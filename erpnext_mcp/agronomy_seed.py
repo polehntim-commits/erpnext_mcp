@@ -509,3 +509,88 @@ def _seed_conversions(report: dict) -> None:
 			_note(report, "created", f"conversion {name}")
 		except Exception as exc:  # pragma: no cover
 			_note(report, "failed", f"conversion {name}", f"{type(exc).__name__}: {exc}")
+
+
+# ── the soil book ───────────────────────────────────────────────────────────
+#
+# v0.116.0. How long the ground stays too wet to drive on after a set, by USDA
+# textural class. THE SHAPE IS WHAT IS WORTH KEEPING, NOT THE FIGURES: a sand is
+# back under a tractor before the shift ends and a clay is not for two and a half
+# days, and that spread of nearly an order of magnitude is the whole reason a
+# single hard-coded twenty-four hours could never have served both. The
+# particular hours are drainage-class shapes and every one of them says
+# `shipped default` in its own `source` column, so an operator reading the
+# register can tell a number nobody has reviewed from one this farm measured.
+#
+# EIGHT CLASSES AND NOT TWELVE. The USDA texture triangle has twelve; four of
+# them (silt, sandy clay, silty clay loam, sandy clay loam) sit between neighbours
+# already here and would be four more rows nobody ever picks between. A farm that
+# needs one adds it with `create_soil_compaction_profile` — the register is
+# authorable precisely so the shipped list can be short.
+#
+# Loam is 24/48, which is deliberately the same pair as `overlays.DEFAULT_RED_HOURS`
+# and `DEFAULT_YELLOW_HOURS`. A block with no profile is coloured as a loam, which
+# is the middle of this book rather than a number invented for the fallback — and
+# the overlay still reports `thresholds_source: default` so the two are never
+# confused.
+SOIL_PROFILE = "Soil Compaction Profile"
+
+SEED_SOIL_PROFILES = (
+	{"soil_type": "Sand", "drainage_class": "Rapid", "red_hours": 8, "yellow_hours": 16},
+	{"soil_type": "Loamy Sand", "drainage_class": "Rapid", "red_hours": 10, "yellow_hours": 20},
+	{"soil_type": "Sandy Loam", "drainage_class": "Well Drained", "red_hours": 16, "yellow_hours": 30},
+	{"soil_type": "Loam", "drainage_class": "Well Drained", "red_hours": 24, "yellow_hours": 48},
+	{
+		"soil_type": "Silt Loam",
+		"drainage_class": "Moderately Well Drained",
+		"red_hours": 30,
+		"yellow_hours": 60,
+	},
+	{
+		"soil_type": "Clay Loam",
+		"drainage_class": "Somewhat Poorly Drained",
+		"red_hours": 40,
+		"yellow_hours": 72,
+	},
+	{"soil_type": "Silty Clay", "drainage_class": "Poorly Drained", "red_hours": 48, "yellow_hours": 84},
+	{"soil_type": "Clay", "drainage_class": "Poorly Drained", "red_hours": 60, "yellow_hours": 96},
+)
+
+#: What every seeded row carries in `source`. ONE STRING, so a listing can be
+#: filtered on it and an operator can see at a glance which figures on their site
+#: are still the ones the app shipped.
+SHIPPED_SOURCE = "shipped default — drainage-class shape, not a measurement"
+
+
+def seed_soil_profiles() -> dict:
+	"""Lay down the soil book. Idempotent; never touches an existing record.
+
+	Separate from `seed_agricultural_masters` and not folded into it, because the
+	two answer to different things: that book is crops, markets and units, and
+	this is one register behind one map layer. An operator reading the install
+	log should be able to tell which of the two ran.
+	"""
+	report: dict = {"created": [], "skipped": [], "failed": []}
+	if not doctype_exists(SOIL_PROFILE):
+		_note(
+			report,
+			"skipped",
+			"the soil compaction profiles",
+			f"this site has no {SOIL_PROFILE} doctype — run `bench migrate`",
+		)
+		return report
+	for spec in SEED_SOIL_PROFILES:
+		name = spec["soil_type"]
+		if frappe.db.exists(SOIL_PROFILE, name):
+			continue
+		try:
+			doc = frappe.new_doc(SOIL_PROFILE)
+			for key, value in spec.items():
+				doc.set(key, value)
+			doc.source = SHIPPED_SOURCE
+			doc.enabled = 1
+			doc.insert(ignore_permissions=True)
+			_note(report, "created", f"{SOIL_PROFILE} {name}")
+		except Exception as exc:  # pragma: no cover - a site with the register locked down
+			_note(report, "failed", f"{SOIL_PROFILE} {name}", f"{type(exc).__name__}: {exc}")
+	return report

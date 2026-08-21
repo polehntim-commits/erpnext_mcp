@@ -83,6 +83,7 @@ _FIELD_FIELDS = (
 	"planting_year",
 	"planting_density_per_acre",
 	"condition",
+	"soil_profile",
 	"productive_from_date",
 	"productive_through_date",
 	"pre_yield_end_date",
@@ -353,6 +354,13 @@ def _describe_field(row: dict, observed: dict | None = None, counties: dict | No
 		"planting_density_per_acre": int(row.get("planting_density_per_acre") or 0) or None,
 		"tree_count_estimate": _tree_count(row),
 		"condition": row.get("condition") or None,
+		# v0.116.0. Which Soil Compaction Profile this block's ground follows, and
+		# therefore how long after a set the compaction overlay keeps machinery off
+		# it. REPORTED AS THE COLUMN AND NOT AS THE RESOLVED HOURS: a register
+		# listing says what is stored on the record, and the resolution — including
+		# the fallback for a block that names none — belongs to `overlays.py`, which
+		# is the one place that answers it the same way for every reader.
+		"soil_profile": row.get("soil_profile") or None,
 		"productive_from_date": _date_str(row.get("productive_from_date")),
 		"productive_through_date": _date_str(row.get("productive_through_date")),
 		"pre_yield_end_date": _date_str(row.get("pre_yield_end_date")),

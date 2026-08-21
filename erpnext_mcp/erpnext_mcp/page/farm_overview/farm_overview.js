@@ -89,6 +89,12 @@ function erpnext_mcp_farm_overview(page) {
 	let loading_widget = null;
 	let answer = null;
 	let company = null;
+	// Which operational layer is drawn, or null for none. ONE AT A TIME AND NONE
+	// BY DEFAULT — farm_overview.py argues both: five overlapping colour schemes
+	// on one polygon is a map nobody reads the important one off, and the layers
+	// cost register reads that somebody opening this page to check a boundary
+	// should not pay for.
+	let overlay = null;
 
 	function esc(value) {
 		return String(value === null || value === undefined ? "" : value)
@@ -117,6 +123,8 @@ function erpnext_mcp_farm_overview(page) {
 
 	const $company_row = body.find(".fo-company-row");
 	const $company = body.find("#fo-company");
+	const $overlay_row = body.find(".fo-overlay-row");
+	const $overlay = body.find("#fo-overlay");
 	const $summary = body.find(".fo-summary");
 	const $notices = body.find(".fo-notices");
 	const $panel = body.find(".fo-panel");
@@ -127,6 +135,16 @@ function erpnext_mcp_farm_overview(page) {
 
 	$company.on("change", function () {
 		company = $(this).val() || null;
+		reload();
+	});
+
+	// A RE-READ AND NOT A CLIENT-SIDE RECOLOUR. The layer is computed server-side
+	// against registers that change while somebody is looking at the page — a
+	// valve shut two minutes ago is the whole point — so picking a layer asks the
+	// server for it rather than switching between snapshots the browser is
+	// holding. It is also what keeps the unasked layer's queries from running.
+	$overlay.on("change", function () {
+		overlay = $(this).val() || null;
 		reload();
 	});
 
@@ -172,7 +190,7 @@ function erpnext_mcp_farm_overview(page) {
 	function reload() {
 		page.set_indicator(__("Loading"), "orange");
 		return frappe
-			.call({ method: METHOD, args: { company: company } })
+			.call({ method: METHOD, args: { company: company, overlay: overlay } })
 			.then((response) => {
 				answer = (response && response.message) || null;
 				if (!answer) {
@@ -196,10 +214,40 @@ function erpnext_mcp_farm_overview(page) {
 
 	function render() {
 		render_company_picker();
+		render_overlay_picker();
 		render_summary();
 		render_notices();
 		render_legend();
 		draw();
+	}
+
+	/** The layer picker, drawn from what this login's roles allow.
+	 *
+	 * THE OPTIONS COME FROM THE SERVER AND ARE NOT A HARDCODED LIST. That is the
+	 * same mistake `roles.ROLE_INDICATORS` was written to undo on the handset: a
+	 * copy of the app's vocabulary compiled into a client goes stale the release
+	 * a layer is added, and the symptom is a picker that silently cannot reach a
+	 * feature the server has.
+	 */
+	function render_overlay_picker() {
+		const specs = answer.overlay_layers || [];
+		if (!specs.length) {
+			// Every role gets at least restricted entry, so an empty list means a
+			// server older than v0.116.0 rather than a login with nothing to see.
+			$overlay_row.hide();
+			return;
+		}
+		const chosen = (answer.overlay || {}).key || "";
+		const rows = [`<option value="">${esc(__("None — boundaries only"))}</option>`].concat(
+			specs.map(
+				(spec) =>
+					`<option value="${esc(spec.key)}"${
+						spec.key === chosen ? " selected" : ""
+					} title="${esc(spec.detail || "")}">${esc(spec.label)}</option>`
+			)
+		);
+		$overlay.html(rows.join(""));
+		$overlay_row.show();
 	}
 
 	function render_company_picker() {
@@ -235,7 +283,35 @@ function erpnext_mcp_farm_overview(page) {
 		if (housing.drawn) {
 			parts.push(`${esc(housing.label)} ${housing.drawn}`);
 		}
-		$summary.text(parts.length ? __("Drawn — {0}", [parts.join(" · ")]) : "");
+		// THE OVERLAY'S COUNTS COME FIRST WHEN THERE IS ONE, because they are the
+		// numbers somebody opened this page for. "Three restricted, two ready to
+		// pick" is a morning; "Fields 40" is a map.
+		const live = overlay_counts();
+		const line = live.length
+			? __("{0} — {1}", [live.join(" · "), parts.join(" · ")])
+			: parts.join(" · ");
+		$summary.text(parts.length || live.length ? __("Drawn — {0}", [line]) : "");
+	}
+
+	/** The three or four numbers the chosen layer actually produced. */
+	function overlay_counts() {
+		const drawn = answer.overlay;
+		if (!drawn) {
+			return [];
+		}
+		const counts = drawn.counts || {};
+		const wanted = [
+			["restricted", __("restricted")],
+			["pre_harvest", __("in pre-harvest")],
+			["ready_to_pick", __("ready to pick")],
+			["unscouted", __("never scouted")],
+			["irrigating", __("watering now")],
+			["too_wet", __("too wet")],
+			["access_blocked", __("closed to equipment")],
+		];
+		return wanted
+			.filter(([key]) => counts[key])
+			.map(([key, label]) => `${counts[key]} ${label}`);
 	}
 
 	function render_legend() {
@@ -263,6 +339,45 @@ function erpnext_mcp_farm_overview(page) {
 				</div>`);
 		}
 		$legend.html(entries.join(""));
+		render_overlay_legend();
+	}
+
+	/** The status key for the chosen layer, under the register legend.
+	 *
+	 * BUILT FROM THE STATUSES ACTUALLY ON THE MAP rather than from a fixed list.
+	 * A farm with nothing restricted should not be shown a red "restricted"
+	 * swatch it can find no shape for — and a status this build has never heard
+	 * of still appears, in whatever colour the server gave it, instead of being
+	 * dropped by a client that is older than its server.
+	 */
+	function render_overlay_legend() {
+		body.find(".fo-overlay-legend, .fo-overlay-note").remove();
+		const index = overlay_index();
+		if (!index.key) {
+			return;
+		}
+		const seen = new Map();
+		Object.keys(index.by_name).forEach((name) => {
+			const state = index.by_name[name];
+			if (state && state.status) {
+				seen.set(state.status, state.colour || "#8c959f");
+			}
+		});
+		const swatches = Array.from(seen.entries()).map(
+			([status, colour]) =>
+				`<div class="fo-legend-entry">
+					<span class="fo-swatch" style="background:${esc(colour)}"></span>
+					<span>${esc(String(status).replace(/_/g, " "))}</span>
+				</div>`
+		);
+		const spec = (answer.overlay_layers || []).find((entry) => entry.key === index.key) || {};
+		$legend.after(
+			`<div class="fo-overlay-legend">
+				<div class="fo-legend-entry"><strong>${esc(spec.label || index.key)}</strong></div>
+				${swatches.join("")}
+			</div>
+			<div class="fo-overlay-note">${esc(spec.detail || "")}</div>`
+		);
 	}
 
 	/** Everything the server said was wrong, above the map rather than in a log.
@@ -319,10 +434,161 @@ function erpnext_mcp_farm_overview(page) {
 			);
 		}
 
+		// The chosen layer's own problems, kept separate from the boundary map's
+		// for the same reason the three above are kept separate from each other:
+		// a layer this login may not pick, a register the overlay could not read
+		// and a register that hit its ceiling are three different jobs.
+		(answer.overlay_refused || []).forEach((entry) => {
+			notes.push(
+				`<div class="fo-note fo-note-warn"><p>${esc(
+					__("The {0} layer was not drawn — {1}", [entry.key, entry.reason])
+				)}</p></div>`
+			);
+		});
+		const drawn = answer.overlay || {};
+		(drawn.refused || []).forEach((doctype) => {
+			notes.push(
+				`<div class="fo-note fo-note-warn"><p>${esc(
+					__(
+						"This login may not read {0}, so the operational layer over it is blank rather than clear.",
+						[doctype]
+					)
+				)}</p></div>`
+			);
+		});
+		(drawn.warnings || []).forEach((warning) => {
+			notes.push(`<div class="fo-note fo-note-warn"><p>${esc(warning)}</p></div>`);
+		});
+
 		$notices.html(notes.join(""));
 	}
 
-	function popup(entry, layer) {
+	/** `{docname: the chosen layer's dict}` for whichever register it colours.
+	 *
+	 * BUILT ONCE PER RENDER AND NOT LOOKED UP PER SHAPE. A farm at the 500-row
+	 * cap with a linear scan per polygon is a quarter of a million comparisons
+	 * to draw one map, on the machine in the office.
+	 *
+	 * THE SUBJECT DECIDES WHICH REGISTER IS INDEXED, and it comes from the
+	 * server. An irrigation set is a ZONE fact and a restricted entry is a BLOCK
+	 * fact; keying either on the other's docnames would silently colour nothing,
+	 * which looks exactly like a farm with no restrictions on it.
+	 */
+	function overlay_index() {
+		const drawn = answer.overlay;
+		if (!drawn) {
+			return { key: null, subject: null, by_name: {} };
+		}
+		const by_name = {};
+		if (drawn.subject === "zone") {
+			(drawn.zones || []).forEach((entry) => {
+				by_name[entry.zone] = entry;
+			});
+		} else {
+			(drawn.blocks || []).forEach((entry) => {
+				by_name[entry.name] = entry[drawn.key] || null;
+			});
+		}
+		return { key: drawn.key, subject: drawn.subject, by_name: by_name };
+	}
+
+	/** Which doctype the chosen layer paints. See `overlay_index`. */
+	function overlay_doctype(index) {
+		return index.subject === "zone" ? "Irrigation Zone" : "Field";
+	}
+
+	/** The overlay dict for one shape, or null if this layer does not paint it. */
+	function overlay_for(index, entry) {
+		if (!index.key || entry.doctype !== overlay_doctype(index)) {
+			return null;
+		}
+		return index.by_name[entry.name] || null;
+	}
+
+	/** The lines the chosen layer adds to a popup, as one block of markup.
+	 *
+	 * WHAT IS PRINTED IS WHAT THE SERVER SAID, in the server's own words. Every
+	 * `warning` and every `reason` on these dicts is a sentence written once —
+	 * `spray_rei.warning_line` is emphatic that a worker reading one wording at a
+	 * gate and another on a work order has been given two rules — and this page
+	 * is one more screen it is read off, not a second author of it.
+	 */
+	function overlay_popup(state, key) {
+		if (!state) {
+			return "";
+		}
+		const lines = [];
+		if (key === "irrigation") {
+			lines.push(overlay_status_line(state));
+			if (state.hours_since_water_off !== null && state.hours_since_water_off !== undefined) {
+				lines.push(__("{0} hours since the water came off", [state.hours_since_water_off]));
+			}
+			if (state.status === "irrigating" && (state.open_valves || []).length) {
+				lines.push(__("Open now: {0}", [state.open_valves.join(", ")]));
+			}
+			if (state.red_hours) {
+				lines.push(
+					__("Red under {0}h, yellow under {1}h ({2})", [
+						state.red_hours,
+						state.yellow_hours,
+						state.soil_profile || __("shipped default"),
+					])
+				);
+			}
+		} else if (key === "spray_rei" || key === "spray_phi") {
+			lines.push(state.warning || overlay_status_line(state));
+		} else if (key === "harvest") {
+			lines.push(overlay_status_line(state));
+			if (state.growth_stage_code) {
+				lines.push(__("BBCH {0} — {1}", [state.growth_stage_code, state.stage_label || ""]));
+			}
+			if (state.brix !== null && state.brix !== undefined) {
+				lines.push(
+					__("{0}° Brix ({1}) against a target of {2}", [
+						state.brix,
+						state.brix_method || __("method not recorded"),
+						state.target === null || state.target === undefined
+							? __("none recorded")
+							: state.target,
+					])
+				);
+			}
+			if (state.short_of) {
+				lines.push(__("Short of: {0}", [state.short_of]));
+			}
+			if (state.stale) {
+				lines.push(__("Last walked {0} days ago", [state.observed_days_ago]));
+			}
+		} else if (key === "equipment_access") {
+			lines.push(overlay_status_line(state));
+			if (state.decided_by) {
+				lines.push(__("Decided by the {0} layer", [state.decided_by]));
+			}
+			(state.notes || []).forEach((note) => lines.push(note));
+		}
+		if (state.reason) {
+			lines.push(state.reason);
+		}
+		const body = lines
+			.filter(Boolean)
+			.map((line) => `<div>${esc(line)}</div>`)
+			.join("");
+		return `<div class="fo-popup-overlay" style="border-left:3px solid ${esc(
+			state.colour || "#8c959f"
+		)};padding-left:6px"><strong>${esc(overlay_label())}</strong>${body}</div>`;
+	}
+
+	function overlay_status_line(state) {
+		return __("Status: {0}", [String(state.status || "unknown").replace(/_/g, " ")]);
+	}
+
+	function overlay_label() {
+		const drawn = answer.overlay || {};
+		const spec = (answer.overlay_layers || []).find((entry) => entry.key === drawn.key);
+		return spec ? spec.label : drawn.key || "";
+	}
+
+	function popup(entry, layer, overlay_state) {
 		const figures = [];
 		if (entry.acres) {
 			figures.push(__("{0} acres recorded", [entry.acres]));
@@ -336,6 +602,7 @@ function erpnext_mcp_farm_overview(page) {
 					entry.detail ? " · " + esc(entry.detail) : ""
 				}</div>
 				<div class="fo-popup-figures">${esc(figures.join(" · "))}</div>
+				${overlay_popup(overlay_state, (answer.overlay || {}).key)}
 				<a href="${esc(entry.route)}">${esc(__("Open {0}", [entry.name]))}</a>
 			</div>`;
 	}
@@ -448,29 +715,45 @@ function erpnext_mcp_farm_overview(page) {
 					);
 				}
 
+				const index = overlay_index();
 				(answer.layers || []).forEach((layer) => {
 					(layer.shapes || []).forEach((entry) => {
 						if (!entry.geometry) {
 							return;
 						}
+						const state = overlay_for(index, entry);
+						// THE REGISTER'S OWN COLOUR STAYS ON EVERY SHAPE THE
+						// LAYER DOES NOT PAINT. A restricted-entry overlay
+						// colours blocks; the parcels under them and the zones
+						// inside them keep their register colours, so the map
+						// still reads as a map rather than as five grey shapes
+						// and three red ones. The FILL carries the status and
+						// the STROKE stays the register's, which is what lets
+						// somebody see both facts about one polygon at once.
 						L.geoJSON(entry.geometry, {
 							style: {
-								color: layer.colour,
-								weight: layer.weight,
-								fillOpacity: layer.fill_opacity,
+								color: state ? state.colour : layer.colour,
+								weight: state ? layer.weight + 1 : layer.weight,
+								fillColor: state ? state.colour : undefined,
+								fillOpacity: state ? 0.45 : layer.fill_opacity,
 								dashArray: layer.dash_array || undefined,
 							},
 						})
 							.addTo(map)
-							.bindPopup(popup(entry, layer))
-							.bindTooltip(esc(entry.label), { sticky: true });
+							.bindPopup(popup(entry, layer, state))
+							.bindTooltip(
+								state
+									? esc(entry.label + " — " + String(state.status || ""))
+									: esc(entry.label),
+								{ sticky: true }
+							);
 					});
 				});
 
 				(answer.markers || []).forEach((entry) => {
 					L.circleMarker(entry.point, MARKER_STYLE)
 						.addTo(map)
-						.bindPopup(popup(entry, null))
+						.bindPopup(popup(entry, null, null))
 						.bindTooltip(esc(entry.label), { sticky: true });
 				});
 
@@ -500,6 +783,7 @@ function erpnext_mcp_farm_overview(page) {
 		$panel.find(".fo-fallback, .fo-empty").remove();
 
 		const rows = [];
+		const index = overlay_index();
 		(answer.layers || []).forEach((layer) => {
 			(layer.shapes || []).forEach((entry) => {
 				// `centre` AND NOT `centroid`, because this table is the one place
@@ -507,12 +791,17 @@ function erpnext_mcp_farm_overview(page) {
 				// the shape for a row whose stored centroid is missing, and a
 				// coordinate column full of blanks would be this page failing at
 				// exactly the job the fallback exists to do.
+				// THE STATUS COLUMN MATTERS MOST HERE. With no Leaflet this table
+				// is the whole map, and a fallback that dropped the layer would
+				// leave somebody unable to find out which block is restricted by
+				// any means at all.
+				const state = overlay_for(index, entry);
 				rows.push(
 					`<tr><td><a href="${esc(entry.route)}">${esc(entry.label)}</a></td><td>${esc(
 						layer.label
 					)}</td><td>${
 						entry.centre ? esc(entry.centre[0] + ", " + entry.centre[1]) : ""
-					}</td></tr>`
+					}</td><td>${esc(state ? String(state.status || "") : "")}</td></tr>`
 				);
 			});
 		});
@@ -520,7 +809,7 @@ function erpnext_mcp_farm_overview(page) {
 			rows.push(
 				`<tr><td><a href="${esc(entry.route)}">${esc(entry.label)}</a></td><td>${esc(
 					entry.doctype
-				)}</td><td>${esc(entry.point[0] + ", " + entry.point[1])}</td></tr>`
+				)}</td><td>${esc(entry.point[0] + ", " + entry.point[1])}</td><td></td></tr>`
 			);
 		});
 
@@ -535,6 +824,7 @@ function erpnext_mcp_farm_overview(page) {
 						<th>${esc(__("Record"))}</th>
 						<th>${esc(__("Register"))}</th>
 						<th>${esc(__("Centroid"))}</th>
+						<th>${esc(overlay_label() || __("Status"))}</th>
 					</tr></thead><tbody>${rows.join("")}</tbody></table>
 			</div>`
 		);

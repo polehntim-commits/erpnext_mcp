@@ -109,7 +109,7 @@ from urllib.parse import quote
 
 import frappe
 
-from . import compat
+from . import compat, overlays
 from .errors import ToolError
 from .tools import farm as farm_tools
 from .tools import housing as housing_tools
@@ -214,11 +214,13 @@ def _may_read(doctype: str) -> bool:
 
 	A permission check that threw would take the whole page down over one layer,
 	which is the opposite of the per-layer refusal this page is built on.
+
+	v0.116.0 MOVED THE BODY TO `overlays.may_read` AND LEFT THIS AS THE CALL. The
+	overlay engine makes the identical promise for the identical reason, and two
+	implementations of "never raise" is two chances for one of them to start
+	raising. The name stays because it is what the rest of this module reads as.
 	"""
-	try:
-		return bool(frappe.has_permission(doctype, "read"))
-	except Exception:  # pragma: no cover - a site mid-migrate with no meta
-		return False
+	return overlays.may_read(doctype)
 
 
 def _may_read_doc(doctype: str, name: str) -> bool:
@@ -604,7 +606,7 @@ def _markers(rows: list) -> list:
 
 # ── the one whitelisted method ──────────────────────────────────────────────
 @frappe.whitelist()
-def farm_overview(company=None) -> dict:
+def farm_overview(company=None, overlay=None) -> dict:
 	"""Every boundary and every building this login may read, on one answer.
 
 	ONE CALL AND NOT FIVE. The page draws nothing until it can fit the map to the
@@ -615,6 +617,29 @@ def farm_overview(company=None) -> dict:
 	the first thing they will come here to look at, and a page that showed them
 	yesterday's shape would be worse than no page — see `on_page_show` in the
 	script, which re-reads on every return for the same reason.
+
+	────────────────────────────────────────────────────────────────────────
+	v0.116.0: `overlay` — ONE OPERATIONAL LAYER AT A TIME, AND NONE BY DEFAULT
+	────────────────────────────────────────────────────────────────────────
+
+	The five layers `overlays.py` computes are what is TRUE of a block right now
+	rather than what shape it is, and this page is where a farm looks at them.
+
+	ONE AT A TIME IS THE WHOLE DESIGN AND NOT A PHASE. `overlays.py` argues that
+	a screen carrying five overlapping colour schemes is a screen nobody reads
+	the one that matters off, and a map is the sharpest case of it: every layer
+	wants to colour the same polygon. So the picker is a single choice, the shape
+	takes that layer's colour, and the popup carries that layer's sentence.
+
+	NONE BY DEFAULT, because the layers cost queries the boundary map does not —
+	the valve log, the restriction register, the observation register — and
+	somebody opening this page to check a polygon should not pay for them. The
+	OPTIONS are always returned, computed from the caller's roles alone with no
+	register read at all, so the picker draws before anything is chosen.
+
+	A LAYER THE CALLER'S ROLES DO NOT SHOW IS REFUSED BY NAME in
+	`overlay_refused`, never silently ignored — a picker that accepted a choice
+	and drew nothing would read as a farm with no restrictions on it.
 	"""
 	allowed = readable_companies()
 	entity = _company(company, allowed)
@@ -708,7 +733,42 @@ def farm_overview(company=None) -> dict:
 		"cap": DRAW_CAP,
 		"capped": [doctype for doctype, total in counts.items() if total >= DRAW_CAP],
 		"page_route": PAGE_ROUTE,
+		**_overlay(entity, overlay),
 	}
+
+
+def _overlay(entity: str, requested) -> dict:
+	"""The picker's options, and the one layer that was asked for. See above.
+
+	THE OPTIONS COST NOTHING. `overlays.layers_for` reads the caller's roles and
+	no register at all, so a page opened with no layer chosen pays for the four
+	boundary reads it already made and not a query more.
+	"""
+	options = overlays.layers_for(frappe.session.user)
+	answer = {
+		"overlay_options": options,
+		# The picker's own rows: key, label, what it means and which shape it
+		# colours. SENT RATHER THAN HELD IN THE SCRIPT, which is the mistake
+		# `roles.ROLE_INDICATORS` exists to undo on the handset — a copy of this
+		# app's vocabulary compiled into a client goes stale the release a layer
+		# is added, and the symptom is a picker that silently cannot reach it.
+		"overlay_layers": [
+			overlays.LAYER_BY_KEY[key] for key in options["visible"] if key in overlays.LAYER_BY_KEY
+		],
+		"overlay": None,
+		"overlay_refused": [],
+	}
+	key = str(requested or "").strip().lower()
+	if not key:
+		return answer
+	wanted, refused = overlays.requested_layers([key], options["visible"])
+	answer["overlay_refused"] = refused
+	if wanted:
+		drawn = overlays.build(company=entity, visible=wanted, limit=DRAW_CAP)
+		drawn["key"] = wanted[0]
+		drawn["subject"] = overlays.LAYER_BY_KEY[wanted[0]]["subject"]
+		answer["overlay"] = drawn
+	return answer
 
 
 __all__ = [

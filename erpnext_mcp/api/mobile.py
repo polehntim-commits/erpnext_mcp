@@ -98,7 +98,7 @@ import json
 
 import frappe
 
-from .. import bucket_bridge, compat, datetimes, locations, pay_stub_pdf, timezones
+from .. import bucket_bridge, compat, datetimes, locations, overlays, pay_stub_pdf, timezones
 from .. import roles as role_lib
 from .. import shifts as shift_records
 from .. import training as training_register
@@ -13795,3 +13795,59 @@ def update_employee_grade(user: str, employee_grade=None, name=None, new_name=No
 	return _org_update(
 		user, org_tools.EMPLOYEE_GRADE, {"employee_grade": employee_grade or name, "new_name": new_name}
 	)
+
+
+# ── 173. get_map_overlays ────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_map_overlays", limit=guard.READ_LIMIT)
+def get_map_overlays(user: str, company=None, blocks=None, layers=None, limit=None) -> dict:
+	"""The operational map, on the phone that is standing in the block. v0.116.0.
+
+	THE MIRROR OF `/app/farm-overview`'s LAYER PICKER, and the reason this route
+	exists at all: every fact on it is one somebody needs where the ground is,
+	not where the desk is. "May I walk into block 7" is asked at a gate; "may the
+	tractor go on it" is asked from the seat of the tractor.
+
+	OPEN ON ENROLMENT ALONE, exactly as `list_farm_locations` is and for a
+	sharper version of the same reason. The restricted-entry layer is the one
+	every role sees, always — it is what keeps somebody out of a treated block —
+	and gating this read on the dispatch role would have withheld a safety
+	warning from the only people it is about. `overlays.layers_for` then narrows
+	what comes back to what THIS worker's roles show, and names what it held.
+
+	SCOPED TWICE. `company` narrows on the way in through `guard.require_scope`,
+	and the layers themselves are computed off registers `frappe.has_permission`
+	has already filtered — the same two-step the Desk page runs, because it is
+	the same function.
+
+	`blocks` IS HOW A SCAN BECOMES A MAP ANSWER. A handset that has just scanned
+	a block's tag wants that block's five layers and not the farm's, and passing
+	one docname is one register read rather than five hundred.
+	"""
+	allowed = guard.require_scope(user)
+	entity = _company(user, company, allowed)
+
+	shown = overlays.layers_for(user)
+	wanted, refused = overlays.requested_layers(layers, shown["visible"])
+
+	if isinstance(blocks, str):
+		blocks = [part.strip() for part in blocks.replace(",", " ").split() if part.strip()]
+
+	cap = overlays.SUBJECT_CAP
+	if limit not in (None, ""):
+		try:
+			cap = max(1, min(int(limit), overlays.SUBJECT_CAP))
+		except (TypeError, ValueError):
+			frappe.throw(f"limit must be a whole number, got {limit!r}.", frappe.ValidationError)
+
+	answer = overlays.build(company=entity, visible=wanted, blocks=blocks, limit=cap)
+	answer["role"] = shown
+	answer["withheld"] = shown["withheld"]
+	answer["refused_layers"] = refused
+	# `guard.scoped` on the way out as well, on both collections. The registers
+	# behind these layers spell the owning entity two ways — `owning_entity` on a
+	# Field and `company` on almost everything else — and `overlays.build` reports
+	# whichever the register handed it. The outbound check reads `company`, so the
+	# rows carry that key, set from the row's own entity.
+	answer["blocks"] = guard.scoped(answer.get("blocks") or [], allowed)
+	return answer

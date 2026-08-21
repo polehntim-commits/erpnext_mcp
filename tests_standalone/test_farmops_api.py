@@ -648,6 +648,16 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/list_employee_grades",
 		"/mobile/create_employee_grade",
 		"/mobile/update_employee_grade",
+		# v0.116.0. The operational map, mirrored onto the handset. The location
+		# read above answers "where can work be sent"; this answers what is TRUE
+		# of each of those places right now — the restricted-entry countdown, the
+		# pre-harvest date, the growth stage and Brix, whether the ground will
+		# take a machine. OPEN ON ENROLMENT like the location read, and for a
+		# sharper reason: the restricted-entry layer is the one every role sees,
+		# so a dispatch gate here would have withheld a safety warning from the
+		# only people it is about. What each role sees beyond that is narrowed by
+		# `overlays.layers_for` and what was held back is NAMED in the answer.
+		"/mobile/get_map_overlays",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):

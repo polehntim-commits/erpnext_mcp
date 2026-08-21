@@ -863,9 +863,16 @@ class ToolRegistration(unittest.TestCase):
 		# tables it reads carry no tools of their own — they are edited on the
 		# Crop form and through `create_crop`/`update_crop`, whose signatures
 		# did not change.
-		self.assertEqual(len(self.registry.TOOLS), 770)
-		self.assertEqual(len(self.registry.READ_TOOLS), 384)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 386)
+		# v0.116.0 adds five, the operational map overlays: two reads
+		# (`get_map_overlays`, `list_soil_compaction_profiles`) and three writes
+		# over the new Soil Compaction Profile register
+		# (`create_soil_compaction_profile`, `update_soil_compaction_profile`,
+		# `assign_soil_profile`). `Field.soil_profile`, `Crop.target_brix` and
+		# `Crop Variety.target_brix` are new columns on existing registers and
+		# carry no tools of their own — no existing signature changed.
+		self.assertEqual(len(self.registry.TOOLS), 775)
+		self.assertEqual(len(self.registry.READ_TOOLS), 386)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 389)
 
 
 if __name__ == "__main__":

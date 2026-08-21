@@ -401,6 +401,15 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"set_field_boundary",
 		"set_zone_boundary",
 		"set_parcel_boundary",
+		# v0.116.0. The operational map, HERE FOR THIS SET'S ORDINARY REASON —
+		# `MobileAPI.swift` does not name it yet, so the server half is published
+		# first and the iOS map mirror is a client change rather than a release
+		# of both. That is the same order the boundary writes above landed in,
+		# and it is deliberate for this route in particular: the layer the phone
+		# most needs is the restricted-entry countdown, and a server that can
+		# answer it before the screen exists is a server the screen can be
+		# written against.
+		"get_map_overlays",
 		# v0.113.0. THE OTHER HALF OF ITEM 11, AND THE ORG CHART. Seventeen
 		# methods, HERE FOR THIS SET'S ORDINARY REASON — `MobileAPI.swift` names
 		# none of them, so the server half is published first and the iOS half is a

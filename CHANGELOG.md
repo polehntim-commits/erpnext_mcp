@@ -3,6 +3,158 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.116.0 — 2026-08-21 — the map that only knew what shape the farm was
+
+**Five MCP tools, one new DocType, three new columns and one Desk picker.** No
+existing tool gained or lost an argument, and no column was dropped.
+
+**A map of forty blocks that cannot say which of them is closed.** v0.110.0 put
+every boundary on one page and it draws SHAPE — where the ground is and whose it
+is. Shape does not change between one morning and the next, and every question a
+farm actually asks a map at six in the morning does: which blocks may a tractor
+go on today, which are closed to entry and for how long, which are ready to pick,
+where did the water run last night. Five registers already held all four answers.
+Not one of them was reachable from the map.
+
+`overlays.py` is the join and it is a READ. It writes nothing, derives nothing
+that is not on a stored record, and hands every answer back with the record it
+came from.
+
+**NOTHING IN IT IS A SECOND OPINION, and that is the whole discipline of the
+file.** Restricted entry is read through `spray_rei.active_for_blocks` — which
+runs the expiry sweep before it answers — and the pre-harvest interval through
+`spray.phi_windows_for_blocks`, which already consults BOTH places this app
+stamps a PHI date and takes the later. The water comes off the same Asset State
+Log rows `get_irrigation_runtime` sums, read for the one fact a map needs: when
+did it come off. An overlay that recomputed a restricted-entry window would be a
+second opinion on a federal restriction, and the two would drift the first time
+either was corrected — with the first symptom being a worker in a treated block.
+
+**COMPACTION IS NOT RESTRICTED ENTRY AND THE TWO ARE NEVER ONE TRAFFIC LIGHT.**
+The irrigation layer answers whether a MACHINE should go on wet ground — wheel
+ruts and a compacted pan that outlasts the planting. The REI layer answers
+whether a PERSON may walk in — 40 CFR §170.407, PPE, and an employer's duty to
+keep workers out. Different rules, different subjects, different consequences,
+two layers with two vocabularies. `equipment_access` is the one place both are
+read together, it reports which input decided its verdict, and a live restriction
+beats every soil consideration on it: nobody drives into a treated block to avoid
+a rut.
+
+**UNKNOWN IS A COLOUR AND IT IS NEVER GREEN.** A zone whose valves have never
+been scanned has not been proven dry. A block with no scouting round on it is not
+"not ready". A crop with no Brix target recorded does not make every block ripe.
+Each comes back `unknown`, in grey, WITH THE REASON — and the two ways a zone can
+have no answer get different sentences, because "no valve names this zone" is a
+job in the asset register and "the valves are tagged and none has ever been
+logged" is a job in the orchard. The failure this surface exists to avoid is the
+comfortable one: an unmeasured block wearing a measured block's colour is worse
+than a hole in the map, because the hole is a job somebody can go and do.
+
+**EQUIPMENT ACCESS IS AN ORDER AND NOT AN AVERAGE.** An average would let a very
+dry block outvote a federal restriction. So: a live REI blocks it, full stop;
+then wet ground is CAUTION rather than a refusal, because whether a pass is worth
+a rut is a judgement about the machine, the load and how badly the job is needed,
+and that is the foreman's — `driving_zone` names the zone that made it their
+problem. An unmeasured block is caution too, never open. SOIL MOISTURE IS NAMED
+IN `inputs_missing` rather than weighted at zero: this app has no soil moisture
+register yet, and a green verdict here honestly means "nothing we can measure is
+against it" instead of "we checked everything".
+
+**NEITHER NUMBER ALONE CALLS A PICK**, which is `Crop Observation.brix_reading`'s
+own description turned into an engine: Brix rises while the stage stands still in
+a hot week and the stage advances while Brix stalls in a wet one. `pick_now`
+needs a BBCH code in 87–89 AND a reading at or above the target; every other
+combination is `near_ready` with `short_of` naming what is missing — the reading
+is under, nobody took one, no target is recorded for this crop, or the sugar is
+there and the fruit is not. A round older than a week is still reported and
+flagged `stale`, because dropping it would draw an unscouted block over one
+scouted a fortnight ago: opposite problems with the same picture.
+
+**THE BBCH BANDS SPLIT STAGE EIGHT.** 81 is the very beginning of colouring and
+89 is fully ripe; a map that drew those the same colour would have a fortnight of
+the season in one band. The scale is a published standard and not this farm's
+configuration, which is why it is code and a record nowhere — a site that could
+edit it would be a site whose observations no longer mean what an agronomist
+reads them as.
+
+**THE HOURS COME FROM THE SOIL, AND THAT SOIL IS A RECORD.** `Soil Compaction
+Profile` — eight USDA textural classes, seeded, each with the hours after which
+the ground is no longer red and then no longer yellow. A record rather than a
+constant for the reason `Pest Action Threshold` is: the number is LOCAL, an
+extension bulletin and a grower who has watched their own rows for twenty years
+disagree, and a threshold nobody can edit is one a crew quietly stops believing.
+A sand is driveable in eight hours and a clay in sixty, and a single hard-coded
+twenty-four either keeps machinery off ground that was ready yesterday or sends
+it onto ground that will hold the ruts for a decade.
+
+THE SEEDED FIGURES ARE DRAINAGE-CLASS SHAPES AND EVERY ONE SAYS SO in its own
+`source` column, so the numbers nobody has reviewed stay visible. NOTHING IS
+WIRED UP by the seeder: every block stays on the shipped 24/48 default until
+somebody points it at a soil, and `list_soil_compaction_profiles` reports
+`blocks_without_profile`, which is how much of that job is left.
+
+**THE CONTROLLER REFUSES A YELLOW AT OR UNDER THE RED, and that refusal is the
+only reason the DocType has a controller.** Getting them the wrong way round is
+SILENT: it leaves no caution band at all, so every wet block goes straight from
+red to green the moment the red hours pass and the drying-out warning the layer
+exists to draw is never drawn. Nothing reports an error. The first symptom is a
+rutted block. Zero hours is refused for the same class of reason — a blank Float
+arrives as zero without anybody having typed it, and zero claims this soil is
+never too wet to drive on.
+
+**WHO SEES WHICH LAYER IS A TABLE, AND RESTRICTED ENTRY IS IN EVERY ROW OF IT.**
+A Field Worker gets that one layer and nothing else — not because the rest is
+secret but because a picking crew's phone showing five overlapping colour schemes
+is a phone nobody reads the one that matters off. A Crew Leader adds harvest
+readiness; a Foreman and a Farm Manager get all five; a Compliance Officer gets
+the two regulated windows and nothing operational. AN ACCOUNT HOLDING NONE OF THE
+SEVEN IS NOT FILTERED AT ALL: a picker HAS the Field Worker role, because
+`create_mobile_user` grants one as part of enrolling them, so a login with none
+is the MCP system user, an accountant or a Desk session — and narrowing that to
+one layer would hide four from the operator's own console over a table that was
+never about them. IT IS A DISPLAY FILTER AND NOT A GATE; `frappe.has_permission`
+on each register is what actually decides what can be read, and a client that
+trusted the table instead would be a sign on a door with no lock.
+
+**EVERY LAYER CARRIES A HEX COLOUR AND NO CLIENT MAPS A STATUS TO ONE.** The
+Desk page and the iOS map would otherwise each hold a copy of "irrigating is
+blue, blocked is red" — and the copies would not diverge loudly. They would
+diverge on ONE status on ONE client, which reads as a block that is simply a
+different colour on the phone than on the office screen. Nobody files that as a
+bug; they stop trusting the map. `irrigating` is blue rather than a darker red on
+purpose: water on the ground right now is not "very restricted", it is a state
+with an action attached, and giving it its own hue stops it being read as the top
+of a severity ramp.
+
+**THE PAGE PICKS ONE LAYER AT A TIME AND NONE BY DEFAULT.** `/app/farm-overview`
+grows an operational-layer select. One at a time is the design and not a phase —
+every layer wants to colour the same polygon. None by default because the layers
+cost register reads the boundary map does not, and somebody opening the page to
+check a shape should not pay for the valve log; the OPTIONS are always returned
+and cost no query at all. The register's own colour stays on every shape the
+chosen layer does not paint, so the map still reads as a map rather than as five
+grey shapes and three red ones.
+
+**`assign_soil_profile` IS ITS OWN TOOL** rather than a new argument on
+`update_field`, which `link_field_to_cost_center` had already settled for the
+identical shape: one Link column with a real consequence behind setting it wrong,
+and no change to the signature of a tool other clients already call. It REFUSES a
+disabled profile, because a block pointed at a retired one is coloured by the
+default while its own form claims a measurement — the worst of both.
+
+`update_soil_compaction_profile` distinguishes an argument not passed from one
+passed as zero, and returns `blocks_recoloured`: a typo discovered by a tractor
+is an expensive way to find out how many blocks an edit moved.
+
+**The handset gets the same answer at the same door.**
+`/farmops/api/mobile/get_map_overlays`, open on enrolment alone like the location
+read beside it and for a sharper version of the same reason — gating it on the
+dispatch role would have withheld a safety warning from the only people it is
+about. `blocks` is how a scan becomes a map answer: one docname is one register
+read rather than five hundred. The iOS client itself is a separate release.
+
+775 tools: 386 read, 389 mutating. Two reads ship on, three writes ship off.
+
 ## 0.115.0 — 2026-08-21 — the round that was walked and never written down
 
 **One MCP tool, five DocType columns, one seeded template and one migration

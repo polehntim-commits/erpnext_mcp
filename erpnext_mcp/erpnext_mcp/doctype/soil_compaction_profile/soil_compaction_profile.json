@@ -1,0 +1,142 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:soil_type",
+ "creation": "2026-08-21 14:00:00.000000",
+ "description": "How long the ground under a block stays too wet to drive on after the water comes off, for one soil. THE HOURS ARE THE WHOLE RECORD: a compaction warning is a clock started by the last irrigation and read against a number, and that number is a property of the SOIL and of nothing else. Sand is back under a tractor before the shift ends; a silty clay is not, and the same twenty-four hours applied to both either keeps machinery off ground that was ready yesterday or sends it onto ground that will hold the wheel ruts for a decade.\n\nIT IS A RECORD RATHER THAN A CONSTANT IN CODE for the reason Pest Action Threshold is: the number is LOCAL. A county soil survey, an extension bulletin and a grower who has watched their own rows for twenty years will give three answers, and the third is usually the right one for that farm. A threshold nobody can edit is one an operator quietly stops believing, and the first thing they stop believing is the colour on a map.\n\nWHICH BLOCK GETS WHICH PROFILE is `Field.soil_profile`. An irrigation zone resolves through the block it waters (`Irrigation Zone.field`), because the soil belongs to the ground and a zone is a way of watering some of it. A zone naming no block, or a block naming no profile, falls back to the shipped default of 24/48 hours and the overlay SAYS SO in `thresholds_source` rather than presenting a guess as a measurement.\n\nTHE SEEDED ROWS ARE A STARTING BOOK, NOT YOUR FARM'S. They are drainage-class shapes off the USDA textural classes — what is worth keeping from them is that the spread between a sand and a clay is nearly an order of magnitude, not the particular hour figures. Replace one with your own and nothing overwrites it.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "soil_type",
+  "drainage_class",
+  "identity_col",
+  "enabled",
+  "hours_section",
+  "red_hours",
+  "hours_col",
+  "yellow_hours",
+  "provenance_section",
+  "source",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "description": "The soil, in whatever vocabulary the farm keeps it in. The seeded rows use the USDA textural classes — Sand, Loam, Silt Loam, Clay Loam — because those are what a county soil survey names and what an operator can look their own ground up under. IT IS THE DOCNAME: a profile is referred to by what the soil is called, on a Field form and in an overlay answer, and a hash there would make every reference unreadable.",
+   "fieldname": "soil_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Soil Type",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "How fast this soil sheds water, which is the mechanism behind both hour figures. Recorded beside them rather than instead of them: the class is what somebody recognises from a soil survey, and the hours are what the map actually reads.",
+   "fieldname": "drainage_class",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Drainage Class",
+   "options": "\nRapid\nWell Drained\nModerately Well Drained\nSomewhat Poorly Drained\nPoorly Drained"
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Untick to retire a profile without deleting it. A block still naming a disabled profile falls back to the shipped default and the overlay names the profile it skipped — a colour that silently changed because somebody retired a row is worse than no colour.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "hours_section",
+   "fieldtype": "Section Break",
+   "label": "Hours Since Water Off"
+  },
+  {
+   "description": "Under this many hours since the water came off, the ground is RED — wet, and a pass over it compacts. Machinery decisions are what this number is for; it is not a statement about whether a worker may walk in, which is the restricted-entry interval and a different register entirely.",
+   "fieldname": "red_hours",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Red Under (Hours)",
+   "precision": "1",
+   "reqd": 1
+  },
+  {
+   "fieldname": "hours_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Between the red figure and this one the ground is YELLOW — drying, and a loaded sprayer is a worse idea than an empty quad. Past it the block is green. MUST BE GREATER THAN THE RED FIGURE and the controller refuses otherwise: a yellow under a red leaves an EMPTY caution band, so every block reads green the moment the red hours pass and the warning that exists to be read is never drawn.",
+   "fieldname": "yellow_hours",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Yellow Under (Hours)",
+   "precision": "1",
+   "reqd": 1
+  },
+  {
+   "fieldname": "provenance_section",
+   "fieldtype": "Section Break",
+   "label": "Provenance"
+  },
+  {
+   "description": "Where the number came from — 'NRCS Web Soil Survey, Wasco County', 'our own 2024 wheel-rut trial', 'shipped default'. The question asked the first time somebody disagrees with a colour on the map, and the one a seeded figure has to be able to answer honestly.",
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-21 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Soil Compaction Profile",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 1,
+ "search_fields": "drainage_class,red_hours,yellow_hours",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

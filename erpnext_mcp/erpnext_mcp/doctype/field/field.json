@@ -23,6 +23,7 @@
   "planting_year",
   "planting_density_per_acre",
   "condition",
+  "soil_profile",
   "productive_section",
   "productive_from_date",
   "productive_through_date",
@@ -177,6 +178,14 @@
    "in_standard_filter": 1,
    "label": "Condition",
    "options": "\nExcellent\nGood\nFair\nPoor\nFallow"
+  },
+  {
+   "description": "Which Soil Compaction Profile this block's ground follows — the two hour figures the irrigation/compaction overlay reads to decide whether a tractor may go on it after a set. OPTIONAL, AND AN EMPTY ONE IS NOT A GUESS: a block naming no profile falls back to the shipped 24/48-hour default and the overlay reports `thresholds_source` as `default` rather than presenting the fallback as this farm's own measurement.\n\nIT IS ON THE BLOCK AND NOT ON THE ZONE. The soil belongs to the ground; an irrigation zone is a way of watering some of it, and resolves its profile through the block it names.",
+   "fieldname": "soil_profile",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Soil Compaction Profile",
+   "options": "Soil Compaction Profile"
   },
   {
    "fieldname": "productive_section",

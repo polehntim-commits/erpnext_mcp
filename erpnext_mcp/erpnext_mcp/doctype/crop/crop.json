@@ -20,6 +20,7 @@
   "harvest_window_start",
   "harvest_col",
   "harvest_window_end",
+  "target_brix",
   "spray_section",
   "default_phi_days",
   "varieties_section",
@@ -118,6 +119,13 @@
    "fieldtype": "Select",
    "label": "Harvest Window End",
    "options": "\nJanuary\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember"
+  },
+  {
+   "description": "The soluble-solids figure a block of this crop is picked at, in degrees Brix. THE NUMBER THE HARVEST-READINESS OVERLAY ARGUES A PICK DATE FROM, read beside the BBCH code off the latest Crop Observation — the doctype's own note says why neither number alone will call a pick right: Brix rises while the stage stands still in a hot week, and the stage advances while Brix stalls in a wet one.\n\nA CROP-LEVEL FLOOR AND NOT A CONTRACT SPECIFICATION. It is the figure that colours a map, and a buyer's minimum is a term of a sale that lives on the sale. A variety may depart from it — `Crop Variety.target_brix` is the sparse overlay, resolved per variety, with the answer reporting which of the two it used. Left blank the overlay reports the stage alone and NAMES the missing target rather than assuming one; a fabricated Brix target would turn every block on the farm the same colour on the same day.",
+   "fieldname": "target_brix",
+   "fieldtype": "Float",
+   "label": "Target Brix",
+   "precision": "2"
   },
   {
    "fieldname": "spray_section",

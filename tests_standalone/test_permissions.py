@@ -350,6 +350,18 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 		# only the Employees rostered on it. `list_push_tokens` is Foreman-and-
 		# above in its own body. A token is a routing address and holds no wage,
 		# no hour, no location and no fact about the business.
+		# THE v0.116.0 ADDITION IS A SOIL, WHICH IS A PROPERTY OF GROUND AND NOT
+		# OF A COMPANY. A Soil Compaction Profile says how long a silt loam stays
+		# too wet to drive on; a silt loam does not consult the deed either, and
+		# two entities farming the same bench are farming the same soil. It is
+		# the Crop argument about a species, applied one layer down.
+		#
+		# The docname reason applies as it does to the four above: `soil_type` IS
+		# the docname and `Field.soil_profile` spells it, so a per-company row
+		# would need either duplicates the unique constraint refuses or a
+		# prefixed name every block would have to carry. The entity narrowing
+		# already exists where it belongs — the FIELD names both the profile and
+		# its owning entity, and Frappe scopes the Field exactly as before.
 		self.assertEqual(
 			sorted(unscoped),
 			[
@@ -369,6 +381,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Market",
 				"Merchant Alias",
 				"Mobile Push Token",
+				"Soil Compaction Profile",
 				"Staged File Chunk",
 				"Staged File Upload Session",
 				"State Tax Table",

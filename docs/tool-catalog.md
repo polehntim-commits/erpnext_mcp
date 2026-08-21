@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 770 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 775 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 384 read tools are **on** by default and can be switched off individually. A
+All 386 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -17902,3 +17902,186 @@ the bytes got there. Nothing about the surface widens: `routes.bind` still reduc
 whatever comes out of it to the keys the method declares.
 
 `SERVER_CHANGES.md` item 24.
+
+---
+
+## v0.116.0 — the operational map overlays
+
+Cycle 5, Precision Ag Map Phase 3. `/app/farm-overview` has drawn **shape** since
+v0.110.0 — where the ground is and whose it is. Shape does not change between one
+morning and the next, and every question a farm asks a map at six does:
+
+> *Which blocks may a tractor go on today? Which are closed to entry, and for how
+> long? Which are ready to pick? Where did the water run last night?*
+
+Five registers already held all four answers and not one of them was reachable
+from the map. Five tools, one new DocType and three new columns close that. **No
+existing tool signature changed.**
+
+### `get_map_overlays` — read-only, default ON
+
+**Arguments:** `company`, `blocks` (array of Field docnames), `layers` (array),
+`limit`.
+
+```json
+{"company": "Constancy Farms", "layers": ["spray_rei", "equipment_access"]}
+```
+
+**Returns** `blocks` and `zones`, each row carrying the layers that were asked
+for, plus `layers`, `counts`, `role`, `withheld`, `refused_layers`, `warnings`
+and `defaults`.
+
+**The five layers.**
+
+| Key | Subject | Read from | Answers |
+| --- | --- | --- | --- |
+| `irrigation` | zone | `Asset State Log`, through `Asset Register.irrigation_zone` | how long since the water came off, against this soil's own hours |
+| `spray_rei` | block | the `Spray REI` register, via `get_active_rei`'s own reader | which blocks are closed to entry, and for how long |
+| `spray_phi` | block | `Spray Application` **and** completed Spray tasks | which blocks may not be picked yet, and when each opens |
+| `harvest` | block | the latest `Crop Observation` | growth stage and Brix against the variety's pick target |
+| `equipment_access` | block | the two above it | may a tractor or sprayer go on this block |
+
+**Nothing here is a second opinion.** Every layer reads its register through that
+register's own owner — `spray_rei.active_for_blocks` runs the expiry sweep before
+it answers, and `spray.phi_windows_for_blocks` already consults *both* places a
+spray stamps a pre-harvest date and takes the later. A map that recomputed either
+would drift from the federal one the first time either was corrected, and the
+first anybody would know is a worker in a treated block or a load rejected at the
+packhouse.
+
+**Compaction and restricted entry are not the same question** and are never
+merged into one traffic light. `irrigation` is about a **machine** on wet ground —
+wheel ruts and a compacted pan that outlasts the planting. `spray_rei` is about a
+**person** walking in — 40 CFR §170.407 and an employer's duty to keep workers
+out. Different rules, different subjects, different consequences.
+
+**`unknown` is a colour and it is never green.** A zone whose valves have never
+been scanned has not been proven dry; a block with no scouting round on it is not
+"not ready"; a crop with no Brix target does not make every block ripe. Each
+comes back `unknown`, in grey, **with the reason** — and the two ways a zone can
+have no answer get different sentences, because "no valve names this zone" is a
+job in the asset register and "the valves are tagged and none has ever been
+logged" is a job in the orchard.
+
+**Every layer dict carries a `colour` in hex** and no client maps a status to
+one. Two clients holding their own tables do not diverge loudly — they diverge on
+one status on one client, which reads as a block that is simply a different
+colour on the phone than on the office screen. Nobody files that; they stop
+trusting the map.
+
+**Equipment access is an order, not an average.** A live restriction blocks the
+block full stop — driving a sprayer into a treated block is an entry and the
+operator is a person, and an average would let a very dry block outvote a federal
+restriction. Then wet ground is **caution and not a refusal**, because whether a
+pass is worth a rut is the foreman's judgement; `driving_zone` names the zone
+that made it their problem. An unmeasured block is caution too, never open.
+**Soil moisture is named in `inputs_missing`** rather than weighted at zero —
+this app has no soil moisture register yet, and an `open` verdict here honestly
+means "nothing we can measure is against it".
+
+**Harvest readiness needs both numbers.** `Crop Observation.brix_reading`'s own
+description states the rule: Brix rises while the stage stands still in a hot
+week, and the stage advances while Brix stalls in a wet one. So `pick_now`
+requires a BBCH code in 87–89 **and** a reading at or above the target, and every
+other combination is `near_ready` with `short_of` naming what is missing —
+`brix` (the reading is under), `brix_reading` (nobody took one), `brix_target`
+(no pick figure recorded for this crop) or `stage` (the sugar is there and the
+fruit is not). A round older than seven days is still reported, flagged `stale`:
+dropping it would draw an unscouted block over one scouted a fortnight ago.
+
+**Which layers come back depends on the caller's roles.** Field Worker gets
+restricted entry and nothing else — not because the rest is secret but because a
+picking crew's phone showing five overlapping colour schemes is a phone nobody
+reads the one that matters off. Crew Leader adds harvest readiness; Foreman and
+Farm Manager get all five; Compliance Officer gets the two regulated windows.
+**Every role gets restricted entry, always.** An account holding none of this
+app's roles is not filtered at all — a picker *has* the Field Worker role, so a
+role-less login is the MCP system user or a Desk session — and `unfiltered` says
+which branch ran. It is a **display filter and not a gate**;
+`frappe.has_permission` on each register is what decides what can be read.
+
+### `list_soil_compaction_profiles` — read-only, default ON
+
+**Arguments:** `enabled_only`, `limit`.
+
+**Returns** `profiles` (each with `red_hours`, `yellow_hours`, `drainage_class`,
+`source`, and the count and names of the blocks it covers), plus
+`default_red_hours`, `default_yellow_hours` and **`blocks_without_profile`**.
+
+That last number is the one worth reading. A block naming no profile is coloured
+by the shipped 24/48-hour default, which is a **loam's** — so a farm on sand is
+being told to keep machinery off ground that dried out yesterday, and a farm on
+clay is being sent onto ground that has not. The eight profiles are seeded on
+migrate and **nothing is wired up** until somebody says which soil each block is.
+
+### `create_soil_compaction_profile` — MUTATING, default off
+
+**Arguments:** `soil_type` (required, and the docname), `red_hours` (required),
+`yellow_hours` (required), `drainage_class`, `source`, `notes`, `enabled`.
+
+The eight seeded rows are USDA textural classes and are deliberately short — the
+triangle has twelve, and four of them sit between neighbours already there. A
+farm with a soil between two adds its own rather than picking the nearer of a
+list nobody reads.
+
+**Refuses a yellow figure at or below the red one**, in the controller, because
+getting them the wrong way round is *silent*: it leaves no caution band at all,
+so every wet block goes straight from red to green when the red hours pass and
+the drying-out warning is never drawn. Nothing anywhere reports an error; the
+first symptom is a rutted block. **Refuses either figure at zero** for the same
+class of reason — a blank Float arrives as zero without anybody typing it, and
+zero claims this soil is never too wet to drive on.
+
+### `update_soil_compaction_profile` — MUTATING, default off, idempotent
+
+**Arguments:** `soil_type` (required), `red_hours`, `yellow_hours`,
+`drainage_class`, `source`, `notes`, `enabled`.
+
+**An argument not passed is left alone and a zero is not a blank.** Omitting
+`red_hours` means keep it; sending `0` means "never too wet", which the
+controller refuses. Collapsing the two would take a working profile down on an
+update that meant to change only the notes.
+
+**Returns `blocks_recoloured`.** Editing a profile recolours every block pointing
+at it on the next map read, and a typo discovered by a tractor is an expensive
+way to learn how many that was.
+
+Retiring a profile with `enabled: false` does not orphan the blocks naming it:
+they fall back to the shipped default and the overlay **names the profile it
+skipped**, so a colour that changed across a farm on the day somebody unticked a
+row can be traced to that row.
+
+### `assign_soil_profile` — MUTATING, default off, idempotent
+
+**Arguments:** `field` (required), `soil_profile`, `clear`, `company`, `dry_run`.
+
+Its own tool rather than an argument on `update_field` — the same call
+`link_field_to_cost_center` makes about the identical shape: one Link column,
+with a real consequence behind setting it wrong, and no change to the signature
+of a tool other clients already call.
+
+**Refuses a disabled profile.** A block pointed at a retired one is coloured by
+the shipped default while its own form claims a measurement, which is the worst
+of both. `clear: true` puts a block back on the default deliberately.
+
+### New records and columns
+
+| Where | What | Why |
+| --- | --- | --- |
+| `Soil Compaction Profile` (new) | `soil_type` (docname), `drainage_class`, `red_hours`, `yellow_hours`, `source`, `enabled`, `notes` | how long this soil stays too wet to drive on. A record and not a constant, for the reason `Pest Action Threshold` is: the number is local, and a threshold nobody can edit is one a crew stops believing |
+| `Field.soil_profile` | Link | which profile this block's ground follows. On the block, because the soil belongs to the ground; a zone resolves through the block it waters |
+| `Crop.target_brix` | Float | the crop-level pick figure the harvest layer argues from |
+| `Crop Variety.target_brix` | Float | the sparse per-variety override, resolved the same way v0.114.0's water overlay is — blank is no opinion, and a zero is not a blank |
+
+### The two other doors
+
+`/app/farm-overview` grows an **operational layer** picker: one layer at a time
+and **none by default**, because the layers cost register reads a boundary check
+should not pay for, and because five colour schemes on one polygon is the same
+unreadable screen the role filter exists to prevent. The register's own colour
+stays on every shape the layer does not paint, so the map still reads as a map.
+
+`/farmops/api/mobile/get_map_overlays` is the same answer on the handset, open on
+enrolment alone — gating it on the dispatch role would have withheld a safety
+warning from the only people it is about. `blocks` is how a scan becomes a map
+answer: one docname is one register read rather than five hundred.

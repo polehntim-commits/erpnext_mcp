@@ -33,6 +33,20 @@
 		.fo-bar label { display: block; font-size: 11px; text-transform: uppercase;
 			letter-spacing: .08em; color: var(--text-muted, #8d99a6); margin: 0 0 4px; }
 		.fo-company-row { min-width: 220px; }
+		.fo-overlay-row { min-width: 240px; }
+		/* THE OVERLAY LEGEND IS A SECOND ROW UNDER THE REGISTER ONE, not a
+		   replacement for it. The register colours say which shape is a block and
+		   which is a zone; the overlay colours say what is true of it. A reader
+		   needs both at once, and merging them would leave somebody unable to
+		   tell an untraced parcel from a dry one. */
+		.fo-overlay-legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 10px 16px;
+			border-top: 1px dashed var(--border-color, #e2e8f0); font-size: 12px; }
+		.fo-overlay-legend .fo-swatch { border-radius: 50%; width: 12px; }
+		.fo-overlay-note { padding: 0 16px 10px; font-size: 11px;
+			color: var(--text-muted, #8d99a6); }
+		.fo-popup-overlay { font-size: 11px; margin: 6px 0; padding: 6px 8px;
+			border-radius: 4px; background: rgba(0,0,0,.04); }
+		.fo-popup-overlay strong { display: block; margin-bottom: 2px; }
 		.fo-summary { flex: 1 1 auto; font-size: 12px; color: var(--text-muted, #8d99a6);
 			text-align: right; }
 		.fo-panel { border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px;
@@ -65,6 +79,10 @@
 		<div class="fo-company-row" style="display:none">
 			<label for="fo-company">Entity</label>
 			<select id="fo-company" class="form-control input-sm"></select>
+		</div>
+		<div class="fo-overlay-row">
+			<label for="fo-overlay">Operational layer</label>
+			<select id="fo-overlay" class="form-control input-sm"></select>
 		</div>
 		<div class="fo-summary"></div>
 	</div>

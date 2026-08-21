@@ -257,6 +257,13 @@
   "allow_update_irrigation_zone",
   "allow_update_farm_location",
   "allow_delete_farm_location",
+  "map_overlay_section",
+  "allow_get_map_overlays",
+  "allow_list_soil_compaction_profiles",
+  "map_overlay_col",
+  "allow_create_soil_compaction_profile",
+  "allow_update_soil_compaction_profile",
+  "allow_assign_soil_profile",
   "housing_tools_section",
   "allow_list_housing_units",
   "allow_get_housing_unit",
@@ -2630,6 +2637,50 @@
    "fieldname": "allow_delete_farm_location",
    "fieldtype": "Check",
    "label": "Delete Farm Location"
+  },
+  {
+   "fieldname": "map_overlay_section",
+   "fieldtype": "Section Break",
+   "label": "Operational Map Overlays"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. What is true of every block and irrigation zone RIGHT NOW: where the water last ran and whether the ground will take a machine, which blocks are closed to entry after a spray and for how long, which may not be picked yet, which are ready, and the composite of the lot. Every layer is read through the register's own owner rather than re-derived, so it cannot disagree with get_active_rei or the pre-harvest compliance rule. Which layers come back depends on the caller's roles — restricted entry always, the rest by role — and the ones held back are named.",
+   "fieldname": "allow_get_map_overlays",
+   "fieldtype": "Check",
+   "label": "Get Map Overlays"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. The soil book behind the compaction colours: how long after the water comes off each soil is still too wet to drive on, and how many blocks each profile actually covers. Reports blocks_without_profile, which is how many blocks are still coloured by the shipped 24/48-hour default rather than by their own ground.",
+   "fieldname": "allow_list_soil_compaction_profiles",
+   "fieldtype": "Check",
+   "label": "List Soil Compaction Profiles"
+  },
+  {
+   "fieldname": "map_overlay_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Adds a soil this farm has that the eight seeded USDA textural classes do not. The controller refuses a yellow figure at or below the red one — getting them the wrong way round leaves NO caution band, so every wet block goes straight from red to green and the drying-out warning is never drawn. OFF by default.",
+   "fieldname": "allow_create_soil_compaction_profile",
+   "fieldtype": "Check",
+   "label": "Create Soil Compaction Profile"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING, idempotent. Replaces a shipped hour figure with this farm's own, or retires a profile. An argument not passed is left alone and a zero is not a blank. Returns how many blocks the edit recolours, because a typo found by a tractor is an expensive way to learn that number. OFF by default.",
+   "fieldname": "allow_update_soil_compaction_profile",
+   "fieldtype": "Check",
+   "label": "Update Soil Compaction Profile"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING, idempotent. Points one block at the soil profile its ground follows, which is what turns the shipped hour figures into this farm's own on that block's zones. Refuses a disabled profile, which would leave the block coloured by the default while its own form claimed a measurement. OFF by default.",
+   "fieldname": "allow_assign_soil_profile",
+   "fieldtype": "Check",
+   "label": "Assign Soil Profile"
   },
   {
    "fieldname": "housing_tools_section",

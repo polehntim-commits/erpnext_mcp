@@ -1752,6 +1752,13 @@ APP_DOCTYPES = {
 	"Traceability Lot Code": "traceability_lot_code",
 	"Traceability Lot Source": "traceability_lot_source",
 	"Critical Tracking Event": "critical_tracking_event",
+	# v0.116.0 — the operational map overlays. How long the ground under a block
+	# stays too wet to drive on after a set, by soil. `autoname: field:soil_type`
+	# because a profile is referred to by what the soil is CALLED — on a Field
+	# form, in an overlay answer and in a refusal — and a hash there would make
+	# every one of those references unreadable. No CHILD_TABLE_SOURCES entry: it
+	# has no child table and nothing looks for its parents.
+	"Soil Compaction Profile": "soil_compaction_profile",
 }
 
 #: The standard reports this app ships, by folder name under `REPORT_DIR`. Rows

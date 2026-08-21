@@ -11,7 +11,8 @@
   "rootstock",
   "pollination_group",
   "expected_yield_per_acre",
-  "maturity_years"
+  "maturity_years",
+  "target_brix"
  ],
  "fields": [
   {
@@ -57,6 +58,14 @@
    "in_list_view": 1,
    "label": "Years to Maturity",
    "non_negative": 1
+  },
+  {
+   "description": "This variety's own pick Brix, where it departs from the crop's. SPARSE AND PER FIELD, the same shape as the water overlay beside it: a blank cell is a variety with no opinion and the crop's figure stands. A ZERO IS NOT A BLANK — it is a claim that this variety is picked at zero Brix, which is why the resolver distinguishes the two rather than reading `float(value or 0)`.",
+   "fieldname": "target_brix",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Target Brix",
+   "precision": "2"
   }
  ],
  "index_web_pages_for_search": 0,

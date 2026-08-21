@@ -159,6 +159,7 @@ def after_install() -> None:
 	_sales_channel_field()
 	_pest_provider_field()
 	_agricultural_masters()
+	_soil_compaction_profiles()
 	_employment_types()
 	_farm_designations()
 	frappe.db.commit()
@@ -204,8 +205,47 @@ def after_migrate() -> None:
 	_sales_channel_field()
 	_pest_provider_field()
 	_agricultural_masters()
+	_soil_compaction_profiles()
 	_employment_types()
 	_farm_designations()
+
+
+def _soil_compaction_profiles() -> None:
+	"""Seed the soil book behind the compaction overlay. v0.116.0.
+
+	EIGHT ROWS AND NO WIRING. The profiles exist after this runs and NOTHING
+	POINTS AT THEM — every block is still coloured by the shipped 24/48 default
+	until somebody says which soil it is, with `assign_soil_profile` or on the
+	Field form. That is deliberate and is the same call `_farm_task_templates`
+	makes about its own seeds: guessing a farm's soil from its county would
+	produce a map full of confident colours drawn off nobody's measurement, and
+	the whole promise of this layer is that a colour can be traced to a record.
+
+	`list_soil_compaction_profiles` reports `blocks_without_profile`, which is
+	the number that says how much of that job is left.
+	"""
+	try:
+		from . import agronomy_seed
+
+		report = agronomy_seed.seed_soil_profiles()
+	except Exception as exc:  # pragma: no cover - the seeder swallows its own
+		print(f"erpnext_mcp: the soil compaction profiles were not seeded — {type(exc).__name__}: {exc}")
+		return
+	if report.get("created"):
+		print(
+			f"erpnext_mcp: seeded {len(report['created'])} soil compaction profile(s) — how long "
+			"the ground stays too wet to drive on after a set, by USDA textural class, which is "
+			"what the irrigation/compaction map layer colours a zone by. THE HOURS ARE "
+			"DRAINAGE-CLASS SHAPES AND NOT MEASUREMENTS: what is worth keeping from them is "
+			"that a sand is driveable in eight hours and a clay in sixty, not the particular "
+			"figures. NOTHING IS WIRED UP — every block is still on the shipped 24/48 default "
+			"until you point it at a soil with assign_soil_profile or on the Field form, and "
+			"list_soil_compaction_profiles reports how many are still on it."
+		)
+	for skipped in report.get("skipped") or ():
+		print(f"erpnext_mcp: skipped {skipped.get('name')} — {skipped.get('reason')}")
+	for failure in report.get("failed") or ():
+		print(f"erpnext_mcp: could not seed {failure.get('name')} — {failure.get('reason')}")
 
 
 def _pest_provider_field() -> None:

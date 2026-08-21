@@ -490,6 +490,19 @@ ROUTES = (
 	# with a document open, and a method with no route 404s — which is the whole
 	# design of this table.
 	Route("/mobile", mobile_api.list_farm_locations),
+	# v0.116.0. THE OPERATIONAL MAP, on the phone that is standing in the block.
+	# The read above answers "where can work be sent"; this answers "what is TRUE
+	# of each of those places right now" — the restricted-entry countdown, the
+	# pre-harvest date, the growth stage and Brix, whether the ground will take a
+	# machine. Every fact on it is one somebody needs where the ground is.
+	#
+	# OPEN ON ENROLMENT LIKE THE READ ABOVE IT, and for a sharper reason. The
+	# restricted-entry layer is the one every role sees — it is the layer that
+	# keeps a worker out of a treated block — so gating it on the dispatch role
+	# would have withheld a safety warning from exactly the people it is about.
+	# What each role sees BEYOND that is narrowed by `overlays.layers_for`, and
+	# what it held back is named in the answer rather than silently missing.
+	Route("/mobile", mobile_api.get_map_overlays),
 	Route("/mobile", mobile_api.create_farm_location),
 	Route("/mobile", mobile_api.create_field),
 	Route("/mobile", mobile_api.create_irrigation_zone),

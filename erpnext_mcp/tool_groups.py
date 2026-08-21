@@ -152,6 +152,13 @@ DOMAIN_BY_KEY = {domain.key: domain for domain in DOMAINS}
 SECTION_DOMAIN = {
 	# ── the orchard ──────────────────────────────────────────────────────
 	"farm_tools_section": "farm",
+	# v0.116.0. The operational map overlays and the soil book behind their
+	# compaction colours file under `farm` beside the registers they read — the
+	# blocks, the zones and the valves are all here, and an operator looking for
+	# "why is this block red" should find the map switch in the same chip as the
+	# register it is drawn over rather than under Compliance because two of the
+	# five layers happen to be regulated windows.
+	"map_overlay_section": "farm",
 	"geo_tools_section": "farm",
 	"irrigation_valve_section": "farm",
 	"agronomy_section": "farm",

@@ -99,6 +99,7 @@ from .tools import (
 	locations,
 	lots,
 	maintenance,
+	map_overlays,
 	masters,
 	meta,
 	ml_model,
@@ -7297,6 +7298,197 @@ TOOLS = {
 		title="Import field boundaries from GeoJSON",
 		available=_geo_ready("Field"),
 		requires=_GEO_REQUIRES,
+	),
+	# ── the operational map: what is true of a block right now ──────────────
+	"get_map_overlays": _tool(
+		map_overlays.get_map_overlays,
+		"THE FARM AS IT IS THIS MORNING, not as it is shaped. Five operational "
+		"layers over every block and irrigation zone this login may read, in one "
+		"answer: where the water last ran and whether the ground will take a "
+		"machine, which blocks are closed to entry and for how long, which may not "
+		"be picked yet and until when, which are ready to pick, and the composite "
+		"of the lot — may a tractor go on this block. Read-only.\n\n"
+		"NOTHING HERE IS A SECOND OPINION. Every layer is a join over a register "
+		"this app already owns and reads it through that register's own owner: "
+		"restricted entry through `get_active_rei`'s reader, the pre-harvest "
+		"interval through the one that already consults BOTH places a spray stamps "
+		"a date, the water through the valve log `get_irrigation_runtime` sums, "
+		"and readiness through the latest `Crop Observation`. A map that computed "
+		"its own REI window would drift from the federal one the first time either "
+		"was corrected.\n\n"
+		"COMPACTION AND RESTRICTED ENTRY ARE NOT THE SAME QUESTION and are never "
+		"merged into one colour. `irrigation` answers whether a MACHINE should go "
+		"on wet ground; `spray_rei` answers whether a PERSON may walk in at all "
+		"(40 CFR §170.407). `equipment_access` is the one place both are read, it "
+		"says which input decided it, and a live restriction beats every soil "
+		"consideration on it.\n\n"
+		"UNKNOWN IS A COLOUR AND IT IS NEVER GREEN. A zone whose valves have never "
+		"been scanned has not been proven dry; a block with no scouting round on it "
+		"is not 'not ready'; a crop with no Brix target does not make every block "
+		"ripe. Each comes back `unknown` WITH THE REASON, because a map that draws "
+		"an unmeasured block the same colour as a measured safe one is worse than a "
+		"map with a hole in it.\n\n"
+		"WHICH LAYERS COME BACK DEPENDS ON THE CALLER'S ROLES. A Field Worker gets "
+		"restricted entry and nothing else, a Crew Leader adds harvest readiness, a "
+		"Foreman and a Farm Manager get all five, a Compliance Officer gets the two "
+		"regulated windows. Every role gets restricted entry, always. Layers held "
+		"back are NAMED in `withheld` — it is a display filter to keep a phone "
+		"readable, and `frappe.has_permission` on each register is what actually "
+		"decides what can be read.",
+		{
+			"company": _COMPANY,
+			"blocks": _field(
+				{"type": "array", "items": {"type": "string"}},
+				"Only these Field docnames. A name this login cannot read is reported in "
+				"`warnings` rather than silently dropped. Omit for the whole entity.",
+			),
+			"layers": _field(
+				{"type": "array", "items": {"type": "string"}},
+				"Narrow to some of irrigation, spray_rei, spray_phi, harvest, "
+				"equipment_access. A layer the caller's roles do not show is REFUSED BY "
+				"NAME in `refused_layers` — asking for harvest readiness and getting a map "
+				"with none would read as a farm with no observations. Omit for every layer "
+				"the roles allow, which is also the cheapest call: an unasked layer's reads "
+				"do not run.",
+			),
+			"limit": _field(_INTEGER, "Maximum blocks. Default and hard maximum 500."),
+		},
+		title="Get the operational map overlays",
+		available=_needs_doctype("Field"),
+		requires="the Field DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_soil_compaction_profiles": _tool(
+		map_overlays.list_soil_compaction_profiles,
+		"The soil book behind the compaction colours: for each soil, how many hours "
+		"after the water comes off the ground is still red, and how many until it is "
+		"green. With the number of blocks each profile actually covers. Read-only.\n\n"
+		"`blocks_without_profile` IS THE NUMBER WORTH READING. A block naming no "
+		"profile is coloured by the shipped 24/48-hour default, which is a loam's — "
+		"so a farm on sand is being told to keep machinery off ground that dried out "
+		"yesterday, and a farm on clay is being sent onto ground that has not. The "
+		"profiles are seeded on migrate and NOTHING IS WIRED UP until somebody says "
+		"which soil each block is, with `assign_soil_profile` or on the Field form.\n\n"
+		"`blocks` PER PROFILE IS THE OTHER HALF: a beautifully maintained profile "
+		"nothing points at looks identical to a working one on the form.",
+		{
+			"enabled_only": _field(_BOOLEAN, "Only profiles that are live. Default false."),
+			"limit": _field(_INTEGER, "Maximum profiles. Default 100, hard maximum 200."),
+		},
+		title="List soil compaction profiles",
+		available=_needs_doctype("Soil Compaction Profile"),
+		requires=("the Soil Compaction Profile DocType, which ships with erpnext_mcp — run `bench migrate`"),
+	),
+	"create_soil_compaction_profile": _tool(
+		map_overlays.create_soil_compaction_profile,
+		"MUTATING (default OFF). Add a soil this farm has that the shipped book does "
+		"not. The eight seeded rows are USDA textural classes and are deliberately "
+		"short: a farm with a soil between two of them adds its own rather than "
+		"picking the nearer of a list nobody reads.\n\n"
+		"REFUSES a yellow figure at or below the red one, in the controller, because "
+		"getting them the wrong way round is SILENT: it leaves no caution band at "
+		"all, so every wet block goes straight from red to green and the drying-out "
+		"warning is never drawn. Also refuses either figure at zero — a blank Float "
+		"arrives as zero without anybody typing it, and zero claims this soil is "
+		"never too wet to drive on.",
+		{
+			"soil_type": _field(
+				_STRING,
+				"REQUIRED, and the profile's own docname — 'Sandy Loam', 'Bedrock Outcrop'. "
+				"Whatever a county soil survey calls this ground.",
+			),
+			"red_hours": _field(
+				_NUMBER,
+				"REQUIRED. Under this many hours since the water came off, the ground is red "
+				"— wet, and a pass over it compacts.",
+			),
+			"yellow_hours": _field(
+				_NUMBER,
+				"REQUIRED. Between the red figure and this one the ground is yellow. Past it, "
+				"green. Must be greater than red_hours.",
+			),
+			"drainage_class": _field(
+				_STRING,
+				"Rapid, Well Drained, Moderately Well Drained, Somewhat Poorly Drained or Poorly Drained.",
+			),
+			"source": _field(
+				_STRING,
+				"Where the number came from — 'NRCS Web Soil Survey, Wasco County', 'our own "
+				"2024 wheel-rut trial'. The question asked the first time somebody disagrees "
+				"with a colour.",
+			),
+			"notes": _field(_STRING, "Anything else about this soil."),
+			"enabled": _field(_BOOLEAN, "Default true."),
+		},
+		required=("soil_type", "red_hours", "yellow_hours"),
+		mutating=True,
+		title="Create a soil compaction profile",
+		available=_needs_doctype("Soil Compaction Profile"),
+		requires=("the Soil Compaction Profile DocType, which ships with erpnext_mcp — run `bench migrate`"),
+	),
+	"update_soil_compaction_profile": _tool(
+		map_overlays.update_soil_compaction_profile,
+		"MUTATING (default OFF), idempotent. Replace a shipped hour figure with this "
+		"farm's own, or retire a profile. Every seeded row says `shipped default` in "
+		"its `source` column precisely so the ones nobody has reviewed stay visible; "
+		"this is how one stops being one.\n\n"
+		"AN ARGUMENT NOT PASSED IS LEFT ALONE AND ZERO IS NOT BLANK. Omitting "
+		"`red_hours` means keep it; sending 0 means 'this soil is never too wet', "
+		"which the controller refuses. The two are distinguished rather than "
+		"collapsed, because collapsing them would take a working profile down on an "
+		"update that meant to change only the notes.\n\n"
+		"`blocks_recoloured` IS RETURNED FOR A REASON. Editing a profile recolours "
+		"every block pointing at it on the next map read, and a typo discovered by a "
+		"tractor is an expensive way to find out how many that was.",
+		{
+			"soil_type": _field(_STRING, "REQUIRED. The profile's docname."),
+			"red_hours": _field(_NUMBER, "New red threshold in hours. Omit to leave it."),
+			"yellow_hours": _field(_NUMBER, "New yellow threshold in hours. Must exceed red_hours."),
+			"drainage_class": _field(_STRING, "New drainage class."),
+			"source": _field(_STRING, "Where the new figure came from."),
+			"notes": _field(_STRING, "Replacement notes."),
+			"enabled": _field(
+				_BOOLEAN,
+				"false retires it. A block still naming a disabled profile falls back to the "
+				"shipped default and the overlay NAMES the profile it skipped.",
+			),
+		},
+		required=("soil_type",),
+		mutating=True,
+		idempotent=True,
+		title="Update a soil compaction profile",
+		available=_needs_doctype("Soil Compaction Profile"),
+		requires=("the Soil Compaction Profile DocType, which ships with erpnext_mcp — run `bench migrate`"),
+	),
+	"assign_soil_profile": _tool(
+		map_overlays.assign_soil_profile,
+		"MUTATING (default OFF), idempotent. Point one block at the soil profile its "
+		"ground follows, which is what turns the shipped hour figures into this "
+		"farm's own on that block's zones.\n\n"
+		"ITS OWN TOOL RATHER THAN AN ARGUMENT ON `update_field`, the same call "
+		"`link_field_to_cost_center` makes about the identical shape: one Link "
+		"column, with a real consequence behind setting it wrong, and no change to "
+		"the signature of a tool other clients already call.\n\n"
+		"REFUSES A DISABLED PROFILE. A block pointed at a retired one is coloured by "
+		"the shipped default while its own form claims a measurement, which is the "
+		"worst of both. `clear=true` puts a block back on the default deliberately.",
+		{
+			"field": _field(_STRING, "REQUIRED. The Field docname, or just the block name."),
+			"soil_profile": _field(
+				_STRING, "The Soil Compaction Profile docname. Required unless `clear` is true."
+			),
+			"clear": _field(_BOOLEAN, "Put this block back on the shipped default hours. Default false."),
+			"company": _COMPANY,
+			"dry_run": _field(_BOOLEAN, "Report the change without making it. Default false."),
+		},
+		required=("field",),
+		mutating=True,
+		idempotent=True,
+		title="Assign a soil compaction profile to a block",
+		available=_needs_doctype("Field", "Soil Compaction Profile"),
+		requires=(
+			"the Field and Soil Compaction Profile DocTypes, which ship with erpnext_mcp — "
+			"run `bench migrate`"
+		),
 	),
 	# ── labor camp housing ──────────────────────────────────────────────────
 	"list_housing_units": _tool(
