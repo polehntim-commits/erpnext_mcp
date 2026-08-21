@@ -126,6 +126,7 @@ from .tools import (
 	revenue,
 	rules,
 	sales,
+	scouting,
 	sessions,
 	shadow_log,
 	shifts,
@@ -9449,8 +9450,8 @@ TOOLS = {
 			"skill": _field(_STRING, "Only tasks needing this skill, e.g. 'camp_maintenance'."),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Training, Compliance-Audit, "
-				"Hiring, Housing-Cleanup, Water-Sampling or Other.",
+				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
+				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other.",
 			),
 			"urgency": _field(_STRING, "Low, Normal, High or Critical."),
 			"company": _COMPANY,
@@ -9563,13 +9564,15 @@ TOOLS = {
 			),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Training, Compliance-Audit, "
-				"Hiring, Housing-Cleanup, Water-Sampling or Other.",
+				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
+				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other.",
 			),
 			"evidence_required": _field(
 				_OBJECT,
-				"JSON object. Keys: photos, signature, findings_text, witness. REQUIRED — at "
-				"least one must be true.",
+				"JSON object. Keys: photos, signature, findings_text, witness, gps. REQUIRED — at "
+				"least one must be true. `gps` (v0.115.0) asks for a location fix on the "
+				"completion — the one requirement nobody types, which is why a contract has "
+				"to ask for it.",
 			),
 			"location_doctype": _field(
 				_STRING, "The register the place is in: Housing Unit, Field, Irrigation Zone or Parcel."
@@ -9585,7 +9588,10 @@ TOOLS = {
 			),
 			"estimated_duration_minutes": _field(_INTEGER, "How long it should take."),
 			"creates_record": _field(
-				_STRING, "Housing Inspection, Detector Test or Water Test. Refused if the site lacks it."
+				_STRING,
+				"Housing Inspection, Detector Test, Water Test — or Crop Observation, which is "
+				"written by the `index_scouting_observations` sweep rather than at completion. "
+				"Refused if the site lacks the DocType.",
 			),
 			"creates_record_data": _field(
 				_OBJECT, "JSON template merged under whatever the completion supplies."
@@ -9645,8 +9651,8 @@ TOOLS = {
 			"location": _field(_STRING, "The docname of the cabin, block, zone or parcel."),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Training, Compliance-Audit, "
-				"Hiring, Housing-Cleanup, Water-Sampling or Other. Default Repair.",
+				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
+				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other. Default Repair.",
 			),
 			"skill_required": _field(_STRING, "e.g. 'camp_maintenance', 'applicator_license'."),
 			"urgency": _field(
@@ -9696,8 +9702,8 @@ TOOLS = {
 			"reported_by": _field(_STRING, "The Employee id of the worker reporting. REQUIRED."),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Training, Compliance-Audit, "
-				"Hiring, Housing-Cleanup, Water-Sampling or Other. Default Repair.",
+				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
+				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other. Default Repair.",
 			),
 			"skill_required": _field(
 				_STRING,
@@ -10060,14 +10066,16 @@ TOOLS = {
 			),
 			"task_type": _field(
 				_STRING,
-				"REQUIRED. Inspection, Test, Spray, Repair, Harvest, Training, Compliance-Audit, "
-				"Hiring, Housing-Cleanup, Water-Sampling or Other — the same vocabulary Farm Task "
-				"uses.",
+				"REQUIRED. Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
+				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other — the same "
+				"vocabulary Farm Task uses.",
 			),
 			"evidence_required": _field(
 				_OBJECT,
-				"REQUIRED. JSON object. Keys: photos, signature, findings_text, witness. At least "
-				"one must be true.",
+				"REQUIRED. JSON object. Keys: photos, signature, findings_text, witness, gps. At "
+				"least one must be true. `gps` (v0.115.0) asks for a location fix on the "
+				"completion — the one requirement nobody types, which is why a contract has to "
+				"ask for it.",
 			),
 			"description": _field(
 				_STRING, "What this job is and when it is done — read by whoever is CHOOSING a template."
@@ -26239,6 +26247,51 @@ TOOLS = {
 		required=("block", "threat", "threat_category", "count_observed"),
 		mutating=True,
 		title="Record a crop observation",
+		available=_needs_doctype("Crop Observation"),
+		requires="the Crop Observation DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"index_scouting_observations": _tool(
+		scouting.index_scouting_observations,
+		"MUTATING (default OFF), idempotent. TURN COMPLETED SCOUTING TASKS INTO "
+		"CROP OBSERVATIONS. Over one window of completion dates, every Farm Task "
+		"Assignment closed in it whose task produces a Crop Observation becomes "
+		"one: the measurements (observation type, BBCH code, Brix and its "
+		"method, threat and count where there was one) off the task's stamped "
+		"record data, and the location fix, the first photograph and the "
+		"worker's own findings off the assignment. Where it was a Pest Scout "
+		"naming a threat, the same threshold engine `create_crop_observation` "
+		"runs is run on it — the block's Pest Pressure moves and an IPM "
+		"Recommendation is generated where the action number was crossed.\n\n"
+		"IT IS A TOOL AND NOT A `doc_events` HOOK, deliberately and for the "
+		"reason `index_lot_events` is: `hooks.py` promises this app installs no "
+		"document hooks and the test suite fails the build over one. A hook here "
+		"would also fire on a foreman correcting a findings note a fortnight "
+		"later, and would fire inside the completion's own transaction — where a "
+		"refusal from the observation's controller takes down a completion that "
+		"was otherwise fine, while the worker is stood in the block.\n\n"
+		"IDEMPOTENT ON `Crop Observation.source_task`, WHICH IS THE REGISTER AND "
+		"NOT A FLAG. A second sweep over the same window writes nothing and says "
+		"so in `counts.observations_already_present`. Where an observation "
+		"exists but the task's `produced_record` is blank — a flag cleared by "
+		"hand, or a half-finished write — the FLAG IS REPAIRED rather than a "
+		"second observation written, which is the failure a hook cannot see and "
+		"which would otherwise double a block's pest pressure invisibly.\n\n"
+		"ONE BAD ROW NEVER COSTS THE WINDOW. A completion whose measurements the "
+		"observation's controller refuses is counted and named in `refused` with "
+		"its reason, and the sweep carries on. The completion itself always "
+		"stands — it was worked and its evidence is on the assignment.\n\n"
+		"WHAT IT SKIPS IS REPORTED. Completions whose task names no location "
+		"cannot become observations, because an observation IS a block and the "
+		"register is keyed on one; that count is in `skipped`.",
+		{
+			"date_from": _field(_STRING, "REQUIRED. Start of the completion window, YYYY-MM-DD."),
+			"date_to": _field(_STRING, "REQUIRED. End of the completion window, YYYY-MM-DD."),
+			"company": _COMPANY,
+		},
+		required=("date_from", "date_to"),
+		mutating=True,
+		idempotent=True,
+		title="Index scouting completions as observations",
 		available=_needs_doctype("Crop Observation"),
 		requires="the Crop Observation DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),

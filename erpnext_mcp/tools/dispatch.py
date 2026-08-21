@@ -94,7 +94,7 @@ from ..erpnext_mcp.doctype.farm_task_assignment.farm_task_assignment import (
 from ..errors import ToolError
 from ..result import ToolResult
 from ..services import push as push_service
-from . import inspections, shadow_log
+from . import inspections, scouting, shadow_log
 from .housing import EMPLOYEE, hr_installed
 
 FARM_TASK = "Farm Task"
@@ -1264,7 +1264,21 @@ def create_farm_task(args: dict) -> ToolResult:
 
 	described = _describe_task(dict(doc.as_dict()))
 	warnings = []
-	if creates_record and creates_record not in inspections.BUILDERS:
+	if creates_record in scouting.DEFERRED_RECORDS:
+		# v0.115.0. NOT A WARNING — a note about WHEN, not WHETHER. This record
+		# is produced by an idempotent sweep rather than at completion, which is
+		# what this app has instead of document hooks. A caller told the same
+		# thing the unbuildable case is told would go looking for a record that
+		# is coming.
+		warnings.append(
+			f"{creates_record} is written by `{scouting.DEFERRED_RECORDS[creates_record]}` rather "
+			"than by the completion itself — an idempotent sweep an operator can see, switch off "
+			"and re-run, which is what erpnext_mcp has instead of document hooks. The completion "
+			"keeps the submitted measurements on this task and the sweep reads them from there "
+			"together with the assignment's location fix, photographs and findings. Run the sweep "
+			"over the completion date to file the record immediately."
+		)
+	elif creates_record and creates_record not in inspections.BUILDERS:
 		warnings.append(
 			f"{creates_record} exists on this site but erpnext_mcp has no builder for it, so "
 			"completing this task will file the evidence against the assignment and report that it "
@@ -2121,7 +2135,12 @@ def complete_farm_task(args: dict) -> ToolResult:
 			"written."
 		)
 
-	unmet = _unmet_evidence(contract, evidence, signature, findings_given, witness)
+	# v0.115.0. THE FIX ON THE SUBMISSION, OR THE ONE ALREADY ON THE ASSIGNMENT.
+	# A worker who sent their coordinates when they claimed the job has met a
+	# `gps` contract without sending them twice, and demanding a second copy at
+	# completion would refuse a submission whose evidence is already on file.
+	location_gps = as_str(args, "farm_location_gps") or str(assignment.get("farm_location_gps") or "")
+	unmet = _unmet_evidence(contract, evidence, signature, findings_given, witness, location_gps)
 	if unmet:
 		raise ToolError(
 			f"{assignment['task']} cannot be completed: its evidence contract is not met.\n"
@@ -2209,7 +2228,7 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# in the record's notes instead. The ASSIGNMENT keeps the worker's own words
 	# either way — that is the evidence, and it is not this function's to edit.
 	record_findings = "" if clean_pass is True else findings
-	produced, record_note, record_state = _produce_record(
+	produced, record_note, record_state, deferred_payload = _produce_record(
 		task, doc, evidence, signature, record_findings, args
 	)
 	if produced:
@@ -2241,6 +2260,15 @@ def complete_farm_task(args: dict) -> ToolResult:
 
 	final_state = AWAITING_REVIEW if record_state == records.CORRECTIVE_ACTION_REQUIRED else COMPLETED
 	task_fields = {"produced_record": produced or ""}
+	# v0.115.0. WHAT THE WORKER SENT, KEPT WHERE THE SWEEP WILL LOOK FOR IT. The
+	# task's own defaults are already in here — `_produce_record` merged them
+	# under the submission — so this is the whole answer for the record, not a
+	# fragment of it, and re-reading the template later cannot change what a
+	# completed round said. Written ONLY on the deferred path: on every other
+	# task `creates_record_data` is the plan somebody was sent with, and
+	# overwriting it with a copy of itself would be noise.
+	if deferred_payload is not None:
+		task_fields["creates_record_data"] = json.dumps(deferred_payload)
 	# The ticks are written back ONLY where there is a checklist, so a task
 	# without one never has an empty blob stamped over the default.
 	if checklist_items(checklist_state):
@@ -2727,7 +2755,12 @@ def _marked_checklist(task: dict, args: dict) -> dict:
 
 
 def _unmet_evidence(
-	contract: dict, evidence: list, signature: str, findings_given: bool, witness: str
+	contract: dict,
+	evidence: list,
+	signature: str,
+	findings_given: bool,
+	witness: str,
+	location_gps: str = "",
 ) -> list:
 	"""Which of the task's evidence requirements this submission does not meet."""
 	unmet = []
@@ -2757,6 +2790,18 @@ def _unmet_evidence(
 			"witness: the task requires somebody else who was there. This is work where one "
 			"person's word is not the standard, which is why the contract asked."
 		)
+	# v0.115.0. THE ONE REQUIREMENT NOBODY IS ASKED TO TYPE, which is precisely
+	# why it has to be checked. A handset takes the fix on its own; a client that
+	# never learned to send one closes the task perfectly happily and leaves a
+	# season of observations that cannot be put on a map. The refusal names the
+	# argument rather than the concept, because the fix is one field away.
+	if contract.get("gps") and not str(location_gps or "").strip():
+		unmet.append(
+			"gps: the task requires a location fix and none was sent. Pass farm_location_gps as "
+			'"lat,lon" — e.g. "45.5152,-122.6784". A block is twenty acres, so an observation '
+			"with no coordinate cannot be compared to the next round of the same corner, put on "
+			"the map, or shown to have been taken where it says it was."
+		)
 	return unmet
 
 
@@ -2770,17 +2815,46 @@ def _elapsed(started, completed):
 
 
 def _produce_record(task: dict, assignment_doc, evidence: list, signature: str, findings: str, args: dict):
-	"""Build the compliance record this task promised. Returns (name, note, state).
+	"""Build the compliance record this task promised. Returns (name, note, state, deferred).
 
 	A task with no `creates_record` produces nothing and says nothing — most work
 	is just work. A task naming a doctype this app has no builder for completes
 	anyway, with the evidence filed against the assignment and a note saying what
 	could not be produced: refusing the completion would strand a worker who has
 	genuinely done the job in front of a tool that will not accept it.
+
+	v0.115.0. `deferred` IS THE FOURTH ANSWER AND IT IS NOT AN ERROR. A record in
+	`scouting.DEFERRED_RECORDS` is written by an idempotent SWEEP rather than
+	here, for the reason `tools/lots.py` gives at length: this app installs no
+	`doc_events` and `test_hooks.py` fails the build over one, so a producer an
+	operator can see, switch off and re-run over last week belongs at the tool
+	layer. The submitted payload comes back so `complete_farm_task` can stamp it
+	onto the task, which is where the sweep reads it from — a completion whose
+	Brix went nowhere would be a round somebody genuinely walked and nothing
+	could later reconstruct.
 	"""
 	doctype = str(task.get("creates_record") or "").strip()
 	if not doctype:
-		return None, None, None
+		return None, None, None, None
+
+	if doctype in scouting.DEFERRED_RECORDS:
+		payload = dict(_safe_json(task.get("creates_record_data")))
+		payload.update(parse_json_object(args.get("record_data"), "record_data"))
+		return (
+			None,
+			(
+				f"This task produces a {doctype}, which is written by "
+				f"`{scouting.DEFERRED_RECORDS[doctype]}` rather than by the completion itself — "
+				"an idempotent sweep an operator can see, switch off and re-run, which is what "
+				"this app has instead of document hooks. The submission is kept on the task's "
+				"`creates_record_data` and the sweep reads it from there together with this "
+				"assignment's location fix, photographs and findings. Run the sweep over this "
+				"date to file it now; nothing is lost if it is run next week instead."
+			),
+			None,
+			payload,
+		)
+
 	builder = inspections.BUILDERS.get(doctype)
 	if builder is None:
 		return (
@@ -2792,12 +2866,14 @@ def _produce_record(task: dict, assignment_doc, evidence: list, signature: str, 
 				"stands — refusing it would strand somebody who has done the job."
 			),
 			None,
+			None,
 		)
 	if not compat.doctype_exists(doctype):
 		return (
 			None,
 			f"This site no longer has the {doctype} DocType, so no record could be written. Run "
 			"`bench migrate`. The completion and its evidence stand.",
+			None,
 			None,
 		)
 
@@ -2836,7 +2912,7 @@ def _produce_record(task: dict, assignment_doc, evidence: list, signature: str, 
 		payload.setdefault("signature", signature)
 
 	record = builder(payload, evidence)
-	return record.name, None, str(record.workflow_state or "")
+	return record.name, None, str(record.workflow_state or ""), None
 
 
 def _subject_field(doctype: str) -> str:

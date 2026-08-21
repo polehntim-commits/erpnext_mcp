@@ -1100,9 +1100,9 @@ class Catalogue(SeededTestCase):
 		program, thinning, pruning — grouped by practice. The two child tables
 		behind it carry no tools of their own.
 		"""
-		self.assertEqual(len(registry.TOOLS), 769)
+		self.assertEqual(len(registry.TOOLS), 770)
 		self.assertEqual(len(registry.READ_TOOLS), 384)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 385)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 386)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

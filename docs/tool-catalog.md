@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 769 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 770 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -15702,6 +15702,81 @@ pressure still moves; only the recommendation is withheld.
 a first season, and it is named as a gap — the observations already on file are
 how you find out what the number should be.
 
+#### `index_scouting_observations` — MUTATING, default off, idempotent (v0.115.0)
+
+The second door onto the same register, and the one nobody types into. A scouting
+task's completion **already is** an observation — a growth stage, a Brix reading,
+a photograph and a coordinate, filed against a Farm Task Assignment. Until
+v0.115.0 all of that stayed on the assignment and the Crop Observation register
+had nothing in it, so the round was worked, evidenced and paid for and the map
+had nothing to colour.
+
+```json
+{"date_from": "2026-08-17", "date_to": "2026-08-23"}
+```
+
+Over one window of **completion dates** every assignment closed in it whose task
+produces a `Crop Observation` becomes one. It reads two places, because they
+answer different questions:
+
+| From the task's `creates_record_data` | From the assignment |
+| --- | --- |
+| `observation_type`, `growth_stage_code`, `brix_reading`, `brix_method` | the location fix (`farm_location_gps`) |
+| `threat`, `threat_category`, `count_observed`, `sample_size` | the first photograph filed as evidence |
+| `crop`, `crop_stage`, `sample_unit`, `severity`, `beneficials_observed` | the worker's own findings, and when it was finished |
+
+The task's half is the template's defaults with the completion's own
+`record_data` merged over the top, stamped at the moment of completion — so a
+template edited next month cannot change what a round already walked said.
+Reading only the task would file an observation with no photograph and no
+coordinate; reading only the assignment would file one with no Brix.
+
+**The threshold engine runs on a Pest Scout and only on a Pest Scout.** Where the
+round named a threat, `evaluate_against_threshold` / `run_downstream` are the same
+functions `create_crop_observation` calls, so an observation is evaluated
+identically whichever door it came through. A Harvest Readiness round is a Brix
+and a stage with no organism in it, and evaluating one would either find no
+threshold (noise) or match a threshold for a pest nobody was looking for.
+
+**It is a tool and not a `doc_events` hook,** for the reason `index_lot_events`
+is: `hooks.py` promises this app installs none and `test_hooks.py` fails the
+build over one. A hook here would also fire on a foreman correcting a findings
+note a fortnight later, and would fire *inside the completion's own transaction*
+— where a refusal from the observation's controller takes down a completion that
+was otherwise fine, while the worker is stood in the block.
+
+**Idempotent on `Crop Observation.source_task`, which is the register and not a
+flag.** A second sweep over the same window writes nothing. Where an observation
+exists but the task's `produced_record` is blank — cleared by hand, or a
+half-finished write — the **flag is repaired** rather than a second observation
+written. That is the failure a hook cannot see, and it would otherwise double a
+block's pest pressure invisibly from both ends.
+
+**One bad row never costs the window.** A completion whose measurements the
+observation's controller refuses is counted and named in `refused` with its
+reason, and the sweep carries on. The completion stands — it was worked, and its
+evidence is on the assignment.
+
+**Completions whose task names no location are skipped and counted.** An
+observation *is* a block; the register is keyed on one.
+
+#### The `Field Scouting` template, and what it asks for
+
+The sixth seeded `Farm Task Template`, and the first whose completion produces an
+agronomic record rather than a compliance one. Its evidence contract is
+`{"photos": true, "findings_text": true, "gps": true}` — `gps` is new in v0.115.0
+and is the one requirement **nobody is asked to type**, which is exactly why it
+has to be in the contract: a handset takes the fix on its own, and a client that
+never learned to send one closes the task perfectly happily and leaves a season of
+observations that cannot be put on a map.
+
+Its `creates_record_data` defaults `observation_type` to `General`, **not** to
+`Pest Scout`. Pest Scout is the one type whose record is invalid without a threat
+and a count, and a template that shipped a mandatory field it has no way to fill
+would refuse every completion from a walk where nothing was found — which is most
+of them. A scout who counted something sends `observation_type: "Pest Scout"`
+with the threat and the count in `record_data` and gets the whole engine.
+
 #### `get_pest_pressure` / `list_pest_pressures`
 
 One row per block, threat and **season year**: a pest that was a problem last
@@ -17319,6 +17394,7 @@ place its products, rates and weather live.
 | `recall_drill` | The twenty-four-hour answer, as a document. Read. |
 | `get_lot_timeline` | The events in order, with the referenced records. Read. |
 | `index_lot_events` | Attaches what the site already holds. Mutating, ships **off**. |
+| `index_scouting_observations` | Completed scouting tasks become Crop Observations. Mutating, ships **off**, idempotent. |
 
 ### Three DocTypes, and one of them is an edge
 

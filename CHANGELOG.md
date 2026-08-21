@@ -3,6 +3,117 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.115.0 — 2026-08-21 — the round that was walked and never written down
+
+**One MCP tool, five DocType columns, one seeded template and one migration
+patch.** No existing tool gained or lost an argument, and no column was dropped.
+
+**A farm was already walking its blocks and the register was empty.** Somebody
+is sent to a block, they read a growth stage, they take a Brix off a
+refractometer, they photograph the canopy and they close the task. All of it
+landed on a Farm Task Assignment — the evidence half — and NOTHING landed in
+`Crop Observation`, which is what the pest-pressure engine, the harvest-readiness
+overlay and next season's threshold argument all read from. The round was
+worked, evidenced and paid for, and the map had nothing to colour.
+
+`index_scouting_observations` is the join, and it is not a new way to record an
+observation: it is the recognition that a scouting task's completion ALREADY IS
+one.
+
+**IT IS A SWEEP AND NOT A DOCUMENT HOOK.** `hooks.py` promises this app installs
+no `doc_events` and `test_hooks.py` fails the build over one; `tools/lots.py`
+settled the identical question the identical way for FSMA lot codes. But the
+promise is not the only reason. A hook here would fire on a foreman correcting a
+findings note a fortnight later, and it would fire INSIDE THE COMPLETION'S OWN
+TRANSACTION — where a refusal from the observation's controller takes down a
+completion that was otherwise fine, while the worker is stood in the block. A
+sweep has the opposite failure mode and it is the affordable one: an observation
+not yet indexed is a row that is late, not a row that is wrong.
+
+**The idempotency key is the register, not the flag.** `Farm Task.produced_record`
+is STAMPED by the sweep and is not what it trusts — the authority is whether a
+`Crop Observation` naming this task exists. Trusting the flag would mean a task
+whose flag was cleared by hand, or by a half-finished write, silently produced a
+SECOND observation of the same round, which doubles a block's pest pressure and
+is invisible from both ends. Where the sweep finds an observation on a task whose
+flag is blank it REPAIRS the flag. That is the case a hook cannot even see.
+
+**It reads two places because they answer different questions.** The task's
+`creates_record_data` carries what was MEASURED — `complete_farm_task` now stamps
+the template's defaults with the completion's own `record_data` merged over the
+top, so a template edited next month cannot change what a round already walked
+said. The assignment carries what the completion knew WITHOUT BEING ASKED: the
+location fix, the photographs, the worker's own findings. Reading only the task
+files an observation with no photograph and no coordinate; reading only the
+assignment files one with no Brix.
+
+**One bad row never costs the window.** A completion whose measurements the
+controller refuses is counted and named in `refused` with its reason, and the
+sweep carries on — and nothing is rolled back, because those refusals come out of
+`validate` before the insert touches the database. A sweep that discarded a week
+of scouting over one mistyped Brix is a sweep an operator turns off.
+
+**Brix, and the method beside it.** `brix_reading` and `brix_method`
+(Refractometer / Estimate) are new, and they are two columns rather than one for
+the reason beneficials sit beside the pest: a refractometer figure and somebody's
+estimate must never average together, because the number that ends up quoted into
+a buyer's specification is the one nobody can tell apart afterwards. A reading
+with no method is refused, a method with no reading is refused, and a figure above
+40° is refused as a decimal point in the wrong place. Whether 19° is ripe is not
+this app's question. Brix sits beside the BBCH code and not instead of it: sugar
+climbs while the stage stands still in a hot week and the stage advances while
+sugar stalls in a wet one, so a pick argued from either alone gets called wrong.
+
+**`observation_type` is what let the other three rounds exist.** Pest Scout,
+Harvest Readiness, General, Growth Stage. `threat`, `threat_category` and
+`count_observed` were unconditionally mandatory, because until now every
+observation was a pest count — so a harvest-readiness walk had three honest
+homes and all of them were bad: refuse it (and the farm keeps maturity in a
+spreadsheet), invent a threat for it (and a pest nobody looked for acquires a
+season of sightings), or say what the round was FOR and ask only for what that
+kind of round produces. The three columns are now mandatory on a Pest Scout AND
+ONLY THERE, in the DocType and again in the controller — a rule stated only in
+JSON is a rule every tool-side write goes around. The threshold engine likewise
+runs on a Pest Scout and only there.
+
+**Nothing written before this release changed meaning.** The default is
+`Pest Scout` and `backfill_observation_type` stamps it on every existing row
+ON PURPOSE rather than leaving a DDL default that looks the same and states
+nothing. Every one of them named a threat and carried a count, because the
+DocType refused one that did not. `create_crop_observation` still requires all
+three arguments and is untouched.
+
+**Two doors, one pipeline.** `evaluate_against_threshold`, `stamp_evaluation` and
+`run_downstream` are the exact lines `create_crop_observation` has run since
+v0.100.0, lifted out unchanged so the sweep calls them rather than
+re-implementing the threshold lookup. Two implementations would drift silently,
+because both produce a well-formed record either way.
+
+**`gps` is the fifth evidence key, and the first nobody is asked to type.** That
+is precisely why it has to be in a contract: a handset takes the fix on its own,
+and a client that never learned to send one closes the task perfectly happily and
+leaves a season of observations that cannot be put on a map. It is additive —
+every contract already stored omits the key, and `_unmet_evidence` checks only
+what it was asked for, so no task already on a board tightened when this shipped.
+A fix sent at claim time satisfies it without being sent twice.
+
+**`Scouting` is a task type of its own, not an Inspection.** An inspection
+produces a pass/fail against a written standard; a scouting round produces a
+MEASUREMENT compared to a threshold somewhere else. Folding them together would
+put every maturity walk on the compliance board.
+
+**`Field Scouting` is the sixth seeded template and the odd one out.** No
+compliance rule raises it — a foreman or an agronomist does, because a block
+needs walking. It is the first template whose completion produces an agronomic
+record rather than a compliance one, and the first whose record is written by a
+sweep. That last part is invisible from the template on purpose: it names
+`Crop Observation` in `creates_record` exactly as the detector template names
+`Detector Test`. Its `creates_record_data` defaults `observation_type` to
+`General` and NOT to `Pest Scout` — Pest Scout is the one type whose record is
+invalid without a threat and a count, and a template that shipped a mandatory
+field it cannot fill would refuse every completion from a walk where nothing was
+found, which is most of them.
+
 ## 0.114.0 — 2026-08-21 — the same variety is not the same tree
 
 **One MCP tool, two child tables, one migration patch and one filter option.**

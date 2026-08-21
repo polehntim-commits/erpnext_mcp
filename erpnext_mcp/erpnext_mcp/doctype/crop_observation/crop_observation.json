@@ -3,18 +3,20 @@
  "allow_rename": 0,
  "autoname": "hash",
  "creation": "2026-08-16 09:00:00.000000",
- "description": "What a scout actually saw in one block on one day: how many of what, out of how many examined, at what growth stage, and how many of its natural enemies were there too. It is the ENTRY POINT of the crop protection pipeline — an observation raises the block's Pest Pressure, and where it crosses that pest's action threshold it generates an IPM Recommendation. Nothing downstream is typed by hand.\n\nSAMPLE SIZE IS A FIRST-CLASS FIELD, NOT A NOTE. 'Two infested leaves' is not a finding; 'two out of two hundred' and 'two out of five' are two different findings, and only one of them is a number. A count with no sample size behind it is recorded and flagged rather than refused, because a scout who saw something worth writing down should never be arguing with a form — but it is not allowed to silently drive a spray decision.\n\nBENEFICIALS ARE COUNTED BESIDE THE PEST because that is what makes this integrated pest management rather than pest counting. A mite population over threshold with predators eating it is a block already handling itself, and the spray that 'fixes' it kills the predators and guarantees the second flare three weeks later.",
+ "description": "What a scout actually saw in one block on one day: how many of what, out of how many examined, at what growth stage, and how many of its natural enemies were there too. It is the ENTRY POINT of the crop protection pipeline — an observation raises the block's Pest Pressure, and where it crosses that pest's action threshold it generates an IPM Recommendation. Nothing downstream is typed by hand.\n\nSAMPLE SIZE IS A FIRST-CLASS FIELD, NOT A NOTE. 'Two infested leaves' is not a finding; 'two out of two hundred' and 'two out of five' are two different findings, and only one of them is a number. A count with no sample size behind it is recorded and flagged rather than refused, because a scout who saw something worth writing down should never be arguing with a form — but it is not allowed to silently drive a spray decision.\n\nBENEFICIALS ARE COUNTED BESIDE THE PEST because that is what makes this integrated pest management rather than pest counting. A mite population over threshold with predators eating it is a block already handling itself, and the spray that 'fixes' it kills the predators and guarantees the second flare three weeks later.\n\nFOUR KINDS OF ROUND, ONE REGISTER. v0.115.0 added `observation_type`, and it is the field that decides what the rest of the row has to carry. A Pest Scout is the round described above and still names a threat and a count. A Harvest Readiness round is a Brix reading and a growth stage with no organism in it; a Growth Stage round is a BBCH code on a date; General is the note somebody made standing in the block. Those three were being walked already and had nowhere to go — filing them here as a pest count of zero would put rounds that were never looking for the pest into that pest's pressure trend, which is the one thing this register must not do. So the threat, the category and the count are mandatory on a Pest Scout AND ONLY THERE, and the pipeline below runs on a Pest Scout AND ONLY THERE.\n\nBRIX SITS BESIDE THE BBCH CODE FOR THE REASON BENEFICIALS SIT BESIDE THE PEST. Either number alone will call a pick date wrong: sugar climbs while the stage stands still in a hot week, and the stage advances while sugar stalls in a wet one. The scouting task's evidence contract asks for both, and `brix_method` is asked for because a refractometer figure and somebody's estimate must never average together.",
  "doctype": "DocType",
  "editable_grid": 0,
  "engine": "InnoDB",
  "field_order": [
   "company",
+  "observation_type",
   "block_doctype",
   "block",
   "observed_on",
   "identity_col",
   "observed_at",
   "observer",
+  "observed_gps",
   "planting_season",
   "scouting_method",
   "threat_section",
@@ -33,6 +35,10 @@
   "severity",
   "beneficials_observed",
   "beneficial_name",
+  "maturity_section",
+  "brix_reading",
+  "maturity_col",
+  "brix_method",
   "evaluation_section",
   "threshold",
   "threshold_value",
@@ -45,6 +51,7 @@
   "downstream_section",
   "pest_pressure",
   "ipm_recommendation",
+  "source_task",
   "evidence_section",
   "photo",
   "notes_section",
@@ -57,6 +64,18 @@
    "in_standard_filter": 1,
    "label": "Company",
    "options": "Company",
+   "search_index": 1
+  },
+  {
+   "default": "Pest Scout",
+   "description": "WHAT THIS ROUND WAS FOR, and the field that decides what the rest of the record has to carry. A Pest Scout observation is a count of something against a threshold and MUST name a threat and a number — that is the pipeline this doctype was built for. The other three are the rounds a farm walks anyway and had nowhere to file: a Harvest Readiness check is a Brix and a stage and no pest at all, a Growth Stage round is a BBCH code on a date, and General is the note somebody made standing in the block. Filing those as a pest count of zero would put three rounds a season into the pressure trend that were never looking for the pest.\n\nIT DEFAULTS TO Pest Scout, and every observation written before v0.115.0 is one: the backfill patch says so explicitly rather than leaving a blank that reads as 'unclassified'.",
+   "fieldname": "observation_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Observation Type",
+   "options": "Pest Scout\nHarvest Readiness\nGeneral\nGrowth Stage",
+   "reqd": 1,
    "search_index": 1
   },
   {
@@ -108,6 +127,12 @@
    "search_index": 1
   },
   {
+   "description": "Where the scout was standing, as \"lat,lon\" — the same format Farm Shift and Farm Task Assignment write. AUTO-CAPTURED BY THE HANDSET AND NEVER TYPED: a block is twenty acres and 'the northwest corner' is not a coordinate, so a second round walked next week cannot be compared to this one without it. It is the column the Precision Ag map reads to put an observation on the map rather than on the block's centroid.",
+   "fieldname": "observed_gps",
+   "fieldtype": "Data",
+   "label": "Observed At (GPS)"
+  },
+  {
    "description": "The planting this observation belongs to, where the block has one on file for the year. It is what lets a season's scouting be read against the block's own lifecycle — pressure on a first-leaf planting is a different decision from the same count on a mature one.",
    "fieldname": "planting_season",
    "fieldtype": "Link",
@@ -128,23 +153,24 @@
    "label": "Threat"
   },
   {
-   "description": "Which of the six kinds of threat this is. Abiotic covers frost, hail, sunburn, wind and salt — damage with no organism behind it, which every pest register leaves out and every grower has to record anyway. Nutrient covers a deficiency read off a tissue or soil test.",
+   "description": "Which of the six kinds of threat this is. Abiotic covers frost, hail, sunburn, wind and salt — damage with no organism behind it, which every pest register leaves out and every grower has to record anyway. Nutrient covers a deficiency read off a tissue or soil test.\n\nMANDATORY ON A PEST SCOUT AND ONLY THERE. A Harvest Readiness round is a Brix and a stage with no organism in it, and a category picked to satisfy a form would put it in the pressure trend for a pest nobody was looking for.",
    "fieldname": "threat_category",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Threat Category",
+   "mandatory_depends_on": "eval:doc.observation_type=='Pest Scout'",
    "options": "Insect\nDisease\nWeed\nVertebrate\nAbiotic\nNutrient",
-   "reqd": 1,
    "search_index": 1
   },
   {
+   "description": "What was being looked at — the pest, the disease, the weed. MANDATORY ON A PEST SCOUT AND ONLY THERE, for the reason Threat Category is: a maturity check is an observation of the fruit, not of an antagonist, and naming one anyway is how a threat nobody saw acquires a season of sightings.",
    "fieldname": "threat",
    "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Threat",
-   "reqd": 1,
+   "mandatory_depends_on": "eval:doc.observation_type=='Pest Scout'",
    "search_index": 1
   },
   {
@@ -186,13 +212,13 @@
    "options": "\nPer Trap\nPer Trap Per Week\nPer Leaf\nPer Shoot\nPer Branch\nPer Tree\nPer 100 Fruit\nPer Sq Ft\nPercent Infested\nPercent Defoliation\nDegree Days\nPercent Dry Weight\nPPM\nCount"
   },
   {
-   "description": "The number seen, in the sample unit above.",
+   "description": "The number seen, in the sample unit above. Zero is a real and useful observation — it is how a block is shown to have been walked and found clean.\n\nMANDATORY ON A PEST SCOUT AND ONLY THERE. A Harvest Readiness round counted nothing, and recording that as a count of zero would read as a clean scout for every pest on the block.",
    "fieldname": "count_observed",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Count Observed",
-   "precision": "4",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.observation_type=='Pest Scout'",
+   "precision": "4"
   },
   {
    "description": "How many units were examined to get that count. See the doctype description: this is the difference between a finding and an anecdote, and an observation below the threshold's own minimum is flagged rather than acted on.",
@@ -231,6 +257,32 @@
    "fieldname": "beneficial_name",
    "fieldtype": "Data",
    "label": "Beneficial"
+  },
+  {
+   "fieldname": "maturity_section",
+   "fieldtype": "Section Break",
+   "label": "Maturity"
+  },
+  {
+   "description": "Soluble solids in degrees Brix. THE NUMBER A PICK DATE IS ARGUED FROM, and the one a packer and a buyer both quote — a cherry contract writes a minimum Brix into the specification, so the figure that decides whether a block is picked this week is the same figure that decides whether the load is accepted.\n\nIT SITS BESIDE THE BBCH CODE AND NOT INSTEAD OF IT. Brix rises while the stage stands still in a hot week and the stage advances while Brix stalls in a wet one; either number alone will call a pick wrong, which is why the scouting contract asks for both.",
+   "fieldname": "brix_reading",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Brix",
+   "precision": "2"
+  },
+  {
+   "fieldname": "maturity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "How the reading was taken. A refractometer figure and somebody's estimate are not the same measurement and must not average together — an Estimate is a useful record of a walk that had no instrument, and a useless input to a contract specification. REQUIRED WHERE THERE IS A READING (see the controller): a bare number with no method behind it is the one that gets quoted as if it were instrumented.",
+   "fieldname": "brix_method",
+   "fieldtype": "Select",
+   "label": "Brix Method",
+   "mandatory_depends_on": "eval:doc.brix_reading",
+   "options": "\nRefractometer\nEstimate"
   },
   {
    "fieldname": "evaluation_section",
@@ -322,6 +374,15 @@
    "search_index": 1
   },
   {
+   "description": "The scouting task whose completion produced this observation, where one did. It is the IDEMPOTENCY KEY `index_scouting_observations` matches on, which is what makes that sweep safe to re-run over a week already indexed, and it is the chain of custody: the task carries who was sent, who claimed it, the evidence they filed and the contract they filed it against. Blank is the ordinary case — an observation filed with create_crop_observation by somebody who walked a block because they were passing is not lesser evidence, it just came through a different door.",
+   "fieldname": "source_task",
+   "fieldtype": "Link",
+   "label": "Source Task",
+   "options": "Farm Task",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "evidence_section",
    "fieldtype": "Section Break",
    "label": "Evidence"
@@ -376,7 +437,7 @@
   }
  ],
  "quick_entry": 0,
- "search_fields": "block,threat,threat_category,observed_on",
+ "search_fields": "block,observation_type,threat,observed_on",
  "sort_field": "observed_on",
  "sort_order": "DESC",
  "states": [],

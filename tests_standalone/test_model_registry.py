@@ -863,9 +863,9 @@ class ToolRegistration(unittest.TestCase):
 		# tables it reads carry no tools of their own — they are edited on the
 		# Crop form and through `create_crop`/`update_crop`, whose signatures
 		# did not change.
-		self.assertEqual(len(self.registry.TOOLS), 769)
+		self.assertEqual(len(self.registry.TOOLS), 770)
 		self.assertEqual(len(self.registry.READ_TOOLS), 384)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 385)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 386)
 
 
 if __name__ == "__main__":

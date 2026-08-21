@@ -29,6 +29,7 @@ from erpnext_mcp import install, settings
 from erpnext_mcp.patches import (
 	backfill_alert_subject_employee,
 	backfill_completion_signatures,
+	backfill_observation_type,
 	backfill_planting_rootstock,
 	fix_literal_newlines_in_instructions,
 	migrate_declarative_rules,
@@ -66,6 +67,7 @@ PATCHES = (
 	),
 	("erpnext_mcp.patches.migrate_incident_tool_switches", migrate_incident_tool_switches),
 	("erpnext_mcp.patches.backfill_planting_rootstock", backfill_planting_rootstock),
+	("erpnext_mcp.patches.backfill_observation_type", backfill_observation_type),
 )
 
 

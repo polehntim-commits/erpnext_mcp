@@ -50,13 +50,13 @@
    "unique": 1
   },
   {
-   "description": "The kind of work every task from this template is. THE SAME VOCABULARY Farm Task.task_type uses, word for word, because a template whose type the Farm Task Select does not hold is a template that fails at the moment somebody tries to raise work from it — which is the moment it exists for.",
+   "description": "The kind of work every task from this template is. THE SAME VOCABULARY Farm Task.task_type uses, word for word, because a template whose type the Farm Task Select does not hold is a template that fails at the moment somebody tries to raise work from it — which is the moment it exists for.\n\nSCOUTING ARRIVED IN v0.115.0 and is deliberately its own type rather than an Inspection. An Inspection produces a pass/fail against a written standard; a scouting round produces a MEASUREMENT — a count, a growth stage, a Brix — that is compared to a threshold somewhere else. Folding it into Inspection would put every maturity walk on the compliance board and make the two impossible to filter apart on the handset, which is the one thing the type is for.",
    "fieldname": "task_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Task Type",
-   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nOther",
+   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nScouting\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nOther",
    "reqd": 1,
    "search_index": 1
   },

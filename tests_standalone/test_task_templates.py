@@ -903,7 +903,7 @@ class TheComplianceFlow(TemplateTestCase):
 
 # ── 8 ───────────────────────────────────────────────────────────────────────
 class TheSeededTemplates(V12TestCase):
-	"""The five this app ships, and the contract that they never overwrite an edit."""
+	"""The six this app ships, and the contract that they never overwrite an edit."""
 
 	NAMES = (
 		"Cabin Habitability Inspection",
@@ -911,9 +911,14 @@ class TheSeededTemplates(V12TestCase):
 		"Water Quality Test",
 		"Certification Renewal",
 		"Training Record",
+		# v0.115.0, and the odd one out: no compliance rule raises it, and its
+		# record is written by a sweep rather than at completion. Both of those
+		# are deliberately invisible from the template — see
+		# `test_the_scouting_seed_produces_a_crop_observation`.
+		"Field Scouting",
 	)
 
-	def test_the_five_are_seeded(self):
+	def test_they_are_all_seeded(self):
 		report = task_templates.seed_farm_task_templates()
 		self.assertEqual(sorted(report["created"]), sorted(self.NAMES))
 		for name in self.NAMES:
@@ -984,6 +989,47 @@ class TheSeededTemplates(V12TestCase):
 				self.assertEqual(spec["dispatch_mode"], recipe["dispatch"])
 				self.assertEqual(spec["creates_record"], recipe["creates_record"])
 				self.assertEqual(spec["evidence_required"], recipe["evidence"])
+
+	def test_the_scouting_seed_produces_a_crop_observation(self):
+		"""v0.115.0. The first seed whose record is agronomic, not compliance.
+
+		Three things have to be true together or the template is decorative: it
+		names the record it produces (so the deferred producer in
+		`_produce_record` recognises it), its contract asks for the location fix
+		(the one requirement nobody types, and so the one nobody notices is
+		missing), and its default observation type is NOT `Pest Scout` — that is
+		the one type whose record is invalid without a threat and a count, so a
+		template defaulting to it would refuse every completion from a walk where
+		nothing was found.
+		"""
+		task_templates.seed_farm_task_templates()
+		row = frappe.db.get_value(
+			"Farm Task Template",
+			"Field Scouting",
+			["task_type", "creates_record", "evidence_required", "creates_record_data"],
+			as_dict=True,
+		)
+		self.assertEqual(row["task_type"], "Scouting")
+		self.assertEqual(row["creates_record"], "Crop Observation")
+
+		contract = json.loads(row["evidence_required"])
+		self.assertTrue(contract.get("gps"), "a scouting round with no coordinate cannot be mapped")
+		self.assertTrue(contract.get("photos"))
+		self.assertTrue(contract.get("findings_text"))
+
+		defaults = json.loads(row["creates_record_data"] or "{}")
+		self.assertIn(defaults.get("observation_type"), ("General", "Harvest Readiness", "Growth Stage"))
+		self.assertNotEqual(defaults.get("observation_type"), "Pest Scout")
+
+	def test_the_scouting_seed_is_the_only_one_with_no_alert_recipe(self):
+		"""It answers nobody's rule, and that is the point of it.
+
+		Every other seed restates an `ALERT_TASK_MAP` recipe so that pointing a
+		compliance rule at it changes nothing. This one is raised by a person
+		because a block needs walking, so a recipe for it would be a schedule
+		nobody asked for.
+		"""
+		self.assertNotIn("Scouting", {recipe["task_type"] for recipe in ALERT_TASK_MAP.values()})
 
 	def test_the_installer_seeds_them_and_wires_no_rule(self):
 		from erpnext_mcp import install

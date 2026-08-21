@@ -122,7 +122,20 @@ EVIDENCE_KEYS = {
 	"signature": "a signature capture — the worker attesting to what they found",
 	"findings_text": "what they actually saw, in words, whether or not anything was wrong",
 	"witness": "the name of somebody else who was there and saw the same thing",
+	"gps": 'a location fix taken where the work was done, as "lat,lon"',
 }
+
+#: v0.115.0. `gps` IS ADDITIVE AND NOTHING EXISTING ASKS FOR IT. Every contract
+#: already stored omits the key, `evidence_contract` reads only the keys a
+#: contract actually names, and `_unmet_evidence` checks only what it was asked
+#: for — so no task already on a board tightened when this shipped.
+#:
+#: IT EXISTS BECAUSE A SCOUTING ROUND IS ABOUT A PLACE. A cabin inspection is
+#: about a cabin and the docname says which; a block is twenty acres and an
+#: observation of "the northwest corner" cannot be compared to next week's round
+#: of the same corner. The handset captures the fix without anybody being asked
+#: for it, which is exactly why it needs to be in the contract: evidence nobody
+#: has to type is evidence nobody notices is missing.
 
 #: The dispatch modes, and which of them a worker may claim from the pool.
 DISPATCH_EITHER = "Either"

@@ -43,16 +43,30 @@ Three things follow, and they are the reasons the design is worth having:
     provenance — 'where did this shape come from' — never a lookup.
 
 ────────────────────────────────────────────────────────────────────────────
-THE FIVE SEEDED TEMPLATES, AND WHY THOSE FIVE
+THE SEEDED TEMPLATES, AND WHY THOSE
 ────────────────────────────────────────────────────────────────────────────
 
-They are the five shipped compliance rules whose work has a repeatable shape,
+The first five are the five shipped compliance rules whose work has a repeatable shape,
 and every one of them is seeded FROM `ALERT_TASK_MAP` in spirit and by hand in
 fact: the same task type, the same skill, the same minutes, the same dispatch
 mode and the same evidence contract the thirteen recipes have used since
 v0.16.0. That is deliberate and it is the backward-compatibility guarantee —
 a site that seeds these templates and points its rules at them raises exactly
 the tasks it raised before, plus a checklist.
+
+THE SIXTH IS THE ODD ONE OUT AND SAYS SO. `Field Scouting` (v0.115.0) answers
+no compliance rule and no alert — nothing raises it on a schedule, a foreman or
+an agronomist raises it because a block needs walking. It is here because it is
+the FIRST template whose completion produces an agronomic record rather than a
+compliance one, and the shape of that is worth shipping rather than leaving
+every operation to invent: a photograph, a growth stage, a sugar reading and a
+coordinate, which is the minimum from which a pick date can later be argued.
+
+It is also the first template whose record is written by a SWEEP rather than at
+completion — see `tools/scouting.py`. That is invisible from here on purpose:
+the template names `Crop Observation` in `creates_record` exactly as the
+detector template names `Detector Test`, and which side of the line a producer
+falls on is not something a template should have to know.
 
 SEEDED, NOT FIXTURED. `test_hooks.py` forbids the word `fixtures` by name, and
 for the reason it always has: a Frappe fixture is imported by `bench migrate`
@@ -489,6 +503,58 @@ SEED_TEMPLATES = (
 			{"item_name": "Inspection scheduled where the certifier requires one", "required": False},
 			{"item_name": "New certificate received and filed", "required": False, "evidence_type": "Photo"},
 			{"item_name": "Certification record updated with the new expiry date"},
+		),
+	},
+	{
+		"template_name": "Field Scouting",
+		"task_type": "Scouting",
+		"description": (
+			"Walk one block and record what it looks like: the growth stage, a Brix reading off "
+			"a refractometer, a photograph, and whatever was found. Completing it produces a Crop "
+			"Observation — the register the pest-pressure engine and the harvest-readiness map "
+			"both read."
+		),
+		"skill_required": "crop_scouting",
+		"estimated_duration_minutes": 30,
+		"dispatch_mode": "Either",
+		"default_urgency": "Normal",
+		"evidence_required": {"photos": True, "findings_text": True, "gps": True},
+		"creates_record": "Crop Observation",
+		# THE ROUND AS SHIPPED IS A GENERAL ONE, AND THE COMPLETION NARROWS IT.
+		# A scout who counted an organism sends observation_type "Pest Scout"
+		# with the threat and the count in record_data and gets the threshold
+		# engine; a round called to decide a pick sends "Harvest Readiness".
+		# The DEFAULT cannot be "Pest Scout", because that is the one type whose
+		# record is invalid without a threat — a template that shipped a
+		# mandatory field it has no way to fill would refuse every completion
+		# from a walk where nothing was found, which is most of them.
+		"creates_record_data": {"observation_type": "General", "scouting_method": "Visual"},
+		"instructions": (
+			"Both numbers, every time. Sugar climbs while the stage stands still in a hot week "
+			"and the stage advances while sugar stalls in a wet one, so a pick argued from either "
+			"one alone gets called wrong — that is why the contract asks for both rather than "
+			"whichever you have.\n\nSay how you took the Brix. A refractometer reading and an "
+			"estimate are not the same measurement, and the figure that ends up quoted into a "
+			"buyer's specification is the one nobody can tell apart afterwards.\n\nIf you "
+			"counted something — mites on leaves, flies in a trap — say what and how many out of "
+			"how many examined, and send observation_type 'Pest Scout' with it. That is what "
+			"moves the block's pressure and can raise a recommendation; a round filed without it "
+			"is a walk that was not looking for the pest, which is a true and useful thing to "
+			"record and a different one.\n\nStand where the fruit is. The phone takes the "
+			"coordinate on its own, and it is what lets next week's round of the same corner be "
+			"compared to this one."
+		),
+		"regimes": [],
+		"checklist": (
+			{"item_name": "Growth stage read and recorded as a BBCH code", "evidence_type": "Measurement"},
+			{"item_name": "Brix read, with the method it was read by", "evidence_type": "Measurement"},
+			{"item_name": "Representative photograph of the fruit or the canopy", "evidence_type": "Photo"},
+			{
+				"item_name": "Pest or disease counted, with the sample size",
+				"required": False,
+				"evidence_type": "Measurement",
+			},
+			{"item_name": "What the block looked like, in words", "evidence_type": "Text"},
 		),
 	},
 	{

@@ -963,6 +963,7 @@
   "allow_compute_sustainability_score",
   "allow_set_pest_action_threshold",
   "allow_create_crop_observation",
+  "allow_index_scouting_observations",
   "block_lifecycle_section",
   "allow_list_planting_seasons",
   "allow_get_planting_season",
@@ -7335,6 +7336,13 @@
    "fieldname": "allow_create_crop_observation",
    "fieldtype": "Check",
    "label": "Create Crop Observation"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Sweeps one window of task completions and turns every closed scouting task into the Crop Observation it produced — the BBCH code, the Brix and its method off the task's stamped record data, and the location fix, the first photograph and the worker's findings off the assignment — running the threshold engine on it where it was a pest scout. It is a TOOL rather than a `doc_events` hook because this app promises to install none, and running it here means an operator can see it, switch it off and re-run it over last week. Idempotent on Crop Observation.source_task, so a second sweep over the same window writes nothing. OFF by default.",
+   "fieldname": "allow_index_scouting_observations",
+   "fieldtype": "Check",
+   "label": "Index Scouting Observations"
   },
   {
    "fieldname": "block_lifecycle_section",

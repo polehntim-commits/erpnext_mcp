@@ -486,8 +486,9 @@ def create_crop_observation(args: dict) -> ToolResult:
 	sample_unit = as_str(args, "sample_unit")
 
 	# ── the threshold ───────────────────────────────────────────────────────
-	threshold = _find_threshold(company or "", crop, threat, stage) if crop else None
-	evaluation = _evaluate(threshold, count, sample_size, beneficials, sample_unit)
+	threshold, evaluation = evaluate_against_threshold(
+		company or "", crop, threat, stage, count, sample_size, beneficials, sample_unit
+	)
 
 	doc = frappe.new_doc(OBSERVATION)
 	doc.company = company or None
@@ -519,30 +520,13 @@ def create_crop_observation(args: dict) -> ToolResult:
 	if scouting:
 		doc.scouting_method = scouting
 
-	doc.threshold = (threshold or {}).get("name")
-	doc.threshold_value = evaluation["threshold_value"]
-	doc.threshold_comparison = evaluation["comparison"]
-	doc.threshold_exceeded = 1 if evaluation["action_exceeded"] else 0
-	doc.warning_exceeded = 1 if evaluation["warning_exceeded"] else 0
-	doc.sample_below_minimum = 1 if evaluation["sample_below_minimum"] else 0
-	doc.evaluation_note = evaluation["note"]
+	stamp_evaluation(doc, threshold, evaluation)
 	doc.insert(ignore_permissions=True)
 
 	# ── the pressure, then the recommendation ───────────────────────────────
-	pressure = _upsert_pressure(doc, threshold, evaluation, season_year)
-	recommendation = None
-	if evaluation["generate"]:
-		recommendation = _generate_recommendation(doc, threshold, evaluation, pressure, season_year)
-
-	updates = {}
-	if pressure:
-		updates["pest_pressure"] = pressure["name"]
-	if recommendation:
-		updates["ipm_recommendation"] = recommendation["name"]
-	if updates:
-		frappe.db.set_value(OBSERVATION, doc.name, updates)
-		for key, value in updates.items():
-			doc.set(key, value)
+	downstream = run_downstream(doc, threshold, evaluation, season_year)
+	pressure = downstream["pest_pressure"]
+	recommendation = downstream["ipm_recommendation"]
 
 	clock = timezones.Renderer(args)
 	described = _describe_observation(dict(doc.as_dict()))
@@ -563,6 +547,76 @@ def create_crop_observation(args: dict) -> ToolResult:
 		),
 		docstatus_delta="none → 0 (created)",
 	)
+
+
+# ── the pipeline, in three pieces both doors go through ─────────────────────
+#
+# v0.115.0. THERE ARE NOW TWO DOORS ONTO THIS PIPELINE and there must be exactly
+# one pipeline behind them. `create_crop_observation` is somebody filing a round
+# they walked; `index_scouting_observations` is the sweep turning a completed
+# scouting task into the same record. If the sweep re-implemented the threshold
+# lookup, an observation would be evaluated differently depending on which door
+# it came through — and the two would drift silently, because both produce a
+# well-formed record either way.
+#
+# NOTHING HERE IS NEW BEHAVIOUR. These are the exact lines
+# `create_crop_observation` has run since v0.100.0, lifted out unchanged.
+
+
+def evaluate_against_threshold(
+	company: str, crop: str, threat: str, stage: str, count, sample_size, beneficials, sample_unit
+) -> tuple:
+	"""(threshold, evaluation) for one measurement. No threshold without a crop.
+
+	A threshold is keyed on the crop as well as the threat, so an observation
+	that names no crop cannot be matched to one — and guessing at the farm's
+	only crop would evaluate a block of pears against a cherry number.
+	"""
+	threshold = _find_threshold(company or "", crop, threat, stage) if crop else None
+	return threshold, _evaluate(threshold, count, sample_size, beneficials, sample_unit)
+
+
+def stamp_evaluation(doc, threshold, evaluation) -> None:
+	"""Copy the decision onto the observation, BEFORE it is inserted.
+
+	The number is copied rather than joined to for the reason the DocType gives:
+	the decision has to be re-readable years later against the threshold that
+	actually made it, and a threshold revised next March must not silently
+	rewrite what last August decided.
+	"""
+	doc.threshold = (threshold or {}).get("name")
+	doc.threshold_value = evaluation["threshold_value"]
+	doc.threshold_comparison = evaluation["comparison"]
+	doc.threshold_exceeded = 1 if evaluation["action_exceeded"] else 0
+	doc.warning_exceeded = 1 if evaluation["warning_exceeded"] else 0
+	doc.sample_below_minimum = 1 if evaluation["sample_below_minimum"] else 0
+	doc.evaluation_note = evaluation["note"]
+
+
+def run_downstream(doc, threshold, evaluation, season_year: int) -> dict:
+	"""Move the block's pressure, generate where the threshold said to, link both.
+
+	Called AFTER the insert, because both writes point back at the observation
+	by docname. Returns the two records it wrote, either of which may be None —
+	a block with no threshold on file still moves its pressure and still
+	generates nothing, and those are two different silences.
+	"""
+	pressure = _upsert_pressure(doc, threshold, evaluation, season_year)
+	recommendation = None
+	if evaluation["generate"]:
+		recommendation = _generate_recommendation(doc, threshold, evaluation, pressure, season_year)
+
+	updates = {}
+	if pressure:
+		updates["pest_pressure"] = pressure["name"]
+	if recommendation:
+		updates["ipm_recommendation"] = recommendation["name"]
+	if updates:
+		frappe.db.set_value(OBSERVATION, doc.name, updates)
+		for key, value in updates.items():
+			doc.set(key, value)
+
+	return {"pest_pressure": pressure, "ipm_recommendation": recommendation}
 
 
 def _planting_for(block: str, block_doctype: str, season_year: int, company: str) -> str:
