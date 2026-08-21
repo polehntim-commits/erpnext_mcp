@@ -25,11 +25,11 @@
   },
   {
    "columns": 2,
-   "description": "What it is grafted onto — 'Gisela 6', 'Mazzard', 'M.9'. THE ROOTSTOCK IS HALF THE TREE and it decides the things the scion does not: vigour, final size, planting density, how soon it bears and how it takes wet ground. A yield per acre quoted without one is a number that cannot be compared to the next block.",
+   "description": "What this variety is USUALLY grafted onto in this operation — 'Gisela 6', 'Mazzard', 'M.9'. THE ROOTSTOCK IS HALF THE TREE and it decides what the scion does not: vigour, final size, planting density, how soon it bears and how it takes wet ground.\n\nTHIS COLUMN IS NOT THE BINDING ANSWER AND MUST NOT BE READ AS ONE. A crop's variety list is a catalogue, and a catalogue has one row per variety — so this can hold exactly one rootstock for 'Bing', while the actual farm has Bing on Mazzard in the old block and Bing on Gisela 6 in the 2019 planting. Those are different trees with different vigour, different density and different yields, and a per-acre figure quoted against the wrong one is not comparable to anything.\n\nTHE BINDING ROOTSTOCK IS ON THE PLANTING: `Planting Season.rootstock` for a block-year, and `Field.rootstock` for the block itself. Both predate this note and both are where a reader should look. What is left here is a default for the case where a planting records none — v0.114.0 backfilled this value down onto every planting that had a blank, so on a migrated site the plantings already carry their own answer and this column is only ever the seed for the next one.",
    "fieldname": "rootstock",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Rootstock"
+   "label": "Typical Rootstock (catalogue default)"
   },
   {
    "columns": 2,

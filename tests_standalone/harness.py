@@ -1679,6 +1679,13 @@ APP_DOCTYPES = {
 	# bench. It needs no CHILD_TABLE_SOURCES entry for that reason.
 	"Pest Management Provider": "pest_management_provider",
 	"Crop Water Requirement": "crop_water_requirement",
+	# v0.114.0. The two per-variety overlays. Both hang off CROP rather than off
+	# Crop Variety, because Frappe has no nested child tables and Crop Variety is
+	# itself a child — so each names its variety as a text column, and `crop.py`
+	# checks that name against the parent's catalogue on save. See
+	# `tools/agronomy.resolve_variety_water` for the fallback the water one feeds.
+	"Crop Variety Water Requirement": "crop_variety_water_requirement",
+	"Crop Variety Protocol": "crop_variety_protocol",
 	"Market": "market",
 	"Market Grade Standard": "market_grade_standard",
 	"Agricultural UOM Context": "agricultural_uom_context",
@@ -4531,6 +4538,14 @@ CHILD_TABLE_SOURCES = {
 	# surface.
 	"Crop Variety": (("Crop", "varieties"),),
 	"Crop Water Requirement": (("Crop", "water_requirements"),),
+	# v0.114.0. Read the same way and for the same reason as the two above:
+	# `get_crop` and `get_variety_care_recipe` pull the overlay rows with a
+	# `parent`/`parentfield` filter rather than loading the Crop. Without these
+	# entries every override would come back empty, and — this is the direction
+	# that matters — a variety with a real Kc override would silently resolve to
+	# the crop default while reporting itself as overridden.
+	"Crop Variety Water Requirement": (("Crop", "variety_water_requirements"),),
+	"Crop Variety Protocol": (("Crop", "variety_protocols"),),
 	"Market Grade Standard": (("Market", "grade_standards"),),
 	"Agricultural UOM Context Entry": (("Agricultural UOM Context", "uoms"),),
 	# v0.88.0. `spray.list_spray_applications` filters by BLOCK, and the block

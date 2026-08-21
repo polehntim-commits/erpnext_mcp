@@ -1,0 +1,79 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-21 12:00:00.000000",
+ "description": "One variety's departure from its crop's water demand at one stage. AN OVERRIDE TABLE AND NOT A REPLACEMENT: a row here is only ever read for the variety it names, and every stage nobody has overridden falls back to the crop's own Crop Water Requirement row. That is the whole point — a farm records Kc once for Cherry and then says, on the two varieties where it is genuinely different, how. A table that demanded every stage per variety would be seven rows per variety to restate six numbers that were already right, and the restatements would drift.\n\nWHY THIS HANGS OFF CROP AND CARRIES THE VARIETY AS A COLUMN. Frappe has no nested child tables, and Crop Variety is itself a child of Crop, so a table on the variety row is not a thing that can exist. The variety is therefore named here as text and checked against the parent's own variety list on save: an override for a variety this crop does not have is a typo, and stored it would be an override that never fires and nobody ever notices.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "variety",
+  "growth_stage",
+  "crop_coefficient_kc",
+  "water_inches_per_week",
+  "notes"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "description": "Which variety this override is about. Must name a row in the crop's own Varieties table — matched ignoring case, because 'bing' and 'Bing' are one tree and a lookup that missed on capitalisation would silently fall back to the crop default. Free text rather than a Link for the same reason Crop Variety is a child table: a variety has no independent existence away from its crop.",
+   "fieldname": "variety",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Variety",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "description": "The stage this override applies at. The same fixed seven as Crop Water Requirement, and deliberately the same list rather than a superset: an override keyed on a stage the crop record cannot express is an override with nothing to override.",
+   "fieldname": "growth_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Growth Stage",
+   "options": "Dormant\nBud Break\nBloom\nFruit Set\nFruit Development\nHarvest\nPost-Harvest",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "description": "This variety's crop coefficient at this stage, replacing the crop's. Bounded exactly as the crop-level column is, by the same constant in crop.py — an override is the easier of the two to fumble, because it is typed by somebody who already knows the crop number and is entering a difference.\n\nLEAVE IT BLANK TO OVERRIDE ONLY THE INCHES. Blank means 'no opinion, use the crop's Kc'; it does not mean zero. A variety that genuinely uses no water at a stage is recorded as 0 and reads back as 0.",
+   "fieldname": "crop_coefficient_kc",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Crop Coefficient (Kc)",
+   "non_negative": 1,
+   "precision": "3"
+  },
+  {
+   "columns": 2,
+   "description": "This variety's flat weekly depth at this stage, replacing the crop's. Blank means the crop's figure stands, on the same rule as the Kc beside it.",
+   "fieldname": "water_inches_per_week",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Water (in/week)",
+   "non_negative": 1,
+   "precision": "2"
+  },
+  {
+   "columns": 4,
+   "description": "Why this variety differs — 'cracks in rain, cut back hard from straw colour', 'on Gisela 5 it runs dry a week earlier than the block average'. The reason an override exists is the first thing the next person needs and the first thing that gets lost.",
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Crop Variety Water Requirement",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 0,
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

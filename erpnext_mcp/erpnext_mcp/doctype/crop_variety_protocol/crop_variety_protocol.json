@@ -1,0 +1,94 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-21 12:00:00.000000",
+ "description": "One step of how a variety is grown, as opposed to what it is. The care recipe: gibberellic acid timings, the PGR program, how the block is thinned, the pruning the variety wants. ONE ROW IS ONE STEP, NOT ONE PROGRAM — a GA program on a firm cherry is two or three applications at different timings, and folding them into one row would put the schedule inside a Notes field where nothing can read it.\n\nWHY THIS IS RECORDED AT ALL. These decisions are the difference between two blocks of the same variety earning different money, and on most farms they live in one person's head and one spray record from three years ago. The spray system can reference these rows to say what a block is due; nothing here applies anything by itself, and nothing here is a label.\n\nTHIS IS A PLAN AND NOT A RECORD, AND THE DISTINCTION IS LOAD-BEARING. What was actually applied to a block is a Spray Application, with its rate, its date and its applicator. This is what the farm intends for the variety in a normal year. A reader that confused the two would report an intention as a completed application, which is the shape of a compliance answer that is wrong in the direction that matters.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "variety",
+  "practice",
+  "timing_stage",
+  "timing_detail",
+  "product",
+  "rate",
+  "notes"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "description": "Which variety this step is for. Must name a row in the crop's own Varieties table, matched ignoring case — same rule as the water override table, and for the same reason: a protocol for a variety this crop does not have is a typo that would never fire.",
+   "fieldname": "variety",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Variety",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "description": "What kind of intervention this is. A FIXED LIST, so that a reader can ask 'what is the PGR program for Bing' and get an answer rather than a text search — free text here would give one crop 'PGR', another 'Plant growth regulator' and a third 'growth reg', and the question would have no answer on any of them. Other is provided rather than pretending the list is complete.",
+   "fieldname": "practice",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Practice",
+   "options": "Gibberellic Acid\nPlant Growth Regulator\nThinning\nPruning\nNutrition\nPollination\nOther",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "description": "The phenological stage this step anchors to, from the same seven the water tables use. OPTIONAL, because a real timing is often finer than a stage — 'ten days after full bloom' is inside Fruit Set and the stage alone would not schedule it. Where it is given it is the coarse anchor a plan can sort and group on; Timing Detail beside it carries the precision.",
+   "fieldname": "timing_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Timing Stage",
+   "options": "\nDormant\nBud Break\nBloom\nFruit Set\nFruit Development\nHarvest\nPost-Harvest"
+  },
+  {
+   "columns": 2,
+   "description": "The timing as the grower says it: '10-14 days after full bloom', 'at 8-10mm fruit', 'straw colour', 'first cover'. FREE TEXT ON PURPOSE — these are the anchors orchard work is actually scheduled against, and every attempt to encode them into days-from-a-date loses the thing that makes them right in a late spring.",
+   "fieldname": "timing_detail",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Timing Detail"
+  },
+  {
+   "columns": 2,
+   "description": "What is used, where the step uses anything — 'ProGibb', 'Promalin', 'lime sulphur'. Free text and NOT a Link to Item: a protocol is written before the farm has bought the thing, and a plan that could not be written until purchasing caught up is a plan that gets written somewhere else instead. A Spray Application records the actual material.",
+   "fieldname": "product",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Product"
+  },
+  {
+   "columns": 1,
+   "description": "The rate, WITH ITS UNITS, as text: '30 ppm', '2 pt/acre', '1 qt/100 gal'. DELIBERATELY NOT A FLOAT. A rate whose unit lives in a neighbouring column is a rate that gets read without it, and ppm, pints per acre and quarts per hundred gallons are not convertible into one another without knowing the dilution — a number here would be a number that looks computable and is not. The binding rate is the label's, always.",
+   "fieldname": "rate",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Rate"
+  },
+  {
+   "columns": 2,
+   "description": "The judgement behind the step — 'skip in a light crop year', 'Rainier only, Bing sizes without it', 'do not tank mix with the calcium'. This is the half of a care recipe that makes it transferable, and the half that is lost when the person who decided it retires.",
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Crop Variety Protocol",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 0,
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

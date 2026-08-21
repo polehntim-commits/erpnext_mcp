@@ -26,6 +26,9 @@
   "varieties",
   "water_section",
   "water_requirements",
+  "variety_overrides_section",
+  "variety_water_requirements",
+  "variety_protocols",
   "notes_section",
   "notes"
  ],
@@ -151,6 +154,26 @@
    "fieldtype": "Table",
    "label": "Water Requirements by Growth Stage",
    "options": "Crop Water Requirement"
+  },
+  {
+   "fieldname": "variety_overrides_section",
+   "fieldtype": "Section Break",
+   "label": "Variety Overrides and Protocols",
+   "description": "Where one variety departs from the crop. BOTH TABLES ARE SPARSE BY DESIGN: a row exists only where a variety genuinely differs, and everything not named here falls back to the crop's own figures above. A form that asked for every stage of every variety would be asking a farm to restate numbers that were already right, and the restatements are what drift."
+  },
+  {
+   "fieldname": "variety_water_requirements",
+   "fieldtype": "Table",
+   "label": "Variety Water Overrides",
+   "options": "Crop Variety Water Requirement",
+   "description": "Per-variety departures from the water demand above, by stage. READ AS AN OVERLAY, NEVER AS A REPLACEMENT — a resolver asks this table for (variety, stage), and falls back to the crop's row for that stage when there is none, so a variety with two rows here still has all seven stages answered. Two rows may not name the same variety and stage: which one an irrigation plan read would depend on row order."
+  },
+  {
+   "fieldname": "variety_protocols",
+   "fieldtype": "Table",
+   "label": "Variety Cultural Practice Protocols",
+   "options": "Crop Variety Protocol",
+   "description": "How each variety is grown rather than what it is: GA timings, the PGR program, the thinning approach, the pruning it wants. ONE ROW IS ONE STEP, so a program with three applications is three rows and keeps its schedule where something can read it. This is the farm's intention for a normal year; what was actually applied to a block is a Spray Application, and nothing here is a label."
   },
   {
    "fieldname": "notes_section",
