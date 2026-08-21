@@ -618,6 +618,36 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/materialize_task_for_alert",
 		"/mobile/list_certifications",
 		"/mobile/get_certification",
+		# v0.113.0. The location pair and the five org masters. The location block
+		# above listed the `update_*` tools as deliberately absent; that sentence
+		# was about `convey_parcel` and was never true of the acreage, and the
+		# delete had no door anywhere in this app on any transport. Both carry
+		# `guard.require_location_role` and both prove the record's entity with
+		# `_scoped_location`. The four `force_check_…` flags are ABSENT from
+		# `delete_farm_location`'s signature, so `bind` drops them and no body can
+		# turn off the one check Frappe's own link integrity does not make.
+		#
+		# The fifteen org paths are `tools/org.py`'s whole surface, which had no
+		# route at all — so the hiring wizard could OFFER the site's designations
+		# and never add one. Reads open on enrolment, writes HR, and the Employee
+		# Grade pay columns absent from every signature.
+		"/mobile/update_farm_location",
+		"/mobile/delete_farm_location",
+		"/mobile/list_designations",
+		"/mobile/create_designation",
+		"/mobile/update_designation",
+		"/mobile/list_departments",
+		"/mobile/create_department",
+		"/mobile/update_department",
+		"/mobile/list_branches",
+		"/mobile/create_branch",
+		"/mobile/update_branch",
+		"/mobile/list_employment_types",
+		"/mobile/create_employment_type",
+		"/mobile/update_employment_type",
+		"/mobile/list_employee_grades",
+		"/mobile/create_employee_grade",
+		"/mobile/update_employee_grade",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):

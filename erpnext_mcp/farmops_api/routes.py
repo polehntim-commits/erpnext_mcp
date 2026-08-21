@@ -949,6 +949,85 @@ ROUTES = (
 	Route("/mobile", mobile_api.materialize_task_for_alert),
 	Route("/mobile", mobile_api.list_certifications),
 	Route("/mobile", mobile_api.get_certification),
+	# v0.113.0. THE OTHER HALF OF ITEM 11. The block above says the three
+	# `update_*` tools are "DELIBERATELY ABSENT" because moving a title is a desk
+	# act with a document open. That sentence was about `convey_parcel` and it was
+	# never true of the acreage: the block registered at six in the morning with
+	# its size guessed is corrected by the person who guessed it, standing on it.
+	#
+	# `update_farm_location` IS THE CREATE SHEET REOPENED — every argument on it is
+	# one `CreateLocationSheet` already collects — and it is polymorphic for the
+	# same reason the create is: the handset has ONE sheet for four registers, and
+	# `tools/locations.py` is where that uniform sheet becomes four different
+	# documents. The register's own `update_` tool does the write, so the parcel
+	# acreage rule, the zone-number clash and the derived `organic_certified` all
+	# still hold. NEITHER ROUTE RENAMES ANYTHING: all four registers build the
+	# docname from the name column and all four tools refuse to re-key.
+	#
+	# `delete_farm_location` IS THE ONLY IRREVERSIBLE ROUTE ON THIS SURFACE, and it
+	# is here because the duplicate is MADE here. v0.98.0 put a location register in
+	# the hands of everybody with the role and gave nobody, on any transport, a way
+	# to take a row out of it — so "Block 3" and "Block 3 " are in every picker on
+	# the farm forever. FOUR CHECKS AND NOTHING RELAXED FOR THE PHONE: a child
+	# register, a plain Link, ANY task/spray record/observation/inspection naming it
+	# through a dynamic link, or an attached file, and it refuses with the count and
+	# eight examples. In practice it can only remove a row nothing has touched.
+	#
+	# THE `force_check_…` FLAGS ARE ABSENT FROM THE WRAPPER'S SIGNATURE, so `bind`
+	# drops them and no body can turn a check off. They exist on the MCP tool, for
+	# an operator with the Desk open. The one that matters is `force_check_activity`:
+	# a dynamic link is two plain columns to a database, so Frappe's own link
+	# integrity does not see it and that check is the only thing standing there.
+	#
+	# BOTH CARRY `guard.require_location_role` — Farm Manager, the same gate as the
+	# five creates — and both prove the record's entity with `_scoped_location`
+	# rather than `guard.require_scoped_doc`, which reads `company` and would have
+	# passed every docname on the bench.
+	Route("/mobile", mobile_api.update_farm_location),
+	Route("/mobile", mobile_api.delete_farm_location),
+	# v0.113.0. THE FIVE ORG MASTERS, fifteen routes. `tools/org.py` has had
+	# create/list/update for all five since it was written and NOT ONE of them had a
+	# route, so the hiring wizard could offer the site's five designations and, the
+	# day the farm hired its first mechanic, had no way to add a sixth —
+	# `create_employee` refuses a designation naming no record, which is right, and
+	# the register it refuses against was unreachable from the only device in the
+	# orchard.
+	#
+	# THE READS ARE OPEN ON ENROLMENT AND THE WRITES ARE HR. That split is
+	# `list_onboarding_reference_data`'s, argued there at length: a job title, a
+	# camp name and an employment class are not facts about a person, and a wizard
+	# has to be able to OFFER the list it is about to refuse a value against. What
+	# these add beyond that call is the live headcount, which is what makes "is this
+	# safe to rename" answerable.
+	#
+	# `personnel.require_hr_role` RUNS IN THE WRAPPER AS WELL AS IN THE TOOL. The
+	# wrapper's runs before anything is read and is what the audit row records; the
+	# tool's is what protects the MCP transport, where there is no wrapper.
+	#
+	# THE PAY COLUMNS ON `Employee Grade` ARE ABSENT FROM EVERY SIGNATURE, so this
+	# table's argument filter makes `default_base_pay`, `default_salary_structure`
+	# and `default_leave_policy` unreachable rather than merely refused. One value
+	# there reaches everybody on the band.
+	#
+	# NO `delete_` FOR ANY OF THE FIVE, and not as an omission: none of the five has
+	# a delete tool at all. Frappe HR's own answer for a master nobody should pick
+	# any more is `disabled` on Department and a rename on the rest, and `update_`
+	# carries both.
+	Route("/mobile", mobile_api.list_designations),
+	Route("/mobile", mobile_api.create_designation),
+	Route("/mobile", mobile_api.update_designation),
+	Route("/mobile", mobile_api.list_departments),
+	Route("/mobile", mobile_api.create_department),
+	Route("/mobile", mobile_api.update_department),
+	Route("/mobile", mobile_api.list_branches),
+	Route("/mobile", mobile_api.create_branch),
+	Route("/mobile", mobile_api.update_branch),
+	Route("/mobile", mobile_api.list_employment_types),
+	Route("/mobile", mobile_api.create_employment_type),
+	Route("/mobile", mobile_api.update_employment_type),
+	Route("/mobile", mobile_api.list_employee_grades),
+	Route("/mobile", mobile_api.create_employee_grade),
+	Route("/mobile", mobile_api.update_employee_grade),
 )
 
 #: Path → Route. Built once at import; there is nothing dynamic about it.

@@ -96,6 +96,7 @@ from .tools import (
 	itgc,
 	kpi,
 	kpidefs,
+	locations,
 	lots,
 	maintenance,
 	masters,
@@ -6952,6 +6953,145 @@ TOOLS = {
 		title="Update an irrigation zone",
 		available=_needs_doctype("Irrigation Zone"),
 		requires="the Irrigation Zone DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	# ── farm structure: the polymorphic pair ────────────────────────────────
+	"update_farm_location": _tool(
+		locations.update_farm_location,
+		"MUTATING (default OFF). Correct one place in whichever of the four "
+		"registers it is in, without having to know which of four tools that register "
+		"uses. Pass `doctype` (Field, Irrigation Zone, Parcel or Housing Unit) and "
+		"`name` — the docname or the name somebody typed, both resolve — plus what "
+		"changed.\n\n"
+		"THE REGISTER'S OWN TOOL DOES THE WRITE. update_field, "
+		"update_irrigation_zone, update_parcel and update_housing_unit each run with "
+		"every refusal they have always made: the parcel acreage rule, the zone "
+		"number already used on that block, the block's zones summing past its "
+		"acreage, the derived organic_certified, the GPS pair that moves together. "
+		"Nothing here relaxes any of it.\n\n"
+		"THIS DOOR SETS THE THIRTEEN A PERSON HAS AN OPINION ABOUT STANDING IN A "
+		"BLOCK: acres, crop, variety, block_number, condition, county, state, "
+		"address, unit_type, capacity, water_source, flow_rate_gpm, notes. An "
+		"argument the chosen register has no column for is REFUSED BY NAME and told "
+		"which registers do take it — `capacity` on a block and `crop` on a cabin are "
+		"both somebody working from the wrong screen. Everything else each register "
+		"carries stays on that register's own update_ tool, which is where the "
+		"columns reaching a financial statement or a compliance answer live.\n\n"
+		"`acres` ON AN IRRIGATION ZONE BECOMES SQUARE FEET. That register computes "
+		"area_acres from area_sq_ft and refuses the former by name, so this converts "
+		"rather than setting a second figure that would disagree with the first.\n\n"
+		"CANNOT RENAME ANYTHING. All four registers build the docname from the name "
+		"column and all four tools refuse to re-key, because every zone, assignment, "
+		"task and filed record holds that docname. `name` identifies the record here; "
+		"it sets nothing.",
+		{
+			"doctype": _field(
+				_STRING,
+				"Which register: Field, Irrigation Zone, Parcel or Housing Unit. "
+				"Case-insensitive. `register` is accepted as an alias.",
+			),
+			"name": _field(_STRING, "The record: its docname, or the name somebody typed. Both resolve."),
+			"register": _field(_STRING, "Alias for doctype."),
+			"owning_entity": _field(_STRING, "Narrow a bare name to one entity."),
+			"company": _field(_STRING, "Alias for owning_entity."),
+			"acres": _field(
+				_NUMBER,
+				"New acreage. Field, Irrigation Zone and Parcel. On a zone it is converted "
+				"to square feet, which is the column that register actually stores.",
+			),
+			"crop": _field(_STRING, "New crop. Field only."),
+			"variety": _field(_STRING, "New variety. Field only."),
+			"block_number": _field(_STRING, "New block number. Field only."),
+			"condition": _field(_STRING, "New condition. Field and Housing Unit."),
+			"county": _field(_STRING, "New county. Parcel only."),
+			"state": _field(_STRING, "New state code. Parcel only."),
+			"address": _field(_STRING, "New address. Parcel only."),
+			"unit_type": _field(_STRING, "New unit type. Housing Unit only."),
+			"capacity": _field(_INTEGER, "New capacity in beds. Housing Unit only."),
+			"water_source": _field(_STRING, "New water source. Irrigation Zone only."),
+			"flow_rate_gpm": _field(_NUMBER, "New flow. Irrigation Zone only."),
+			"notes": _field(_STRING, "New notes. All four."),
+		},
+		required=("doctype", "name"),
+		mutating=True,
+		title="Update a farm location",
+		available=_needs_doctype("Field", "Irrigation Zone", "Parcel", "Housing Unit"),
+		requires="at least one of the four location DocTypes, which ship with erpnext_mcp — run `bench migrate`",
+	),
+	"delete_farm_location": _tool(
+		locations.delete_farm_location,
+		"MUTATING (default OFF). IRREVERSIBLE. Remove one place from one of the four "
+		"registers, once nothing at all depends on it. There is no undo, no draft and "
+		"no cancelled state, and none of the four registers has a disabled column to "
+		"hide a row behind.\n\n"
+		"WHAT THIS IS FOR. The duplicate: a block typed twice at six in the morning, "
+		"one of the two never used, sitting in every picker on the farm because "
+		"nothing in this app has ever removed a register row. A place with ANY "
+		"history is the other case and is refused — keep it, because a place with "
+		"history is what the register is for.\n\n"
+		"FOUR CHECKS, all on by default, all refusals rather than warnings, all run "
+		"before anything is deleted so one call reports every reason at once:\n"
+		"(1) children — the registers hanging off it. A Parcel holds blocks, zones "
+		"and cabins; a Field holds zones. An Irrigation Zone and a Housing Unit are "
+		"leaves.\n"
+		"(2) references — everything else naming it with a plain Link: scale tickets, "
+		"lot codes, cost and revenue entries, biological assets, water tests, bin "
+		"seals, leases, housing assignments, detector tests, inspections.\n"
+		"(3) activity — everything naming it through a DYNAMIC link, which is where "
+		"the farm's work is: Farm Task, Spray Application Block, Spray REI, Crop "
+		"Observation, Pest Pressure, IPM Recommendation, Inspection Session, Accident "
+		"Report.\n"
+		"(4) attachments — the Files filed against it. A File names its parent by "
+		"DOCNAME rather than by link, so nothing else would refuse and the "
+		"photographs would simply stop resolving.\n\n"
+		"Each failed check reports its count and up to eight examples, so 'why can I "
+		"not remove this' is answered rather than asserted.\n\n"
+		"THE ACTIVITY CHECK IS THE ONE THAT MATTERS. The other three are Links "
+		"Frappe's own integrity check would have refused the delete over anyway; a "
+		"dynamic link is two plain columns to a database. Each check has a "
+		"force_check_… flag that turns it off, and turning off force_check_activity "
+		"is the only one that genuinely removes a protection rather than changing "
+		"which error you get.\n\n"
+		"`dry_run=true` RUNS ALL FOUR AND DELETES NOTHING. Make that call first.",
+		{
+			"doctype": _field(
+				_STRING,
+				"Which register: Field, Irrigation Zone, Parcel or Housing Unit. "
+				"Case-insensitive. `register` is accepted as an alias.",
+			),
+			"name": _field(_STRING, "The record: its docname, or the name somebody typed. Both resolve."),
+			"register": _field(_STRING, "Alias for doctype."),
+			"owning_entity": _field(_STRING, "Narrow a bare name to one entity."),
+			"company": _field(_STRING, "Alias for owning_entity."),
+			"dry_run": _field(
+				_BOOLEAN,
+				"Run all four checks and delete nothing. Default false. Reports exactly what "
+				"the real call would refuse over, or that it would succeed.",
+			),
+			"force_check_children": _field(
+				_BOOLEAN,
+				"true (the default) = refuse if any register row hangs off it.",
+			),
+			"force_check_references": _field(
+				_BOOLEAN,
+				"true (the default) = refuse if any record links to it.",
+			),
+			"force_check_activity": _field(
+				_BOOLEAN,
+				"true (the default) = refuse if any task, spray record, observation or "
+				"inspection names it through a dynamic link. THE ONE WORTH LEAVING ON: "
+				"Frappe's own link integrity does not see a dynamic link.",
+			),
+			"force_check_attachments": _field(
+				_BOOLEAN,
+				"true (the default) = refuse if any File is attached to it.",
+			),
+		},
+		required=("doctype", "name"),
+		mutating=True,
+		destructive=True,
+		title="Delete a farm location",
+		available=_needs_doctype("Field", "Irrigation Zone", "Parcel", "Housing Unit"),
+		requires="at least one of the four location DocTypes, which ship with erpnext_mcp — run `bench migrate`",
 	),
 	# ── farm structure: boundaries ──────────────────────────────────────────
 	"set_field_boundary": _tool(

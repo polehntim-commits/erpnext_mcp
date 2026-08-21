@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 766 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 768 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -5481,6 +5481,82 @@ get_employee_housing_history {"employee": "Antony"}
 
 Matches on the employee id first and then on the name, because a site with no HR
 app records the name and a site with one records the id.
+
+---
+
+## `update_farm_location`
+
+**MUTATING**, default OFF (`allow_update_farm_location`).
+
+**Arguments:** `doctype` (required — `Field`, `Irrigation Zone`, `Parcel` or
+`Housing Unit`; `register` is an alias), `name` (required — the docname or the
+name somebody typed, both resolve), `owning_entity` (alias `company`), plus any
+of `acres`, `crop`, `variety`, `block_number`, `condition`, `county`, `state`,
+`address`, `unit_type`, `capacity`, `water_source`, `flow_rate_gpm`, `notes`.
+
+**Returns** whatever the register's own `update_` tool returns — the record and
+`changed`, every entry as before → after — plus `doctype`, `location`,
+`option` (the picker row, re-read after the save) and `arguments_mapped`, which
+names the column each argument actually landed in.
+
+**The register's own tool does the write.** `update_field`,
+`update_irrigation_zone`, `update_parcel` and `update_housing_unit` each run with
+every refusal they have always made: the parcel acreage rule, the zone number
+already used on that block, the block's zones summing past its acreage, the
+derived `organic_certified`, the GPS pair that moves together. This resolves the
+register and maps thirteen argument names onto four vocabularies; it relaxes
+nothing.
+
+**A column the named register does not have is refused by name**, with the
+registers that do take it named beside it. `capacity` on a block and `crop` on a
+cabin are both somebody working from the wrong screen, and a silent drop is how
+they come to believe they recorded it.
+
+**`acres` on an Irrigation Zone becomes square feet.** That register computes
+`area_acres` from `area_sq_ft` and refuses the former by name, so this converts
+rather than setting a second figure that would disagree with the first.
+
+**Cannot rename anything.** All four registers build the docname from the name
+column and all four tools refuse to re-key, because every zone, assignment, task
+and filed record holds that docname. `name` identifies the record here.
+
+---
+
+## `delete_farm_location`
+
+**MUTATING**, default OFF (`allow_delete_farm_location`). **Irreversible.**
+
+**Arguments:** `doctype` (required), `name` (required), `owning_entity` (alias
+`company`), `dry_run` (default `false`), and `force_check_children`,
+`force_check_references`, `force_check_activity`, `force_check_attachments` (all
+default `true`).
+
+**Returns** `deleted`, `location_row` (the picker row as it was), `checks_passed`,
+`checks_skipped`, `found` (per failed check: the referring doctype, the column,
+the count and up to eight examples) and a `note`.
+
+**What this is for.** The duplicate — a block typed twice at six in the morning,
+one of the two never used, sitting in every picker on the farm because nothing in
+this app has ever removed a register row. A place with any history is the other
+case and is refused: keep it, because a place with history is what the register
+is for. There is no `disabled` column on any of the four to hide a row behind,
+which is why the checks are strict rather than advisory.
+
+| Check | Refuses when |
+| --- | --- |
+| `children` | a register row hangs off it — a Parcel holds blocks, zones and cabins; a Field holds zones. An Irrigation Zone and a Housing Unit are leaves |
+| `references` | anything names it with a plain Link: scale tickets, lot codes, cost and revenue entries, biological assets, water tests, bin seals, leases, housing assignments, detector tests, inspections |
+| `activity` | anything names it through a **dynamic** link: Farm Task, Spray Application Block, Spray REI, Crop Observation, Pest Pressure, IPM Recommendation, Inspection Session, Accident Report |
+| `attachments` | a File is attached to it. A File names its parent by docname rather than by link, so nothing else would refuse |
+
+**The `activity` check is the one that matters.** The other three are Links
+Frappe's own integrity check would have refused the delete over anyway; a dynamic
+link is two plain columns to a database. Turning off `force_check_activity` is
+the only flag that genuinely removes a protection rather than changing which
+error you get.
+
+**`dry_run=true` runs all four and deletes nothing.** Make that call first — it
+answers "why can I not remove this" without a failed write.
 
 ---
 

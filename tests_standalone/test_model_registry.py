@@ -857,9 +857,9 @@ class ToolRegistration(unittest.TestCase):
 		# (`create_garnishment`, `update_garnishment`,
 		# `render_garnishment_response`) over the new Farm Garnishment doctype —
 		# the court order the payroll deduction exists under.
-		self.assertEqual(len(self.registry.TOOLS), 766)
+		self.assertEqual(len(self.registry.TOOLS), 768)
 		self.assertEqual(len(self.registry.READ_TOOLS), 383)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 383)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 385)
 
 
 if __name__ == "__main__":

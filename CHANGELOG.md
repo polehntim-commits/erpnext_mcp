@@ -3,6 +3,92 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.113.0 — 2026-08-21 — the place you could make and could not fix
+
+**Two MCP tools and seventeen mobile routes.** No doctype changed, nothing
+existing moved, and no tool lost an argument.
+
+**The sentence this undoes.** `farmops_api/routes.py` said, when the location
+register was published in v0.98.0, that "`convey_parcel`, `link_parcel_to_asset`
+and the three `update_*` tools are DELIBERATELY ABSENT — moving a title and
+repointing an asset are desk acts with a document open." That was right about
+conveyance and wrong about the ordinary correction. A Farm Manager who could
+add a place from a tailgate could not fix one: a block registered at six in the
+morning under a guessed acreage with its crop blank stayed exactly as typed
+until somebody opened a Desk. And because the creates are idempotent by name,
+the obvious field workaround — register it again, properly — was itself refused.
+
+**Worse, nothing in this app had ever deleted a register row.** Not from a
+handset, not from an AI console, not from anywhere. So a block typed twice sat
+in every picker on the farm for good; there is no `disabled` column on `Field`,
+`Irrigation Zone`, `Parcel` or `Housing Unit` to hide one behind.
+
+**`update_farm_location` is a door, not a fifth implementation.** It resolves
+the register and calls that register's own `update_` tool, which keeps every
+refusal it has always made: the parcel acreage rule, the zone number already
+used on that block, the block's zones summing past its acreage, the derived
+`organic_certified`, the GPS pair that moves together. It sets the thirteen
+columns a person has an opinion about standing in a block, and **an argument the
+named register has no column for is refused BY NAME** with the registers that do
+take it — `capacity` on a block and `crop` on a cabin are somebody working from
+the wrong screen, and a silent drop is how they come to believe they recorded
+it. `acres` on an Irrigation Zone becomes square feet, because that register
+computes `area_acres` and refuses it by name. Neither tool renames anything: all
+four build the docname from the name column and everything downstream holds it.
+
+**`delete_farm_location` runs four checks and every one is a refusal.**
+Children (the registers hanging off it), references (plain Links), activity
+(**dynamic** links) and attachments. Each failed check reports its count and up
+to eight examples, all four run before anything is deleted, and `dry_run=true`
+runs them and writes nothing.
+
+**The activity check is the one that earns the module.** The other three are
+Links Frappe's own integrity check would have refused the delete over anyway; a
+Dynamic Link is two plain columns to a database. A Farm Task holds
+`location_doctype="Field"` and `location=<docname>`, and `check_if_doc_is_linked`
+does not walk it — so without this check the delete would have SUCCEEDED and left
+every task, spray record, observation, REI window and inspection ever filed
+against that block printing a name that resolves to nothing. That is a Worker
+Protection Standard answer that has quietly stopped being an answer. The scan
+filters on **both** columns, so a task pointing at a Housing Unit that happens to
+share a docname with a Field does not block the Field: refusing over somebody
+else's record is as wrong as allowing one.
+
+**The referrer tables are hand-written, so `test_locations` walks the shipped
+DocType JSON and compares** — the same guard `test_realestate` keeps over
+`realestate.PARCEL_REFERRERS`, and the reason a conveyance did not forget
+`Biological Asset`. A doctype that grows a Link or an open Dynamic Link to any
+of the four cannot arrive without that going red. `STATIC_REFERRERS["Parcel"]` is
+additionally asserted to be `PARCEL_REFERRERS` minus the three registers: one
+fact split by what a person can do about it, not copied.
+
+**Seventeen mobile routes, and `tools/org.py` had none of them.** The location
+pair carries `guard.require_location_role` — Farm Manager, the same gate as the
+five creates — and proves the record's entity with `_scoped_location` rather than
+`guard.require_scoped_doc`, which reads `company` and would have passed every
+docname on the bench. The four `force_check_…` flags are **absent from the
+wrapper's signature**, so `bind` drops them and no body can turn a safety check
+off; `dry_run` is declared, so the app can grey out its own delete button with
+the real answer.
+
+**The other fifteen are the five org masters.** `create_designation`,
+`list_designations`, `update_designation` and the same three for Department,
+Branch, Employment Type and Employee Grade have existed as tools since
+`tools/org.py` was written and NOT ONE had a route — so the hiring wizard could
+offer the site's five designations and, the day the farm hired its first
+mechanic, had no way to add a sixth. `create_employee` refuses a designation
+naming no record, which is right, and the register it refuses against was
+unreachable from the only device in the orchard. The reads are open on enrolment
+and the writes carry `personnel.require_hr_role`, which is
+`list_onboarding_reference_data`'s split and argued there. The Employee Grade pay
+columns are absent from every signature, so `default_base_pay` is unreachable
+rather than merely refused — one value there reaches everybody on the band.
+
+**`test_locations.py`** is 41 tests in five groups. Its delete-safety coverage —
+the both-columns dynamic assertion, the `PARCEL_REFERRERS` cross-check and the
+child-table example guard — came out of a review by a second session that had
+built the same feature independently and handed over its test design.
+
 ## 0.112.0 — 2026-08-21 — the crew row a second scan could delete
 
 **One row lock on `Farm Shift`, taken by all seven tools that write it.** No new

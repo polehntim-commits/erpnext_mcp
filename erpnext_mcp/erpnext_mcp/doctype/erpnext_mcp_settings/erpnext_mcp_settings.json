@@ -255,6 +255,8 @@
   "allow_import_farm_app_fields",
   "allow_create_irrigation_zone",
   "allow_update_irrigation_zone",
+  "allow_update_farm_location",
+  "allow_delete_farm_location",
   "housing_tools_section",
   "allow_list_housing_units",
   "allow_get_housing_unit",
@@ -2612,6 +2614,20 @@
    "fieldname": "allow_update_irrigation_zone",
    "fieldtype": "Check",
    "label": "Update Irrigation Zone"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Correct one place in any of the four location registers (Field, Irrigation Zone, Parcel, Housing Unit) through one door, taking the doctype/name pair list_farm_locations reports on every row. The register's own update tool does the write, with every refusal it has always made; a column the named register does not have is refused BY NAME rather than dropped. Cannot rename a place and cannot move it to another parent.",
+   "fieldname": "allow_update_farm_location",
+   "fieldtype": "Check",
+   "label": "Update Farm Location"
+  },
+  {
+   "default": "0",
+   "description": "WRITE, IRREVERSIBLE. Remove one row from a location register, and ONLY where nothing has ever used it. FOUR CHECKS, every one a refusal: no blocks, zones or cabins registered under it; no record linking to it; no task, spray record, observation or inspection naming it through a DYNAMIC link (the one Frappe's own link integrity does not see); and no file attached to it. The undo for a mis-registration typed ten minutes ago; a place with any history at all is refused, with the count and up to eight examples of what blocks it. dry_run=true runs all four and deletes nothing.",
+   "fieldname": "allow_delete_farm_location",
+   "fieldtype": "Check",
+   "label": "Delete Farm Location"
   },
   {
    "fieldname": "housing_tools_section",

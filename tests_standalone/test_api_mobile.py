@@ -401,6 +401,43 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"set_field_boundary",
 		"set_zone_boundary",
 		"set_parcel_boundary",
+		# v0.113.0. THE OTHER HALF OF ITEM 11, AND THE ORG CHART. Seventeen
+		# methods, HERE FOR THIS SET'S ORDINARY REASON — `MobileAPI.swift` names
+		# none of them, so the server half is published first and the iOS half is a
+		# client change rather than a release of both. `test_ios_contract`
+		# transcribes no mirror for a Codable that does not exist.
+		#
+		# `update_farm_location` IS THE CREATE SHEET REOPENED and takes only
+		# arguments `CreateLocationSheet` already collects. `delete_farm_location`
+		# is THE ONLY IRREVERSIBLE METHOD ON THIS SURFACE and the property to check
+		# if it ever appears in an app build is its ABSENT arguments: the four
+		# `force_check_…` flags are on the tool and not on the wrapper, so `bind`
+		# drops them and no body can turn a safety check off. Both carry
+		# `guard.require_location_role`.
+		#
+		# The fifteen org methods are the five masters `create_employee` refuses an
+		# unknown value against. THE READS ARE OPEN ON ENROLMENT and the writes
+		# carry `personnel.require_hr_role`, which is
+		# `list_onboarding_reference_data`'s split. The Employee Grade pay columns
+		# are absent from every signature here, so `default_base_pay` is
+		# unreachable rather than merely refused.
+		"update_farm_location",
+		"delete_farm_location",
+		"list_designations",
+		"create_designation",
+		"update_designation",
+		"list_departments",
+		"create_department",
+		"update_department",
+		"list_branches",
+		"create_branch",
+		"update_branch",
+		"list_employment_types",
+		"create_employment_type",
+		"update_employment_type",
+		"list_employee_grades",
+		"create_employee_grade",
+		"update_employee_grade",
 		"universal_scan",
 		"classify_receipt",
 		"create_expense_receipt",

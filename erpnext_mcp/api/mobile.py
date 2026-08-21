@@ -131,10 +131,12 @@ from ..tools import expenses as expense_tools
 from ..tools import farm as farm_tools
 from ..tools import files as file_tools
 from ..tools import housing as housing_tools
+from ..tools import locations as location_tools
 from ..tools import masters as master_tools
 from ..tools import ml_model as ml_model_tools
 from ..tools import mobile as mobile_tools
 from ..tools import narrative as narrative_tools
+from ..tools import org as org_tools
 from ..tools import payroll as payroll_tools
 from ..tools import payroll_deductions as payroll_deduction_tools
 from ..tools import push as push_tools
@@ -13343,3 +13345,453 @@ def get_certification(user: str, certification=None, company=None) -> dict:
 	name = guard.require_scoped_doc(CERTIFICATION, certification, "certification", allowed)
 
 	return evidence_tools.get_certification({"certification": name}).data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# v0.113.0 — THE REST OF THE LOCATION REGISTER, AND THE ORG CHART
+#
+# Two things, and they are here together because they are the same shape of gap:
+# a register the Desk can maintain and a handset could only ever add to.
+#
+# ITEM 11 CREATED A PLACE AND COULD NEVER CORRECT ONE. v0.98.0 mounted the read
+# and five creates; `routes.py` said at the time that "the three `update_*` tools
+# are DELIBERATELY ABSENT" because moving a title is a desk act. That sentence
+# was right about `convey_parcel` and wrong about the acreage: the block created
+# at six in the morning with the acreage guessed is corrected by the person who
+# guessed it, standing on it, and until now the only door was a Desk. Worse, a
+# block created TWICE could not be removed at all — by anybody, from anywhere, on
+# any transport — because nothing in this app has ever deleted a register row.
+#
+# THE ORG MASTERS HAD FIFTEEN TOOLS AND NO ROUTES. `tools/org.py` has shipped
+# create/list/update for Designation, Department, Branch, Employment Type and
+# Employee Grade since it was written, and `create_employee` refuses a value that
+# names none of them — so the hiring wizard's Assignment step could offer the
+# site's five designations and, the moment the farm hired its first mechanic,
+# had no way to add a sixth. `list_onboarding_reference_data` reads the four
+# dropdowns and is the wizard's own call; it cannot write, and there was no
+# second call that could.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── 156. update_farm_location ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_farm_location", mutating=True, limit=guard.WRITE_LIMIT)
+def update_farm_location(
+	user: str,
+	name=None,
+	doctype=None,
+	register=None,
+	company=None,
+	acres=None,
+	crop=None,
+	variety=None,
+	block_number=None,
+	condition=None,
+	county=None,
+	state=None,
+	address=None,
+	unit_type=None,
+	capacity=None,
+	water_source=None,
+	flow_rate_gpm=None,
+	notes=None,
+) -> dict:
+	"""Correct one place the handset can already create. The other half of item 11.
+
+	THE SHEET IS `CreateLocationSheet` REOPENED. Every argument here is one the
+	create sheet already collects, which is deliberate: the screen that made the
+	mistake is the screen that fixes it, and a caller who could name a value on
+	the way in should not need a different vocabulary to change it.
+
+	THE GATE IS `guard.require_location_role` — Farm Manager, the same gate as the
+	five creates and narrower than dispatch. Correcting a register entry reaches
+	as far as creating one: every task, spray record and acre of cost allocation
+	routes through the docname, and the acreage is what per-acre costing divides
+	by.
+
+	THE ENTITY IS PROVED BEFORE THE WRITE, by `_scoped_location` rather than by
+	`guard.require_scoped_doc` — all four registers spell the owning entity
+	`owning_entity` and that check reads `company`, so it would have passed every
+	docname on the bench. The same hand-made check the creates make about a
+	parent, made here about the record itself.
+
+	`tools/locations.update_farm_location` DOES THE WRITE, which means the
+	register's own `update_` tool does: the parcel acreage rule, the zone-number
+	clash, the derived `organic_certified`, the GPS pair that moves together. An
+	argument the chosen register has no column for is refused BY NAME rather than
+	dropped.
+
+	NOTHING HERE RENAMES ANYTHING. All four registers build the docname from the
+	name column and all four tools refuse to re-key; `name` on this signature
+	IDENTIFIES the record, it does not set anything.
+	"""
+	wanted, label = _one_spelling(doctype, register, "doctype", "register")
+	chosen = _location_register(wanted, label)
+	guard.require_location_role(user, f"Correcting a {chosen} in the location register")
+	allowed = guard.require_scope(user)
+	guard.require_company(user, company, allowed)
+
+	docname = _scoped_location(chosen, name, "name", allowed)
+	inner: dict = {"doctype": chosen, "name": docname}
+	for key, value in (
+		("acres", acres),
+		("crop", crop),
+		("variety", variety),
+		("block_number", block_number),
+		("condition", condition),
+		("county", county),
+		("state", state),
+		("address", address),
+		("unit_type", unit_type),
+		("capacity", capacity),
+		("water_source", water_source),
+		("flow_rate_gpm", flow_rate_gpm),
+		("notes", notes),
+	):
+		if value is not None:
+			inner[key] = value
+
+	return location_tools.update_farm_location(inner).data
+
+
+# ── 157. delete_farm_location ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("delete_farm_location", mutating=True, limit=guard.WRITE_LIMIT)
+def delete_farm_location(
+	user: str, name=None, doctype=None, register=None, company=None, dry_run=None
+) -> dict:
+	"""Remove the duplicate somebody created ten minutes ago. Nothing else.
+
+	THE ONLY IRREVERSIBLE ROUTE ON THIS SURFACE, and the reason it is here rather
+	than left to a Desk is that the duplicate is MADE here: the create routes shipped
+	in v0.98.0 put a location register in the hands of everybody with the role, and a
+	register that can be added to at a tailgate and only tidied at a desk fills up
+	with "Block 3" and "Block 3 " forever.
+
+	THE FOUR SAFETY CHECKS ARE THE TOOL'S AND NOTHING IS RELAXED FOR THE PHONE. A
+	place with a child register on it, a record linking to it, ANY task, spray
+	record, observation or inspection naming it, or a file attached to it, is
+	refused with the count and up to eight examples. In practice that means this
+	route can only ever remove a row nothing has touched — which is exactly the
+	row it exists for, and every other row is one the register is FOR.
+
+	THE `force_check_…` FLAGS ARE ABSENT FROM THIS SIGNATURE, so `bind` drops
+	them and no body can turn a check off. They are on the MCP tool, where an
+	operator with the Desk open can decide to skip one; a handset gets the four
+	checks or nothing, because the flag that matters — `force_check_activity` —
+	turns off the ONE check Frappe's own link integrity does not make.
+
+	`dry_run` IS DECLARED AND IS THE CALL TO MAKE FIRST. It runs all four and
+	writes nothing, so the app can grey out its own delete button with the real
+	answer rather than guessing at one.
+
+	THE GATE IS `guard.require_location_role` and the entity is proved by
+	`_scoped_location`, both for the reasons `update_farm_location` above states.
+	"""
+	wanted, label = _one_spelling(doctype, register, "doctype", "register")
+	chosen = _location_register(wanted, label)
+	guard.require_location_role(user, f"Removing a {chosen} from the location register")
+	allowed = guard.require_scope(user)
+	guard.require_company(user, company, allowed)
+
+	docname = _scoped_location(chosen, name, "name", allowed)
+	inner: dict = {"doctype": chosen, "name": docname}
+	if dry_run is not None:
+		inner["dry_run"] = dry_run
+	return location_tools.delete_farm_location(inner).data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# THE FIVE ORG MASTERS. Fifteen routes, three shared bodies, one gate each way.
+#
+# THE READS ARE OPEN ON ENROLMENT and the writes are HR. That split is
+# `list_onboarding_reference_data`'s and is argued there at length: a job title,
+# a camp name and an employment class are not facts about a person, and the
+# wizard has to be able to OFFER the list `create_employee` is about to refuse a
+# value against. What each read adds beyond that call is the live headcount,
+# which is an aggregate and is the column that makes "is this safe to rename"
+# answerable — `list_designations` reports it and `unused` beside it.
+#
+# THE WRITES CARRY `personnel.require_hr_role` IN THE WRAPPER as well as in the
+# tool. Two locks on the same door on purpose: the wrapper's runs before anything
+# is read and is what the audit row records, and the tool's is what protects the
+# MCP transport, where there is no wrapper.
+#
+# THE PAY COLUMNS ON Employee Grade ARE ABSENT FROM EVERY SIGNATURE HERE, which
+# makes them unreachable rather than merely refused — `bind` delivers only what a
+# signature names. `tools/org._refuse_grade_pay` refuses them by name anyway, so
+# a caller who finds another way in still gets the sentence rather than a write.
+# `default_base_pay` sets what an entire BAND of people is paid.
+#
+# `delete_` IS ABSENT FOR ALL FIVE and is not an oversight: none of the five
+# registers has a delete tool at all. Frappe HR's own answer for a master nobody
+# should pick any more is `disabled` on Department and a rename on the rest, and
+# `update_` carries both.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _org_list(user: str, doctype: str, company, limit, in_use_only) -> dict:
+	"""The shared body of the five org reads. Scope, then the tool.
+
+	`company` NARROWS ONLY Department, which is the one of the five that carries
+	one on a stock Frappe HR — the same asymmetry `_onboarding_reference_data`
+	handles, and for the same reason a Designation is a job title rather than a
+	company's job title.
+	"""
+	allowed = guard.require_scope(user)
+	wanted = guard.require_company(user, company, allowed)
+	master = org_tools.BY_DOCTYPE[doctype]
+
+	inner: dict = {}
+	if wanted and master.company_scoped:
+		inner["company"] = wanted
+	if limit not in (None, ""):
+		inner["limit"] = limit
+	if in_use_only is not None:
+		inner["in_use_only"] = in_use_only
+	return org_tools._list(master, inner).data
+
+
+def _org_create(user: str, doctype: str, given: dict, company=None) -> dict:
+	"""The shared body of the five org creates. HR gate, entity scope, tool.
+
+	THE GATE RUNS BEFORE ANYTHING IS READ. A register entry is what
+	`create_employee` validates against and what a Position Wage Default is keyed
+	on, so adding one creates the row a wage rate can hang off — which is a
+	personnel change however small the record looks.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	master = org_tools.BY_DOCTYPE[doctype]
+
+	inner = {key: value for key, value in given.items() if value not in (None, "")}
+	if master.company_scoped:
+		inner["company"] = _company(user, company, allowed)
+	return org_tools._create(master, inner).data
+
+
+def _org_update(user: str, doctype: str, given: dict, company=None) -> dict:
+	"""The shared body of the five org updates, renames included.
+
+	A RENAME MOVES EVERY Link ON THE SITE and the tool says so in its own answer:
+	`frappe.rename_doc` repoints every Employee already carrying the old title, and
+	it is REFUSED where the target name exists, because folding two registers into
+	one is a decision about which of them the people on both actually hold.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	master = org_tools.BY_DOCTYPE[doctype]
+
+	inner = {key: value for key, value in given.items() if value is not None}
+	if master.company_scoped and company not in (None, ""):
+		inner["company"] = _company(user, company, allowed)
+	return org_tools._update(master, inner).data
+
+
+# ── 158. list_designations ───────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_designations", limit=guard.READ_LIMIT)
+def list_designations(user: str, company=None, limit=None, in_use_only=None) -> dict:
+	"""Every job title on this site, with how many people hold each."""
+	return _org_list(user, org_tools.DESIGNATION, company, limit, in_use_only)
+
+
+# ── 159. create_designation ──────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_designation", mutating=True, limit=guard.WRITE_LIMIT)
+def create_designation(user: str, name=None, designation_name=None, description=None) -> dict:
+	"""Add the job title the hiring wizard is about to refuse a value against.
+
+	BOTH SPELLINGS OF THE NAME, because `bind` drops what a signature does not
+	name and a method taking one of them would be a silent empty column for
+	whichever caller guessed wrong. The same call every create on this surface
+	makes.
+	"""
+	return _org_create(
+		user,
+		org_tools.DESIGNATION,
+		{"designation_name": name or designation_name, "description": description},
+	)
+
+
+# ── 160. update_designation ──────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_designation", mutating=True, limit=guard.WRITE_LIMIT)
+def update_designation(user: str, designation=None, name=None, description=None, new_name=None) -> dict:
+	"""Correct one job title's description, or its spelling."""
+	return _org_update(
+		user,
+		org_tools.DESIGNATION,
+		{"designation": designation or name, "description": description, "new_name": new_name},
+	)
+
+
+# ── 161. list_departments ────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_departments", limit=guard.READ_LIMIT)
+def list_departments(user: str, company=None, limit=None, in_use_only=None) -> dict:
+	"""Every department, narrowed to one company, with its headcount."""
+	return _org_list(user, org_tools.DEPARTMENT, company, limit, in_use_only)
+
+
+# ── 162. create_department ───────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_department", mutating=True, limit=guard.WRITE_LIMIT)
+def create_department(
+	user: str, name=None, department_name=None, company=None, parent_department=None, is_group=None
+) -> dict:
+	"""Add one department to a company's org chart.
+
+	THE ONE OF THE FIVE WHOSE DOCNAME IS NOT WHAT YOU TYPED. Frappe HR's
+	controller appends the company abbreviation, so "Harvest" at Orchard Meadow
+	becomes "Harvest - OML" — the answer reports both, and every other tool here
+	resolves either.
+	"""
+	return _org_create(
+		user,
+		org_tools.DEPARTMENT,
+		{
+			"department_name": name or department_name,
+			"parent_department": parent_department,
+			"is_group": is_group,
+		},
+		company=company,
+	)
+
+
+# ── 163. update_department ───────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_department", mutating=True, limit=guard.WRITE_LIMIT)
+def update_department(
+	user: str,
+	department=None,
+	name=None,
+	company=None,
+	parent_department=None,
+	is_group=None,
+	disabled=None,
+	new_name=None,
+) -> dict:
+	"""Move a department in the tree, retire it, or correct its spelling.
+
+	`disabled` IS THE RETIREMENT AND A RENAME IS NOT. Disabling keeps every
+	Employee already in it pointing at it and takes it out of the pickers; that is
+	the right answer for a department that was real and is finished.
+	"""
+	return _org_update(
+		user,
+		org_tools.DEPARTMENT,
+		{
+			"department": department or name,
+			"parent_department": parent_department,
+			"is_group": is_group,
+			"disabled": disabled,
+			"new_name": new_name,
+		},
+		company=company,
+	)
+
+
+# ── 164. list_branches ───────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_branches", limit=guard.READ_LIMIT)
+def list_branches(user: str, company=None, limit=None, in_use_only=None) -> dict:
+	"""Every branch on this site, with how many people are posted to each.
+
+	A BRANCH IS THE CAMP, which is what makes this more than a dropdown:
+	`Parcel.branch` is the only column joining an operating unit to the ground its
+	housing stands on, and `list_onboarding_reference_data` walks it to turn the
+	wizard's Assignment step into its Housing step.
+	"""
+	return _org_list(user, org_tools.BRANCH, company, limit, in_use_only)
+
+
+# ── 165. create_branch ───────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_branch", mutating=True, limit=guard.WRITE_LIMIT)
+def create_branch(user: str, name=None, branch=None) -> dict:
+	"""Add one operating unit or camp. A Branch carries nothing but its name."""
+	return _org_create(user, org_tools.BRANCH, {"branch": name or branch})
+
+
+# ── 166. update_branch ───────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_branch", mutating=True, limit=guard.WRITE_LIMIT)
+def update_branch(user: str, branch=None, name=None, new_name=None) -> dict:
+	"""Correct a branch's spelling. There is nothing else on one to change.
+
+	WHICH IS WHY THIS ROUTE EXISTS AT ALL. "Mill Creak" typed at six in the
+	morning is on every Employee posted there since, and `new_name` goes through
+	`frappe.rename_doc`, which repoints all of them.
+	"""
+	return _org_update(user, org_tools.BRANCH, {"branch": branch or name, "new_name": new_name})
+
+
+# ── 167. list_employment_types ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_employment_types", limit=guard.READ_LIMIT)
+def list_employment_types(user: str, company=None, limit=None, in_use_only=None) -> dict:
+	"""Every employment category, with how many people are on each."""
+	return _org_list(user, org_tools.EMPLOYMENT_TYPE, company, limit, in_use_only)
+
+
+# ── 168. create_employment_type ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_employment_type", mutating=True, limit=guard.WRITE_LIMIT)
+def create_employment_type(user: str, name=None, employment_type_name=None) -> dict:
+	"""Add one employment category — Hourly, Seasonal Worker, H-2A.
+
+	THE INSTALLER SEEDS TWO and a farm running an H-2A programme needs a third
+	before its first petition worker is hired. This is the route that adds it.
+	"""
+	return _org_create(
+		user, org_tools.EMPLOYMENT_TYPE, {"employment_type_name": name or employment_type_name}
+	)
+
+
+# ── 169. update_employment_type ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_employment_type", mutating=True, limit=guard.WRITE_LIMIT)
+def update_employment_type(user: str, employment_type=None, name=None, new_name=None) -> dict:
+	"""Correct an employment category's spelling. It carries nothing else."""
+	return _org_update(
+		user, org_tools.EMPLOYMENT_TYPE, {"employment_type": employment_type or name, "new_name": new_name}
+	)
+
+
+# ── 170. list_employee_grades ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_employee_grades", limit=guard.READ_LIMIT)
+def list_employee_grades(user: str, company=None, limit=None, in_use_only=None) -> dict:
+	"""Every grade on this site, with how many people are on each.
+
+	THE LABEL AND THE HEADCOUNT, AND NOT THE PAY. `tools/org._describe` reports
+	the name and `active_employees`; a grade's `default_base_pay` is not among
+	the columns it reads, so what a band is paid does not travel to a handset
+	even as a read.
+	"""
+	return _org_list(user, org_tools.EMPLOYEE_GRADE, company, limit, in_use_only)
+
+
+# ── 171. create_employee_grade ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_employee_grade", mutating=True, limit=guard.WRITE_LIMIT)
+def create_employee_grade(user: str, name=None, employee_grade_name=None) -> dict:
+	"""Add one pay band's LABEL. The pay on it is set in the Desk.
+
+	PROMPT-NAMED, which is the trap this register carries: there is no column
+	behind the docname on a stock site, so the name given IS the docname. The tool
+	sets both spellings Frappe's insert path may take, rather than trusting
+	whichever one this version uses.
+	"""
+	return _org_create(user, org_tools.EMPLOYEE_GRADE, {"employee_grade_name": name or employee_grade_name})
+
+
+# ── 172. update_employee_grade ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_employee_grade", mutating=True, limit=guard.WRITE_LIMIT)
+def update_employee_grade(user: str, employee_grade=None, name=None, new_name=None) -> dict:
+	"""Correct a grade's spelling. Its pay columns are absent from this signature."""
+	return _org_update(
+		user, org_tools.EMPLOYEE_GRADE, {"employee_grade": employee_grade or name, "new_name": new_name}
+	)

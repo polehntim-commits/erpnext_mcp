@@ -1094,9 +1094,9 @@ class Catalogue(SeededTestCase):
 		withheld against the balance, and `render_garnishment_response` draws the
 		employer's answer back to the issuing court. Two reads and three writes.
 		"""
-		self.assertEqual(len(registry.TOOLS), 766)
+		self.assertEqual(len(registry.TOOLS), 768)
 		self.assertEqual(len(registry.READ_TOOLS), 383)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 383)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 385)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says
