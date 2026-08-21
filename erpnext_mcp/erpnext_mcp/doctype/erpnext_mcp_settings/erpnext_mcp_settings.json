@@ -740,6 +740,17 @@
   "allow_trace_bin",
   "bin_seal_write_section",
   "allow_seal_bin",
+  "traceability_lot_read_section",
+  "allow_get_traceability_lot",
+  "allow_list_traceability_lots",
+  "allow_trace_lot_forward",
+  "allow_trace_lot_backward",
+  "allow_recall_drill",
+  "allow_get_lot_timeline",
+  "traceability_lot_write_section",
+  "allow_create_traceability_lot",
+  "allow_record_cte",
+  "allow_index_lot_events",
   "document_intel_read_section",
   "allow_get_document_validation",
   "allow_list_document_validations",
@@ -5800,6 +5811,79 @@
    "fieldname": "allow_seal_bin",
    "fieldtype": "Check",
    "label": "Seal Bin"
+  },
+  {
+   "fieldname": "traceability_lot_read_section",
+   "fieldtype": "Section Break",
+   "label": "FSMA 204 Traceability — Read"
+  },
+  {
+   "default": "1",
+   "description": "READ. One lot with every Critical Tracking Event filed against it, its source lots and its status. Every break is NAMED rather than returned as an empty list: a lot with no events may simply not be indexed yet, and a lot with no block and no source lots is fruit whose origin was never written down. ON by default, because reading a trace cannot create one.",
+   "fieldname": "allow_get_traceability_lot",
+   "fieldtype": "Check",
+   "label": "Get Traceability Lot"
+  },
+  {
+   "default": "1",
+   "description": "READ. The FSMA 204 lot register — by block, variety, day, status, shift or planting season, newest harvest first. Events and source lots are deliberately not on it: both are per-lot reads and forty lots would be eighty of them. ON by default.",
+   "fieldname": "allow_list_traceability_lots",
+   "fieldtype": "Check",
+   "label": "List Traceability Lots"
+  },
+  {
+   "default": "1",
+   "description": "READ. Which lots carry this lot's fruit and WHO HAS THEM — the transformation graph walked downwards, then every Shipping event in that closure. Distinct from `trace_forward`, which walks the free-text bucket chain from a block or a spray; both are correct and they answer different questions from different evidence. It reports the fruit it CANNOT place, because the honest scope of a recall is wider than the destinations it can name. ON by default.",
+   "fieldname": "allow_trace_lot_forward",
+   "fieldtype": "Check",
+   "label": "Trace Lot Forward"
+  },
+  {
+   "default": "1",
+   "description": "READ. Everything upstream of one lot — its source lots, their sources, the blocks at the roots, and then the spray register, bounded at each root lot's own harvest date. The spray hop is why it exists: a residue detection is a question about what a block had been given. Distinct from `trace_backward`, which walks the free-text bucket chain from a bin or a shipment. ON by default.",
+   "fieldname": "allow_trace_lot_backward",
+   "fieldtype": "Check",
+   "label": "Trace Lot Backward"
+  },
+  {
+   "default": "1",
+   "description": "READ. The twenty-four-hour answer: everywhere a lot went, who received it, when. It WRITES NOTHING and sets nothing to Recalled — a drill is run on fruit nobody is worried about, and a read that changed a status would make the rehearsal indistinguishable from the event. Readiness is reported as a count, never as a verdict. ON by default.",
+   "fieldname": "allow_recall_drill",
+   "fieldtype": "Check",
+   "label": "Recall Drill"
+  },
+  {
+   "default": "1",
+   "description": "READ. One lot's events in the order they HAPPENED, with the referenced registers' rows resolved alongside — the document an audit asks for, in one call rather than one call per event. A pointer resolving to nothing is reported rather than dropped, and an uninstalled register is told apart from a deleted record. ON by default.",
+   "fieldname": "allow_get_lot_timeline",
+   "fieldtype": "Check",
+   "label": "Get Lot Timeline"
+  },
+  {
+   "fieldname": "traceability_lot_write_section",
+   "fieldtype": "Section Break",
+   "label": "FSMA 204 Traceability — Write"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Assigns the one identifier FSMA 204 actually requires to one day's fruit off one block, as {block}-{variety}-{YYYYMMDD}-{sequence}. Idempotent on block, variety, day and company, because two codes for one afternoon's fruit split a recall in half and neither half names the other. OFF by default, like every other mutating tool: a lot code is printed on fruit and travels off the farm, and issuing one is a decision an operator takes on purpose.",
+   "fieldname": "allow_create_traceability_lot",
+   "fieldtype": "Check",
+   "label": "Create Traceability Lot"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Files one Critical Tracking Event — the FSMA 204 unit of record — against one lot. The event is a POINTER at the register holding the detail, never a copy of it. It never changes the lot: a Shipping event does not decrement a quantity or set a status, because those are separate measurements and a silent rewrite would make a lot disagree with its own history. OFF by default.",
+   "fieldname": "allow_record_cte",
+   "fieldtype": "Check",
+   "label": "Record Critical Tracking Event"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Sweeps one date window and attaches the Bin Seals, Scale Tickets and Spray Applications this site already holds to lot codes — creating the lots the seals imply. It is a TOOL rather than a `doc_events` hook because this app promises to install none, and running it here means an operator can see it, switch it off and re-run it over last season. Idempotent throughout, so a second sweep over the same window writes nothing. OFF by default.",
+   "fieldname": "allow_index_lot_events",
+   "fieldtype": "Check",
+   "label": "Index Lot Events"
   },
   {
    "fieldname": "document_intel_read_section",

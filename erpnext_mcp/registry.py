@@ -96,6 +96,7 @@ from .tools import (
 	itgc,
 	kpi,
 	kpidefs,
+	lots,
 	maintenance,
 	masters,
 	meta,
@@ -18297,6 +18298,305 @@ TOOLS = {
 		title="Trace a bin to the workers who filled it",
 		available=_needs_doctype("Bin Seal"),
 		requires="the Bin Seal DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	# ── v0.111.0: FSMA 204 lot codes and critical tracking events ──────────
+	#
+	# THE NAMES ARE `trace_lot_forward` AND `trace_lot_backward`, NOT `trace_forward`
+	# AND `trace_backward`. The older pair take a block, a bin, a spray or a
+	# shipment and walk the FREE-TEXT chain the bucket captures record; these take a
+	# lot code and walk the transformation graph. Two different questions asked of
+	# two different bodies of evidence, and giving the new pair the old names — or
+	# bolting a `lot_code` argument onto the old pair — would have made every
+	# existing caller's tool description a lie about what it now does.
+	"create_traceability_lot": _tool(
+		lots.create_traceability_lot,
+		"MUTATING (default OFF). ASSIGN THE ONE IDENTIFIER FSMA 204 ACTUALLY REQUIRES to one day's fruit "
+		"off one block. The code is generated as {block}-{variety}-{YYYYMMDD}-"
+		"{sequence} — 'YC3-BING-20260821-01' — and it is the docname, because a "
+		"lot code is read off a bin and typed into a buyer's portal by somebody "
+		"who has never seen this site.\n\n"
+		"WHY IT IS NEEDED WHEN THE FARM ALREADY TRACES. `trace_forward` and "
+		"`trace_backward` walk block ids, bin ids and shipment ids written free-"
+		"hand on bucket captures. That chain is real and it does not survive a "
+		"hand-off to a packing house, does not survive two bins called '17' in two "
+		"seasons, and does not survive four field lots being combined into one "
+		"pallet. This does.\n\n"
+		"IDEMPOTENT on (field, variety, harvest_date, company): a retry gets the "
+		"same lot back with `already_existed` set. Two codes for one afternoon's "
+		"fruit split a recall in half and neither half names the other — pass "
+		"allow_duplicate where the block genuinely produced two lots that day.\n\n"
+		"A LOT WITH NO BLOCK IS ACCEPTED ONLY WITH `source_lots`. That is a "
+		"transformation lot — a pallet made of other lots — whose block is "
+		"whatever its sources name, and asserting one on the pallet would be a "
+		"guess a backward trace then reports as fact.",
+		{
+			"field": _field(
+				_STRING,
+				"The Field the fruit came off. Required unless source_lots is given. A Link, "
+				"because a residue question runs from a lot to a block to a spray register.",
+			),
+			"variety": _field(_STRING, "The variety, as the operation says it — 'Bing', 'Honeycrisp'."),
+			"harvest_date": _field(_STRING, "The day the fruit was picked, YYYY-MM-DD. Defaults to today."),
+			"company": _COMPANY,
+			"lot_code": _field(
+				_STRING,
+				"Override the generated code. For importing history whose codes are already "
+				"printed on bins. Refused where it names an existing lot.",
+			),
+			"status": _field(_STRING, "Active (default), Shipped, Consumed or Recalled."),
+			"harvest_shift": _field(_STRING, "The Farm Shift the picking happened on."),
+			"shift": _field(_STRING, "Alias for harvest_shift."),
+			"planting_season": _field(
+				_STRING, "The Planting Season this lot came off, where the block has had several."
+			),
+			"quantity": _field(_NUMBER, "How much is in the lot, where anybody counted."),
+			"quantity_uom": _field(_STRING, "The unit — bins, lb, kg, boxes."),
+			"source_lots": _field(
+				{"type": "array", "items": {"type": ["string", "object"]}},
+				"The lots this one was made FROM, for a transformation. Lot codes, or objects "
+				"with source_lot / quantity_contributed / quantity_uom / note.",
+			),
+			"location": _field(_STRING, "Where the lot was created, for the opening event."),
+			"actor": _field(_STRING, "The Employee who created it, for the opening event."),
+			"allow_duplicate": _field(
+				_BOOLEAN, "Create a second lot for a block, variety and day that already has one."
+			),
+			"notes": _field(_STRING, "Anything about the lot that is not a column."),
+		},
+		mutating=True,
+		title="Create a traceability lot code",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_traceability_lot": _tool(
+		lots.get_traceability_lot,
+		"One lot with every Critical Tracking Event filed against it, its source "
+		"lots and its status. Read-only.\n\n"
+		"EVERY BREAK IS NAMED. A lot with no events is reported as such rather "
+		"than as an empty list — the sprays and bin seals may well exist and "
+		"simply not be indexed yet, and index_lot_events attaches them. A lot with "
+		"no block and no source lots is fruit whose origin was never written down, "
+		"and that is said plainly.\n\n"
+		"An event is a POINTER at the register holding the detail; get_lot_timeline "
+		"resolves those pointers and returns the referenced records alongside.",
+		{
+			"lot_code": _field(_STRING, "REQUIRED. The lot code. Stored upper-case."),
+		},
+		required=("lot_code",),
+		title="Get a traceability lot",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_traceability_lots": _tool(
+		lots.list_traceability_lots,
+		"The lot register — by block, variety, day, status, shift or planting "
+		"season. Newest harvest first. Read-only.\n\n"
+		"Events and source lots are NOT on this register: both are per-lot reads "
+		"and forty lots would be eighty of them. get_traceability_lot has one lot "
+		"in full.",
+		{
+			"field": _field(_STRING, "One Field docname."),
+			"variety": _field(_STRING, "One variety, as stored."),
+			"date_from": _field(_STRING, "Earliest harvest date, YYYY-MM-DD."),
+			"date_to": _field(_STRING, "Latest harvest date, YYYY-MM-DD."),
+			"status": _field(_STRING, "Active, Shipped, Consumed or Recalled."),
+			"harvest_shift": _field(_STRING, "One Farm Shift."),
+			"planting_season": _field(_STRING, "One Planting Season."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List traceability lots",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"record_cte": _tool(
+		lots.record_cte,
+		"MUTATING (default OFF). FILE ONE CRITICAL TRACKING EVENT against one lot — the FSMA 204 unit of "
+		"record. Five event types, and they are the rule's rather than this app's: "
+		"Growing (anything done to the fruit on the tree), Receiving (fruit "
+		"arriving somewhere), Transforming (a lot becoming other lots), Creating "
+		"(a lot first existing) and Shipping (fruit leaving to somebody).\n\n"
+		"THE EVENT IS A POINTER, NOT A COPY. `reference_doctype` and "
+		"`reference_name` name the record that already holds the detail — a Spray "
+		"Application, a Bin Seal, a Trade Shipment. Copying that record's products "
+		"or weight into the event would create a second version of a fact that can "
+		"drift from the first, and the drifted one is always the one somebody "
+		"reads. The Key Data Elements are here as well because the rule names them "
+		"and because a hand-entered event has no source record to point at.\n\n"
+		"IT NEVER CHANGES THE LOT. A Shipping event does not decrement the lot's "
+		"quantity and does not set its status to Shipped: those are two "
+		"measurements taken by two people, and an event that silently rewrote the "
+		"lot would make the lot disagree with its own history with no way to tell "
+		"which somebody meant.\n\n"
+		"IDEMPOTENT on (lot, event_type, reference_doctype, reference_name). An "
+		"event with NO reference is never deduplicated — two hand-entered Shipping "
+		"events on one lot are two loads that left.",
+		{
+			"lot_code": _field(_STRING, "REQUIRED. The lot this happened to."),
+			"event_type": _field(
+				_STRING, "REQUIRED. Growing, Receiving, Transforming, Creating or Shipping."
+			),
+			"reference_doctype": _field(
+				_STRING, "The register holding the detail — 'Spray Application', 'Trade Shipment'."
+			),
+			"reference_name": _field(_STRING, "The docname in that register."),
+			"actor": _field(_STRING, "The Employee who performed it. Docname, number, name or login."),
+			"location": _field(_STRING, "Where the EVENT was performed, as somebody would say it."),
+			"description": _field(_STRING, "What happened, in a sentence."),
+			"quantity": _field(_NUMBER, "How much moved. Blank means nobody counted, which is not zero."),
+			"quantity_uom": _field(_STRING, "The unit — bins, lb, kg, boxes."),
+			"source_location": _field(_STRING, "Where the fruit came FROM on this event."),
+			"destination_location": _field(
+				_STRING, "Where it went TO. This is the field recall_drill is run from."
+			),
+			"carrier": _field(_STRING, "Who carried it — the only party who can still stop a load."),
+			"receiver": _field(_STRING, "Who received it. The people who have to be telephoned."),
+			"event_datetime": _field(_STRING, "When it HAPPENED, not when it was filed. Defaults to now."),
+			"when": _field(_STRING, "Alias for event_datetime."),
+			"company": _COMPANY,
+		},
+		required=("lot_code", "event_type"),
+		mutating=True,
+		title="Record a critical tracking event",
+		available=_needs_doctype("Critical Tracking Event"),
+		requires="the Critical Tracking Event DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"trace_lot_forward": _tool(
+		lots.trace_lot_forward,
+		"WHICH LOTS CARRY THIS LOT'S FRUIT, AND WHO HAS THEM. It walks the "
+		"transformation graph downwards — this lot, the lots it was made into, the "
+		"lots THOSE were made into — and reads every Shipping event in that "
+		"closure, returning the destinations, the receivers and the carriers. "
+		"Read-only; writes nothing.\n\n"
+		"NOT THE SAME TOOL AS `trace_forward`, which takes a block, a spray or a "
+		"water test and walks the free-text bucket chain to the settlements and "
+		"the invoices. That one is unchanged and is still the right call when the "
+		"SOURCE is suspect and no lot code was ever assigned.\n\n"
+		"IT REPORTS THE FRUIT IT CANNOT PLACE. A Shipping event naming neither a "
+		"destination nor a receiver is product that left and cannot be traced to "
+		"anybody; that count is on `counts.unplaced_shipments` and the honest "
+		"scope of a recall is wider than the destination list. A lot with NO "
+		"Shipping event at all is reported as a break rather than as an empty "
+		"list, because 'it has not left' and 'nobody recorded where it went' are "
+		"different answers and only one of them is good news.\n\n"
+		"`recall_drill` is this read written as the document somebody acts on.",
+		{
+			"lot_code": _field(_STRING, "REQUIRED. The lot code."),
+		},
+		required=("lot_code",),
+		title="Trace a lot forward to its destinations",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"trace_lot_backward": _tool(
+		lots.trace_lot_backward,
+		"EVERYTHING UPSTREAM OF ONE LOT: its source lots, their source lots, the "
+		"blocks at the roots of that chain, and then THE SPRAY REGISTER — bounded "
+		"at each root lot's own harvest date. Read-only; writes nothing.\n\n"
+		"THE SPRAY HOP IS WHY THIS EXISTS. A residue detection is a question about "
+		"what a block had been given, and answering it from a pallet code meant "
+		"unpicking which field lots were in the pallet by hand. Applications made "
+		"AFTER the fruit came off are excluded: naming one sends somebody to "
+		"investigate a tank that was never on that crop. Planned and Cancelled "
+		"passes are excluded too — neither put anything on the ground.\n\n"
+		"NOT THE SAME TOOL AS `trace_backward`, which takes a shipment, a bin, a "
+		"scale ticket or a settlement and walks the free-text bucket chain. That "
+		"one is unchanged and is still the right call when all anybody has is a "
+		"bin id.\n\n"
+		"A chain that reaches no block is reported as a break: it ends at a lot "
+		"code and cannot reach the spray register at all.",
+		{
+			"lot_code": _field(_STRING, "REQUIRED. The lot code."),
+		},
+		required=("lot_code",),
+		title="Trace a lot back to the blocks and sprays",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"recall_drill": _tool(
+		lots.recall_drill,
+		"THE TWENTY-FOUR-HOUR ANSWER: everywhere this lot went, who received it "
+		"and when. A buyer telephones or a residue result comes back, and the "
+		"operation has one day to say where the fruit is — this runs the forward "
+		"trace and writes it as the thing somebody acts on: `parties_to_notify`, "
+		"each with what they received, when, and under which lot code.\n\n"
+		"IT WRITES NOTHING AND SETS NOTHING TO RECALLED. A drill is run on fruit "
+		"nobody is worried about — that is what makes it a drill — and a read that "
+		"changed a status would make the rehearsal indistinguishable from the "
+		"event. Setting the lot's status is a deliberate, separate act.\n\n"
+		"READINESS IS A COUNT, NOT A VERDICT. This computes no opinion about "
+		"whether the operation is compliant. It says how many lots were reached, "
+		"how many parties can be named, and — stated first rather than omitted — "
+		"how many shipments name nobody. An operation with unplaced shipments has "
+		"a real gap and now knows its size. Where NO party can be named at all, "
+		"`scope_warning` says so in as many words: do not read it as a clean bill.",
+		{
+			"lot_code": _field(_STRING, "REQUIRED. The lot code under suspicion."),
+		},
+		required=("lot_code",),
+		title="Run a recall drill on a lot",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_lot_timeline": _tool(
+		lots.get_lot_timeline,
+		"ONE LOT'S EVENTS IN ORDER, WITH THE REFERENCED RECORDS RESOLVED — the "
+		"document an audit asks for. `get_traceability_lot` returns the events; "
+		"this returns them chronologically WITH the register rows they point at, "
+		"so 'produce the records for lot X' is one call rather than one call plus "
+		"one read per event. Read-only.\n\n"
+		"THE CHRONOLOGY IS WHEN THE EVENT HAPPENED, not the creation order. A "
+		"phone that posts an afternoon of events when the signal comes back would "
+		"otherwise produce a timeline reading in the order the bars returned.\n\n"
+		"A pointer that resolves to nothing is REPORTED rather than dropped, and "
+		"the two ways it can fail are told apart: a register this site does not "
+		"have is a different problem from a record that was deleted, and only one "
+		"of them means evidence went missing. A timeline with no Growing event or "
+		"no Shipping event is flagged as such.",
+		{
+			"lot_code": _field(_STRING, "REQUIRED. The lot code."),
+			"limit": _LIMIT,
+		},
+		required=("lot_code",),
+		title="Get a lot's event timeline",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"index_lot_events": _tool(
+		lots.index_lot_events,
+		"MUTATING (default OFF), idempotent. ATTACH THE RECORDS THIS SITE ALREADY HOLDS TO LOT CODES. Over one date "
+		"window it turns Bin Seals into lots and Receiving events, Scale Tickets "
+		"into Shipping events, and Spray Applications into Growing events on every "
+		"lot whose block the pass reached on or before harvest. It is how an "
+		"operation gets from nothing to a working lot register in one call, and "
+		"how a season of history is indexed a week at a time.\n\n"
+		"IT IS A TOOL AND NOT A `doc_events` HOOK, deliberately. `hooks.py` "
+		"promises this app installs no document hooks and the test suite fails the "
+		"build over one; running the indexing here means an operator can see it, "
+		"switch it off, and re-run it over last season.\n\n"
+		"IDEMPOTENT THROUGHOUT. Lots are matched on (field, variety, "
+		"harvest_date, company) and events on (lot, event_type, reference_doctype, "
+		"reference_name), so a second sweep over the same window writes nothing "
+		"and says so in `counts.events_already_present`.\n\n"
+		"IT DOES NOT INDEX TRADE SHIPMENTS. A Trade Shipment carries no lot "
+		"column, and guessing its lots off a date would put fruit on a truck it "
+		"was never on. Use record_cte for those — one call per shipment, naming "
+		"the lots deliberately.\n\n"
+		"WHAT IT SKIPS IS REPORTED. Bin seals with no Field cannot be filed under "
+		"a lot, because a lot code IS a block and a day; scale tickets matching no "
+		"lot are loads that left with nothing here to say which fruit they were. "
+		"Both counts are in `skipped`.",
+		{
+			"date_from": _field(_STRING, "REQUIRED. Start of the window, YYYY-MM-DD."),
+			"date_to": _field(_STRING, "REQUIRED. End of the window, YYYY-MM-DD."),
+			"company": _COMPANY,
+		},
+		required=("date_from", "date_to"),
+		mutating=True,
+		idempotent=True,
+		title="Index existing records as lot events",
+		available=_needs_doctype("Traceability Lot Code"),
+		requires="the Traceability Lot Code DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── v0.68.0: Container-Agnostic Fill Pipeline ──────────────────────────
 	"get_fill_determination": _tool(

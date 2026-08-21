@@ -1735,6 +1735,16 @@ APP_DOCTYPES = {
 	# because the handset drains a backlog in one pass and drains it again from
 	# the start if that pass is interrupted; see `tools/app_feedback.py`.
 	"App Feedback": "app_feedback",
+	# v0.111.0 — FSMA 204. The traceability lot code is the one identifier the Food
+	# Traceability Rule requires, and it is the DOCNAME (`autoname: field:lot_code`)
+	# because it is read off a bin and typed into a buyer's portal by somebody who
+	# has never seen this site. `Traceability Lot Source` DOES need a
+	# CHILD_TABLE_SOURCES entry, unlike Bin Seal Contributor: `trace_lot_forward`
+	# has to find the PARENTS of a source row, which is the one direction that
+	# cannot be read through a parent document.
+	"Traceability Lot Code": "traceability_lot_code",
+	"Traceability Lot Source": "traceability_lot_source",
+	"Critical Tracking Event": "critical_tracking_event",
 }
 
 #: The standard reports this app ships, by folder name under `REPORT_DIR`. Rows
@@ -4532,6 +4542,13 @@ CHILD_TABLE_SOURCES = {
 	# register full of sprays on that block would answer "none", which is the
 	# worst possible direction for a pesticide record to be wrong in.
 	"Spray Application Block": (("Spray Application", "blocks"),),
+	# v0.111.0. `lots._child_lots_of` asks the OTHER direction of the
+	# transformation graph: given a lot, which lots name it as a source. The
+	# parents are what is being looked for, so this is the one edge that cannot be
+	# read through a parent document — without this entry `trace_lot_forward` would
+	# answer "this lot went nowhere" for a lot that went into a pallet, which is
+	# the worst possible direction for a recall answer to be wrong in.
+	"Traceability Lot Source": (("Traceability Lot Code", "source_lots"),),
 }
 
 

@@ -3,6 +3,79 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.111.0 — 2026-08-21 — the lot code a buyer can hold
+
+**FSMA 204, as an index over the registers this app already keeps.** Nine tools
+and three DocTypes. Nothing existing was changed: `trace_forward`,
+`trace_backward` and `trace_bin` keep their arguments, their answers and their
+names, no doctype gained a field, no mobile route moved, and `hooks.py` still
+installs no `doc_events`.
+
+**Why a farm that already traces needed this.** The three trace tools above walk
+a chain of free-text ids — `block_id`, `bin_id`, `shipment_id`, written on a
+bucket capture by whoever was holding the phone. That chain is the honest record
+of what the site stored, and it has three properties the Food Traceability Rule
+will not accept: it is not an identifier (two bins called "17" in two seasons are
+two bins), it does not survive a hand-off to a packing house, and it does not
+survive a transformation — four field lots combined into a pallet destroy the
+join, and nothing in the free-text chain records which four.
+
+**`Traceability Lot Code` is the identifier.** `{block}-{variety}-{YYYYMMDD}-
+{sequence}`, unique, and it is the *docname*, because a lot code is read off a
+bin and typed into a buyer's portal by somebody who has never seen this site.
+Unique on purpose, which is the opposite of the decision `Bin Seal` takes about
+`bin_tag` and right for the opposite reason: a bin tag is somebody else's sticker
+and is genuinely reused; a lot code is assigned here, once, by this app. The
+block segment is `Field.block_number` where the register has one and the Field
+name reduced to its initials and digits where it does not — truncating the name
+gives 'YELLOWCAMP' for both Block 3 and Block 4, which is unique and useless to
+anybody reading one off a bin.
+
+**`Critical Tracking Event` is a pointer, never a copy.** The rule's five event
+types, each carrying who, when, where, how much and where from and to, plus
+`reference_doctype`/`reference_name` naming the record that already holds the
+detail. The spray's own record remains the only place its products, rates and
+weather live: copying them into an event would create a second version of a fact
+that can drift from the first, and the drifted one is always the one somebody
+reads. The reference is `Data` rather than a Dynamic Link so an event survives
+naming a register this site does not have — an unresolved pointer is *reported*
+as the data fault it is rather than dropped.
+
+**`Traceability Lot Source` is the transformation edge,** and it is the only
+reason a trace is ever more than one hop.
+
+**`trace_lot_forward` and `trace_lot_backward` are new tools, not renamed ones.**
+They take a lot code and walk the transformation graph; the older pair take a
+block, a bin or a shipment and walk the free-text chain. Both are correct, they
+answer different questions from different evidence, and bolting a `lot_code`
+argument onto the older pair would have made every existing caller's tool
+description a lie about what it now does.
+
+**`recall_drill` writes nothing and recalls nothing.** A drill is run on fruit
+nobody is worried about — that is what makes it a drill — and a read that changed
+a status would make the rehearsal indistinguishable from the event. Readiness is
+reported as a count, never as a verdict: how many lots were reached, how many
+parties can be named, and — stated first rather than omitted — how many shipments
+name nobody. Where no party can be named at all it says so in as many words: *do
+not read this as a clean bill.*
+
+**`index_lot_events` is a tool because this app installs no document hooks.**
+`hooks.py` promises none and `test_hooks.py` fails the build over one;
+`tools/itgc.py` settled the identical question the identical way. It sweeps a
+window, turns Bin Seals into lots and Receiving events, Scale Tickets into
+Shipping events and Spray Applications into Growing events, and is idempotent on
+`(lot, event_type, reference_doctype, reference_name)` — so a second sweep over
+the same window writes nothing and says so. It does *not* index Trade Shipments:
+a shipment carries no lot column, and guessing its lots off a date would put
+fruit on a truck it was never on.
+
+**What it skips is reported.** Bin seals with no `field`, scale tickets matching
+no lot. Both counts come back with the sentence that says how to close each,
+because a sweep that silently dropped them would read as "everything is indexed".
+
+**Switches.** Six reads ship on, three writes ship off — the invariant every
+release holds. 766 tools: 383 read, 383 mutating.
+
 ## 0.110.0 — 2026-08-20 — the whole farm on one map, and a boundary you can walk
 
 **`/app/farm-overview`.** Every parcel, block and irrigation zone this app knows

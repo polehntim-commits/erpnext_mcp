@@ -1,0 +1,194 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:lot_code",
+ "creation": "2026-08-21 12:00:00.000000",
+ "description": "One traceable lot, under the code that travels with it. THE FSMA 204 TRACEABILITY LOT CODE, WHICH IS THE ONE IDENTIFIER THE RULE ACTUALLY REQUIRES: the Food Traceability Rule does not ask an operation to keep better records, it asks it to keep records that can be JOINED, and the join is this code. A bin tag is reused between seasons, a shipment id is the buyer's, a block name is what the crew calls it — none of the three survives a hand-off. This does, because it is assigned once at harvest and every Critical Tracking Event afterwards names it.\n\nWHY IT IS ADDITIVE AND INDEXES RATHER THAN REPLACES. Spray Application, Bin Seal, Scale Ticket, Trade Shipment and Settlement Statement already hold the facts a recall needs; what they never held was a single column all five agree on. This record is that column. Nothing here duplicates a weight, a customer or a spray — it names the lot and points at the registers, and `Critical Tracking Event` is the pointer.\n\nTHE DOCNAME IS THE LOT CODE. `autoname: field:lot_code` rather than a hash or a series, because a lot code is printed on a bin, read aloud down a telephone and typed into a buyer's portal by somebody who has never seen this site. A Link to a hash would mean every trace read had to resolve a name nobody holds.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "lot_code",
+  "status",
+  "variety",
+  "identity_col",
+  "company",
+  "field",
+  "harvest_date",
+  "origin_section",
+  "harvest_shift",
+  "planting_season",
+  "origin_col",
+  "quantity",
+  "quantity_uom",
+  "transformation_section",
+  "source_lots",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "description": "The code itself, and the docname. {block}-{variety}-{YYYYMMDD}-{sequence} — 'YC3-BING-20260821-01'. UNIQUE ON THIS SITE AND MADE SO, which is the opposite of the decision Bin Seal takes about `bin_tag` and right for the opposite reason: a bin tag is a sticker somebody else printed and reuses, and a lot code is assigned HERE, once, by this app. A second record under one code is not a second true bin — it is the join breaking, and refusing it is the whole point of the column.",
+   "fieldname": "lot_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lot Code",
+   "reqd": 1,
+   "search_index": 1,
+   "unique": 1
+  },
+  {
+   "default": "Active",
+   "description": "Where the lot is in its life. Active is fruit that exists and has not left; Shipped has gone to a buyer and its Shipping event says to whom; Consumed was transformed into other lots and `source_lots` on those names it; Recalled is under a hold. THE STATUS IS NOT THE RECALL. Setting this to Recalled records a decision; `recall_drill` computes who has to be telephoned, and it answers for a lot in any status because a mock recall is run on fruit nobody is worried about.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Active\nShipped\nConsumed\nRecalled",
+   "search_index": 1
+  },
+  {
+   "description": "What is in it, as the operation calls it — 'Bing', 'Rainier', 'Honeycrisp'. Free text and not a Link, matching Field.variety, Scale Ticket.variety and Planting Season.variety, which are all Data on this site. A Link here would refuse a lot over a variety nobody had entered in a master yet, on the one afternoon of the year the fruit is actually moving.",
+   "fieldname": "variety",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Variety",
+   "search_index": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "The entity the lot belongs to. It is what scopes this register — a User Permission on Company reaches this doctype because this column links to one, which is the mechanism every other record in this app is scoped by and the reason none of them needs a hand-written permission hook.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "description": "The block the fruit came off. A Link and not a string, for the reason Bin Seal's `field` is one: a residue question runs from a lot to a block to a spray register, and a typed block name breaks that chain at its weakest point. Optional on a lot created by TRANSFORMATION, where the block is whatever `source_lots` names and asserting one of them here would be a guess.",
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Field",
+   "options": "Field",
+   "search_index": 1
+  },
+  {
+   "description": "The day the fruit was picked, which is the date in the code and the date a spray bound is taken against. NOT the day the record was made: a lot keyed in the following morning is still the previous day's fruit, and filing it under the keystroke would put a pass applied that night inside the growing window of fruit that was already in the shed.",
+   "fieldname": "harvest_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Harvest Date",
+   "search_index": 1
+  },
+  {
+   "fieldname": "origin_section",
+   "fieldtype": "Section Break",
+   "label": "Where It Came From"
+  },
+  {
+   "description": "The shift the picking happened on, where there was one. It is the join to the crew, the weather timeline and the break log — every exposure or hygiene question about a lot is asked of a shift. Optional: fruit picked by a crew tallied on paper is still fruit.",
+   "fieldname": "harvest_shift",
+   "fieldtype": "Link",
+   "label": "Harvest Shift",
+   "options": "Farm Shift",
+   "search_index": 1
+  },
+  {
+   "description": "The planting this lot came off, where the block has been through more than one. A block is replanted and a lot picked in 2026 is not the same biological asset as a lot picked off the same acres in 2014; naming the season is what keeps a rootstock or an organic-transition question answerable years later.",
+   "fieldname": "planting_season",
+   "fieldtype": "Link",
+   "label": "Planting Season",
+   "options": "Planting Season",
+   "search_index": 1
+  },
+  {
+   "fieldname": "origin_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "How much is in the lot, where anybody counted. RECORDED AND NEVER RECONCILED against the events: a Shipping event that moves half the lot does not decrement this, because the two are different measurements taken by different people and silently balancing them would delete the disagreement, which is the same rule Bin Seal applies to its two bucket counts. `get_lot_timeline` reports both and names the gap.",
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "label": "Quantity",
+   "precision": "3"
+  },
+  {
+   "description": "The unit the quantity is in — bins, lb, kg, boxes. Free text, matching Trade Shipment and Scale Ticket, both of which let the operation say what it actually counted.",
+   "fieldname": "quantity_uom",
+   "fieldtype": "Data",
+   "label": "Quantity UOM"
+  },
+  {
+   "fieldname": "transformation_section",
+   "fieldtype": "Section Break",
+   "label": "What It Was Made From"
+  },
+  {
+   "description": "The lots that went INTO this one, where this lot was created by a transformation — a pack line combining four field lots into one pallet code, a repack, a re-grade. EMPTY IS THE ORDINARY CASE and means this lot came off a block rather than off other lots. THIS TABLE IS WHAT MAKES A TRACE MORE THAN ONE HOP: without it a pallet code traces to the pack line and stops, and the four blocks that actually fed it are unreachable in either direction.",
+   "fieldname": "source_lots",
+   "fieldtype": "Table",
+   "label": "Source Lots",
+   "options": "Traceability Lot Source"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "description": "Anything about the lot that is not a column — a hold placed by a buyer, a re-grade, a block the crew picked into it that nobody expected.",
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Traceability Lot Code",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "field,variety,harvest_date,status",
+ "sort_field": "harvest_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

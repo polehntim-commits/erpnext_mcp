@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 757 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 766 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 377 read tools are **on** by default and can be switched off individually. A
+All 383 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -17145,6 +17145,250 @@ true record** rather than the first false one. Where there is more than one,
 in the chain rather than a lookup failure — nothing records which block that bin
 came from and nothing can reconstruct it now. The refusal points at
 `list_bin_seals(shift=…)`, which is usually how a mis-keyed tag is found.
+## FSMA 204: lot codes and critical tracking events (v0.111.0)
+
+Nine tools, and they sit **beside** the trace tools above rather than replacing
+any of them. `trace_forward`, `trace_backward` and `trace_bin` keep their
+arguments, their answers and their names exactly.
+
+### Why a farm that already traces needs this
+
+The three tools above walk a chain of **free-text ids** — `block_id`, `crew_id`,
+`bin_id`, `shipment_id`, written on a bucket capture by whoever was holding the
+phone. That chain is the honest record of what the site stored, and it has three
+properties the Food Traceability Rule will not accept:
+
+* **It is not an identifier.** Two bins called "17" in two seasons are two bins.
+  A regulator asking "produce the records for lot X" is asking about *one* lot.
+* **It does not survive a hand-off.** The buyer's portal, the packing house and
+  the carrier do not have this site's bucket captures.
+* **It does not survive a transformation.** Four field lots combined into one
+  pallet destroy the join, and nothing in the free-text chain records which four.
+
+So this release adds the thing the rule actually requires — a **traceability lot
+code**, assigned once, unique on the site, printed on the fruit — and a
+**Critical Tracking Event** register that *indexes* the records already here
+under it. Nothing is copied: a CTE says "Spray Application SP-0041 is a Growing
+event in lot YC3-BING-20260821-01", and the spray's own record remains the only
+place its products, rates and weather live.
+
+| | |
+|---|---|
+| `create_traceability_lot` | Assigns a lot code. Mutating, ships **off**. |
+| `get_traceability_lot` | One lot with every event filed against it. Read. |
+| `list_traceability_lots` | The register. Read. |
+| `record_cte` | Files one critical tracking event. Mutating, ships **off**. |
+| `trace_lot_forward` | Downstream lots and their destinations. Read. |
+| `trace_lot_backward` | Upstream lots, blocks and the spray register. Read. |
+| `recall_drill` | The twenty-four-hour answer, as a document. Read. |
+| `get_lot_timeline` | The events in order, with the referenced records. Read. |
+| `index_lot_events` | Attaches what the site already holds. Mutating, ships **off**. |
+
+### Three DocTypes, and one of them is an edge
+
+**Traceability Lot Code.** `lot_code` is the docname — `autoname: field:lot_code`
+— because a lot code is read off a bin, said down a telephone and typed into a
+buyer's portal by somebody who has never seen this site, and a Link to a hash
+would mean resolving a name nobody holds. It is **unique**, which is the opposite
+of the decision `Bin Seal` takes about `bin_tag` and right for the opposite
+reason: a bin tag is somebody else's sticker and is genuinely reused, and a lot
+code is assigned here, once, by this app.
+
+**Traceability Lot Source.** The child table on the lot naming the lots that went
+*into* it. This is the transformation edge and the only reason a trace is ever
+more than one hop — a pack line combining four field lots into a pallet has
+destroyed the join unless somebody wrote down which four.
+
+**Critical Tracking Event.** The rule's five event types — Growing, Receiving,
+Transforming, Creating, Shipping — each carrying who, when, where, how much, and
+where from and to. `reference_doctype` / `reference_name` are `Data` rather than
+a Dynamic Link, deliberately: an event may name a register this site does not
+have, and a Dynamic Link would either refuse the event or vanish it. An
+unresolved reference is **reported as the data fault it is** rather than dropped.
+
+## `create_traceability_lot`
+
+**MUTATING (default OFF).** `{block}-{variety}-{YYYYMMDD}-{sequence}`.
+
+```json
+{"field": "Yellow Camp Block 3 - MC", "variety": "Bing", "harvest_date": "2026-08-21"}
+```
+
+```json
+{"lot_code": "YC3-BING-20260821-01", "status": "Active", "already_existed": false,
+ "opening_event": {"name": "CTE-2026-00001", "created": true, "event_type": "Creating"}}
+```
+
+**Idempotent on `(field, variety, harvest_date, company)`.** A retry gets the same
+lot back with `already_existed` set. Two codes for one afternoon's fruit split a
+recall in half and neither half names the other; pass `allow_duplicate` where the
+block genuinely produced two lots that day.
+
+**A lot with no `field` is accepted only with `source_lots`** — that is a
+transformation lot, whose block is whatever its sources name. Asserting one on
+the pallet would be a guess that a backward trace then reports as fact.
+
+**The block segment comes from `Field.block_number`** where the register has one,
+because that is what the crew and the packing house both say. A lot code built
+out of a forty-character Field docname is one nobody reads aloud correctly.
+
+## `get_traceability_lot`
+
+**READ (default ON).** One lot, its source lots, and every event filed against
+it. A lot with no events, or with no block *and* no source lots, comes back with
+that named in `breaks` — the records may well exist and simply not be indexed,
+and an empty list would read as a clean bill.
+
+## `list_traceability_lots`
+
+**READ (default ON).** By `field`, `variety`, `status`, `harvest_shift`,
+`planting_season`, `company` or a `date_from`/`date_to` range. Newest harvest
+first. Events and source lots are deliberately not on the answer: both are
+per-lot reads, and forty lots would be eighty of them.
+
+## `record_cte`
+
+**MUTATING (default OFF).** One critical tracking event.
+
+```json
+{"lot_code": "YC3-BING-20260821-01", "event_type": "Shipping",
+ "reference_doctype": "Trade Shipment", "reference_name": "TSHIP-2026-0009",
+ "destination_location": "Hood River Cold Storage", "receiver": "Columbia Packing Co",
+ "carrier": "Nordby Transport", "quantity": 42, "quantity_uom": "bin"}
+```
+
+**The event is a pointer, not a copy.** Copying the shipment's weight in here
+would create a second version of a fact that can drift from the first, and the
+drifted one is always the one somebody reads.
+
+**It never changes the lot.** A Shipping event does not decrement `quantity` and
+does not set `status` to Shipped — those are two measurements taken by two
+people, and an event that silently rewrote the lot would make the lot disagree
+with its own history with no way to tell afterwards which one somebody meant.
+
+**Idempotent on `(lot, event_type, reference_doctype, reference_name)`.** An
+event with *no* reference is never deduplicated: two hand-entered Shipping events
+on one lot are two loads that left.
+
+## `trace_lot_forward`
+
+**READ (default ON).** The transformation graph walked downwards, then every
+Shipping event in that closure.
+
+```json
+{"lot_code": "YC3-BING-20260821-01"}
+```
+
+```json
+{"downstream_lots": [{"lot_code": "PACK-MIXED-20260823-01", "…": "…"}],
+ "transformation_edges": [{"source_lot": "YC3-BING-20260821-01",
+                           "lot_code": "PACK-MIXED-20260823-01", "depth": 1}],
+ "destinations": [{"destination": "Hood River Cold Storage",
+                   "receiver": "Columbia Packing Co", "carrier": "Nordby Transport",
+                   "shipped_at": "2026-08-23 14:10:00"}],
+ "counts": {"downstream_lots": 1, "shipping_events": 1, "destinations": 1,
+            "unplaced_shipments": 0},
+ "breaks": []}
+```
+
+**Not the same tool as `trace_forward`,** which takes a block, a spray or a water
+test and walks the free-text bucket chain to the settlements and invoices. Both
+are correct; they answer different questions from different evidence. Bolting a
+`lot_code` argument onto the older tool would have made every existing caller's
+description a lie about what it now does.
+
+**It reports the fruit it cannot place.** A Shipping event naming neither a
+destination nor a receiver is product that left and cannot be traced to anybody;
+that count is `counts.unplaced_shipments`, and the honest scope of the recall is
+wider than the destination list. A lot with **no** Shipping event at all is a
+break, not an empty list — "it has not left" and "nobody recorded where it went"
+are different answers and only one of them is good news.
+
+## `trace_lot_backward`
+
+**READ (default ON).** Source lots, their sources, the blocks at the roots of the
+chain, and then the **spray register** — bounded at each root lot's own harvest
+date, because a pass made after the fruit came off did not reach it. Planned and
+Cancelled passes are excluded: neither put anything on the ground.
+
+A chain that reaches no block is reported as a break. It ends at a lot code and
+cannot reach the spray register at all, which is the one hop a residue question
+is asked through.
+
+## `recall_drill`
+
+**READ (default ON).** `trace_lot_forward` written as the document somebody reads
+at eleven at night.
+
+```json
+{"parties_to_notify": [{"party": "Columbia Packing Co",
+                        "destination": "Hood River Cold Storage",
+                        "carriers": ["Nordby Transport"],
+                        "lot_codes": ["PACK-MIXED-20260823-01"],
+                        "first_shipped_at": "2026-08-23 14:10:00",
+                        "last_shipped_at": "2026-08-23 14:10:00"}],
+ "lots_affected": ["YC3-BING-20260821-01", "PACK-MIXED-20260823-01"],
+ "counts": {"lots_affected": 2, "parties_to_notify": 1, "unplaced_shipments": 0}}
+```
+
+**It writes nothing and sets nothing to Recalled.** A drill is run on fruit
+nobody is worried about — that is what makes it a drill — and a read that changed
+a status would make the rehearsal indistinguishable from the event.
+
+**Readiness is a count, never a verdict.** This app computes no opinion about
+whether an operation is compliant. Where no party can be named at all,
+`scope_warning` says so in as many words: *do not read this as a clean bill.*
+
+## `get_lot_timeline`
+
+**READ (default ON).** The events in the order they **happened** — not the order
+they were written, because a phone that posts an afternoon of events when the
+signal comes back would otherwise produce a timeline reading in the order the
+bars returned — each with `reference_detail`, the register row it points at, read
+live.
+
+A pointer that resolves to nothing is reported rather than dropped, and the two
+ways it can fail are told apart: a register this site does not have is a
+different problem from a record that was deleted, and only one of them means
+evidence went missing.
+
+## `index_lot_events`
+
+**MUTATING (default OFF), idempotent.** How an operation gets from nothing to a
+working lot register in one call, and how a season of history is indexed a week
+at a time.
+
+```json
+{"date_from": "2026-08-17", "date_to": "2026-08-23"}
+```
+
+Over the window it does three things, in order:
+
+1. **Bin Seals become lots and Receiving events.** A seal names a block, a crop
+   and a day, which is exactly a lot; where none covers that combination one is
+   created.
+2. **Scale Tickets become Shipping events.** A ticket is a load weighed onto
+   somebody else's scale — the grower's fruit arriving at the packer — so its
+   `customer` is the receiver and its `destination` is where the fruit went.
+3. **Spray Applications become Growing events,** on every lot whose block the
+   pass reached on or before harvest.
+
+**It is a tool and not a `doc_events` hook.** `hooks.py` promises this app
+installs no document hooks and `test_hooks.py` fails the build over one;
+`tools/itgc.py` settled the identical question the identical way. Running the
+indexing here means an operator can see it, switch it off, and re-run it over
+last season.
+
+**It does not index Trade Shipments.** A Trade Shipment carries no lot column,
+and this release adds no field to a doctype it would then have to keep. Guessing
+a shipment's lots off a date would put fruit on a truck it was never on — use
+`record_cte`, one call per shipment, naming the lots deliberately.
+
+**What it skips is reported.** Bin seals with no `field` cannot be filed under a
+lot, because a lot code *is* a block and a day; scale tickets matching no lot are
+loads that left with nothing here to say which fruit they were. Both counts are
+in `skipped`, with the sentence that says how to close each.
+
 ## The break horn reaches the crew (v0.99.0)
 
 `BreakAlarm` on the handset plays a tone the instant a foreman calls a break, over

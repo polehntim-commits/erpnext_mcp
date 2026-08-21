@@ -168,6 +168,12 @@ SECTION_DOMAIN = {
 	"fill_pipeline_write_section": "farm",
 	"bin_seal_read_section": "farm",
 	"bin_seal_write_section": "farm",
+	# v0.111.0. The FSMA 204 lot register files under `farm` with every other
+	# trace tool — trace_forward, trace_backward and trace_bin are all here, and
+	# an operator hunting for a recall switch should find all five in one chip
+	# rather than two under Farm and three under Compliance.
+	"traceability_lot_read_section": "farm",
+	"traceability_lot_write_section": "farm",
 	"receipts_section": "farm",
 	"weather_section": "farm",
 	"asset_tag_section": "farm",

@@ -1,0 +1,75 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-21 12:00:00.000000",
+ "description": "One lot that went into another lot. THE TRANSFORMATION EDGE, AND THE ONLY REASON A TRACE IS EVER MORE THAN ONE HOP: a pack line that combines four field lots into a pallet code has destroyed the join unless somebody wrote down which four, and nobody can reconstruct it afterwards from weights. Read forwards it says where a block's fruit ended up; read backwards it says which blocks are in a pallet a buyer is holding.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "source_lot",
+  "source_field",
+  "identity_col",
+  "quantity_contributed",
+  "quantity_uom",
+  "note"
+ ],
+ "fields": [
+  {
+   "description": "The input lot. A Link to Traceability Lot Code rather than a typed code, because this edge is the whole graph — a typo here is a pallet whose blocks cannot be found, and it is invisible on the form where the wrong code looks exactly like the right one.",
+   "fieldname": "source_lot",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Lot",
+   "options": "Traceability Lot Code",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The input lot's block, snapshotted when the edge was written. Denormalised for the reason every name in this app is: the source lot can be corrected, merged or re-graded afterwards, and a pallet read two years later is entitled to the block this app believed it came from at the moment somebody combined it. `trace_lot_backward` walks the Link, not this — it is evidence, not the join.",
+   "fieldname": "source_field",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source Field",
+   "read_only": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "How much of the source lot went in, where anybody measured it. ZERO AND BLANK ARE DIFFERENT ANSWERS: blank is 'this lot is in the pallet and nobody weighed the share', which is honest and still traceable; a share invented by dividing the pallet evenly would be a number nobody measured, and a recall scoped by it would be wrong in both directions.",
+   "fieldname": "quantity_contributed",
+   "fieldtype": "Float",
+   "label": "Quantity Contributed",
+   "precision": "3"
+  },
+  {
+   "description": "The unit the contribution is in — bins, lb, boxes. Kept per row rather than taken from the parent, because a repack genuinely combines lots counted in different units and forcing one would make somebody convert on the spot and record the conversion instead of the count.",
+   "fieldname": "quantity_uom",
+   "fieldtype": "Data",
+   "label": "Quantity UOM"
+  },
+  {
+   "description": "Why this lot is in this one, where it is not obvious — a partial pallet topped up from the next row, a re-grade, fruit pulled back off a truck.",
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Traceability Lot Source",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 0,
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

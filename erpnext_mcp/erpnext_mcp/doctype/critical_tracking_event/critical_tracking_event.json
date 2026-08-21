@@ -1,0 +1,236 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-21 12:00:00.000000",
+ "description": "One Critical Tracking Event against one lot — the FSMA 204 unit of record. FIVE EVENT TYPES AND A HANDFUL OF KEY DATA ELEMENTS, WHICH IS THE WHOLE RULE: Growing, Receiving, Transforming, Creating and Shipping, each carrying who, when, where, how much and where from and to. An operation that can produce these for one lot inside twenty-four hours passes the traceability half of an audit; one that cannot, does not, however good its spray records are.\n\nWHY IT IS A POINTER AND NOT A COPY. `reference_doctype` and `reference_name` name the record that already holds the detail — a Spray Application, a Bin Seal, a Scale Ticket, a Trade Shipment. This row exists to say THAT record is an event in THIS lot's history, in a shape a regulator recognises and a query can sort by time. Copying the spray's products or the shipment's weight in here would create a second version of a fact that can drift from the first, and the drifted one is always the one somebody reads.\n\nWHY THE KEY DATA ELEMENTS ARE STILL COLUMNS. Because the rule names them and because a hand-entered event has no source record to point at. A CTE with no reference is legitimate — a truck loaded at a field gate with nothing but a phone — and the KDEs are where that event lives.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "event_type",
+  "lot_code",
+  "event_datetime",
+  "identity_col",
+  "company",
+  "actor",
+  "actor_name",
+  "location",
+  "reference_section",
+  "reference_doctype",
+  "reference_col",
+  "reference_name",
+  "kde_section",
+  "description",
+  "quantity",
+  "quantity_uom",
+  "movement_section",
+  "source_location",
+  "destination_location",
+  "movement_col",
+  "carrier",
+  "receiver"
+ ],
+ "fields": [
+  {
+   "default": "CTE-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CTE-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "description": "Which of the rule's five events this is. GROWING is anything done to the fruit on the tree — a spray, an irrigation set, a water test. RECEIVING is fruit arriving somewhere: a bin sealed and taken in, a scale ticket at the shed. TRANSFORMING is a lot becoming other lots, and the OTHER lot's `source_lots` is where the edge is stored. CREATING is a lot first coming into existence. SHIPPING is fruit leaving to somebody, and it is the event `recall_drill` is built out of — a lot with no Shipping event has not left, and a lot with three has gone to three places.",
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event Type",
+   "options": "Growing\nReceiving\nTransforming\nCreating\nShipping",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The lot this happened to. A Link, and the join the entire feature is built on — see Traceability Lot Code on why the docname IS the code.",
+   "fieldname": "lot_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lot Code",
+   "options": "Traceability Lot Code",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "When the event happened, which is not when the row was written. A phone out of signal posts an afternoon of events the moment the bars come back, and a timestamp assigned on receipt would file the whole day at the spot where the signal returned — the same argument Bin Seal makes about `sealed_at`, and it matters more here because a timeline sorted by the wrong column is a timeline that reads backwards.",
+   "fieldname": "event_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Event Datetime",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "The entity. Filled from the lot on save where it was left blank, and it is what scopes this register — a User Permission on Company reaches this doctype because this column links to one.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "description": "Who performed it. Optional, and deliberately so: an event indexed from a Spray Application whose applicator is a User rather than an Employee has no Employee to name, and refusing the event over it would put a hole in the chain to protect a column. Where it is known it is the answer to the rule's 'who', and to every hygiene question asked afterwards.",
+   "fieldname": "actor",
+   "fieldtype": "Link",
+   "label": "Actor",
+   "options": "Employee",
+   "search_index": 1
+  },
+  {
+   "description": "Denormalised at write time, so an event read years later names the person as they were named then — the rule every record in this app snapshots a name under.",
+   "fieldname": "actor_name",
+   "fieldtype": "Data",
+   "label": "Actor (Name)",
+   "read_only": 1
+  },
+  {
+   "description": "Where it happened, as somebody would say it — 'Yellow Camp Block 3', 'Receiving Dock 2', 'Hood River packing house'. Free text and not a Link, because the rule's location is a PLACE and the places a lot passes through include several this site has no register for: a buyer's dock, a cold storage nobody here owns, a field gate.",
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Location"
+  },
+  {
+   "fieldname": "reference_section",
+   "fieldtype": "Section Break",
+   "label": "The Record This Points At"
+  },
+  {
+   "description": "Which register holds the detail — 'Spray Application', 'Bin Seal', 'Scale Ticket', 'Trade Shipment'. Data rather than a Dynamic Link on purpose: an event may name a doctype that is not installed on this site, or a record that has since been deleted, and a Dynamic Link would either refuse the event or vanish it. A reference that resolves to nothing is a real data fault and is REPORTED by the reads rather than dropped, which is the same rule `trace_backward` applies to an unresolved shipment id.",
+   "fieldname": "reference_doctype",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Reference DocType",
+   "search_index": 1
+  },
+  {
+   "fieldname": "reference_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "The docname in that register. Together with `reference_doctype` it is what makes the indexing idempotent: one lot, one event type, one source record is one CTE, and re-running the indexer over a week that has already been indexed writes nothing.",
+   "fieldname": "reference_name",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Reference Name",
+   "search_index": 1
+  },
+  {
+   "fieldname": "kde_section",
+   "fieldtype": "Section Break",
+   "label": "Key Data Elements"
+  },
+  {
+   "description": "What happened, in a sentence. On an indexed event this is generated and says which record it came from and what that record was; on a hand-entered one it is the only account of the event that exists.",
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "description": "How much moved, where anybody counted. Blank means nobody counted, which is not zero — see Traceability Lot Source on why the difference is kept rather than filled in.",
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "label": "Quantity",
+   "precision": "3"
+  },
+  {
+   "description": "The unit the quantity is in — bins, lb, kg, boxes.",
+   "fieldname": "quantity_uom",
+   "fieldtype": "Data",
+   "label": "Quantity UOM"
+  },
+  {
+   "fieldname": "movement_section",
+   "fieldtype": "Section Break",
+   "label": "Movement"
+  },
+  {
+   "description": "Where the fruit came FROM on this event. On a Shipping event it is the shed or the block; on a Receiving event it is wherever the truck started. Distinct from `location`, which is where the EVENT was performed — on a shipment those two are the same place and on a receipt they are not, and collapsing them is how a recall report loses the origin.",
+   "fieldname": "source_location",
+   "fieldtype": "Data",
+   "label": "Source Location"
+  },
+  {
+   "description": "Where the fruit went TO. THIS IS THE FIELD A RECALL IS RUN FROM: `recall_drill` collects it off every Shipping event in the forward trace, and a Shipping event with no destination is product that left and cannot be traced to anywhere — reported as a break in its own right rather than skipped.",
+   "fieldname": "destination_location",
+   "fieldtype": "Data",
+   "label": "Destination Location"
+  },
+  {
+   "fieldname": "movement_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Who carried it. Optional, and worth having: on the day a load has to be intercepted, the carrier is the only party who can still stop it.",
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "label": "Carrier"
+  },
+  {
+   "description": "Who received it — the buyer, the packing house, the cold store. The people who have to be telephoned. Optional because a Shipping event recorded at the gate genuinely may not know yet, and an event refused over it is an event nobody records at all.",
+   "fieldname": "receiver",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Receiver",
+   "search_index": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Critical Tracking Event",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "lot_code,event_type,event_datetime,receiver",
+ "sort_field": "event_datetime",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
