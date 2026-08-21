@@ -453,6 +453,7 @@ function tool_console_html() {
 			<option value="enabled">${__("Enabled only")}</option>
 			<option value="disabled">${__("Disabled only")}</option>
 			<option value="write">${__("Write tools only")}</option>
+			<option value="read">${__("Read tools only")}</option>
 		</select>
 		<span class="text-muted small" data-console="shown" style="margin-left:8px"></span>
 	</div>
@@ -540,6 +541,21 @@ function apply_tool_filter(frm, wrapper) {
 		if (visible && VIEW.only === "enabled") visible = !!frm.doc[fieldname];
 		if (visible && VIEW.only === "disabled") visible = !frm.doc[fieldname];
 		if (visible && VIEW.only === "write") visible = !!info && !!info.mutating;
+		// The mirror of "write", and the one that makes a DOMAIN'S READS settable
+		// on their own: pick a chip, pick this, press "Enable everything shown".
+		// Without it the only additive bulk control enables a domain's writes
+		// alongside its reads, and the profiles — which do separate reads from
+		// writes — are absolute, so neither reaches "give the bookkeeper the
+		// compliance reads and change nothing else".
+		//
+		// THE TWO PACKET TYPES ARE EXCLUDED DELIBERATELY. They carry an `allow_`
+		// switch and live in `CONSOLE.switches` rather than `CONSOLE.tools`,
+		// because they are artefacts this app can build and not tools a client
+		// can call. `mutating` is false on both, so a bare `!info.mutating` would
+		// sweep them into every read filter and let "enable all Compliance reads"
+		// tick a packet type. Harmless in blast radius, wrong in meaning.
+		if (visible && VIEW.only === "read")
+			visible = !!info && !info.mutating && !(CONSOLE.switches || {})[tool];
 		if (visible && query) {
 			const haystack = (tool + " " + control.find(".label-area").text()).toLowerCase();
 			visible = haystack.indexOf(query) !== -1;

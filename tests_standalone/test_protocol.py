@@ -1093,9 +1093,15 @@ class Catalogue(SeededTestCase):
 		payroll deduction that honours it, `update_garnishment` posts what was
 		withheld against the balance, and `render_garnishment_response` draws the
 		employer's answer back to the issuing court. Two reads and three writes.
+
+		v0.114.0 ADDS ONE READ, `get_variety_care_recipe`: one variety's water
+		schedule resolved against its crop's per field and labelled with each
+		number's source, plus its cultural practice protocol — GA timings, PGR
+		program, thinning, pruning — grouped by practice. The two child tables
+		behind it carry no tools of their own.
 		"""
-		self.assertEqual(len(registry.TOOLS), 768)
-		self.assertEqual(len(registry.READ_TOOLS), 383)
+		self.assertEqual(len(registry.TOOLS), 769)
+		self.assertEqual(len(registry.READ_TOOLS), 384)
 		self.assertEqual(len(registry.MUTATING_TOOLS), 385)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):

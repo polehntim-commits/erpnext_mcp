@@ -29,6 +29,7 @@ from erpnext_mcp import install, settings
 from erpnext_mcp.patches import (
 	backfill_alert_subject_employee,
 	backfill_completion_signatures,
+	backfill_planting_rootstock,
 	fix_literal_newlines_in_instructions,
 	migrate_declarative_rules,
 	migrate_incident_tool_switches,
@@ -64,6 +65,7 @@ PATCHES = (
 		backfill_alert_subject_employee,
 	),
 	("erpnext_mcp.patches.migrate_incident_tool_switches", migrate_incident_tool_switches),
+	("erpnext_mcp.patches.backfill_planting_rootstock", backfill_planting_rootstock),
 )
 
 
@@ -845,3 +847,47 @@ class BackfillAlertSubjectEmployee(FreshSite):
 		self.assertEqual(self.stored(alert), "HR-EMP-0007")
 		self.assertEqual(second["filled"], 0)
 		self.assertEqual(second["already_set"], 1)
+
+
+class BackfillPlantingRootstock(FreshSite):
+	"""Carrying the catalogue's rootstock down onto the plantings that record none.
+
+	THE SUBSTANTIVE TESTS ARE IN `test_crop_variety_overlay.py`, with the rest of
+	the v0.114.0 crop work: that it only fills a blank, never rewrites a value
+	typed against a block, matches on crop as well as variety, and is safe to run
+	twice. What belongs HERE is the question this module exists for — whether the
+	patch survives a site that has never seen this app — because an exception let
+	out of a patch stops every other app's migration too, and the site that finds
+	it is somebody's upgrade rather than a test.
+	"""
+
+	def test_it_survives_a_site_with_no_crop_register_at_all(self):
+		backfill_planting_rootstock.execute()
+
+	def test_it_reports_the_absence_rather_than_raising(self):
+		report = backfill_planting_rootstock.backfill_planting_rootstock()
+		self.assertTrue(report["skipped"])
+		self.assertEqual(report["catalogue"], 0)
+
+	def test_it_survives_a_catalogue_that_names_no_rootstock(self):
+		"""The commonest real site: crops recorded, rootstocks never filled in."""
+		STORE.seed(
+			"Crop",
+			[
+				{
+					"name": "Sweet Cherry",
+					"crop_name": "Sweet Cherry",
+					"varieties": [
+						{
+							"name": "cv-1",
+							"parent": "Sweet Cherry",
+							"parenttype": "Crop",
+							"parentfield": "varieties",
+							"variety_name": "Bing",
+							"rootstock": "",
+						}
+					],
+				}
+			],
+		)
+		backfill_planting_rootstock.execute()

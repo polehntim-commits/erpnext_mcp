@@ -857,8 +857,14 @@ class ToolRegistration(unittest.TestCase):
 		# (`create_garnishment`, `update_garnishment`,
 		# `render_garnishment_response`) over the new Farm Garnishment doctype —
 		# the court order the payroll deduction exists under.
-		self.assertEqual(len(self.registry.TOOLS), 768)
-		self.assertEqual(len(self.registry.READ_TOOLS), 383)
+		# v0.114.0 adds ONE read: `get_variety_care_recipe`, which resolves a
+		# variety's water schedule against its crop's PER FIELD and returns its
+		# cultural practice protocol grouped by practice. The two new child
+		# tables it reads carry no tools of their own — they are edited on the
+		# Crop form and through `create_crop`/`update_crop`, whose signatures
+		# did not change.
+		self.assertEqual(len(self.registry.TOOLS), 769)
+		self.assertEqual(len(self.registry.READ_TOOLS), 384)
 		self.assertEqual(len(self.registry.MUTATING_TOOLS), 385)
 
 

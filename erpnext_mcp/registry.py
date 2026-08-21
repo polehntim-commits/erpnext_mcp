@@ -25371,6 +25371,42 @@ TOOLS = {
 		available=_needs_doctype("Crop"),
 		requires="the Crop DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
+	"get_variety_care_recipe": _tool(
+		agronomy.get_variety_care_recipe,
+		"One variety's care recipe, RESOLVED: its water schedule and its cultural "
+		"practice protocol — GA timings, PGR program, thinning approach, pruning. "
+		"Read-only.\n\n"
+		"THE RESOLUTION IS WHY THIS EXISTS. A crop records water demand by growth "
+		"stage and a variety may depart from it, and the overlay is sparse. This "
+		"combines the two PER FIELD and in season order, and labels every surviving "
+		"number `variety override` or `crop default`. A caller resolving the two "
+		"tables by hand falls back per ROW instead, which silently discards the "
+		"crop's weekly depth every time a variety overrides only the Kc.\n\n"
+		"BLANK IS NOT ZERO. An override with an empty Kc is a variety with no "
+		"opinion about Kc and the crop's figure stands; an override of 0.0 is a "
+		"variety that genuinely takes no water at that stage.\n\n"
+		"A PROTOCOL STEP IS A PLAN, NOT A RECORD, and it is not a label. What "
+		"actually went onto a block is a Spray Application. Rates are text with "
+		"their units, because ppm and pints per acre do not convert without a "
+		"dilution.\n\n"
+		"IT REPORTS THE CATALOGUE ROOTSTOCK AND SAYS IT IS NOT THE BLOCK'S. One row "
+		"per variety cannot hold Bing on Mazzard and Bing on Gisela 6 at once; the "
+		"binding rootstock is on the planting.\n\n"
+		"REFUSES a variety the crop does not list, naming the ones it does — the "
+		"failure is nearly always a spelling or a variety filed under another crop, "
+		"and both are answered by seeing the list.",
+		{
+			"crop": _field(_STRING, "The Crop docname — 'Sweet Cherry'. Matched case-insensitively."),
+			"variety": _field(
+				_STRING,
+				"The variety as the crop's catalogue spells it — 'Bing'. Matched case-insensitively.",
+			),
+		},
+		required=("crop", "variety"),
+		title="Get a variety's care recipe",
+		available=_needs_doctype("Crop"),
+		requires="the Crop DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
 	"create_crop": _tool(
 		agronomy.create_crop,
 		"MUTATING (default OFF). Register one crop with its varieties and its water "

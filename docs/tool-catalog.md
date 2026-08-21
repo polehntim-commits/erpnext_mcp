@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 768 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 769 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 383 read tools are **on** by default and can be switched off individually. A
+All 384 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -14867,7 +14867,7 @@ and not a tool switch — the three reads stay usable for rows already written.
 
 ## Agricultural master data (v0.82.0)
 
-Ten tools, five doctypes and three child tables. The three registers everything
+Eleven tools, five doctypes and five child tables. The three registers everything
 else in this app had been taking on trust from whoever was calling it: **what is
 grown**, **where it is sold**, and **in what units**.
 
@@ -14910,6 +14910,7 @@ of its own, not a field option.
 | `get_crop` | One crop in full: varieties with rootstock and pollination group, water demand by growth stage, the markets that buy it, the conversions recorded for it |
 | `create_crop` | Register one, with both child tables. **Mutating** |
 | `update_crop` | Change one. Cannot re-key it. **Mutating** |
+| `get_variety_care_recipe` | One variety's **resolved** water schedule — each Kc and weekly depth reconciled against the crop default per field and labelled with its source — plus its cultural practice protocol grouped by practice (v0.114.0) |
 
 **A blank PHI is not a PHI of zero.** Zero means genuinely no interval; blank
 means nobody has recorded one. They are reported apart at every level, because a
@@ -15162,7 +15163,7 @@ by Frappe exactly as before.
 
 ## Agricultural master data (v0.82.0)
 
-Ten tools, five doctypes and three child tables. The three registers everything
+Eleven tools, five doctypes and five child tables. The three registers everything
 else in this app had been taking on trust from whoever was calling it: **what is
 grown**, **where it is sold**, and **in what units**.
 
@@ -15205,6 +15206,7 @@ of its own, not a field option.
 | `get_crop` | One crop in full: varieties with rootstock and pollination group, water demand by growth stage, the markets that buy it, the conversions recorded for it |
 | `create_crop` | Register one, with both child tables. **Mutating** |
 | `update_crop` | Change one. Cannot re-key it. **Mutating** |
+| `get_variety_care_recipe` | One variety's **resolved** water schedule — each Kc and weekly depth reconciled against the crop default per field and labelled with its source — plus its cultural practice protocol grouped by practice (v0.114.0) |
 
 **A blank PHI is not a PHI of zero.** Zero means genuinely no interval; blank
 means nobody has recorded one. They are reported apart at every level, because a
@@ -15227,6 +15229,64 @@ capitalise, and both facts cannot be true. Every recorded variety sitting in one
 pollination incompatibility group is only **reported**: they will not set fruit
 for each other and the block finds out four years later, but the pollinizer may
 be in a neighbouring block or simply unrecorded here.
+
+### The variety overlays (v0.114.0)
+
+Two child tables hang off `Crop` and carry the facts that are true of one
+**variety** rather than of the species: `Crop Variety Water Requirement` and
+`Crop Variety Protocol`.
+
+Both hang off the crop and name their variety as a text column, because Frappe
+has no nested child tables and `Crop Variety` is itself a child — a table on the
+variety row is not a thing that can exist. `crop.py` checks that name against the
+crop's own catalogue on save, which is the rule that matters: an override naming
+a variety the catalogue does not list stores perfectly well, resolves to nothing,
+and leaves a form showing what looks like a recorded decision. Invisible from
+both ends, so it is refused.
+
+**They are sparse overlays, and the fallback is per field.** A row exists only
+where a variety departs from its crop; every stage nobody overrode falls back to
+the crop's own figure. A row that overrides only the Kc leaves the crop's weekly
+depth standing — resolving per *row* instead is the mistake `get_variety_care_recipe`
+exists to stop a caller making, and it discards a real number every time.
+Demanding all seven stages per variety would be asking a farm to restate figures
+that were already right, and the restatements are what drift.
+
+**Blank is not zero, here most of all.** An empty Kc on an override is a variety
+with no opinion about Kc. `0.0` is a variety that genuinely takes no water at
+that stage. An override carrying neither number is refused rather than stored,
+because it changes nothing and nothing would ever show that.
+
+**A protocol step is a plan, not a record, and not a label.** GA timings, PGR
+programs, thinning and pruning — what the farm intends for the variety in a
+normal year. What actually went onto a block is a `Spray Application`. One row is
+one step, so a GA program of three applications is three rows and keeps its
+schedule where something can read it; the uniqueness rule is deliberately *not*
+on (variety, practice), which would refuse the commonest real recipe in the file.
+Rates are text with their units, because ppm, pints per acre and quarts per
+hundred gallons do not convert without knowing the dilution.
+
+### The rootstock moved to the planting (v0.114.0)
+
+`Crop Variety.rootstock` is one column on a catalogue with one row per variety,
+so it can hold exactly one rootstock for `Bing` while the farm has Bing on
+Mazzard in the old block and Bing on Gisela 6 in the 2019 planting. The rootstock
+is half the tree — vigour, final size, density, how soon the block bears, how it
+takes wet ground — so those are different trees, and a per-acre yield quoted
+against the wrong one is not comparable to anything.
+
+The block-level answer already existed: `Planting Season.rootstock` for a
+block-year and `Field.rootstock` for the block. What was missing was anything
+saying so. The catalogue column is now labelled a **catalogue default**, every
+payload that reports it carries a caveat naming the two columns that bind, and
+the `backfill_planting_rootstock` patch carries the catalogue value down onto
+every planting that recorded none.
+
+The patch **only ever fills a blank**. A planting that already names a rootstock
+was typed against that block and is the better record by construction, so it is
+never rewritten and never compared — no "which is right" question is raised. It
+is a seed and not a sync: after it runs the two columns are free to disagree, and
+they should.
 
 ### The market tools
 

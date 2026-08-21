@@ -3,6 +3,78 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.114.0 — 2026-08-21 — the same variety is not the same tree
+
+**One MCP tool, two child tables, one migration patch and one filter option.**
+No existing tool lost or gained an argument, and no column was dropped.
+
+**The rootstock was recorded at the wrong grain, and the right column already
+existed.** `Crop Variety` is a catalogue with one row per variety, so it holds
+exactly one rootstock for `Bing` — while the farm has Bing on Mazzard in the old
+block and Bing on Gisela 6 in the 2019 planting. The rootstock is half the tree:
+it decides vigour, final size, planting density, how soon the block bears and
+how it takes wet ground. Those are different trees with different yields, and a
+per-acre figure quoted against the wrong one is not comparable to anything.
+
+`Planting Season.rootstock` and `Field.rootstock` have both been there since
+v0.88.0. What was missing was anything saying they were the answer. The
+catalogue column is now labelled a **catalogue default**, every payload that
+reports it carries a caveat naming the two columns that bind, and
+`backfill_planting_rootstock` carries the catalogue value down onto every
+planting that recorded none. **It only ever fills a blank** — a planting that
+already names a rootstock was typed against that block and is the better record
+by construction, so it is never rewritten and never compared. It is a seed and
+not a sync: afterwards the two columns are free to disagree, and they should.
+
+**The column was not removed, deliberately.** `create_crop` and `update_crop`
+still accept `rootstock` in a variety row, so no tool signature changed and no
+caller broke. What changed is that nothing reads it as binding any more.
+
+**Two overlay tables, both hanging off `Crop`.** `Crop Variety Water
+Requirement` carries a variety's Kc and weekly depth by stage; `Crop Variety
+Protocol` carries its care recipe — GA timings, PGR programs, thinning, pruning.
+Neither hangs off `Crop Variety`, because Frappe has no nested child tables and
+Crop Variety is itself a child, so each names its variety as a text column.
+
+**That text column is the whole risk, and it is why both tables validate on
+save.** `'Bing '` with a trailing space, or a variety somebody removed last
+season, stores perfectly well and resolves to nothing: the reader falls back to
+the crop default while the form still shows what looks like a recorded decision.
+Invisible from both ends. So a row naming a variety the catalogue does not list
+is refused, along with an override carrying neither of its two numbers — which
+would also change nothing — and the catalogue's spelling is written back onto
+every row that saves.
+
+**`get_variety_care_recipe` resolves the overlay PER FIELD, and that is the
+point of it.** A row that overrides only the Kc leaves the crop's weekly depth
+standing. Resolving per *row* instead — take the override if there is one, else
+the crop — is the obvious implementation, and it silently discards a real number
+every time. Every resolved figure comes back labelled `variety override` or
+`crop default`, the same rule `get_uom_conversions` follows for a factor: a
+caller handed `0.6` cannot otherwise tell a variety's considered figure from its
+crop's default. Stages come back in season order, and a stage only the variety
+records is returned rather than dropped.
+
+**Blank is not zero, and here it irrigates.** An override with an empty Kc is a
+variety with no opinion about Kc. `0.0` is a variety that genuinely takes no
+water at that stage. Five tests fail if the two are collapsed.
+
+**A protocol step is a plan, not a record, and not a label.** What actually went
+onto a block is a `Spray Application`. One row is one step, so a GA program of
+three applications is three rows and keeps its schedule where something can read
+it — the uniqueness rule is deliberately *not* on (variety, practice), which
+would refuse the commonest real recipe in the file. Rates are text with their
+units, because ppm and pints per acre do not convert without a dilution.
+
+**The tool console gained the filter it was missing (extends v0.108.0).** It
+offered All, Enabled, Disabled and Write-tools-only — four options and three
+branches, with no way to narrow to read tools. So "enable all of this domain's
+**reads**" was unreachable: the domain chips plus the bulk button turned a
+domain's writes on alongside its reads, and the profiles, which do separate
+reads from writes, rewrite every switch on the form. One option closes it. The
+two compliance packet types are excluded from it on purpose — they are artefacts
+this app builds, not tools a client calls.
+
 ## 0.113.0 — 2026-08-21 — the place you could make and could not fix
 
 **Two MCP tools and seventeen mobile routes.** No doctype changed, nothing

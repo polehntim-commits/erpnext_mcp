@@ -61,6 +61,11 @@ from ..result import ToolResult
 CROP = "Crop"
 CROP_VARIETY = "Crop Variety"
 CROP_WATER = "Crop Water Requirement"
+#: v0.114.0. The two per-variety overlays. Both hang off CROP and name their
+#: variety as text — Frappe has no nested child tables and Crop Variety is
+#: itself a child, so a table on the variety row is not a thing that can exist.
+CROP_VARIETY_WATER = "Crop Variety Water Requirement"
+CROP_VARIETY_PROTOCOL = "Crop Variety Protocol"
 MARKET = "Market"
 GRADE_STANDARD = "Market Grade Standard"
 UOM_CONTEXT = "Agricultural UOM Context"
@@ -124,6 +129,44 @@ PHI_CAVEAT = (
 	"BINDING pre-harvest interval is the one printed on the label of the material actually "
 	"applied, and on a single crop it ranges from zero days to thirty. A gate that reads this "
 	"number and stops reading will clear fruit that a label would hold."
+)
+
+#: v0.114.0. The sentence every tool that reports a variety's rootstock carries.
+#: The catalogue holds ONE rootstock per variety and a farm has the same variety
+#: on several — so this column is a default and the planting is the answer. Said
+#: in the payload rather than left to a caller to know, because a per-acre yield
+#: quoted against the wrong rootstock is not comparable to anything and nothing
+#: in the number itself shows which one it was.
+ROOTSTOCK_CAVEAT = (
+	"A variety's `rootstock` here is the CATALOGUE DEFAULT and not the binding answer. A crop's "
+	"variety list has one row per variety, so it can hold one rootstock for 'Bing' while the "
+	"farm has Bing on Mazzard in the old block and Bing on Gisela 6 in the 2019 planting — "
+	"different trees, different vigour, different density, different yields. The binding "
+	"rootstock is on the planting: `Planting Season.rootstock` for a block-year and "
+	"`Field.rootstock` for the block. Read those before comparing anything per acre."
+)
+
+#: v0.114.0. How the two per-variety tables resolve, for every payload that
+#: returns them raw. A caller handed an override table and a crop table with no
+#: rule between them will pick one, and half of them will pick the wrong one.
+OVERLAY_CAVEAT = (
+	"`variety_water_overrides` and `variety_protocols` are SPARSE OVERLAYS on the crop, not "
+	"complete per-variety records. A stage no override names falls back to the crop's own "
+	"water requirement, and the fallback is PER FIELD: a row overriding only the Kc leaves the "
+	"crop's weekly depth standing. Call get_variety_care_recipe for one variety's resolved "
+	"schedule with each number's source attached, rather than resolving these two tables by hand."
+)
+
+#: v0.114.0. What a protocol is and is not, on every payload that returns one.
+#: A plan and a record look identical in a JSON list, and reporting an intention
+#: as a completed application is a compliance answer wrong in the direction that
+#: costs the most.
+PROTOCOL_CAVEAT = (
+	"A protocol step is what the farm INTENDS for this variety in a normal year. It is not a "
+	"record that anything was applied, and it is not a label: what actually went onto a block, "
+	"at what rate, on what date and by whom is a Spray Application. Rates here are text with "
+	"their units because ppm, pints per acre and quarts per hundred gallons do not convert "
+	"without a dilution — the binding rate is always the label's."
 )
 
 #: What `null` means on a PHI, said outright. `0` and "nobody recorded one" are
@@ -331,6 +374,151 @@ def _stage(changes: dict, doc, field: str, wanted) -> None:
 	doc.set(field, wanted if wanted != "" else None)
 
 
+# ── the variety overlay ─────────────────────────────────────────────────────
+#
+# v0.114.0. A crop records water demand by growth stage, and a variety may
+# depart from it. THE OVERLAY IS SPARSE AND THE RESOLUTION IS PER FIELD, not per
+# row: a variety that overrides only the Kc at Harvest gets the crop's weekly
+# depth at Harvest and the crop's everything at the other six stages. Anything
+# coarser would make an override a commitment to restate the whole schedule,
+# which is how the restatements drift apart from the original.
+#
+# EVERY RESOLVED NUMBER TRAVELS WITH WHERE IT CAME FROM, the same rule
+# `get_uom_conversions` follows for a factor and for the same reason: a caller
+# handed 0.6 cannot tell a variety's considered figure from its crop's default,
+# and those are different facts about the block in front of them.
+#
+# BLANK IS NOT ZERO, HERE MOST OF ALL. A variety row with an empty Kc is a
+# variety with no opinion about Kc and the crop's stands. A variety row with 0.0
+# is a variety that genuinely uses no water at that stage. Collapsing the two
+# would let an override nobody finished silently water a block at zero.
+
+#: The stages in the order a season runs through them, which is the order any
+#: reader of a schedule expects. Sorting these alphabetically puts Bloom before
+#: Bud Break and Dormant in the middle, which reads as a corrupted record.
+#: Sourced from the Select on both water tables — if that list grows, a stage
+#: missing from here still resolves and simply sorts last, rather than vanishing.
+STAGE_ORDER = (
+	"Dormant",
+	"Bud Break",
+	"Bloom",
+	"Fruit Set",
+	"Fruit Development",
+	"Harvest",
+	"Post-Harvest",
+)
+
+
+def _stage_key(stage: str) -> tuple:
+	"""Sort key putting known stages in season order and unknown ones last."""
+	try:
+		return (0, STAGE_ORDER.index(stage))
+	except ValueError:
+		return (1, stage)
+
+
+def _number_or_none(value):
+	"""A stored float, or None where the cell is empty.
+
+	`float(value or 0)` is wrong on both of these columns — see the note above
+	about blank and zero — and it is wrong quietly, which is why this exists
+	rather than being written out at each of the four call sites.
+	"""
+	if value in (None, ""):
+		return None
+	return float(value)
+
+
+def _variety_water_overrides(crop: str) -> list[dict]:
+	if not compat.doctype_exists(CROP_VARIETY_WATER):
+		return []
+	return _child_rows(
+		CROP_VARIETY_WATER,
+		crop,
+		"variety_water_requirements",
+		("variety", "growth_stage", "crop_coefficient_kc", "water_inches_per_week", "notes"),
+	)
+
+
+def _variety_protocols(crop: str) -> list[dict]:
+	if not compat.doctype_exists(CROP_VARIETY_PROTOCOL):
+		return []
+	return _child_rows(
+		CROP_VARIETY_PROTOCOL,
+		crop,
+		"variety_protocols",
+		("variety", "practice", "timing_stage", "timing_detail", "product", "rate", "notes"),
+	)
+
+
+def _for_variety(rows: list[dict], variety: str) -> list[dict]:
+	"""The overlay rows naming `variety`, matched ignoring case.
+
+	`crop.py` writes the catalogue's spelling back onto every overlay row on
+	save, so on a record saved under this release the match is exact anyway.
+	Casefolding here as well covers the rows a `bench migrate` or a direct
+	`db.set_value` put in without going through the controller.
+	"""
+	wanted = str(variety or "").strip().casefold()
+	return [row for row in rows if str(row.get("variety") or "").strip().casefold() == wanted]
+
+
+def resolve_variety_water(crop_stages: list[dict], overrides: list[dict], variety: str) -> list[dict]:
+	"""The effective water schedule for one variety, per field, with provenance.
+
+	`crop_stages` are the crop's own Crop Water Requirement rows; `overrides` is
+	the whole overlay table, filtered here rather than by the caller so that the
+	filtering rule lives in one place.
+
+	A STAGE THE CROP DOES NOT RECORD BUT THE VARIETY DOES IS STILL RETURNED, with
+	its crop-level figures reported as None. That is a variety adding a stage its
+	crop never modelled, which is a real thing to record about a late variety,
+	and dropping it would lose the only row that said so.
+	"""
+	by_stage = {str(row.get("growth_stage") or "").strip(): row for row in crop_stages}
+	overridden = {str(row.get("growth_stage") or "").strip(): row for row in _for_variety(overrides, variety)}
+
+	out = []
+	for stage in sorted(set(by_stage) | set(overridden), key=_stage_key):
+		base = by_stage.get(stage) or {}
+		over = overridden.get(stage) or {}
+
+		crop_kc = _number_or_none(base.get("crop_coefficient_kc"))
+		crop_inches = _number_or_none(base.get("water_inches_per_week"))
+		over_kc = _number_or_none(over.get("crop_coefficient_kc"))
+		over_inches = _number_or_none(over.get("water_inches_per_week"))
+
+		kc = crop_kc if over_kc is None else over_kc
+		inches = crop_inches if over_inches is None else over_inches
+		out.append(
+			{
+				"growth_stage": stage,
+				"crop_coefficient_kc": kc,
+				"crop_coefficient_kc_source": _source(over_kc, crop_kc),
+				"water_inches_per_week": inches,
+				"water_inches_per_week_source": _source(over_inches, crop_inches),
+				"crop_default_kc": crop_kc,
+				"crop_default_water_inches_per_week": crop_inches,
+				"is_overridden": bool(over),
+				# The variety's note where it has one, because it is the note
+				# about the departure and the crop's is about the crop. Both are
+				# returned rather than one hiding the other.
+				"variety_notes": str(over.get("notes") or "").strip() or None,
+				"crop_notes": str(base.get("notes") or "").strip() or None,
+			}
+		)
+	return out
+
+
+def _source(override, default) -> str | None:
+	"""Which record a resolved number came from, or None where there is none."""
+	if override is not None:
+		return "variety override"
+	if default is not None:
+		return "crop default"
+	return None
+
+
 # ── 1. list_crops ───────────────────────────────────────────────────────────
 def list_crops(args: dict) -> ToolResult:
 	"""The crop register, with the varieties counted and the gaps named."""
@@ -432,6 +620,20 @@ def get_crop(args: dict) -> ToolResult:
 		else []
 	)
 
+	# v0.114.0. The two overlays, reported RAW here and resolved by
+	# `get_variety_care_recipe`. This tool is the crop's own record and showing a
+	# resolved schedule per variety would bury the crop's figures under seven
+	# copies of themselves; what a reader needs at this level is which varieties
+	# depart from the crop at all, and where.
+	water_overrides = _variety_water_overrides(name)
+	protocols = _variety_protocols(name)
+	varieties_with_overrides = sorted(
+		{str(row.get("variety") or "").strip() for row in water_overrides if row.get("variety")}
+	)
+	varieties_with_protocols = sorted(
+		{str(row.get("variety") or "").strip() for row in protocols if row.get("variety")}
+	)
+
 	markets = []
 	if compat.doctype_exists(MARKET):
 		markets = [
@@ -492,10 +694,16 @@ def get_crop(args: dict) -> ToolResult:
 			"pollination_groups": groups,
 			"water_requirements": water,
 			"water_stages_recorded": [stage["growth_stage"] for stage in water],
+			"variety_water_overrides": water_overrides,
+			"varieties_with_water_overrides": varieties_with_overrides,
+			"variety_protocols": protocols,
+			"varieties_with_protocols": varieties_with_protocols,
+			"overlay_caveat": OVERLAY_CAVEAT,
 			"markets": markets,
 			"unit_conversions": conversions,
 			"agronomy_notes": notes,
 			"phi_caveat": PHI_CAVEAT,
+			"rootstock_caveat": ROOTSTOCK_CAVEAT,
 		},
 		summary=(
 			f"{described['crop_name']}: {len(varieties)} variety(ies), PHI "
@@ -716,6 +924,143 @@ def update_crop(args: dict) -> ToolResult:
 		},
 		summary=f"{doc.name}: {len(changes)} field(s) changed",
 		docstatus_delta="0 → 0 (updated)",
+	)
+
+
+# ── 4b. get_variety_care_recipe ─────────────────────────────────────────────
+def get_variety_care_recipe(args: dict) -> ToolResult:
+	"""One variety's resolved water schedule and its cultural practice protocol.
+
+	THE RESOLUTION IS THE POINT. Anything can read the two overlay tables off
+	`get_crop`; what nobody can do by hand without getting it wrong is combine
+	them with the crop's own schedule per field, in season order, and say which
+	record each surviving number came from. A caller that resolves this itself
+	will fall back per ROW — which silently discards the crop's weekly depth
+	every time a variety overrides only the Kc.
+
+	IT REPORTS THE ROOTSTOCK AND REFUSES TO PRETEND IT IS THE BLOCK'S. The
+	catalogue holds one per variety; a care recipe is read against a block, and
+	the block's rootstock is on its planting. Both are returned, and the payload
+	says which is which.
+	"""
+	_require(CROP)
+	crop_row = _one_of(
+		CROP, as_str(args, "crop", required=True), "crop", ("name", "crop_name", "growth_cycle")
+	)
+	crop = crop_row["name"]
+	wanted = as_str(args, "variety", required=True)
+
+	varieties = (
+		_child_rows(
+			CROP_VARIETY,
+			crop,
+			"varieties",
+			("variety_name", "rootstock", "pollination_group", "expected_yield_per_acre", "maturity_years"),
+		)
+		if compat.doctype_exists(CROP_VARIETY)
+		else []
+	)
+	variety = _match_variety(varieties, wanted, crop)
+
+	crop_stages = (
+		_child_rows(
+			CROP_WATER,
+			crop,
+			"water_requirements",
+			("growth_stage", "crop_coefficient_kc", "water_inches_per_week", "notes"),
+		)
+		if compat.doctype_exists(CROP_WATER)
+		else []
+	)
+	overrides = _variety_water_overrides(crop)
+	schedule = resolve_variety_water(crop_stages, overrides, variety["variety_name"])
+	steps = _for_variety(_variety_protocols(crop), variety["variety_name"])
+
+	# Grouped as well as listed, because "what is the PGR program for Bing" is
+	# the question this tool exists to answer and a flat list makes the caller
+	# do the grouping — which is where a practice gets missed.
+	by_practice: dict = {}
+	for step in steps:
+		practice = str(step.get("practice") or "Other").strip() or "Other"
+		by_practice.setdefault(practice, []).append(step)
+	for rows in by_practice.values():
+		rows.sort(key=lambda row: _stage_key(str(row.get("timing_stage") or "").strip()))
+
+	overridden = [row["growth_stage"] for row in schedule if row["is_overridden"]]
+	notes = []
+	if not schedule:
+		notes.append(
+			f"No water demand is modelled for {crop} at all, so this variety has no schedule to "
+			"resolve — not a schedule of zero. Record the crop's stages first; a variety "
+			"override on its own has nothing to override."
+		)
+	elif not overridden:
+		notes.append(
+			f"{variety['variety_name']} departs from {crop} at no stage, so every figure here is "
+			"the crop's. That is the ordinary case and not a gap — an overlay row exists only "
+			"where a variety genuinely differs."
+		)
+	if not steps:
+		notes.append(
+			f"No cultural practice protocol is recorded for {variety['variety_name']}. Nothing "
+			"can say what this variety is due, and a spray plan reading this has no GA timing, "
+			"no PGR program and no thinning approach to work from."
+		)
+	if variety.get("rootstock"):
+		notes.append(
+			f"The catalogue's default rootstock for {variety['variety_name']} is "
+			f"{variety['rootstock']}. That is a species-level default — read the block's own "
+			"planting for what is actually in the ground before applying anything sized per acre."
+		)
+
+	return ToolResult(
+		data={
+			"crop": crop,
+			"variety": variety["variety_name"],
+			"pollination_group": variety.get("pollination_group") or None,
+			"expected_yield_per_acre": _number_or_none(variety.get("expected_yield_per_acre")),
+			"maturity_years": int(variety["maturity_years"]) if variety.get("maturity_years") else None,
+			"catalogue_rootstock": variety.get("rootstock") or None,
+			"water_schedule": schedule,
+			"stages_overridden": overridden,
+			"stages_from_crop_default": [row["growth_stage"] for row in schedule if not row["is_overridden"]],
+			"protocol_steps": steps,
+			"protocol_by_practice": by_practice,
+			"practices_recorded": sorted(by_practice),
+			"agronomy_notes": notes,
+			"rootstock_caveat": ROOTSTOCK_CAVEAT,
+			"protocol_caveat": PROTOCOL_CAVEAT,
+			"phi_caveat": PHI_CAVEAT,
+		},
+		summary=(
+			f"{variety['variety_name']} on {crop}: {len(overridden)} stage(s) overridden of "
+			f"{len(schedule)}, {len(steps)} protocol step(s)"
+		),
+	)
+
+
+def _match_variety(varieties: list[dict], wanted: str, crop: str) -> dict:
+	"""The catalogue row for `wanted`, matched ignoring case, or a refusal naming what exists.
+
+	Names the alternatives rather than saying "not found". A variety is free text
+	on both sides of this lookup, so the overwhelmingly common failure is a
+	spelling or a variety recorded under a different crop — and both are answered
+	instantly by seeing the list.
+	"""
+	target = str(wanted or "").strip().casefold()
+	for row in varieties:
+		if str(row.get("variety_name") or "").strip().casefold() == target:
+			return row
+	if not varieties:
+		raise ToolError(
+			f"{crop} has no varieties recorded, so there is no care recipe for {wanted!r} or for "
+			f"anything else. Add the variety to the crop's Varieties table first."
+		)
+	known = ", ".join(sorted(str(row.get("variety_name") or "") for row in varieties))
+	raise ToolError(
+		f"{crop} has no variety called {wanted!r}. The varieties recorded are: {known}. A care "
+		f"recipe is read against the catalogue, so a variety it does not list has nothing to "
+		f"resolve — check the spelling, or whether the variety is recorded under another crop."
 	)
 
 

@@ -449,3 +449,78 @@ class TheFormJSAsksTheServer(SeededTestCase):
 			4,
 			f"the hook regex has gone stale rather than green — it found {queried}",
 		)
+
+	#: An `<option value="x">` inside the filter `<select>`, and the branch that
+	#: acts on one. The select is `data-console="only"` and its value lands in
+	#: `VIEW.only`, so a branch is always spelled `VIEW.only === "x"`.
+	OPTIONS = r'<option value="([a-z_]+)"'
+	BRANCHES = r'VIEW\.only === "([a-z_]+)"'
+
+	def test_every_filter_option_it_offers_is_one_it_acts_on(self):
+		"""A dropdown entry with no branch renders, selects, and does nothing.
+
+		Same silent-failure class as the hook test above and caught the same way:
+		by comparing what the markup offers against what the code answers. `all`
+		is excluded because it is the absence of a filter — it is the default
+		`VIEW.only` and correctly has no branch of its own.
+
+		WHAT THIS TEST CANNOT DO, said plainly because a test that only checks
+		one direction should admit which. It catches an ORPHANED option — one
+		offered and never acted on. It cannot catch a MISSING one, and a missing
+		one is exactly what shipped in v0.108.0: four options, three branches,
+		and no way to filter to read tools, which left "enable all of this
+		domain's reads" unreachable until v0.114.0. Nothing string-level could
+		have found that, because the gap was a control nobody had written.
+
+		Nor does any of this prove the console renders. `self.js()` reads the file
+		and every assertion in this class is a regex over source; the suite never
+		executes `apply_tool_filter`.
+		"""
+		import re
+
+		body = self.js()
+		options = set(re.findall(self.OPTIONS, body)) - {"all"}
+		branches = set(re.findall(self.BRANCHES, body))
+		orphaned = sorted(options - branches)
+		self.assertEqual(
+			orphaned,
+			[],
+			f"the filter offers option(s) nothing acts on, so choosing one silently does nothing: {orphaned}",
+		)
+		self.assertGreaterEqual(
+			len(options),
+			4,
+			f"the option regex has gone stale rather than green — it found {sorted(options)}",
+		)
+
+	def test_the_read_filter_excludes_the_packet_types(self):
+		"""The two compliance packet types are switches, not tools.
+
+		They carry an `allow_` switch and sit in `CONSOLE.switches`, and
+		`mutating` is false on both — so a bare `!info.mutating` read filter would
+		sweep them in and let "enable every read tool in this domain" tick a
+		packet type. The blast radius is nil (they are read-only artefacts that
+		default on) but the meaning is wrong, so the exclusion is explicit and
+		this pins it.
+
+		ASSERTS ON THE WHOLE READ BRANCH, NOT ON THE EXCLUSION ALONE. The obvious
+		version of this test — `assertIn("CONSOLE.switches || {})[tool]", …)` —
+		is green on a file with the exclusion deleted, because the line above it
+		that resolves `info` contains that same substring already:
+
+		    const info = (CONSOLE.tools || {})[tool] || (CONSOLE.switches || {})[tool];
+
+		It was written that way, run against a deliberately broken file, and
+		passed. Matching the branch as one expression is what actually pins it.
+		"""
+		import re
+
+		body = self.js()
+		branch = re.search(r'VIEW\.only === "read"\)\s*\n?\s*visible = ([^;]+);', body)
+		self.assertIsNotNone(branch, "the read-filter branch is gone or has been rewritten")
+		expression = " ".join(branch.group(1).split())
+		self.assertEqual(
+			expression,
+			"!!info && !info.mutating && !(CONSOLE.switches || {})[tool]",
+			f"the read filter no longer excludes the packet types: {expression!r}",
+		)

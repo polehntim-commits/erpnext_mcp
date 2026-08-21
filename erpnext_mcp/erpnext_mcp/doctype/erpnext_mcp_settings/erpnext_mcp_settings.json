@@ -934,6 +934,7 @@
   "agronomy_section",
   "allow_list_crops",
   "allow_get_crop",
+  "allow_get_variety_care_recipe",
   "allow_list_markets",
   "allow_get_market",
   "allow_list_ag_uom_contexts",
@@ -7141,6 +7142,13 @@
    "fieldname": "allow_get_crop",
    "fieldtype": "Check",
    "label": "Get Crop"
+  },
+  {
+   "default": "1",
+   "description": "READ. One variety's resolved care recipe: its water schedule with each Kc and weekly depth resolved against the crop default PER FIELD and labelled with which record it came from, plus its cultural practice protocol — GA timings, PGR program, thinning and pruning — grouped by practice. Reports the catalogue rootstock and says outright that the binding one is on the block's planting.",
+   "fieldname": "allow_get_variety_care_recipe",
+   "fieldtype": "Check",
+   "label": "Get Variety Care Recipe"
   },
   {
    "default": "1",
