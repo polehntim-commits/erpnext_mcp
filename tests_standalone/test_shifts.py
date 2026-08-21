@@ -7,7 +7,7 @@ timeline. Oregon OSHA does not ask what the temperature was when one job closed 
 it asks whether the July 15 shift complied with OAR 437-004-1131 from start to
 finish, and only a record spanning the exposure period can answer.
 
-NINE CLAIMS.
+TEN CLAIMS.
 
 1. `TheForemanFormsTheCrew` — start_shift creates the record, rosters everybody
    with joined_at at the SHIFT's start rather than at the moment the call landed,
@@ -40,6 +40,10 @@ NINE CLAIMS.
 
 9. `ReadingItBack` — list_shifts and get_shift, including the computed status
    and the evidence chain get_shift is for.
+
+10. `TwoPhonesOneCrew` — every tool that saves the shift document reads its
+    state AFTER taking the row lock, so a close, a cancel or a second roster
+    landing in the gap is seen rather than written over.
 """
 
 import frappe
@@ -1291,3 +1295,120 @@ class ReadingItBack(ShiftTestCase):
 			"list_heat_exposure_events has the register",
 			self.tool_error("get_heat_exposure_event", {"name": "HEAT-1999-0001"}),
 		)
+
+
+# ── 10 ──────────────────────────────────────────────────────────────────────
+class TwoPhonesOneCrew(ShiftTestCase):
+	"""The roster race, and the property that closes it.
+
+	`TheCrewIsAnEnvelope` above already covers the SEQUENTIAL case — a join onto
+	a shift that is already closed is refused by name. What it cannot cover is
+	the simultaneous one: two handsets that read the same open shift in the same
+	instant both pass every guard and both save, and because Frappe rewrites a
+	child table by deleting its rows and re-inserting them, the second commit
+	takes the first one's crew row with it. The worker it drops is picking in the
+	block with no Attendance row and no payroll day, off a scan that answered 200.
+
+	THIS DOUBLE IS SINGLE-THREADED, SO THERE IS NO CONCURRENCY TO TEST. What
+	there IS to test is the property that makes the lock work on a real bench:
+	every tool that saves the shift must read its state AFTER taking the row
+	lock, not before. So these tests stand in for the other transaction by
+	mutating the row from inside `shifts.lock_shift` — which is exactly the
+	moment a real second writer's commit becomes visible — and assert the guard
+	that was raced now fires.
+
+	All three fail against the code before the fix, which had read `end_datetime`
+	into `row` by the time anything was locked.
+	"""
+
+	def racing(self, mutate):
+		"""Run `mutate` ONCE, at the moment the shift's row lock is taken.
+
+		ONCE IS LOAD-BEARING. `mutate` stands in for the other transaction and
+		the realistic ones call a tool that takes the lock again; without the
+		one-shot guard that re-enters this hook forever.
+		"""
+		original = shifts.lock_shift
+		fired = []
+
+		def lock_then_race(name: str) -> None:
+			original(name)
+			if not fired:
+				fired.append(name)
+				mutate(name)
+
+		shifts.lock_shift = lock_then_race
+		self.addCleanup(setattr, shifts, "lock_shift", original)
+		return fired
+
+	def closed_during_the_wait(self, name: str) -> None:
+		"""What the other transaction did: signed the shift closed."""
+		doc = frappe.get_doc(shifts.DOCTYPE, name)
+		doc.end_datetime = at(15)
+		doc.status = shifts.STATUS_CLOSED
+		doc.save(ignore_permissions=True)
+
+	def test_a_join_that_lands_during_the_lock_wait_sees_the_close(self):
+		"""The worker this drops is the whole cost of the bug: a crew row on a
+		shift whose Attendance has already been written is a person with no
+		payroll day, and nothing on the record afterwards shows there were two
+		callers."""
+		shift = self.start(crew_employees=[WORKER])["name"]
+		self.racing(self.closed_during_the_wait)
+		message = self.tool_error("add_worker_to_shift", {"shift": shift, "employee": CREW[0]})
+		self.assertIn("Nobody joins a shift that is over", message)
+		self.assertIn("Nothing was changed", message)
+		self.assertEqual(len(self.crew_rows(shift)), 1)
+
+	def test_a_close_that_lands_during_the_lock_wait_is_not_written_twice(self):
+		"""Two closes write two sets of Attendance rows for one day, which is the
+		refusal `end_shift` already carries for the sequential case."""
+		shift = self.start(crew_employees=[WORKER])["name"]
+		self.racing(self.closed_during_the_wait)
+		message = self.tool_error(
+			"end_shift",
+			{"shift": shift, "end_datetime": at(16), "supervisor_signature_file_token": SIGNATURE},
+		)
+		self.assertIn("already closed", message)
+		self.assertIn("second set of Attendance rows", message)
+
+	def test_a_cancel_that_lands_during_the_lock_wait_sees_the_close(self):
+		shift = self.start(crew_employees=[WORKER])["name"]
+		self.racing(self.closed_during_the_wait)
+		message = self.tool_error(
+			"cancel_shift",
+			{"shift": shift, "cancellation_reason": "the block was still wet at seven"},
+		)
+		self.assertIn("Nothing was changed", message)
+
+	def test_the_lock_is_taken_on_the_shift_that_was_named(self):
+		shift = self.start(crew_employees=[WORKER])["name"]
+		locked = self.racing(lambda name: None)
+		self.tool_data("add_worker_to_shift", {"shift": shift, "employee": CREW[0]})
+		self.assertEqual(locked, [shift])
+
+	def test_every_tool_that_saves_the_shift_takes_the_lock(self):
+		"""A LOCK ONLY SERIALISES THE WRITERS THAT TAKE IT. One tool left outside
+		it is enough to drop a worker off a roster, and the next tool to load the
+		shift document and save it will be written by somebody who has not read
+		`shifts.lock_shift`. So this asserts the rule rather than the seven names:
+		anything that does `frappe.get_doc(DOCTYPE, ...)` and saves must resolve
+		through `_resolve_shift_for_update`.
+		"""
+		import ast
+		import inspect
+
+		from erpnext_mcp.tools import shifts as shift_tools
+
+		source = inspect.getsource(shift_tools)
+		lines = source.split("\n")
+		unlocked = []
+		for node in ast.parse(source).body:
+			if not isinstance(node, ast.FunctionDef):
+				continue
+			body = "\n".join(lines[node.lineno - 1 : node.end_lineno])
+			if "frappe.get_doc(DOCTYPE" not in body or ".save(" not in body:
+				continue
+			if "_resolve_shift_for_update(" not in body:
+				unlocked.append(node.name)
+		self.assertEqual(unlocked, [], f"these save the shift without locking it: {unlocked}")

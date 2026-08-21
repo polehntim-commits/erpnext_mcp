@@ -3,6 +3,54 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.112.0 — 2026-08-21 — the crew row a second scan could delete
+
+**One row lock on `Farm Shift`, taken by all seven tools that write it.** No new
+tool, no new argument, no doctype change and no mobile route moved.
+
+**The failure.** `add_worker_to_shift` reads the shift, walks `crew` for a name
+already on it, appends a row and saves — four statements with three gaps in
+them. Frappe rewrites a child table by DELETING its rows and re-inserting them,
+so two foremen scanning two different badges onto one crew in the same moment
+both load a crew of N, both write a crew of N+1, and the second commit leaves
+the FIRST worker's row gone. Nothing on the record afterwards shows there were
+two scans: the shift has a plausible crew, the phone that scanned first got a
+200, and the person it dropped is picking in the block with no Attendance row
+and no payroll day. A wage liability produced by a scan that appeared to
+succeed.
+
+**The duplicate guard is raced the same way, in the other direction.** Two scans
+of the same badge — an ordinary double-tap on a phone with a slow radio — both
+read a crew without that person and both append, and the refusal that exists by
+name for the sequential case ("Two rows for one person become two Attendance
+days when the shift closes") never runs.
+
+**`shifts.lock_shift` is a `SELECT ... FOR UPDATE` on the row**, deliberately the
+same mechanism `tools/dispatch.py::lock_task` has taken for the claim race since
+v0.98.0 rather than a second pattern to reason about. Frappe wraps each request
+in one transaction, so the lock is held until that request commits: the second
+caller blocks instead of reading stale state, and when it wakes it takes the
+ordinary refusal — or appends to the row set that actually exists.
+
+**All seven writers take it, not the two that touch `crew`.** A save from ANY
+tool that loads the shift document rewrites the crew as it was when that caller
+loaded it, so `add_worker_to_shift`, `remove_worker_from_shift`,
+`log_shift_event`, `cancel_shift`, `end_shift`, `log_shift_break` and
+`end_shift_break` all resolve through `_resolve_shift_for_update`, which locks
+and then reads the row AGAIN — the lock makes a read authoritative, it cannot
+refresh one already taken. `end_shift` is on the list because it is the same
+race with the worst outcome: a join landing between `is_open` and the close puts
+a crew row on a shift whose Attendance has already been written, which is the
+state that tool's own refusal calls "a person with no payroll day".
+
+**`TwoPhonesOneCrew` in `test_shifts.py`** stands in for the other transaction by
+mutating the row from inside `lock_shift` — the moment a real second writer's
+commit becomes visible — and asserts the raced guard now fires. Its fifth test
+asserts the RULE rather than the seven names: anything in `tools/shifts.py` that
+loads the shift document and saves it must resolve through the locking variant,
+so the next tool written against this doctype cannot quietly sit outside the
+lock. All five fail against 0.111.0.
+
 ## 0.111.0 — 2026-08-21 — the lot code a buyer can hold
 
 **FSMA 204, as an index over the registers this app already keeps.** Nine tools

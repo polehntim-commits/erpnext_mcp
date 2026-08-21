@@ -198,9 +198,37 @@ def _resolve_shift(args: dict, key: str = "shift") -> dict:
 			f"no {DOCTYPE} called {name!r} on this site. list_shifts has the register; a docname "
 			"looks like SHIFT-2026-0001. Nothing was changed."
 		)
+	return _shift_row(name)
+
+
+def _shift_row(name: str) -> dict:
+	"""One Farm Shift as a dict, by docname, with no resolution and no checking."""
 	return dict(
 		frappe.db.get_value(DOCTYPE, name, compat.existing_fields(DOCTYPE, shifts.FIELDS), as_dict=True) or {}
 	)
+
+
+def _resolve_shift_for_update(args: dict, key: str = "shift") -> dict:
+	"""Resolve the shift, take its row lock, and read it again UNDER that lock.
+
+	THE RE-READ IS THE POINT AND NOT TIDINESS. `shifts.lock_shift` makes a read
+	authoritative; it cannot refresh one already taken. The first resolution
+	above it exists only to turn whatever spelling arrived into a docname, and
+	its `end_datetime` — the value `is_open` and every close guard turn on — was
+	read before anybody was blocked, so it is exactly as stale as the value this
+	whole mechanism exists to stop being trusted.
+
+	EVERY TOOL THAT LOADS THE SHIFT DOCUMENT AND SAVES IT CALLS THIS, not just
+	the two that touch `crew`. Frappe rewrites a child table by deleting its rows
+	and re-inserting them, so a save from ANY of them — a break logged, an event
+	timestamped, a close signed — rewrites the crew as it was when that caller
+	loaded the document. A lock only serialises the writers that take it, and one
+	tool left outside it is enough to drop a worker off a roster. See
+	`shifts.lock_shift` for the failure it produces.
+	"""
+	row = _resolve_shift(args, key)
+	shifts.lock_shift(str(row.get("name") or ""))
+	return _shift_row(str(row.get("name") or "")) or row
 
 
 def file_reference(value: str, label: str) -> str:
@@ -661,7 +689,7 @@ def add_worker_to_shift(args: dict) -> ToolResult:
 	"""Roster somebody onto a shift already running — a late arrival, or a transfer."""
 	_require()
 	actor = employee_tool.require_shift_role()
-	row = _resolve_shift(args)
+	row = _resolve_shift_for_update(args)
 	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
 	if not shifts.is_open(row):
 		raise ToolError(
@@ -796,7 +824,7 @@ def remove_worker_from_shift(args: dict) -> ToolResult:
 	"""
 	_require()
 	actor = employee_tool.require_shift_role()
-	row = _resolve_shift(args)
+	row = _resolve_shift_for_update(args)
 	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
 
 	person = employee_tool.resolve_employee(as_str(args, "employee", required=True))
@@ -873,7 +901,7 @@ def log_shift_event(args: dict) -> ToolResult:
 	"""
 	_require()
 	actor = employee_tool.require_shift_role()
-	row = _resolve_shift(args)
+	row = _resolve_shift_for_update(args)
 	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
 
 	event_type = as_choice(
@@ -996,7 +1024,7 @@ def cancel_shift(args: dict) -> ToolResult:
 	"""
 	_require()
 	actor = employee_tool.require_shift_role()
-	row = _resolve_shift(args)
+	row = _resolve_shift_for_update(args)
 	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
 
 	if not shifts.is_open(row):
@@ -1092,7 +1120,7 @@ def end_shift(args: dict) -> ToolResult:
 	"""
 	_require()
 	actor = employee_tool.require_shift_role()
-	row = _resolve_shift(args)
+	row = _resolve_shift_for_update(args)
 	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
 	if not shifts.is_open(row):
 		raise ToolError(
@@ -1860,7 +1888,7 @@ def log_shift_break(args: dict) -> ToolResult:
 	"""
 	_require()
 	actor = employee_tool.require_shift_role()
-	row = _resolve_shift(args)
+	row = _resolve_shift_for_update(args)
 	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
 
 	sent_kind = as_str(args, "break_kind", required=True).strip()
@@ -2023,7 +2051,7 @@ def end_shift_break(args: dict) -> ToolResult:
 	"""
 	_require()
 	actor = employee_tool.require_shift_role()
-	row = _resolve_shift(args)
+	row = _resolve_shift_for_update(args)
 	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
 
 	event_name = as_str(args, "event", required=True).strip()

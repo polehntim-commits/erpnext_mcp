@@ -192,6 +192,57 @@ def is_open(row: dict) -> bool:
 	return not str(row.get("end_datetime") or "").strip()
 
 
+def lock_shift(name: str) -> None:
+	"""Hold the Farm Shift row until this transaction ends. THE ROSTER RACE'S FIX.
+
+	────────────────────────────────────────────────────────────────────────
+	TWO BADGES, ONE SHIFT, AND ONE OF THEM OFF THE PAYROLL
+	────────────────────────────────────────────────────────────────────────
+
+	`add_worker_to_shift` reads the shift, walks `crew` for a name already on it,
+	appends a row and saves — four statements with three gaps in them. Frappe
+	rewrites a child table by DELETING its rows and re-inserting them, so two
+	foremen scanning two different badges onto one crew in the same moment both
+	load a crew of N, both write a crew of N+1, and the second commit leaves the
+	FIRST worker's row gone. Nothing afterwards shows there were two scans: the
+	shift has a plausible crew, the phone that scanned first got a 200, and the
+	person it dropped is picking in the block with no Attendance row and no
+	payroll day. That is a wage liability produced by a scan that appeared to
+	succeed, which is the worst shape a defect of this kind takes.
+
+	THE DUPLICATE GUARD IS RACED THE SAME WAY, in the other direction. Two scans
+	of the SAME badge — the ordinary double-tap on a phone with a slow radio —
+	both read a crew without that person and both append, and the refusal that
+	exists by name for the sequential case ("Two rows for one person become two
+	Attendance days when the shift closes") never runs.
+
+	A SELECT ... FOR UPDATE ON THE ROW, WHICH IS THE WHOLE MECHANISM, and it is
+	deliberately the one `tools/dispatch.py::lock_task` already takes for the
+	claim race rather than a second pattern to reason about. Frappe wraps each
+	request in one transaction, so the lock is held until that request commits.
+	The second caller BLOCKS here instead of reading stale state, and when it
+	wakes the crew says what the first caller left and it takes the ordinary
+	refusal — or appends to the row set that actually exists.
+
+	IT IS ONLY A LOCK IF BOTH SIDES TAKE IT, which is why the callers are the
+	three tools that read the crew and then write it: `add_worker_to_shift`,
+	`remove_worker_from_shift` and `end_shift`. The close is on the list because
+	it is the same race with the worst outcome — a join landing between
+	`is_open` and the close writes a crew row onto a shift whose Attendance has
+	already been written, which is the state that tool's own refusal calls "a
+	person with no payroll day".
+
+	READ THE ROW AGAIN AFTER CALLING THIS. The lock makes a read authoritative;
+	it does not refresh one already taken. Every caller re-resolves.
+	"""
+	if not name:
+		return
+	try:
+		frappe.db.get_value(DOCTYPE, name, "name", for_update=True)
+	except TypeError:  # pragma: no cover - a Frappe without for_update
+		pass
+
+
 def to_the_second(value) -> str:
 	"""One timestamp as a string, with any sub-second part cut off.
 
