@@ -3,6 +3,65 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.120.0 — 2026-08-22 — the label was in oxides and the prefix was invented
+
+**Farm App Retirement, Cycle 2 — the utility ports and the SQLite migration.**
+Seven new modules, one migration engine, one script, eight test modules, 257
+tests. No new tool, no new DocType, no new column, no change to any existing
+file: every path in this release is one that did not exist before it.
+
+**The ports are `bbch`, `gs1`, `ndvi_anomaly`, `nutrient_calcs`, `data_privacy`,
+`simulation` and `satellite`.** Each separates the decision from the fetching, so
+the half that holds the errors can be exercised without a database, an HTTP
+client or an app context — which is exactly what the farm_app's versions could
+not do, and why none of the bugs below were ever caught there.
+
+**WHAT EACH ONE REFUSES IS THE CONTENT OF THE RELEASE.** `gs1` will not invent a
+company prefix: its ancestor fell back to a literal `DEV123`, which is
+unscannable at best and, in the plausible numeric case, another company's product
+number printed onto the farm's labels. `satellite.evalscript` raises for an index
+it does not know rather than answering NDVI — the farm_app's
+`scripts.get(metric_type, scripts['ndvi'])` charted moisture series that were
+secretly greenness, and nothing errored. `bbch.parse` reads `2026-08-01` as
+nothing rather than as stage 20. `simulation` ships no yield-impact percentage,
+because its ancestor's `-(frost_days*5 + heat_days*3)` had no citation and a
+number like that gets quoted in an insurance claim.
+
+**THE OXIDE TRAP.** A fertiliser grade `10-20-10` is 10% N, 20% **P₂O₅** and 10%
+**K₂O** — the first figure elemental, the other two oxides. Reporting the label
+figures as elemental over-states phosphorus by 2.3×, on the one nutrient with a
+discharge limit. `nutrient_calcs.nutrients()` returns both bases by name, and
+`aggregate()` reports what it could not read in an `unaccounted` list rather than
+counting it as zero.
+
+**`farm_app_migration` + `scripts/migrate_farm_app.py` move the sidecar's SQLite
+rows in, idempotently.** Ten specs in dependency order, each with a NATURAL key —
+a device by hardware id, a plan by name and version, a reading by device, type
+and timestamp — so a second run creates nothing. It never updates an existing
+document: after the cutover ERPNext is the system of record, and overwriting an
+operator's correction with a stale sidecar value would silently undo their work.
+Dry run by default.
+
+**IT WILL NOT INVENT TWO THINGS.** `block_ticker` is not derived from a block
+name — the field's own description says it is a promise made to a buyer and that
+empty is the normal state, so tickers come only from a map the operator supplies.
+And an MRL research session that found `NOT_FOUND` is refused rather than
+migrated, because a limit of zero is a real limit and the strictest one there is.
+
+**Two bugs found in this release's own drafts, both of the kind that ship green.**
+`exposure()` converted its Celsius threshold with the series' unit, so a
+Fahrenheit series with `threshold_c=35` compared against 1.7°C and reported every
+hour of the summer as heat stress. And `moment()` stripped the offset but left a
+trailing `Z`, so every `2026-08-01T10:30:00Z` — what an `isoformat()` export
+writes — parsed to `""` and every reading carrying one was refused for "no
+timestamp".
+
+**Cycle 3's gap list is in `RELEASES/v0.120.0.md`**, from a sweep of the
+sidecar's 84 blueprints and 196 models. Five real gaps remain, the largest being
+the HACCP/food-safety plan structure; `Satellite Metric` is the one this release
+is blocked on, and until it ships the migration folds only the newest NDVI per
+block onto `Field` and reports the rest of the series as dropped.
+
 ## 0.119.0 — 2026-08-22 — the reading that was zero and the argument nobody sent
 
 **One coercion helper and three call sites.** No new tool, no new DocType, no new
