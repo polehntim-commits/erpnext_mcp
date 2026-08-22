@@ -3,6 +3,82 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.117.0 — 2026-08-21 — the numbers were in the sentence and not in the column
+
+**Four named arguments on one mobile endpoint.** No new MCP tool, no new DocType,
+no new column, and nothing that was unreachable from a handset became reachable
+except these four.
+
+**v0.115.0 built the register and v0.116.0 drew the map off it, and the one
+surface that is standing in the block could fill neither.**
+`index_scouting_observations` turns a completed scouting task into a Crop
+Observation, and it reads the measurements out of `Farm Task.creates_record_data`
+— the template's defaults with the completion's own `record_data` merged over the
+top. A handset cannot send `record_data`, deliberately: `complete_task_via_mobile`
+lists its arguments one by one precisely so that `record_data`, which writes
+arbitrary fields into a compliance record, and `worker_id`, which names whose
+completion it is, are unreachable from a phone. That reasoning is right and none
+of it is undone here.
+
+**The consequence was a round somebody genuinely walked, filed with nothing in
+it.** A scouting round closed from the app produced an observation carrying the
+seeded template's defaults — `observation_type: General`, `scouting_method:
+Visual` — and **`brix_reading` and `growth_stage_code` both null**.
+`overlays.harvest_overlay` then drew that block grey with `short_of` reporting
+that nobody took a reading, on a round where somebody read both and typed them
+into the findings text. The numbers were on the register and legible to a person;
+they were not in the numeric columns the map reads. A scout who believes their
+Brix coloured a block and finds it grey a week later stops taking readings.
+
+**`observation_type`, `growth_stage_code`, `brix_reading` and `brix_method` are
+now named arguments on `complete_task_via_mobile`, and `record_data` still is
+not.** Every one of the four is already in `scouting.PAYLOAD_FIELDS`, so nothing
+new became writable: what arrives is a closed list of four measurement columns
+rather than an open dictionary. **The pest half — `threat`, `threat_category`,
+`count_observed`, `sample_size` — is deliberately NOT here.** It carries the
+threshold engine behind it, and whether a handset should be able to move a
+block's pest pressure is a decision worth making on its own rather than one that
+arrives as a consequence of letting a scout record the Brix.
+
+**EVERY REFUSAL HAPPENS AT THE DOOR, WHILE THE SCOUT IS STILL IN THE BLOCK, and
+that is why `_measurements` exists instead of four pass-through lines.** The
+observation is written days later by an idempotent sweep, so a payload the Crop
+Observation controller refuses lands in that sweep's `refused` list — correct,
+and read by nobody, a week after the phone that could have corrected it left the
+orchard. So an unknown `observation_type`, a Brix that is not a number, a
+negative one, one above the 40° ceiling, a reading with no method and a method
+with no reading are all refused here, by argument name, with nothing written.
+
+**`Pest Scout` IS REFUSED FROM THIS DOOR.** It is the one observation type whose
+record is invalid without a threat, a category and a count, none of which this
+transport can send — so accepting the word would stamp a round the sweep is then
+obliged to refuse, which is the same silent failure arrived at from the other
+direction. A task whose TEMPLATE says Pest Scout is untouched; this refuses a
+handset asking for one.
+
+**THE BRIX PAIR IS CHECKED AGAINST THE TASK'S OWN DEFAULTS, not the submission
+alone.** A template that stamps `brix_method: Refractometer` has already answered
+"how was it read", and refusing a phone that sent only the number would be
+demanding it justify a field on the record in front of it. The check runs only
+where the submission touched one of the two.
+
+**`SERVER_CHANGES.md` §27 was already closed and is now covered.** `gps` joined
+`EVIDENCE_KEYS` in v0.115.0, so `create_farm_task` has accepted it since — from
+the Desk, from MCP and from the phone, whose wrapper forwards `evidence_required`
+verbatim. What did not exist was a test through the MOBILE door, which is the one
+the audit named: a scouting round raised from a handset can now be shown to carry
+the `gps` requirement its own observation needs, and its completion shown to
+refuse without a fix.
+
+**What this does NOT close, found while proving the above.** The shipped `Field
+Scouting` template snapshots four REQUIRED checklist items onto every round it
+raises, `complete_farm_task` refuses a completion that leaves them unticked, and
+the mobile surface has no `checklist` argument and no route that ticks an item —
+while `create_task_from_template` IS published to the phone. So a template-raised
+scouting round can be raised from a handset and closed only from the Desk. It is
+asserted in `test_scouting_from_the_phone.py` rather than left to be discovered,
+and that test is meant to fail on the day somebody closes it.
+
 ## 0.116.0 — 2026-08-21 — the map that only knew what shape the farm was
 
 **Five MCP tools, one new DocType, three new columns and one Desk picker.** No

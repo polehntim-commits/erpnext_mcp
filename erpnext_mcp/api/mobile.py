@@ -102,6 +102,7 @@ from .. import bucket_bridge, compat, datetimes, locations, overlays, pay_stub_p
 from .. import roles as role_lib
 from .. import shifts as shift_records
 from .. import training as training_register
+from ..erpnext_mcp.doctype.crop_observation import crop_observation as observation_rules
 from ..erpnext_mcp.doctype.farm_task_assignment import farm_task_assignment as assignment_states
 from ..errors import ToolError
 from ..tools import accidents as accident_tools
@@ -142,6 +143,7 @@ from ..tools import payroll_deductions as payroll_deduction_tools
 from ..tools import push as push_tools
 from ..tools import realestate as realestate_tools
 from ..tools import receipts as receipt_tools
+from ..tools import scouting as scouting_tools
 from ..tools import sessions as session_tools
 from ..tools import shadow_log as shadow_log_tools
 from ..tools import shipments as shipment_tools
@@ -177,6 +179,7 @@ DISCIPLINE_RECORD = "Farm Incident Record"
 ACCIDENT_REPORT = "Accident Report"
 FARM_TASK_TEMPLATE = template_tools.TEMPLATE
 SHADOW_LOG_ENTRY = shadow_log_tools.DOCTYPE
+CROP_OBSERVATION = scouting_tools.OBSERVATION
 
 #: The Farm Task Assignment state a completion lands in. Imported from the
 #: doctype's own controller rather than spelled here, so a vocabulary change
@@ -452,6 +455,177 @@ def _location(given, latitude, longitude) -> str:
 		return f"{float(latitude):.7f},{float(longitude):.7f}"
 	except (TypeError, ValueError):
 		return ""
+
+
+#: The measurement columns a completion filed from a handset may put on the Crop
+#: Observation it produces, and the only four. NAMED ARGUMENTS RATHER THAN
+#: `record_data`, which stays unreachable from this transport for the reason
+#: `complete_task_via_mobile` gives at length: an open dictionary writes
+#: arbitrary fields into a compliance record. Four names write four columns.
+#:
+#: The pest-scout half — `threat`, `threat_category`, `count_observed`,
+#: `sample_size` — is deliberately NOT here. It carries the threshold engine
+#: behind it, and whether a handset should be able to move a block's pest
+#: pressure is a decision worth making on its own rather than one that arrives
+#: as a consequence of letting a scout record the Brix.
+MEASUREMENT_ARGUMENTS = ("observation_type", "growth_stage_code", "brix_reading", "brix_method")
+
+
+def _record_defaults(raw) -> dict:
+	"""The task's stamped `creates_record_data`, tolerant of a blob nobody can parse.
+
+	Read-side, so a task holding bad JSON is treated as holding nothing rather
+	than costing somebody their completion. The write side of that field is
+	`create_farm_task`, which refuses.
+	"""
+	try:
+		value = json.loads(raw) if isinstance(raw, str) and raw.strip() else (raw or {})
+	except Exception:
+		return {}
+	return value if isinstance(value, dict) else {}
+
+
+def _measurements(task: str, observation_type, growth_stage_code, brix_reading, brix_method) -> dict:
+	"""The four scouting readings off the arguments, refused early and by name.
+
+	v0.117.0. `SERVER_CHANGES.md` §26. A scouting round closed from the app used
+	to file an observation carrying the seeded template's defaults and NOTHING
+	ELSE: `brix_reading` and `growth_stage_code` both null on a round where
+	somebody stood in the block and read both. `overlays.harvest_overlay` then
+	drew that block grey with `short_of` reporting that nobody took a reading.
+	The numbers were in the findings text and legible to a person; they were not
+	in the numeric columns the map reads.
+
+	EVERY REFUSAL BELOW HAPPENS HERE RATHER THAN AT THE SWEEP, and that is the
+	whole reason this function exists instead of four pass-through lines. The
+	Crop Observation is written days later by `index_scouting_observations`, and
+	a payload its controller refuses is counted in that sweep's `refused` list —
+	correct, and read by nobody, a week after the phone that could have corrected
+	it left the block. The person who took the reading is standing there NOW.
+
+	`Pest Scout` IS REFUSED FROM THIS DOOR ON PURPOSE. The register requires a
+	threat, a category and a count on that type, none of which this transport
+	can send (see `MEASUREMENT_ARGUMENTS`), so accepting the word would stamp a
+	round that the sweep is then obliged to refuse — the exact silent failure
+	above, arrived at from the other direction. A task whose TEMPLATE says Pest
+	Scout is untouched: this only refuses a handset asking for one.
+
+	THE BRIX PAIR IS CHECKED AGAINST THE TASK'S OWN DEFAULTS, not against the
+	submission alone. A template that stamps `brix_method: Refractometer` has
+	already answered "how was it read", and a phone sending the number would be
+	refused for a missing half that is on the record in front of it. The check
+	runs only where this submission touched one of the two — a template's own
+	standing default is never something a completion has to justify.
+	"""
+	sent = {
+		key: value
+		for key, value in (
+			("observation_type", observation_type),
+			("growth_stage_code", growth_stage_code),
+			("brix_reading", brix_reading),
+			("brix_method", brix_method),
+		)
+		if value not in (None, "")
+	}
+	if not sent:
+		return {}
+
+	row = frappe.db.get_value(FARM_TASK, task, ["creates_record", "creates_record_data"], as_dict=True) or {}
+	produces = str(row.get("creates_record") or "").strip()
+	if produces != CROP_OBSERVATION:
+		frappe.throw(
+			f"This task produces {produces or 'no compliance record'}, so there is nowhere to put "
+			f"{', '.join(sorted(sent))}. The scouting readings belong to a task whose record is a "
+			f"{CROP_OBSERVATION} — one raised from a scouting template. Nothing was filed: send the "
+			"completion again without them, and the work still closes.",
+			frappe.ValidationError,
+		)
+
+	out = {}
+
+	kind = str(observation_type or "").strip()
+	if kind:
+		match = next(
+			(known for known in observation_rules.OBSERVATION_TYPES if known.lower() == kind.lower()), ""
+		)
+		if not match:
+			frappe.throw(
+				f"observation_type is {kind!r}, which is not a kind of round this register knows. "
+				f"It is one of: {', '.join(observation_rules.OBSERVATION_TYPES)}. Nothing was filed.",
+				frappe.ValidationError,
+			)
+		if match == observation_rules.PEST_SCOUT:
+			frappe.throw(
+				f"A {observation_rules.PEST_SCOUT} observation is a count of a named organism, and "
+				"the threat, its category and the count cannot be sent from a handset — so this "
+				"round would be stamped and then refused by the register days later, with nobody "
+				"in the block to correct it. File the maturity or condition round as "
+				f"{', '.join(k for k in observation_rules.OBSERVATION_TYPES if k != observation_rules.PEST_SCOUT)}, "
+				"or raise the pest count from the Desk. Nothing was filed.",
+				frappe.ValidationError,
+			)
+		out["observation_type"] = match
+
+	code = str(growth_stage_code or "").strip()
+	if code:
+		out["growth_stage_code"] = code[:140]
+
+	method = str(brix_method or "").strip()
+	if method:
+		known = next((m for m in observation_rules.BRIX_METHODS if m and m.lower() == method.lower()), "")
+		if not known:
+			frappe.throw(
+				f"brix_method is {method!r}. It is one of: "
+				f"{', '.join(m for m in observation_rules.BRIX_METHODS if m)} — a refractometer "
+				"figure and somebody's estimate are not the same measurement and must not average "
+				"together. Nothing was filed.",
+				frappe.ValidationError,
+			)
+		out["brix_method"] = known
+
+	if brix_reading not in (None, ""):
+		try:
+			reading = float(brix_reading)
+		except (TypeError, ValueError):
+			frappe.throw(
+				f"brix_reading is {brix_reading!r}, which is not a number. Send the degrees Brix "
+				"as a figure — 18.5 — or leave it out. Nothing was filed.",
+				frappe.ValidationError,
+			)
+		if reading < 0:
+			frappe.throw("brix_reading cannot be negative. Nothing was filed.", frappe.ValidationError)
+		if reading > observation_rules.BRIX_CEILING:
+			frappe.throw(
+				f"brix_reading is {reading:g}, which is above {observation_rules.BRIX_CEILING:g} — the "
+				"ceiling this app accepts on fruit. Ripe sweet cherries run 16-24 and table grapes to "
+				"about 26, so a figure this high is almost always a decimal point in the wrong place. "
+				"Nothing was filed.",
+				frappe.ValidationError,
+			)
+		out["brix_reading"] = reading
+
+	if "brix_reading" in out or "brix_method" in out:
+		merged = {**_record_defaults(row.get("creates_record_data")), **out}
+		has_reading = merged.get("brix_reading") not in (None, "")
+		has_method = bool(str(merged.get("brix_method") or "").strip())
+		if has_reading and not has_method:
+			frappe.throw(
+				f"A Brix reading was sent with no brix_method, and the task does not carry one. Say "
+				f"whether it came off a refractometer or was estimated: "
+				f"{', '.join(m for m in observation_rules.BRIX_METHODS if m)}. The two are not the "
+				"same measurement, and the number that gets quoted into a buyer's specification is "
+				"the one nobody can tell apart afterwards. Nothing was filed.",
+				frappe.ValidationError,
+			)
+		if has_method and not has_reading:
+			frappe.throw(
+				"brix_method was sent with no Brix reading, and the task does not carry one. Stating "
+				"how a number was taken when there is no number is a record that reads as "
+				"instrumented and holds nothing. Nothing was filed.",
+				frappe.ValidationError,
+			)
+
+	return out
 
 
 def _bucket_entries(raw, company: str) -> list:
@@ -1129,6 +1303,10 @@ def complete_task_via_mobile(
 	farm_location_gps=None,
 	evidence_files=None,
 	visit_id=None,
+	observation_type=None,
+	growth_stage_code=None,
+	brix_reading=None,
+	brix_method=None,
 ) -> dict:
 	"""Finish one task: file the evidence, write the compliance record.
 
@@ -1169,6 +1347,18 @@ def complete_task_via_mobile(
 	UUID as 8-4-4-4-12, either case, or the call is refused with the format in
 	the message. Omitting it is not an error — it files the completion outside
 	any visit, which `list_visits` counts separately and says so.
+
+	v0.117.0. THE FOUR SCOUTING MEASUREMENTS ARE NAMED ARGUMENTS AND
+	`record_data` IS STILL NOT ONE. `SERVER_CHANGES.md` §26: the paragraph above
+	is why the phone cannot send `record_data`, and the consequence was that a
+	scouting round closed from the app filed an observation carrying the seeded
+	template's defaults with `brix_reading` and `growth_stage_code` both null —
+	on a round where somebody read both. Every one of these four is already in
+	`scouting.PAYLOAD_FIELDS`, so nothing new became writable: what arrives is a
+	closed list of four measurement columns rather than an open dictionary, and
+	the reasoning that made `record_data` and `worker_id` unreachable is intact.
+	`_measurements` refuses a bad one HERE, while the scout is still in the
+	block — see it for why that is not the sweep's job to discover on Friday.
 	"""
 	allowed = guard.require_scope(user)
 	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
@@ -1196,6 +1386,9 @@ def complete_task_via_mobile(
 	evidence = _evidence(evidence_files)
 	if evidence:
 		inner["evidence_files"] = evidence
+	measurements = _measurements(name, observation_type, growth_stage_code, brix_reading, brix_method)
+	if measurements:
+		inner["record_data"] = measurements
 
 	result = fieldwork.complete_task_via_mobile(inner)
 	return shape.completion(result.data)
