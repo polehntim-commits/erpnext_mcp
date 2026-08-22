@@ -1,0 +1,232 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "The maximum residue limit for one active ingredient on one crop in one market, and — the part that makes it usable — where the number came from and when it stops being trustworthy.\n\nAN MRL WITH NO SOURCE IS UNUSABLE AND THIS DOCTYPE REFUSES TO PRETEND OTHERWISE. A load rejected at a border is rejected against a specific regulation on a specific date, and 'we had 0.5 written down' is not a defence. So `source` is required, `source_tier` records how far from the official register the figure was found, and `confidence` records what the person who found it thought of it. A tier-4 inferred limit is worth having and is not worth shipping fruit on.\n\nEXPIRY IS THE FIELD THIS EXISTS FOR. MRLs are revised, harmonised and withdrawn constantly, and a stale limit is more dangerous than a missing one because nobody goes looking. `expiry_date` is when this figure should be re-checked rather than when the regulation lapses — those differ, and the useful one is the first.\n\nTHE RESEARCH TRAIL IS STORED WITH THE ANSWER. Where a limit was researched rather than read off a register, `research_notes` and `research_response` keep what was actually returned, so a number that later looks wrong can be traced to the reasoning that produced it instead of being re-researched from nothing. See `erpnext_mcp/prompt_templates.py` for the prompt that produces them.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "chemical",
+  "crop",
+  "identity_col",
+  "market",
+  "mrl_ppm",
+  "company",
+  "provenance_section",
+  "source",
+  "source_tier",
+  "provenance_col",
+  "confidence",
+  "substance_status",
+  "is_default_mrl",
+  "crop_group_match",
+  "validity_section",
+  "effective_date",
+  "validity_col",
+  "expiry_date",
+  "research_section",
+  "research_notes",
+  "research_response",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "MRL-.#####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "description": "The ACTIVE INGREDIENT, not the trade name. 'spinetoram', not 'Delegate' — a trade name is a formulation and several of them share an active ingredient with different limits attached to none of them.",
+   "fieldname": "chemical",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Chemical",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "crop",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Crop",
+   "options": "Crop",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Where the fruit is going. An MRL is a property of the DESTINATION, which is why this is the third part of the key and why the same fruit can be legal in one lane and rejected in the next.",
+   "fieldname": "market",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Market",
+   "options": "Market",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The limit in mg/kg, which is the same thing as ppm. Four decimals because a great many default limits are 0.01 and rounding is not available here.",
+   "fieldname": "mrl_ppm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "MRL (ppm)",
+   "precision": "4",
+   "reqd": 1
+  },
+  {
+   "description": "Optional. An MRL is a fact about a regulator and not about a business, so a site-wide record with no company is the normal case; the column exists for operations that maintain their own stricter internal limits.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "provenance_section",
+   "fieldtype": "Section Break",
+   "label": "Provenance — Where This Number Came From"
+  },
+  {
+   "description": "The regulation, database or document this came from — 'EU Reg. 396/2005 Annex II', 'Codex CXL 0140', '40 CFR 180.635'. REQUIRED. See the doctype description.",
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "How far from the official register this was found. 1 official regulatory database; 2 a government gazette or official journal; 3 an industry or academic cross-reference; 4 inferred — a harmonisation rule or a default limit, believed rather than read.",
+   "fieldname": "source_tier",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Source Tier",
+   "options": "1\n2\n3\n4"
+  },
+  {
+   "fieldname": "provenance_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "default": "High",
+   "fieldname": "confidence",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Confidence",
+   "options": "High\nMedium\nLow"
+  },
+  {
+   "default": "Registered",
+   "description": "Whether the substance may be used on this crop in this market at all. BANNED IS NOT THE SAME AS AN MRL OF ZERO: a banned substance usually still carries a default limit, and a load is refused on the ban regardless of the residue found.",
+   "fieldname": "substance_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Substance Status",
+   "options": "Registered\nBanned\nNot Registered\nRestricted\nUnknown"
+  },
+  {
+   "description": "Whether this is the market's blanket default rather than a limit set for this ingredient and crop. Many jurisdictions apply 0.01 to anything unlisted, and a default reached by that route means 'nobody has set one', which is worth knowing before planning a spray around it.",
+   "fieldname": "is_default_mrl",
+   "fieldtype": "Check",
+   "label": "Is Default MRL"
+  },
+  {
+   "description": "Whether this limit was matched through a crop GROUP — 'stone fruit' covering cherries — rather than the crop itself. A group match is legitimate and is one step further from certainty.",
+   "fieldname": "crop_group_match",
+   "fieldtype": "Check",
+   "label": "Crop Group Match"
+  },
+  {
+   "fieldname": "validity_section",
+   "fieldtype": "Section Break",
+   "label": "Validity"
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective From"
+  },
+  {
+   "fieldname": "validity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "When this figure should be looked at again. See the doctype description: this is a review date, not the regulation's own lapse date.",
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Re-check By"
+  },
+  {
+   "fieldname": "research_section",
+   "fieldtype": "Section Break",
+   "label": "Research Trail"
+  },
+  {
+   "description": "How this was found: which databases were consulted, what harmonisation rule was applied, which crop group was matched.",
+   "fieldname": "research_notes",
+   "fieldtype": "Text",
+   "label": "Research Notes"
+  },
+  {
+   "description": "The raw response from whatever research produced this, kept verbatim as an audit trail. Never parsed after the fact — the parsed values are the columns above.",
+   "fieldname": "research_response",
+   "fieldtype": "Long Text",
+   "label": "Research Response"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "MRL Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "chemical,crop,market",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

@@ -278,6 +278,29 @@ SECTION_DOMAIN = {
 	"mobile_read_section": "platform",
 	"mobile_write_section": "platform",
 	"push_notification_section": "platform",
+	# v0.118.0, Farm App Retirement Cycle 1. The IoT network files under `farm`
+	# beside the blocks and zones its devices sit in — a soil probe is a fact
+	# about a block, and an operator looking for "why is this block's moisture
+	# stale" should find the device switch in the same chip as the block
+	# register.
+	"iot_read_section": "farm",
+	"iot_write_section": "farm",
+	# Residue limits file under `compliance` rather than `farm`, because the
+	# question an MRL answers is not "what may I spray" — it is "may this load
+	# cross this border", which is the same kind of question as a trade document
+	# or an inspection record. `get_ipm_reference` sits in the read section with
+	# them rather than in a section of its own: it is the book somebody consults
+	# WHILE deciding whether a spray will clear a destination, and a switch on
+	# its own chip would be found by nobody.
+	"mrl_read_section": "compliance",
+	"mrl_write_section": "compliance",
+	# The competitive picture and the written strategy file under `holding` with
+	# governance and the cap table: they are decisions the OWNERS make about what
+	# the business is, not work anybody does in the orchard.
+	"competitive_intel_read_section": "holding",
+	"competitive_intel_write_section": "holding",
+	"strategy_read_section": "holding",
+	"strategy_write_section": "holding",
 }
 
 

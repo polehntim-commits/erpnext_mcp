@@ -1,0 +1,242 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Somebody else in this market: a competitor, a supplier, a buyer, a partner, or a farm somebody is thinking about buying. One record per organisation, and the type is a column rather than five doctypes because the same grower is a competitor for labour, a partner in a packing shed and a possible acquisition in the same season, and splitting them would make that one organisation three records that drift apart.\n\nTHE ESTIMATES ARE LABELLED AS ESTIMATES AND THAT IS THE POINT. Revenue, acreage and market share here are somebody's read of a private business, not filed accounts. They are worth writing down — a competitor's acreage is what decides whether a price move matters — and they are worth never confusing with the numbers in the ledger, which is why every one of them says `estimated` in its own name.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "participant_name",
+  "participant_type",
+  "identity_col",
+  "customer",
+  "strategic_plan",
+  "relationship_status",
+  "market_section",
+  "industry_segment",
+  "geography",
+  "crops",
+  "market_col",
+  "market_position",
+  "market_share_pct",
+  "employee_count",
+  "scale_section",
+  "estimated_revenue",
+  "estimated_acreage",
+  "assessment_section",
+  "strengths",
+  "weaknesses",
+  "assessment_col",
+  "key_assets",
+  "vulnerability_windows",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "MKTP-.#####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The organisation's name as it is actually known locally, not its filing name.",
+   "fieldname": "participant_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Participant Name",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "What this organisation is TO US. One participant can be several things at once; record the one that drives the decisions being made about them now, and say the rest in the notes.",
+   "fieldname": "participant_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Participant Type",
+   "options": "Competitor\nSupplier\nCustomer\nPartner\nTarget",
+   "reqd": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Where this participant is also somebody this farm invoices, the ERPNext Customer record. Optional, and the link is what stops the sales ledger and the competitive picture being two separate opinions about the same company.",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "search_index": 1
+  },
+  {
+   "description": "The plan this participant was assessed under. Assessments age; tying one to the plan it was made for is what says how old.",
+   "fieldname": "strategic_plan",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Strategic Plan",
+   "options": "Strategic Plan"
+  },
+  {
+   "default": "Neutral",
+   "fieldname": "relationship_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Relationship Status",
+   "options": "Allied\nNeutral\nAdversarial\nAcquisition Target"
+  },
+  {
+   "fieldname": "market_section",
+   "fieldtype": "Section Break",
+   "label": "Market Position"
+  },
+  {
+   "description": "'Sweet cherry packing', 'custom harvest', 'organic apple'. Free text — the segment somebody competes in is not a taxonomy.",
+   "fieldname": "industry_segment",
+   "fieldtype": "Data",
+   "label": "Industry Segment"
+  },
+  {
+   "description": "The region they operate in — 'The Dalles', 'Yakima Valley', 'Central WA'.",
+   "fieldname": "geography",
+   "fieldtype": "Data",
+   "label": "Geography"
+  },
+  {
+   "description": "What they grow or handle, comma-separated. Deliberately text rather than a link table: half these entries are somebody's recollection, and a Link would refuse to store 'cherries, maybe pears'.",
+   "fieldname": "crops",
+   "fieldtype": "Small Text",
+   "label": "Crops"
+  },
+  {
+   "fieldname": "market_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Where they sit in the segment. The four are the standard Kotler positions and are used here because they map onto how somebody is likely to RESPOND to a move, which is what a competitive record is for.",
+   "fieldname": "market_position",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Market Position",
+   "options": "Leader\nChallenger\nFollower\nNicher"
+  },
+  {
+   "description": "Estimated share of the segment named above. An estimate of a private figure — see the doctype description.",
+   "fieldname": "market_share_pct",
+   "fieldtype": "Percent",
+   "label": "Market Share (%)"
+  },
+  {
+   "fieldname": "employee_count",
+   "fieldtype": "Int",
+   "label": "Employee Count"
+  },
+  {
+   "fieldname": "scale_section",
+   "fieldtype": "Section Break",
+   "label": "Estimated Scale"
+  },
+  {
+   "fieldname": "estimated_revenue",
+   "fieldtype": "Currency",
+   "label": "Estimated Revenue"
+  },
+  {
+   "fieldname": "estimated_acreage",
+   "fieldtype": "Float",
+   "label": "Estimated Acreage",
+   "precision": "2"
+  },
+  {
+   "fieldname": "assessment_section",
+   "fieldtype": "Section Break",
+   "label": "Assessment"
+  },
+  {
+   "description": "One per line.",
+   "fieldname": "strengths",
+   "fieldtype": "Small Text",
+   "label": "Strengths"
+  },
+  {
+   "description": "One per line.",
+   "fieldname": "weaknesses",
+   "fieldtype": "Small Text",
+   "label": "Weaknesses"
+  },
+  {
+   "fieldname": "assessment_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "What they hold that is hard to replicate — water rights, a packing line, a variety licence, a buyer relationship. One per line.",
+   "fieldname": "key_assets",
+   "fieldtype": "Small Text",
+   "label": "Key Assets"
+  },
+  {
+   "description": "When they are weakest and why — 'succession, owner is 71', 'note matures 2027'. One per line. This is the field that turns a competitor record into a decision.",
+   "fieldname": "vulnerability_windows",
+   "fieldtype": "Small Text",
+   "label": "Vulnerability Windows"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Market Participant",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "participant_name,participant_type,geography",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

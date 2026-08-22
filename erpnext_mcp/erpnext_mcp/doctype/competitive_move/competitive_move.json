@@ -1,0 +1,241 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Something a competitor actually did, recorded on the day somebody noticed it. A price cut, a block bought, a packing line built, a buyer signed, a shed shut.\n\nWHAT MAKES THIS WORTH A RECORD RATHER THAN A CONVERSATION is that moves only mean anything in sequence. One competitor dropping price is weather; the same competitor dropping price in three consecutive Julys is a strategy, and nobody sees the pattern from memory. So the observation date, the source and the confidence are all stored — a move somebody heard at the co-op counter and a move read in a filing are both worth having and are not worth the same.\n\nTHE RESPONSE HALF IS DELIBERATELY SEPARATE FROM THE OBSERVATION HALF. What was recommended, what was actually done, when, and how it turned out — kept apart so the gap between recommended and actual stays visible. That gap is the most instructive thing in the register.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "market_participant",
+  "move_type",
+  "identity_col",
+  "strategic_plan",
+  "severity",
+  "observed_date",
+  "observation_section",
+  "description",
+  "source",
+  "observation_col",
+  "confidence",
+  "impact_assessment",
+  "impact_section",
+  "market_impact_pct",
+  "impact_col",
+  "revenue_impact",
+  "response_section",
+  "response_urgency",
+  "recommended_response",
+  "response_col",
+  "actual_response",
+  "response_date",
+  "outcome",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "CMOV-.YYYY.-.#####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "market_participant",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Market Participant",
+   "options": "Market Participant",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "move_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Move Type",
+   "options": "Price Change\nExpansion\nContraction\nAcquisition\nPartnership\nExit\nRegulatory\nInnovation",
+   "reqd": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "strategic_plan",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Strategic Plan",
+   "options": "Strategic Plan"
+  },
+  {
+   "default": "Medium",
+   "fieldname": "severity",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Severity",
+   "options": "Low\nMedium\nHigh"
+  },
+  {
+   "description": "When this was NOTICED, which is not when it happened. The two are worth distinguishing and only this one is knowable.",
+   "fieldname": "observed_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Observed On",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "observation_section",
+   "fieldtype": "Section Break",
+   "label": "What Happened"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text",
+   "label": "Description",
+   "reqd": 1
+  },
+  {
+   "description": "Where this came from — 'grower meeting', 'county recorder', 'their website'. Not a citation; enough that somebody can weigh it.",
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source"
+  },
+  {
+   "fieldname": "observation_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "default": "Medium",
+   "description": "How sure the observer is that this is true and complete. Low-confidence moves are kept: three low-confidence sightings of the same thing is itself evidence.",
+   "fieldname": "confidence",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Confidence",
+   "options": "Low\nMedium\nHigh"
+  },
+  {
+   "description": "What this means for us, in plain words. Written at observation time, before the response — so the reasoning can be read back against what actually happened.",
+   "fieldname": "impact_assessment",
+   "fieldtype": "Text",
+   "label": "Impact Assessment"
+  },
+  {
+   "fieldname": "impact_section",
+   "fieldtype": "Section Break",
+   "label": "Estimated Impact"
+  },
+  {
+   "fieldname": "market_impact_pct",
+   "fieldtype": "Percent",
+   "label": "Market Impact (%)"
+  },
+  {
+   "fieldname": "impact_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "revenue_impact",
+   "fieldtype": "Currency",
+   "label": "Revenue Impact"
+  },
+  {
+   "fieldname": "response_section",
+   "fieldtype": "Section Break",
+   "label": "Response — Recommended, Then Actual"
+  },
+  {
+   "default": "Monitor",
+   "fieldname": "response_urgency",
+   "fieldtype": "Select",
+   "label": "Response Urgency",
+   "options": "No Action\nMonitor\nRespond\nUrgent"
+  },
+  {
+   "fieldname": "recommended_response",
+   "fieldtype": "Text",
+   "label": "Recommended Response"
+  },
+  {
+   "fieldname": "response_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "What was actually done. Left empty where nothing was done, which is a real and common answer and is not the same as the question never being asked.",
+   "fieldname": "actual_response",
+   "fieldtype": "Text",
+   "label": "Actual Response"
+  },
+  {
+   "fieldname": "response_date",
+   "fieldtype": "Date",
+   "label": "Response Date"
+  },
+  {
+   "description": "How it turned out. Filled in later, by somebody who can now see.",
+   "fieldname": "outcome",
+   "fieldtype": "Text",
+   "label": "Outcome"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Competitive Move",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "market_participant,move_type,observed_date",
+ "sort_field": "observed_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

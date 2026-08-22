@@ -60,11 +60,32 @@ class PlantingSeason(Document):
 			self.status = ESTABLISHING
 		if self.lifecycle not in LIFECYCLES:
 			self.lifecycle = PERENNIAL
+		self._copy_block_ticker()
 		self._check_years()
 		self._check_dates()
 		self._check_removal()
 		self._trees_per_acre()
 		self._label()
+
+	def _copy_block_ticker(self) -> None:
+		"""Take the block's buyer-facing ticker at save time and keep it.
+
+		COPIED RATHER THAN FETCHED, which is the whole point. A `fetch_from` shows
+		whatever the Field says TODAY, so re-tickering a block in 2027 would silently
+		relabel its 2024 season — and the 2024 settlements that quoted the old ticker
+		would no longer agree with the season record they were settled against. A
+		season is a closed year; what the buyer called the block that year is part of
+		what happened.
+
+		A SEASON WITH NO FIELD KEEPS WHATEVER IT HAS. The link is optional on this
+		doctype, and blanking a stored ticker because the link is empty would lose
+		the record for no gain.
+		"""
+		if not self.field:
+			return
+		ticker = frappe.db.get_value("Field", self.field, "block_ticker")
+		if ticker:
+			self.block_ticker = str(ticker).strip().upper()
 
 	def _check_years(self):
 		if not self.plant_year:

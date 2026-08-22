@@ -1,0 +1,330 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "One farm somebody is considering buying, scored on the four things that actually decide whether it works, and tracked through the stages between noticing it and closing.\n\nTHE FOUR SCORES ARE SEPARATE BECAUSE THEY FAIL SEPARATELY, and a single 'attractiveness' number would hide exactly the case worth catching: a financially distressed neighbour with perfect strategic fit and no cultural fit at all is a deal that closes and then does not work. Each runs 0 to 1, each is somebody's judgement, and `accretive_score` combines them rather than replacing them.\n\nTHE INTERGENERATIONAL HORIZON IS WHY THIS IS NOT A STANDARD M&A RECORD. A payback period of eleven years disqualifies a deal in most businesses and is unremarkable in tree fruit, where the asset is land and water and the buyer is thinking in a horizon measured in plantings. The land, water, varietal and infrastructure values are broken out for the same reason: the going concern is often not the point.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "entity_name",
+  "market_participant",
+  "identity_col",
+  "strategic_plan",
+  "status",
+  "action_level",
+  "fit_section",
+  "strategic_fit_score",
+  "financial_health_score",
+  "fit_col",
+  "synergy_score",
+  "cultural_fit_score",
+  "accretive_score",
+  "economics_section",
+  "estimated_value",
+  "estimated_acquisition_cost",
+  "projected_revenue_uplift",
+  "projected_cost_savings",
+  "economics_col",
+  "acreage",
+  "payback_period_years",
+  "irr_estimate",
+  "intergenerational_horizon_years",
+  "asset_section",
+  "land_value_appreciation",
+  "water_rights_value",
+  "asset_col",
+  "varietal_ip_value",
+  "infrastructure_value",
+  "timeline_section",
+  "identified_date",
+  "target_close_date",
+  "timeline_col",
+  "actual_close_date",
+  "rationale_section",
+  "rationale",
+  "recommendation",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "ACQT-.#####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "What the target is called. Held here as well as on the linked participant so a target can be opened before anybody has written the participant record.",
+   "fieldname": "entity_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Entity Name",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "market_participant",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Market Participant",
+   "options": "Market Participant",
+   "search_index": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "strategic_plan",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Strategic Plan",
+   "options": "Strategic Plan"
+  },
+  {
+   "default": "Identified",
+   "description": "Where this is in the pipeline. `Passed` is a real outcome and is kept rather than deleted — the reason a deal was passed on is the most useful thing in the file when the same farm comes up again in four years.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Identified\nEvaluating\nDue Diligence\nNegotiating\nClosed\nPassed",
+   "reqd": 1
+  },
+  {
+   "default": "Monitor",
+   "description": "What to DO about it now, which is not the same as where it is. A target can sit at Due Diligence with an action level of Monitor because the seller has gone quiet.",
+   "fieldname": "action_level",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Action Level",
+   "options": "Monitor\nEvaluate\nPursue\nNegotiate\nClose"
+  },
+  {
+   "fieldname": "fit_section",
+   "fieldtype": "Section Break",
+   "label": "Fit Scores — 0 to 1, Each Judged Separately"
+  },
+  {
+   "description": "Does owning this advance the plan — contiguous ground, a variety gap, a market this farm cannot reach today.",
+   "fieldname": "strategic_fit_score",
+   "fieldtype": "Float",
+   "label": "Strategic Fit",
+   "precision": "2"
+  },
+  {
+   "description": "How sound the target is on its own. A LOW score here is not automatically bad: distress is why some farms are for sale at a price that works.",
+   "fieldname": "financial_health_score",
+   "fieldtype": "Float",
+   "label": "Financial Health",
+   "precision": "2"
+  },
+  {
+   "fieldname": "fit_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "What the two together do that neither does alone — shared equipment, one crew, a full packing line.",
+   "fieldname": "synergy_score",
+   "fieldtype": "Float",
+   "label": "Synergy",
+   "precision": "2"
+  },
+  {
+   "description": "Whether the people stay and whether the two operations can be run as one. The score most often skipped and most often the one that decides it.",
+   "fieldname": "cultural_fit_score",
+   "fieldtype": "Float",
+   "label": "Cultural Fit",
+   "precision": "2"
+  },
+  {
+   "description": "The four fit scores combined, recomputed on every save. READ-ONLY: a composite somebody can edit independently of its inputs is a composite that will disagree with them.",
+   "fieldname": "accretive_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Accretive Score",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "economics_section",
+   "fieldtype": "Section Break",
+   "label": "Economics"
+  },
+  {
+   "description": "What the whole thing is thought to be worth, all in.",
+   "fieldname": "estimated_value",
+   "fieldtype": "Currency",
+   "label": "Estimated Value"
+  },
+  {
+   "description": "What it would actually take to buy — which is not the estimated value once debt, holdbacks and the family are in it.",
+   "fieldname": "estimated_acquisition_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Acquisition Cost"
+  },
+  {
+   "fieldname": "projected_revenue_uplift",
+   "fieldtype": "Currency",
+   "label": "Projected Revenue Uplift"
+  },
+  {
+   "fieldname": "projected_cost_savings",
+   "fieldtype": "Currency",
+   "label": "Projected Cost Savings"
+  },
+  {
+   "fieldname": "economics_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "acreage",
+   "fieldtype": "Float",
+   "label": "Acreage",
+   "precision": "2"
+  },
+  {
+   "fieldname": "payback_period_years",
+   "fieldtype": "Float",
+   "label": "Payback Period (Years)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "irr_estimate",
+   "fieldtype": "Percent",
+   "label": "IRR Estimate"
+  },
+  {
+   "default": "25",
+   "description": "The horizon this deal is being judged over. Twenty-five years by default, which is roughly one orchard's productive life — see the doctype description for why this is not the usual M&A horizon.",
+   "fieldname": "intergenerational_horizon_years",
+   "fieldtype": "Int",
+   "label": "Intergenerational Horizon (Years)"
+  },
+  {
+   "fieldname": "asset_section",
+   "fieldtype": "Section Break",
+   "label": "Asset Values — Where The Value Actually Sits"
+  },
+  {
+   "fieldname": "land_value_appreciation",
+   "fieldtype": "Currency",
+   "label": "Land Value"
+  },
+  {
+   "description": "Broken out because in much of the interior West this is the largest single number on the page and it does not move with the orchard.",
+   "fieldname": "water_rights_value",
+   "fieldtype": "Currency",
+   "label": "Water Rights Value"
+  },
+  {
+   "fieldname": "asset_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Managed-variety licences and club rights, which do not always transfer with a sale — and finding that out after closing is the classic way this line becomes zero.",
+   "fieldname": "varietal_ip_value",
+   "fieldtype": "Currency",
+   "label": "Varietal IP Value"
+  },
+  {
+   "fieldname": "infrastructure_value",
+   "fieldtype": "Currency",
+   "label": "Infrastructure Value"
+  },
+  {
+   "fieldname": "timeline_section",
+   "fieldtype": "Section Break",
+   "label": "Timeline"
+  },
+  {
+   "fieldname": "identified_date",
+   "fieldtype": "Date",
+   "label": "Identified On"
+  },
+  {
+   "fieldname": "target_close_date",
+   "fieldtype": "Date",
+   "label": "Target Close"
+  },
+  {
+   "fieldname": "timeline_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "actual_close_date",
+   "fieldtype": "Date",
+   "label": "Actual Close"
+  },
+  {
+   "fieldname": "rationale_section",
+   "fieldtype": "Section Break",
+   "label": "Rationale"
+  },
+  {
+   "description": "Why this target, in plain words. The field that has to be readable by somebody who was not in the room.",
+   "fieldname": "rationale",
+   "fieldtype": "Text",
+   "label": "Rationale"
+  },
+  {
+   "fieldname": "recommendation",
+   "fieldtype": "Text",
+   "label": "Recommendation"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Acquisition Target",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "entity_name,status,action_level",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

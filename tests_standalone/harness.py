@@ -1742,6 +1742,21 @@ APP_DOCTYPES = {
 	# because the handset drains a backlog in one pass and drains it again from
 	# the start if that pass is interrupted; see `tools/app_feedback.py`.
 	"App Feedback": "app_feedback",
+	# v0.118.0, Farm App Retirement Cycle 1. The five registers the Flask
+	# sidecar held and this app did not. `IoT Reading` denormalises its field
+	# and company off the device AT WRITE TIME rather than linking through —
+	# see `iot_reading.py` on why a probe moved in July must not relocate June's
+	# readings. `Strategic Objective` is a standalone doctype and not a child
+	# table of Strategic Plan, so it needs no CHILD_TABLE_SOURCES entry: it is
+	# queried by `strategic_plan` as an ordinary Link column.
+	"IoT Device": "iot_device",
+	"IoT Reading": "iot_reading",
+	"Market Participant": "market_participant",
+	"Acquisition Target": "acquisition_target",
+	"Competitive Move": "competitive_move",
+	"Strategic Plan": "strategic_plan",
+	"Strategic Objective": "strategic_objective",
+	"MRL Record": "mrl_record",
 	# v0.111.0 — FSMA 204. The traceability lot code is the one identifier the Food
 	# Traceability Rule requires, and it is the DOCNAME (`autoname: field:lot_code`)
 	# because it is read off a bin and typed into a buyer's portal by somebody who

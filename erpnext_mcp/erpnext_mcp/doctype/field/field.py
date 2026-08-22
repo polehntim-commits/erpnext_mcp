@@ -44,6 +44,11 @@ from erpnext_mcp.abbr import parcel_abbr, suffixed
 #: conventional and looks fine.
 CERTIFIED_ORGANIC = "Certified Organic"
 
+#: How long a buyer-facing block ticker may be. Ten characters, because the
+#: place it has to fit is a column on a printed settlement sheet, and a ticker
+#: that has to be abbreviated by whoever types it is not the same ticker twice.
+TICKER_MAX = 10
+
 
 class Field(Document):
 	def autoname(self):
@@ -82,9 +87,60 @@ class Field(Document):
 			frappe.throw(_("Planting Density cannot be negative."))
 
 		self._check_parcel_acreage(parcel)
+		self._check_block_ticker()
 		self._derive_organic_certified()
 		self._check_boundary()
 		self._check_ndvi()
+
+	def _check_block_ticker(self) -> None:
+		"""Normalise the buyer-facing ticker, and refuse a second block claiming it.
+
+		UNIQUE ACROSS THE COMPANY, not across the site and not across the parcel.
+		Across the site is wrong because two entities on one bench are two
+		businesses, and Highland's 'YC-3' is no business of Meadow's. Across the
+		parcel is wrong for the opposite reason: the ticker's whole purpose is that
+		a buyer can say it without knowing which parcel the block sits on, and two
+		'YC-3's under one company make that sentence ambiguous exactly where it is
+		being relied on.
+
+		FOLDED TO UPPER CASE ON SAVE, and that is the substantive decision here. A
+		ticker is copied off a purchase order by hand and typed back on a settlement
+		by somebody else; 'yc-3' and 'YC-3' reaching this check as different strings
+		would let both exist, and the duplicate would be discovered by a buyer
+		receiving the wrong block's fruit rather than by this controller.
+
+		EMPTY IS ALWAYS ALLOWED and is the normal state. Most blocks are never sold
+		by name. The uniqueness check therefore runs only on a ticker that is set —
+		treating '' as a value would let the first untickered block lock out every
+		other one.
+		"""
+		ticker = str(self.block_ticker or "").strip().upper()
+		self.block_ticker = ticker
+		if not ticker:
+			return
+
+		if len(ticker) > TICKER_MAX:
+			frappe.throw(
+				_(
+					"Block Ticker {0!r} is {1} characters. A ticker has to fit the column it is "
+					"printed in — keep it to {2}."
+				).format(ticker, len(ticker), TICKER_MAX),
+				title=_("Block Ticker Too Long"),
+			)
+
+		filters = {"block_ticker": ticker, "name": ("!=", self.name or "")}
+		if self.owning_entity:
+			filters["owning_entity"] = self.owning_entity
+		duplicate = frappe.db.get_value("Field", filters, "name")
+		if duplicate:
+			frappe.throw(
+				_(
+					"Block Ticker {0!r} is already on {1}. A ticker is what a buyer puts on an "
+					"order, so two blocks answering to it under one company means somebody gets "
+					"the wrong fruit. Give this block its own, or clear the other one first."
+				).format(ticker, duplicate),
+				title=_("Duplicate Block Ticker"),
+			)
 
 	def _derive_organic_certified(self) -> None:
 		"""Rewrite the organic flag from the status, every save, without exception.

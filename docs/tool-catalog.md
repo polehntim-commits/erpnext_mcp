@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 775 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 808 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 386 read tools are **on** by default and can be switched off individually. A
+All 404 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -18085,3 +18085,241 @@ stays on every shape the layer does not paint, so the map still reads as a map.
 enrolment alone — gating it on the dispatch role would have withheld a safety
 warning from the only people it is about. `blocks` is how a scan becomes a map
 answer: one docname is one register read rather than five hundred.
+
+---
+
+## v0.118.0 — Farm App Retirement, Cycle 1
+
+The Flask sidecar is being retired into this app. Cycle 1 builds the five
+registers it held that this one did not, ports the reference data and the
+research prompts that could not be re-derived, and adds one new field that is
+not a migration at all. **No existing tool signature changed**; `create_field`,
+`update_field` and `list_fields` gained one optional argument each.
+
+Thirty-three tools: eighteen read (**on** by default), fifteen mutating (**off**
+by default, as every mutating tool ships).
+
+### The block ticker — a new field, not a port
+
+`block_ticker` on `Field`, and a read-only copy on `Planting Season`.
+
+A ticker is the **buyer's** name for a block — `YC-3` for Yellow Camp Block 3.
+It goes on the purchase order, comes back on the settlement, and is how a buyer
+asks for the same fruit next season without knowing what the docname is.
+
+It is deliberately **not** `block_number`. A block number is what the crew calls
+it, is duplicated across parcels on purpose, and changes when somebody re-splits
+a block. A ticker is a promise made to somebody outside the business, so it is
+**unique across the company**, folded to upper case on save, and ten characters
+at most — the width of a column on a printed settlement sheet.
+
+| Tool | Change |
+| --- | --- |
+| `create_field` | accepts `block_ticker` |
+| `update_field` | accepts `block_ticker`; an empty string clears it |
+| `list_fields` | filters on `block_ticker`, case-insensitively |
+| `get_field` | reports it (no argument change) |
+
+**Empty is the normal state.** Most blocks are never sold by name, and `''` is
+not treated as a value — otherwise the first untickered block would lock out
+every other one.
+
+**The Planting Season copy is a copy and not a `fetch_from`.** It is taken at
+save time and kept. Re-tickering a block in 2027 must not relabel its 2024
+season, because the settlements that quoted the old code would stop agreeing
+with the season record they were settled against.
+
+### IoT — `IoT Device`, `IoT Reading`
+
+| Tool | Kind | Notes |
+| --- | --- | --- |
+| `create_iot_device` | write | mints the bearer token; shown once, never read back |
+| `get_iot_device` | read | accepts a docname **or** the hardware id |
+| `list_iot_devices` | read | filters include `online` |
+| `update_iot_device` | write | `last_seen` and `auth_token` are refused |
+| `create_iot_reading` | write | the only writer of `last_seen` |
+| `list_iot_readings` | read | rows, not statistics; capped at 500 |
+| `get_device_readings` | read | per reading type, per unit, never across them |
+
+**`last_seen` means the device spoke.** It is written only when a reading
+arrives, and `update_iot_device` refuses the argument — a `last_seen` somebody
+typed is the one thing that would make a dead sensor look alive.
+
+**Online is computed at read time and stored nowhere.** A stored flag is wrong
+from the moment a device goes quiet, and that is the only moment it matters. A
+silent probe is not reading zero moisture; it is not reading, and a block gets
+irrigated or does not on the difference. `health_warnings` says which: never
+reported, silent for so many hours, battery low, never calibrated.
+
+**A reading's block is a copy of where its device sat when it was taken.** A
+probe moved from Block 3 to Block 7 in July must not retroactively move June's
+readings — the June irrigation decisions were justified from them.
+
+**The timestamp is the device's and is required**, never defaulted to now. A
+device posting a buffered backlog would otherwise have every reading stamped with
+the moment its radio came back, which is the one time they did not happen — and
+buffered readings are exactly the ones somebody wants during a frost event.
+Duplicates on `(device, reading_type, timestamp)` are refused: devices retry,
+gateways replay, and a batch stored twice doubles every average computed off it.
+
+**Aggregates never cross a unit boundary.** Where one reading type arrives in two
+units — a device reconfigured mid-season — `mixed_units` says so and the figures
+carry a note, rather than a mean being taken through the change.
+
+### Competitive intelligence — `Market Participant`, `Competitive Move`, `Acquisition Target`
+
+Four tools each: `create_*`, `get_*`, `list_*`, `update_*`.
+
+**Every scale figure is an estimate and every result says so.** A competitor's
+revenue, acreage, headcount and share are reads of a private business. They are
+worth acting on and are not worth combining with numbers from the ledger.
+
+**The four fit scores fail separately, so they are stored separately.** A
+distressed neighbour with perfect strategic fit and no cultural fit is a deal
+that closes and then does not work — and a single attractiveness number hides
+exactly that case. `accretive_score` is their mean, derived on save and **refused
+as an argument**; `weakest_dimension` is reported beside it, because a deal fails
+on its weakest score rather than its average. An **unscored** target scores
+`null`, not zero: zero is an answer, and an unassessed target must not sort
+beside one assessed as worthless.
+
+**`live_count` is separate from the total.** A pipeline of forty targets of which
+thirty-five are Closed or Passed is a pipeline of five, and the count that gets
+quoted is the wrong one by default.
+
+**The observation half and the response half of a move are kept apart**, so the
+gap between what was recommended and what was actually done stays visible.
+`list_competitive_moves` names `urgent_unanswered`; it is invisible move by move
+and is the most instructive thing in the register. A future observation date is
+refused — a move somebody expects is not an observation.
+
+**No tool here decides.** There is no `assess`, no `rank`, no landscape verdict.
+The scoring is a judgement a person makes and the arithmetic on it happens in one
+place. The farm_app's landscape prompt is preserved as data (below).
+
+### Strategy — `Strategic Plan`, `Strategic Objective`
+
+Four tools each.
+
+**Plans are superseded, never edited into the next one.** Naming a
+`previous_version` versions the new plan and retires its predecessor in one call,
+and the old wording is left exactly as written — the interesting question about a
+strategy is almost always what it *used* to say. `version` is derived and refused
+as an argument; a circular chain is refused, because a loop leaves "what did we
+say before this" with no answer.
+
+**An objective is its own record, not a row on the plan.** Recording this
+quarter's actual should not be a write to the strategy document — and "show me
+everything overdue across every plan" is then one query rather than a walk
+through every parent.
+
+**Target and actual are free text on purpose.** Half of these are numbers and
+half are not: `14 tons/acre`, `two new buyers`, `crew housed on site`. A numeric
+column would silently exclude the ones that matter most.
+
+**An undated actual is refused**, and so is `Achieved` with an empty actual — the
+most flattering row a plan can carry and the one nobody can check. `achieved_rate`
+is computed over **settled** objectives only; counting ones still in progress
+flatters every plan on the day it is written. `overdue` means past its date **and
+still open**, so a `Failed` objective does not sit on the list for ever.
+
+### Residue limits — `MRL Record`
+
+| Tool | Kind |
+| --- | --- |
+| `create_mrl_record` | write |
+| `get_mrl_record` | read |
+| `list_mrl_records` | read |
+| `update_mrl_record` | write |
+| `get_mrl_for_chemical_crop_market` | read |
+| `get_ipm_reference` | read |
+
+**`source` is required and its absence is the failure this prevents.** A load is
+refused at a border against a named regulation on a named date, and "we had 0.5
+written down" is not a defence. A tier-4 inferred limit with an honest note is
+worth keeping; a bare number with no provenance is worse than nothing, because it
+looks identical to a checked one. `source_tier` records how far from the official
+register the figure was found: 1 official database, 2 government gazette, 3
+industry or academic cross-reference, 4 inferred.
+
+**`chemical` is the active ingredient, not the trade name** — several products
+share one active ingredient and the limit attaches to the ingredient.
+
+**`get_mrl_for_chemical_crop_market` never guesses.** A miss returns
+`found: false`. It will not fall back to another market's figure, will not
+average across markets, and will not offer the nearest crop; every one of those
+returns something that looks like an answer to a question about whether a load
+can ship. What it returns instead is the neighbouring evidence — the same
+ingredient's limits elsewhere, the same market's limits on other ingredients —
+clearly labelled as research rather than as the answer.
+
+**Zero is a real limit.** A non-detect requirement is the strictest limit there
+is, and treating it as missing would convert it into no limit at all. **A ban is
+not an MRL**: a banned substance still carries a default figure, and the load is
+refused on the ban regardless of the residue found.
+
+`expiry_date` is a **re-check** date rather than the regulation's own lapse.
+`list_mrl_records` names `needs_recheck`, which is what the register exists for:
+limits are revised and withdrawn constantly, and a stale one is more dangerous
+than a missing one because nobody goes looking.
+
+### `get_ipm_reference` — the book, not the farm
+
+**Arguments:** `pest`, `product`, `beneficial`, `crop`, `table`.
+
+Read-only in the strongest sense: it touches **no doctype and no site data**, so
+it works on a bench with nothing installed, and every result carries
+`is_site_data: false` with the works it was assembled from named. With no filter
+it returns only the index.
+
+| Table | Rows | What |
+| --- | --- | --- |
+| `pest_models` | 28 | the pest, and its degree-day emergence model where the literature has one |
+| `beneficials` | 19 | the organism and what it needs to stay in the block |
+| `pest_damage` | 8 | damage severity, the vulnerable BBCH window, economic impact per acre |
+| `beneficial_activity` | 10 | when each beneficial is actually working |
+| `pesticide_efficacy` | 24 | efficacy 0–1, IRAC/FRAC group, resistance risk, residual days |
+| `beneficial_toxicity` | 80 | what each product does to each beneficial |
+| `pesticide_products` | 46 | keyed by EPA registration number, with restricted-use and signal word |
+| `pesticide_labels` | 190 | PHI, REI, label ceiling and the reduced IPM rate, per product per crop |
+
+**The toxicity table is why this is worth carrying.** Every label states a PHI and
+an REI because the law requires it; almost none states what the product does to
+the predators already working the block. A farm that sprays a pyrethroid for one
+aphid flush and loses its predatory mites has bought a spider mite outbreak in
+August, and that consequence is written down almost nowhere else.
+
+Passing `product` **and** `pest` returns `rotation_partners`: products effective
+on the same pest from a **different** mode-of-action group. Same-group
+alternatives are excluded rather than ranked lower — two products that work
+equally well and share a group are one product as far as resistance is concerned.
+
+**Matching is exact apart from case and spacing.** There is no fuzzy matching on
+purpose: the near-misses in this vocabulary — `Cherry Slug` and `Pear Slug`,
+`Spider Mites` — are precisely the ones that must not be bridged automatically.
+
+**Nothing here is a label.** Intervals vary by state and formulation and change
+between seasons; the label in the applicator's hand governs, and `caveat` says so
+in every result.
+
+### `erpnext_mcp/erpnext_mcp/prompt_templates.py` — no tool, and deliberately so
+
+Thirteen research prompts carried out of the Flask app as **data**: two MRL
+(single market and batch), six pest and IPM, two agronomy, three strategy. Each
+carries `system`, `user`, `returns`, `source` (the farm_app file it came from) and
+a derived placeholder list; `render()` fills one in and reports what was left
+blank rather than raising.
+
+These are the one part of that application that cannot be re-derived from the
+schema. `mrl_research_single` names sixteen national regulators and a four-tier
+fallback ladder because that is what it took to stop a model returning
+`NOT_FOUND` at the first miss; the pest prompts open by pasting the exact names
+already on file and demanding they be copied verbatim, because a model returning
+"codling moths" for `Codling Moth` produces a row that attaches to nothing.
+
+**No tool renders them into a writer.** The farm_app's `utils/ai_call.py` — the
+provider dispatch to Ollama, xAI and Anthropic — is **not ported**: an MCP server
+is already on the other end of a model. A generated strategic plan or an
+unreviewed MRL landing in a register is a document the farm is measured against
+that nobody chose, and the whole value of the `source` column is that a person
+put something in it.

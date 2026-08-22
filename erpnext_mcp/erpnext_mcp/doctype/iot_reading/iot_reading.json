@@ -1,0 +1,162 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "One number from one device at one moment. This is the highest-volume record this app writes and it is deliberately the thinnest: a device, a type, a value, a unit, a timestamp and a quality flag.\n\nQUALITY IS A COLUMN AND NOT A FILTER APPLIED BEFORE STORAGE. A reading the gateway thought was wrong is still what the sensor said, and the run of suspect values either side of a real event is often the only evidence the event happened. Storing it and marking it lets a reader exclude it; dropping it at the door means nobody can ever ask.\n\nTHE FIELD IS DENORMALISED FROM THE DEVICE ON PURPOSE. A device moved between blocks in July must not retroactively move June's readings, and a link resolved at read time would do exactly that.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "device",
+  "company",
+  "identity_col",
+  "field",
+  "timestamp",
+  "measurement_section",
+  "reading_type",
+  "value",
+  "measurement_col",
+  "unit",
+  "quality",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "IOTR-.YYYY.-.######",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "device",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Device",
+   "options": "IoT Device",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Copied from the device on save.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Copied from the device AT THE MOMENT THE READING IS WRITTEN, and never resolved afterwards. See the doctype description.",
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Field",
+   "options": "Field",
+   "search_index": 1
+  },
+  {
+   "description": "When the device took the measurement — NOT when the server received it. The two differ by hours for a device that buffered while offline, and the buffered ones are exactly the readings somebody needs during a frost event.",
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Timestamp",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "measurement_section",
+   "fieldtype": "Section Break",
+   "label": "Measurement"
+  },
+  {
+   "description": "What was measured. A closed list, because a free-text reading type makes every average a string-matching exercise. `generic` is the honest escape hatch and carries its meaning in the unit.",
+   "fieldname": "reading_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reading Type",
+   "options": "soil_moisture_vwc\nsoil_temp_c\nflow_gallons\nair_temp_c\nhumidity_pct\nwind_speed_kmh\nrain_mm\nleaf_wetness_pct\nsolar_radiation_wm2\ngeneric",
+   "reqd": 1
+  },
+  {
+   "description": "The measurement itself. Four decimals because volumetric water content is a fraction and rounding it to two loses the change that matters.",
+   "fieldname": "value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Value",
+   "precision": "4",
+   "reqd": 1
+  },
+  {
+   "fieldname": "measurement_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "The unit the value is in — '%', 'C', 'gal', 'mm'. REQUIRED even though the reading type implies it: a device reporting Fahrenheit into an air_temp_c column is a real failure and the unit is the only place it shows.",
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unit",
+   "reqd": 1
+  },
+  {
+   "default": "Good",
+   "description": "What the gateway or the ingest path thought of this value. `Suspect` is out of the expected band but physically possible; `Error` is a sensor fault code or a value that cannot exist.",
+   "fieldname": "quality",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Quality",
+   "options": "Good\nSuspect\nError"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "IoT Reading",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "device,reading_type,timestamp",
+ "sort_field": "timestamp",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

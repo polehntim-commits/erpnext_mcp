@@ -1,0 +1,223 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "One piece of hardware in the orchard that reports a number, and everything needed to decide whether to believe it. A reading is only as good as the device's calibration, its battery and how long ago it last spoke — so those live here, on the thing, rather than being repeated on every reading. `last_seen` is the field that matters most and is the one nobody sets by hand: a soil probe that has been silent for a week is not reading zero moisture, it is not reading, and the difference is a block that gets irrigated or does not.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "device_name",
+  "hardware_id",
+  "identity_col",
+  "device_type",
+  "device_class",
+  "placement_section",
+  "field",
+  "zone",
+  "placement_col",
+  "enabled",
+  "auth_token",
+  "health_section",
+  "last_seen",
+  "battery_level",
+  "health_col",
+  "signal_strength",
+  "calibrated_on",
+  "config_section",
+  "device_config",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "IOTD-.#####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "What it is called on the radio and on the sticker on its lid.",
+   "fieldname": "device_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Device Name",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The MAC address, serial number or IMEI printed on the unit. UNIQUE ACROSS THE SITE, and deliberately not scoped to a company: one physical box cannot be in two orchards, and a duplicate here is either a typo or a device somebody moved without re-registering.",
+   "fieldname": "hardware_id",
+   "fieldtype": "Data",
+   "label": "Hardware ID",
+   "reqd": 1,
+   "search_index": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "WHAT IT MEASURES. This is the axis that decides which reading types are plausible from this device, which is why it is the one that is required.",
+   "fieldname": "device_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Device Type",
+   "options": "Soil Moisture\nFlow Meter\nWeather Station\nTemperature\nGeneric",
+   "reqd": 1
+  },
+  {
+   "default": "Sensor",
+   "description": "WHAT IT DOES, which is a different question from what it measures. A gateway reports nothing of its own and relays for others; an actuator opens a valve. Kept separate from device_type because a flow meter and a valve controller sit on the same pipe and only one of them can be told to do something.",
+   "fieldname": "device_class",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Device Class",
+   "options": "Sensor\nActuator\nGateway"
+  },
+  {
+   "fieldname": "placement_section",
+   "fieldtype": "Section Break",
+   "label": "Placement"
+  },
+  {
+   "description": "The block this device sits in. Optional: a weather station on the shop roof belongs to no block, and forcing one on it would put its readings in a block's average.",
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Field",
+   "options": "Field",
+   "search_index": 1
+  },
+  {
+   "description": "Which part of the block — 'row 14 north end', 'top of the hill'. Free text, because the sub-block a probe sits in is rarely a record anywhere.",
+   "fieldname": "zone",
+   "fieldtype": "Data",
+   "label": "Zone"
+  },
+  {
+   "fieldname": "placement_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "default": "1",
+   "description": "Whether this device is still in service. A retired device is disabled rather than deleted, because its readings stay and a reading whose device vanished cannot be judged.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Enabled"
+  },
+  {
+   "description": "The bearer token the device itself presents when posting readings. Stored as a Password field so it does not appear in a list view, an export or a print format. Generated on registration; nothing reads it back.",
+   "fieldname": "auth_token",
+   "fieldtype": "Password",
+   "label": "Auth Token"
+  },
+  {
+   "fieldname": "health_section",
+   "fieldtype": "Section Break",
+   "label": "Health — Whether To Believe It"
+  },
+  {
+   "description": "When this device last posted anything. READ-ONLY AND WRITTEN BY THE READING PATH, never by hand: a last_seen somebody typed is the exact field that would make a dead sensor look alive.",
+   "fieldname": "last_seen",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Seen",
+   "read_only": 1
+  },
+  {
+   "description": "Percent remaining, 0 to 100. A probe below about 15% reports drifting values before it reports nothing.",
+   "fieldname": "battery_level",
+   "fieldtype": "Float",
+   "label": "Battery Level (%)",
+   "precision": "1"
+  },
+  {
+   "fieldname": "health_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "RSSI in dBm, so a normal value is negative — around -70 is good and -100 is nearly gone.",
+   "fieldname": "signal_strength",
+   "fieldtype": "Float",
+   "label": "Signal Strength (dBm)",
+   "precision": "1"
+  },
+  {
+   "description": "When this device was last calibrated against a known reference. An uncalibrated soil probe is a number with no units.",
+   "fieldname": "calibrated_on",
+   "fieldtype": "Date",
+   "label": "Calibrated On"
+  },
+  {
+   "fieldname": "config_section",
+   "fieldtype": "Section Break",
+   "label": "Configuration"
+  },
+  {
+   "description": "Calibration coefficients, alarm thresholds, reporting interval — as JSON. Free-form on purpose: every vendor's box has a different set and none of them is worth a column.",
+   "fieldname": "device_config",
+   "fieldtype": "Long Text",
+   "label": "Device Config"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "IoT Device",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "device_name,hardware_id,device_type,field",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

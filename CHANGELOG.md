@@ -3,6 +3,156 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.118.0 — 2026-08-22 — the sidecar's five registers, and the book nobody could rewrite
+
+**Farm App Retirement, Cycle 1.** Eight DocTypes, thirty-three tools, one new
+field that is not a migration, and two modules of salvage. The Flask sidecar held
+five registers this app did not; they are here now, and so are the two things in
+that codebase that could not have been re-derived from its schema.
+
+**THE BLOCK TICKER IS THE ONE NEW FEATURE AND IT IS THE SMALLEST THING HERE.**
+`block_ticker` on `Field`, copied read-only onto `Planting Season`. It is the
+BUYER's name for a block — `YC-3` — the code that goes on a purchase order and
+comes back on a settlement, and the way a buyer asks for the same fruit next
+season without knowing what a docname is. It is deliberately not `block_number`:
+a block number is what the crew calls it, is duplicated across parcels on
+purpose, and changes when somebody re-splits a block. A ticker is a promise made
+to somebody outside the business, so it is unique across the COMPANY, folded to
+upper case before the uniqueness check, and ten characters at most — the width of
+a column on a printed settlement sheet. Empty is the normal state and never
+collides; treating `''` as a value would let the first untickered block lock out
+every other one. `create_field`, `update_field` and `list_fields` each gained one
+optional argument; no signature changed.
+
+* **THE PLANTING SEASON COPY IS A COPY AND NOT A `fetch_from`,** and this is the
+  decision in that field rather than an implementation detail. A fetch shows
+  whatever the block says TODAY, so re-lettering a block in 2027 would silently
+  relabel its 2024 season — and the 2024 settlements that quoted the old code
+  would stop agreeing with the record they were settled against. What the buyer
+  called the block that year is part of what happened. (It also could not have
+  worked: the standalone double has no `fetch_from`, so the column would have
+  been null in every test and correct on the bench, or the reverse.)
+
+* **`last_seen` MEANS THE DEVICE SPOKE, AND `update_iot_device` REFUSES IT.**
+  The IoT register's whole value is telling a dry block from a dead probe: a soil
+  sensor silent for a week is not reading zero moisture, it is not reading, and a
+  block gets irrigated or does not on the difference. `create_iot_reading` is the
+  only writer of that column, so it cannot mean anything else — a `last_seen`
+  somebody could type is the one field that would make a dead sensor look alive.
+  Online is computed at read time and stored nowhere, for the matching reason: a
+  stored flag is wrong from the moment a device goes quiet, which is the only
+  moment it matters.
+
+* **A READING KEEPS THE BLOCK ITS DEVICE SAT IN WHEN IT WAS TAKEN.** Denormalised
+  at write time and never resolved again. A probe moved from Block 3 to Block 7
+  in July would, through a link, retroactively move every June reading with it —
+  and the June irrigation decisions those readings justified would no longer be
+  defensible from the record. The timestamp is the DEVICE's and is required
+  rather than defaulted to now, because a device posting a buffered backlog would
+  otherwise have every reading in it stamped with the moment its radio came back,
+  which is the one time they did not happen. Duplicates on
+  `(device, reading_type, timestamp)` are refused: devices retry, gateways
+  replay, and a batch stored twice doubles every average computed off it.
+
+* **THE FOUR ACQUISITION FIT SCORES FAIL SEPARATELY, SO THEY ARE STORED
+  SEPARATELY.** A financially distressed neighbour with perfect strategic fit and
+  no cultural fit is a deal that closes and then does not work, and a single
+  attractiveness number hides exactly that case. `accretive_score` is their mean,
+  derived on save and REFUSED as an argument, with `weakest_dimension` named
+  beside it — a deal fails on its weakest score rather than on its average. An
+  unscored target scores null rather than zero: zero is an answer, and an
+  unassessed target must not sort beside one assessed as worthless.
+
+* **NO TOOL IN THE COMPETITIVE MODULE DECIDES ANYTHING.** The farm_app's
+  `assess_acquisition_target`, `rank_acquisition_targets` and
+  `generate_competitive_landscape` are the part deliberately NOT ported. The
+  scoring is a judgement a person makes; the arithmetic on it happens in one
+  place; what a landscape MEANS is the thing the operator is being paid to work
+  out. What the tools do instead is put the evidence in front of them —
+  `urgent_unanswered` on the move register is the gap between what was
+  recommended and what was actually done, and it is invisible move by move.
+
+* **PLANS ARE SUPERSEDED, NEVER EDITED INTO THE NEXT ONE.** Naming a
+  `previous_version` versions the new plan and retires its predecessor in one
+  call, leaving the old wording exactly as written — because the interesting
+  question about a strategy is almost always what it USED to say. `version` is
+  derived and refused as an argument, and a circular chain is refused: a loop
+  leaves "what did we say before this" with no answer, which is the question the
+  chain exists for.
+
+* **AN OBJECTIVE IS ITS OWN DOCTYPE AND NOT A CHILD TABLE**, against the
+  migration plan, and for two reasons. Recording this quarter's actual would
+  otherwise be a write to the strategy document — re-stamping it and putting a
+  numbers entry in the same audit trail as a change of direction. And "show me
+  everything overdue across every plan" becomes one query rather than a walk
+  through every parent. Target and actual are free text because half of these are
+  not numbers — `two new buyers`, `crew housed on site` — and a Float column
+  would silently exclude the ones that matter most. An undated actual is refused,
+  and so is `Achieved` with an empty actual: the most flattering row a plan can
+  carry and the one nobody can check.
+
+* **`get_mrl_for_chemical_crop_market` NEVER GUESSES, AND THAT IS THE WHOLE
+  DESIGN.** A miss returns `found: false`. It will not fall back to another
+  market's figure, will not average across markets, will not offer the nearest
+  crop — every one of those returns something that LOOKS like an answer to a
+  question about whether a load can ship. What comes back instead is the
+  neighbouring evidence, labelled as research: the same ingredient's limits
+  elsewhere, the same market's limits on other ingredients. `source` is required
+  on every record, because a load is refused at a border against a named
+  regulation on a named date and "we had 0.5 written down" is not a defence — a
+  bare number with no provenance is worse than nothing, since it looks identical
+  to a checked one.
+
+* **ZERO IS A REAL LIMIT AND A BAN IS NOT A LIMIT.** A non-detect requirement is
+  the strictest MRL there is, and treating zero as missing would convert it into
+  no limit at all. A banned substance still carries a default figure and the load
+  is refused on the ban regardless of the residue found, so the two are separate
+  columns and the warning says which is doing the work.
+
+* **THE IPM REFERENCE BOOK IS LITERATURE AND READS NO DOCTYPE.** 405 rows ported
+  out of `seed_ipm_data.py`, `seed_pests_beneficials.py` and
+  `pesticide_labels_data.py`: 28 pest models with their degree-day base
+  temperatures, 8 damage profiles with BBCH windows, 19 beneficials, 24
+  product-to-pest efficacies with their IRAC and FRAC groups, 46 products, 190
+  label rows with PHI and REI — and **80 beneficial-toxicity rows, which is the
+  half almost no label carries**. Every product label states a pre-harvest
+  interval because the law requires it; almost none states what the product does
+  to the predators already working the block. A farm that sprays a pyrethroid for
+  one aphid flush and loses its predatory mites has bought a spider mite outbreak
+  in August. `get_ipm_reference` reads it and touches no site data at all.
+  Matching is exact apart from case and spacing — no fuzzy matching, because the
+  near-misses in this vocabulary (`Cherry Slug` and `Pear Slug`, `Spider Mites`)
+  are precisely the ones that must not be bridged automatically.
+
+* **THE THIRTEEN RESEARCH PROMPTS ARE DATA, AND NOTHING RENDERS THEM INTO A
+  WRITER.** `prompt_templates.py` is the salvage that mattered most: these are
+  two years of somebody discovering, one bad answer at a time, what a model has
+  to be told before it cites an MRL instead of inventing one.
+  `mrl_research_single` names sixteen national regulators and a four-tier
+  fallback ladder for exactly that reason; every pest prompt opens by pasting the
+  exact names already on file and demanding they be copied verbatim, because a
+  model returning "codling moths" for `Codling Moth` writes a row that attaches
+  to nothing. `utils/ai_call.py` — the provider dispatch to Ollama, xAI and
+  Anthropic — is NOT ported: an MCP server is already on the other end of a
+  model. A generated strategic plan or an unreviewed MRL landing in a register is
+  a document the farm is measured against that nobody chose, and the entire value
+  of the `source` column is that a person put something in it.
+
+* **A BUG THE TESTS FOUND, IN THE CODE THIS RELEASE ADDED.** Every one of the four
+  new tool modules staged its changes with `str(before or "") != str(after or "")`
+  — the obvious spelling, and one that silently drops ZERO, since `0 or ""` is
+  `""`. Setting an MRL of 0 ppm or a cultural fit score of 0 over an empty column
+  staged nothing, the write was lost, and the only symptom was a required field
+  the caller believed they had supplied. Fixed with an explicit `_same` that tells
+  blank from zero, and both regressions are asserted: a non-detect residue limit
+  and a fit score of nothing are the two values most worth recording.
+
+186 new tests. The negative controls are the point of several of them: the same
+lowercase ticker asserted to still collide, so a regression that stops folding
+case fails rather than passing quietly; a reading asserted to DO move `last_seen`
+beside the refusal that stops anything else moving it; and Korea asserted NOT to
+receive Japan's residue limit when only Japan has one on file.
+
 ## 0.117.0 — 2026-08-21 — the numbers were in the sentence and not in the column
 
 **Four named arguments on one mobile endpoint.** No new MCP tool, no new DocType,

@@ -1,0 +1,167 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "One thing a plan says it will achieve, with the number that says whether it did. A plan without these is an essay.\n\nWHY THIS IS ITS OWN DOCTYPE AND NOT A CHILD TABLE OF THE PLAN. Objectives are updated on a completely different cadence from the plan that spawned them — somebody records this quarter's actual against a KPI without wanting to touch, re-approve or re-version the strategy document. As a child row that edit is a write to the plan; as its own record it is a write to the objective. It also means an objective can be read, listed and filtered on its own, which is what 'show me everything overdue across every plan' needs and what a child table cannot answer without going through every parent.\n\nTARGET AND ACTUAL ARE BOTH FREE TEXT, DELIBERATELY. Half of these are numbers and half are not — '$1.2M gross', '14 tons/acre', 'two new buyers', 'crew housed on site'. A Float column would silently exclude the ones that are not numbers, which are disproportionately the objectives that matter and the ones nobody would then track anywhere.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "strategic_plan",
+  "objective",
+  "identity_col",
+  "status",
+  "due_date",
+  "owner_role",
+  "kpi_section",
+  "kpi_metric",
+  "kpi_target",
+  "kpi_col",
+  "kpi_actual",
+  "measured_on",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "STOB-.#####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "strategic_plan",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Strategic Plan",
+   "options": "Strategic Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "What is to be achieved, in one sentence. SMART if it can be — specific, measurable, achievable, relevant, time-bound.",
+   "fieldname": "objective",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Objective",
+   "reqd": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "default": "Pending",
+   "description": "`Failed` is a real value and is kept. An objective quietly deleted when it did not happen is how a plan comes to look like it worked.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nIn Progress\nAchieved\nFailed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Due Date",
+   "search_index": 1
+  },
+  {
+   "description": "Who is answerable for this one. Free text — on most farms it is a person's name and not a role that exists in any register.",
+   "fieldname": "owner_role",
+   "fieldtype": "Data",
+   "label": "Owner"
+  },
+  {
+   "fieldname": "kpi_section",
+   "fieldtype": "Section Break",
+   "label": "Measure"
+  },
+  {
+   "description": "What is being measured — 'gross revenue', 'tons/acre', 'lost-time incidents'.",
+   "fieldname": "kpi_metric",
+   "fieldtype": "Data",
+   "label": "KPI Metric"
+  },
+  {
+   "description": "The figure to hit. Free text; see the doctype description for why this is not a Float.",
+   "fieldname": "kpi_target",
+   "fieldtype": "Data",
+   "label": "KPI Target"
+  },
+  {
+   "fieldname": "kpi_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "What was actually achieved, recorded as it becomes known.",
+   "fieldname": "kpi_actual",
+   "fieldtype": "Data",
+   "label": "KPI Actual"
+  },
+  {
+   "description": "When the actual was last taken. An actual with no date cannot be told from a stale one.",
+   "fieldname": "measured_on",
+   "fieldtype": "Date",
+   "label": "Measured On"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Strategic Objective",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "strategic_plan,objective,status",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

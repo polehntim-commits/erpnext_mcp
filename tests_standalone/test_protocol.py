@@ -1111,9 +1111,9 @@ class Catalogue(SeededTestCase):
 		`link_field_to_cost_center` is rather than a new argument on
 		`update_field`.
 		"""
-		self.assertEqual(len(registry.TOOLS), 775)
-		self.assertEqual(len(registry.READ_TOOLS), 386)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 389)
+		self.assertEqual(len(registry.TOOLS), 808)
+		self.assertEqual(len(registry.READ_TOOLS), 404)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 404)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

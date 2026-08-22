@@ -142,6 +142,12 @@ STATIC_REFERRERS = {
 		("Biological Asset", "field"),
 		("Block Cost Entry", "field"),
 		("Block Revenue Entry", "field"),
+		# v0.118.0. The device sits in the block; the reading carries a COPY of
+		# where its device sat when it was taken, which is why both are here and
+		# neither is redundant — deleting a block has to reach the historical
+		# readings as well as the hardware currently standing in it.
+		("IoT Device", "field"),
+		("IoT Reading", "field"),
 		("Planting Season", "field"),
 		("Scale Ticket", "field"),
 		("Traceability Lot Code", "field"),

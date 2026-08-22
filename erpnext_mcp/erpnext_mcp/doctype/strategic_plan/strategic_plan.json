@@ -1,0 +1,297 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "What this operation is trying to become, written down and given a version number. Vision, mission, the SWOT, Porter's five forces, the grand strategy and the exit — the whole apparatus, one record per plan per crop.\n\nPLANS ARE SUPERSEDED, NEVER EDITED INTO THE NEXT ONE. `previous_version` points back at the plan this one replaced and `status` moves to Historical rather than the row being overwritten, because the interesting question about a strategy is almost always what it USED to say. A farm that changed its mind about a market in 2025 needs the 2024 wording to understand why it did.\n\nTHE ANALYSIS BLOCKS ARE LONG TEXT AND NOT CHILD TABLES, and that is a considered choice rather than laziness. A SWOT is four lists of sentences somebody wrote in a room; forcing it into rows adds a schema and takes away the sentences. Nothing in this app computes on them — they are read by people — and the moment something does, it will want a shape this doctype cannot guess now.\n\nOBJECTIVES ARE A SEPARATE DOCTYPE, not a child table. See Strategic Objective for why: they are updated on their own cadence by people who are not editing the plan.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "plan_name",
+  "crop",
+  "identity_col",
+  "status",
+  "timeframe",
+  "version",
+  "previous_version",
+  "dates_section",
+  "effective_date",
+  "dates_col",
+  "retired_date",
+  "direction_section",
+  "description",
+  "vision",
+  "mission",
+  "values_text",
+  "analysis_section",
+  "swot",
+  "porters_five_forces",
+  "analysis_col",
+  "sustainable_advantage",
+  "analogous_games",
+  "strategy_section",
+  "grand_strategy",
+  "business_strategy",
+  "strategy_col",
+  "command_structure",
+  "functional_tactics",
+  "control_section",
+  "validation_control",
+  "control_col",
+  "exit_strategy",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "STRP-.#####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "plan_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Plan Name",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The crop this plan is for. Empty means farm-wide, which is the usual case for the first plan an operation writes.",
+   "fieldname": "crop",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Crop",
+   "options": "Crop"
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "default": "Developing",
+   "description": "`Developed` means written and agreed; `Implemented` means somebody is actually running it. The distinction matters because a plan that never left Developed is the most common outcome and the register should say so.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Developing\nDeveloped\nImplemented\nHistorical",
+   "reqd": 1
+  },
+  {
+   "description": "The span this plan covers, in whatever words the operation uses — '2026-2031', 'through the replant', 'five years'.",
+   "fieldname": "timeframe",
+   "fieldtype": "Data",
+   "label": "Timeframe"
+  },
+  {
+   "default": "1",
+   "description": "One higher than the plan this one supersedes. Read-only: derived from previous_version on save, because a version number somebody types will eventually be typed twice.",
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "description": "The plan this one replaces. Self-referential; a chain of these is the operation's strategic history and is the reason nothing here is edited in place.",
+   "fieldname": "previous_version",
+   "fieldtype": "Link",
+   "label": "Previous Version",
+   "options": "Strategic Plan"
+  },
+  {
+   "fieldname": "dates_section",
+   "fieldtype": "Section Break",
+   "label": "Dates"
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective From"
+  },
+  {
+   "fieldname": "dates_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "When this plan stopped being the live one. Set when a successor is written; a Historical plan with no retired date is a gap in the chain.",
+   "fieldname": "retired_date",
+   "fieldtype": "Date",
+   "label": "Retired On"
+  },
+  {
+   "fieldname": "direction_section",
+   "fieldtype": "Section Break",
+   "label": "Direction"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "vision",
+   "fieldtype": "Text Editor",
+   "label": "Vision"
+  },
+  {
+   "fieldname": "mission",
+   "fieldtype": "Text Editor",
+   "label": "Mission"
+  },
+  {
+   "description": "One per line.",
+   "fieldname": "values_text",
+   "fieldtype": "Small Text",
+   "label": "Values"
+  },
+  {
+   "fieldname": "analysis_section",
+   "fieldtype": "Section Break",
+   "label": "Analysis"
+  },
+  {
+   "description": "Strengths, weaknesses, opportunities and threats. Free text or JSON — nothing computes on it. See the doctype description.",
+   "fieldname": "swot",
+   "fieldtype": "Long Text",
+   "label": "SWOT"
+  },
+  {
+   "description": "Threat of new entrants, supplier power, buyer power, threat of substitutes, rivalry among existing competitors.",
+   "fieldname": "porters_five_forces",
+   "fieldtype": "Long Text",
+   "label": "Porter's Five Forces"
+  },
+  {
+   "fieldname": "analysis_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Core competencies and the value-chain reading behind them — what this operation does that is genuinely hard to copy.",
+   "fieldname": "sustainable_advantage",
+   "fieldtype": "Long Text",
+   "label": "Sustainable Advantage"
+  },
+  {
+   "description": "The game-theory framing: which game this market most resembles and what that implies about how a competitor will respond. Kept because it is the part of a plan people actually reason with.",
+   "fieldname": "analogous_games",
+   "fieldtype": "Long Text",
+   "label": "Analogous Games"
+  },
+  {
+   "fieldname": "strategy_section",
+   "fieldtype": "Section Break",
+   "label": "Strategy"
+  },
+  {
+   "description": "The overall posture — growth, stability, retrenchment, harvest.",
+   "fieldname": "grand_strategy",
+   "fieldtype": "Text Editor",
+   "label": "Grand Strategy"
+  },
+  {
+   "description": "How this operation intends to win in its segment: cost, differentiation, focus.",
+   "fieldname": "business_strategy",
+   "fieldtype": "Text Editor",
+   "label": "Business Strategy"
+  },
+  {
+   "fieldname": "strategy_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Who decides what, and how. Written down because on a farm this is usually understood and never stated, and the first succession event is a bad time to discover the two differ.",
+   "fieldname": "command_structure",
+   "fieldtype": "Long Text",
+   "label": "Command Structure"
+  },
+  {
+   "description": "What each function actually does about the strategy — operations, labour, sales, capital.",
+   "fieldname": "functional_tactics",
+   "fieldtype": "Long Text",
+   "label": "Functional Tactics"
+  },
+  {
+   "fieldname": "control_section",
+   "fieldtype": "Section Break",
+   "label": "Control and Exit"
+  },
+  {
+   "description": "How anybody would know whether this is working: the KPIs and how they are watched. A strategy with no validation section is a wish.",
+   "fieldname": "validation_control",
+   "fieldtype": "Long Text",
+   "label": "Validation and Control"
+  },
+  {
+   "fieldname": "control_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Succession, sale, wind-down. On a family farm this is the hardest section to write and the most expensive one to leave blank.",
+   "fieldname": "exit_strategy",
+   "fieldtype": "Text Editor",
+   "label": "Exit Strategy"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Strategic Plan",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "plan_name,status,crop",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "naming_rule": "By \"Naming Series\" field"
+}

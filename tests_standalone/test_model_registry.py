@@ -870,9 +870,9 @@ class ToolRegistration(unittest.TestCase):
 		# `assign_soil_profile`). `Field.soil_profile`, `Crop.target_brix` and
 		# `Crop Variety.target_brix` are new columns on existing registers and
 		# carry no tools of their own — no existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 775)
-		self.assertEqual(len(self.registry.READ_TOOLS), 386)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 389)
+		self.assertEqual(len(self.registry.TOOLS), 808)
+		self.assertEqual(len(self.registry.READ_TOOLS), 404)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 404)
 
 
 if __name__ == "__main__":

@@ -88,6 +88,7 @@ _FIELD_FIELDS = (
 	"productive_through_date",
 	"pre_yield_end_date",
 	"block_number",
+	"block_ticker",
 	"external_farm_app_id",
 	"cost_center",
 	"last_spray_date",
@@ -365,6 +366,11 @@ def _describe_field(row: dict, observed: dict | None = None, counties: dict | No
 		"productive_through_date": _date_str(row.get("productive_through_date")),
 		"pre_yield_end_date": _date_str(row.get("pre_yield_end_date")),
 		"block_number": row.get("block_number") or None,
+		# v0.118.0. The buyer-facing code, and the only identifier on this record
+		# somebody outside the farm ever types. Reported beside block_number rather
+		# than instead of it: they answer different questions and a block commonly
+		# has one and not the other.
+		"block_ticker": row.get("block_ticker") or None,
 		"external_farm_app_id": row.get("external_farm_app_id") or None,
 		"cost_center": row.get("cost_center") or None,
 		"last_spray_date": effective,
@@ -499,6 +505,11 @@ def list_fields(args: dict) -> ToolResult:
 		value = as_str(args, key)
 		if value:
 			filters[key] = value
+	# The ticker is folded to upper case on save, so a buyer quoting "yc-3"
+	# has to be folded here too or the filter answers nothing and looks right.
+	ticker = as_str(args, "block_ticker")
+	if ticker:
+		filters["block_ticker"] = ticker.strip().upper()
 	if "food_safety_zone" in args:
 		filters["food_safety_zone"] = 1 if as_bool(args, "food_safety_zone") else 0
 	organic_status = as_str(args, "organic_status")
@@ -741,6 +752,7 @@ def create_field(args: dict) -> ToolResult:
 	doc.planting_year = as_int(args, "planting_year")
 	doc.planting_density_per_acre = as_int(args, "planting_density_per_acre")
 	doc.block_number = as_str(args, "block_number")
+	doc.block_ticker = as_str(args, "block_ticker")
 	doc.external_farm_app_id = uuid
 	doc.notes = as_str(args, "notes")
 
@@ -889,7 +901,7 @@ def update_field(args: dict) -> ToolResult:
 	doc = frappe.get_doc(FIELD, row["name"])
 	changes = {}
 
-	for key in ("crop", "variety", "rootstock", "block_number", "notes"):
+	for key in ("crop", "variety", "rootstock", "block_number", "block_ticker", "notes"):
 		if key in args:
 			_stage(changes, doc, key, as_str(args, key))
 	for key in ("planting_year", "planting_density_per_acre"):
@@ -940,7 +952,7 @@ def update_field(args: dict) -> ToolResult:
 	if not changes:
 		raise ToolError(
 			"nothing to change. Pass at least one of: acreage, crop, variety, rootstock, "
-			"planting_year, planting_density_per_acre, condition, block_number, "
+			"planting_year, planting_density_per_acre, condition, block_number, block_ticker, "
 			"external_farm_app_id, last_spray_date, water_test_last_date, "
 			"wildlife_intrusion_last_report, productive_from_date, productive_through_date, "
 			"pre_yield_end_date, food_safety_zone, worker_hygiene_station_present, "

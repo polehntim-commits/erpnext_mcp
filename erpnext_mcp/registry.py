@@ -63,6 +63,7 @@ from .tools import (
 	calendar,
 	collab,
 	company,
+	compintel,
 	compliance,
 	controls,
 	costing,
@@ -92,6 +93,7 @@ from .tools import (
 	inspections,
 	insurance,
 	investment_report,
+	iot,
 	irrigation,
 	itgc,
 	kpi,
@@ -104,6 +106,7 @@ from .tools import (
 	meta,
 	ml_model,
 	mobile,
+	mrl,
 	mutate,
 	narrative,
 	newhire,
@@ -140,6 +143,7 @@ from .tools import (
 	spray_rei,
 	state_tax,
 	stock_inventory,
+	strategy,
 	tasktemplates,
 	tax,
 	tax_remittance,
@@ -6528,6 +6532,11 @@ TOOLS = {
 		{
 			"owning_entity": _field(_STRING, "The company whose blocks to read. `company` is an alias."),
 			"company": _field(_STRING, "Alias for owning_entity."),
+			"block_ticker": _field(
+				_STRING,
+				"Only the block answering to this buyer-facing ticker. Case-insensitive — a "
+				"buyer quoting 'yc-3' finds YC-3.",
+			),
 			"parcel": _field(_STRING, "Only blocks on this parcel. Docname or parcel name."),
 			"county": _field(
 				_STRING,
@@ -6626,6 +6635,13 @@ TOOLS = {
 			"planting_density_per_acre": _field(_INTEGER, "Trees per acre."),
 			"condition": _field(_STRING, "Excellent, Good, Fair, Poor or Fallow."),
 			"block_number": _field(_STRING, "The legacy block id, free text ('3A', 'N-12')."),
+			"block_ticker": _field(
+				_STRING,
+				"The buyer-facing code for this block — 'YC-3'. Short, stable, unique across "
+				"the company, folded to upper case, ten characters at most. This is what goes on "
+				"a purchase order and comes back on a settlement; block_number is what the crew "
+				"calls it and is not the same thing. Optional, and blank is the normal state.",
+			),
 			"external_farm_app_id": _field(_STRING, "The Farm App's own id for this block."),
 			# v0.19.5. The dates that decide whether this block is in the per-acre
 			# denominator at all. Written at creation because a block planted today
@@ -6707,6 +6723,11 @@ TOOLS = {
 			"planting_density_per_acre": _field(_INTEGER, "New trees per acre."),
 			"condition": _field(_STRING, "New condition. Empty string clears it."),
 			"block_number": _field(_STRING, "New block number."),
+			"block_ticker": _field(
+				_STRING,
+				"New buyer-facing ticker. Refused if another block under the same company "
+				"already answers to it. Pass an empty string to clear one.",
+			),
 			"external_farm_app_id": _field(_STRING, "New Farm App id. Empty string clears it."),
 			"productive_from_date": _field(
 				_STRING, "New productive-from date, YYYY-MM-DD. The Sustainable CF/Acre denominator."
@@ -27914,6 +27935,1036 @@ TOOLS = {
 		title="Send a test push",
 		available=_needs_doctype("Mobile Push Token"),
 		requires="the Mobile Push Token DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	# ══════════════════════════════════════════════════════════════════════
+	# v0.118.0, Farm App Retirement Cycle 1. Five registers the Flask sidecar
+	# held and this app did not: the device network, the competitive picture,
+	# the written strategy, the objectives under it, and the residue limits a
+	# load ships against. See `tools/iot.py`, `tools/compintel.py`,
+	# `tools/strategy.py` and `tools/mrl.py` for why each is shaped as it is.
+	# ══════════════════════════════════════════════════════════════════════
+	"create_iot_device": _tool(
+		iot.create_iot_device,
+		"MUTATING (default OFF). Register one field device — a soil probe, a flow "
+		"meter, a weather station — and mint the bearer token it will post with.\n\n"
+		"THE TOKEN IS SHOWN ONCE AND NEVER READ BACK. It is generated here rather "
+		"than accepted from the caller, because a token somebody chose is a token "
+		"somebody can guess and this one authenticates a box that will be posting "
+		"unattended for years. A device that loses it is re-registered.\n\n"
+		"THE HARDWARE ID IS UNIQUE ACROSS THE SITE and not per company: one "
+		"physical box cannot be in two orchards, so a duplicate is a typo or a "
+		"device somebody moved without re-registering.",
+		{
+			"company": _COMPANY,
+			"device_name": _field(_STRING, "What it is called on the radio and on the sticker."),
+			"hardware_id": _field(
+				_STRING, "The MAC address, serial number or IMEI printed on the unit. Unique."
+			),
+			"device_type": _field(
+				_STRING,
+				"What it measures: Soil Moisture, Flow Meter, Weather Station, Temperature or Generic.",
+			),
+			"device_class": _field(
+				_STRING,
+				"What it does: Sensor (default), Actuator or Gateway. A different question from "
+				"device_type — a flow meter and a valve controller sit on the same pipe.",
+			),
+			"field": _field(_STRING, "The block it sits in. Optional; a shop-roof station is in none."),
+			"zone": _field(_STRING, "Which part of the block — 'row 14 north end'."),
+			"enabled": _field(_BOOLEAN, "Whether it is in service. Default true."),
+			"calibrated_on": _field(_STRING, "When it was last calibrated against a reference."),
+			"device_config": _field(
+				_STRING, "Calibration coefficients, thresholds, reporting interval — as JSON."
+			),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("device_name", "hardware_id", "device_type"),
+		mutating=True,
+		title="Register an IoT device",
+		available=_needs_doctype("IoT Device"),
+		requires="the IoT Device DocType — run `bench migrate`",
+	),
+	"get_iot_device": _tool(
+		iot.get_iot_device,
+		"One device in full, with its health picture and its most recent reading. "
+		"Accepts a docname or the hardware id. Read-only.\n\n"
+		"WHETHER IT IS ONLINE IS COMPUTED HERE AND STORED NOWHERE. A stored flag "
+		"is wrong from the moment a device goes quiet, because nothing runs to "
+		"update it — and that is the only moment it matters. `health_warnings` "
+		"names what is wrong in the words somebody would need: never reported, "
+		"silent for so many hours, battery low, never calibrated.\n\n"
+		"A SILENT PROBE IS NOT READING ZERO. It is not reading, and anything "
+		"computed off its latest value is as old as that value.",
+		{
+			"device": _field(_STRING, "The docname or the hardware id."),
+		},
+		required=("device",),
+		title="Get an IoT device",
+		available=_needs_doctype("IoT Device"),
+		requires="the IoT Device DocType — run `bench migrate`",
+	),
+	"list_iot_devices": _tool(
+		iot.list_iot_devices,
+		"The device register, counted by type, with the offline, never-reported and "
+		"low-battery ones NAMED rather than merely counted — 'three are offline' is "
+		"not actionable and 'the two probes in Yellow Camp are offline' is. "
+		"Read-only.",
+		{
+			"company": _COMPANY,
+			"field": _field(_STRING, "Only devices in this block."),
+			"device_type": _field(
+				_STRING, "Soil Moisture, Flow Meter, Weather Station, Temperature, Generic."
+			),
+			"device_class": _field(_STRING, "Sensor, Actuator or Gateway."),
+			"enabled": _field(_BOOLEAN, "Only devices in service, or only retired ones."),
+			"online": _field(
+				_BOOLEAN,
+				"Only devices that have reported within the online window, or only those that have not.",
+			),
+			"limit": _LIMIT,
+		},
+		title="List IoT devices",
+		available=_needs_doctype("IoT Device"),
+		requires="the IoT Device DocType — run `bench migrate`",
+	),
+	"update_iot_device": _tool(
+		iot.update_iot_device,
+		"MUTATING (default OFF). Change a device's placement, health figures, "
+		"calibration date or config.\n\n"
+		"`last_seen` IS REFUSED HERE AND THAT IS THE POINT OF THE COLUMN. It is "
+		"written only when a reading actually arrives, so it always means the "
+		"device spoke — a last_seen somebody typed is the one thing that would "
+		"make a dead sensor look alive. `auth_token` is refused too: nothing reads "
+		"it back, so rotating it means re-registering with the new token in hand.",
+		{
+			"device": _field(_STRING, "The docname of the device to change."),
+			"device_name": _field(_STRING, "New name."),
+			"hardware_id": _field(_STRING, "New hardware id. Still has to be unique."),
+			"device_type": _field(_STRING, "New device type."),
+			"device_class": _field(_STRING, "Sensor, Actuator or Gateway."),
+			"field": _field(_STRING, "Move it to this block. Empty string detaches it."),
+			"zone": _field(_STRING, "New zone."),
+			"enabled": _field(_BOOLEAN, "Take it out of service, or put it back."),
+			"battery_level": _field(_NUMBER, "Percent remaining, 0 to 100."),
+			"signal_strength": _field(_NUMBER, "RSSI in dBm — normally negative."),
+			"calibrated_on": _field(_STRING, "When it was last calibrated."),
+			"device_config": _field(_STRING, "New config JSON."),
+			"notes": _field(_STRING, "New notes."),
+		},
+		required=("device",),
+		mutating=True,
+		title="Update an IoT device",
+		available=_needs_doctype("IoT Device"),
+		requires="the IoT Device DocType — run `bench migrate`",
+	),
+	"create_iot_reading": _tool(
+		iot.create_iot_reading,
+		"MUTATING (default OFF). Record one measurement from one device, and mark "
+		"that device as having spoken. This is the only path that writes "
+		"`last_seen`.\n\n"
+		"THE TIMESTAMP IS THE DEVICE'S AND IS REQUIRED. It is deliberately not "
+		"defaulted to now: a device posting a buffered backlog would have every "
+		"reading in it stamped with the moment its radio came back, which is the "
+		"one time they did not happen — and buffered readings are exactly the ones "
+		"somebody wants during a frost event.\n\n"
+		"DUPLICATES ARE REFUSED on (device, reading type, timestamp). Devices retry "
+		"and gateways replay, and a batch stored twice doubles every average "
+		"computed off it. A disabled device is refused too — accepting readings "
+		"from a retired device would make its retirement invisible.",
+		{
+			"device": _field(_STRING, "The docname or the hardware id of the reporting device."),
+			"timestamp": _field(
+				_STRING, "When the DEVICE took the measurement, not when the server received it."
+			),
+			"reading_type": _field(
+				_STRING,
+				"soil_moisture_vwc, soil_temp_c, flow_gallons, air_temp_c, humidity_pct, "
+				"wind_speed_kmh, rain_mm, leaf_wetness_pct, solar_radiation_wm2 or generic.",
+			),
+			"value": _field(_NUMBER, "The measurement."),
+			"unit": _field(
+				_STRING,
+				"The unit it is in. Required even though the type implies one — a device "
+				"reporting Fahrenheit into an air_temp_c column is a real and quiet failure, and "
+				"this is the only place it shows.",
+			),
+			"quality": _field(_STRING, "Good (default), Suspect or Error."),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("device", "timestamp", "reading_type", "value", "unit"),
+		mutating=True,
+		title="Record an IoT reading",
+		available=_needs_doctype("IoT Reading"),
+		requires="the IoT Reading DocType — run `bench migrate`",
+	),
+	"list_iot_readings": _tool(
+		iot.list_iot_readings,
+		"Readings matching the filters, newest first — ROWS, not statistics. "
+		"Read-only.\n\n"
+		"USE get_device_readings FOR AGGREGATES. This one is for looking at "
+		"individual measurements, and it is capped at 500 rows because readings "
+		"are the highest-volume record this app writes; when the cap is hit, "
+		"`capped_at` says so rather than letting a partial page read as the whole "
+		"series.\n\n"
+		"SUSPECT AND ERROR ROWS ARE INCLUDED BY DEFAULT. A reading the gateway "
+		"thought was wrong is still what the sensor said, and the run of suspect "
+		"values either side of a real event is often the only evidence it "
+		"happened. Filter on `quality` to exclude them deliberately.",
+		{
+			"device": _field(_STRING, "Docname or hardware id."),
+			"field": _field(_STRING, "Only readings from devices in this block."),
+			"company": _COMPANY,
+			"reading_type": _field(_STRING, "One reading type."),
+			"quality": _field(_STRING, "Good, Suspect or Error."),
+			"from_timestamp": _field(
+				_STRING, "Only readings at or after this moment. `from_date` is an alias."
+			),
+			"to_timestamp": _field(_STRING, "Only readings at or before this moment. `to_date` is an alias."),
+			"from_date": _field(_STRING, "Alias for from_timestamp."),
+			"to_date": _field(_STRING, "Alias for to_timestamp."),
+			"limit": _LIMIT,
+		},
+		title="List IoT readings",
+		available=_needs_doctype("IoT Reading"),
+		requires="the IoT Reading DocType — run `bench migrate`",
+	),
+	"get_device_readings": _tool(
+		iot.get_device_readings,
+		"One device's readings over a date range, summarised per reading type: "
+		"count, min, max, mean, latest, and the window they actually span. "
+		"Read-only.\n\n"
+		"SUMMARISED PER TYPE AND PER UNIT, NEVER ACROSS THEM. A device reporting "
+		"both soil temperature and soil moisture has two series, and a single mean "
+		"over the pair is a number with no referent. Where one reading type "
+		"arrives in two different units — which happens when a device is "
+		"reconfigured mid-season — that is REPORTED as `mixed_units` rather than "
+		"averaged through.\n\n"
+		"THE DEVICE'S HEALTH COMES BACK WITH THE NUMBERS, because a series that "
+		"flatlines is a dry block if the probe is healthy and a dead battery if it "
+		"is not, and those are opposite irrigation decisions.",
+		{
+			"device": _field(_STRING, "Docname or hardware id."),
+			"reading_type": _field(_STRING, "Narrow to one type."),
+			"quality": _field(_STRING, "Good, Suspect or Error."),
+			"from_timestamp": _field(_STRING, "Start of the window. `from_date` is an alias."),
+			"to_timestamp": _field(_STRING, "End of the window. `to_date` is an alias."),
+			"from_date": _field(_STRING, "Alias for from_timestamp."),
+			"to_date": _field(_STRING, "Alias for to_timestamp."),
+		},
+		required=("device",),
+		title="Get a device's readings",
+		available=_needs_doctype("IoT Reading"),
+		requires="the IoT Reading DocType — run `bench migrate`",
+	),
+	"create_market_participant": _tool(
+		compintel.create_market_participant,
+		"MUTATING (default OFF). Open a record for another organisation in this "
+		"market — a competitor, supplier, buyer, partner or acquisition target.\n\n"
+		"THE TYPE IS A COLUMN RATHER THAN FIVE DOCTYPES because the same grower is "
+		"a competitor for labour, a partner in a packing shed and a possible "
+		"acquisition in one season, and splitting them makes one organisation "
+		"three records that drift apart.\n\n"
+		"EVERY SCALE FIGURE HERE IS AN ESTIMATE and the result says so. Revenue, "
+		"acreage, headcount and market share are reads of a private business; they "
+		"are worth acting on and are not worth combining with numbers from the "
+		"ledger.",
+		{
+			"company": _COMPANY,
+			"participant_name": _field(_STRING, "The organisation's name as it is actually known locally."),
+			"participant_type": _field(_STRING, "Competitor, Supplier, Customer, Partner or Target."),
+			"customer": _field(
+				_STRING, "The ERPNext Customer record, where this is also somebody we invoice."
+			),
+			"strategic_plan": _field(_STRING, "The plan this assessment was made under."),
+			"relationship_status": _field(_STRING, "Allied, Neutral, Adversarial or Acquisition Target."),
+			"industry_segment": _field(_STRING, "'Sweet cherry packing', 'custom harvest'."),
+			"geography": _field(_STRING, "The region they operate in."),
+			"crops": _field(_STRING, "What they grow or handle, comma-separated."),
+			"market_position": _field(_STRING, "Leader, Challenger, Follower or Nicher."),
+			"market_share_pct": _field(_NUMBER, "Estimated share of the segment, 0 to 100."),
+			"employee_count": _field(_INTEGER, "Estimated headcount."),
+			"estimated_revenue": _field(_NUMBER, "Estimated revenue."),
+			"estimated_acreage": _field(_NUMBER, "Estimated acreage."),
+			"strengths": _field(_STRING, "One per line."),
+			"weaknesses": _field(_STRING, "One per line."),
+			"key_assets": _field(
+				_STRING,
+				"What they hold that is hard to replicate — water, a packing line, a variety licence.",
+			),
+			"vulnerability_windows": _field(
+				_STRING,
+				"When they are weakest and why — 'succession, owner is 71', 'note matures 2027'. "
+				"This is the field that turns a competitor record into a decision.",
+			),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("participant_name", "participant_type"),
+		mutating=True,
+		title="Create a market participant",
+		available=_needs_doctype("Market Participant"),
+		requires="the Market Participant DocType — run `bench migrate`",
+	),
+	"get_market_participant": _tool(
+		compintel.get_market_participant,
+		"One participant in full, with every move observed against them and any "
+		"acquisition target opened on them. Read-only.\n\n"
+		"`moves_without_response` IS THE FIGURE WORTH READING. A participant with "
+		"nine observed moves and no responses is a competitor being watched rather "
+		"than answered, and that is not visible from the moves one at a time.",
+		{
+			"market_participant": _field(_STRING, "The docname, e.g. 'MKTP-00012'."),
+		},
+		required=("market_participant",),
+		title="Get a market participant",
+		available=_needs_doctype("Market Participant"),
+		requires="the Market Participant DocType — run `bench migrate`",
+	),
+	"list_market_participants": _tool(
+		compintel.list_market_participants,
+		"The participant register, counted by type, with the ones nobody has "
+		"assessed named. Read-only, and it never refuses.\n\n"
+		"`without_assessment` is the useful column: a participant record with no "
+		"strengths and no weaknesses is a name in a list, and the register should "
+		"say which of its rows are that.",
+		{
+			"company": _COMPANY,
+			"participant_type": _field(_STRING, "Competitor, Supplier, Customer, Partner or Target."),
+			"market_position": _field(_STRING, "Leader, Challenger, Follower or Nicher."),
+			"relationship_status": _field(_STRING, "Allied, Neutral, Adversarial or Acquisition Target."),
+			"geography": _field(_STRING, "Only participants in this region."),
+			"industry_segment": _field(_STRING, "Only participants in this segment."),
+			"strategic_plan": _field(_STRING, "Only participants assessed under this plan."),
+			"limit": _LIMIT,
+		},
+		title="List market participants",
+		available=_needs_doctype("Market Participant"),
+		requires="the Market Participant DocType — run `bench migrate`",
+	),
+	"update_market_participant": _tool(
+		compintel.update_market_participant,
+		"MUTATING (default OFF). Revise a participant record — the estimates age, "
+		"and an assessment nobody has touched in three seasons is describing a "
+		"business that has moved.",
+		{
+			"market_participant": _field(_STRING, "The docname to change."),
+			"participant_name": _field(_STRING, "New name."),
+			"participant_type": _field(_STRING, "Competitor, Supplier, Customer, Partner or Target."),
+			"customer": _field(_STRING, "Link to an ERPNext Customer."),
+			"strategic_plan": _field(_STRING, "The plan this assessment belongs to."),
+			"relationship_status": _field(_STRING, "Allied, Neutral, Adversarial or Acquisition Target."),
+			"industry_segment": _field(_STRING, "New segment."),
+			"geography": _field(_STRING, "New region."),
+			"crops": _field(_STRING, "New crop list."),
+			"market_position": _field(_STRING, "Leader, Challenger, Follower or Nicher."),
+			"market_share_pct": _field(_NUMBER, "New estimated share."),
+			"employee_count": _field(_INTEGER, "New estimated headcount."),
+			"estimated_revenue": _field(_NUMBER, "New estimated revenue."),
+			"estimated_acreage": _field(_NUMBER, "New estimated acreage."),
+			"strengths": _field(_STRING, "One per line."),
+			"weaknesses": _field(_STRING, "One per line."),
+			"key_assets": _field(_STRING, "One per line."),
+			"vulnerability_windows": _field(_STRING, "One per line."),
+			"notes": _field(_STRING, "New notes."),
+		},
+		required=("market_participant",),
+		mutating=True,
+		title="Update a market participant",
+		available=_needs_doctype("Market Participant"),
+		requires="the Market Participant DocType — run `bench migrate`",
+	),
+	"create_competitive_move": _tool(
+		compintel.create_competitive_move,
+		"MUTATING (default OFF). Record something a competitor actually did, on "
+		"the day somebody noticed it.\n\n"
+		"MOVES ONLY MEAN ANYTHING IN SEQUENCE. One competitor dropping price is "
+		"weather; the same competitor dropping price in three consecutive Julys is "
+		"a strategy, and nobody sees that from memory. So the observation date, "
+		"the source and the confidence are all stored — a move heard at the co-op "
+		"counter and one read in a filing are both worth having and are not worth "
+		"the same.\n\n"
+		"A FUTURE OBSERVATION DATE IS REFUSED. A move somebody expects is not an "
+		"observation, and speculation in this register is what stops it answering "
+		"whether a pattern is real.",
+		{
+			"company": _COMPANY,
+			"market_participant": _field(_STRING, "Who did it."),
+			"move_type": _field(
+				_STRING,
+				"Price Change, Expansion, Contraction, Acquisition, Partnership, Exit, "
+				"Regulatory or Innovation.",
+			),
+			"description": _field(_STRING, "What happened."),
+			"observed_date": _field(_STRING, "When it was NOTICED. Default today; the future is refused."),
+			"strategic_plan": _field(_STRING, "The plan this is assessed against."),
+			"severity": _field(_STRING, "Low, Medium (default) or High."),
+			"source": _field(_STRING, "Where this came from — 'grower meeting', 'county recorder'."),
+			"confidence": _field(_STRING, "Low, Medium (default) or High."),
+			"impact_assessment": _field(
+				_STRING, "What it means for us, written now — before the response, so it can be read back."
+			),
+			"market_impact_pct": _field(_NUMBER, "Estimated share impact."),
+			"revenue_impact": _field(_NUMBER, "Estimated revenue impact."),
+			"response_urgency": _field(_STRING, "No Action, Monitor (default), Respond or Urgent."),
+			"recommended_response": _field(_STRING, "What should be done."),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("market_participant", "move_type", "description"),
+		mutating=True,
+		title="Record a competitive move",
+		available=_needs_doctype("Competitive Move"),
+		requires="the Competitive Move DocType — run `bench migrate`",
+	),
+	"get_competitive_move": _tool(
+		compintel.get_competitive_move,
+		"One move in full, with the participant who made it. Read-only.",
+		{
+			"competitive_move": _field(_STRING, "The docname, e.g. 'CMOV-2026-00007'."),
+		},
+		required=("competitive_move",),
+		title="Get a competitive move",
+		available=_needs_doctype("Competitive Move"),
+		requires="the Competitive Move DocType — run `bench migrate`",
+	),
+	"list_competitive_moves": _tool(
+		compintel.list_competitive_moves,
+		"Moves observed, newest first, counted by type and by participant, with "
+		"the unanswered ones named. Read-only, and it never refuses.\n\n"
+		"`urgent_unanswered` IS THE ONE TO READ FIRST — moves somebody marked "
+		"Respond or Urgent that nothing was ever done about. The gap between the "
+		"recommendation and the response is the most instructive thing in this "
+		"register and is invisible move by move.\n\n"
+		"`low_confidence` is reported rather than filtered, because three "
+		"low-confidence sightings of the same thing are themselves evidence.",
+		{
+			"company": _COMPANY,
+			"market_participant": _field(_STRING, "Only this participant's moves."),
+			"move_type": _field(_STRING, "One move type."),
+			"severity": _field(_STRING, "Low, Medium or High."),
+			"confidence": _field(_STRING, "Low, Medium or High."),
+			"response_urgency": _field(_STRING, "No Action, Monitor, Respond or Urgent."),
+			"strategic_plan": _field(_STRING, "Only moves assessed under this plan."),
+			"unanswered": _field(
+				_BOOLEAN, "True for only the moves with no actual response; false for only those with one."
+			),
+			"from_date": _field(_STRING, "Only moves observed on or after this date."),
+			"to_date": _field(_STRING, "Only moves observed on or before this date."),
+			"limit": _LIMIT,
+		},
+		title="List competitive moves",
+		available=_needs_doctype("Competitive Move"),
+		requires="the Competitive Move DocType — run `bench migrate`",
+	),
+	"update_competitive_move": _tool(
+		compintel.update_competitive_move,
+		"MUTATING (default OFF). Revise a move, or — the usual reason — record "
+		"what was actually done about it and how it turned out.\n\n"
+		"A RESPONSE DATE WITH NO RESPONSE IS REFUSED. It closes the record without "
+		"saying what happened, which is exactly the half this register exists for.",
+		{
+			"competitive_move": _field(_STRING, "The docname to change."),
+			"market_participant": _field(_STRING, "Reassign to another participant."),
+			"move_type": _field(_STRING, "New move type."),
+			"strategic_plan": _field(_STRING, "New plan."),
+			"severity": _field(_STRING, "Low, Medium or High."),
+			"observed_date": _field(_STRING, "New observation date."),
+			"description": _field(_STRING, "New description."),
+			"source": _field(_STRING, "New source."),
+			"confidence": _field(_STRING, "Low, Medium or High."),
+			"impact_assessment": _field(_STRING, "New impact assessment."),
+			"market_impact_pct": _field(_NUMBER, "New share impact."),
+			"revenue_impact": _field(_NUMBER, "New revenue impact."),
+			"response_urgency": _field(_STRING, "No Action, Monitor, Respond or Urgent."),
+			"recommended_response": _field(_STRING, "What should be done."),
+			"actual_response": _field(_STRING, "What was actually done."),
+			"response_date": _field(_STRING, "When. Refused without an actual response."),
+			"outcome": _field(_STRING, "How it turned out."),
+			"notes": _field(_STRING, "New notes."),
+		},
+		required=("competitive_move",),
+		mutating=True,
+		title="Update a competitive move",
+		available=_needs_doctype("Competitive Move"),
+		requires="the Competitive Move DocType — run `bench migrate`",
+	),
+	"create_acquisition_target": _tool(
+		compintel.create_acquisition_target,
+		"MUTATING (default OFF). Open a file on a farm somebody is considering "
+		"buying, scored on the four dimensions that decide whether it works.\n\n"
+		"THE FOUR SCORES ARE SEPARATE BECAUSE THEY FAIL SEPARATELY. A financially "
+		"distressed neighbour with perfect strategic fit and no cultural fit is a "
+		"deal that closes and then does not work — and a single attractiveness "
+		"number hides exactly that case. `accretive_score` is their mean, derived "
+		"on save and not settable, and `weakest_dimension` is reported beside it "
+		"because a deal fails on its weakest score rather than its average.\n\n"
+		"THE HORIZON DEFAULTS TO 25 YEARS, which is roughly one orchard's "
+		"productive life. A payback period that disqualifies a deal in most "
+		"businesses is unremarkable in tree fruit, where the asset is land and "
+		"water — which is why the land, water, varietal and infrastructure values "
+		"are broken out separately from the going concern.",
+		{
+			"company": _COMPANY,
+			"entity_name": _field(_STRING, "What the target is called."),
+			"market_participant": _field(_STRING, "The participant record for it, where one exists."),
+			"strategic_plan": _field(_STRING, "The plan this is being pursued under."),
+			"status": _field(
+				_STRING,
+				"Identified (default), Evaluating, Due Diligence, Negotiating, Closed or Passed.",
+			),
+			"action_level": _field(_STRING, "Monitor (default), Evaluate, Pursue, Negotiate or Close."),
+			"strategic_fit_score": _field(_NUMBER, "0 to 1. Does owning this advance the plan."),
+			"financial_health_score": _field(
+				_NUMBER, "0 to 1. A LOW score is not automatically bad — distress is why some farms sell."
+			),
+			"synergy_score": _field(_NUMBER, "0 to 1. What the two together do that neither does alone."),
+			"cultural_fit_score": _field(
+				_NUMBER, "0 to 1. Most often skipped and most often the one that decides it."
+			),
+			"estimated_value": _field(_NUMBER, "What the whole thing is thought to be worth."),
+			"estimated_acquisition_cost": _field(_NUMBER, "What it would actually take to buy."),
+			"projected_revenue_uplift": _field(_NUMBER, "Projected revenue uplift."),
+			"projected_cost_savings": _field(_NUMBER, "Projected cost savings."),
+			"acreage": _field(_NUMBER, "Acres."),
+			"payback_period_years": _field(_NUMBER, "Years to payback."),
+			"irr_estimate": _field(_NUMBER, "Estimated IRR, as a percentage."),
+			"intergenerational_horizon_years": _field(_INTEGER, "Horizon being judged over. Default 25."),
+			"land_value_appreciation": _field(_NUMBER, "Land value."),
+			"water_rights_value": _field(
+				_NUMBER,
+				"Water rights value — often the largest single number on the page, and it does "
+				"not move with the orchard.",
+			),
+			"varietal_ip_value": _field(
+				_NUMBER,
+				"Managed-variety licences and club rights, which do not always transfer with a sale.",
+			),
+			"infrastructure_value": _field(_NUMBER, "Infrastructure value."),
+			"identified_date": _field(_STRING, "When it was identified. Default today."),
+			"target_close_date": _field(_STRING, "Target close."),
+			"actual_close_date": _field(_STRING, "Actual close. Required in effect for status Closed."),
+			"rationale": _field(_STRING, "Why this target, readable by somebody who was not in the room."),
+			"recommendation": _field(_STRING, "What is recommended."),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("entity_name",),
+		mutating=True,
+		title="Create an acquisition target",
+		available=_needs_doctype("Acquisition Target"),
+		requires="the Acquisition Target DocType — run `bench migrate`",
+	),
+	"get_acquisition_target": _tool(
+		compintel.get_acquisition_target,
+		"One target in full: the four fit scores with the weakest named, the asset "
+		"breakdown totalled against the going-concern estimate, and the "
+		"participant record behind it. Read-only.\n\n"
+		"THE ASSET TOTAL AND THE ESTIMATED VALUE DISAGREEING IS THE INTERESTING "
+		"CASE, and this says so when they do: an asset total above the estimated "
+		"value is a target worth buying for the ground and the water rather than "
+		"for the business.",
+		{
+			"acquisition_target": _field(_STRING, "The docname, e.g. 'ACQT-00004'."),
+		},
+		required=("acquisition_target",),
+		title="Get an acquisition target",
+		available=_needs_doctype("Acquisition Target"),
+		requires="the Acquisition Target DocType — run `bench migrate`",
+	),
+	"list_acquisition_targets": _tool(
+		compintel.list_acquisition_targets,
+		"The pipeline, best-scored first, counted by status. Read-only, and it "
+		"never refuses.\n\n"
+		"`live_count` IS SEPARATE FROM THE TOTAL ON PURPOSE. A pipeline of forty "
+		"targets of which thirty-five are Closed or Passed is a pipeline of five, "
+		"and the count that gets quoted is the wrong one by default. "
+		"`partially_scored` names the targets whose accretive score is a mean of "
+		"two dimensions and is therefore not comparable with a fully scored one.",
+		{
+			"company": _COMPANY,
+			"status": _field(
+				_STRING, "Identified, Evaluating, Due Diligence, Negotiating, Closed or Passed."
+			),
+			"action_level": _field(_STRING, "Monitor, Evaluate, Pursue, Negotiate or Close."),
+			"market_participant": _field(_STRING, "Only targets on this participant."),
+			"strategic_plan": _field(_STRING, "Only targets under this plan."),
+			"limit": _LIMIT,
+		},
+		title="List acquisition targets",
+		available=_needs_doctype("Acquisition Target"),
+		requires="the Acquisition Target DocType — run `bench migrate`",
+	),
+	"update_acquisition_target": _tool(
+		compintel.update_acquisition_target,
+		"MUTATING (default OFF). Move a target through the pipeline, or revise its "
+		"scores and economics.\n\n"
+		"`accretive_score` IS REFUSED. It is the mean of the four fit scores, "
+		"recomputed on every save — a composite somebody can edit independently of "
+		"its inputs will eventually disagree with them, and the disagreement is "
+		"found by whoever is reading it to make the decision.\n\n"
+		"MARKING A TARGET Closed WITHOUT AN ACTUAL CLOSE DATE IS REFUSED: a deal "
+		"that closed closed on a day, and that date is what every holding-period "
+		"and return figure is measured from.",
+		{
+			"acquisition_target": _field(_STRING, "The docname to change."),
+			"entity_name": _field(_STRING, "New name."),
+			"market_participant": _field(_STRING, "Link to a participant."),
+			"strategic_plan": _field(_STRING, "New plan."),
+			"status": _field(
+				_STRING, "Identified, Evaluating, Due Diligence, Negotiating, Closed or Passed."
+			),
+			"action_level": _field(_STRING, "Monitor, Evaluate, Pursue, Negotiate or Close."),
+			"strategic_fit_score": _field(_NUMBER, "0 to 1."),
+			"financial_health_score": _field(_NUMBER, "0 to 1."),
+			"synergy_score": _field(_NUMBER, "0 to 1."),
+			"cultural_fit_score": _field(_NUMBER, "0 to 1."),
+			"estimated_value": _field(_NUMBER, "New estimated value."),
+			"estimated_acquisition_cost": _field(_NUMBER, "New acquisition cost."),
+			"projected_revenue_uplift": _field(_NUMBER, "New revenue uplift."),
+			"projected_cost_savings": _field(_NUMBER, "New cost savings."),
+			"acreage": _field(_NUMBER, "New acreage."),
+			"payback_period_years": _field(_NUMBER, "New payback period."),
+			"irr_estimate": _field(_NUMBER, "New IRR estimate."),
+			"intergenerational_horizon_years": _field(_INTEGER, "New horizon."),
+			"land_value_appreciation": _field(_NUMBER, "New land value."),
+			"water_rights_value": _field(_NUMBER, "New water rights value."),
+			"varietal_ip_value": _field(_NUMBER, "New varietal IP value."),
+			"infrastructure_value": _field(_NUMBER, "New infrastructure value."),
+			"identified_date": _field(_STRING, "New identified date."),
+			"target_close_date": _field(_STRING, "New target close."),
+			"actual_close_date": _field(_STRING, "Actual close date."),
+			"rationale": _field(_STRING, "New rationale."),
+			"recommendation": _field(_STRING, "New recommendation."),
+			"notes": _field(_STRING, "New notes."),
+		},
+		required=("acquisition_target",),
+		mutating=True,
+		title="Update an acquisition target",
+		available=_needs_doctype("Acquisition Target"),
+		requires="the Acquisition Target DocType — run `bench migrate`",
+	),
+	"create_strategic_plan": _tool(
+		strategy.create_strategic_plan,
+		"MUTATING (default OFF). Write a strategic plan: vision, mission, SWOT, "
+		"Porter's five forces, the grand strategy, the exit.\n\n"
+		"NAMING A `previous_version` VERSIONS THIS PLAN AND RETIRES THAT ONE, in "
+		"one call. Plans are superseded rather than edited into the next, because "
+		"the interesting question about a strategy is almost always what it USED "
+		"to say — a farm that changed its mind about a market in 2025 needs the "
+		"2024 wording to understand why.\n\n"
+		"`version` IS REFUSED as an argument: it is derived from the predecessor, "
+		"because a number somebody types is one that will eventually be typed "
+		"twice and two plans both calling themselves v3 make the chain "
+		"unorderable.\n\n"
+		"NOTHING HERE GENERATES A PLAN. The research prompt the Flask app used is "
+		"preserved as data in `prompt_templates.PROMPTS['strategic_plan_draft']` "
+		"and is deliberately not wired to a writer: a generated strategy that "
+		"lands in the register without anybody agreeing to it is a document the "
+		"farm is measured against and nobody chose.",
+		{
+			"company": _COMPANY,
+			"plan_name": _field(_STRING, "What this plan is called."),
+			"crop": _field(_STRING, "The crop it is for. Empty means farm-wide."),
+			"status": _field(_STRING, "Developing (default), Developed, Implemented or Historical."),
+			"timeframe": _field(_STRING, "The span it covers — '2026-2031', 'through the replant'."),
+			"previous_version": _field(
+				_STRING, "The plan this one supersedes. Versions this one and retires that one."
+			),
+			"effective_date": _field(_STRING, "When it takes effect."),
+			"retired_date": _field(_STRING, "When it stopped applying."),
+			"description": _field(_STRING, "A short description."),
+			"vision": _field(_STRING, "The long-term vision."),
+			"mission": _field(_STRING, "The mission."),
+			"values_text": _field(_STRING, "Values, one per line."),
+			"swot": _field(_STRING, "Strengths, weaknesses, opportunities and threats. Free text or JSON."),
+			"porters_five_forces": _field(_STRING, "The five forces."),
+			"sustainable_advantage": _field(_STRING, "Core competencies and the value-chain reading."),
+			"analogous_games": _field(_STRING, "The game-theory framing."),
+			"grand_strategy": _field(_STRING, "Growth, stability, retrenchment or harvest."),
+			"business_strategy": _field(_STRING, "Cost, differentiation or focus."),
+			"command_structure": _field(_STRING, "Who decides what, and how."),
+			"functional_tactics": _field(_STRING, "What each function does about the strategy."),
+			"validation_control": _field(
+				_STRING, "How anybody would know it is working. A strategy with no validation is a wish."
+			),
+			"exit_strategy": _field(
+				_STRING,
+				"Succession, sale or wind-down. The hardest section to write and the most "
+				"expensive to leave blank.",
+			),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("plan_name",),
+		mutating=True,
+		title="Create a strategic plan",
+		available=_needs_doctype("Strategic Plan"),
+		requires="the Strategic Plan DocType — run `bench migrate`",
+	),
+	"get_strategic_plan": _tool(
+		strategy.get_strategic_plan,
+		"One plan in full, with its objectives, its place in the supersession "
+		"chain, and how much of it is actually filled in. Read-only.\n\n"
+		"`completeness` AND `sections_empty` ARE REPORTED RATHER THAN HIDDEN. A "
+		"plan with a vision and nothing else is a common and honest state, and a "
+		"register that presented it as finished would let it stay that way. "
+		"`objectives_unmeasured` names the objectives carrying a target that "
+		"nobody has ever recorded an actual against.",
+		{
+			"strategic_plan": _field(_STRING, "The docname, e.g. 'STRP-00002'."),
+		},
+		required=("strategic_plan",),
+		title="Get a strategic plan",
+		available=_needs_doctype("Strategic Plan"),
+		requires="the Strategic Plan DocType — run `bench migrate`",
+	),
+	"list_strategic_plans": _tool(
+		strategy.list_strategic_plans,
+		"The plan register, newest version first, counted by status. Read-only, "
+		"and it never refuses.\n\n"
+		"`historical_without_retired_date` NAMES A BREAK IN THE CHAIN — a plan "
+		"that says it stopped applying and not when, so nothing can be dated "
+		"against it.",
+		{
+			"company": _COMPANY,
+			"status": _field(_STRING, "Developing, Developed, Implemented or Historical."),
+			"crop": _field(_STRING, "Only plans for this crop."),
+			"limit": _LIMIT,
+		},
+		title="List strategic plans",
+		available=_needs_doctype("Strategic Plan"),
+		requires="the Strategic Plan DocType — run `bench migrate`",
+	),
+	"update_strategic_plan": _tool(
+		strategy.update_strategic_plan,
+		"MUTATING (default OFF). Revise a plan in place — for filling a gap or "
+		"fixing wording.\n\n"
+		"IF THE OPERATION HAS CHANGED ITS MIND, WRITE A NEW PLAN instead, naming "
+		"this one as previous_version. An edited plan loses what it used to say, "
+		"which is the question strategic history exists to answer — so editing an "
+		"analysis section here comes back with that said plainly rather than "
+		"refused.",
+		{
+			"strategic_plan": _field(_STRING, "The docname to change."),
+			"plan_name": _field(_STRING, "New name."),
+			"crop": _field(_STRING, "New crop, or empty for farm-wide."),
+			"status": _field(_STRING, "Developing, Developed, Implemented or Historical."),
+			"timeframe": _field(_STRING, "New timeframe."),
+			"previous_version": _field(_STRING, "The plan this supersedes."),
+			"effective_date": _field(_STRING, "New effective date."),
+			"retired_date": _field(_STRING, "New retired date."),
+			"description": _field(_STRING, "New description."),
+			"vision": _field(_STRING, "New vision."),
+			"mission": _field(_STRING, "New mission."),
+			"values_text": _field(_STRING, "New values, one per line."),
+			"swot": _field(_STRING, "New SWOT."),
+			"porters_five_forces": _field(_STRING, "New five forces."),
+			"sustainable_advantage": _field(_STRING, "New sustainable advantage."),
+			"analogous_games": _field(_STRING, "New game-theory framing."),
+			"grand_strategy": _field(_STRING, "New grand strategy."),
+			"business_strategy": _field(_STRING, "New business strategy."),
+			"command_structure": _field(_STRING, "New command structure."),
+			"functional_tactics": _field(_STRING, "New functional tactics."),
+			"validation_control": _field(_STRING, "New validation and control."),
+			"exit_strategy": _field(_STRING, "New exit strategy."),
+			"notes": _field(_STRING, "New notes."),
+		},
+		required=("strategic_plan",),
+		mutating=True,
+		title="Update a strategic plan",
+		available=_needs_doctype("Strategic Plan"),
+		requires="the Strategic Plan DocType — run `bench migrate`",
+	),
+	"create_strategic_objective": _tool(
+		strategy.create_strategic_objective,
+		"MUTATING (default OFF). Add a measurable promise to a plan. A plan "
+		"without these is an essay.\n\n"
+		"AN OBJECTIVE IS ITS OWN RECORD RATHER THAN A ROW ON THE PLAN, because "
+		"recording this quarter's actual should not be a write to the strategy "
+		"document — and because 'show me everything overdue across every plan' is "
+		"then one query rather than a walk through every parent.\n\n"
+		"TARGET AND ACTUAL ARE FREE TEXT ON PURPOSE. Half of these are numbers and "
+		"half are not — '14 tons/acre', 'two new buyers', 'crew housed on site' — "
+		"and a numeric column would silently exclude the ones that matter most.",
+		{
+			"company": _COMPANY,
+			"strategic_plan": _field(_STRING, "The plan this belongs to."),
+			"objective": _field(_STRING, "What is to be achieved, in one sentence. SMART if it can be."),
+			"status": _field(_STRING, "Pending (default), In Progress, Achieved or Failed."),
+			"due_date": _field(_STRING, "When it is due."),
+			"owner_role": _field(_STRING, "Who is answerable for it."),
+			"kpi_metric": _field(_STRING, "What is being measured."),
+			"kpi_target": _field(_STRING, "The figure to hit."),
+			"kpi_actual": _field(
+				_STRING, "What was achieved. Recording one with no measured_on dates it today."
+			),
+			"measured_on": _field(_STRING, "When the actual was taken. Required alongside an actual."),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("strategic_plan", "objective"),
+		mutating=True,
+		title="Create a strategic objective",
+		available=_needs_doctype("Strategic Objective"),
+		requires="the Strategic Objective DocType — run `bench migrate`",
+	),
+	"get_strategic_objective": _tool(
+		strategy.get_strategic_objective,
+		"One objective, with the plan it belongs to and whether it is overdue. Read-only.",
+		{
+			"strategic_objective": _field(_STRING, "The docname, e.g. 'STOB-00031'."),
+		},
+		required=("strategic_objective",),
+		title="Get a strategic objective",
+		available=_needs_doctype("Strategic Objective"),
+		requires="the Strategic Objective DocType — run `bench migrate`",
+	),
+	"list_strategic_objectives": _tool(
+		strategy.list_strategic_objectives,
+		"Objectives across every plan, or one, with the overdue and unmeasured "
+		"ones named. Read-only, and it never refuses.\n\n"
+		"OVERDUE MEANS PAST ITS DATE AND STILL OPEN. A Failed objective past its "
+		"date is settled rather than overdue — counting it would keep it on the "
+		"list for ever.\n\n"
+		"`achieved_rate` IS COMPUTED OVER SETTLED OBJECTIVES ONLY, not over all of "
+		"them. A hit rate that counts objectives still in progress flatters every "
+		"plan on the day it is written.",
+		{
+			"company": _COMPANY,
+			"strategic_plan": _field(_STRING, "Only this plan's objectives."),
+			"status": _field(_STRING, "Pending, In Progress, Achieved or Failed."),
+			"due_from": _field(_STRING, "Only objectives due on or after this date."),
+			"due_to": _field(_STRING, "Only objectives due on or before this date."),
+			"limit": _LIMIT,
+		},
+		title="List strategic objectives",
+		available=_needs_doctype("Strategic Objective"),
+		requires="the Strategic Objective DocType — run `bench migrate`",
+	),
+	"update_strategic_objective": _tool(
+		strategy.update_strategic_objective,
+		"MUTATING (default OFF). Record progress against an objective, or revise "
+		"it.\n\n"
+		"AN ACTUAL WITH NO MEASUREMENT DATE IS REFUSED — an undated figure cannot "
+		"be told from one taken eighteen months ago, so it is either believed and "
+		"wrong or discounted and useless. Passing `kpi_actual` without "
+		"`measured_on` dates it today, which is honest at the moment somebody has "
+		"the number in front of them.\n\n"
+		"MARKING ONE Achieved WITH AN EMPTY ACTUAL IS REFUSED TOO: it is the most "
+		"flattering row a plan can carry and the one nobody can check.",
+		{
+			"strategic_objective": _field(_STRING, "The docname to change."),
+			"strategic_plan": _field(_STRING, "Move it to another plan."),
+			"objective": _field(_STRING, "New wording."),
+			"status": _field(_STRING, "Pending, In Progress, Achieved or Failed."),
+			"due_date": _field(_STRING, "New due date."),
+			"owner_role": _field(_STRING, "New owner."),
+			"kpi_metric": _field(_STRING, "New metric."),
+			"kpi_target": _field(_STRING, "New target."),
+			"kpi_actual": _field(_STRING, "What was achieved."),
+			"measured_on": _field(_STRING, "When it was measured. Defaults to today alongside an actual."),
+			"notes": _field(_STRING, "New notes."),
+		},
+		required=("strategic_objective",),
+		mutating=True,
+		title="Update a strategic objective",
+		available=_needs_doctype("Strategic Objective"),
+		requires="the Strategic Objective DocType — run `bench migrate`",
+	),
+	"create_mrl_record": _tool(
+		mrl.create_mrl_record,
+		"MUTATING (default OFF). Record the maximum residue limit for one active "
+		"ingredient on one crop into one destination market.\n\n"
+		"THE SOURCE IS REQUIRED AND ITS ABSENCE IS THE FAILURE THIS PREVENTS. A "
+		"load is refused at a border against a named regulation on a named date, "
+		"and 'we had 0.5 written down' is not a defence. A tier-4 inferred limit "
+		"with an honest note is worth keeping; a bare number with no provenance is "
+		"worse than nothing, because it looks the same as a checked one.\n\n"
+		"THE CHEMICAL IS THE ACTIVE INGREDIENT, NOT THE TRADE NAME. Several "
+		"products share one active ingredient and the limit attaches to the "
+		"ingredient.\n\n"
+		"A SECOND LIMIT ON THE SAME LANE IS REFUSED. Two answers to a question "
+		"asked once, at the moment somebody decides whether a load can ship, means "
+		"whichever row the query happens to return is the one the decision rests "
+		"on.",
+		{
+			"chemical": _field(_STRING, "The ACTIVE INGREDIENT — 'spinetoram', not 'Delegate'."),
+			"crop": _field(_STRING, "The Crop this limit is for."),
+			"market": _field(_STRING, "The Market it is going to. An MRL is a property of the destination."),
+			"mrl_ppm": _field(
+				_NUMBER, "The limit in mg/kg, which is ppm. Zero is valid and means non-detect."
+			),
+			"source": _field(
+				_STRING,
+				"The regulation, database or document — 'EU Reg. 396/2005 Annex II', 'Codex CXL "
+				"0140', '40 CFR 180.635'. Required.",
+			),
+			"company": _COMPANY,
+			"source_tier": _field(
+				_STRING,
+				"1 official register, 2 government gazette, 3 industry or academic "
+				"cross-reference, 4 inferred. Default 1.",
+			),
+			"confidence": _field(_STRING, "High (default), Medium or Low."),
+			"substance_status": _field(
+				_STRING,
+				"Registered (default), Banned, Not Registered, Restricted or Unknown. A ban "
+				"refuses the load regardless of the residue found.",
+			),
+			"is_default_mrl": _field(
+				_STRING, "Whether this is the market's blanket default rather than a limit set for this pair."
+			),
+			"crop_group_match": _field(
+				_STRING, "Whether this was matched through a crop group — 'stone fruit' covering cherries."
+			),
+			"effective_date": _field(_STRING, "When it takes effect."),
+			"expiry_date": _field(
+				_STRING, "When this figure should be RE-CHECKED — a review date, not the regulation's lapse."
+			),
+			"research_notes": _field(_STRING, "How it was found: databases consulted, rules applied."),
+			"research_response": _field(
+				_STRING, "The raw research response, kept verbatim as an audit trail."
+			),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("chemical", "crop", "market", "mrl_ppm", "source"),
+		mutating=True,
+		title="Create an MRL record",
+		available=_needs_doctype("MRL Record"),
+		requires="the MRL Record DocType — run `bench migrate`",
+	),
+	"get_mrl_record": _tool(
+		mrl.get_mrl_record,
+		"One limit in full, with everything that qualifies it — the source tier, "
+		"whether it is a blanket default, whether it was matched through a crop "
+		"group, and whether it is past its re-check date. Read-only.\n\n"
+		"`warnings` IS THE FIELD TO READ. It says in words what the columns say in "
+		"flags: that a figure was inferred rather than read off a register, that "
+		"nobody has set a limit for this pair, that the substance is banned "
+		"regardless of the number.",
+		{
+			"mrl_record": _field(_STRING, "The docname, e.g. 'MRL-00019'."),
+		},
+		required=("mrl_record",),
+		title="Get an MRL record",
+		available=_needs_doctype("MRL Record"),
+		requires="the MRL Record DocType — run `bench migrate`",
+	),
+	"list_mrl_records": _tool(
+		mrl.list_mrl_records,
+		"Limits on file, counted by market, with the stale, inferred, default and "
+		"banned ones each named. Read-only, and it never refuses.\n\n"
+		"`needs_recheck` IS WHAT THIS REGISTER EXISTS FOR. MRLs are revised, "
+		"harmonised and withdrawn constantly, and a stale limit is more dangerous "
+		"than a missing one because nobody goes looking for it.",
+		{
+			"chemical": _field(_STRING, "One active ingredient."),
+			"crop": _field(_STRING, "One crop."),
+			"market": _field(_STRING, "One destination market."),
+			"company": _COMPANY,
+			"source_tier": _field(_STRING, "1, 2, 3 or 4."),
+			"confidence": _field(_STRING, "High, Medium or Low."),
+			"substance_status": _field(_STRING, "Registered, Banned, Not Registered, Restricted or Unknown."),
+			"needs_recheck": _field(_BOOLEAN, "True for only the limits past their re-check date."),
+			"limit": _LIMIT,
+		},
+		title="List MRL records",
+		available=_needs_doctype("MRL Record"),
+		requires="the MRL Record DocType — run `bench migrate`",
+	),
+	"update_mrl_record": _tool(
+		mrl.update_mrl_record,
+		"MUTATING (default OFF). Revise a limit — most often because the regulator "
+		"did.\n\n"
+		"MOVING THE NUMBER WITHOUT MOVING THE SOURCE IS REPORTED BACK. A revised "
+		"figure almost always comes from a revised regulation, and a record whose "
+		"limit changed while its citation did not is one that now cites a document "
+		"saying something else.",
+		{
+			"mrl_record": _field(_STRING, "The docname to change."),
+			"chemical": _field(_STRING, "New active ingredient."),
+			"crop": _field(_STRING, "New crop."),
+			"market": _field(_STRING, "New market."),
+			"mrl_ppm": _field(_NUMBER, "New limit in ppm."),
+			"source": _field(_STRING, "New source."),
+			"source_tier": _field(_STRING, "1, 2, 3 or 4."),
+			"confidence": _field(_STRING, "High, Medium or Low."),
+			"substance_status": _field(_STRING, "Registered, Banned, Not Registered, Restricted or Unknown."),
+			"is_default_mrl": _field(_STRING, "Whether this is the market's blanket default."),
+			"crop_group_match": _field(_STRING, "Whether this was matched through a crop group."),
+			"effective_date": _field(_STRING, "New effective date."),
+			"expiry_date": _field(_STRING, "New re-check date."),
+			"research_notes": _field(_STRING, "New research notes."),
+			"research_response": _field(_STRING, "New raw research response."),
+			"notes": _field(_STRING, "New notes."),
+		},
+		required=("mrl_record",),
+		mutating=True,
+		title="Update an MRL record",
+		available=_needs_doctype("MRL Record"),
+		requires="the MRL Record DocType — run `bench migrate`",
+	),
+	"get_mrl_for_chemical_crop_market": _tool(
+		mrl.get_mrl_for_chemical_crop_market,
+		"The limit for one lane — this ingredient, this fruit, this destination. "
+		"Read-only.\n\n"
+		"IT NEVER GUESSES, AND THAT IS THE WHOLE DESIGN. A miss returns "
+		"`found: false`: this will not fall back to another market's figure, will "
+		"not average across markets, and will not offer the nearest crop. Every "
+		"one of those returns something that looks like an answer to a question "
+		"about whether a load can ship.\n\n"
+		"WHAT IT RETURNS INSTEAD is the neighbouring evidence, clearly labelled as "
+		"research rather than as the answer: the same ingredient's limits in other "
+		"markets, and the same market's limits on other ingredients.",
+		{
+			"chemical": _field(_STRING, "The active ingredient."),
+			"crop": _field(_STRING, "The crop."),
+			"market": _field(_STRING, "The destination market."),
+			"company": _COMPANY,
+		},
+		required=("chemical", "crop", "market"),
+		title="Get the MRL for a chemical, crop and market",
+		available=_needs_doctype("MRL Record"),
+		requires="the MRL Record DocType — run `bench migrate`",
+	),
+	"get_ipm_reference": _tool(
+		mrl.get_ipm_reference,
+		"The published IPM reference book this app carries: degree-day emergence "
+		"models, pest damage windows, beneficial organisms and when they are "
+		"active, product efficacy with IRAC and FRAC groups, product-level "
+		"pre-harvest and re-entry intervals, and — the half almost no label "
+		"carries — what each product does to each beneficial. Read-only.\n\n"
+		"THIS IS LITERATURE, NOT THIS FARM'S RECORDS. It reads no doctype and no "
+		"site data at all, and every result says `is_site_data: false` and names "
+		"the works it was assembled from. Nothing here is a label: intervals vary "
+		"by state and formulation and change between seasons, and the label in the "
+		"applicator's hand governs.\n\n"
+		"THE BENEFICIAL TOXICITY TABLE IS WHY IT IS WORTH HAVING. A farm that "
+		"sprays a pyrethroid for one aphid flush and loses its predatory mites has "
+		"bought a spider mite outbreak in August, and that consequence is written "
+		"down almost nowhere else.\n\n"
+		"MATCHING IS EXACT apart from case and spacing. There is no fuzzy matching "
+		"on purpose — the near-misses in this vocabulary ('Cherry Slug' and 'Pear "
+		"Slug', 'Spider Mites') are the ones that must not be bridged "
+		"automatically. With no filter it returns only the index.",
+		{
+			"pest": _field(
+				_STRING,
+				"A pest name. Returns its emergence model, its damage window and every product "
+				"with a recorded effect on it, best first.",
+			),
+			"product": _field(
+				_STRING,
+				"A product name or EPA registration number. Returns its label rows, and what it "
+				"does to every beneficial. Pass `pest` as well for rotation partners from a "
+				"different mode-of-action group.",
+			),
+			"beneficial": _field(
+				_STRING, "A beneficial organism. Returns what it needs, when it works, and what harms it."
+			),
+			"crop": _field(_STRING, "Narrow the damage windows and label rows to one crop."),
+			"table": _field(
+				_STRING,
+				"Read a whole table: pest_models, beneficials, pest_damage, beneficial_activity, "
+				"pesticide_efficacy, beneficial_toxicity, pesticide_products or pesticide_labels.",
+			),
+		},
+		title="Get IPM reference data",
 	),
 }
 

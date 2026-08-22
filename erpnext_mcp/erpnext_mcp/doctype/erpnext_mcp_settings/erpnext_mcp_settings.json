@@ -985,7 +985,48 @@
   "allow_create_employee_bank_account",
   "allow_update_employee_bank_account",
   "allow_generate_nacha_file",
-  "allow_generate_prenote_file"
+  "allow_generate_prenote_file",
+  "iot_read_section",
+  "allow_get_iot_device",
+  "allow_list_iot_devices",
+  "allow_list_iot_readings",
+  "allow_get_device_readings",
+  "iot_write_section",
+  "allow_create_iot_device",
+  "allow_update_iot_device",
+  "allow_create_iot_reading",
+  "competitive_intel_read_section",
+  "allow_get_market_participant",
+  "allow_list_market_participants",
+  "allow_get_competitive_move",
+  "allow_list_competitive_moves",
+  "allow_get_acquisition_target",
+  "allow_list_acquisition_targets",
+  "competitive_intel_write_section",
+  "allow_create_market_participant",
+  "allow_update_market_participant",
+  "allow_create_competitive_move",
+  "allow_update_competitive_move",
+  "allow_create_acquisition_target",
+  "allow_update_acquisition_target",
+  "strategy_read_section",
+  "allow_get_strategic_plan",
+  "allow_list_strategic_plans",
+  "allow_get_strategic_objective",
+  "allow_list_strategic_objectives",
+  "strategy_write_section",
+  "allow_create_strategic_plan",
+  "allow_update_strategic_plan",
+  "allow_create_strategic_objective",
+  "allow_update_strategic_objective",
+  "mrl_read_section",
+  "allow_get_mrl_record",
+  "allow_list_mrl_records",
+  "allow_get_mrl_for_chemical_crop_market",
+  "allow_get_ipm_reference",
+  "mrl_write_section",
+  "allow_create_mrl_record",
+  "allow_update_mrl_record"
  ],
  "fields": [
   {
@@ -7493,6 +7534,277 @@
    "fieldname": "allow_generate_prenote_file",
    "fieldtype": "Check",
    "label": "Generate Prenote File"
+  },
+  {
+   "fieldname": "iot_read_section",
+   "fieldtype": "Section Break",
+   "label": "IoT — Devices and Readings"
+  },
+  {
+   "default": "1",
+   "description": "READ. One device with its health picture and latest reading. Whether it is online is computed here and stored nowhere — a stored flag is wrong from the moment a device goes quiet, which is the only moment it matters.",
+   "fieldname": "allow_get_iot_device",
+   "fieldtype": "Check",
+   "label": "Get IoT Device"
+  },
+  {
+   "default": "1",
+   "description": "READ. The device register, with the offline, never-reported and low-battery ones NAMED rather than counted.",
+   "fieldname": "allow_list_iot_devices",
+   "fieldtype": "Check",
+   "label": "List IoT Devices"
+  },
+  {
+   "default": "1",
+   "description": "READ. Individual readings, newest first. Rows, not statistics — capped at 500, and it says when the cap was hit.",
+   "fieldname": "allow_list_iot_readings",
+   "fieldtype": "Check",
+   "label": "List IoT Readings"
+  },
+  {
+   "default": "1",
+   "description": "READ. One device's readings over a window, summarised per reading type and per unit and never across them. A mean of a temperature and a flow rate has no referent.",
+   "fieldname": "allow_get_device_readings",
+   "fieldtype": "Check",
+   "label": "Get Device Readings"
+  },
+  {
+   "fieldname": "iot_write_section",
+   "fieldtype": "Section Break",
+   "label": "IoT — Registration and Ingest"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Register a device and mint its bearer token. The token is shown once and never read back.",
+   "fieldname": "allow_create_iot_device",
+   "fieldtype": "Check",
+   "label": "Create IoT Device"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Change placement, health figures or config. `last_seen` is refused — it is written only when a reading arrives, so it always means the device spoke.",
+   "fieldname": "allow_update_iot_device",
+   "fieldtype": "Check",
+   "label": "Update IoT Device"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Record one measurement and mark the device as having spoken. The timestamp is the device's and is required; duplicates on (device, type, timestamp) are refused.",
+   "fieldname": "allow_create_iot_reading",
+   "fieldtype": "Check",
+   "label": "Create IoT Reading"
+  },
+  {
+   "fieldname": "competitive_intel_read_section",
+   "fieldtype": "Section Break",
+   "label": "Competitive Intelligence — Reading"
+  },
+  {
+   "default": "1",
+   "description": "READ. One participant with every move observed against them, and the moves nobody ever responded to named.",
+   "fieldname": "allow_get_market_participant",
+   "fieldtype": "Check",
+   "label": "Get Market Participant"
+  },
+  {
+   "default": "1",
+   "description": "READ. The participant register, with the ones nobody has assessed named.",
+   "fieldname": "allow_list_market_participants",
+   "fieldtype": "Check",
+   "label": "List Market Participants"
+  },
+  {
+   "default": "1",
+   "description": "READ. One move, with the participant who made it.",
+   "fieldname": "allow_get_competitive_move",
+   "fieldtype": "Check",
+   "label": "Get Competitive Move"
+  },
+  {
+   "default": "1",
+   "description": "READ. Moves observed, newest first, with the urgent unanswered ones named. The gap between recommendation and response is invisible move by move.",
+   "fieldname": "allow_list_competitive_moves",
+   "fieldtype": "Check",
+   "label": "List Competitive Moves"
+  },
+  {
+   "default": "1",
+   "description": "READ. One target with its four fit scores, the weakest named, and the asset breakdown totalled against the going-concern estimate.",
+   "fieldname": "allow_get_acquisition_target",
+   "fieldtype": "Check",
+   "label": "Get Acquisition Target"
+  },
+  {
+   "default": "1",
+   "description": "READ. The pipeline, best-scored first. `live_count` is separate from the total because a pipeline of forty of which thirty-five are settled is a pipeline of five.",
+   "fieldname": "allow_list_acquisition_targets",
+   "fieldtype": "Check",
+   "label": "List Acquisition Targets"
+  },
+  {
+   "fieldname": "competitive_intel_write_section",
+   "fieldtype": "Section Break",
+   "label": "Competitive Intelligence — Writing"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Open a record for another organisation in this market. Every scale figure on it is an estimate and the result says so.",
+   "fieldname": "allow_create_market_participant",
+   "fieldtype": "Check",
+   "label": "Create Market Participant"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Revise a participant record — the estimates age.",
+   "fieldname": "allow_update_market_participant",
+   "fieldtype": "Check",
+   "label": "Update Market Participant"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Record something a competitor did, on the day it was noticed. A future observation date is refused.",
+   "fieldname": "allow_create_competitive_move",
+   "fieldtype": "Check",
+   "label": "Create Competitive Move"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Record what was actually done about a move. A response date with no response is refused.",
+   "fieldname": "allow_update_competitive_move",
+   "fieldtype": "Check",
+   "label": "Update Competitive Move"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Open a file on a farm somebody is considering buying, scored on four dimensions that fail separately.",
+   "fieldname": "allow_create_acquisition_target",
+   "fieldtype": "Check",
+   "label": "Create Acquisition Target"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Move a target through the pipeline. `accretive_score` is derived and refused; Closed without a close date is refused.",
+   "fieldname": "allow_update_acquisition_target",
+   "fieldtype": "Check",
+   "label": "Update Acquisition Target"
+  },
+  {
+   "fieldname": "strategy_read_section",
+   "fieldtype": "Section Break",
+   "label": "Strategy — Reading"
+  },
+  {
+   "default": "1",
+   "description": "READ. One plan with its objectives, its place in the supersession chain, and how much of it is actually filled in.",
+   "fieldname": "allow_get_strategic_plan",
+   "fieldtype": "Check",
+   "label": "Get Strategic Plan"
+  },
+  {
+   "default": "1",
+   "description": "READ. The plan register, with breaks in the supersession chain named.",
+   "fieldname": "allow_list_strategic_plans",
+   "fieldtype": "Check",
+   "label": "List Strategic Plans"
+  },
+  {
+   "default": "1",
+   "description": "READ. One objective, with the plan it belongs to and whether it is overdue.",
+   "fieldname": "allow_get_strategic_objective",
+   "fieldtype": "Check",
+   "label": "Get Strategic Objective"
+  },
+  {
+   "default": "1",
+   "description": "READ. Objectives across every plan, with the overdue and unmeasured ones named. The achieved rate is computed over settled objectives only.",
+   "fieldname": "allow_list_strategic_objectives",
+   "fieldtype": "Check",
+   "label": "List Strategic Objectives"
+  },
+  {
+   "fieldname": "strategy_write_section",
+   "fieldtype": "Section Break",
+   "label": "Strategy — Writing"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Write a plan. Naming a previous_version versions this one and retires that one; `version` itself is derived and refused.",
+   "fieldname": "allow_create_strategic_plan",
+   "fieldtype": "Check",
+   "label": "Create Strategic Plan"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Revise a plan in place — for a gap or a wording fix. Changing direction means writing a new plan, and this says so.",
+   "fieldname": "allow_update_strategic_plan",
+   "fieldtype": "Check",
+   "label": "Update Strategic Plan"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Add a measurable promise to a plan. Target and actual are free text on purpose.",
+   "fieldname": "allow_create_strategic_objective",
+   "fieldtype": "Check",
+   "label": "Create Strategic Objective"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Record progress. An undated actual is refused, and Achieved with an empty actual is refused.",
+   "fieldname": "allow_update_strategic_objective",
+   "fieldtype": "Check",
+   "label": "Update Strategic Objective"
+  },
+  {
+   "fieldname": "mrl_read_section",
+   "fieldtype": "Section Break",
+   "label": "Residue Limits and IPM Reference"
+  },
+  {
+   "default": "1",
+   "description": "READ. One limit with everything that qualifies it — source tier, blanket default, crop-group match, past its re-check date.",
+   "fieldname": "allow_get_mrl_record",
+   "fieldtype": "Check",
+   "label": "Get MRL Record"
+  },
+  {
+   "default": "1",
+   "description": "READ. Limits on file, with the stale, inferred, default and banned ones each named.",
+   "fieldname": "allow_list_mrl_records",
+   "fieldtype": "Check",
+   "label": "List MRL Records"
+  },
+  {
+   "default": "1",
+   "description": "READ. The limit for one lane. It never guesses: a miss is a miss, with the neighbouring evidence returned as research rather than as an answer.",
+   "fieldname": "allow_get_mrl_for_chemical_crop_market",
+   "fieldtype": "Check",
+   "label": "Get MRL For Chemical, Crop and Market"
+  },
+  {
+   "default": "1",
+   "description": "READ. The published IPM book: degree-day models, damage windows, efficacy with IRAC and FRAC groups, label intervals, and what each product does to each beneficial. Literature, not this farm's records — it reads no doctype at all.",
+   "fieldname": "allow_get_ipm_reference",
+   "fieldtype": "Check",
+   "label": "Get IPM Reference Data"
+  },
+  {
+   "fieldname": "mrl_write_section",
+   "fieldtype": "Section Break",
+   "label": "Residue Limits — Writing"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Record a limit for one ingredient on one crop into one market. The source is required — a limit with no provenance looks identical to a checked one.",
+   "fieldname": "allow_create_mrl_record",
+   "fieldtype": "Check",
+   "label": "Create MRL Record"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Revise a limit. Moving the number without moving the source is reported back.",
+   "fieldname": "allow_update_mrl_record",
+   "fieldtype": "Check",
+   "label": "Update MRL Record"
   }
  ],
  "index_web_pages_for_search": 0,

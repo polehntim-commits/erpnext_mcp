@@ -13,6 +13,7 @@
   "acreage",
   "identity_col",
   "block_number",
+  "block_ticker",
   "external_farm_app_id",
   "cost_center",
   "planting_section",
@@ -111,6 +112,16 @@
    "fieldname": "block_number",
    "fieldtype": "Data",
    "label": "Block Number",
+   "search_index": 1
+  },
+  {
+   "description": "THE BUYER'S NAME FOR THIS BLOCK, and the only identifier on this record a person outside the farm ever types. Short, stable and buyer-facing — 'YC-3' for Yellow Camp Block 3 — it goes on the purchase order, comes back on the settlement, and is how a buyer asks for the same fruit next season without knowing or caring what the docname is.\n\nIT IS DELIBERATELY NOT `block_number`. The block number is what the crew and the old records call it, is duplicated across parcels on purpose, and changes when somebody re-splits a block. A ticker is promised to somebody outside the business, so it is unique across the company and is meant never to move. Ten characters, because it has to fit in a column on a paper settlement sheet.\n\nEMPTY IS THE NORMAL STATE. Most blocks are never sold by name, and a farm that has not made this promise to anybody should not be made to invent one.",
+   "fieldname": "block_ticker",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Block Ticker",
+   "length": 10,
    "search_index": 1
   },
   {
@@ -447,7 +458,7 @@
   }
  ],
  "quick_entry": 0,
- "search_fields": "field_name,parcel,variety,block_number",
+ "search_fields": "field_name,parcel,variety,block_number,block_ticker",
  "sort_field": "field_name",
  "sort_order": "ASC",
  "states": [],
