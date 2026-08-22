@@ -1,0 +1,185 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 18:00:00.000000",
+ "description": "One index reading for one block at one moment — NDVI, NDRE, moisture. This is the record that makes a satellite pull worth keeping: the imagery itself is re-downloadable and expensive, the number derived from it is small and permanent, and a season of these is what the anomaly detector compares against. Written by a pull, never by hand.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "field",
+  "company",
+  "identity_col",
+  "metric_type",
+  "timestamp",
+  "measurement_section",
+  "value",
+  "indexed_value",
+  "measurement_col",
+  "source",
+  "cloud_cover_pct",
+  "context_section",
+  "h3_index",
+  "pixel_count",
+  "context_col",
+  "stddev",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "SATM-.YYYY.-.######",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "no_copy": 1,
+   "options": "SATM-.YYYY.-.######",
+   "print_hide": 1,
+   "reqd": 1
+  },
+  {
+   "description": "The block this reading is of. A metric with no block is a number with no ground.",
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Block",
+   "options": "Field",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Copied from the block on save, and kept. A block sold in July must not retroactively move June's readings to the buyer's books.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "ndvi",
+   "description": "Which vegetation index. NDVI is the one Field.last_ndvi_mean mirrors; the rest live only here.",
+   "fieldname": "metric_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Index",
+   "options": "ndvi\nevi\nndre\nndwi\nndmi\nsavi",
+   "reqd": 1
+  },
+  {
+   "description": "When the satellite passed, NOT when the row was written. A backfill run in August writes rows stamped with May.",
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Acquired At",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "measurement_section",
+   "fieldtype": "Section Break",
+   "label": "Reading"
+  },
+  {
+   "description": "The index in its own physical units — NDVI runs -1 to 1 and water reads negative. This is what an agronomist reads.",
+   "fieldname": "value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Raw Value",
+   "precision": "6",
+   "reqd": 1
+  },
+  {
+   "description": "The same reading rescaled 0-100, derived on save. What the anomaly detector compares, because a relative drop computed on raw NDVI is unsound near zero.",
+   "fieldname": "indexed_value",
+   "fieldtype": "Float",
+   "label": "Indexed 0-100",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "measurement_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The provider and collection this came from — 'sentinel-2-l2a', 'copernicus'. Two sources are not comparable pixel for pixel.",
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source"
+  },
+  {
+   "description": "Cloud fraction of the pass this came from. A cloudy pass reads as a low NDVI and looks exactly like a crop in trouble, so the figure travels with the number.",
+   "fieldname": "cloud_cover_pct",
+   "fieldtype": "Percent",
+   "label": "Cloud Cover"
+  },
+  {
+   "fieldname": "context_section",
+   "fieldtype": "Section Break",
+   "label": "Context"
+  },
+  {
+   "description": "Set when the reading is for one hex within the block rather than the whole of it. Blank means the whole block.",
+   "fieldname": "h3_index",
+   "fieldtype": "Data",
+   "label": "H3 Cell",
+   "search_index": 1
+  },
+  {
+   "description": "How many pixels the mean was taken over, after masking. A mean over eleven pixels is not the same claim as one over forty thousand.",
+   "fieldname": "pixel_count",
+   "fieldtype": "Int",
+   "label": "Usable Pixels"
+  },
+  {
+   "fieldname": "context_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Spread across the block. A high one on a healthy mean is a block that is half fine and half not.",
+   "fieldname": "stddev",
+   "fieldtype": "Float",
+   "label": "Std Dev",
+   "precision": "6"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Satellite Metric",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "field,metric_type,timestamp",
+ "sort_field": "timestamp",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "naming_rule": "By \"Naming Series\" field"
+}

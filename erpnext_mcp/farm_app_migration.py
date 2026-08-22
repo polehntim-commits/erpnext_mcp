@@ -1,73 +1,74 @@
 # SPDX-License-Identifier: MIT
-"""Moving the farm_app's SQLite rows into ERPNext, once, without doing it twice.
+"""Carrying the two things out of the farm_app's SQLite that are worth keeping.
 
-WHAT THIS IS. The farm_app Flask sidecar kept its own SQLite database, and Cycle
-1 of the retirement plan built the ERPNext doctypes that replace the tables
-still living in it. This module is the transfer: read a table, turn each row
-into a document, and insert it — in an order that respects the foreign keys, and
-in a way that can be run again tomorrow without producing a second copy of
-everything.
+WHAT THIS IS, AND WHAT IT DELIBERATELY IS NOT. v0.120.0 shipped a general
+SQLite→ERPNext migration covering ten tables — blocks, IoT devices and readings,
+strategic plans, objectives, market participants, acquisition targets,
+competitive moves. **That was wrong about the data, and the owner said so.** The
+sidecar's contents are TEST data: rows typed to exercise a form, six blocks of
+which two are the same block twice, readings fifteen seconds apart from a smoke
+test. Migrating test data into the system of record does not preserve anything —
+it contaminates a clean register with rows nobody can tell apart from real ones
+afterwards.
 
-THE THREE PROPERTIES THAT MATTER, IN THE ORDER THEY MATTER.
+So this module now carries exactly two things, both named by the owner as real:
 
-**Idempotent, by a NATURAL key and never by a row number.** Every spec below
-names the fields that make one of its documents unique — a device's hardware id,
-a plan's name and version, a reading's device-type-and-timestamp. A second run
-finds the existing document by those fields and records it as already present.
-Matching on the SQLite `id` instead would be easier and would be wrong twice
-over: the id is not stored on most of the target doctypes, and a farm_app table
-that was ever re-seeded has ids pointing at different rows than it did last week.
+**The MRL reference data.** `maximum_residue` is a table of residue limits
+assembled over two seasons out of the EU, Codex, Japanese and US registers.
+Nothing about it is farm-specific — it is published regulation, transcribed —
+and transcribing it again is weeks of somebody's attention. `mrl_research_session`
+carries the completed research that produced some of those limits, and travels
+with it.
 
-**It never updates.** A document that already exists is left exactly as it is,
-including when the SQLite row has changed. The farm_app is being retired, not
-synchronised: after the cutover ERPNext is the system of record, and a migration
-that reached back to overwrite an operator's correction with a stale sidecar
-value would silently undo work somebody did in the new system. The report says
-`already present` and the operator decides.
+**The satellite history.** Not the imagery: a Sentinel-2 raster is megabytes,
+is re-downloadable from the provider's archive, and is useful for as long as it
+takes to compute a mean from it. What is worth keeping is the two things the
+imagery LEFT BEHIND — the index series computed from it (`field_satellite_metric`
+→ `Satellite Metric`), and the record of how far back the archive has already
+been walked (`satellite_backfill_cursor` → `Satellite Backfill Cursor`). The
+second is the one that answers the owner's actual question: without it a backfill
+starts at the beginning and pays the provider again for months already bought.
+Cached raster FILES on disk are reported by `raster_manifest()` rather than
+moved, because moving them is a `docker cp` an operator does with their own hands
+and their own disk.
 
-**Dry run first, always.** `migrate()` with the default loader produces the
-whole transfer as data — every document it would create, every refusal and every
-warning — and writes nothing. `FrappeLoader` is the only object here that
-writes, and the caller has to pass one deliberately.
+EVERYTHING ELSE IS GONE WITH THE SIDECAR, ON PURPOSE. The doctypes Cycle 1 built
+for IoT, strategy and competitive intelligence remain — the STRUCTURE was the
+point, and a farm starting to log real devices needs somewhere to log them. What
+is not carried across is the test rows that happened to be sitting in those
+tables.
 
-WHAT IT WILL NOT INVENT. Two cases, both deliberate:
+THE PROPERTIES THAT STILL MATTER.
 
-*`block_ticker` is not derived from a block's name.* The field's own description
-says it is the buyer's name for the block, unique across the company, promised
-to somebody outside the business, and that EMPTY IS THE NORMAL STATE. Turning
-`"Block A4"` into `"A4"` would manufacture a commitment the farm never made, on
-every block at once. Tickers migrate only from an explicit mapping the operator
-supplies, and blocks not in it keep an empty ticker.
+**Idempotent, by a NATURAL key and never by a row number.** A limit is matched by
+chemical, crop and market; a metric by block, index and acquisition time; a
+cursor by block and index. A second run finds what is there and reports it as
+already present. Matching on the SQLite `id` would be easier and wrong twice
+over: it is not stored on any target doctype, and a table that was ever re-seeded
+has ids pointing at different rows than last week.
 
-*An unrecognised Select value is reported, not guessed.* A farm_app
-`participant_type` of `"co-op"` has no Market Participant option to land on. The
-row still migrates, that one field is left blank, and the value appears in
-`warnings` with the row that carried it — because the alternative, quietly
-choosing the first option in the list, produces a register that is wrong in a
-way nobody can find later.
+**It never updates.** A document that already exists is left exactly as it is.
+The sidecar is being retired, not synchronised.
 
-WHERE THE FOREIGN KEYS GO. Rows reference each other by SQLite id, and the
-documents they become reference each other by docname. `Links` carries the
-map — built as each table is migrated, and seeded for `field` from the
-`external_farm_app_id` column that `import_farm_app_fields` writes for exactly
-this purpose. A row whose parent has not been migrated is REFUSED rather than
-inserted with an empty link, because a reading with no device is a number with
-no provenance.
+**Dry run first, always.** `migrate()` with the default loader produces the whole
+transfer as data — every document it would create, every refusal and every
+warning — and writes nothing. `FrappeLoader` is the only object here that writes.
 
-WHAT IS NOT MIGRATED, AND WHY. `field_satellite_metric` has no target doctype —
-`Satellite Metric` is proposed in the plan and has not shipped — so its spec
-folds only the newest NDVI reading per block onto `Field`'s own
-`last_ndvi_*` columns and reports the rest of the history as dropped. That is a
-real loss of a time series and it is stated in the report rather than left for
-somebody to notice. Everything else the plan excludes (HR, payroll, accounting,
-crop protection, Nostr, backup sharding) is excluded because it is already in
-ERPNext or was never going to be.
+THE NAME JOIN IS THE WEAK POINT AND IS TREATED AS ONE. MRL rows reference a crop
+and a country by SQLite id; nothing on this site's `Crop` or `Market` carries
+those ids, so the join is on the NAME. `seed_links_by_name` does it once, exactly,
+casefolded, with no fuzzy matching of any kind, and reports every miss by name —
+because a residue limit filed against the wrong fruit is worse than one that did
+not migrate at all, since it looks like an answer.
 
-RUNNING IT. `scripts/migrate_farm_app.py` is the command line around this
-module; it is where the bench is started and the flags are parsed. Everything
-here works on a `sqlite3.Connection` and a loader object, so the whole transfer
-can be exercised against a fixture database with no bench at all — which is what
-the tests do.
+A ROW WHOSE PARENT IS NOT RESOLVED IS REFUSED, never inserted with an empty link.
+An MRL with no market cannot be applied to a shipment, and a satellite reading
+with no block is a number with no ground.
+
+RUNNING IT. `scripts/migrate_farm_app.py` is the command line around this module.
+Everything here works on a `sqlite3.Connection` and a loader object, so the whole
+transfer can be exercised against a fixture database with no bench at all — which
+is what the tests do.
 """
 
 from __future__ import annotations
@@ -454,47 +455,6 @@ def _options(*names) -> dict:
 
 
 # ── one builder per table ───────────────────────────────────────────────────
-DEVICE_TYPES = {
-	**_options("Soil Moisture", "Flow Meter", "Weather Station", "Temperature", "Generic"),
-	"soil": "Soil Moisture",
-	"moisture": "Soil Moisture",
-	"flow": "Flow Meter",
-	"weather": "Weather Station",
-	"temp": "Temperature",
-}
-READING_QUALITY = {**_options("Good", "Suspect", "Error"), "ok": "Good", "bad": "Error"}
-PLAN_STATUS = {**_options("Developing", "Developed", "Implemented", "Historical"), "retired": "Historical"}
-OBJECTIVE_STATUS = {
-	**_options("Pending", "In Progress", "Achieved", "Failed"),
-	"open": "Pending",
-	"complete": "Achieved",
-	"completed": "Achieved",
-	"done": "Achieved",
-	"abandoned": "Failed",
-}
-PARTICIPANT_TYPES = {**_options("Competitor", "Supplier", "Customer", "Partner", "Target")}
-PARTICIPANT_POSITION = {**_options("Leader", "Challenger", "Follower", "Nicher")}
-PARTICIPANT_RELATIONSHIP = {
-	**_options("Allied", "Neutral", "Adversarial", "Acquisition Target"),
-	"ally": "Allied",
-	"hostile": "Adversarial",
-	"target": "Acquisition Target",
-}
-ACQUISITION_STATUS = {
-	**_options("Identified", "Evaluating", "Due Diligence", "Negotiating", "Closed", "Passed"),
-	"open": "Identified",
-	"rejected": "Passed",
-}
-ACQUISITION_ACTION = {**_options("Monitor", "Evaluate", "Pursue", "Negotiate", "Close")}
-MOVE_SEVERITY = {**_options("Low", "Medium", "High"), "critical": "High", "minor": "Low"}
-MOVE_URGENCY = {
-	**_options("No Action", "Monitor", "Respond", "Urgent"),
-	"none": "No Action",
-	"immediate": "Urgent",
-	"high": "Urgent",
-	"medium": "Respond",
-	"low": "Monitor",
-}
 CONFIDENCE = {**_options("Low", "Medium", "High")}
 SUBSTANCE_STATUS = {
 	**_options("Registered", "Banned", "Not Registered", "Restricted", "Unknown"),
@@ -505,260 +465,37 @@ SUBSTANCE_STATUS = {
 }
 
 
-def build_field(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	"""A `Field` from a farm_app `field` row.
+def _mrl_links(row: dict, links: Links, doc: dict) -> None:
+	"""Resolve the crop and the market, or refuse the row saying which is missing.
 
-	`block_ticker` comes ONLY from the operator's mapping — see the module
-	docstring. `boundary_geojson` carries the polygon across so that the
-	geospatial derivations (`centroid`, `bbox`, H3 cover) recompute on save
-	rather than being copied as stale numbers.
+	BOTH ARE `reqd=1` ON `MRL Record`, so a document without them is one Frappe
+	will refuse at insert time — halfway through a run, with a traceback, after
+	some of the batch has already landed. Refusing here instead puts it in the
+	DRY RUN, by name, before anything is written: an earlier draft warned and
+	migrated anyway, which turned a readable plan into a mid-run failure.
+
+	It is also the right answer on the merits. A residue limit is a limit for one
+	chemical on one crop in one market; without either link it is a number that
+	cannot be applied to a shipment, and one filed anyway looks like an answer.
+	The fix is a minute of somebody's time — create the Crop or the Market, or
+	rename it to match — and this migration is idempotent, so re-running picks up
+	only what was missing.
 	"""
-	name = text(row.get("name"))
-	if not name:
-		raise RowRefused("a block with no name cannot be created — Field.field_name is required")
-	tickers = context.get("tickers") or {}
-	ticker = text(tickers.get(str(row.get("id"))) or tickers.get(name))
-	if ticker and len(ticker) > 10:
-		warnings.append(f"block_ticker {ticker!r} is longer than the field's 10 characters — left blank")
-		ticker = ""
-
-	doc = {
-		"field_name": name,
-		"external_farm_app_id": text(row.get("id")),
-		"acreage": number(row.get("acres")),
-		"block_ticker": ticker.upper(),
-		"boundary_geojson": text(row.get("polygon")),
-	}
-	if context.get("company"):
-		doc["owning_entity"] = context["company"]
-	if context.get("parcel"):
-		doc["parcel"] = context["parcel"]
-	return {key: value for key, value in doc.items() if value not in (None, "")}
-
-
-def build_iot_device(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	hardware_id = text(row.get("hardware_id"))
-	if not hardware_id:
-		raise RowRefused(
-			"a device with no hardware_id has no natural key — two of them would migrate as one, "
-			"and neither could be matched to the thing on the post"
-		)
-	doc = {
-		"device_name": text(row.get("name")) or hardware_id,
-		"hardware_id": hardware_id,
-		"device_type": option(row.get("device_type"), DEVICE_TYPES, warnings, "device_type", "Generic"),
-		"zone": text(row.get("zone")),
-		"enabled": flag(row.get("is_active")),
-		"last_seen": moment(row.get("last_seen")),
-		"battery_level": number(row.get("battery_level")),
-		"signal_strength": number(row.get("signal_strength")),
-		"device_config": json_text(row.get("config")),
-	}
-	# THE AUTH TOKEN CROSSES. A device in an orchard post has this string burned
-	# into its firmware and no way to be told a new one short of a truck and a
-	# laptop, so rotating it at migration silently takes every sensor offline.
-	# `--rotate-tokens` is how an operator asks for the other behaviour.
-	if not context.get("rotate_tokens"):
-		token = text(row.get("auth_token"))
-		if token:
-			doc["auth_token"] = token
-	field = links.resolve("field", row.get("field_id"))
-	if field:
-		doc["field"] = field
-	elif row.get("field_id") is not None:
-		warnings.append(f"field id {row['field_id']} is not migrated — device registered without a block")
-	if context.get("company"):
-		doc["company"] = context["company"]
-	return {key: value for key, value in doc.items() if value not in (None, "")}
-
-
-def build_iot_reading(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	device = links.require("iot_device", row.get("device_id"), "this reading")
-	when = moment(row.get("timestamp"))
-	if not when:
-		raise RowRefused("a reading with no timestamp is a number with no place in a series")
-	value = number(row.get("value"))
-	if value is None:
-		raise RowRefused("a reading with no value is not a reading")
-	doc = {
-		"device": device,
-		"timestamp": when,
-		"reading_type": text(row.get("reading_type")) or "generic",
-		"value": value,
-		"unit": text(row.get("unit")) or "unit",
-		"quality": option(row.get("quality"), READING_QUALITY, warnings, "quality", "Good"),
-	}
-	field = links.resolve("field", row.get("field_id"))
-	if field:
-		doc["field"] = field
-	if context.get("company"):
-		doc["company"] = context["company"]
-	return doc
-
-
-def build_strategic_plan(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	name = text(row.get("name"))
-	if not name:
-		raise RowRefused("a plan with no name cannot be told apart from the next one")
-	doc = {
-		"plan_name": name,
-		"status": option(row.get("status"), PLAN_STATUS, warnings, "status", "Developing"),
-		"version": integer(row.get("version")) or 1,
-		"effective_date": day(row.get("effective_date")),
-		"retired_date": day(row.get("retired_date")),
-		"vision": text(row.get("vision")),
-		"mission": text(row.get("mission")),
-		"values_text": lines(row.get("values")),
-		"swot": json_text(row.get("swot")),
-		"porters_five_forces": json_text(row.get("porters_five_forces")),
-		"sustainable_advantage": json_text(row.get("sustainable_advantage")),
-		"analogous_games": json_text(row.get("analogous_games")),
-		"grand_strategy": text(row.get("grand_strategy")),
-		"business_strategy": text(row.get("business_strategy")),
-		"command_structure": json_text(row.get("command_structure")),
-		"functional_tactics": json_text(row.get("functional_tactics")),
-		"validation_control": json_text(row.get("validation_control")),
-		"exit_strategy": text(row.get("exit_strategy")),
-		"notes": text(row.get("notes")),
-	}
 	crop = links.resolve("commodity", row.get("commodity_id"))
-	if crop:
-		doc["crop"] = crop
-	previous = links.resolve("strategic_plan", row.get("parent_id"))
-	if previous:
-		doc["previous_version"] = previous
-	if context.get("company"):
-		doc["company"] = context["company"]
-	return {key: value for key, value in doc.items() if value not in (None, "")}
-
-
-def build_objective(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	plan = links.require("strategic_plan", row.get("strategic_plan_id"), "this objective")
-	description = text(row.get("description"))
-	if not description:
-		raise RowRefused("an objective with no description states nothing to achieve")
-	doc = {
-		"strategic_plan": plan,
-		"objective": description,
-		"status": option(row.get("status"), OBJECTIVE_STATUS, warnings, "status", "Pending"),
-		"due_date": day(row.get("target_date")),
-		"kpi_metric": text(row.get("measurable")),
-		"notes": text(row.get("notes")),
-	}
-	if context.get("company"):
-		doc["company"] = context["company"]
-	return {key: value for key, value in doc.items() if value not in (None, "")}
-
-
-def build_market_participant(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	name = text(row.get("name"))
-	if not name:
-		raise RowRefused("a participant with no name is not a participant")
-	doc = {
-		"participant_name": name,
-		"participant_type": option(
-			row.get("participant_type"), PARTICIPANT_TYPES, warnings, "participant_type", "Competitor"
-		),
-		"relationship_status": option(
-			row.get("relationship_status"), PARTICIPANT_RELATIONSHIP, warnings, "relationship_status"
-		),
-		"market_position": option(
-			row.get("market_position"), PARTICIPANT_POSITION, warnings, "market_position"
-		),
-		"industry_segment": text(row.get("industry_segment")),
-		"geography": text(row.get("geography")),
-		"employee_count": integer(row.get("employee_count")),
-		"estimated_revenue": number(row.get("estimated_revenue")),
-		"estimated_acreage": number(row.get("estimated_acreage")),
-		"strengths": lines(row.get("strengths")),
-		"weaknesses": lines(row.get("weaknesses")),
-		"key_assets": lines(row.get("key_assets")),
-		"vulnerability_windows": lines(row.get("vulnerability_windows")),
-		"notes": text(row.get("notes")),
-	}
-	plan = links.resolve("strategic_plan", row.get("strategic_plan_id"))
-	if plan:
-		doc["strategic_plan"] = plan
-	# `contact_id` pointed at the farm_app's own Contact table, which has no
-	# single ERPNext counterpart — a contact became a Customer, a Supplier or
-	# neither depending on what it was for. Reported rather than guessed.
-	if row.get("contact_id") is not None:
-		warnings.append(
-			f"contact id {row['contact_id']} is not linked — a farm_app Contact may be a Customer or "
-			"a Supplier in ERPNext, and the migration will not choose one"
+	market = links.resolve("country", row.get("country_id"))
+	missing = []
+	if not crop:
+		missing.append(f"crop (farm_app commodity id {row.get('commodity_id')!r})")
+	if not market:
+		missing.append(f"market (farm_app country id {row.get('country_id')!r})")
+	if missing:
+		raise RowRefused(
+			"this limit has no " + " and no ".join(missing) + " on this site. `MRL Record` requires "
+			"both, so it would be refused at insert; the run report lists every unmatched name so "
+			"they can be created or renamed, and re-running picks up only what was missing."
 		)
-	if context.get("company"):
-		doc["company"] = context["company"]
-	return {key: value for key, value in doc.items() if value not in (None, "")}
-
-
-def build_acquisition_target(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	participant = links.require("market_participant", row.get("participant_id"), "this target")
-	doc = {
-		"market_participant": participant,
-		"entity_name": text(context.get("participant_names", {}).get(str(row.get("participant_id"))))
-		or participant,
-		"status": option(row.get("status"), ACQUISITION_STATUS, warnings, "status", "Identified"),
-		"action_level": option(
-			row.get("action_level"), ACQUISITION_ACTION, warnings, "action_level", "Monitor"
-		),
-		"strategic_fit_score": number(row.get("strategic_fit_score")),
-		"financial_health_score": number(row.get("financial_health_score")),
-		"synergy_score": number(row.get("synergy_score")),
-		"cultural_fit_score": number(row.get("cultural_fit_score")),
-		"accretive_score": number(row.get("accretive_score")),
-		"estimated_acquisition_cost": number(row.get("estimated_acquisition_cost")),
-		"projected_revenue_uplift": number(row.get("projected_revenue_uplift")),
-		"projected_cost_savings": number(row.get("projected_cost_savings")),
-		"payback_period_years": number(row.get("payback_period_years")),
-		"irr_estimate": number(row.get("irr_estimate")),
-		"intergenerational_horizon_years": integer(row.get("intergenerational_horizon_years")),
-		"land_value_appreciation": number(row.get("land_value_appreciation")),
-		"water_rights_value": number(row.get("water_rights_value")),
-		"varietal_ip_value": number(row.get("varietal_ip_value")),
-		"infrastructure_value": number(row.get("infrastructure_value")),
-		"identified_date": day(row.get("identified_date")),
-		"target_close_date": day(row.get("target_close_date")),
-		"actual_close_date": day(row.get("actual_close_date")),
-		"recommendation": json_text(row.get("recommendation")),
-		"notes": text(row.get("notes")),
-	}
-	plan = links.resolve("strategic_plan", row.get("strategic_plan_id"))
-	if plan:
-		doc["strategic_plan"] = plan
-	if context.get("company"):
-		doc["company"] = context["company"]
-	return {key: value for key, value in doc.items() if value not in (None, "")}
-
-
-def build_competitive_move(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	participant = links.require("market_participant", row.get("participant_id"), "this move")
-	observed = day(row.get("observed_date"))
-	if not observed:
-		raise RowRefused("a move with no observed date cannot be placed in the competitive timeline")
-	doc = {
-		"market_participant": participant,
-		"observed_date": observed,
-		"move_type": text(row.get("move_type")),
-		"severity": option(row.get("severity"), MOVE_SEVERITY, warnings, "severity", "Medium"),
-		"description": text(row.get("description")),
-		"source": text(row.get("source")),
-		"confidence": option(row.get("confidence"), CONFIDENCE, warnings, "confidence", "Medium"),
-		"market_impact_pct": number(row.get("market_impact_pct")),
-		"revenue_impact": number(row.get("revenue_impact")),
-		"response_urgency": option(row.get("response_urgency"), MOVE_URGENCY, warnings, "response_urgency"),
-		"recommended_response": json_text(row.get("recommended_response")),
-		"actual_response": text(row.get("actual_response")),
-		"response_date": day(row.get("response_date")),
-		"outcome": text(row.get("outcome")),
-		"notes": text(row.get("notes")),
-	}
-	plan = links.resolve("strategic_plan", row.get("strategic_plan_id"))
-	if plan:
-		doc["strategic_plan"] = plan
-	if context.get("company"):
-		doc["company"] = context["company"]
-	return {key: value for key, value in doc.items() if value not in (None, "")}
+	doc["crop"] = crop
+	doc["market"] = market
 
 
 def build_mrl_record(row: dict, links: Links, context: dict, warnings: list) -> dict:
@@ -807,106 +544,217 @@ def build_mrl_record(row: dict, links: Links, context: dict, warnings: list) -> 
 		"research_notes": text(row.get("review_notes")) or text(result.get("notes")),
 		"research_response": text(row.get("ai_response_raw")),
 	}
-	crop = links.resolve("commodity", row.get("commodity_id"))
-	if crop:
-		doc["crop"] = crop
-	market = links.resolve("country", row.get("country_id"))
-	if market:
-		doc["market"] = market
-	else:
-		warnings.append(
-			f"country id {row.get('country_id')!r} has no Market — the record migrates without one, "
-			"and an MRL with no market is a limit nobody can apply to a shipment"
-		)
+	_mrl_links(row, links, doc)
 	if context.get("company"):
 		doc["company"] = context["company"]
 	return {key: value for key, value in doc.items() if value not in (None, "")}
 
 
-def build_satellite_fold(row: dict, links: Links, context: dict, warnings: list) -> dict:
-	"""The `Field` columns one satellite metric row updates.
+def build_maximum_residue(row: dict, links: Links, context: dict, warnings: list) -> dict:
+	"""An `MRL Record` from the sidecar's `maximum_residue` table.
 
-	See the module docstring: `Satellite Metric` does not exist, so only the
-	newest NDVI reading per block survives, onto the three `last_ndvi_*` columns.
-	Everything else in the table is reported as dropped.
+	THIS IS THE ONE THAT MATTERS. A research session is the transcript of asking a
+	question; `maximum_residue` is the answer the farm decided to keep and ships
+	fruit against. It is reference data assembled over two seasons out of the EU,
+	Codex, Japanese and US registers, and it is expensive to redo and impossible
+	to reconstruct from the schema.
+
+	THE UNIT IS CHECKED, NOT ASSUMED. `MRL Record.mrl_ppm` says ppm in its own
+	name and the source table carries a free-text `mrl_unit`. mg/kg IS ppm, so
+	that converts silently and correctly; ppb is a thousandth of one, and a ppb
+	figure written into a ppm column is a limit a thousand times too loose — the
+	direction that clears a shipment it should have held. Anything this does not
+	recognise is refused rather than guessed at.
+	"""
+	chemical = text(row.get("active_ingredient"))
+	if not chemical:
+		raise RowRefused("a residue limit that names no substance cannot be applied to anything")
+
+	amount = number(row.get("mrl_value"))
+	if amount is None:
+		raise RowRefused("no mrl_value on this row — a record with no limit is not a limit")
+
+	unit = text(row.get("mrl_unit")).lower().replace(" ", "") or "ppm"
+	factors = {"ppm": 1.0, "mg/kg": 1.0, "mgkg": 1.0, "mg/kg-1": 1.0, "ppb": 0.001, "ug/kg": 0.001}
+	if unit not in factors:
+		raise RowRefused(
+			f"mrl_unit {row.get('mrl_unit')!r} is not one this converts to ppm "
+			f"({', '.join(sorted(factors))}). A unit guessed here is a limit off by a factor of a "
+			"thousand, in the direction that clears a shipment it should have held."
+		)
+	if factors[unit] != 1.0:
+		warnings.append(f"mrl_value converted from {unit} to ppm (x{factors[unit]})")
+
+	doc = {
+		"chemical": chemical,
+		"mrl_ppm": round(amount * factors[unit], 6),
+		"source": text(row.get("source")),
+		"research_notes": text(row.get("source_reference")),
+		"substance_status": option(row.get("status"), SUBSTANCE_STATUS, warnings, "status", "Unknown"),
+		"effective_date": day(row.get("effective_date")),
+		"expiry_date": day(row.get("review_date")),
+		"notes": text(row.get("notes")),
+	}
+	_mrl_links(row, links, doc)
+	if context.get("company"):
+		doc["company"] = context["company"]
+	return {key: value for key, value in doc.items() if value not in (None, "")}
+
+
+def build_satellite_metric(row: dict, links: Links, context: dict, warnings: list) -> dict:
+	"""A `Satellite Metric` from one `field_satellite_metric` row.
+
+	The whole series crosses now, not just the newest reading. v0.120.0 folded
+	only the latest NDVI onto `Field` because there was nowhere else to put it;
+	the doctype this writes exists precisely so that a season of readings — which
+	is what a satellite subscription actually bought — survives the sidecar.
+
+	The RAW value is preferred and the indexed one is a fallback: a row that
+	stored only `indexed_value` is un-indexed here through the same range table
+	the storage side uses, so the two never disagree by a rounding step.
 	"""
 	from . import satellite
 
-	metric = text(row.get("metric_type")).lower()
-	if metric not in ("ndvi", ""):
-		raise RowRefused(f"{metric or 'unnamed'} has nowhere to land — `Field` stores only NDVI")
-	field = links.require("field", row.get("field_id"), "this metric")
+	field = links.require("field", row.get("field_id"), "this satellite metric")
+	metric = text(row.get("metric_type")).lower() or "ndvi"
+	try:
+		metric = satellite.resolve_metric(metric)
+	except satellite.SatelliteError as problem:
+		raise RowRefused(str(problem)) from problem
+
+	when = moment(row.get("timestamp"))
+	if not when:
+		raise RowRefused("a pass with no timestamp cannot be placed in a series")
+
 	value = number(row.get("value"))
 	if value is None:
 		indexed = number(row.get("indexed_value"))
-		value = satellite.from_index(indexed, "ndvi") if indexed is not None else None
+		value = satellite.from_index(indexed, metric) if indexed is not None else None
 	if value is None:
-		raise RowRefused("no NDVI value on this row")
-	return {
-		"__docname": field,
-		satellite.FIELD_COLUMNS["mean"]: round(value, 6),
-		satellite.FIELD_COLUMNS["pulled_on"]: day(row.get("timestamp")),
-		satellite.FIELD_COLUMNS["provider"]: text(row.get("source")) or satellite.DATA_COLLECTION,
+		raise RowRefused("no value and no indexed_value on this row")
+
+	low, high = satellite.METRICS[metric]["raw_range"]
+	if not low <= value <= high:
+		raise RowRefused(
+			f"{value} is outside the range {metric} runs in ({low} to {high}) — a decode with the "
+			"wrong scale, not a reading"
+		)
+
+	doc = {
+		"field": field,
+		"metric_type": metric,
+		"timestamp": when,
+		"value": round(value, 6),
+		"source": text(row.get("source")) or satellite.DATA_COLLECTION,
+		"h3_index": text(row.get("h3_index")),
 	}
+	if context.get("company"):
+		doc["company"] = context["company"]
+	return {key: value for key, value in doc.items() if value not in (None, "")}
 
 
-#: The transfer, in dependency order. Reordering this list breaks the foreign
-#: keys — `iot_reading` cannot resolve its device before `iot_device` has run —
-#: so the order is the spec and not a presentation choice.
+def build_backfill_cursor(row: dict, links: Links, context: dict, warnings: list) -> dict:
+	"""A `Satellite Backfill Cursor` — the record that stops a re-download.
+
+	Nothing on it is a measurement. Its entire value is that a backfill without
+	it starts at the beginning and pays the provider again for months somebody
+	has already bought, and that cost shows up on an invoice rather than in the
+	data.
+	"""
+	field = links.require("field", row.get("field_id"), "this backfill cursor")
+	oldest = moment(row.get("oldest_fetched"))
+	newest = moment(row.get("newest_fetched"))
+	if not oldest and not newest:
+		raise RowRefused("a cursor with neither end of its window recorded says nothing was fetched")
+
+	doc = {
+		"field": field,
+		# The sidecar kept ONE cursor per block with no index column, and every
+		# pull it ever made was NDVI. Recording that as the ndvi cursor is the
+		# honest reading; a cursor claiming to cover indices nobody fetched would
+		# suppress the walks that have not happened.
+		"metric_type": "ndvi",
+		"oldest_fetched": oldest,
+		"newest_fetched": newest,
+		"last_run": moment(row.get("last_run")),
+		"backfill_complete": flag(row.get("backfill_complete")),
+	}
+	if context.get("company"):
+		doc["company"] = context["company"]
+	return {key: value for key, value in doc.items() if value not in (None, "")}
+
+
+def raster_manifest(connection, root: str = "") -> dict:
+	"""What cached imagery the sidecar still holds, as `{"rasters": [...], ...}`.
+
+	`Field.ndvi_path` is a path INSIDE the farm_app container, so this cannot
+	fetch the file — it reports what to copy out and whether the path is readable
+	from wherever this is running. Pass `root` to check against a directory the
+	container's files have been copied into.
+
+	WHY THIS IS A MANIFEST AND NOT A COPY. Moving image files is a `docker cp`,
+	which is a thing an operator does with their own hands and their own disk
+	space; a migration script that silently pulled megabytes across a container
+	boundary would be doing something nobody asked for at a moment nobody chose.
+	What the script owes them is a list, a size, and an honest answer about
+	whether the files are still there.
+	"""
+	import os
+
+	rows, missing, total = [], 0, 0
+	if not table_exists(connection, "field"):
+		return {"rasters": [], "missing": 0, "total_bytes": 0, "checked_against": root or ""}
+	for row in read_rows(connection, "field"):
+		path = text(row.get("ndvi_path"))
+		if not path:
+			continue
+		local = os.path.join(root, path.lstrip("/")) if root else path
+		exists = os.path.isfile(local)
+		size = os.path.getsize(local) if exists else 0
+		total += size
+		missing += 0 if exists else 1
+		rows.append(
+			{
+				"field_id": row.get("id"),
+				"block": text(row.get("name")),
+				"path": path,
+				"readable_at": local if exists else "",
+				"bytes": size,
+			}
+		)
+	return {"rasters": rows, "missing": missing, "total_bytes": total, "checked_against": root or ""}
+
+
+#: The transfer, in dependency order. Two things only, because everything else in
+#: the sidecar was test data — see the module docstring.
 SPECS = (
 	Spec(
-		"field",
-		"Field",
-		("external_farm_app_id",),
-		build_field,
-		note="blocks; usually already migrated by import_farm_app_fields",
-	),
-	Spec("strategic_plan", "Strategic Plan", ("plan_name", "version"), build_strategic_plan),
-	Spec(
-		"objective",
-		"Strategic Objective",
-		("strategic_plan", "objective"),
-		build_objective,
-		depends_on=("strategic_plan",),
+		"maximum_residue",
+		"MRL Record",
+		("chemical", "crop", "market"),
+		build_maximum_residue,
+		note="the residue limits themselves; the reference data this migration exists for",
 	),
 	Spec(
-		"market_participant",
-		"Market Participant",
-		("participant_name",),
-		build_market_participant,
-		depends_on=("strategic_plan",),
-	),
-	Spec(
-		"acquisition_target",
-		"Acquisition Target",
-		("market_participant", "identified_date"),
-		build_acquisition_target,
-		depends_on=("market_participant",),
-	),
-	Spec(
-		"competitive_move",
-		"Competitive Move",
-		("market_participant", "observed_date", "move_type"),
-		build_competitive_move,
-		depends_on=("market_participant",),
-	),
-	Spec("mrl_research_session", "MRL Record", ("chemical", "crop", "market"), build_mrl_record),
-	Spec("iot_device", "IoT Device", ("hardware_id",), build_iot_device, depends_on=("field",)),
-	Spec(
-		"iot_reading",
-		"IoT Reading",
-		("device", "reading_type", "timestamp"),
-		build_iot_reading,
-		depends_on=("iot_device",),
+		"mrl_research_session",
+		"MRL Record",
+		("chemical", "crop", "market"),
+		build_mrl_record,
+		note="completed research sessions that reached a validated limit",
 	),
 	Spec(
 		"field_satellite_metric",
-		"Field",
-		(),
-		build_satellite_fold,
-		depends_on=("field",),
-		mode="update",
-		note="newest NDVI per block only; the rest of the series has no target doctype",
+		"Satellite Metric",
+		("field", "metric_type", "timestamp"),
+		build_satellite_metric,
+		note="the whole index series, so a season of pulls survives the sidecar",
+	),
+	Spec(
+		"satellite_backfill_cursor",
+		"Satellite Backfill Cursor",
+		("field", "metric_type"),
+		build_backfill_cursor,
+		note="how far back imagery has already been paid for",
 	),
 )
 
@@ -917,8 +765,9 @@ def seed_links_from_site(frappe_module=None) -> dict:
 	"""`{"field": {farm_app id: docname}}` read off the site's own Fields.
 
 	The bridge between waves: `import_farm_app_fields` wrote
-	`external_farm_app_id` for exactly this. Everything else in the map is built
-	during the run.
+	`external_farm_app_id` for exactly this. Blocks are the only register this
+	can resolve by id, because they are the only one anybody carried an external
+	id onto — everything else matches by name, in `seed_links_by_name`.
 	"""
 	if frappe_module is None:
 		import frappe as frappe_module
@@ -932,6 +781,77 @@ def seed_links_from_site(frappe_module=None) -> dict:
 		or []
 	)
 	return {"field": {str(row["external_farm_app_id"]): row["name"] for row in rows}}
+
+
+def seed_links_by_name(connection, lookup, tables=("commodity", "country")) -> dict:
+	"""`{"commodity": {id: Crop}, "country": {id: Market}}`, matched on NAME.
+
+	MRL rows point at a crop and a country by SQLite id, and nothing on this
+	site's Crop or Market carries those ids — so the join has to be the name, and
+	the name is the weakest link in this whole migration. It is therefore done
+	ONCE, here, reported in full, and never guessed at row level: a residue limit
+	silently filed against the wrong crop is worse than one that did not migrate,
+	because it looks like an answer.
+
+	`lookup(doctype, name)` is the site query, injected so this is testable
+	without a bench — `frappe_lookup()` builds the real one.
+
+	Matching is casefolded and trimmed and NOTHING else. No fuzzy matching, no
+	plural stripping, no "cherries" → "Cherry": every one of those is a rule that
+	is right four times and wrong once, and the once is a limit on the wrong
+	fruit. What does not match is reported by name so somebody can rename it or
+	create it, which takes a minute and is auditable.
+	"""
+	out, unmatched = {}, {}
+	targets = {"commodity": "Crop", "country": "Market"}
+	for table in tables:
+		if table not in targets or not table_exists(connection, table):
+			continue
+		mapping, misses = {}, []
+		for row in read_rows(connection, table):
+			name = text(row.get("name"))
+			if not name:
+				continue
+			found = lookup(targets[table], name)
+			if found:
+				mapping[str(row.get("id"))] = found
+			else:
+				misses.append(name)
+		out[table] = mapping
+		if misses:
+			unmatched[table] = misses
+	out["_unmatched"] = unmatched
+	return out
+
+
+def frappe_lookup(frappe_module=None):
+	"""A `lookup(doctype, name)` that asks the site, casefolded, exact.
+
+	Tries the doctype's own name column first and then the docname, because a
+	Crop may be named `CROP-0007` with `crop_name` "Cherry" or may be named
+	"Cherry" outright, and which one a site does is a naming-series decision
+	somebody made years ago.
+	"""
+	if frappe_module is None:
+		import frappe as frappe_module
+
+	columns = {"Crop": "crop_name", "Market": "market_name"}
+
+	def lookup(doctype: str, name: str):
+		wanted = str(name or "").strip()
+		if not wanted:
+			return None
+		column = columns.get(doctype)
+		if column:
+			for row in frappe_module.db.get_all(doctype, fields=["name", column], limit=5000) or []:
+				if str(row.get(column) or "").strip().casefold() == wanted.casefold():
+					return row["name"]
+		for row in frappe_module.db.get_all(doctype, fields=["name"], limit=5000) or []:
+			if str(row["name"]).strip().casefold() == wanted.casefold():
+				return row["name"]
+		return None
+
+	return lookup
 
 
 def migrate(
@@ -953,11 +873,9 @@ def migrate(
 	each table's entry carries its own refusals and warnings with the source row
 	id attached — so a migration that refused eleven rows says which eleven.
 
-	`updated` IS COUNTED SEPARATELY FROM `created` because only the satellite fold
-	updates, and it updates on every run by design — it writes the same three
-	columns to the same values. Folding it into `created` made a second, fully
-	idempotent run report that it had created something, which is the one number
-	an operator checks to decide whether the migration is done.
+	`updated` is reported and is zero for every spec here: all four insert. It is
+	kept because the counter is part of the report's shape and a later
+	update-shaped migration should not have to change every reader of it.
 	"""
 	loader = loader if loader is not None else DryRunLoader()
 	links = links if links is not None else Links()
@@ -1015,17 +933,8 @@ def _migrate_table(connection, spec: Spec, loader, links: Links, context: dict, 
 		)
 		return entry
 
-	# The satellite fold needs the newest row per block, so it is collected first
-	# and then reduced. Every other spec streams.
-	rows = list(read_rows(connection, spec.table, limit)) if spec.mode == "update" else None
-	if rows is not None:
-		entry["read"] = len(rows)
-		rows = _newest_per_field(rows, entry)
-	source = rows if rows is not None else read_rows(connection, spec.table, limit)
-
-	for row in source:
-		if rows is None:
-			entry["read"] += 1
+	for row in read_rows(connection, spec.table, limit):
+		entry["read"] += 1
 		warnings = []
 		row_id = row.get("id")
 		try:
@@ -1035,12 +944,6 @@ def _migrate_table(connection, spec: Spec, loader, links: Links, context: dict, 
 			entry["refusals"].append({"id": row_id, "why": str(refusal)})
 			continue
 		entry["warnings"].extend({"id": row_id, "warning": warning} for warning in warnings)
-
-		if spec.mode == "update":
-			docname = doc.pop("__docname")
-			loader.update(spec.doctype, docname, doc)
-			entry["updated"] += 1
-			continue
 
 		filters = {key: doc.get(key, "") for key in spec.natural_key}
 		found = loader.find(spec.doctype, filters) if filters else None
@@ -1058,26 +961,3 @@ def _migrate_table(connection, spec: Spec, loader, links: Links, context: dict, 
 			{"id": None, "warning": f"stopped at the {limit}-row limit — re-run with a higher limit"}
 		)
 	return entry
-
-
-def _newest_per_field(rows: list, entry: dict) -> list:
-	"""The newest NDVI row per block, with the rest counted as dropped."""
-	newest = {}
-	for row in rows:
-		if text(row.get("metric_type")).lower() not in ("ndvi", ""):
-			continue
-		key = str(row.get("field_id"))
-		stamp = moment(row.get("timestamp"))
-		if key not in newest or stamp > moment(newest[key].get("timestamp")):
-			newest[key] = row
-	dropped = len(rows) - len(newest)
-	if dropped > 0:
-		entry["warnings"].append(
-			{
-				"id": None,
-				"warning": f"{dropped} of {len(rows)} satellite rows were dropped: `Satellite Metric` "
-				"has not shipped, so only the newest NDVI per block survives. The time series is "
-				"lost unless that doctype is built before the sidecar is decommissioned.",
-			}
-		)
-	return list(newest.values())

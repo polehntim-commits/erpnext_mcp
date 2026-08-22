@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Migrate the farm_app's SQLite database into ERPNext. Idempotent, dry-run by default.
+"""Carry the farm_app's MRL reference data and satellite history into ERPNext.
 
-WHAT THIS IS. The command line around `erpnext_mcp.farm_app_migration`, which is
-where the actual transfer lives and where every decision it makes is argued.
-This file does three things that module deliberately does not: it parses flags,
-it starts Frappe, and it prints a report a person can read before deciding to
-run it for real.
+WHAT THIS MOVES, AND WHY IT IS NOT EVERYTHING. `erpnext_mcp.farm_app_migration`
+is where the transfer lives and where every decision it makes is argued. The
+short version: the sidecar's contents are test data except for two things, and
+those two are what this carries.
 
-RUNNING IT. Like `seed_related_parties.py`, this runs OUTSIDE `bench execute` and
-configures Frappe itself:
+    maximum_residue           → MRL Record                 the residue limits themselves
+    mrl_research_session      → MRL Record                 the research that produced some of them
+    field_satellite_metric    → Satellite Metric           the index series the imagery left behind
+    satellite_backfill_cursor → Satellite Backfill Cursor  how far back imagery was already paid for
+
+Cached raster FILES are reported by `--rasters` and never moved — see below.
+
+RUNNING IT. Like `seed_related_parties.py`, this runs OUTSIDE `bench execute`
+and configures Frappe itself:
 
     python3 migrate_farm_app.py --database farm_app.db --site erp.local
     # ...read the plan, then:
     python3 migrate_farm_app.py --database farm_app.db --site erp.local --apply
 
-Without `--apply` NOTHING IS WRITTEN — it reads the SQLite database, builds every
-document, checks which ones already exist, and prints what it would do.
+Without `--apply` NOTHING IS WRITTEN.
 
 FLAGS, WHICH MATCH THIS DOCSTRING EXACTLY (a previous release shipped a script
 whose docstring and `argparse` disagreed, and it cost twenty minutes of somebody
@@ -26,31 +31,28 @@ else's evening):
     --site SITE         the Frappe site. Defaults to `currentsite.txt`.
     --sites-path PATH   the bench's `sites` directory. Auto-detected.
     --company NAME      the company every migrated record belongs to.
-    --parcel NAME       default Parcel for blocks created by the `field` table.
-    --tickers PATH      a JSON map of farm_app block id or name → block ticker.
-    --table NAME        migrate only this table. Repeatable. Default: all.
+    --table NAME        migrate only this table. Repeatable. Default: all four.
     --limit N           most rows to take from any one table. Default 100000.
-    --rotate-tokens     do NOT carry IoT device auth tokens across.
+    --rasters PATH      also report cached NDVI rasters, checked under this root.
     --report PATH       write the full JSON report here as well as printing it.
     --apply             actually write. Without it, nothing is created.
     --verbose           print every refusal and warning, not just the counts.
 
-THE TICKER FILE, AND WHY IT IS A FILE. `block_ticker` is the buyer's name for a
-block and the field's own description says empty is the normal state. This will
-not derive one from a block name, so a farm that has promised tickers to a buyer
-states them:
+THE NAME JOIN IS THE PART TO READ THE REPORT FOR. MRL rows point at a crop and a
+country by SQLite id, and nothing on this site's `Crop` or `Market` carries those
+ids — so the join is on the NAME, done once, exactly, with no fuzzy matching.
+Every unmatched name is listed under `unmatched`. A limit whose crop or market
+does not resolve is REFUSED rather than filed against nothing: both are required
+on `MRL Record`, and one filed anyway looks like an answer. Create or rename what
+is missing and re-run — the migration is idempotent, so the second pass picks up
+only what was refused.
 
-    {"1": "YC-3", "Block A4": "OM-A4"}
-
-Keys are matched against the farm_app block id first and then its name. Blocks
-not in the file get no ticker, which is the correct outcome for almost all of
-them.
-
-ORDER MATTERS AND IS NOT YOURS TO CHOOSE. The tables run in dependency order,
-and `--table` filters that order rather than replacing it: passing
-`--table iot_reading` alone will refuse every row, because the devices they
-point at have not been migrated in that run. Use `--table` to RE-RUN a table
-after fixing its refusals, once its parents are already in.
+THE RASTERS ARE REPORTED, NOT MOVED. `Field.ndvi_path` in the sidecar points at
+a file inside the farm_app container. Copying megabytes across a container
+boundary is a `docker cp` an operator does with their own hands and their own
+disk, at a moment they choose — so `--rasters <root>` says what exists, how big
+it is, and whether it is readable from here, and stops there. The numbers this
+app actually reads are the Satellite Metric rows, which do migrate.
 
 EXIT CODES. 0 when the run did what it was asked (including a dry run that found
 problems it reported), 1 for a bad plan or a database this cannot read, 2 for a
@@ -87,15 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
 	parser.add_argument("--site", default="", help="the Frappe site; defaults to currentsite.txt")
 	parser.add_argument("--sites-path", default="", help="the bench's sites directory")
 	parser.add_argument("--company", default="", help="the company every migrated record belongs to")
-	parser.add_argument("--parcel", default="", help="default Parcel for blocks created by the field table")
-	parser.add_argument("--tickers", default="", help="JSON map of farm_app block id or name → block ticker")
 	parser.add_argument("--table", action="append", default=[], help="migrate only this table; repeatable")
 	parser.add_argument(
 		"--limit", type=int, default=migration.DEFAULT_LIMIT, help="most rows from any one table"
 	)
-	parser.add_argument(
-		"--rotate-tokens", action="store_true", help="do NOT carry IoT device auth tokens across"
-	)
+	parser.add_argument("--rasters", default="", help="also report cached NDVI rasters under this root")
 	parser.add_argument("--report", default="", help="write the full JSON report here as well")
 	parser.add_argument("--apply", action="store_true", help="actually write; without it nothing is created")
 	parser.add_argument("--verbose", action="store_true", help="print every refusal and warning")
@@ -112,39 +110,6 @@ def registered_flags() -> set:
 
 def parse_args(argv=None) -> argparse.Namespace:
 	return build_parser().parse_args(argv)
-
-
-def load_tickers(path: str) -> dict:
-	"""The block-ticker map, checked before anything is written.
-
-	Refused rather than trimmed when a ticker is over ten characters, because the
-	field is ten characters and a silently truncated ticker is a different
-	promise from the one the farm made.
-	"""
-	if not path:
-		return {}
-	if not os.path.isfile(path):
-		raise PlanError(f"no such ticker file: {path}")
-	try:
-		with open(path) as handle:
-			payload = json.load(handle)
-	except json.JSONDecodeError as error:
-		raise PlanError(f"{path} is not valid JSON: {error}") from None
-	if not isinstance(payload, dict):
-		raise PlanError(f"{path} must hold a JSON object of block id or name → ticker")
-
-	out = {}
-	for key, value in payload.items():
-		ticker = str(value or "").strip().upper()
-		if not ticker:
-			continue
-		if len(ticker) > 10:
-			raise PlanError(
-				f"ticker {ticker!r} for block {key!r} is {len(ticker)} characters; the field holds 10. "
-				"It has to fit a column on a paper settlement sheet."
-			)
-		out[str(key)] = ticker
-	return out
 
 
 def check_tables(names) -> tuple:
@@ -258,7 +223,6 @@ def main(argv=None) -> int:
 	args = parse_args(argv)
 	try:
 		tables = check_tables(args.table)
-		tickers = load_tickers(args.tickers)
 		if not os.path.isfile(args.database):
 			raise PlanError(f"no such database file: {args.database}")
 		sites_path = find_sites_path(args.sites_path)
@@ -271,7 +235,6 @@ def main(argv=None) -> int:
 	print(f"sites path: {sites_path}")
 	print(f"database:   {args.database}")
 	print(f"tables:     {', '.join(tables) if tables else 'all, in dependency order'}")
-	print(f"tickers:    {len(tickers)} block(s) named" if tickers else "tickers:    none given")
 	print(f"mode:       {'APPLY — records will be created' if args.apply else 'DRY RUN — nothing written'}")
 
 	try:
@@ -290,19 +253,22 @@ def main(argv=None) -> int:
 		return 2
 
 	try:
-		links = migration.Links(migration.seed_links_from_site(frappe))
+		seeds = migration.seed_links_from_site(frappe)
+		by_name = migration.seed_links_by_name(connection, migration.frappe_lookup(frappe))
+		unmatched = by_name.pop("_unmatched", {})
+		links = migration.Links({**seeds, **by_name})
 		print(f"blocks already carrying a Farm App id: {links.known('field')}")
+		print(f"crops matched by name:   {links.known('commodity')}")
+		print(f"markets matched by name: {links.known('country')}")
+		for table, names in sorted(unmatched.items()):
+			target = {"commodity": "Crop", "country": "Market"}[table]
+			print(f"  NO {target} on this site for: {', '.join(sorted(names))}")
 		loader = migration.FrappeLoader(frappe) if args.apply else migration.DryRunLoader()
 		report = migration.migrate(
 			connection,
 			loader,
 			links,
-			{
-				"company": args.company,
-				"parcel": args.parcel,
-				"tickers": tickers,
-				"rotate_tokens": args.rotate_tokens,
-			},
+			{"company": args.company},
 			only=tables,
 			limit=args.limit,
 		)
@@ -325,8 +291,20 @@ def main(argv=None) -> int:
 			pass
 		connection.close()
 
+	report["unmatched"] = unmatched
+	if args.rasters:
+		report["rasters"] = migration.raster_manifest(connection, args.rasters)
+
 	print()
 	print(format_report(report, args.verbose))
+	if report.get("rasters"):
+		manifest = report["rasters"]
+		print(
+			f"\n  cached rasters: {len(manifest['rasters'])} referenced, {manifest['missing']} not "
+			f"readable under {manifest['checked_against']}, "
+			f"{manifest['total_bytes'] / 1e6:.1f} MB found"
+		)
+		print("  these are NOT moved by this script — copy them out yourself if you want them kept.")
 	if args.report:
 		with open(args.report, "w") as handle:
 			json.dump(report, handle, indent=2, sort_keys=True, default=str)

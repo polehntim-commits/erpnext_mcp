@@ -3,6 +3,76 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.121.0 — 2026-08-22 — the sidecar's data was test data, and two things in it were not
+
+**Farm App Retirement, Cycle 2 corrected.** v0.120.0 shipped a ten-table
+SQLite→ERPNext migration; the owner then said the sidecar's contents are TEST
+data and that only two things in it are real. Two new DocTypes, the migration
+narrowed from ten tables to four, 76 tests.
+
+**THE CORRECTION WAS RIGHT AND THE EVIDENCE WAS IN THE DATABASE.** `field` holds
+six blocks of which two are "Dry Block" twice; `field_satellite_metric` holds two
+rows, both `moisture`, both 0.15, fifteen seconds apart — somebody pressing a
+button twice to see whether the fetch worked. `maximum_residue`,
+`mrl_research_session`, `satellite_backfill_cursor`, `country`, `commodity` and
+`market` are all empty, and `Field.ndvi_path` is NULL on every block. That is a
+fact about the local copy and NOT about production, which lives in the Umbrel
+container and is not reachable from here — so the migration is built to carry
+real data if production holds any and to report honestly when it holds none.
+
+**Migrating test data into the system of record does not preserve anything.** It
+contaminates a clean register with rows nobody can tell apart from real ones
+afterwards, which is why eight specs were removed rather than left switched off.
+The DocTypes they wrote into all remain: the STRUCTURE was the point of Cycle 1,
+and a farm starting to log real devices needs somewhere to log them.
+
+**WHAT STILL CROSSES IS THE MRL REFERENCE BOOK AND THE SATELLITE HISTORY.**
+`maximum_residue` → `MRL Record` is new and is the more important half of the MRL
+ask: v0.120.0 migrated only `mrl_research_session`, which is the transcript of
+asking a question, and missed the table holding the answers the farm ships fruit
+against.
+
+**TWO NEW DOCTYPES, because the satellite history had nowhere to go.**
+`Satellite Metric` holds one index reading for one block at one moment — the
+small permanent thing an expensive download leaves behind — so the whole series
+crosses rather than just the newest NDVI folded onto `Field`. `Satellite Backfill
+Cursor` holds no measurement at all, only how far back imagery has already been
+pulled, and it is the record that actually answers "so it doesn't need
+re-downloading": without it a backfill starts at the beginning and pays the
+provider again for months already bought. **Its cost of loss is invisible in the
+data and visible on an invoice.**
+
+**THE RASTERS THEMSELVES ARE REPORTED, NOT MOVED.** A Sentinel-2 tile is
+megabytes, is re-downloadable from the archive for years, and is useful for about
+as long as it takes to compute a mean from it. `raster_manifest()` says what a
+production copy still points at — path, size, readable or not — and copies
+nothing, because moving megabytes across a container boundary is a `docker cp` an
+operator does with their own hands, their own disk and their own timing.
+
+**THE UNIT TRAP IN THE MRL DATA.** `MRL Record.mrl_ppm` says ppm in its own name
+and `maximum_residue.mrl_unit` is free text. mg/kg IS ppm and converts silently;
+ppb and µg/kg are thousandths and are converted with the conversion announced;
+anything else is REFUSED. 300 ppb written straight into a ppm column is a limit a
+thousand times too loose — the direction that clears a shipment it should have
+held.
+
+**A LIMIT WHOSE CROP OR MARKET DOES NOT RESOLVE IS REFUSED IN THE DRY RUN.** Both
+are `reqd=1` on `MRL Record`, so an earlier draft that warned and migrated anyway
+would have turned a readable plan into a mid-run insert failure with part of the
+batch already landed. The name join is exact and casefolded with no fuzzy
+matching of any kind — every "cherries → Cherry" rule is right four times and
+wrong once, and the once is a residue limit filed against the wrong fruit — and
+every unmatched name is listed so it can be created or renamed before a re-run.
+
+**THE DEPLOYED SITE IS BEHIND, and this blocks the migration.** Its live MCP
+surface carries no MRL tools at all, so it is running something older than
+v0.118.0 and none of the doctypes this writes into exist there. Deploy first, or
+every row is refused for a doctype that is not on the site.
+
+**Gap audit updated in `RELEASES/v0.121.0.md`:** the two satellite gaps are
+closed, three remain — the HACCP/food-safety plan structure (the largest), the
+vision labelling workflow, and applicant tracking.
+
 ## 0.120.0 — 2026-08-22 — the label was in oxides and the prefix was invented
 
 **Farm App Retirement, Cycle 2 — the utility ports and the SQLite migration.**

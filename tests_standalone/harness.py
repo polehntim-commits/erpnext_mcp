@@ -1756,6 +1756,11 @@ APP_DOCTYPES = {
 	"Competitive Move": "competitive_move",
 	"Strategic Plan": "strategic_plan",
 	"Strategic Objective": "strategic_objective",
+	# Satellite Metric is the series a pull leaves behind and Satellite Backfill
+	# Cursor is the bookkeeping that stops it being paid for twice. Neither is a
+	# child table, so neither needs a CHILD_TABLE_SOURCES entry.
+	"Satellite Metric": "satellite_metric",
+	"Satellite Backfill Cursor": "satellite_backfill_cursor",
 	"MRL Record": "mrl_record",
 	# v0.111.0 — FSMA 204. The traceability lot code is the one identifier the Food
 	# Traceability Rule requires, and it is the DOCNAME (`autoname: field:lot_code`)

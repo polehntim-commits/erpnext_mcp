@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 18:00:00.000000",
+ "description": "How far back imagery has already been fetched for one block and one index — the record that stops a backfill paying for the same twelve months twice. It holds no measurement: it is bookkeeping about downloads, and losing it costs money rather than data.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "field",
+  "metric_type",
+  "identity_col",
+  "company",
+  "backfill_complete",
+  "window_section",
+  "oldest_fetched",
+  "newest_fetched",
+  "window_col",
+  "last_run",
+  "last_error",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "SATC-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "no_copy": 1,
+   "options": "SATC-.#####",
+   "print_hide": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Block",
+   "options": "Field",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "default": "ndvi",
+   "description": "One cursor per block per index. A backfill of NDVI says nothing about how far back moisture has been fetched.",
+   "fieldname": "metric_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Index",
+   "options": "ndvi\nevi\nndre\nndwi\nndmi\nsavi",
+   "reqd": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "default": "0",
+   "description": "Set when the archive has been walked as far back as the provider holds. Until then a scheduler keeps reaching backwards from `oldest_fetched`.",
+   "fieldname": "backfill_complete",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Backfill Complete"
+  },
+  {
+   "fieldname": "window_section",
+   "fieldtype": "Section Break",
+   "label": "Window Already Fetched"
+  },
+  {
+   "description": "The earliest pass already pulled. A backfill resumes BEFORE this, never at it.",
+   "fieldname": "oldest_fetched",
+   "fieldtype": "Datetime",
+   "label": "Oldest Fetched"
+  },
+  {
+   "description": "The most recent pass already pulled. A forward sweep resumes AFTER this.",
+   "fieldname": "newest_fetched",
+   "fieldtype": "Datetime",
+   "label": "Newest Fetched"
+  },
+  {
+   "fieldname": "window_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "When a pull last touched this cursor, successfully or not — which is how a scheduler that has quietly stopped is noticed.",
+   "fieldname": "last_run",
+   "fieldtype": "Datetime",
+   "label": "Last Run",
+   "read_only": 1
+  },
+  {
+   "description": "Why the last attempt failed, kept so a block that stops updating can be explained without re-querying the provider.",
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Satellite Backfill Cursor",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "field,metric_type",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0,
+ "naming_rule": "By \"Naming Series\" field"
+}

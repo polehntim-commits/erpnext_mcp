@@ -149,6 +149,12 @@ STATIC_REFERRERS = {
 		("IoT Device", "field"),
 		("IoT Reading", "field"),
 		("Planting Season", "field"),
+		# v0.121.0. The series a satellite pull leaves behind and the cursor that
+		# stops it being paid for twice. Both are keyed on the block, and a block
+		# deleted without reaching them leaves a cursor claiming a backfill was
+		# done for ground nobody farms.
+		("Satellite Backfill Cursor", "field"),
+		("Satellite Metric", "field"),
 		("Scale Ticket", "field"),
 		("Traceability Lot Code", "field"),
 		("Water Test", "block"),
