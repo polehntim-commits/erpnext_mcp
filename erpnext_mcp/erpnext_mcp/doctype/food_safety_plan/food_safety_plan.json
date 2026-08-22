@@ -1,0 +1,202 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Master FSMA/HACCP food safety plan document. Defines the scope, qualified individual, covered CTEs, and plan lifecycle for a facility's preventive controls program under 21 CFR Part 117.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "plan_name",
+  "facility_name",
+  "company",
+  "scope",
+  "status",
+  "covered_activities",
+  "company_gln",
+  "company_address",
+  "qi_section",
+  "qualified_individual",
+  "qualified_individual_name",
+  "qi_certification_expiry",
+  "qi_col",
+  "qi_training_description",
+  "lifecycle_section",
+  "version_number",
+  "effective_date",
+  "review_frequency_months",
+  "lifecycle_col",
+  "last_review_date",
+  "next_review_date",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "plan_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Plan Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "facility_name",
+   "fieldtype": "Data",
+   "label": "Facility Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "scope",
+   "fieldtype": "Long Text",
+   "label": "Scope"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nActive\nArchived"
+  },
+  {
+   "description": "JSON array of covered CTEs — e.g. growing, harvesting, cooling, packing.",
+   "fieldname": "covered_activities",
+   "fieldtype": "JSON",
+   "label": "Covered Activities"
+  },
+  {
+   "fieldname": "company_gln",
+   "fieldtype": "Data",
+   "label": "Company GLN"
+  },
+  {
+   "fieldname": "company_address",
+   "fieldtype": "Small Text",
+   "label": "Company Address"
+  },
+  {
+   "fieldname": "qi_section",
+   "fieldtype": "Section Break",
+   "label": "Qualified Individual"
+  },
+  {
+   "fieldname": "qualified_individual",
+   "fieldtype": "Data",
+   "label": "QI Employee ID"
+  },
+  {
+   "fieldname": "qualified_individual_name",
+   "fieldtype": "Data",
+   "label": "QI Name"
+  },
+  {
+   "fieldname": "qi_certification_expiry",
+   "fieldtype": "Date",
+   "label": "QI Certification Expiry"
+  },
+  {
+   "fieldname": "qi_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "qi_training_description",
+   "fieldtype": "Data",
+   "label": "QI Training"
+  },
+  {
+   "fieldname": "lifecycle_section",
+   "fieldtype": "Section Break",
+   "label": "Plan Lifecycle"
+  },
+  {
+   "default": "1",
+   "fieldname": "version_number",
+   "fieldtype": "Int",
+   "label": "Version"
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date"
+  },
+  {
+   "default": "12",
+   "fieldname": "review_frequency_months",
+   "fieldtype": "Int",
+   "label": "Review Frequency (Months)"
+  },
+  {
+   "fieldname": "lifecycle_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "last_review_date",
+   "fieldtype": "Date",
+   "label": "Last Review Date"
+  },
+  {
+   "fieldname": "next_review_date",
+   "fieldtype": "Date",
+   "label": "Next Review Date"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Food Safety Plan",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "plan_name,facility_name,status",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "plan_name",
+ "track_changes": 1
+}

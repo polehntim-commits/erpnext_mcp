@@ -579,6 +579,7 @@
   "fieldwork_read_col",
   "allow_get_task_with_evidence_contract",
   "allow_list_compliance_calendar_for_me",
+  "allow_list_tasks_by_location",
   "kpi_read_section",
   "allow_get_sustainable_cf_per_acre",
   "allow_list_normalization_adjustments",
@@ -1026,7 +1027,40 @@
   "allow_get_ipm_reference",
   "mrl_write_section",
   "allow_create_mrl_record",
-  "allow_update_mrl_record"
+  "allow_update_mrl_record",
+  "haccp_read_section",
+  "allow_list_food_safety_plans",
+  "allow_get_food_safety_plan",
+  "allow_list_hazard_analyses",
+  "allow_get_hazard_analysis",
+  "allow_list_preventive_controls",
+  "allow_get_preventive_control",
+  "allow_list_monitoring_records",
+  "allow_get_monitoring_record",
+  "allow_list_corrective_action_records",
+  "allow_get_corrective_action_record",
+  "allow_list_verification_records",
+  "allow_get_verification_record",
+  "allow_list_recall_plans",
+  "allow_get_recall_plan",
+  "allow_list_supplier_verifications",
+  "allow_get_supplier_verification",
+  "allow_get_food_safety_dashboard",
+  "haccp_write_section",
+  "allow_create_food_safety_plan",
+  "allow_update_food_safety_plan",
+  "allow_create_hazard_analysis",
+  "allow_update_hazard_analysis",
+  "allow_create_preventive_control",
+  "allow_update_preventive_control",
+  "allow_create_monitoring_record",
+  "allow_create_corrective_action_record",
+  "allow_update_corrective_action_record",
+  "allow_create_verification_record",
+  "allow_create_recall_plan",
+  "allow_update_recall_plan",
+  "allow_create_supplier_verification",
+  "allow_update_supplier_verification"
  ],
  "fields": [
   {
@@ -7805,6 +7839,242 @@
    "fieldname": "allow_update_mrl_record",
    "fieldtype": "Check",
    "label": "Update MRL Record"
+  },
+  {
+   "default": "1",
+   "description": "One trip's worth of work per place: what the caller already holds plus what could be taken, grouped by the task's own location instead of two lists a screen has to cross-reference. A third reader of list_my_tasks and list_available_for_me's own calls — every refusal and scoping rule those two carry travels with it unchanged.",
+   "fieldname": "allow_list_tasks_by_location",
+   "fieldtype": "Check",
+   "label": "Tasks By Location"
+  },
+  {
+   "fieldname": "haccp_read_section",
+   "fieldtype": "Section Break",
+   "label": "HACCP / Food Safety (v0.122.0)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "allow_list_food_safety_plans",
+   "fieldtype": "Check",
+   "label": "List Food Safety Plans",
+   "default": "1",
+   "description": "READ. Every FSMA/HACCP food safety plan on the site, with its status, its qualified individual and the lifecycle dates."
+  },
+  {
+   "fieldname": "allow_get_food_safety_plan",
+   "fieldtype": "Check",
+   "label": "Get Food Safety Plan",
+   "default": "1",
+   "description": "READ. One plan in full: the qualified individual, the lifecycle, the CTEs it covers, and how many hazards, controls, monitoring records, corrective actions, verifications and recall plans hang off it."
+  },
+  {
+   "fieldname": "allow_list_hazard_analyses",
+   "fieldtype": "Check",
+   "label": "List Hazard Analyses",
+   "default": "1",
+   "description": "READ. The hazards identified against a plan, filterable by type and risk level — one hazard at one process step per row."
+  },
+  {
+   "fieldname": "allow_get_hazard_analysis",
+   "fieldtype": "Check",
+   "label": "Get Hazard Analysis",
+   "default": "1",
+   "description": "READ. One hazard in full: the process step, the hazard itself, likelihood x severity and the risk level computed from them, the sources, and whether it is preventable."
+  },
+  {
+   "fieldname": "allow_list_preventive_controls",
+   "fieldtype": "Check",
+   "label": "List Preventive Controls",
+   "default": "1",
+   "description": "READ. The preventive controls and CCPs on a plan, each with its monitoring parameters, critical limits and corrective action spec."
+  },
+  {
+   "fieldname": "allow_get_preventive_control",
+   "fieldtype": "Check",
+   "label": "Get Preventive Control",
+   "default": "1",
+   "description": "READ. One control in full: monitoring specs, critical limits, corrective action, verification schedule, and how many monitoring records have been filed against it."
+  },
+  {
+   "fieldname": "allow_list_monitoring_records",
+   "fieldtype": "Check",
+   "label": "List Monitoring Records",
+   "default": "1",
+   "description": "READ. The monitoring log — the measurements actually taken against a control, and whether each sat inside the critical limit."
+  },
+  {
+   "fieldname": "allow_get_monitoring_record",
+   "fieldtype": "Check",
+   "label": "Get Monitoring Record",
+   "default": "1",
+   "description": "READ. One monitoring measurement in full: the reading, the control it was taken against, whether it was within the limit, and who took it."
+  },
+  {
+   "fieldname": "allow_list_corrective_action_records",
+   "fieldtype": "Check",
+   "label": "List Corrective Action Records",
+   "default": "1",
+   "description": "READ. Deviations from a critical limit and what was done about them, with status, product disposition and whether a recall was called for."
+  },
+  {
+   "fieldname": "allow_get_corrective_action_record",
+   "fieldtype": "Check",
+   "label": "Get Corrective Action Record",
+   "default": "1",
+   "description": "READ. One corrective action in full: the deviation, the root cause, the action taken, the product impact, the recall determination and whether it is closed."
+  },
+  {
+   "fieldname": "allow_list_verification_records",
+   "fieldtype": "Check",
+   "label": "List Verification Records",
+   "default": "1",
+   "description": "READ. Verification activity — calibrations, log reviews, product tests and sanitation checks — and whether each found the control effective."
+  },
+  {
+   "fieldname": "allow_get_verification_record",
+   "fieldtype": "Check",
+   "label": "Get Verification Record",
+   "default": "1",
+   "description": "READ. One verification in full: equipment calibration status, the result summary, whether the control was effective, and the findings."
+  },
+  {
+   "fieldname": "allow_list_recall_plans",
+   "fieldtype": "Check",
+   "label": "List Recall Plans",
+   "default": "1",
+   "description": "READ. The recall plans on file, with their FDA notification procedure, coordinator contacts and simulation dates."
+  },
+  {
+   "fieldname": "allow_get_recall_plan",
+   "fieldtype": "Check",
+   "label": "Get Recall Plan",
+   "default": "1",
+   "description": "READ. One recall plan in full: coordinators, team contacts, the customer list, the FDA notification procedure and the simulation schedule."
+  },
+  {
+   "fieldname": "allow_list_supplier_verifications",
+   "fieldtype": "Check",
+   "label": "List Supplier Verifications",
+   "default": "1",
+   "description": "READ. Audits, certificate reviews and tests of supply-chain partners, with the verification result and when each certificate expires."
+  },
+  {
+   "fieldname": "allow_get_supplier_verification",
+   "fieldtype": "Check",
+   "label": "Get Supplier Verification",
+   "default": "1",
+   "description": "READ. One supplier verification in full: the supplier, what they supply, the hazards they control, the method and result, and certificate expiry."
+  },
+  {
+   "fieldname": "allow_get_food_safety_dashboard",
+   "fieldtype": "Check",
+   "label": "Get Food Safety Dashboard",
+   "default": "1",
+   "description": "READ. Every food safety plan on the site at a glance: QI status, control counts, open corrective actions, whether the recall plan is current, and which supplier certificates have expired. The answer to 'are we audit-ready'."
+  },
+  {
+   "fieldname": "haccp_write_section",
+   "fieldtype": "Section Break",
+   "label": "HACCP / Food Safety — Write (v0.122.0)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "allow_create_food_safety_plan",
+   "fieldtype": "Check",
+   "label": "Create Food Safety Plan",
+   "default": "0",
+   "description": "MUTATING. Create a food safety plan — the master record every hazard, control, monitoring record and corrective action links back to. Starts in Draft. Ships off."
+  },
+  {
+   "fieldname": "allow_update_food_safety_plan",
+   "fieldtype": "Check",
+   "label": "Update Food Safety Plan",
+   "default": "0",
+   "description": "MUTATING. Revise fields on an existing food safety plan. Ships off."
+  },
+  {
+   "fieldname": "allow_create_hazard_analysis",
+   "fieldtype": "Check",
+   "label": "Create Hazard Analysis",
+   "default": "0",
+   "description": "MUTATING. Record a hazard found at a process step. The risk level is computed from likelihood and severity on the standard matrix, never typed in. Ships off."
+  },
+  {
+   "fieldname": "allow_create_preventive_control",
+   "fieldtype": "Check",
+   "label": "Create Preventive Control",
+   "default": "0",
+   "description": "MUTATING. Define a preventive control or CCP with its monitoring parameters, critical limits and corrective action plan. Ships off."
+  },
+  {
+   "fieldname": "allow_update_preventive_control",
+   "fieldtype": "Check",
+   "label": "Update Preventive Control",
+   "default": "0",
+   "description": "MUTATING. Revise a control's monitoring parameters, critical limits or status. Ships off."
+  },
+  {
+   "fieldname": "allow_create_monitoring_record",
+   "fieldtype": "Check",
+   "label": "Create Monitoring Record",
+   "default": "0",
+   "description": "MUTATING. Log a measurement against a preventive control. Whether it sat inside the critical limit is computed from the control, not asserted by the caller. Ships off."
+  },
+  {
+   "fieldname": "allow_create_corrective_action_record",
+   "fieldtype": "Check",
+   "label": "Create Corrective Action Record",
+   "default": "0",
+   "description": "MUTATING. Document a deviation from a critical limit and what was done about it, product disposition and recall determination included. Starts Open. Ships off."
+  },
+  {
+   "fieldname": "allow_update_corrective_action_record",
+   "fieldtype": "Check",
+   "label": "Update Corrective Action Record",
+   "default": "0",
+   "description": "MUTATING. Close a corrective action, add a root cause, revise the product disposition, or trigger a recall. Ships off."
+  },
+  {
+   "fieldname": "allow_create_verification_record",
+   "fieldtype": "Check",
+   "label": "Create Verification Record",
+   "default": "0",
+   "description": "MUTATING. Record a verification against a control — calibration, log review, product test or sanitation check. Ships off."
+  },
+  {
+   "fieldname": "allow_create_recall_plan",
+   "fieldtype": "Check",
+   "label": "Create Recall Plan",
+   "default": "0",
+   "description": "MUTATING. Create a recall plan with coordinator contacts, customer list and FDA notification procedure. Every food safety plan should have one. Ships off."
+  },
+  {
+   "fieldname": "allow_update_recall_plan",
+   "fieldtype": "Check",
+   "label": "Update Recall Plan",
+   "default": "0",
+   "description": "MUTATING. Change coordinators, update contacts, record a simulation, or archive a recall plan. Ships off."
+  },
+  {
+   "fieldname": "allow_create_supplier_verification",
+   "fieldtype": "Check",
+   "label": "Create Supplier Verification",
+   "default": "0",
+   "description": "MUTATING. Record an audit, certificate review or product test of a supply-chain partner. Ships off."
+  },
+  {
+   "fieldname": "allow_update_supplier_verification",
+   "fieldtype": "Check",
+   "label": "Update Supplier Verification",
+   "default": "0",
+   "description": "MUTATING. File new audit results, an updated certificate or changed contact details on a supplier verification. Ships off."
+  },
+  {
+   "fieldname": "allow_update_hazard_analysis",
+   "fieldtype": "Check",
+   "label": "Update Hazard Analysis",
+   "default": "0",
+   "description": "MUTATING. Revise a hazard row's likelihood, severity or description — what a plan review changes. Ships off."
   }
  ],
  "index_web_pages_for_search": 0,

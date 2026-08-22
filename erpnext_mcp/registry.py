@@ -86,6 +86,7 @@ from .tools import (
 	funnel,
 	garnishments,
 	governance,
+	haccp,
 	heat,
 	housing,
 	hr,
@@ -11002,6 +11003,36 @@ TOOLS = {
 		title="My compliance calendar",
 		available=_needs_doctype("Compliance Alert"),
 		requires="the Compliance Alert DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_tasks_by_location": _tool(
+		fieldwork.list_tasks_by_location,
+		"ONE TRIP'S WORTH OF WORK PER PLACE. Combines what the caller already holds "
+		"(Claimed/In-Progress) with the self-pickable pool, then groups both by the "
+		"task's own location instead of two lists a screen has to cross-reference — "
+		"'MC-Cabin-01: 3 tasks, ~90 min'. Read-only.\n\n"
+		"IT IS A THIRD READER OF list_my_tasks AND list_available_for_me'S OWN "
+		"CALLS, not a new query — every refusal and scoping rule those two carry "
+		"travels with it unchanged, including the honest skill-matching story: "
+		"`skill_matching` says whether the pool half was filtered on a real skill "
+		"register, an explicit argument, or not at all.\n\n"
+		"A TASK WITH NO LOCATION IS REPORTED, NOT DROPPED — `unlocated_tasks` "
+		"carries it rather than inventing an 'Unlocated' place. "
+		"`total_estimated_minutes` sums only tasks that carry an estimate; "
+		"`tasks_missing_estimate` says how many in the group did not.",
+		{
+			"location_filter": _field(
+				_STRING, "Only this place (a Housing Unit, Field, Zone or Parcel docname)."
+			),
+			"skill": _field(_STRING, "Only tasks needing this skill, e.g. 'camp_maintenance'."),
+			"task_type": _field(_STRING, "Inspection, Test, Spray, Repair, Harvest, Training, and so on."),
+			"urgency": _field(_STRING, "Low, Normal, High or Critical — applied to the pool half only."),
+			"company": _field(_STRING, "One of the caller's entities. Defaults to their preferred one."),
+			"user": _field(_STRING, "Only when the request carries no per-user credential."),
+			"limit": _LIMIT,
+		},
+		title="Tasks by location",
+		available=_needs_doctype("Farm Task"),
+		requires="the Farm Task DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	"validate_public_endpoint": _tool(
 		funnel.validate_public_endpoint,
@@ -28965,6 +28996,730 @@ TOOLS = {
 			),
 		},
 		title="Get IPM reference data",
+	),
+	# ── HACCP / food safety (Cycle 3) ────────────────────────────────────────
+	"list_food_safety_plans": _tool(
+		haccp.list_food_safety_plans,
+		"Every FSMA/HACCP food safety plan on the site, with status, QI info and "
+		"lifecycle dates. Optionally filtered by status and company. Read-only.",
+		{
+			"status": _field(_STRING, "Draft, Active, or Archived."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List food safety plans",
+		available=_needs_doctype("Food Safety Plan"),
+		requires="the Food Safety Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_food_safety_plan": _tool(
+		haccp.get_food_safety_plan,
+		"One food safety plan in full: the QI, lifecycle, covered CTEs, and counts "
+		"of hazard analyses, preventive controls, monitoring records, corrective "
+		"actions, verification records, and recall plans linked to it. Read-only.",
+		{
+			"plan": _field(_STRING, "The Food Safety Plan docname."),
+			"food_safety_plan": _field(_STRING, "Alias for plan."),
+		},
+		title="Get a food safety plan",
+		available=_needs_doctype("Food Safety Plan"),
+		requires="the Food Safety Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_food_safety_plan": _tool(
+		haccp.create_food_safety_plan,
+		"MUTATING (default OFF). Create a new FSMA/HACCP food safety plan — the "
+		"master document that every hazard analysis, preventive control, monitoring "
+		"record, and corrective action links back to. Starts in Draft by default.",
+		{
+			"plan_name": _field(_STRING, "The plan's display name."),
+			"facility_name": _field(_STRING, "The facility this plan covers."),
+			"company": _COMPANY,
+			"scope": _field(_STRING, "What processes and products are covered."),
+			"status": _field(_STRING, "Draft, Active, or Archived. Default Draft."),
+			"covered_activities": _field(
+				_STRING_ARRAY,
+				'CTEs the plan covers, e.g. ["growing","harvesting","cooling","packing"].',
+			),
+			"company_gln": _field(_STRING, "The company's Global Location Number."),
+			"company_address": _field(_STRING, "Facility address."),
+			"qualified_individual": _field(_STRING, "Employee ID of the Qualified Individual."),
+			"qualified_individual_name": _field(_STRING, "QI name."),
+			"qi_certification_expiry": _field(_STRING, "QI cert expiry, YYYY-MM-DD."),
+			"qi_training_description": _field(_STRING, "QI training description."),
+			"version_number": _field(_INTEGER, "Plan version number."),
+			"effective_date": _field(_STRING, "When the plan takes effect, YYYY-MM-DD."),
+			"review_frequency_months": _field(_INTEGER, "How often the plan is reviewed."),
+			"last_review_date": _field(_STRING, "Last review date, YYYY-MM-DD."),
+			"next_review_date": _field(_STRING, "Next review due, YYYY-MM-DD."),
+			"notes": _field(_STRING, "Free-text notes."),
+		},
+		required=("plan_name", "facility_name"),
+		mutating=True,
+		title="Create a food safety plan",
+		available=_needs_doctype("Food Safety Plan"),
+		requires="the Food Safety Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"update_food_safety_plan": _tool(
+		haccp.update_food_safety_plan,
+		"MUTATING (default OFF). Update fields on an existing food safety plan.",
+		{
+			"plan": _field(_STRING, "The Food Safety Plan docname."),
+			"food_safety_plan": _field(_STRING, "Alias for plan."),
+			"plan_name": _field(_STRING, "New plan name."),
+			"facility_name": _field(_STRING, "New facility name."),
+			"scope": _field(_STRING, "Updated scope."),
+			"status": _field(_STRING, "Draft, Active, or Archived."),
+			"covered_activities": _field(_STRING_ARRAY, "Updated CTE list."),
+			"qualified_individual": _field(_STRING, "QI Employee ID."),
+			"qualified_individual_name": _field(_STRING, "QI name."),
+			"qi_certification_expiry": _field(_STRING, "YYYY-MM-DD."),
+			"qi_training_description": _field(_STRING, "QI training."),
+			"version_number": _field(_INTEGER, "Plan version."),
+			"effective_date": _field(_STRING, "YYYY-MM-DD."),
+			"review_frequency_months": _field(_INTEGER, "Months between reviews."),
+			"last_review_date": _field(_STRING, "YYYY-MM-DD."),
+			"next_review_date": _field(_STRING, "YYYY-MM-DD."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		mutating=True,
+		title="Update a food safety plan",
+		available=_needs_doctype("Food Safety Plan"),
+		requires="the Food Safety Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_hazard_analyses": _tool(
+		haccp.list_hazard_analyses,
+		"Hazard analyses linked to a food safety plan, optionally filtered by "
+		"hazard type and risk level. Each identifies one hazard at one process "
+		"step with a risk matrix score. Read-only.",
+		{
+			"food_safety_plan": _field(_STRING, "Filter by plan docname."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"hazard_type": _field(_STRING, "Biological, Chemical, Physical, Radiological, or Allergen."),
+			"risk_level": _field(_STRING, "Low, Medium, High, or Critical."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List hazard analyses",
+		available=_needs_doctype("Hazard Analysis"),
+		requires="the Hazard Analysis DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_hazard_analysis": _tool(
+		haccp.get_hazard_analysis,
+		"One hazard analysis record in full: the process step, hazard details, "
+		"risk assessment (likelihood x severity = computed risk level), sources, "
+		"and preventability. Read-only.",
+		{
+			"hazard_analysis": _field(_STRING, "The Hazard Analysis docname."),
+			"hazard": _field(_STRING, "Alias for hazard_analysis."),
+		},
+		title="Get a hazard analysis",
+		available=_needs_doctype("Hazard Analysis"),
+		requires="the Hazard Analysis DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_hazard_analysis": _tool(
+		haccp.create_hazard_analysis,
+		"MUTATING (default OFF). Record a hazard identified at a process step. "
+		"The risk level is auto-computed from likelihood and severity using a "
+		"standard risk matrix (remote/low/moderate/high x minor/major/critical).",
+		{
+			"food_safety_plan": _field(_STRING, "The parent Food Safety Plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"process_step": _field(_STRING, "The step: harvesting, cooling, packing, washing, etc."),
+			"cte_type": _field(_STRING, "FSMA CTE type, if applicable."),
+			"description": _field(_STRING, "Description of the process step."),
+			"hazard_type": _field(_STRING, "Biological, Chemical, Physical, Radiological, or Allergen."),
+			"hazard_name": _field(_STRING, "Short name for the hazard."),
+			"hazard_description": _field(_STRING, "Detailed hazard description."),
+			"likelihood": _field(_STRING, "Remote, Low, Moderate, or High."),
+			"severity": _field(_STRING, "Minor, Major, or Critical."),
+			"is_preventable": _field(_BOOLEAN, "Can this hazard be prevented? Default true."),
+			"potential_sources": _field(_STRING, "Where the hazard may come from."),
+			"conditions_for_hazard": _field(_STRING, "Conditions that allow the hazard."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("food_safety_plan", "hazard_type", "hazard_name", "process_step"),
+		mutating=True,
+		title="Create a hazard analysis",
+		available=_needs_doctype("Hazard Analysis"),
+		requires="the Hazard Analysis DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"update_hazard_analysis": _tool(
+		haccp.update_hazard_analysis,
+		"MUTATING (default OFF). Revise one hazard row on a food safety plan — "
+		"its likelihood, severity, description or preventability.\n\n"
+		"A HAZARD ANALYSIS IS A JUDGEMENT, NOT AN OBSERVATION, which is why this "
+		"exists where `update_monitoring_record` deliberately does not. A "
+		"monitoring reading is a measurement with a time on it and is appended "
+		"to; a hazard row is what a qualified individual concluded, and a plan "
+		"review is exactly the occasion for concluding something else.\n\n"
+		"PASS ONLY WHAT CHANGES. Omitted fields are left alone, and a call that "
+		"names nothing to change is refused rather than writing an empty "
+		"revision.",
+		{
+			"hazard_analysis": _field(_STRING, "The hazard row's docname."),
+			"hazard": _field(_STRING, "Alias for hazard_analysis."),
+			"food_safety_plan": _field(_STRING, "Move the row to another plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"process_step": _field(_STRING, "The step in the process this hazard attaches to."),
+			"cte_type": _field(_STRING, "Critical Tracking Event type, where the step is one."),
+			"description": _field(_STRING, "What happens at this step."),
+			"hazard_type": _field(_STRING, "Biological, Chemical, Physical or Radiological."),
+			"hazard_name": _field(_STRING, "The hazard itself, e.g. 'Listeria monocytogenes'."),
+			"hazard_description": _field(_STRING, "How the hazard arises here."),
+			"likelihood": _field(_STRING, "The risk-matrix likelihood, in this site's vocabulary."),
+			"severity": _field(_STRING, "The risk-matrix severity, in this site's vocabulary."),
+			"is_preventable": _field(
+				_BOOLEAN,
+				"Whether a preventive control can address it — the question that decides "
+				"whether this row needs a CCP under it.",
+			),
+			"potential_sources": _field(_STRING, "Where the hazard comes from."),
+			"conditions_for_hazard": _field(_STRING, "What has to be true for it to occur."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Anything else the reviewer recorded."),
+		},
+		required=("hazard_analysis",),
+		mutating=True,
+		title="Update a hazard analysis",
+		available=_needs_doctype("Hazard Analysis"),
+		requires="the Hazard Analysis DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_preventive_controls": _tool(
+		haccp.list_preventive_controls,
+		"Preventive controls (and CCPs) for a food safety plan. Each defines "
+		"monitoring parameters, critical limits, and corrective action specs. "
+		"Read-only.",
+		{
+			"food_safety_plan": _field(_STRING, "Filter by plan docname."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"control_type": _field(_STRING, "Process, Sanitation, Allergen, Supply Chain, or Other."),
+			"ccp_only": _field(_BOOLEAN, "Only critical control points."),
+			"active_only": _field(_BOOLEAN, "Only active controls."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List preventive controls",
+		available=_needs_doctype("Preventive Control"),
+		requires="the Preventive Control DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_preventive_control": _tool(
+		haccp.get_preventive_control,
+		"One preventive control in full: monitoring specs, critical limits, "
+		"corrective action description, verification schedule, and a count of "
+		"monitoring records filed against it. Read-only.",
+		{
+			"preventive_control": _field(_STRING, "The Preventive Control docname."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+		},
+		title="Get a preventive control",
+		available=_needs_doctype("Preventive Control"),
+		requires="the Preventive Control DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_preventive_control": _tool(
+		haccp.create_preventive_control,
+		"MUTATING (default OFF). Define a preventive control or CCP with its "
+		"monitoring parameters, critical limits, and corrective action plan.",
+		{
+			"food_safety_plan": _field(_STRING, "The parent Food Safety Plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"control_name": _field(_STRING, "Name of the control."),
+			"description": _field(_STRING, "What this control does."),
+			"control_type": _field(_STRING, "Process, Sanitation, Allergen, Supply Chain, or Other."),
+			"is_critical_control_point": _field(_BOOLEAN, "Is this a CCP?"),
+			"is_active": _field(_BOOLEAN, "Is this control active? Default true."),
+			"monitoring_parameter": _field(_STRING, "What to measure: temperature, pH, time, etc."),
+			"monitoring_frequency": _field(_STRING, "How often: hourly, per batch, etc."),
+			"monitoring_method": _field(_STRING, "How to measure."),
+			"critical_limit": _field(_NUMBER, "The numeric critical limit."),
+			"critical_limit_unit": _field(_STRING, "Unit: deg F, pH, %, minutes."),
+			"critical_limit_operator": _field(_STRING, "<=, >=, <, >, or =."),
+			"critical_limit_description": _field(_STRING, "What the limit means in words."),
+			"corrective_action_description": _field(_STRING, "What to do on a deviation."),
+			"corrective_action_responsible": _field(_STRING, "Employee ID of the responsible person."),
+			"verification_frequency": _field(_STRING, "How often to verify."),
+			"verification_method": _field(_STRING, "Verification method."),
+			"required_training_description": _field(_STRING, "Training required for monitors."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("food_safety_plan", "control_name", "control_type"),
+		mutating=True,
+		title="Create a preventive control",
+		available=_needs_doctype("Preventive Control"),
+		requires="the Preventive Control DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"update_preventive_control": _tool(
+		haccp.update_preventive_control,
+		"MUTATING (default OFF). Update a preventive control's monitoring "
+		"parameters, critical limits, or status.",
+		{
+			"preventive_control": _field(_STRING, "The Preventive Control docname."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+			"food_safety_plan": _field(_STRING, "Move to a different plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"control_name": _field(_STRING, "Updated name."),
+			"description": _field(_STRING, "Updated description."),
+			"control_type": _field(_STRING, "Process, Sanitation, Allergen, Supply Chain, or Other."),
+			"is_critical_control_point": _field(_BOOLEAN, "CCP status."),
+			"is_active": _field(_BOOLEAN, "Active status."),
+			"monitoring_parameter": _field(_STRING, "Updated parameter."),
+			"monitoring_frequency": _field(_STRING, "Updated frequency."),
+			"monitoring_method": _field(_STRING, "Updated method."),
+			"critical_limit": _field(_NUMBER, "Updated limit."),
+			"critical_limit_unit": _field(_STRING, "Updated unit."),
+			"critical_limit_operator": _field(_STRING, "Updated operator."),
+			"critical_limit_description": _field(_STRING, "Updated description."),
+			"corrective_action_description": _field(_STRING, "Updated CA description."),
+			"corrective_action_responsible": _field(_STRING, "Updated responsible person."),
+			"verification_frequency": _field(_STRING, "Updated frequency."),
+			"verification_method": _field(_STRING, "Updated method."),
+			"required_training_description": _field(_STRING, "Updated training."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		mutating=True,
+		title="Update a preventive control",
+		available=_needs_doctype("Preventive Control"),
+		requires="the Preventive Control DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_monitoring_records": _tool(
+		haccp.list_monitoring_records,
+		"Monitoring log entries — actual measurements taken against preventive "
+		"controls. Shows whether each was within the critical limit. Read-only.",
+		{
+			"food_safety_plan": _field(_STRING, "Filter by plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"preventive_control": _field(_STRING, "Filter by control."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+			"from_date": _field(_STRING, "Earliest date, YYYY-MM-DD."),
+			"to_date": _field(_STRING, "Latest date, YYYY-MM-DD."),
+			"out_of_limit_only": _field(_BOOLEAN, "Only measurements that exceeded the limit."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List monitoring records",
+		available=_needs_doctype("Monitoring Record"),
+		requires="the Monitoring Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_monitoring_record": _tool(
+		haccp.get_monitoring_record,
+		"One monitoring record in full: the measurement, the control it was "
+		"against, whether it was within the critical limit, and who took it. "
+		"Read-only.",
+		{
+			"monitoring_record": _field(_STRING, "The Monitoring Record docname."),
+			"record": _field(_STRING, "Alias for monitoring_record."),
+		},
+		title="Get a monitoring record",
+		available=_needs_doctype("Monitoring Record"),
+		requires="the Monitoring Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_monitoring_record": _tool(
+		haccp.create_monitoring_record,
+		"MUTATING (default OFF). Log a monitoring measurement against a preventive "
+		"control. The is_within_limit flag is auto-computed from the control's "
+		"critical limit settings.",
+		{
+			"food_safety_plan": _field(_STRING, "The parent plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"preventive_control": _field(_STRING, "The control being monitored."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+			"monitoring_date": _field(_STRING, "Date of the measurement, YYYY-MM-DD. Defaults to today."),
+			"monitoring_time": _field(_STRING, "Time of the measurement."),
+			"measured_value": _field(_NUMBER, "The numeric measurement."),
+			"measured_unit": _field(_STRING, "Unit of measurement."),
+			"observation_notes": _field(_STRING, "What was observed."),
+			"monitored_by": _field(_STRING, "Employee ID of the monitor."),
+			"monitored_by_name": _field(_STRING, "Monitor's name."),
+			"block": _field(_STRING, "The Field (block) where monitoring occurred."),
+			"planting_season": _field(_STRING, "Planting Season, if applicable."),
+			"source_task": _field(_STRING, "Farm Task that triggered this monitoring."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("food_safety_plan", "preventive_control"),
+		mutating=True,
+		title="Create a monitoring record",
+		available=_needs_doctype("Monitoring Record"),
+		requires="the Monitoring Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_corrective_action_records": _tool(
+		haccp.list_corrective_action_records,
+		"Corrective action records — deviations from critical limits and what "
+		"was done about them. Shows status (Open/Closed/Verified), product "
+		"disposition, and recall determination. Read-only.",
+		{
+			"food_safety_plan": _field(_STRING, "Filter by plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"preventive_control": _field(_STRING, "Filter by control."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+			"status": _field(_STRING, "Open, Closed, or Verified."),
+			"from_date": _field(_STRING, "Earliest deviation date, YYYY-MM-DD."),
+			"to_date": _field(_STRING, "Latest deviation date, YYYY-MM-DD."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List corrective action records",
+		available=_needs_doctype("Corrective Action Record"),
+		requires="the Corrective Action Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_corrective_action_record": _tool(
+		haccp.get_corrective_action_record,
+		"One corrective action record in full: the deviation, root cause, action "
+		"taken, product impact, recall determination, and closure status. "
+		"Read-only.",
+		{
+			"corrective_action_record": _field(_STRING, "The Corrective Action Record docname."),
+			"record": _field(_STRING, "Alias for corrective_action_record."),
+		},
+		title="Get a corrective action record",
+		available=_needs_doctype("Corrective Action Record"),
+		requires="the Corrective Action Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_corrective_action_record": _tool(
+		haccp.create_corrective_action_record,
+		"MUTATING (default OFF). Document a deviation from a critical limit and "
+		"the corrective action taken, including product disposition and recall "
+		"determination. Starts with status Open.",
+		{
+			"food_safety_plan": _field(_STRING, "The parent plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"preventive_control": _field(_STRING, "The control that was violated."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+			"monitoring_record": _field(_STRING, "The monitoring record that triggered this, if any."),
+			"deviation_date": _field(_STRING, "When the deviation occurred, YYYY-MM-DD."),
+			"deviation_description": _field(_STRING, "What happened."),
+			"root_cause": _field(_STRING, "Why it happened."),
+			"action_taken": _field(_STRING, "What was done to correct it."),
+			"action_date": _field(_STRING, "When the correction was made, YYYY-MM-DD."),
+			"action_taken_by": _field(_STRING, "Employee ID of who acted."),
+			"action_taken_by_name": _field(_STRING, "Name of who acted."),
+			"preventive_measure": _field(_STRING, "Steps to prevent recurrence."),
+			"preventive_measure_date": _field(
+				_STRING, "When preventive measures were implemented, YYYY-MM-DD."
+			),
+			"affected_product_description": _field(_STRING, "What product was affected."),
+			"affected_quantity": _field(_NUMBER, "How much."),
+			"affected_quantity_unit": _field(_STRING, "Unit."),
+			"product_disposition": _field(_STRING, "Removed, Reworked, Salvaged, or Destroyed."),
+			"recall_determination": _field(
+				_STRING, "No Recall, Internal Recall, Customer Recall, or Market Withdrawal."
+			),
+			"recall_initiated": _field(_BOOLEAN, "Has a recall been started?"),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("food_safety_plan", "preventive_control", "deviation_description", "action_taken"),
+		mutating=True,
+		title="Create a corrective action record",
+		available=_needs_doctype("Corrective Action Record"),
+		requires="the Corrective Action Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"update_corrective_action_record": _tool(
+		haccp.update_corrective_action_record,
+		"MUTATING (default OFF). Update a corrective action record — close it, "
+		"add root cause analysis, update product disposition, or trigger recall.",
+		{
+			"corrective_action_record": _field(_STRING, "The Corrective Action Record docname."),
+			"record": _field(_STRING, "Alias for corrective_action_record."),
+			"status": _field(_STRING, "Open, Closed, or Verified."),
+			"deviation_description": _field(_STRING, "Updated description."),
+			"root_cause": _field(_STRING, "Root cause analysis."),
+			"action_taken": _field(_STRING, "Updated corrective action."),
+			"deviation_date": _field(_STRING, "YYYY-MM-DD."),
+			"action_date": _field(_STRING, "YYYY-MM-DD."),
+			"action_taken_by": _field(_STRING, "Employee ID."),
+			"action_taken_by_name": _field(_STRING, "Name."),
+			"preventive_measure": _field(_STRING, "Preventive steps."),
+			"preventive_measure_date": _field(_STRING, "YYYY-MM-DD."),
+			"affected_product_description": _field(_STRING, "Product description."),
+			"affected_quantity": _field(_NUMBER, "Quantity."),
+			"affected_quantity_unit": _field(_STRING, "Unit."),
+			"product_disposition": _field(_STRING, "Removed, Reworked, Salvaged, or Destroyed."),
+			"recall_determination": _field(_STRING, "Recall status."),
+			"recall_initiated": _field(_BOOLEAN, "Recall started?"),
+			"closed_date": _field(_STRING, "When this CA was closed, YYYY-MM-DD."),
+			"closure_notes": _field(_STRING, "How the CA was resolved."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		mutating=True,
+		title="Update a corrective action record",
+		available=_needs_doctype("Corrective Action Record"),
+		requires="the Corrective Action Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_verification_records": _tool(
+		haccp.list_verification_records,
+		"Verification records — calibration, log review, product testing, and "
+		"sanitation checks. Shows whether each found the control effective. "
+		"Read-only.",
+		{
+			"food_safety_plan": _field(_STRING, "Filter by plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"preventive_control": _field(_STRING, "Filter by control."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+			"verification_type": _field(
+				_STRING, "Calibration, Log Review, Product Testing, Sanitation Test, or Other."
+			),
+			"from_date": _field(_STRING, "Earliest date, YYYY-MM-DD."),
+			"to_date": _field(_STRING, "Latest date, YYYY-MM-DD."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List verification records",
+		available=_needs_doctype("Verification Record"),
+		requires="the Verification Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_verification_record": _tool(
+		haccp.get_verification_record,
+		"One verification record in full: equipment calibration status, result "
+		"summary, control effectiveness, and findings. Read-only.",
+		{
+			"verification_record": _field(_STRING, "The Verification Record docname."),
+			"record": _field(_STRING, "Alias for verification_record."),
+		},
+		title="Get a verification record",
+		available=_needs_doctype("Verification Record"),
+		requires="the Verification Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_verification_record": _tool(
+		haccp.create_verification_record,
+		"MUTATING (default OFF). Record a verification activity — calibration, "
+		"log review, product testing, or sanitation check — against a preventive "
+		"control.",
+		{
+			"food_safety_plan": _field(_STRING, "The parent plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"preventive_control": _field(_STRING, "The control being verified."),
+			"control": _field(_STRING, "Alias for preventive_control."),
+			"verification_type": _field(
+				_STRING, "Calibration, Log Review, Product Testing, Sanitation Test, or Other."
+			),
+			"description": _field(_STRING, "Description of the verification."),
+			"verification_date": _field(_STRING, "Date, YYYY-MM-DD. Defaults to today."),
+			"verification_time": _field(_STRING, "Time."),
+			"equipment_name": _field(_STRING, "Equipment being calibrated or tested."),
+			"equipment_calibrated_date": _field(_STRING, "Last calibration date, YYYY-MM-DD."),
+			"equipment_calibration_due_date": _field(_STRING, "Next calibration due, YYYY-MM-DD."),
+			"calibration_status": _field(_STRING, "Compliant, Overdue, or Failed."),
+			"result_summary": _field(_STRING, "Summary of findings."),
+			"is_control_effective": _field(_BOOLEAN, "Is the control still effective?"),
+			"findings": _field(_STRING, "Detailed findings."),
+			"corrective_actions_triggered": _field(_BOOLEAN, "Did this trigger a corrective action?"),
+			"verified_by": _field(_STRING, "Employee ID of the verifier."),
+			"verified_by_name": _field(_STRING, "Verifier name."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("food_safety_plan", "verification_type"),
+		mutating=True,
+		title="Create a verification record",
+		available=_needs_doctype("Verification Record"),
+		requires="the Verification Record DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_recall_plans": _tool(
+		haccp.list_recall_plans,
+		"Recall plans on file — FDA notification procedures, coordinator "
+		"contacts, simulation dates. Read-only.",
+		{
+			"food_safety_plan": _field(_STRING, "Filter by plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"active_only": _field(_BOOLEAN, "Only active recall plans."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List recall plans",
+		available=_needs_doctype("Recall Plan"),
+		requires="the Recall Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_recall_plan": _tool(
+		haccp.get_recall_plan,
+		"One recall plan in full: coordinators, team contacts, customer list, "
+		"FDA notification procedure, and simulation schedule. Read-only.",
+		{
+			"recall_plan": _field(_STRING, "The Recall Plan docname."),
+			"plan_name": _field(_STRING, "Alias for recall_plan."),
+		},
+		title="Get a recall plan",
+		available=_needs_doctype("Recall Plan"),
+		requires="the Recall Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_recall_plan": _tool(
+		haccp.create_recall_plan,
+		"MUTATING (default OFF). Create a recall plan with coordinator contacts, "
+		"customer list, and FDA notification procedures. Every food safety plan "
+		"should have one.",
+		{
+			"food_safety_plan": _field(_STRING, "The parent Food Safety Plan."),
+			"recall_plan_name": _field(_STRING, "Display name for this recall plan."),
+			"description": _field(_STRING, "Description."),
+			"is_active": _field(_BOOLEAN, "Active? Default true."),
+			"recall_coordinator": _field(_STRING, "Primary coordinator Employee ID."),
+			"recall_coordinator_name": _field(_STRING, "Coordinator name."),
+			"recall_coordinator_backup": _field(_STRING, "Backup coordinator Employee ID."),
+			"recall_coordinator_backup_name": _field(_STRING, "Backup name."),
+			"recall_team_contacts": _field(
+				{"type": "array", "items": _OBJECT},
+				'Team contacts: [{"name":"...","role":"...","phone":"...","email":"..."}].',
+			),
+			"customers_list": _field(
+				{"type": "array", "items": _OBJECT},
+				'Customer contacts: [{"name":"...","contact":"...","address":"...","gln":"..."}].',
+			),
+			"product_identification": _field(_STRING, "How affected products are identified."),
+			"fda_notification_required": _field(_BOOLEAN, "Is FDA notification required? Default true."),
+			"fda_notification_procedure": _field(_STRING, "How to notify FDA."),
+			"last_simulation_date": _field(_STRING, "Last recall drill date, YYYY-MM-DD."),
+			"next_simulation_date": _field(_STRING, "Next drill date, YYYY-MM-DD."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("food_safety_plan", "recall_plan_name", "recall_coordinator"),
+		mutating=True,
+		title="Create a recall plan",
+		available=_needs_doctype("Recall Plan"),
+		requires="the Recall Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"update_recall_plan": _tool(
+		haccp.update_recall_plan,
+		"MUTATING (default OFF). Update a recall plan — change coordinators, "
+		"update contacts, record a simulation, or archive it.",
+		{
+			"recall_plan": _field(_STRING, "The Recall Plan docname."),
+			"plan_name": _field(_STRING, "Alias for recall_plan."),
+			"food_safety_plan": _field(_STRING, "Move to a different plan."),
+			"recall_plan_name": _field(_STRING, "Updated name."),
+			"description": _field(_STRING, "Updated description."),
+			"is_active": _field(_BOOLEAN, "Active status."),
+			"recall_coordinator": _field(_STRING, "Updated coordinator."),
+			"recall_coordinator_name": _field(_STRING, "Coordinator name."),
+			"recall_coordinator_backup": _field(_STRING, "Updated backup."),
+			"recall_coordinator_backup_name": _field(_STRING, "Backup name."),
+			"recall_team_contacts": _field({"type": "array", "items": _OBJECT}, "Updated team contacts."),
+			"customers_list": _field({"type": "array", "items": _OBJECT}, "Updated customer contacts."),
+			"product_identification": _field(_STRING, "Updated product ID method."),
+			"fda_notification_required": _field(_BOOLEAN, "FDA notification required."),
+			"fda_notification_procedure": _field(_STRING, "Updated procedure."),
+			"last_simulation_date": _field(_STRING, "YYYY-MM-DD."),
+			"next_simulation_date": _field(_STRING, "YYYY-MM-DD."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		mutating=True,
+		title="Update a recall plan",
+		available=_needs_doctype("Recall Plan"),
+		requires="the Recall Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_supplier_verifications": _tool(
+		haccp.list_supplier_verifications,
+		"Supplier verification records — audits, certificate reviews, and "
+		"testing of supply-chain partners. Shows verification result and "
+		"certificate expiry. Read-only.",
+		{
+			"food_safety_plan": _field(_STRING, "Filter by plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"verification_result": _field(_STRING, "Approved, Approved with Conditions, or Rejected."),
+			"verification_method": _field(_STRING, "Audit, Certificate Review, Testing, or Other."),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List supplier verifications",
+		available=_needs_doctype("Supplier Verification"),
+		requires="the Supplier Verification DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_supplier_verification": _tool(
+		haccp.get_supplier_verification,
+		"One supplier verification in full: supplier details, product supplied, "
+		"hazards they control, verification method and result, and certificate "
+		"expiry. Read-only.",
+		{
+			"supplier_verification": _field(_STRING, "The Supplier Verification docname."),
+			"verification": _field(_STRING, "Alias for supplier_verification."),
+		},
+		title="Get a supplier verification",
+		available=_needs_doctype("Supplier Verification"),
+		requires="the Supplier Verification DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"create_supplier_verification": _tool(
+		haccp.create_supplier_verification,
+		"MUTATING (default OFF). Record a supplier verification — an audit, "
+		"certificate review, or product test of a supply-chain partner.",
+		{
+			"food_safety_plan": _field(_STRING, "The parent plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"supplier_name": _field(_STRING, "Name of the supplier."),
+			"supplier_gln": _field(_STRING, "Supplier's GLN."),
+			"supplier_address": _field(_STRING, "Address."),
+			"supplier_contact_name": _field(_STRING, "Contact name."),
+			"supplier_contact_phone": _field(_STRING, "Contact phone."),
+			"supplier_contact_email": _field(_STRING, "Contact email."),
+			"product_supplied": _field(_STRING, "What they supply."),
+			"product_description": _field(_STRING, "Product details."),
+			"hazards_controlled_by_supplier": _field(
+				_STRING_ARRAY,
+				"Hazard names the supplier controls.",
+			),
+			"verification_method": _field(_STRING, "Audit, Certificate Review, Testing, or Other."),
+			"verification_date": _field(_STRING, "YYYY-MM-DD."),
+			"verification_result": _field(_STRING, "Approved, Approved with Conditions, or Rejected."),
+			"verification_notes": _field(_STRING, "Verification notes."),
+			"certificate_type": _field(_STRING, "ISO 22000, SQF, FSSC 22000, etc."),
+			"certificate_expiry_date": _field(_STRING, "YYYY-MM-DD."),
+			"next_verification_date": _field(_STRING, "YYYY-MM-DD."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("food_safety_plan", "supplier_name"),
+		mutating=True,
+		title="Create a supplier verification",
+		available=_needs_doctype("Supplier Verification"),
+		requires="the Supplier Verification DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"update_supplier_verification": _tool(
+		haccp.update_supplier_verification,
+		"MUTATING (default OFF). Update a supplier verification — new audit "
+		"results, updated certificate, or changed contact information.",
+		{
+			"supplier_verification": _field(_STRING, "The Supplier Verification docname."),
+			"verification": _field(_STRING, "Alias for supplier_verification."),
+			"food_safety_plan": _field(_STRING, "Move to a different plan."),
+			"plan": _field(_STRING, "Alias for food_safety_plan."),
+			"supplier_name": _field(_STRING, "Updated supplier name."),
+			"supplier_gln": _field(_STRING, "Updated GLN."),
+			"supplier_address": _field(_STRING, "Updated address."),
+			"supplier_contact_name": _field(_STRING, "Updated contact."),
+			"supplier_contact_phone": _field(_STRING, "Updated phone."),
+			"supplier_contact_email": _field(_STRING, "Updated email."),
+			"product_supplied": _field(_STRING, "Updated product."),
+			"product_description": _field(_STRING, "Updated description."),
+			"hazards_controlled_by_supplier": _field(_STRING_ARRAY, "Updated hazard list."),
+			"verification_method": _field(_STRING, "Updated method."),
+			"verification_date": _field(_STRING, "YYYY-MM-DD."),
+			"verification_result": _field(_STRING, "Updated result."),
+			"verification_notes": _field(_STRING, "Updated notes."),
+			"certificate_type": _field(_STRING, "Updated cert type."),
+			"certificate_expiry_date": _field(_STRING, "YYYY-MM-DD."),
+			"next_verification_date": _field(_STRING, "YYYY-MM-DD."),
+			"company": _COMPANY,
+			"notes": _field(_STRING, "Notes."),
+		},
+		mutating=True,
+		title="Update a supplier verification",
+		available=_needs_doctype("Supplier Verification"),
+		requires="the Supplier Verification DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_food_safety_dashboard": _tool(
+		haccp.get_food_safety_dashboard,
+		"Summary of every food safety plan on the site: QI status, control "
+		"counts, open corrective actions, recall plan currency, and expired "
+		"supplier certificates. The answer to 'are we audit-ready'. Read-only.",
+		{
+			"company": _COMPANY,
+		},
+		title="Food safety dashboard",
+		available=_needs_doctype("Food Safety Plan"),
+		requires="the Food Safety Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 }
 

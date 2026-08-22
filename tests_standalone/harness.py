@@ -1779,6 +1779,22 @@ APP_DOCTYPES = {
 	# every one of those references unreadable. No CHILD_TABLE_SOURCES entry: it
 	# has no child table and nothing looks for its parents.
 	"Soil Compaction Profile": "soil_compaction_profile",
+	# v0.120.0, Farm App Retirement Cycle 3 — HACCP / food safety. Eight DocTypes
+	# covering the full FSMA preventive-controls framework: master plan, hazard
+	# identification, CCP definitions, monitoring log, corrective actions,
+	# verification activities, recall procedures, and supply-chain verification.
+	# Every record links back to a Food Safety Plan, and most link to a Preventive
+	# Control inside it. Controllers carry auto-compute logic: risk_level from
+	# likelihood x severity on Hazard Analysis, is_within_limit from the control's
+	# critical limit on Monitoring Record.
+	"Food Safety Plan": "food_safety_plan",
+	"Hazard Analysis": "hazard_analysis",
+	"Preventive Control": "preventive_control",
+	"Monitoring Record": "monitoring_record",
+	"Corrective Action Record": "corrective_action_record",
+	"Verification Record": "verification_record",
+	"Recall Plan": "recall_plan",
+	"Supplier Verification": "supplier_verification",
 }
 
 #: The standard reports this app ships, by folder name under `REPORT_DIR`. Rows

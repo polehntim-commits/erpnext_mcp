@@ -1110,10 +1110,19 @@ class Catalogue(SeededTestCase):
 		`assign_soil_profile`, which is its own tool for the reason
 		`link_field_to_cost_center` is rather than a new argument on
 		`update_field`.
+
+		v0.122.0, FARM APP RETIREMENT CYCLE 3, ADDS THIRTY-TWO. Thirty-one carry
+		the HACCP/FSMA food safety plan and the eight registers under it — the
+		hazard analysis, the preventive controls, the monitoring and
+		verification records, the corrective actions, the recall plan and
+		supplier verification — and one, `list_tasks_by_location`, is a third
+		reader of `list_available_for_me` and `list_my_tasks`'s own calls that
+		groups the pool and the caller's held work by place instead of two
+		lists a screen has to cross-reference.
 		"""
-		self.assertEqual(len(registry.TOOLS), 808)
-		self.assertEqual(len(registry.READ_TOOLS), 404)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 404)
+		self.assertEqual(len(registry.TOOLS), 840)
+		self.assertEqual(len(registry.READ_TOOLS), 422)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 418)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

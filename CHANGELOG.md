@@ -3,6 +3,94 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.122.0 — 2026-08-22 — the plan an inspector asks for, and the block that was almost overwritten
+
+**Farm App Retirement, Cycle 3 — the last of the sidecar's own registers.** Eight
+DocTypes for the FSMA preventive-controls framework, thirty-one tools over them,
+one task-board read, and the two documents the cutover itself runs on. 840 tools
+= 422 read + 418 mutating.
+
+**HACCP IS THE PART OF THAT APPLICATION AN INSPECTOR ACTUALLY ASKS FOR.** Food
+Safety Plan is the root; Hazard Analysis, Preventive Control, Monitoring Record,
+Corrective Action Record, Verification Record, Recall Plan and Supplier
+Verification hang off it. `farm_app`'s own food-safety blueprint is 24 routes of
+server-rendered forms; the tools are CRUD against the same eight tables, because
+the compliance value is in a record EXISTING and being COMPLETE, not in a state
+machine — a qualified individual reviews a plan, and a tool that advanced a
+plan's status on its own would be manufacturing the very signature an auditor
+came to verify.
+
+**ONLY SIX OF THE EIGHT TAKE AN `update_`.** A Monitoring or Verification record
+is a measurement with a time on it: it is appended to, and a correction to one
+is a Corrective Action Record rather than an edit. A Hazard Analysis is the
+exception, and `update_hazard_analysis` exists because a hazard row is a
+JUDGEMENT — `farm_app` let one be edited, a plan review is exactly the occasion
+for reaching a different conclusion, and refusing here would have made a
+mistyped likelihood permanent. `risk_level` recomputes from the matrix on save,
+so a downgraded likelihood cannot leave the old risk sitting under it.
+
+**`get_food_safety_dashboard` answers "are we audit-ready" in one call**, which
+is otherwise eight reads and a date comparison per plan. `qi_current` and
+`review_overdue` are computed against today rather than stored, and a register
+that is not installed yet counts zero rather than refusing.
+
+**`list_tasks_by_location`** groups the claimable pool and the caller's own held
+work by place, instead of two flat lists a screen has to cross-reference. It is
+a third reader of `list_available_for_me` and `list_my_tasks`'s own calls, so
+every refusal and scoping rule those carry travels with it unchanged.
+
+**THE CYCLE 1 BLOCK WAS ALMOST DELETED BY THIS RELEASE, AND THE SUITE WOULD NOT
+HAVE SAID SO.** The HACCP entries were first written into `TOOLS` at the tail of
+the dict — which is exactly where v0.118.0's thirty-three tools live, lines
+27946–28925, `create_iot_device` through `get_ipm_reference`. A rebuild anchored
+on "whatever entry is currently last" rather than on the dict's closing brace
+overwrote all of them, along with the three `block_ticker` fields and the
+`compintel`, `iot`, `mrl` and `strategy` imports; the settings JSON lost the
+matching thirty-three switches and the catalogue lost their entries. It was
+green because the three hand-written count assertions had been lowered to
+776/387/389 to match. The rescue was to rebuild from HEAD rather than patch the
+damaged file — both versions are identical up to line 27938 and identical again
+after the `TOOLS` close, so HEAD's prefix, HEAD's Cycle 1 block, the HACCP block
+and HEAD's suffix reassemble cleanly. **A count assertion that is edited
+downwards to make a suite pass is the alarm, not the noise.**
+
+**A LINK NOBODY SETS IS NOT A GATE.** `Hazard Analysis` and `Preventive
+Control` shipped without the `company` column the other six carry, and
+`require_scoped_doc` reads that column off the document itself. A missing column
+does not refuse — it reads NULL and passes everything, so two entities on one
+site would have read each other's hazard rows. Adding the Link is half of it:
+neither `create_hazard_analysis` nor `create_preventive_control` set it, and a
+column the handler leaves NULL holds the gate open while the DocType JSON looks
+correct. Both creates now set it, both `update_` tools can set it on rows that
+predate the column, both `list_` tools filter on it, and all six schemas
+advertise the argument their handlers read. `HazardAndControlAreScoped` asserts
+the value is STORED and that a list refuses to cross entities — against the
+previous code the leak reproduces as `1 != 0`, a row filed under one company
+returned under the other.
+
+**THIRTY SWITCHES SHIPPED WITHOUT A DESCRIPTION.** That description is the only
+explanation an operator gets before ticking a box that lets an AI write to the
+ledger. All 812 older switches carry one; the thirty new HACCP switches carried
+none, which `test_settings` reported as thirty separate failures. Defaults were
+already right — seventeen reads ON, thirteen writes OFF — so only the prose was
+missing. And `Monitoring Record.block` was a plain Link to `Field` that no table
+in `tools/locations.py` named, three lines below the `("Water Test", "block")`
+that is the same shape: `delete_farm_location` would have left a food safety log
+pointing at ground that is gone, and that log is the evidence an audit asks for.
+
+**Documents, not code:** `farm_app_route_mapping.md` maps what iOS actually
+calls, and `farm_app_retirement_checklist.md` is the cutover runbook. Both are
+measured rather than estimated — `farm_app` has 1051 route decorators, not the
+~225 a first pass guessed, and iOS calls 144 distinct mobile methods.
+
+**NOT PORTED, BY THE OWNER'S DECISION:** the vault and its encryption, the Nostr
+identity/event/relay code and its NIP-44 crypto, the Merkle proofs, the Tor
+backup sharding and the Nostr-tied wallet pass. Vision labelling stays in Volume
+Vision. The two iOS features that still reach `farm_app` — the Apple Wallet pass
+and the company logo — do so over Tor with NIP-98 auth, are in that excluded
+set, and go dark at cutover rather than migrating; both already guard on an
+onion address and fail silently, so neither throws in a worker's face.
+
 ## 0.121.0 — 2026-08-22 — the sidecar's data was test data, and two things in it were not
 
 **Farm App Retirement, Cycle 2 corrected.** v0.120.0 shipped a ten-table
@@ -397,6 +485,51 @@ while `create_task_from_template` IS published to the phone. So a template-raise
 scouting round can be raised from a handset and closed only from the Desk. It is
 asserted in `test_scouting_from_the_phone.py` rather than left to be discovered,
 and that test is meant to fail on the day somebody closes it.
+
+## 0.117.0 — 2026-08-21 — the trip a phone had to reconstruct by eye
+
+**One MCP tool.** No new DocType, no new column, no existing tool gained or
+lost an argument.
+
+**Cycle 6 of the build plan was "Compliance Framework + Inspections," and an
+audit of the plan against the code before writing anything found that the
+framework was already there.** The Compliance Rule DocType, the rule-engine
+refactor that reads it instead of a hardcoded dict, the Farm Task Template
+DocType, `propose_compliance_rule` and `approve_compliance_rule`, the
+Inspection Template and Inspection Session DocTypes and the eleven tools
+worked from them — all of it shipped across v0.21.0 and v0.37.0. Building any
+of that a second time would not have been a gap closed, it would have been a
+second copy of a framework already carrying live rules and live sessions, and
+the two would have drifted the first time either was corrected.
+
+**One real gap was left in the plan's own list: task grouping by location.**
+A worker planning a morning at MC-Cabin-01 had `list_my_tasks` (what they
+already hold) and `list_available_for_me` (the pool) as two flat lists, and no
+way to see in one read what one trip to one place could cover — the exact
+example the plan itself gives, `"MC-Cabin-01: 3 tasks, ~90 min."`
+
+`list_tasks_by_location` is that read. IT IS A THIRD READER OF THE SAME TWO
+CALLS, not a new query: it combines what `list_available_for_me` and
+`list_my_tasks` already return and groups both by the Farm Task's own
+`location`. Every refusal and scoping rule those two carry — entity access,
+the concurrent-claim count, the honest skill-matching story that admits when
+nothing on a site records what skills a worker has — travels with it
+unchanged, because it is the same two calls underneath.
+
+**A TASK WITH NO LOCATION IS REPORTED, NOT DROPPED.** Hand-raised work that
+names no asset or field goes in `unlocated_tasks` rather than a fake
+"Unlocated" group — there is no such place, and inventing one would read as
+a place that does not exist. `total_estimated_minutes` sums only tasks that
+carry an estimate; `tasks_missing_estimate` says how many in the group did
+not, so the minutes read as a floor and not a promise.
+
+**WHY A NEW TOOL AND NOT A FLAG ON THE TWO IT READS**, which is the identical
+question `list_my_tasks` vs. `list_dispatched_tasks` already settled in
+v0.17.0: an operator piloting the grouped view wants a switch that reaches it
+alone, and a flag buried inside a tool that is already on is not something a
+switch can reach.
+
+776 tools: 387 read, 389 mutating. One read ships on.
 
 ## 0.116.0 — 2026-08-21 — the map that only knew what shape the farm was
 

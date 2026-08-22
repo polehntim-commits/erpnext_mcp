@@ -1,0 +1,194 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Per-process-step hazard identification within a Food Safety Plan. Each record identifies a biological, chemical, physical, radiological, or allergen hazard, assesses its likelihood and severity, and computes a risk level used to prioritize preventive controls.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "food_safety_plan",
+  "process_step",
+  "cte_type",
+  "description",
+  "hazard_section",
+  "hazard_type",
+  "hazard_name",
+  "hazard_description",
+  "risk_section",
+  "likelihood",
+  "severity",
+  "risk_col",
+  "risk_level",
+  "is_preventable",
+  "sources_section",
+  "potential_sources",
+  "conditions_for_hazard",
+  "company",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "food_safety_plan",
+   "fieldtype": "Link",
+   "label": "Food Safety Plan",
+   "options": "Food Safety Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "process_step",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Process Step",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cte_type",
+   "fieldtype": "Data",
+   "label": "CTE Type"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Long Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "hazard_section",
+   "fieldtype": "Section Break",
+   "label": "Hazard"
+  },
+  {
+   "fieldname": "hazard_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Hazard Type",
+   "options": "Biological\nChemical\nPhysical\nRadiological\nAllergen",
+   "reqd": 1
+  },
+  {
+   "fieldname": "hazard_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Hazard Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "hazard_description",
+   "fieldtype": "Long Text",
+   "label": "Hazard Description"
+  },
+  {
+   "fieldname": "risk_section",
+   "fieldtype": "Section Break",
+   "label": "Risk Assessment"
+  },
+  {
+   "fieldname": "likelihood",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Likelihood",
+   "options": "\nRemote\nLow\nModerate\nHigh"
+  },
+  {
+   "fieldname": "severity",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Severity",
+   "options": "\nMinor\nMajor\nCritical"
+  },
+  {
+   "fieldname": "risk_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Computed from likelihood x severity matrix.",
+   "fieldname": "risk_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Risk Level",
+   "options": "\nLow\nMedium\nHigh\nCritical"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_preventable",
+   "fieldtype": "Check",
+   "label": "Is Preventable"
+  },
+  {
+   "fieldname": "sources_section",
+   "fieldtype": "Section Break",
+   "label": "Sources"
+  },
+  {
+   "fieldname": "potential_sources",
+   "fieldtype": "Long Text",
+   "label": "Potential Sources"
+  },
+  {
+   "fieldname": "conditions_for_hazard",
+   "fieldtype": "Long Text",
+   "label": "Conditions for Hazard"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Hazard Analysis",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "food_safety_plan,hazard_name,process_step,risk_level",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "hazard_name",
+ "track_changes": 1
+}

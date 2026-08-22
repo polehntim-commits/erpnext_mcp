@@ -1,0 +1,210 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "FDA recall procedures for a Food Safety Plan. Defines the recall coordinator, team contacts, customer lists, product identification, FDA notification procedures, and simulation schedule. The plan you hope never to execute but must have ready.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "food_safety_plan",
+  "recall_plan_name",
+  "description",
+  "is_active",
+  "coordinator_section",
+  "recall_coordinator",
+  "recall_coordinator_name",
+  "coordinator_col",
+  "recall_coordinator_backup",
+  "recall_coordinator_backup_name",
+  "contacts_section",
+  "recall_team_contacts",
+  "customers_list",
+  "product_section",
+  "product_identification",
+  "fda_section",
+  "fda_notification_required",
+  "fda_notification_procedure",
+  "simulation_section",
+  "last_simulation_date",
+  "next_simulation_date",
+  "company",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "food_safety_plan",
+   "fieldtype": "Link",
+   "label": "Food Safety Plan",
+   "options": "Food Safety Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "recall_plan_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Recall Plan Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Long Text",
+   "label": "Description"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "coordinator_section",
+   "fieldtype": "Section Break",
+   "label": "Recall Coordinator"
+  },
+  {
+   "fieldname": "recall_coordinator",
+   "fieldtype": "Data",
+   "label": "Coordinator (Employee ID)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "recall_coordinator_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Coordinator Name"
+  },
+  {
+   "fieldname": "coordinator_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "recall_coordinator_backup",
+   "fieldtype": "Data",
+   "label": "Backup Coordinator (Employee ID)"
+  },
+  {
+   "fieldname": "recall_coordinator_backup_name",
+   "fieldtype": "Data",
+   "label": "Backup Coordinator Name"
+  },
+  {
+   "fieldname": "contacts_section",
+   "fieldtype": "Section Break",
+   "label": "Contacts"
+  },
+  {
+   "description": "Array of {name, role, phone, email}",
+   "fieldname": "recall_team_contacts",
+   "fieldtype": "JSON",
+   "label": "Recall Team Contacts"
+  },
+  {
+   "description": "Array of {name, contact, address, gln}",
+   "fieldname": "customers_list",
+   "fieldtype": "JSON",
+   "label": "Customer Contacts"
+  },
+  {
+   "fieldname": "product_section",
+   "fieldtype": "Section Break",
+   "label": "Product"
+  },
+  {
+   "fieldname": "product_identification",
+   "fieldtype": "Long Text",
+   "label": "Product Identification"
+  },
+  {
+   "fieldname": "fda_section",
+   "fieldtype": "Section Break",
+   "label": "FDA"
+  },
+  {
+   "default": "1",
+   "fieldname": "fda_notification_required",
+   "fieldtype": "Check",
+   "label": "FDA Notification Required"
+  },
+  {
+   "fieldname": "fda_notification_procedure",
+   "fieldtype": "Long Text",
+   "label": "FDA Notification Procedure"
+  },
+  {
+   "fieldname": "simulation_section",
+   "fieldtype": "Section Break",
+   "label": "Simulation"
+  },
+  {
+   "fieldname": "last_simulation_date",
+   "fieldtype": "Date",
+   "label": "Last Simulation Date"
+  },
+  {
+   "fieldname": "next_simulation_date",
+   "fieldtype": "Date",
+   "label": "Next Simulation Date"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Recall Plan",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "food_safety_plan,recall_plan_name",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "recall_plan_name",
+ "track_changes": 1
+}

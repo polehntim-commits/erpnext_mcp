@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 808 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 840 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 404 read tools are **on** by default and can be switched off individually. A
+All 422 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -18323,3 +18323,107 @@ is already on the other end of a model. A generated strategic plan or an
 unreviewed MRL landing in a register is a document the farm is measured against
 that nobody chose, and the whole value of the `source` column is that a person
 put something in it.
+
+## v0.122.0 — Farm App Retirement, Cycle 3
+
+The last of the Flask sidecar's own registers, and the audit of what is left.
+Cycle 1 took the device network, the competitive picture, the strategy and the
+residue limits; Cycle 2 took phenology, the satellite metrics and the barcodes.
+What remained was the food-safety plan — the one part of that application an
+inspector actually asks to see — and one gap in the task board that only showed
+up when the routes were read end to end.
+
+Deliberately **not** ported, and named here so the omission is a decision rather
+than an oversight: the vault and its encryption, the Nostr identity, event and
+relay code with its NIP-44 crypto, the Merkle proofs, the Tor backup sharding
+and the Nostr-tied wallet pass. The vision labelling workflow is Volume Vision's
+and stays there.
+
+### HACCP and the FSMA preventive-controls framework — thirty tools
+
+Eight DocTypes, and thirty-one tools over them: `list_`, `get_` and `create_`
+for each of the eight, `update_` for the six whose records are revised rather
+than appended to, and one dashboard.
+
+| DocType | What it holds |
+| --- | --- |
+| Food Safety Plan | The master plan: facility, qualified individual, lifecycle |
+| Hazard Analysis | Per-step hazard identification against a risk matrix |
+| Preventive Control | CCP definitions, critical limits, monitoring specs |
+| Monitoring Record | An actual measurement taken against a control |
+| Corrective Action Record | A deviation and what was done about it |
+| Verification Record | Calibration, log review, product testing |
+| Recall Plan | FDA recall procedure, contacts and simulation dates |
+| Supplier Verification | Supply-chain verification with certificate expiry |
+
+**The plan is the root.** Every other record carries a `food_safety_plan`, and
+most also carry the `preventive_control` inside it. The plan is the document an
+auditor asks for; the seven registers under it are what make the answer
+credible.
+
+**These tools are CRUD, and that is the design.** The inspection records
+elsewhere in this app branch on their findings and drive a state machine. HACCP
+records do not: the compliance value is in the *existence* of the record and its
+*completeness*, not in an automated transition. A qualified individual reviews a
+food safety plan — a tool does not, and one that advanced a plan's status on its
+own would be producing the very signature an auditor is trying to verify. Only
+six DocTypes take an `update_` at all, because a Monitoring or Verification
+record is an observation with a time on it: it is appended to, and a correction
+to one is a Corrective Action Record, not an edit. A Hazard Analysis is the
+exception among the read-mostly registers and does take an `update_`, because it
+records a *judgement* rather than a measurement, and a plan review is precisely
+the occasion for reaching a different one — `farm_app` let a hazard row be
+edited, and refusing to here would have made a mistyped likelihood permanent.
+
+### `get_food_safety_dashboard` — read-only, default ON
+
+**Arguments:** `company`.
+
+**Returns** `plans` — one row per Food Safety Plan with `qi_current`,
+`review_overdue`, counts of hazards, controls, monitoring, verification and
+supplier records, `open_corrective_actions`, `active_recall_plans`,
+`last_recall_simulation` and `expired_supplier_certificates` — plus
+`total_plans` and `total_open_corrective_actions`.
+
+**It answers "are we audit-ready" in one call.** That question is otherwise
+eight reads and a date comparison per plan, which is the kind of arithmetic that
+gets done once and then not again. `qi_current` and `review_overdue` are
+computed against today rather than stored, so neither can go stale in the
+register; a plan with no expiry or no review date on file reports `false` for
+both rather than guessing, because a missing date is not a passing one.
+
+**A register that is not installed counts zero rather than refusing.** Each
+child count is guarded on the DocType existing, so a site part-way through
+`bench migrate` gets a dashboard with honest zeros instead of an error naming a
+table the reader has never heard of.
+
+### `list_tasks_by_location` — read-only, default ON
+
+**Arguments:** `location_filter` (a Housing Unit, Field, Zone or Parcel
+docname), `skill`, `task_type`, `urgency` (applied to the pool half only),
+`company`, `user`, `limit`.
+
+**Returns** `location_groups` — one entry per place, each with `location`,
+`location_doctype`, `label` (e.g. `"MC-Cabin-01: 3 tasks, ~90 min"`),
+`total_tasks`, `held_count`, `available_count`, `total_estimated_minutes`,
+`tasks_missing_estimate` and the `tasks` themselves — plus `unlocated_tasks`
+for hand-raised work naming no place, `skill_matching`, and `me`.
+
+**It is a third reader of two calls that already existed**, not a new query:
+`list_available_for_me`'s pool and `list_my_tasks`'s Claimed/In-Progress
+holdings, combined and grouped by the Farm Task's own `location`. Every refusal
+and scoping rule those two carry — entity access, the concurrent-claim count,
+the honest skill-matching story `skill_matching` reports — travels with it
+unchanged, because it is the same two calls underneath.
+
+**Why a new tool and not a `group_by_location` flag** on `list_my_tasks` or
+`list_available_for_me`: the same reason this module's other tools are separate
+switches and not one with modes. An operator piloting the grouped view wants a
+switch that reaches it alone, and a flag buried inside a tool that is already on
+is not something a switch can reach.
+
+**A task with no location is reported, not dropped.** `unlocated_tasks` names it
+rather than folding it into a fake "Unlocated" group — there is no such place.
+`total_estimated_minutes` sums only tasks that carry an estimate;
+`tasks_missing_estimate` says how many in the group did not, so the minutes read
+as a floor rather than a promise.

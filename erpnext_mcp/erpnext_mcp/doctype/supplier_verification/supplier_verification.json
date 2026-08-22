@@ -1,0 +1,210 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Supply chain verification record for a Food Safety Plan. Documents supplier audits, certificate reviews, product testing, and approval status. Tracks hazards the supplier controls, verification results, and certificate expiry dates to ensure the supply chain preventive control is maintained.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "food_safety_plan",
+  "supplier_name",
+  "supplier_gln",
+  "supplier_address",
+  "supplier_contact_name",
+  "supplier_contact_phone",
+  "supplier_contact_email",
+  "product_section",
+  "product_supplied",
+  "product_description",
+  "hazards_controlled_by_supplier",
+  "verification_section",
+  "verification_method",
+  "verification_date",
+  "verification_result",
+  "verification_notes",
+  "certificate_section",
+  "certificate_type",
+  "certificate_expiry_date",
+  "next_verification_date",
+  "company",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "food_safety_plan",
+   "fieldtype": "Link",
+   "label": "Food Safety Plan",
+   "options": "Food Safety Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "supplier_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Supplier Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier_gln",
+   "fieldtype": "Data",
+   "label": "Supplier GLN"
+  },
+  {
+   "fieldname": "supplier_address",
+   "fieldtype": "Small Text",
+   "label": "Supplier Address"
+  },
+  {
+   "fieldname": "supplier_contact_name",
+   "fieldtype": "Data",
+   "label": "Supplier Contact Name"
+  },
+  {
+   "fieldname": "supplier_contact_phone",
+   "fieldtype": "Data",
+   "label": "Supplier Contact Phone"
+  },
+  {
+   "fieldname": "supplier_contact_email",
+   "fieldtype": "Data",
+   "label": "Supplier Contact Email"
+  },
+  {
+   "fieldname": "product_section",
+   "fieldtype": "Section Break",
+   "label": "Product"
+  },
+  {
+   "fieldname": "product_supplied",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Product Supplied"
+  },
+  {
+   "fieldname": "product_description",
+   "fieldtype": "Long Text",
+   "label": "Product Description"
+  },
+  {
+   "description": "Array of hazard names the supplier controls.",
+   "fieldname": "hazards_controlled_by_supplier",
+   "fieldtype": "JSON",
+   "label": "Hazards Controlled by Supplier"
+  },
+  {
+   "fieldname": "verification_section",
+   "fieldtype": "Section Break",
+   "label": "Verification"
+  },
+  {
+   "fieldname": "verification_method",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Verification Method",
+   "options": "\nAudit\nCertificate Review\nTesting\nOther"
+  },
+  {
+   "fieldname": "verification_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Verification Date",
+   "search_index": 1
+  },
+  {
+   "fieldname": "verification_result",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Verification Result",
+   "options": "\nApproved\nApproved with Conditions\nRejected"
+  },
+  {
+   "fieldname": "verification_notes",
+   "fieldtype": "Long Text",
+   "label": "Verification Notes"
+  },
+  {
+   "fieldname": "certificate_section",
+   "fieldtype": "Section Break",
+   "label": "Certificate"
+  },
+  {
+   "description": "e.g. ISO 22000, SQF, FSSC 22000",
+   "fieldname": "certificate_type",
+   "fieldtype": "Data",
+   "label": "Certificate Type"
+  },
+  {
+   "fieldname": "certificate_expiry_date",
+   "fieldtype": "Date",
+   "label": "Certificate Expiry Date",
+   "search_index": 1
+  },
+  {
+   "fieldname": "next_verification_date",
+   "fieldtype": "Date",
+   "label": "Next Verification Date",
+   "search_index": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Supplier Verification",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "food_safety_plan,supplier_name,verification_result",
+ "sort_field": "verification_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "supplier_name",
+ "track_changes": 1
+}

@@ -50,6 +50,7 @@ ON = {
 		"list_available_for_me",
 		"get_task_with_evidence_contract",
 		"list_compliance_calendar_for_me",
+		"list_tasks_by_location",
 		"claim_task_via_mobile",
 		"start_task_via_mobile",
 		"complete_task_via_mobile",
@@ -242,6 +243,108 @@ class MyTasksAndThePool(FieldworkTestCase):
 		for tool in ("list_my_tasks", "list_available_for_me"):
 			with self.subTest(tool=tool):
 				self.assertFalse(self.as_worker(tool).get("isError"))
+
+
+class TasksByLocation(FieldworkTestCase):
+	"""v0.117.0. One trip's worth of work per place, held and pool combined."""
+
+	def test_two_tasks_at_one_place_are_one_group_with_a_minutes_label(self):
+		unit = self.a_camp()
+		self.a_task(location_doctype="Housing Unit", location=unit, estimated_duration_minutes=60)
+		self.a_task(
+			task_name="Detector test — MC-Cabin-01",
+			task_type="Test",
+			location_doctype="Housing Unit",
+			location=unit,
+			estimated_duration_minutes=30,
+		)
+		data = self.worker_data("list_tasks_by_location")
+		self.assertEqual(data["group_count"], 1)
+		group = data["location_groups"][0]
+		self.assertEqual(group["location"], unit)
+		self.assertEqual(group["total_tasks"], 2)
+		self.assertEqual(group["total_estimated_minutes"], 90)
+		self.assertEqual(group["label"], f"{unit}: 2 tasks, ~90 min")
+		self.assertEqual(group["tasks_missing_estimate"], 0)
+
+	def test_a_held_task_and_a_pool_task_at_one_place_are_one_group(self):
+		"""What I'm holding and what I could still take, in one trip."""
+		unit = self.a_camp()
+		mine = self.a_task(location_doctype="Housing Unit", location=unit)
+		self.worker_data("claim_task_via_mobile", {"task_name": mine["name"]})
+		self.a_task(
+			task_name="Detector test — MC-Cabin-01",
+			task_type="Test",
+			location_doctype="Housing Unit",
+			location=unit,
+		)
+		data = self.worker_data("list_tasks_by_location")
+		group = data["location_groups"][0]
+		self.assertEqual(group["total_tasks"], 2)
+		self.assertEqual(group["held_count"], 1)
+		self.assertEqual(group["available_count"], 1)
+		held = next(task for task in group["tasks"] if task["held"])
+		self.assertEqual(held["assignment"], self.worker_data("list_my_tasks")["assignments"][0]["name"])
+
+	def test_two_places_are_two_groups(self):
+		first = self.a_camp("MC-Cabin-01")
+		second = self.a_camp("MC-Cabin-02")
+		self.a_task(location_doctype="Housing Unit", location=first)
+		self.a_task(task_name="Walk — MC-Cabin-02", location_doctype="Housing Unit", location=second)
+		data = self.worker_data("list_tasks_by_location")
+		self.assertEqual(data["group_count"], 2)
+		self.assertEqual(data["total_tasks"], 2)
+
+	def test_a_task_with_no_location_is_reported_not_dropped(self):
+		"""There is no place called 'Unlocated' — inventing one would read as a
+		place that does not exist."""
+		unit = self.a_camp()
+		self.a_task(location_doctype="Housing Unit", location=unit)
+		self.a_task(task_name="Hand-raised repair, no place named")
+		data = self.worker_data("list_tasks_by_location")
+		self.assertEqual(data["group_count"], 1)
+		self.assertEqual(data["unlocated_count"], 1)
+		self.assertEqual(data["total_tasks"], 2)
+		self.assertIn("no place called 'Unlocated'", data["unlocated_note"])
+
+	def test_minutes_are_a_floor_not_a_promise_when_some_tasks_lack_an_estimate(self):
+		unit = self.a_camp()
+		self.a_task(location_doctype="Housing Unit", location=unit, estimated_duration_minutes=45)
+		self.a_task(
+			task_name="Detector test — MC-Cabin-01",
+			task_type="Test",
+			location_doctype="Housing Unit",
+			location=unit,
+		)
+		group = self.worker_data("list_tasks_by_location")["location_groups"][0]
+		self.assertEqual(group["total_estimated_minutes"], 45)
+		self.assertEqual(group["tasks_missing_estimate"], 1)
+		self.assertEqual(group["label"], f"{unit}: 2 tasks, ~45 min")
+
+	def test_it_is_honest_about_skills_the_same_way_the_pool_is(self):
+		self.a_task(skill_required="applicator_license")
+		data = self.worker_data("list_tasks_by_location")
+		self.assertIsNone(data["skill_filter"])
+		self.assertIn("NOT FILTERED", data["skill_matching"])
+
+	def test_a_company_outside_the_workers_entities_is_refused(self):
+		message = self.worker_error("list_tasks_by_location", {"company": OTHER})
+		self.assertIn(OTHER, message)
+		self.assertIn("not yours", message)
+
+	def test_a_location_filter_narrows_the_groups(self):
+		first = self.a_camp("MC-Cabin-01")
+		second = self.a_camp("MC-Cabin-02")
+		self.a_task(location_doctype="Housing Unit", location=first)
+		self.a_task(task_name="Walk — MC-Cabin-02", location_doctype="Housing Unit", location=second)
+		data = self.worker_data("list_tasks_by_location", {"location_filter": first})
+		self.assertEqual(data["group_count"], 1)
+		self.assertEqual(data["location_groups"][0]["location"], first)
+
+	def test_it_is_on_by_default(self):
+		self.configure(enabled=1, allow_create_farm_task=1)
+		self.a_task()
+		self.assertFalse(self.as_worker("list_tasks_by_location").get("isError"))
 
 
 class SkillsAreNotInvented(FieldworkTestCase):

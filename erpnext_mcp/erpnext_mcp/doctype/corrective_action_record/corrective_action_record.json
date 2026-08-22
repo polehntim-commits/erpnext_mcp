@@ -1,0 +1,263 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Documents a deviation from a preventive control's critical limits and the corrective action taken. Tracks root cause analysis, product disposition, recall determination, and closure — the complete record an FDA inspector needs to see when a critical limit was exceeded.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "food_safety_plan",
+  "preventive_control",
+  "monitoring_record",
+  "status",
+  "deviation_section",
+  "deviation_date",
+  "deviation_description",
+  "root_cause",
+  "action_section",
+  "action_taken",
+  "action_date",
+  "action_taken_by",
+  "action_taken_by_name",
+  "preventive_measure_section",
+  "preventive_measure",
+  "preventive_measure_date",
+  "product_section",
+  "affected_product_description",
+  "affected_quantity",
+  "affected_quantity_unit",
+  "product_col",
+  "product_disposition",
+  "recall_section",
+  "recall_determination",
+  "recall_initiated",
+  "closure_section",
+  "closed_date",
+  "closure_notes",
+  "company",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "food_safety_plan",
+   "fieldtype": "Link",
+   "label": "Food Safety Plan",
+   "options": "Food Safety Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "preventive_control",
+   "fieldtype": "Link",
+   "label": "Preventive Control",
+   "options": "Preventive Control",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "monitoring_record",
+   "fieldtype": "Link",
+   "label": "Monitoring Record",
+   "options": "Monitoring Record",
+   "search_index": 1
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nClosed\nVerified",
+   "reqd": 1
+  },
+  {
+   "fieldname": "deviation_section",
+   "fieldtype": "Section Break",
+   "label": "Deviation"
+  },
+  {
+   "fieldname": "deviation_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Deviation Date",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "deviation_description",
+   "fieldtype": "Long Text",
+   "label": "Deviation Description",
+   "reqd": 1
+  },
+  {
+   "fieldname": "root_cause",
+   "fieldtype": "Long Text",
+   "label": "Root Cause"
+  },
+  {
+   "fieldname": "action_section",
+   "fieldtype": "Section Break",
+   "label": "Action Taken"
+  },
+  {
+   "fieldname": "action_taken",
+   "fieldtype": "Long Text",
+   "label": "Action Taken",
+   "reqd": 1
+  },
+  {
+   "fieldname": "action_date",
+   "fieldtype": "Date",
+   "label": "Action Date"
+  },
+  {
+   "fieldname": "action_taken_by",
+   "fieldtype": "Data",
+   "label": "Action Taken By (Employee ID)"
+  },
+  {
+   "fieldname": "action_taken_by_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Action Taken By (Name)"
+  },
+  {
+   "fieldname": "preventive_measure_section",
+   "fieldtype": "Section Break",
+   "label": "Preventive Measure"
+  },
+  {
+   "fieldname": "preventive_measure",
+   "fieldtype": "Long Text",
+   "label": "Preventive Measure"
+  },
+  {
+   "fieldname": "preventive_measure_date",
+   "fieldtype": "Date",
+   "label": "Preventive Measure Date"
+  },
+  {
+   "fieldname": "product_section",
+   "fieldtype": "Section Break",
+   "label": "Product Impact"
+  },
+  {
+   "fieldname": "affected_product_description",
+   "fieldtype": "Long Text",
+   "label": "Affected Product Description"
+  },
+  {
+   "fieldname": "affected_quantity",
+   "fieldtype": "Float",
+   "label": "Affected Quantity"
+  },
+  {
+   "fieldname": "affected_quantity_unit",
+   "fieldtype": "Data",
+   "label": "Affected Quantity Unit"
+  },
+  {
+   "fieldname": "product_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "product_disposition",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Product Disposition",
+   "options": "\nRemoved\nReworked\nSalvaged\nDestroyed"
+  },
+  {
+   "fieldname": "recall_section",
+   "fieldtype": "Section Break",
+   "label": "Recall Determination"
+  },
+  {
+   "fieldname": "recall_determination",
+   "fieldtype": "Select",
+   "label": "Recall Determination",
+   "options": "\nNo Recall\nInternal Recall\nCustomer Recall\nMarket Withdrawal"
+  },
+  {
+   "default": "0",
+   "fieldname": "recall_initiated",
+   "fieldtype": "Check",
+   "label": "Recall Initiated"
+  },
+  {
+   "fieldname": "closure_section",
+   "fieldtype": "Section Break",
+   "label": "Closure"
+  },
+  {
+   "fieldname": "closed_date",
+   "fieldtype": "Datetime",
+   "label": "Closed Date"
+  },
+  {
+   "fieldname": "closure_notes",
+   "fieldtype": "Small Text",
+   "label": "Closure Notes"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Corrective Action Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "food_safety_plan,preventive_control,status,deviation_date",
+ "sort_field": "deviation_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "preventive_control",
+ "track_changes": 1
+}

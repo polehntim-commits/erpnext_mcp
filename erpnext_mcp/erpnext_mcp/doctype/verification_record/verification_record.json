@@ -1,0 +1,210 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Verification activity record — calibration checks, monitoring log reviews, product testing, and sanitation verification. Proves the preventive controls are working as intended and the monitoring system is producing accurate data.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "food_safety_plan",
+  "preventive_control",
+  "verification_type",
+  "description",
+  "verification_date",
+  "verification_time",
+  "equipment_section",
+  "equipment_name",
+  "equipment_calibrated_date",
+  "equipment_calibration_due_date",
+  "equipment_col",
+  "calibration_status",
+  "results_section",
+  "result_summary",
+  "is_control_effective",
+  "findings",
+  "corrective_actions_triggered",
+  "personnel_section",
+  "verified_by",
+  "verified_by_name",
+  "company",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "food_safety_plan",
+   "fieldtype": "Link",
+   "label": "Food Safety Plan",
+   "options": "Food Safety Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "preventive_control",
+   "fieldtype": "Link",
+   "label": "Preventive Control",
+   "options": "Preventive Control",
+   "search_index": 1
+  },
+  {
+   "fieldname": "verification_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Verification Type",
+   "options": "Calibration\nLog Review\nProduct Testing\nSanitation Test\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Long Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "verification_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Verification Date",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "verification_time",
+   "fieldtype": "Data",
+   "label": "Time"
+  },
+  {
+   "fieldname": "equipment_section",
+   "fieldtype": "Section Break",
+   "label": "Equipment"
+  },
+  {
+   "fieldname": "equipment_name",
+   "fieldtype": "Data",
+   "label": "Equipment Name"
+  },
+  {
+   "fieldname": "equipment_calibrated_date",
+   "fieldtype": "Date",
+   "label": "Equipment Calibrated Date"
+  },
+  {
+   "fieldname": "equipment_calibration_due_date",
+   "fieldtype": "Date",
+   "label": "Equipment Calibration Due Date"
+  },
+  {
+   "fieldname": "equipment_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "calibration_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Calibration Status",
+   "options": "\nCompliant\nOverdue\nFailed"
+  },
+  {
+   "fieldname": "results_section",
+   "fieldtype": "Section Break",
+   "label": "Results"
+  },
+  {
+   "fieldname": "result_summary",
+   "fieldtype": "Long Text",
+   "label": "Result Summary"
+  },
+  {
+   "fieldname": "is_control_effective",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Control Effective"
+  },
+  {
+   "fieldname": "findings",
+   "fieldtype": "Long Text",
+   "label": "Findings"
+  },
+  {
+   "default": "0",
+   "fieldname": "corrective_actions_triggered",
+   "fieldtype": "Check",
+   "label": "Corrective Actions Triggered"
+  },
+  {
+   "fieldname": "personnel_section",
+   "fieldtype": "Section Break",
+   "label": "Personnel"
+  },
+  {
+   "fieldname": "verified_by",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Verified By (Employee ID)"
+  },
+  {
+   "fieldname": "verified_by_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Verified By (Name)"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Verification Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "food_safety_plan,verification_type,verification_date",
+ "sort_field": "verification_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "verification_type",
+ "track_changes": 1
+}

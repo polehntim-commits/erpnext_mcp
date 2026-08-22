@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""The seven calls the Farm Ops app makes all day, with the worker already known.
+"""The eight calls the Farm Ops app makes all day, with the worker already known.
 
 v0.17.0. Every tool here is a THIN WRAPPER over something Sprint 8 already
 shipped. That is the whole design and it is worth defending, because "seven new
@@ -65,6 +65,37 @@ skills field to Employee is read. Otherwise the whole pool for the worker's
 entities comes back, and `skill_matching` in the result says which of the three
 happened. An unfiltered pool that admits it is unfiltered is a usable screen; a
 filtered pool that cannot say what it filtered on is not.
+
+────────────────────────────────────────────────────────────────────────────
+THE EIGHTH TOOL, AND WHY IT IS A THIRD READER RATHER THAN A FLAG
+────────────────────────────────────────────────────────────────────────────
+
+v0.117.0. `list_tasks_by_location` answers a question neither `list_my_tasks`
+nor `list_available_for_me` answers on its own: "if I drove to MC-Cabin-01
+right now, what could I get done in one visit?" A worker planning a morning
+does not think in two lists — the three tasks they are already holding at a
+cabin and the two more sitting in the pool for it are one trip, and a screen
+that made them cross-reference two flat lists to see that would be asking the
+phone to do the grouping a server call can do once.
+
+It is a THIRD READER of the same two calls, not a new query. Both
+`dispatch.list_available_tasks` and `dispatch.list_dispatched_tasks` are
+called exactly as `list_available_for_me` and `list_my_tasks` call them, and
+every refusal and every scoping rule this module's other seven tools already
+carry — entity access, the honest skill-matching story — travels with them
+unchanged. WHY A NEW TOOL AND NOT A `group_by_location` FLAG ON THE EXISTING
+TWO, the way the module docstring above already answers for
+`list_my_tasks` vs. `list_dispatched_tasks`: an operator piloting the grouped
+view wants a switch that reaches it alone, and a flag buried inside a tool
+that is already on is not something a switch can reach.
+
+A TASK WITH NO LOCATION IS REPORTED, NOT DROPPED. `unlocated_tasks` carries
+every task this call could not place — hand-raised work with no asset or
+field named on it — because folding those into a fake "Unlocated" group would
+read as a place, and there is no such place. `total_estimated_minutes` is
+summed only from tasks that carry an estimate; `tasks_missing_estimate` says
+how many in the group did not, so the minutes are read as a floor and not a
+promise.
 """
 
 from __future__ import annotations
@@ -672,3 +703,152 @@ def complete_task_via_mobile(args: dict) -> ToolResult:
 	data = dict(result.data)
 	data["me"] = _me_block(me)
 	return ToolResult(data=data, summary=result.summary, docstatus_delta=result.docstatus_delta)
+
+
+# ── 8. list_tasks_by_location ───────────────────────────────────────────────
+#: Worst-to-least-urgent, the same order `dispatch._by_urgency` sorts a flat
+#: board by. Duplicated rather than imported: it is four literal strings, and
+#: reaching into a leading-underscore name in another module for them would
+#: tie this file to dispatch.py's internals rather than its public calls.
+_URGENCY_ORDER = {"Critical": 0, "High": 1, "Normal": 2, "Low": 3}
+
+
+def list_tasks_by_location(args: dict) -> ToolResult:
+	"""One trip's worth of work per place: what is held plus what could be taken.
+
+	Combines `list_my_tasks` (Claimed/In-Progress — already the caller's) with
+	`list_available_for_me` (the self-pickable pool), then groups both by the
+	Farm Task's own `location`/`location_doctype` rather than reporting them as
+	two lists a screen has to cross-reference. See the module docstring for why
+	this is a third reader of the same two calls and not a new query.
+	"""
+	me = _me(args)
+	worker = _require_employee(me)
+	company = _company_for(me, args)
+
+	skill, skill_matching = _skill_for(me, args)
+	pool_inner = {"worker_id": worker, "limit": args.get("limit")}
+	if company:
+		pool_inner["company"] = company
+	if skill:
+		pool_inner["skill"] = skill
+	for key in ("task_type", "urgency"):
+		if as_str(args, key):
+			pool_inner[key] = args.get(key)
+	pool = dispatch.list_available_tasks(pool_inner).data.get("tasks") or []
+
+	held_inner = {"worker_id": worker, "include_finished": False, "limit": args.get("limit")}
+	if company:
+		held_inner["company"] = company
+	held = dispatch.list_dispatched_tasks(held_inner).data.get("assignments") or []
+
+	# Combined and de-duplicated by task name. The two sources cannot name the
+	# same task — the pool is Available and held work is Claimed/In-Progress —
+	# but a dict keyed by name costs nothing and refuses to double-count a task
+	# if that ever stops being true.
+	combined = {}
+	for entry in pool:
+		name = entry.get("name")
+		if name:
+			combined[name] = {**entry, "held": False, "assignment": None, "assignment_state": None}
+	for entry in held:
+		detail = entry.get("task_detail")
+		if not detail or not detail.get("name"):
+			continue
+		combined[detail["name"]] = {
+			**detail,
+			"held": True,
+			"assignment": entry.get("name"),
+			"assignment_state": entry.get("state"),
+		}
+
+	location = as_str(args, "location_filter") or as_str(args, "location")
+	tasks = list(combined.values())
+	if location:
+		wanted = location.strip().casefold()
+		tasks = [task for task in tasks if str(task.get("location") or "").strip().casefold() == wanted]
+
+	groups, unlocated = {}, []
+	for task in tasks:
+		place = str(task.get("location") or "").strip()
+		if not place:
+			unlocated.append(_brief(task))
+			continue
+		key = (str(task.get("location_doctype") or ""), place)
+		groups.setdefault(key, []).append(task)
+
+	described = [_describe_group(place, doctype, members) for (doctype, place), members in groups.items()]
+	described.sort(
+		key=lambda group: (
+			min(_URGENCY_ORDER.get(task["urgency"], 9) for task in group["tasks"]),
+			-group["total_tasks"],
+			group["location"],
+		)
+	)
+
+	data = {
+		"me": _me_block(me),
+		"company": company or None,
+		"skill_filter": skill or None,
+		"skill_matching": skill_matching,
+		"location_filter": location or None,
+		"location_groups": described,
+		"group_count": len(described),
+		"total_tasks": len(tasks),
+		"unlocated_tasks": unlocated,
+		"unlocated_count": len(unlocated),
+		"note": (
+			"`held` tasks are already the caller's (Claimed or In-Progress); the rest are self-"
+			"pickable and sitting in the pool. `total_estimated_minutes` sums only tasks that "
+			"carry an estimate — `tasks_missing_estimate` says how many in the group did not, so "
+			"the minutes read as a floor and not a promise."
+		),
+	}
+	if unlocated:
+		data["unlocated_note"] = (
+			f"{len(unlocated)} task(s) here name no location — hand-raised work with no asset or "
+			"field on it — and are reported here rather than folded into a fake group. There is "
+			"no place called 'Unlocated'."
+		)
+
+	summary = f"{len(described)} location(s) covering {len(tasks)} task(s) for {worker}"
+	if unlocated:
+		summary += f"; {len(unlocated)} task(s) with no location"
+	return ToolResult(data=data, summary=summary)
+
+
+def _brief(task: dict) -> dict:
+	"""A task, trimmed to what a location-grouped screen draws per row."""
+	return {
+		"name": task.get("name"),
+		"task_name": task.get("task_name"),
+		"task_type": task.get("task_type"),
+		"state": task.get("state"),
+		"urgency": task.get("urgency"),
+		"estimated_duration_minutes": task.get("estimated_duration_minutes"),
+		"held": task.get("held", False),
+		"assignment": task.get("assignment"),
+		"self_pickable": task.get("self_pickable", False),
+	}
+
+
+def _describe_group(place: str, location_doctype: str, members: list) -> dict:
+	briefs = [_brief(task) for task in members]
+	estimated = [task["estimated_duration_minutes"] for task in briefs if task["estimated_duration_minutes"]]
+	total_tasks = len(briefs)
+	total_minutes = sum(estimated)
+	held_count = len([task for task in briefs if task["held"]])
+	label = f"{place}: {total_tasks} task{'s' if total_tasks != 1 else ''}"
+	if total_minutes:
+		label += f", ~{total_minutes} min"
+	return {
+		"location": place,
+		"location_doctype": location_doctype or None,
+		"label": label,
+		"total_tasks": total_tasks,
+		"held_count": held_count,
+		"available_count": total_tasks - held_count,
+		"total_estimated_minutes": total_minutes,
+		"tasks_missing_estimate": total_tasks - len(estimated),
+		"tasks": briefs,
+	}

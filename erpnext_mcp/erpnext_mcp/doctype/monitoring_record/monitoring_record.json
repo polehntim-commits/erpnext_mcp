@@ -1,0 +1,194 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "Actual monitoring log entry for a preventive control. Records the measured value, whether it falls within the critical limit, who performed the monitoring, and links back to the block and planting season for traceability.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "food_safety_plan",
+  "preventive_control",
+  "monitoring_date",
+  "monitoring_time",
+  "measurement_section",
+  "measured_value",
+  "measured_unit",
+  "measurement_col",
+  "is_within_limit",
+  "details_section",
+  "observation_notes",
+  "monitored_by",
+  "monitored_by_name",
+  "context_section",
+  "block",
+  "planting_season",
+  "source_task",
+  "company",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "food_safety_plan",
+   "fieldtype": "Link",
+   "label": "Food Safety Plan",
+   "options": "Food Safety Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "preventive_control",
+   "fieldtype": "Link",
+   "label": "Preventive Control",
+   "options": "Preventive Control",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "monitoring_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Monitoring Date",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "monitoring_time",
+   "fieldtype": "Data",
+   "label": "Time"
+  },
+  {
+   "fieldname": "measurement_section",
+   "fieldtype": "Section Break",
+   "label": "Measurement"
+  },
+  {
+   "fieldname": "measured_value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Measured Value"
+  },
+  {
+   "fieldname": "measured_unit",
+   "fieldtype": "Data",
+   "label": "Measured Unit"
+  },
+  {
+   "fieldname": "measurement_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Computed from preventive control critical limits.",
+   "fieldname": "is_within_limit",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Within Limit"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "observation_notes",
+   "fieldtype": "Long Text",
+   "label": "Observation Notes"
+  },
+  {
+   "fieldname": "monitored_by",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Monitored By (Employee ID)"
+  },
+  {
+   "fieldname": "monitored_by_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Monitored By (Name)"
+  },
+  {
+   "fieldname": "context_section",
+   "fieldtype": "Section Break",
+   "label": "Context"
+  },
+  {
+   "fieldname": "block",
+   "fieldtype": "Link",
+   "label": "Block",
+   "options": "Field",
+   "search_index": 1
+  },
+  {
+   "fieldname": "planting_season",
+   "fieldtype": "Link",
+   "label": "Planting Season",
+   "options": "Planting Season",
+   "search_index": 1
+  },
+  {
+   "fieldname": "source_task",
+   "fieldtype": "Link",
+   "label": "Source Task",
+   "options": "Farm Task",
+   "search_index": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Monitoring Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "food_safety_plan,preventive_control,monitoring_date",
+ "sort_field": "monitoring_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "preventive_control",
+ "track_changes": 1
+}

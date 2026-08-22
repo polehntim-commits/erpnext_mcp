@@ -148,6 +148,11 @@ STATIC_REFERRERS = {
 		# readings as well as the hardware currently standing in it.
 		("IoT Device", "field"),
 		("IoT Reading", "field"),
+		# v0.122.0. A monitoring measurement names the block it was taken in. An
+		# FSMA record outlives the block it describes, so a block deleted without
+		# reaching here leaves a food safety log pointing at ground that is gone —
+		# and that log is the evidence an audit asks for.
+		("Monitoring Record", "block"),
 		("Planting Season", "field"),
 		# v0.121.0. The series a satellite pull leaves behind and the cursor that
 		# stops it being paid for twice. Both are keyed on the block, and a block

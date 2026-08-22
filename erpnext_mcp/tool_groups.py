@@ -301,6 +301,13 @@ SECTION_DOMAIN = {
 	"competitive_intel_write_section": "holding",
 	"strategy_read_section": "holding",
 	"strategy_write_section": "holding",
+	# v0.122.0, Farm App Retirement Cycle 3. HACCP and FSMA food safety plans
+	# file under `compliance` with the other registers an inspector asks for —
+	# the question a Preventive Control or Monitoring Record answers is "does
+	# this facility satisfy 21 CFR 117", which is the same kind of question as
+	# an inspection template or a corrective action log.
+	"haccp_read_section": "compliance",
+	"haccp_write_section": "compliance",
 }
 
 

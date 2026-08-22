@@ -1,0 +1,232 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 12:00:00.000000",
+ "description": "A critical control point (CCP) or preventive control within a Food Safety Plan, with monitoring parameters, critical limits, corrective action procedures, and verification requirements. The operational backbone of the HACCP system.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "food_safety_plan",
+  "control_name",
+  "description",
+  "control_type",
+  "is_critical_control_point",
+  "is_active",
+  "monitoring_section",
+  "monitoring_parameter",
+  "monitoring_frequency",
+  "monitoring_method",
+  "limits_section",
+  "critical_limit",
+  "critical_limit_unit",
+  "critical_limit_operator",
+  "limits_col",
+  "critical_limit_description",
+  "corrective_section",
+  "corrective_action_description",
+  "corrective_action_responsible",
+  "verification_section",
+  "verification_frequency",
+  "verification_method",
+  "personnel_section",
+  "required_training_description",
+  "company",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "food_safety_plan",
+   "fieldtype": "Link",
+   "label": "Food Safety Plan",
+   "options": "Food Safety Plan",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "control_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Control Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Long Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "control_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Control Type",
+   "options": "Process\nSanitation\nAllergen\nSupply Chain\nOther",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_critical_control_point",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is CCP"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "monitoring_section",
+   "fieldtype": "Section Break",
+   "label": "Monitoring Specifications"
+  },
+  {
+   "description": "e.g. temperature, pH, time, visual",
+   "fieldname": "monitoring_parameter",
+   "fieldtype": "Data",
+   "label": "Monitoring Parameter"
+  },
+  {
+   "description": "e.g. every 4 hours, hourly, per batch",
+   "fieldname": "monitoring_frequency",
+   "fieldtype": "Data",
+   "label": "Monitoring Frequency"
+  },
+  {
+   "fieldname": "monitoring_method",
+   "fieldtype": "Data",
+   "label": "Monitoring Method"
+  },
+  {
+   "fieldname": "limits_section",
+   "fieldtype": "Section Break",
+   "label": "Critical Limits"
+  },
+  {
+   "fieldname": "critical_limit",
+   "fieldtype": "Float",
+   "label": "Critical Limit"
+  },
+  {
+   "description": "e.g. deg F, deg C, pH, %, minutes",
+   "fieldname": "critical_limit_unit",
+   "fieldtype": "Data",
+   "label": "Critical Limit Unit"
+  },
+  {
+   "fieldname": "critical_limit_operator",
+   "fieldtype": "Select",
+   "label": "Critical Limit Operator",
+   "options": "\n<=\n>=\n<\n>\n="
+  },
+  {
+   "fieldname": "limits_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "critical_limit_description",
+   "fieldtype": "Small Text",
+   "label": "Critical Limit Description"
+  },
+  {
+   "fieldname": "corrective_section",
+   "fieldtype": "Section Break",
+   "label": "Corrective Action"
+  },
+  {
+   "fieldname": "corrective_action_description",
+   "fieldtype": "Long Text",
+   "label": "Corrective Action Description"
+  },
+  {
+   "fieldname": "corrective_action_responsible",
+   "fieldtype": "Data",
+   "label": "Responsible Employee ID"
+  },
+  {
+   "fieldname": "verification_section",
+   "fieldtype": "Section Break",
+   "label": "Verification"
+  },
+  {
+   "fieldname": "verification_frequency",
+   "fieldtype": "Data",
+   "label": "Verification Frequency"
+  },
+  {
+   "fieldname": "verification_method",
+   "fieldtype": "Data",
+   "label": "Verification Method"
+  },
+  {
+   "fieldname": "personnel_section",
+   "fieldtype": "Section Break",
+   "label": "Personnel"
+  },
+  {
+   "fieldname": "required_training_description",
+   "fieldtype": "Data",
+   "label": "Required Training Description"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "search_index": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Preventive Control",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "food_safety_plan,control_name,control_type",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "control_name",
+ "track_changes": 1
+}

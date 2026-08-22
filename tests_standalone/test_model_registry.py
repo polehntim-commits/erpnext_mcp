@@ -870,9 +870,15 @@ class ToolRegistration(unittest.TestCase):
 		# `assign_soil_profile`). `Field.soil_profile`, `Crop.target_brix` and
 		# `Crop Variety.target_brix` are new columns on existing registers and
 		# carry no tools of their own — no existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 808)
-		self.assertEqual(len(self.registry.READ_TOOLS), 404)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 404)
+		# v0.122.0, Farm App Retirement Cycle 3, adds thirty-two: thirty-one for the
+		# HACCP/FSMA food safety plan and the eight registers under it, and one
+		# read, `list_tasks_by_location`, a third reader of
+		# `list_available_for_me` and `list_my_tasks`'s own calls that groups the
+		# pool and the caller's held work by place. Eighteen reads and fourteen
+		# writes; no existing signature changed.
+		self.assertEqual(len(self.registry.TOOLS), 840)
+		self.assertEqual(len(self.registry.READ_TOOLS), 422)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 418)
 
 
 if __name__ == "__main__":
