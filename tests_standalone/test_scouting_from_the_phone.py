@@ -221,6 +221,38 @@ class ARoundWalkedFromThePhoneReachesTheRegister(PhoneScoutingTestCase):
 		self.assertEqual(self.stamped()["brix_reading"], 18.5)
 		self.assertEqual(self.stamped()["brix_method"], "Refractometer")
 
+	def test_a_zero_is_a_reading_and_not_an_absent_argument(self):
+		"""v0.119.0. THE SAME SILENT NULL, THROUGH A TYPE COERCION.
+
+		`str(value or "").strip()` turns an integer 0 into `""`, and the drop was
+		DOUBLY silent: 0 passes the `not in (None, "")` filter, so `_measurements`
+		did not return early — it proceeded, lost the code at `if code:` and threw
+		nothing. The round filed with the template's default and a null growth
+		stage, which is a walk somebody did recorded as a walk nobody did: exactly
+		what v0.117.0 was written to end, re-entering by another door.
+
+		Both spellings are asserted because a handset may send either. BBCH
+		dormancy is conventionally "00", and an integer 0 in a JSON body is the
+		one a client gets to be careless about.
+		"""
+		self.walk(growth_stage_code=0)
+		self.assertEqual(self.stamped()["growth_stage_code"], "0")
+		row = self.one_observation()
+		self.assertEqual(row["growth_stage_code"], "0")
+
+	def test_a_zero_brix_reading_survives_too(self):
+		"""It always did — `brix_reading` was written with an explicit presence
+		test rather than truthiness. Pinned so a later tidy-up cannot quietly
+		convert it to the idiom the test above exists to refuse."""
+		self.walk(brix_reading=0, brix_method="Refractometer")
+		self.assertEqual(self.stamped()["brix_reading"], 0.0)
+		self.assertEqual(self.one_observation()["brix_method"], "Refractometer")
+
+	def test_a_zero_growth_stage_string_is_unaffected(self):
+		"""The contrast case, so a regression cannot pass by breaking both."""
+		self.walk(growth_stage_code="00")
+		self.assertEqual(self.stamped()["growth_stage_code"], "00")
+
 	def test_the_shipped_templates_contract_and_defaults_arrive_on_the_task(self):
 		"""The path a foreman actually takes: the template `bench migrate` seeds."""
 		task = self.a_template_round()
@@ -306,6 +338,14 @@ class TheReadingsAreRefusedAtTheDoor(PhoneScoutingTestCase):
 		a round the sweep is then obliged to refuse."""
 		message = self.refusal(observation_type="Pest Scout")
 		self.assertIn("cannot be sent from a handset", message)
+		self.assertIn("Harvest Readiness", message)
+
+	def test_a_zero_observation_type_is_refused_rather_than_ignored(self):
+		"""The other half of `_as_text`. A 0 where a Select value belongs is
+		nonsense either way — but it must be REFUSED by name, not silently
+		treated as an argument nobody sent."""
+		message = self.refusal(observation_type=0)
+		self.assertIn("'0'", message)
 		self.assertIn("Harvest Readiness", message)
 
 	def test_a_reading_with_no_method_is_refused(self):

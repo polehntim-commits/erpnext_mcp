@@ -471,6 +471,25 @@ def _location(given, latitude, longitude) -> str:
 MEASUREMENT_ARGUMENTS = ("observation_type", "growth_stage_code", "brix_reading", "brix_method")
 
 
+def _as_text(value) -> str:
+	"""One client-supplied value as text. NOT `str(value or "")`, which eats zero.
+
+	v0.119.0. `0 or ""` is `""`, so the usual normalising idiom turns a
+	legitimate zero into an absent argument — and every check downstream then
+	agrees the caller said nothing. `_measurements` is where that mattered: a
+	BBCH stage of 0 passed the `not in (None, "")` filter, so the function did
+	not return early, then vanished at `if code:` and threw nothing. The round
+	filed with the template's default and a null growth stage — a walk somebody
+	did, recorded as a walk nobody did, which is the exact failure v0.117.0 was
+	written to end, re-entering through a type coercion instead of a missing
+	argument.
+
+	See `erpnext_mcp/tools/farm.py:_stage` for the same trap in its comparison
+	form, and prefer an explicit `is None` test anywhere a value may be zero.
+	"""
+	return "" if value is None else str(value).strip()
+
+
 def _record_defaults(raw) -> dict:
 	"""The task's stamped `creates_record_data`, tolerant of a blob nobody can parse.
 
@@ -543,7 +562,7 @@ def _measurements(task: str, observation_type, growth_stage_code, brix_reading, 
 
 	out = {}
 
-	kind = str(observation_type or "").strip()
+	kind = _as_text(observation_type)
 	if kind:
 		match = next(
 			(known for known in observation_rules.OBSERVATION_TYPES if known.lower() == kind.lower()), ""
@@ -566,11 +585,11 @@ def _measurements(task: str, observation_type, growth_stage_code, brix_reading, 
 			)
 		out["observation_type"] = match
 
-	code = str(growth_stage_code or "").strip()
+	code = _as_text(growth_stage_code)
 	if code:
 		out["growth_stage_code"] = code[:140]
 
-	method = str(brix_method or "").strip()
+	method = _as_text(brix_method)
 	if method:
 		known = next((m for m in observation_rules.BRIX_METHODS if m and m.lower() == method.lower()), "")
 		if not known:

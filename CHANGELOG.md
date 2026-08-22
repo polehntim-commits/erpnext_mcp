@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.119.0 — 2026-08-22 — the reading that was zero and the argument nobody sent
+
+**One coercion helper and three call sites.** No new tool, no new DocType, no new
+column, no signature change.
+
+**v0.117.0 closed the front door and this is the same failure coming back through
+the side one.** `_measurements` normalised each client-supplied field with
+`str(value or "").strip()`, and `0 or ""` is `""` — so an integer BBCH stage of 0
+became an absent argument. **THE DROP WAS DOUBLY SILENT.** Zero passes the
+`not in (None, "")` filter that decides whether any measurement was sent at all,
+so the function did not return early; it proceeded, lost the code at `if code:`
+and threw nothing. The completion succeeded, the task was stamped with the
+template's defaults alone, and `index_scouting_observations` filed an observation
+with a null growth stage — a walk somebody did, recorded as a walk nobody did.
+`overlays.harvest_overlay` then draws that block grey with `short_of` reporting
+that nobody took a reading. That is the exact sentence v0.117.0 exists to make
+untrue.
+
+**`_as_text` is the fix and it is deliberately not clever:** `"" if value is None
+else str(value).strip()`. It is used for `observation_type`, `growth_stage_code`
+and `brix_method` — the three client-supplied fields that went through the old
+idiom. `brix_reading` never did: it was written with an explicit
+`not in (None, "")` presence test, which is why a Brix of 0 has always reached
+the record, and that shape is now the one to copy. A test pins it so a later
+tidy-up cannot quietly convert it back.
+
+**A ZERO OBSERVATION TYPE IS NOW REFUSED RATHER THAN IGNORED.** `0` where a Select
+value belongs is nonsense whichever way it is read, but the two readings are not
+equally safe: refusing names the argument while the scout is still in the block,
+and ignoring files a round that says something nobody typed.
+
+**Found because v0.118.0 hit the same idiom in its own new modules**, in its
+comparison form — `str(before or "") != str(after or "")`, which stages no write
+when a value is legitimately zero. That form and this one have the same root
+cause and different shapes, and the coercion form hides better because it reads
+as ordinary normalisation. A sweep for the remaining sites should look for
+`or ""` around anything that can legitimately be zero rather than for the
+comparison alone; `tools/farm.py:_stage` is the reference for the comparison
+half.
+
 ## 0.118.0 — 2026-08-22 — the sidecar's five registers, and the book nobody could rewrite
 
 **Farm App Retirement, Cycle 1.** Eight DocTypes, thirty-three tools, one new
