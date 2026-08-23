@@ -658,6 +658,84 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# only people it is about. What each role sees beyond that is narrowed by
 		# `overlays.layers_for` and what was held back is NAMED in the answer.
 		"/mobile/get_map_overlays",
+		# v0.123.0. THE FOOD-SAFETY, TRACEABILITY, SENSOR AND MARKET REGISTERS.
+		# Seventy-two methods, HERE FOR THIS SET'S ORDINARY REASON: `MobileAPI.swift`
+		# names none of them yet, so the server half ships first and the iOS half is a
+		# client change rather than a release of both. They move up when the constants
+		# land. Every one is reachable and gated today — see the block comment above
+		# them in `api/mobile.py` for which gate each carries and why.
+		"/mobile/get_corrective_action_record",
+		"/mobile/get_food_safety_dashboard",
+		"/mobile/get_food_safety_plan",
+		"/mobile/get_hazard_analysis",
+		"/mobile/get_monitoring_record",
+		"/mobile/get_preventive_control",
+		"/mobile/get_recall_plan",
+		"/mobile/get_supplier_verification",
+		"/mobile/get_verification_record",
+		"/mobile/list_corrective_action_records",
+		"/mobile/list_food_safety_plans",
+		"/mobile/list_hazard_analyses",
+		"/mobile/list_monitoring_records",
+		"/mobile/list_preventive_controls",
+		"/mobile/list_recall_plans",
+		"/mobile/list_supplier_verifications",
+		"/mobile/list_verification_records",
+		"/mobile/create_corrective_action_record",
+		"/mobile/create_food_safety_plan",
+		"/mobile/create_hazard_analysis",
+		"/mobile/create_monitoring_record",
+		"/mobile/create_preventive_control",
+		"/mobile/create_recall_plan",
+		"/mobile/create_supplier_verification",
+		"/mobile/create_verification_record",
+		"/mobile/update_corrective_action_record",
+		"/mobile/update_food_safety_plan",
+		"/mobile/update_hazard_analysis",
+		"/mobile/update_preventive_control",
+		"/mobile/update_recall_plan",
+		"/mobile/update_supplier_verification",
+		"/mobile/get_lot_timeline",
+		"/mobile/get_traceability_lot",
+		"/mobile/list_traceability_lots",
+		"/mobile/recall_drill",
+		"/mobile/trace_lot_backward",
+		"/mobile/trace_lot_forward",
+		"/mobile/create_traceability_lot",
+		"/mobile/index_lot_events",
+		"/mobile/record_cte",
+		"/mobile/trace_backward",
+		"/mobile/trace_forward",
+		"/mobile/get_device_readings",
+		"/mobile/get_iot_device",
+		"/mobile/list_iot_devices",
+		"/mobile/list_iot_readings",
+		"/mobile/create_iot_device",
+		"/mobile/create_iot_reading",
+		"/mobile/update_iot_device",
+		"/mobile/get_ipm_reference",
+		"/mobile/get_mrl_for_chemical_crop_market",
+		"/mobile/get_mrl_record",
+		"/mobile/list_mrl_records",
+		"/mobile/create_mrl_record",
+		"/mobile/update_mrl_record",
+		"/mobile/list_soil_compaction_profiles",
+		"/mobile/assign_soil_profile",
+		"/mobile/create_soil_compaction_profile",
+		"/mobile/update_soil_compaction_profile",
+		"/mobile/get_variety_care_recipe",
+		"/mobile/get_acquisition_target",
+		"/mobile/get_competitive_move",
+		"/mobile/get_market_participant",
+		"/mobile/list_acquisition_targets",
+		"/mobile/list_competitive_moves",
+		"/mobile/list_market_participants",
+		"/mobile/create_acquisition_target",
+		"/mobile/create_competitive_move",
+		"/mobile/create_market_participant",
+		"/mobile/update_acquisition_target",
+		"/mobile/update_competitive_move",
+		"/mobile/update_market_participant",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):
@@ -2416,3 +2494,155 @@ class TheFieldRegistrationFlow(FarmOpsAPITestCase):
 		"""It has no company of its own, and a photograph taken at a state change
 		already has a home in `log_asset_state_change`'s `photo_file_token`."""
 		self.assertNotIn("Asset State Log", mobile_api.ATTACHABLE_DOCTYPES)
+
+
+# ── the v0.123.0 registers, driven as a picker ──────────────────────────────
+class TheNewRegistersAreGated(FarmOpsAPITestCase):
+	"""Every route v0.123.0 published, called by a plain enrolled Field Worker.
+
+	THE CLAIM UNDER TEST IS THE GATE AND NOT THE FEATURE. Seventy-two methods
+	were published at once, and the thing that decides what a handset may do
+	with them is one line in each wrapper's own body — `require_dispatch_role`
+	on the writes, `personnel.require_hr_role()` on the competitive registers,
+	and nothing at all on the reads that are open on enrolment. A route table
+	that lists all seventy-two proves they are REACHABLE; it proves nothing
+	about which of them a picker is refused, and those are different questions.
+
+	`allow_<tool>` DOES NOT ANSWER THIS EITHER. `settings.tool_enabled` gates
+	`mcp.py` and is never read by `api/guard.py`, so a switch left off does not
+	close a route — the gate in the body is the whole of it. That is exactly why
+	it is worth a test that drives each one as the least-privileged caller who
+	can reach it at all.
+
+	THE FOURTH TEST IS THE ONE THAT KEEPS THIS HONEST: the three sets below are
+	compared against the route table, so a route added later and left out of
+	this file fails here rather than going quietly ungated.
+	"""
+
+	DISPATCH_GATED: ClassVar[set[str]] = {
+		"assign_soil_profile",
+		"create_corrective_action_record",
+		"create_food_safety_plan",
+		"create_hazard_analysis",
+		"create_iot_device",
+		"create_iot_reading",
+		"create_monitoring_record",
+		"create_mrl_record",
+		"create_preventive_control",
+		"create_recall_plan",
+		"create_soil_compaction_profile",
+		"create_supplier_verification",
+		"create_traceability_lot",
+		"create_verification_record",
+		"index_lot_events",
+		"recall_drill",
+		"record_cte",
+		"update_corrective_action_record",
+		"update_food_safety_plan",
+		"update_hazard_analysis",
+		"update_iot_device",
+		"update_mrl_record",
+		"update_preventive_control",
+		"update_recall_plan",
+		"update_soil_compaction_profile",
+		"update_supplier_verification",
+	}
+
+	HR_GATED: ClassVar[set[str]] = {
+		"create_acquisition_target",
+		"create_competitive_move",
+		"create_market_participant",
+		"get_acquisition_target",
+		"get_competitive_move",
+		"get_market_participant",
+		"list_acquisition_targets",
+		"list_competitive_moves",
+		"list_market_participants",
+		"update_acquisition_target",
+		"update_competitive_move",
+		"update_market_participant",
+	}
+
+	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		"get_corrective_action_record",
+		"get_device_readings",
+		"get_food_safety_dashboard",
+		"get_food_safety_plan",
+		"get_hazard_analysis",
+		"get_iot_device",
+		"get_ipm_reference",
+		"get_lot_timeline",
+		"get_monitoring_record",
+		"get_mrl_for_chemical_crop_market",
+		"get_mrl_record",
+		"get_preventive_control",
+		"get_recall_plan",
+		"get_supplier_verification",
+		"get_traceability_lot",
+		"get_variety_care_recipe",
+		"get_verification_record",
+		"list_corrective_action_records",
+		"list_food_safety_plans",
+		"list_hazard_analyses",
+		"list_iot_devices",
+		"list_iot_readings",
+		"list_monitoring_records",
+		"list_mrl_records",
+		"list_preventive_controls",
+		"list_recall_plans",
+		"list_soil_compaction_profiles",
+		"list_supplier_verifications",
+		"list_traceability_lots",
+		"list_verification_records",
+		"trace_backward",
+		"trace_forward",
+		"trace_lot_backward",
+		"trace_lot_forward",
+	}
+
+	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
+	#: rather than the bare 403 because entity scoping answers 403 too, and a
+	#: test that could not tell them apart would pass on the wrong refusal.
+	RESTRICTED = "is restricted to"
+
+	def test_the_three_sets_are_exactly_the_routes_this_release_added(self):
+		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
+		self.assertEqual(len(named), 72, "a method is named in two sets at once")
+		mounted = {route.path for route in ROUTES}
+		missing = {f"/mobile/{m}" for m in named} - mounted
+		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
+
+	def test_a_picker_is_refused_every_write_and_the_recall_drill(self):
+		"""The writes are a foreman's. A picker meets the dispatch gate."""
+		for method in sorted(self.DISPATCH_GATED):
+			with self.subTest(method=method):
+				status, body = self.refusal(f"{PREFIX}/mobile/{method}")
+				self.assertEqual(status, 403, f"{method} answered {status} to a Field Worker")
+				self.assertIn(self.RESTRICTED, body["error"], method)
+
+	#: `personnel.require_hr_role()` raises `ToolError`, not `frappe.PermissionError`,
+	#: so this refusal reaches the phone as 400 where the dispatch gate's reaches
+	#: it as 403. THAT IS PRE-EXISTING AND NOT THIS RELEASE'S DOING — every HR-gated
+	#: method already on this surface answers the same way, and the suite has always
+	#: asserted the SENTENCE for them rather than the code (see `test_employee.py`,
+	#: `test_org.py`, `test_compliance_reports.py`). Asserted the same way here so
+	#: this test says what is true rather than what `app.py`'s status table implies.
+	PERSONNEL = "may not change the personnel register"
+
+	def test_a_picker_is_refused_every_competitive_register_read_and_write(self):
+		"""What this farm thinks a rival is worth is not a picker's to read."""
+		for method in sorted(self.HR_GATED):
+			with self.subTest(method=method):
+				status, body = self.refusal(f"{PREFIX}/mobile/{method}")
+				self.assertIn(status, (400, 403), f"{method} answered {status} to a Field Worker")
+				self.assertIn(self.PERSONNEL, body["error"], method)
+
+	def test_the_open_reads_are_not_refused_for_the_role(self):
+		"""They may still refuse for a missing argument or an entity they cannot
+		reach — what they must NOT do is answer the dispatch gate's sentence,
+		which would mean a read the brief says is open on enrolment is closed."""
+		for method in sorted(self.OPEN_ON_ENROLMENT):
+			with self.subTest(method=method):
+				response = self.post(f"{PREFIX}/mobile/{method}")
+				if response.status_code == 403:
+					self.assertNotIn(self.RESTRICTED, self.payload(response).get("error", ""), method)

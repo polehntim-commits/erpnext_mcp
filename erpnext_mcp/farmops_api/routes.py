@@ -1041,6 +1041,100 @@ ROUTES = (
 	Route("/mobile", mobile_api.list_employee_grades),
 	Route("/mobile", mobile_api.create_employee_grade),
 	Route("/mobile", mobile_api.update_employee_grade),
+	# v0.123.0. The FSMA/HACCP registers. The monitoring log is the one a phone
+	# is actually standing in front of — a CCP check is written at the line, on
+	# the hour, by whoever is there. Reads open on enrolment; every write and
+	# the recall drill carry `guard.require_dispatch_role`.
+	Route("/mobile", mobile_api.get_corrective_action_record),
+	Route("/mobile", mobile_api.get_food_safety_dashboard),
+	Route("/mobile", mobile_api.get_food_safety_plan),
+	Route("/mobile", mobile_api.get_hazard_analysis),
+	Route("/mobile", mobile_api.get_monitoring_record),
+	Route("/mobile", mobile_api.get_preventive_control),
+	Route("/mobile", mobile_api.get_recall_plan),
+	Route("/mobile", mobile_api.get_supplier_verification),
+	Route("/mobile", mobile_api.get_verification_record),
+	Route("/mobile", mobile_api.list_corrective_action_records),
+	Route("/mobile", mobile_api.list_food_safety_plans),
+	Route("/mobile", mobile_api.list_hazard_analyses),
+	Route("/mobile", mobile_api.list_monitoring_records),
+	Route("/mobile", mobile_api.list_preventive_controls),
+	Route("/mobile", mobile_api.list_recall_plans),
+	Route("/mobile", mobile_api.list_supplier_verifications),
+	Route("/mobile", mobile_api.list_verification_records),
+	Route("/mobile", mobile_api.create_corrective_action_record),
+	Route("/mobile", mobile_api.create_food_safety_plan),
+	Route("/mobile", mobile_api.create_hazard_analysis),
+	Route("/mobile", mobile_api.create_monitoring_record),
+	Route("/mobile", mobile_api.create_preventive_control),
+	Route("/mobile", mobile_api.create_recall_plan),
+	Route("/mobile", mobile_api.create_supplier_verification),
+	Route("/mobile", mobile_api.create_verification_record),
+	Route("/mobile", mobile_api.update_corrective_action_record),
+	Route("/mobile", mobile_api.update_food_safety_plan),
+	Route("/mobile", mobile_api.update_hazard_analysis),
+	Route("/mobile", mobile_api.update_preventive_control),
+	Route("/mobile", mobile_api.update_recall_plan),
+	Route("/mobile", mobile_api.update_supplier_verification),
+	# v0.123.0. The lot register and its critical tracking events. The lot code
+	# is on the bin in front of the picker, so the reads are open; creating a
+	# lot or filing a CTE is a foreman's act.
+	Route("/mobile", mobile_api.get_lot_timeline),
+	Route("/mobile", mobile_api.get_traceability_lot),
+	Route("/mobile", mobile_api.list_traceability_lots),
+	Route("/mobile", mobile_api.recall_drill),
+	Route("/mobile", mobile_api.trace_lot_backward),
+	Route("/mobile", mobile_api.trace_lot_forward),
+	Route("/mobile", mobile_api.create_traceability_lot),
+	Route("/mobile", mobile_api.index_lot_events),
+	Route("/mobile", mobile_api.record_cte),
+	# v0.123.0. Both directions of the trace, open on enrolment: 'where did this
+	# come from' is the question asked with the box in hand.
+	Route("/mobile", mobile_api.trace_backward),
+	Route("/mobile", mobile_api.trace_forward),
+	# v0.123.0. The sensor register. A phone standing in the block is the thing
+	# that notices a dead battery, and `create_iot_reading` is how a manual
+	# reading gets filed when the radio did not make it.
+	Route("/mobile", mobile_api.get_device_readings),
+	Route("/mobile", mobile_api.get_iot_device),
+	Route("/mobile", mobile_api.list_iot_devices),
+	Route("/mobile", mobile_api.list_iot_readings),
+	Route("/mobile", mobile_api.create_iot_device),
+	Route("/mobile", mobile_api.create_iot_reading),
+	Route("/mobile", mobile_api.update_iot_device),
+	# v0.123.0. Residue limits and the IPM lookup. `get_mrl_for_chemical_crop_market`
+	# is the one that decides whether a load may ship to a market at all.
+	Route("/mobile", mobile_api.get_ipm_reference),
+	Route("/mobile", mobile_api.get_mrl_for_chemical_crop_market),
+	Route("/mobile", mobile_api.get_mrl_record),
+	Route("/mobile", mobile_api.list_mrl_records),
+	Route("/mobile", mobile_api.create_mrl_record),
+	Route("/mobile", mobile_api.update_mrl_record),
+	# v0.123.0. The compaction reference behind the map's red and green. The
+	# profile table is site-wide and carries no `company` column; the docstrings
+	# say so rather than implying a scope that is not there.
+	Route("/mobile", mobile_api.list_soil_compaction_profiles),
+	Route("/mobile", mobile_api.assign_soil_profile),
+	Route("/mobile", mobile_api.create_soil_compaction_profile),
+	Route("/mobile", mobile_api.update_soil_compaction_profile),
+	# v0.123.0. The variety care recipe, keyed on crop rather than on a document.
+	Route("/mobile", mobile_api.get_variety_care_recipe),
+	# v0.123.0. The competitive registers, and the only block here gated on
+	# `personnel.require_hr_role()` at BOTH ends. What this farm thinks a rival is
+	# worth, and where it is weak, is a holding-company fact; a field worker's
+	# handset is enrolled for their own work and not for that.
+	Route("/mobile", mobile_api.get_acquisition_target),
+	Route("/mobile", mobile_api.get_competitive_move),
+	Route("/mobile", mobile_api.get_market_participant),
+	Route("/mobile", mobile_api.list_acquisition_targets),
+	Route("/mobile", mobile_api.list_competitive_moves),
+	Route("/mobile", mobile_api.list_market_participants),
+	Route("/mobile", mobile_api.create_acquisition_target),
+	Route("/mobile", mobile_api.create_competitive_move),
+	Route("/mobile", mobile_api.create_market_participant),
+	Route("/mobile", mobile_api.update_acquisition_target),
+	Route("/mobile", mobile_api.update_competitive_move),
+	Route("/mobile", mobile_api.update_market_participant),
 )
 
 #: Path → Route. Built once at import; there is nothing dynamic about it.

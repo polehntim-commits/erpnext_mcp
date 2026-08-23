@@ -3,6 +3,65 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.123.0 — 2026-08-23 — the registers a phone was standing in front of and could not reach
+
+**Seventy-two mobile routes.** No new DocType, no new MCP tool, no existing tool
+signature changed. The mobile route table goes from 202 to 274.
+
+**THE GAP WAS A TRANSPORT ONE, NOT A CAPABILITY ONE.** Every one of these
+seventy-two already existed as an MCP tool and could be called by the assistant;
+none of them had a door a handset could knock on. The registers behind them are
+exactly the ones somebody is standing in front of when the question comes up —
+the monitoring log a CCP check is written to at the line, the lot code on the bin
+in the picker's hands, the sensor whose battery died out in a block, the residue
+limit that decides whether a load may ship to a market at all.
+
+**`allow_<tool>` DOES NOT GATE THIS TRANSPORT, AND THAT IS THE WHOLE REASON THE
+GATES ARE CHOSEN PER METHOD.** `settings.tool_enabled` is read by `mcp.py` and by
+nothing in `api/guard.py`. Those switches decide what the AI surface may call;
+they have never decided what a phone may call. What gates a route here is
+`guard.endpoint` — the mobile kill switch, the rate limit, `FARM_OPS_ROLES`, a
+live enrolment grant — plus whatever the wrapper's own body adds. Registering a
+route IS publishing it to every enrolled handset, so route omission was never the
+security boundary and a switch left off would not have closed one of these.
+
+**THIRTY-FOUR READS ARE OPEN ON ENROLMENT. TWENTY-SIX CARRY
+`guard.require_dispatch_role`.** The split is the one the surface already used:
+reading the plan, the lot, the device or the limit is the ordinary case this API
+exists for; creating a plan, filing a CTE, registering a device or moving a
+residue limit is a foreman's act. `recall_drill` is gated with the writes despite
+being read-only — it is a management exercise against the lot register rather
+than a read of one's own work.
+
+**TWELVE CARRY `personnel.require_hr_role()` AT BOTH ENDS.** The competitive
+registers are the only block here gated on reads as well as writes. What this
+farm believes a rival is worth, and where it thinks that rival is weak, is a
+holding-company fact; a picker's handset is enrolled for their own work and not
+for that. Note that this gate raises `ToolError` rather than
+`frappe.PermissionError`, so it reaches the phone as 400 where the dispatch gate
+reaches it as 403 — PRE-EXISTING behaviour shared with every HR-gated method
+already on this surface, recorded here because the status table in
+`farmops_api/app.py` reads as though every role refusal is a 403.
+
+**FIVE METHODS, ACROSS THREE REGISTERS, CANNOT BE SCOPED AND SAY SO IN THEIR
+OWN DOCSTRINGS.** Soil
+Compaction Profile carries no `company` column, and the IPM and variety-care
+lookups are keyed on a crop rather than on a document. `guard.require_scoped_doc`
+reads `company` off the row and only refuses when it finds one, so on those it
+reads None, skips its check and hands the docname straight back — the failure
+mode v0.110.0 hit on three other registers. They are
+site-wide reference data. Naming that in each docstring is the difference between
+a known property and an oversight nobody wrote down.
+
+**EVERYTHING ELSE IS SCOPED, AND THE SUITE NOW PROVES THE GATES RATHER THAN THE
+ROUTES.** Twenty-five methods scope on the docname through `guard.require_scoped_doc`,
+which refuses another entity's document as NOT FOUND so its docnames cannot be
+mapped by watching which error comes back; the other forty-two resolve a company
+through `guard.require_company` and let the tool filter on it.
+`TheNewRegistersAreGated` drives all seventy-two as a plain enrolled Field Worker
+and asserts which refuse — a route table proves a method is REACHABLE and says
+nothing about who may use it, and those are different questions.
+
 ## 0.122.0 — 2026-08-22 — the plan an inspector asks for, and the block that was almost overwritten
 
 **Farm App Retirement, Cycle 3 — the last of the sidecar's own registers.** Eight

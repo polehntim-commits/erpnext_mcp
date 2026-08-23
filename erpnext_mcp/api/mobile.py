@@ -107,6 +107,7 @@ from ..erpnext_mcp.doctype.farm_task_assignment import farm_task_assignment as a
 from ..errors import ToolError
 from ..tools import accidents as accident_tools
 from ..tools import ach as ach_tools
+from ..tools import agronomy as agronomy_tools
 from ..tools import app_feedback as feedback_tools
 from ..tools import (
 	asset_tags,
@@ -124,6 +125,7 @@ from ..tools import (
 )
 from ..tools import binseals as bin_seal_tools
 from ..tools import calendar as compliance_calendar
+from ..tools import compintel as compintel_tools
 from ..tools import dimensions as dimension_tools
 from ..tools import discipline as discipline_tools
 from ..tools import employee as personnel
@@ -131,11 +133,16 @@ from ..tools import evidence as evidence_tools
 from ..tools import expenses as expense_tools
 from ..tools import farm as farm_tools
 from ..tools import files as file_tools
+from ..tools import haccp as haccp_tools
 from ..tools import housing as housing_tools
+from ..tools import iot as iot_tools
 from ..tools import locations as location_tools
+from ..tools import lots as lot_tools
+from ..tools import map_overlays as map_overlay_tools
 from ..tools import masters as master_tools
 from ..tools import ml_model as ml_model_tools
 from ..tools import mobile as mobile_tools
+from ..tools import mrl as mrl_tools
 from ..tools import narrative as narrative_tools
 from ..tools import org as org_tools
 from ..tools import payroll as payroll_tools
@@ -151,6 +158,7 @@ from ..tools import spray as spray_tools
 from ..tools import stock_inventory as stock_tools
 from ..tools import tasktemplates as template_tools
 from ..tools import tax_remittance as remittance_tools
+from ..tools import trace as trace_tools
 from ..tools import training as training_tools
 from ..tools import training_sessions as training_session_tools
 from ..tools import universal_scan as universal_scan_tool
@@ -14063,3 +14071,3341 @@ def get_map_overlays(user: str, company=None, blocks=None, layers=None, limit=No
 	# rows carry that key, set from the row's own entity.
 	answer["blocks"] = guard.scoped(answer.get("blocks") or [], allowed)
 	return answer
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# v0.123.0 — THE FOOD-SAFETY, TRACEABILITY, SENSOR AND MARKET REGISTERS
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Seventy-two methods that existed as MCP tools and had no door a handset could
+# knock on. The registers behind them are the ones a phone is standing in front
+# of when the question comes up: the monitoring log a CCP check is written to,
+# the lot code on the bin in front of the picker, the device whose battery just
+# died in a block, the residue limit that decides whether a load may ship.
+#
+# THE `allow_<tool>` SWITCHES DO NOT GATE THIS TRANSPORT. `settings.tool_enabled`
+# is read by `mcp.py` and by nothing in `api/guard.py` — those switches are the
+# AI surface's gate and they are why a tool is off for the assistant, not why a
+# route is closed to a phone. What gates a route here is `guard.endpoint`: the
+# mobile kill switch, the rate limit, `FARM_OPS_ROLES` and a live enrolment
+# grant, plus whatever the wrapper's own body adds. REGISTERING A ROUTE IS
+# PUBLISHING IT to every enrolled handset, so the gate each one carries is
+# chosen per method below rather than inherited from a settings page.
+#
+# READS ARE OPEN ON ENROLMENT, WRITES CARRY `guard.require_dispatch_role`, and
+# the competitive registers carry `personnel.require_hr_role()` at BOTH ends —
+# a rival's vulnerability windows are a holding-company fact and not a picker's.
+# `recall_drill` is gated with the writes despite being read-only: it is a
+# management exercise against the lot register, not a read of one's own work.
+#
+# FIVE METHODS, ACROSS THREE REGISTERS, CANNOT BE SCOPED AND SAY SO. Soil
+# Compaction Profile has no `company` column, and the IPM and variety-care
+# lookups are keyed on a crop rather than on a document. `require_scoped_doc`
+# reads `company` off the row and only refuses when it finds one, so on these it
+# reads None, skips its check and hands the docname straight back. They are
+# site-wide reference data, named in each docstring rather than left looking
+# like an oversight.
+
+
+# ── 174. get_corrective_action_record ───────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_corrective_action_record", limit=guard.READ_LIMIT)
+def get_corrective_action_record(
+	user: str,
+	corrective_action_record=None,
+	record=None,
+) -> dict:
+	"""One corrective action record in full: the deviation, root cause,
+	action taken, product impact, recall determination, and closure
+	status.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(corrective_action_record, record, "corrective_action_record", "record")
+	named = guard.require_scoped_doc(
+		haccp_tools.CORRECTIVE_ACTION_RECORD, named, "corrective action record", allowed
+	)
+	inner: dict = {"corrective_action_record": named}
+	return haccp_tools.get_corrective_action_record(inner).data
+
+
+# ── 175. get_food_safety_dashboard ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_food_safety_dashboard", limit=guard.READ_LIMIT)
+def get_food_safety_dashboard(
+	user: str,
+	company=None,
+) -> dict:
+	"""Summary of every food safety plan on the site: QI status, control
+	counts, open corrective actions, recall plan currency, and expired.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	return haccp_tools.get_food_safety_dashboard(inner).data
+
+
+# ── 176. get_food_safety_plan ───────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_food_safety_plan", limit=guard.READ_LIMIT)
+def get_food_safety_plan(
+	user: str,
+	plan=None,
+	food_safety_plan=None,
+) -> dict:
+	"""One food safety plan in full: the QI, lifecycle, covered CTEs, and
+	counts of hazard analyses, preventive controls, monitoring records,
+	corrective.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(plan, food_safety_plan, "plan", "food_safety_plan")
+	named = guard.require_scoped_doc(haccp_tools.FOOD_SAFETY_PLAN, named, "food safety plan", allowed)
+	inner: dict = {"plan": named}
+	return haccp_tools.get_food_safety_plan(inner).data
+
+
+# ── 177. get_hazard_analysis ────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_hazard_analysis", limit=guard.READ_LIMIT)
+def get_hazard_analysis(
+	user: str,
+	hazard_analysis=None,
+	hazard=None,
+) -> dict:
+	"""One hazard analysis record in full: the process step, hazard
+	details, risk assessment (likelihood x severity = computed risk
+	level), sources,.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(hazard_analysis, hazard, "hazard_analysis", "hazard")
+	named = guard.require_scoped_doc(haccp_tools.HAZARD_ANALYSIS, named, "hazard analysis", allowed)
+	inner: dict = {"hazard_analysis": named}
+	return haccp_tools.get_hazard_analysis(inner).data
+
+
+# ── 178. get_monitoring_record ──────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_monitoring_record", limit=guard.READ_LIMIT)
+def get_monitoring_record(
+	user: str,
+	monitoring_record=None,
+	record=None,
+) -> dict:
+	"""One monitoring record in full: the measurement, the control it was
+	against, whether it was within the critical limit, and who took it.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(monitoring_record, record, "monitoring_record", "record")
+	named = guard.require_scoped_doc(haccp_tools.MONITORING_RECORD, named, "monitoring record", allowed)
+	inner: dict = {"monitoring_record": named}
+	return haccp_tools.get_monitoring_record(inner).data
+
+
+# ── 179. get_preventive_control ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_preventive_control", limit=guard.READ_LIMIT)
+def get_preventive_control(
+	user: str,
+	preventive_control=None,
+	control=None,
+) -> dict:
+	"""One preventive control in full: monitoring specs, critical limits,
+	corrective action description, verification schedule, and a count
+	of.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(preventive_control, control, "preventive_control", "control")
+	named = guard.require_scoped_doc(haccp_tools.PREVENTIVE_CONTROL, named, "preventive control", allowed)
+	inner: dict = {"preventive_control": named}
+	return haccp_tools.get_preventive_control(inner).data
+
+
+# ── 180. get_recall_plan ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_recall_plan", limit=guard.READ_LIMIT)
+def get_recall_plan(
+	user: str,
+	recall_plan=None,
+	plan_name=None,
+) -> dict:
+	"""One recall plan in full: coordinators, team contacts, customer
+	list,.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(recall_plan, plan_name, "recall_plan", "plan_name")
+	named = guard.require_scoped_doc(haccp_tools.RECALL_PLAN, named, "recall plan", allowed)
+	inner: dict = {"recall_plan": named}
+	return haccp_tools.get_recall_plan(inner).data
+
+
+# ── 181. get_supplier_verification ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_supplier_verification", limit=guard.READ_LIMIT)
+def get_supplier_verification(
+	user: str,
+	supplier_verification=None,
+	verification=None,
+) -> dict:
+	"""One supplier verification in full: supplier details, product
+	supplied, hazards they control, verification method and result, and
+	certificate.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(
+		supplier_verification, verification, "supplier_verification", "verification"
+	)
+	named = guard.require_scoped_doc(
+		haccp_tools.SUPPLIER_VERIFICATION, named, "supplier verification", allowed
+	)
+	inner: dict = {"supplier_verification": named}
+	return haccp_tools.get_supplier_verification(inner).data
+
+
+# ── 182. get_verification_record ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_verification_record", limit=guard.READ_LIMIT)
+def get_verification_record(
+	user: str,
+	verification_record=None,
+	record=None,
+) -> dict:
+	"""One verification record in full: equipment calibration status,
+	result.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named, _label = _one_spelling(verification_record, record, "verification_record", "record")
+	named = guard.require_scoped_doc(haccp_tools.VERIFICATION_RECORD, named, "verification record", allowed)
+	inner: dict = {"verification_record": named}
+	return haccp_tools.get_verification_record(inner).data
+
+
+# ── 183. list_corrective_action_records ─────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_corrective_action_records", limit=guard.READ_LIMIT)
+def list_corrective_action_records(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	preventive_control=None,
+	control=None,
+	status=None,
+	from_date=None,
+	to_date=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Corrective action records — deviations from critical limits and what
+	was done about them.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("preventive_control", preventive_control),
+		("control", control),
+		("status", status),
+		("from_date", from_date),
+		("to_date", to_date),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_corrective_action_records(inner).data
+
+
+# ── 184. list_food_safety_plans ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_food_safety_plans", limit=guard.READ_LIMIT)
+def list_food_safety_plans(
+	user: str,
+	status=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Every FSMA/HACCP food safety plan on the site, with status, QI info
+	and.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("status", status),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_food_safety_plans(inner).data
+
+
+# ── 185. list_hazard_analyses ───────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_hazard_analyses", limit=guard.READ_LIMIT)
+def list_hazard_analyses(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	hazard_type=None,
+	risk_level=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Hazard analyses linked to a food safety plan, optionally filtered by
+	hazard type and risk level.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("hazard_type", hazard_type),
+		("risk_level", risk_level),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_hazard_analyses(inner).data
+
+
+# ── 186. list_monitoring_records ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_monitoring_records", limit=guard.READ_LIMIT)
+def list_monitoring_records(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	preventive_control=None,
+	control=None,
+	from_date=None,
+	to_date=None,
+	out_of_limit_only=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Monitoring log entries — actual measurements taken against
+	preventive.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("preventive_control", preventive_control),
+		("control", control),
+		("from_date", from_date),
+		("to_date", to_date),
+		("out_of_limit_only", out_of_limit_only),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_monitoring_records(inner).data
+
+
+# ── 187. list_preventive_controls ───────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_preventive_controls", limit=guard.READ_LIMIT)
+def list_preventive_controls(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	control_type=None,
+	ccp_only=None,
+	active_only=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Preventive controls (and CCPs) for a food safety plan.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("control_type", control_type),
+		("ccp_only", ccp_only),
+		("active_only", active_only),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_preventive_controls(inner).data
+
+
+# ── 188. list_recall_plans ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_recall_plans", limit=guard.READ_LIMIT)
+def list_recall_plans(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	active_only=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Recall plans on file — FDA notification procedures, coordinator.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("active_only", active_only),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_recall_plans(inner).data
+
+
+# ── 189. list_supplier_verifications ────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_supplier_verifications", limit=guard.READ_LIMIT)
+def list_supplier_verifications(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	verification_result=None,
+	verification_method=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Supplier verification records — audits, certificate reviews, and
+	testing of supply-chain partners.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("verification_result", verification_result),
+		("verification_method", verification_method),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_supplier_verifications(inner).data
+
+
+# ── 190. list_verification_records ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_verification_records", limit=guard.READ_LIMIT)
+def list_verification_records(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	preventive_control=None,
+	control=None,
+	verification_type=None,
+	from_date=None,
+	to_date=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""Verification records — calibration, log review, product testing, and
+	sanitation checks.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("preventive_control", preventive_control),
+		("control", control),
+		("verification_type", verification_type),
+		("from_date", from_date),
+		("to_date", to_date),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.list_verification_records(inner).data
+
+
+# ── 191. create_corrective_action_record ────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_corrective_action_record", limit=guard.WRITE_LIMIT, mutating=True)
+def create_corrective_action_record(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	preventive_control=None,
+	control=None,
+	monitoring_record=None,
+	deviation_date=None,
+	deviation_description=None,
+	root_cause=None,
+	action_taken=None,
+	action_date=None,
+	action_taken_by=None,
+	action_taken_by_name=None,
+	preventive_measure=None,
+	preventive_measure_date=None,
+	affected_product_description=None,
+	affected_quantity=None,
+	affected_quantity_unit=None,
+	product_disposition=None,
+	recall_determination=None,
+	recall_initiated=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Document a deviation from a critical limit and the corrective action
+	taken, including product disposition and recall.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("preventive_control", preventive_control),
+		("control", control),
+		("monitoring_record", monitoring_record),
+		("deviation_date", deviation_date),
+		("deviation_description", deviation_description),
+		("root_cause", root_cause),
+		("action_taken", action_taken),
+		("action_date", action_date),
+		("action_taken_by", action_taken_by),
+		("action_taken_by_name", action_taken_by_name),
+		("preventive_measure", preventive_measure),
+		("preventive_measure_date", preventive_measure_date),
+		("affected_product_description", affected_product_description),
+		("affected_quantity", affected_quantity),
+		("affected_quantity_unit", affected_quantity_unit),
+		("product_disposition", product_disposition),
+		("recall_determination", recall_determination),
+		("recall_initiated", recall_initiated),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_corrective_action_record(inner).data
+
+
+# ── 192. create_food_safety_plan ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_food_safety_plan", limit=guard.WRITE_LIMIT, mutating=True)
+def create_food_safety_plan(
+	user: str,
+	plan_name=None,
+	facility_name=None,
+	company=None,
+	scope=None,
+	status=None,
+	covered_activities=None,
+	company_gln=None,
+	company_address=None,
+	qualified_individual=None,
+	qualified_individual_name=None,
+	qi_certification_expiry=None,
+	qi_training_description=None,
+	version_number=None,
+	effective_date=None,
+	review_frequency_months=None,
+	last_review_date=None,
+	next_review_date=None,
+	notes=None,
+) -> dict:
+	"""Create a new FSMA/HACCP food safety plan — the master document that
+	every hazard analysis, preventive control, monitoring.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("plan_name", plan_name),
+		("facility_name", facility_name),
+		("scope", scope),
+		("status", status),
+		("covered_activities", covered_activities),
+		("company_gln", company_gln),
+		("company_address", company_address),
+		("qualified_individual", qualified_individual),
+		("qualified_individual_name", qualified_individual_name),
+		("qi_certification_expiry", qi_certification_expiry),
+		("qi_training_description", qi_training_description),
+		("version_number", version_number),
+		("effective_date", effective_date),
+		("review_frequency_months", review_frequency_months),
+		("last_review_date", last_review_date),
+		("next_review_date", next_review_date),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_food_safety_plan(inner).data
+
+
+# ── 193. create_hazard_analysis ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_hazard_analysis", limit=guard.WRITE_LIMIT, mutating=True)
+def create_hazard_analysis(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	process_step=None,
+	cte_type=None,
+	description=None,
+	hazard_type=None,
+	hazard_name=None,
+	hazard_description=None,
+	likelihood=None,
+	severity=None,
+	is_preventable=None,
+	potential_sources=None,
+	conditions_for_hazard=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Record a hazard identified at a process step.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("process_step", process_step),
+		("cte_type", cte_type),
+		("description", description),
+		("hazard_type", hazard_type),
+		("hazard_name", hazard_name),
+		("hazard_description", hazard_description),
+		("likelihood", likelihood),
+		("severity", severity),
+		("is_preventable", is_preventable),
+		("potential_sources", potential_sources),
+		("conditions_for_hazard", conditions_for_hazard),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_hazard_analysis(inner).data
+
+
+# ── 194. create_monitoring_record ───────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_monitoring_record", limit=guard.WRITE_LIMIT, mutating=True)
+def create_monitoring_record(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	preventive_control=None,
+	control=None,
+	monitoring_date=None,
+	monitoring_time=None,
+	measured_value=None,
+	measured_unit=None,
+	observation_notes=None,
+	monitored_by=None,
+	monitored_by_name=None,
+	block=None,
+	planting_season=None,
+	source_task=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Log a monitoring measurement against a preventive control.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("preventive_control", preventive_control),
+		("control", control),
+		("monitoring_date", monitoring_date),
+		("monitoring_time", monitoring_time),
+		("measured_value", measured_value),
+		("measured_unit", measured_unit),
+		("observation_notes", observation_notes),
+		("monitored_by", monitored_by),
+		("monitored_by_name", monitored_by_name),
+		("block", block),
+		("planting_season", planting_season),
+		("source_task", source_task),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_monitoring_record(inner).data
+
+
+# ── 195. create_preventive_control ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_preventive_control", limit=guard.WRITE_LIMIT, mutating=True)
+def create_preventive_control(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	control_name=None,
+	description=None,
+	control_type=None,
+	is_critical_control_point=None,
+	is_active=None,
+	monitoring_parameter=None,
+	monitoring_frequency=None,
+	monitoring_method=None,
+	critical_limit=None,
+	critical_limit_unit=None,
+	critical_limit_operator=None,
+	critical_limit_description=None,
+	corrective_action_description=None,
+	corrective_action_responsible=None,
+	verification_frequency=None,
+	verification_method=None,
+	required_training_description=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Define a preventive control or CCP with its.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("control_name", control_name),
+		("description", description),
+		("control_type", control_type),
+		("is_critical_control_point", is_critical_control_point),
+		("is_active", is_active),
+		("monitoring_parameter", monitoring_parameter),
+		("monitoring_frequency", monitoring_frequency),
+		("monitoring_method", monitoring_method),
+		("critical_limit", critical_limit),
+		("critical_limit_unit", critical_limit_unit),
+		("critical_limit_operator", critical_limit_operator),
+		("critical_limit_description", critical_limit_description),
+		("corrective_action_description", corrective_action_description),
+		("corrective_action_responsible", corrective_action_responsible),
+		("verification_frequency", verification_frequency),
+		("verification_method", verification_method),
+		("required_training_description", required_training_description),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_preventive_control(inner).data
+
+
+# ── 196. create_recall_plan ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_recall_plan", limit=guard.WRITE_LIMIT, mutating=True)
+def create_recall_plan(
+	user: str,
+	food_safety_plan=None,
+	recall_plan_name=None,
+	description=None,
+	is_active=None,
+	recall_coordinator=None,
+	recall_coordinator_name=None,
+	recall_coordinator_backup=None,
+	recall_coordinator_backup_name=None,
+	recall_team_contacts=None,
+	customers_list=None,
+	product_identification=None,
+	fda_notification_required=None,
+	fda_notification_procedure=None,
+	last_simulation_date=None,
+	next_simulation_date=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Create a recall plan with coordinator contacts, customer list, and
+	FDA notification procedures.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("recall_plan_name", recall_plan_name),
+		("description", description),
+		("is_active", is_active),
+		("recall_coordinator", recall_coordinator),
+		("recall_coordinator_name", recall_coordinator_name),
+		("recall_coordinator_backup", recall_coordinator_backup),
+		("recall_coordinator_backup_name", recall_coordinator_backup_name),
+		("recall_team_contacts", recall_team_contacts),
+		("customers_list", customers_list),
+		("product_identification", product_identification),
+		("fda_notification_required", fda_notification_required),
+		("fda_notification_procedure", fda_notification_procedure),
+		("last_simulation_date", last_simulation_date),
+		("next_simulation_date", next_simulation_date),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_recall_plan(inner).data
+
+
+# ── 197. create_supplier_verification ───────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_supplier_verification", limit=guard.WRITE_LIMIT, mutating=True)
+def create_supplier_verification(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	supplier_name=None,
+	supplier_gln=None,
+	supplier_address=None,
+	supplier_contact_name=None,
+	supplier_contact_phone=None,
+	supplier_contact_email=None,
+	product_supplied=None,
+	product_description=None,
+	hazards_controlled_by_supplier=None,
+	verification_method=None,
+	verification_date=None,
+	verification_result=None,
+	verification_notes=None,
+	certificate_type=None,
+	certificate_expiry_date=None,
+	next_verification_date=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Record a supplier verification — an audit,.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("supplier_name", supplier_name),
+		("supplier_gln", supplier_gln),
+		("supplier_address", supplier_address),
+		("supplier_contact_name", supplier_contact_name),
+		("supplier_contact_phone", supplier_contact_phone),
+		("supplier_contact_email", supplier_contact_email),
+		("product_supplied", product_supplied),
+		("product_description", product_description),
+		("hazards_controlled_by_supplier", hazards_controlled_by_supplier),
+		("verification_method", verification_method),
+		("verification_date", verification_date),
+		("verification_result", verification_result),
+		("verification_notes", verification_notes),
+		("certificate_type", certificate_type),
+		("certificate_expiry_date", certificate_expiry_date),
+		("next_verification_date", next_verification_date),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_supplier_verification(inner).data
+
+
+# ── 198. create_verification_record ─────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_verification_record", limit=guard.WRITE_LIMIT, mutating=True)
+def create_verification_record(
+	user: str,
+	food_safety_plan=None,
+	plan=None,
+	preventive_control=None,
+	control=None,
+	verification_type=None,
+	description=None,
+	verification_date=None,
+	verification_time=None,
+	equipment_name=None,
+	equipment_calibrated_date=None,
+	equipment_calibration_due_date=None,
+	calibration_status=None,
+	result_summary=None,
+	is_control_effective=None,
+	findings=None,
+	corrective_actions_triggered=None,
+	verified_by=None,
+	verified_by_name=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Record a verification activity — calibration, log review, product
+	testing, or sanitation check — against a preventive.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("preventive_control", preventive_control),
+		("control", control),
+		("verification_type", verification_type),
+		("description", description),
+		("verification_date", verification_date),
+		("verification_time", verification_time),
+		("equipment_name", equipment_name),
+		("equipment_calibrated_date", equipment_calibrated_date),
+		("equipment_calibration_due_date", equipment_calibration_due_date),
+		("calibration_status", calibration_status),
+		("result_summary", result_summary),
+		("is_control_effective", is_control_effective),
+		("findings", findings),
+		("corrective_actions_triggered", corrective_actions_triggered),
+		("verified_by", verified_by),
+		("verified_by_name", verified_by_name),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.create_verification_record(inner).data
+
+
+# ── 199. update_corrective_action_record ────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_corrective_action_record", limit=guard.WRITE_LIMIT, mutating=True)
+def update_corrective_action_record(
+	user: str,
+	corrective_action_record=None,
+	record=None,
+	status=None,
+	deviation_description=None,
+	root_cause=None,
+	action_taken=None,
+	deviation_date=None,
+	action_date=None,
+	action_taken_by=None,
+	action_taken_by_name=None,
+	preventive_measure=None,
+	preventive_measure_date=None,
+	affected_product_description=None,
+	affected_quantity=None,
+	affected_quantity_unit=None,
+	product_disposition=None,
+	recall_determination=None,
+	recall_initiated=None,
+	closed_date=None,
+	closure_notes=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Update a corrective action record — close it,.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("corrective_action_record", corrective_action_record),
+		("record", record),
+		("status", status),
+		("deviation_description", deviation_description),
+		("root_cause", root_cause),
+		("action_taken", action_taken),
+		("deviation_date", deviation_date),
+		("action_date", action_date),
+		("action_taken_by", action_taken_by),
+		("action_taken_by_name", action_taken_by_name),
+		("preventive_measure", preventive_measure),
+		("preventive_measure_date", preventive_measure_date),
+		("affected_product_description", affected_product_description),
+		("affected_quantity", affected_quantity),
+		("affected_quantity_unit", affected_quantity_unit),
+		("product_disposition", product_disposition),
+		("recall_determination", recall_determination),
+		("recall_initiated", recall_initiated),
+		("closed_date", closed_date),
+		("closure_notes", closure_notes),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.update_corrective_action_record(inner).data
+
+
+# ── 200. update_food_safety_plan ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_food_safety_plan", limit=guard.WRITE_LIMIT, mutating=True)
+def update_food_safety_plan(
+	user: str,
+	plan=None,
+	food_safety_plan=None,
+	plan_name=None,
+	facility_name=None,
+	scope=None,
+	status=None,
+	covered_activities=None,
+	qualified_individual=None,
+	qualified_individual_name=None,
+	qi_certification_expiry=None,
+	qi_training_description=None,
+	version_number=None,
+	effective_date=None,
+	review_frequency_months=None,
+	last_review_date=None,
+	next_review_date=None,
+	company=None,
+	notes=None,
+) -> dict:
+	""".
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("plan", plan),
+		("food_safety_plan", food_safety_plan),
+		("plan_name", plan_name),
+		("facility_name", facility_name),
+		("scope", scope),
+		("status", status),
+		("covered_activities", covered_activities),
+		("qualified_individual", qualified_individual),
+		("qualified_individual_name", qualified_individual_name),
+		("qi_certification_expiry", qi_certification_expiry),
+		("qi_training_description", qi_training_description),
+		("version_number", version_number),
+		("effective_date", effective_date),
+		("review_frequency_months", review_frequency_months),
+		("last_review_date", last_review_date),
+		("next_review_date", next_review_date),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.update_food_safety_plan(inner).data
+
+
+# ── 201. update_hazard_analysis ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_hazard_analysis", limit=guard.WRITE_LIMIT, mutating=True)
+def update_hazard_analysis(
+	user: str,
+	hazard_analysis=None,
+	hazard=None,
+	food_safety_plan=None,
+	plan=None,
+	process_step=None,
+	cte_type=None,
+	description=None,
+	hazard_type=None,
+	hazard_name=None,
+	hazard_description=None,
+	likelihood=None,
+	severity=None,
+	is_preventable=None,
+	potential_sources=None,
+	conditions_for_hazard=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Revise one hazard row on a food safety plan — its likelihood,
+	severity, description or preventability.\n\nA HAZARD ANALYSIS IS A
+	JUDGEMENT, NOT AN OBSERVATION, which is why this exists where
+	`update_monitoring_record` deliberately does not.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("hazard_analysis", hazard_analysis),
+		("hazard", hazard),
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("process_step", process_step),
+		("cte_type", cte_type),
+		("description", description),
+		("hazard_type", hazard_type),
+		("hazard_name", hazard_name),
+		("hazard_description", hazard_description),
+		("likelihood", likelihood),
+		("severity", severity),
+		("is_preventable", is_preventable),
+		("potential_sources", potential_sources),
+		("conditions_for_hazard", conditions_for_hazard),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.update_hazard_analysis(inner).data
+
+
+# ── 202. update_preventive_control ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_preventive_control", limit=guard.WRITE_LIMIT, mutating=True)
+def update_preventive_control(
+	user: str,
+	preventive_control=None,
+	control=None,
+	food_safety_plan=None,
+	plan=None,
+	control_name=None,
+	description=None,
+	control_type=None,
+	is_critical_control_point=None,
+	is_active=None,
+	monitoring_parameter=None,
+	monitoring_frequency=None,
+	monitoring_method=None,
+	critical_limit=None,
+	critical_limit_unit=None,
+	critical_limit_operator=None,
+	critical_limit_description=None,
+	corrective_action_description=None,
+	corrective_action_responsible=None,
+	verification_frequency=None,
+	verification_method=None,
+	required_training_description=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Update a preventive control's monitoring.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("preventive_control", preventive_control),
+		("control", control),
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("control_name", control_name),
+		("description", description),
+		("control_type", control_type),
+		("is_critical_control_point", is_critical_control_point),
+		("is_active", is_active),
+		("monitoring_parameter", monitoring_parameter),
+		("monitoring_frequency", monitoring_frequency),
+		("monitoring_method", monitoring_method),
+		("critical_limit", critical_limit),
+		("critical_limit_unit", critical_limit_unit),
+		("critical_limit_operator", critical_limit_operator),
+		("critical_limit_description", critical_limit_description),
+		("corrective_action_description", corrective_action_description),
+		("corrective_action_responsible", corrective_action_responsible),
+		("verification_frequency", verification_frequency),
+		("verification_method", verification_method),
+		("required_training_description", required_training_description),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.update_preventive_control(inner).data
+
+
+# ── 203. update_recall_plan ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_recall_plan", limit=guard.WRITE_LIMIT, mutating=True)
+def update_recall_plan(
+	user: str,
+	recall_plan=None,
+	plan_name=None,
+	food_safety_plan=None,
+	recall_plan_name=None,
+	description=None,
+	is_active=None,
+	recall_coordinator=None,
+	recall_coordinator_name=None,
+	recall_coordinator_backup=None,
+	recall_coordinator_backup_name=None,
+	recall_team_contacts=None,
+	customers_list=None,
+	product_identification=None,
+	fda_notification_required=None,
+	fda_notification_procedure=None,
+	last_simulation_date=None,
+	next_simulation_date=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Update a recall plan — change coordinators,.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("recall_plan", recall_plan),
+		("plan_name", plan_name),
+		("food_safety_plan", food_safety_plan),
+		("recall_plan_name", recall_plan_name),
+		("description", description),
+		("is_active", is_active),
+		("recall_coordinator", recall_coordinator),
+		("recall_coordinator_name", recall_coordinator_name),
+		("recall_coordinator_backup", recall_coordinator_backup),
+		("recall_coordinator_backup_name", recall_coordinator_backup_name),
+		("recall_team_contacts", recall_team_contacts),
+		("customers_list", customers_list),
+		("product_identification", product_identification),
+		("fda_notification_required", fda_notification_required),
+		("fda_notification_procedure", fda_notification_procedure),
+		("last_simulation_date", last_simulation_date),
+		("next_simulation_date", next_simulation_date),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.update_recall_plan(inner).data
+
+
+# ── 204. update_supplier_verification ───────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_supplier_verification", limit=guard.WRITE_LIMIT, mutating=True)
+def update_supplier_verification(
+	user: str,
+	supplier_verification=None,
+	verification=None,
+	food_safety_plan=None,
+	plan=None,
+	supplier_name=None,
+	supplier_gln=None,
+	supplier_address=None,
+	supplier_contact_name=None,
+	supplier_contact_phone=None,
+	supplier_contact_email=None,
+	product_supplied=None,
+	product_description=None,
+	hazards_controlled_by_supplier=None,
+	verification_method=None,
+	verification_date=None,
+	verification_result=None,
+	verification_notes=None,
+	certificate_type=None,
+	certificate_expiry_date=None,
+	next_verification_date=None,
+	company=None,
+	notes=None,
+) -> dict:
+	"""Update a supplier verification — new audit.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Filing a food-safety record")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("supplier_verification", supplier_verification),
+		("verification", verification),
+		("food_safety_plan", food_safety_plan),
+		("plan", plan),
+		("supplier_name", supplier_name),
+		("supplier_gln", supplier_gln),
+		("supplier_address", supplier_address),
+		("supplier_contact_name", supplier_contact_name),
+		("supplier_contact_phone", supplier_contact_phone),
+		("supplier_contact_email", supplier_contact_email),
+		("product_supplied", product_supplied),
+		("product_description", product_description),
+		("hazards_controlled_by_supplier", hazards_controlled_by_supplier),
+		("verification_method", verification_method),
+		("verification_date", verification_date),
+		("verification_result", verification_result),
+		("verification_notes", verification_notes),
+		("certificate_type", certificate_type),
+		("certificate_expiry_date", certificate_expiry_date),
+		("next_verification_date", next_verification_date),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return haccp_tools.update_supplier_verification(inner).data
+
+
+# ── 205. get_lot_timeline ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_lot_timeline", limit=guard.READ_LIMIT)
+def get_lot_timeline(
+	user: str,
+	lot_code=None,
+	limit=None,
+) -> dict:
+	"""ONE LOT'S EVENTS IN ORDER, WITH THE REFERENCED RECORDS RESOLVED —
+	the document an audit asks for.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(lot_tools.DOCTYPE, lot_code, "lot code", allowed)
+	inner: dict = {"lot_code": named}
+	for key, given in (("limit", limit),):
+		if given not in (None, ""):
+			inner[key] = given
+	return lot_tools.get_lot_timeline(inner).data
+
+
+# ── 206. get_traceability_lot ───────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_traceability_lot", limit=guard.READ_LIMIT)
+def get_traceability_lot(
+	user: str,
+	lot_code=None,
+) -> dict:
+	"""One lot with every Critical Tracking Event filed against it, its
+	source lots and its status.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(lot_tools.DOCTYPE, lot_code, "lot code", allowed)
+	inner: dict = {"lot_code": named}
+	return lot_tools.get_traceability_lot(inner).data
+
+
+# ── 207. list_traceability_lots ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_traceability_lots", limit=guard.READ_LIMIT)
+def list_traceability_lots(
+	user: str,
+	field=None,
+	variety=None,
+	date_from=None,
+	date_to=None,
+	status=None,
+	harvest_shift=None,
+	planting_season=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""The lot register — by block, variety, day, status, shift or planting
+	season.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("field", field),
+		("variety", variety),
+		("date_from", date_from),
+		("date_to", date_to),
+		("status", status),
+		("harvest_shift", harvest_shift),
+		("planting_season", planting_season),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return lot_tools.list_traceability_lots(inner).data
+
+
+# ── 208. recall_drill ───────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("recall_drill", limit=guard.READ_LIMIT)
+def recall_drill(
+	user: str,
+	lot_code=None,
+) -> dict:
+	"""THE TWENTY-FOUR-HOUR ANSWER: everywhere this lot went, who received
+	it and when.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	guard.require_dispatch_role(user, "Running a recall drill")
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(lot_tools.DOCTYPE, lot_code, "lot code", allowed)
+	inner: dict = {"lot_code": named}
+	return lot_tools.recall_drill(inner).data
+
+
+# ── 209. trace_lot_backward ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("trace_lot_backward", limit=guard.READ_LIMIT)
+def trace_lot_backward(
+	user: str,
+	lot_code=None,
+) -> dict:
+	"""EVERYTHING UPSTREAM OF ONE LOT: its source lots, their source lots,
+	the blocks at the roots of that chain, and then THE SPRAY REGISTER —
+	bounded at each root lot's own harvest date.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(lot_tools.DOCTYPE, lot_code, "lot code", allowed)
+	inner: dict = {"lot_code": named}
+	return lot_tools.trace_lot_backward(inner).data
+
+
+# ── 210. trace_lot_forward ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("trace_lot_forward", limit=guard.READ_LIMIT)
+def trace_lot_forward(
+	user: str,
+	lot_code=None,
+) -> dict:
+	"""WHICH LOTS CARRY THIS LOT'S FRUIT, AND WHO HAS THEM.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(lot_tools.DOCTYPE, lot_code, "lot code", allowed)
+	inner: dict = {"lot_code": named}
+	return lot_tools.trace_lot_forward(inner).data
+
+
+# ── 211. create_traceability_lot ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_traceability_lot", limit=guard.WRITE_LIMIT, mutating=True)
+def create_traceability_lot(
+	user: str,
+	field=None,
+	variety=None,
+	harvest_date=None,
+	company=None,
+	lot_code=None,
+	status=None,
+	harvest_shift=None,
+	shift=None,
+	planting_season=None,
+	quantity=None,
+	quantity_uom=None,
+	source_lots=None,
+	location=None,
+	actor=None,
+	allow_duplicate=None,
+	notes=None,
+) -> dict:
+	"""ASSIGN THE ONE IDENTIFIER FSMA 204 ACTUALLY REQUIRES to one day's
+	fruit off one block.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Writing to the lot register")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("field", field),
+		("variety", variety),
+		("harvest_date", harvest_date),
+		("lot_code", lot_code),
+		("status", status),
+		("harvest_shift", harvest_shift),
+		("shift", shift),
+		("planting_season", planting_season),
+		("quantity", quantity),
+		("quantity_uom", quantity_uom),
+		("source_lots", source_lots),
+		("location", location),
+		("actor", actor),
+		("allow_duplicate", allow_duplicate),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return lot_tools.create_traceability_lot(inner).data
+
+
+# ── 212. index_lot_events ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("index_lot_events", limit=guard.WRITE_LIMIT, mutating=True)
+def index_lot_events(
+	user: str,
+	date_from=None,
+	date_to=None,
+	company=None,
+) -> dict:
+	"""MUTATING (default OFF), idempotent.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Writing to the lot register")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("date_from", date_from),
+		("date_to", date_to),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return lot_tools.index_lot_events(inner).data
+
+
+# ── 213. record_cte ─────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("record_cte", limit=guard.WRITE_LIMIT, mutating=True)
+def record_cte(
+	user: str,
+	lot_code=None,
+	event_type=None,
+	reference_doctype=None,
+	reference_name=None,
+	actor=None,
+	location=None,
+	description=None,
+	quantity=None,
+	quantity_uom=None,
+	source_location=None,
+	destination_location=None,
+	carrier=None,
+	receiver=None,
+	event_datetime=None,
+	when=None,
+	company=None,
+) -> dict:
+	"""FILE ONE CRITICAL TRACKING EVENT against one lot — the FSMA 204 unit
+	of record.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Writing to the lot register")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("lot_code", lot_code),
+		("event_type", event_type),
+		("reference_doctype", reference_doctype),
+		("reference_name", reference_name),
+		("actor", actor),
+		("location", location),
+		("description", description),
+		("quantity", quantity),
+		("quantity_uom", quantity_uom),
+		("source_location", source_location),
+		("destination_location", destination_location),
+		("carrier", carrier),
+		("receiver", receiver),
+		("event_datetime", event_datetime),
+		("when", when),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return lot_tools.record_cte(inner).data
+
+
+# ── 214. trace_backward ─────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("trace_backward", limit=guard.READ_LIMIT)
+def trace_backward(
+	user: str,
+	shipment=None,
+	bin=None,
+	scale_ticket=None,
+	settlement=None,
+	bucket_entry=None,
+	company=None,
+	date_from=None,
+	date_to=None,
+	limit=None,
+) -> dict:
+	"""THE MOCK RECALL, BACKWARDS: everything that happened to one lot.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("shipment", shipment),
+		("bin", bin),
+		("scale_ticket", scale_ticket),
+		("settlement", settlement),
+		("bucket_entry", bucket_entry),
+		("date_from", date_from),
+		("date_to", date_to),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return trace_tools.trace_backward(inner).data
+
+
+# ── 215. trace_forward ──────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("trace_forward", limit=guard.READ_LIMIT)
+def trace_forward(
+	user: str,
+	block=None,
+	spray_application=None,
+	water_test=None,
+	company=None,
+	date_from=None,
+	date_to=None,
+	limit=None,
+) -> dict:
+	"""THE MOCK RECALL, FORWARDS: which lots carry product from here, and
+	WHO HAS THEM.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("block", block),
+		("spray_application", spray_application),
+		("water_test", water_test),
+		("date_from", date_from),
+		("date_to", date_to),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return trace_tools.trace_forward(inner).data
+
+
+# ── 216. get_device_readings ────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_device_readings", limit=guard.READ_LIMIT)
+def get_device_readings(
+	user: str,
+	device=None,
+	reading_type=None,
+	quality=None,
+	from_timestamp=None,
+	to_timestamp=None,
+	from_date=None,
+	to_date=None,
+) -> dict:
+	"""One device's readings over a date range, summarised per reading
+	type: count, min, max, mean, latest, and the window they actually
+	span.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(iot_tools.DEVICE, device, "device", allowed)
+	inner: dict = {"device": named}
+	for key, given in (
+		("reading_type", reading_type),
+		("quality", quality),
+		("from_timestamp", from_timestamp),
+		("to_timestamp", to_timestamp),
+		("from_date", from_date),
+		("to_date", to_date),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return iot_tools.get_device_readings(inner).data
+
+
+# ── 217. get_iot_device ─────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_iot_device", limit=guard.READ_LIMIT)
+def get_iot_device(
+	user: str,
+	device=None,
+) -> dict:
+	"""One device in full, with its health picture and its most recent
+	reading.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(iot_tools.DEVICE, device, "device", allowed)
+	inner: dict = {"device": named}
+	return iot_tools.get_iot_device(inner).data
+
+
+# ── 218. list_iot_devices ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_iot_devices", limit=guard.READ_LIMIT)
+def list_iot_devices(
+	user: str,
+	company=None,
+	field=None,
+	device_type=None,
+	device_class=None,
+	enabled=None,
+	online=None,
+	limit=None,
+) -> dict:
+	"""The device register, counted by type, with the offline, never-
+	reported and low-battery ones NAMED rather than merely counted —
+	'three are offline' is not actionable and 'the two probes in Yellow
+	Camp are offline' is.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("field", field),
+		("device_type", device_type),
+		("device_class", device_class),
+		("enabled", enabled),
+		("online", online),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return iot_tools.list_iot_devices(inner).data
+
+
+# ── 219. list_iot_readings ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_iot_readings", limit=guard.READ_LIMIT)
+def list_iot_readings(
+	user: str,
+	device=None,
+	field=None,
+	company=None,
+	reading_type=None,
+	quality=None,
+	from_timestamp=None,
+	to_timestamp=None,
+	from_date=None,
+	to_date=None,
+	limit=None,
+) -> dict:
+	"""Readings matching the filters, newest first — ROWS, not statistics.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("device", device),
+		("field", field),
+		("reading_type", reading_type),
+		("quality", quality),
+		("from_timestamp", from_timestamp),
+		("to_timestamp", to_timestamp),
+		("from_date", from_date),
+		("to_date", to_date),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return iot_tools.list_iot_readings(inner).data
+
+
+# ── 220. create_iot_device ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_iot_device", limit=guard.WRITE_LIMIT, mutating=True)
+def create_iot_device(
+	user: str,
+	company=None,
+	device_name=None,
+	hardware_id=None,
+	device_type=None,
+	device_class=None,
+	field=None,
+	zone=None,
+	enabled=None,
+	calibrated_on=None,
+	device_config=None,
+	notes=None,
+) -> dict:
+	"""Register one field device — a soil probe, a flow meter, a weather
+	station — and mint the bearer token it will post with.\n\nTHE TOKEN
+	IS SHOWN ONCE AND NEVER READ BACK.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Writing to the device register")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("device_name", device_name),
+		("hardware_id", hardware_id),
+		("device_type", device_type),
+		("device_class", device_class),
+		("field", field),
+		("zone", zone),
+		("enabled", enabled),
+		("calibrated_on", calibrated_on),
+		("device_config", device_config),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return iot_tools.create_iot_device(inner).data
+
+
+# ── 221. create_iot_reading ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_iot_reading", limit=guard.WRITE_LIMIT, mutating=True)
+def create_iot_reading(
+	user: str,
+	device=None,
+	timestamp=None,
+	reading_type=None,
+	value=None,
+	unit=None,
+	quality=None,
+	notes=None,
+) -> dict:
+	"""Record one measurement from one device, and mark that device as
+	having spoken.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	guard.require_dispatch_role(user, "Writing to the device register")
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(iot_tools.DEVICE, device, "device", allowed)
+	inner: dict = {"device": named}
+	for key, given in (
+		("timestamp", timestamp),
+		("reading_type", reading_type),
+		("value", value),
+		("unit", unit),
+		("quality", quality),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return iot_tools.create_iot_reading(inner).data
+
+
+# ── 222. update_iot_device ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_iot_device", limit=guard.WRITE_LIMIT, mutating=True)
+def update_iot_device(
+	user: str,
+	device=None,
+	device_name=None,
+	hardware_id=None,
+	device_type=None,
+	device_class=None,
+	field=None,
+	zone=None,
+	enabled=None,
+	battery_level=None,
+	signal_strength=None,
+	calibrated_on=None,
+	device_config=None,
+	notes=None,
+) -> dict:
+	"""Change a device's placement, health figures, calibration date or
+	config.\n\n`last_seen` IS REFUSED HERE AND THAT IS THE POINT OF THE
+	COLUMN.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	guard.require_dispatch_role(user, "Writing to the device register")
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(iot_tools.DEVICE, device, "device", allowed)
+	inner: dict = {"device": named}
+	for key, given in (
+		("device_name", device_name),
+		("hardware_id", hardware_id),
+		("device_type", device_type),
+		("device_class", device_class),
+		("field", field),
+		("zone", zone),
+		("enabled", enabled),
+		("battery_level", battery_level),
+		("signal_strength", signal_strength),
+		("calibrated_on", calibrated_on),
+		("device_config", device_config),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return iot_tools.update_iot_device(inner).data
+
+
+# ── 223. get_ipm_reference ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_ipm_reference", limit=guard.READ_LIMIT)
+def get_ipm_reference(
+	user: str,
+	pest=None,
+	product=None,
+	beneficial=None,
+	crop=None,
+	table=None,
+) -> dict:
+	"""The published IPM reference book this app carries: degree-day
+	emergence models, pest damage windows, beneficial organisms and when
+	they are active, product efficacy with IRAC and FRAC groups,
+	product-level pre-harvest and re-entry intervals, and — the half
+	almost no label carries — what each product does to each beneficial.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	THIS REGISTER IS SITE-WIDE AND CARRIES NO `company` COLUMN, so there
+	is nothing to scope it to and `guard.require_scoped_doc` would read
+	None and check nothing. It is reference data — the same rows for
+	every entity on the bench — and it is named here rather than left to
+	look like an oversight.
+	"""
+	# Enrolment and scope are still PROVEN here even though nothing below
+	# consumes the list: `require_scope` raises for a caller with no
+	# company at all, and this register has none to filter on.
+	guard.require_scope(user)
+	inner: dict = {}
+	for key, given in (
+		("pest", pest),
+		("product", product),
+		("beneficial", beneficial),
+		("crop", crop),
+		("table", table),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return mrl_tools.get_ipm_reference(inner).data
+
+
+# ── 224. get_mrl_for_chemical_crop_market ───────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_mrl_for_chemical_crop_market", limit=guard.READ_LIMIT)
+def get_mrl_for_chemical_crop_market(
+	user: str,
+	chemical=None,
+	crop=None,
+	market=None,
+	company=None,
+) -> dict:
+	"""The limit for one lane — this ingredient, this fruit, this
+	destination.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("chemical", chemical),
+		("crop", crop),
+		("market", market),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return mrl_tools.get_mrl_for_chemical_crop_market(inner).data
+
+
+# ── 225. get_mrl_record ─────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_mrl_record", limit=guard.READ_LIMIT)
+def get_mrl_record(
+	user: str,
+	mrl_record=None,
+) -> dict:
+	"""One limit in full, with everything that qualifies it — the source
+	tier, whether it is a blanket default, whether it was matched
+	through a crop group, and whether it is past its re-check date.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(mrl_tools.MRL, mrl_record, "MRL record", allowed)
+	inner: dict = {"mrl_record": named}
+	return mrl_tools.get_mrl_record(inner).data
+
+
+# ── 226. list_mrl_records ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_mrl_records", limit=guard.READ_LIMIT)
+def list_mrl_records(
+	user: str,
+	chemical=None,
+	crop=None,
+	market=None,
+	company=None,
+	source_tier=None,
+	confidence=None,
+	substance_status=None,
+	needs_recheck=None,
+	limit=None,
+) -> dict:
+	"""Limits on file, counted by market, with the stale, inferred, default
+	and banned ones each named.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("chemical", chemical),
+		("crop", crop),
+		("market", market),
+		("source_tier", source_tier),
+		("confidence", confidence),
+		("substance_status", substance_status),
+		("needs_recheck", needs_recheck),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return mrl_tools.list_mrl_records(inner).data
+
+
+# ── 227. create_mrl_record ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_mrl_record", limit=guard.WRITE_LIMIT, mutating=True)
+def create_mrl_record(
+	user: str,
+	chemical=None,
+	crop=None,
+	market=None,
+	mrl_ppm=None,
+	source=None,
+	company=None,
+	source_tier=None,
+	confidence=None,
+	substance_status=None,
+	is_default_mrl=None,
+	crop_group_match=None,
+	effective_date=None,
+	expiry_date=None,
+	research_notes=None,
+	research_response=None,
+	notes=None,
+) -> dict:
+	"""Record the maximum residue limit for one active ingredient on one
+	crop into one destination market.\n\nTHE SOURCE IS REQUIRED AND ITS
+	ABSENCE IS THE FAILURE THIS PREVENTS.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Writing to the residue-limit register")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("chemical", chemical),
+		("crop", crop),
+		("market", market),
+		("mrl_ppm", mrl_ppm),
+		("source", source),
+		("source_tier", source_tier),
+		("confidence", confidence),
+		("substance_status", substance_status),
+		("is_default_mrl", is_default_mrl),
+		("crop_group_match", crop_group_match),
+		("effective_date", effective_date),
+		("expiry_date", expiry_date),
+		("research_notes", research_notes),
+		("research_response", research_response),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return mrl_tools.create_mrl_record(inner).data
+
+
+# ── 228. update_mrl_record ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_mrl_record", limit=guard.WRITE_LIMIT, mutating=True)
+def update_mrl_record(
+	user: str,
+	mrl_record=None,
+	chemical=None,
+	crop=None,
+	market=None,
+	mrl_ppm=None,
+	source=None,
+	source_tier=None,
+	confidence=None,
+	substance_status=None,
+	is_default_mrl=None,
+	crop_group_match=None,
+	effective_date=None,
+	expiry_date=None,
+	research_notes=None,
+	research_response=None,
+	notes=None,
+) -> dict:
+	"""Revise a limit — most often because the regulator did.\n\nMOVING THE
+	NUMBER WITHOUT MOVING THE SOURCE IS REPORTED BACK.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	guard.require_dispatch_role(user, "Writing to the residue-limit register")
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(mrl_tools.MRL, mrl_record, "MRL record", allowed)
+	inner: dict = {"mrl_record": named}
+	for key, given in (
+		("chemical", chemical),
+		("crop", crop),
+		("market", market),
+		("mrl_ppm", mrl_ppm),
+		("source", source),
+		("source_tier", source_tier),
+		("confidence", confidence),
+		("substance_status", substance_status),
+		("is_default_mrl", is_default_mrl),
+		("crop_group_match", crop_group_match),
+		("effective_date", effective_date),
+		("expiry_date", expiry_date),
+		("research_notes", research_notes),
+		("research_response", research_response),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return mrl_tools.update_mrl_record(inner).data
+
+
+# ── 229. list_soil_compaction_profiles ──────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_soil_compaction_profiles", limit=guard.READ_LIMIT)
+def list_soil_compaction_profiles(
+	user: str,
+	enabled_only=None,
+	limit=None,
+) -> dict:
+	"""The soil book behind the compaction colours: for each soil, how many
+	hours after the water comes off the ground is still red, and how
+	many until it is green.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	THIS REGISTER IS SITE-WIDE AND CARRIES NO `company` COLUMN, so there
+	is nothing to scope it to and `guard.require_scoped_doc` would read
+	None and check nothing. It is reference data — the same rows for
+	every entity on the bench — and it is named here rather than left to
+	look like an oversight.
+	"""
+	# Enrolment and scope are still PROVEN here even though nothing below
+	# consumes the list: `require_scope` raises for a caller with no
+	# company at all, and this register has none to filter on.
+	guard.require_scope(user)
+	inner: dict = {}
+	for key, given in (
+		("enabled_only", enabled_only),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return map_overlay_tools.list_soil_compaction_profiles(inner).data
+
+
+# ── 230. assign_soil_profile ────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("assign_soil_profile", limit=guard.WRITE_LIMIT, mutating=True)
+def assign_soil_profile(
+	user: str,
+	field=None,
+	soil_profile=None,
+	clear=None,
+	company=None,
+	dry_run=None,
+) -> dict:
+	"""MUTATING (default OFF), idempotent.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	guard.require_dispatch_role(user, "Editing the soil-compaction reference")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("field", field),
+		("soil_profile", soil_profile),
+		("clear", clear),
+		("dry_run", dry_run),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return map_overlay_tools.assign_soil_profile(inner).data
+
+
+# ── 231. create_soil_compaction_profile ─────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_soil_compaction_profile", limit=guard.WRITE_LIMIT, mutating=True)
+def create_soil_compaction_profile(
+	user: str,
+	soil_type=None,
+	red_hours=None,
+	yellow_hours=None,
+	drainage_class=None,
+	source=None,
+	notes=None,
+	enabled=None,
+) -> dict:
+	"""Add a soil this farm has that the shipped book does not.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	THIS REGISTER IS SITE-WIDE AND CARRIES NO `company` COLUMN, so there
+	is nothing to scope it to and `guard.require_scoped_doc` would read
+	None and check nothing. It is reference data — the same rows for
+	every entity on the bench — and it is named here rather than left to
+	look like an oversight.
+	"""
+	guard.require_dispatch_role(user, "Editing the soil-compaction reference")
+	# Enrolment and scope are still PROVEN here even though nothing below
+	# consumes the list: `require_scope` raises for a caller with no
+	# company at all, and this register has none to filter on.
+	guard.require_scope(user)
+	inner: dict = {}
+	for key, given in (
+		("soil_type", soil_type),
+		("red_hours", red_hours),
+		("yellow_hours", yellow_hours),
+		("drainage_class", drainage_class),
+		("source", source),
+		("notes", notes),
+		("enabled", enabled),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return map_overlay_tools.create_soil_compaction_profile(inner).data
+
+
+# ── 232. update_soil_compaction_profile ─────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_soil_compaction_profile", limit=guard.WRITE_LIMIT, mutating=True)
+def update_soil_compaction_profile(
+	user: str,
+	soil_type=None,
+	red_hours=None,
+	yellow_hours=None,
+	drainage_class=None,
+	source=None,
+	notes=None,
+	enabled=None,
+) -> dict:
+	"""MUTATING (default OFF), idempotent.
+
+	THE DISPATCH GATE. Every read beside this one is open on enrolment;
+	writing is what a foreman does, and `guard.require_dispatch_role` is
+	the frozenset that says so.
+
+	THIS REGISTER IS SITE-WIDE AND CARRIES NO `company` COLUMN, so there
+	is nothing to scope it to and `guard.require_scoped_doc` would read
+	None and check nothing. It is reference data — the same rows for
+	every entity on the bench — and it is named here rather than left to
+	look like an oversight.
+	"""
+	guard.require_dispatch_role(user, "Editing the soil-compaction reference")
+	# Enrolment and scope are still PROVEN here even though nothing below
+	# consumes the list: `require_scope` raises for a caller with no
+	# company at all, and this register has none to filter on.
+	guard.require_scope(user)
+	inner: dict = {}
+	for key, given in (
+		("soil_type", soil_type),
+		("red_hours", red_hours),
+		("yellow_hours", yellow_hours),
+		("drainage_class", drainage_class),
+		("source", source),
+		("notes", notes),
+		("enabled", enabled),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return map_overlay_tools.update_soil_compaction_profile(inner).data
+
+
+# ── 233. get_variety_care_recipe ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_variety_care_recipe", limit=guard.READ_LIMIT)
+def get_variety_care_recipe(
+	user: str,
+	crop=None,
+	variety=None,
+) -> dict:
+	"""One variety's care recipe, RESOLVED: its water schedule and its
+	cultural practice protocol — GA timings, PGR program, thinning
+	approach, pruning.
+
+	OPEN ON ENROLMENT. `guard.endpoint` has already required a Farm Ops
+	role and a live mobile grant; this read adds nothing beyond the
+	company scope its own answer is filtered to.
+
+	THIS REGISTER IS SITE-WIDE AND CARRIES NO `company` COLUMN, so there
+	is nothing to scope it to and `guard.require_scoped_doc` would read
+	None and check nothing. It is reference data — the same rows for
+	every entity on the bench — and it is named here rather than left to
+	look like an oversight.
+	"""
+	# Enrolment and scope are still PROVEN here even though nothing below
+	# consumes the list: `require_scope` raises for a caller with no
+	# company at all, and this register has none to filter on.
+	guard.require_scope(user)
+	inner: dict = {}
+	for key, given in (
+		("crop", crop),
+		("variety", variety),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return agronomy_tools.get_variety_care_recipe(inner).data
+
+
+# ── 234. get_acquisition_target ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_acquisition_target", limit=guard.READ_LIMIT)
+def get_acquisition_target(
+	user: str,
+	acquisition_target=None,
+) -> dict:
+	"""One target in full: the four fit scores with the weakest named, the
+	asset breakdown totalled against the going-concern estimate, and the
+	participant record behind it.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(
+		compintel_tools.TARGET, acquisition_target, "acquisition_target", allowed
+	)
+	inner: dict = {"acquisition_target": named}
+	return compintel_tools.get_acquisition_target(inner).data
+
+
+# ── 235. get_competitive_move ───────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_competitive_move", limit=guard.READ_LIMIT)
+def get_competitive_move(
+	user: str,
+	competitive_move=None,
+) -> dict:
+	""".
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(compintel_tools.MOVE, competitive_move, "competitive_move", allowed)
+	inner: dict = {"competitive_move": named}
+	return compintel_tools.get_competitive_move(inner).data
+
+
+# ── 236. get_market_participant ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_market_participant", limit=guard.READ_LIMIT)
+def get_market_participant(
+	user: str,
+	market_participant=None,
+) -> dict:
+	"""One participant in full, with every move observed against them and
+	any acquisition target opened on them.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(
+		compintel_tools.PARTICIPANT, market_participant, "market_participant", allowed
+	)
+	inner: dict = {"market_participant": named}
+	return compintel_tools.get_market_participant(inner).data
+
+
+# ── 237. list_acquisition_targets ───────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_acquisition_targets", limit=guard.READ_LIMIT)
+def list_acquisition_targets(
+	user: str,
+	company=None,
+	status=None,
+	action_level=None,
+	market_participant=None,
+	strategic_plan=None,
+	limit=None,
+) -> dict:
+	"""The pipeline, best-scored first, counted by status.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("status", status),
+		("action_level", action_level),
+		("market_participant", market_participant),
+		("strategic_plan", strategic_plan),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.list_acquisition_targets(inner).data
+
+
+# ── 238. list_competitive_moves ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_competitive_moves", limit=guard.READ_LIMIT)
+def list_competitive_moves(
+	user: str,
+	company=None,
+	market_participant=None,
+	move_type=None,
+	severity=None,
+	confidence=None,
+	response_urgency=None,
+	strategic_plan=None,
+	unanswered=None,
+	from_date=None,
+	to_date=None,
+	limit=None,
+) -> dict:
+	"""Moves observed, newest first, counted by type and by participant,
+	with the unanswered ones named.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("market_participant", market_participant),
+		("move_type", move_type),
+		("severity", severity),
+		("confidence", confidence),
+		("response_urgency", response_urgency),
+		("strategic_plan", strategic_plan),
+		("unanswered", unanswered),
+		("from_date", from_date),
+		("to_date", to_date),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.list_competitive_moves(inner).data
+
+
+# ── 239. list_market_participants ───────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_market_participants", limit=guard.READ_LIMIT)
+def list_market_participants(
+	user: str,
+	company=None,
+	participant_type=None,
+	market_position=None,
+	relationship_status=None,
+	geography=None,
+	industry_segment=None,
+	strategic_plan=None,
+	limit=None,
+) -> dict:
+	"""The participant register, counted by type, with the ones nobody has
+	assessed named.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("participant_type", participant_type),
+		("market_position", market_position),
+		("relationship_status", relationship_status),
+		("geography", geography),
+		("industry_segment", industry_segment),
+		("strategic_plan", strategic_plan),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.list_market_participants(inner).data
+
+
+# ── 240. create_acquisition_target ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_acquisition_target", limit=guard.WRITE_LIMIT, mutating=True)
+def create_acquisition_target(
+	user: str,
+	company=None,
+	entity_name=None,
+	market_participant=None,
+	strategic_plan=None,
+	status=None,
+	action_level=None,
+	strategic_fit_score=None,
+	financial_health_score=None,
+	synergy_score=None,
+	cultural_fit_score=None,
+	estimated_value=None,
+	estimated_acquisition_cost=None,
+	projected_revenue_uplift=None,
+	projected_cost_savings=None,
+	acreage=None,
+	payback_period_years=None,
+	irr_estimate=None,
+	intergenerational_horizon_years=None,
+	land_value_appreciation=None,
+	water_rights_value=None,
+	varietal_ip_value=None,
+	infrastructure_value=None,
+	identified_date=None,
+	target_close_date=None,
+	actual_close_date=None,
+	rationale=None,
+	recommendation=None,
+	notes=None,
+) -> dict:
+	"""Open a file on a farm somebody is considering buying, scored on the
+	four dimensions that decide whether it works.\n\nTHE FOUR SCORES ARE
+	SEPARATE BECAUSE THEY FAIL SEPARATELY.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("entity_name", entity_name),
+		("market_participant", market_participant),
+		("strategic_plan", strategic_plan),
+		("status", status),
+		("action_level", action_level),
+		("strategic_fit_score", strategic_fit_score),
+		("financial_health_score", financial_health_score),
+		("synergy_score", synergy_score),
+		("cultural_fit_score", cultural_fit_score),
+		("estimated_value", estimated_value),
+		("estimated_acquisition_cost", estimated_acquisition_cost),
+		("projected_revenue_uplift", projected_revenue_uplift),
+		("projected_cost_savings", projected_cost_savings),
+		("acreage", acreage),
+		("payback_period_years", payback_period_years),
+		("irr_estimate", irr_estimate),
+		("intergenerational_horizon_years", intergenerational_horizon_years),
+		("land_value_appreciation", land_value_appreciation),
+		("water_rights_value", water_rights_value),
+		("varietal_ip_value", varietal_ip_value),
+		("infrastructure_value", infrastructure_value),
+		("identified_date", identified_date),
+		("target_close_date", target_close_date),
+		("actual_close_date", actual_close_date),
+		("rationale", rationale),
+		("recommendation", recommendation),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.create_acquisition_target(inner).data
+
+
+# ── 241. create_competitive_move ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_competitive_move", limit=guard.WRITE_LIMIT, mutating=True)
+def create_competitive_move(
+	user: str,
+	company=None,
+	market_participant=None,
+	move_type=None,
+	description=None,
+	observed_date=None,
+	strategic_plan=None,
+	severity=None,
+	source=None,
+	confidence=None,
+	impact_assessment=None,
+	market_impact_pct=None,
+	revenue_impact=None,
+	response_urgency=None,
+	recommended_response=None,
+	notes=None,
+) -> dict:
+	"""Record something a competitor actually did, on the day somebody
+	noticed it.\n\nMOVES ONLY MEAN ANYTHING IN SEQUENCE.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("market_participant", market_participant),
+		("move_type", move_type),
+		("description", description),
+		("observed_date", observed_date),
+		("strategic_plan", strategic_plan),
+		("severity", severity),
+		("source", source),
+		("confidence", confidence),
+		("impact_assessment", impact_assessment),
+		("market_impact_pct", market_impact_pct),
+		("revenue_impact", revenue_impact),
+		("response_urgency", response_urgency),
+		("recommended_response", recommended_response),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.create_competitive_move(inner).data
+
+
+# ── 242. create_market_participant ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_market_participant", limit=guard.WRITE_LIMIT, mutating=True)
+def create_market_participant(
+	user: str,
+	company=None,
+	participant_name=None,
+	participant_type=None,
+	customer=None,
+	strategic_plan=None,
+	relationship_status=None,
+	industry_segment=None,
+	geography=None,
+	crops=None,
+	market_position=None,
+	market_share_pct=None,
+	employee_count=None,
+	estimated_revenue=None,
+	estimated_acreage=None,
+	strengths=None,
+	weaknesses=None,
+	key_assets=None,
+	vulnerability_windows=None,
+	notes=None,
+) -> dict:
+	"""Open a record for another organisation in this market — a
+	competitor, supplier, buyer, partner or acquisition target.\n\nTHE
+	TYPE IS A COLUMN RATHER THAN FIVE DOCTYPES because the same grower
+	is a competitor for labour, a partner in a packing shed and a
+	possible acquisition in one season, and splitting them makes one
+	organisation three records that drift apart.\n\nEVERY SCALE FIGURE
+	HERE IS AN ESTIMATE and the result says so.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("participant_name", participant_name),
+		("participant_type", participant_type),
+		("customer", customer),
+		("strategic_plan", strategic_plan),
+		("relationship_status", relationship_status),
+		("industry_segment", industry_segment),
+		("geography", geography),
+		("crops", crops),
+		("market_position", market_position),
+		("market_share_pct", market_share_pct),
+		("employee_count", employee_count),
+		("estimated_revenue", estimated_revenue),
+		("estimated_acreage", estimated_acreage),
+		("strengths", strengths),
+		("weaknesses", weaknesses),
+		("key_assets", key_assets),
+		("vulnerability_windows", vulnerability_windows),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.create_market_participant(inner).data
+
+
+# ── 243. update_acquisition_target ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_acquisition_target", limit=guard.WRITE_LIMIT, mutating=True)
+def update_acquisition_target(
+	user: str,
+	acquisition_target=None,
+	entity_name=None,
+	market_participant=None,
+	strategic_plan=None,
+	status=None,
+	action_level=None,
+	strategic_fit_score=None,
+	financial_health_score=None,
+	synergy_score=None,
+	cultural_fit_score=None,
+	estimated_value=None,
+	estimated_acquisition_cost=None,
+	projected_revenue_uplift=None,
+	projected_cost_savings=None,
+	acreage=None,
+	payback_period_years=None,
+	irr_estimate=None,
+	intergenerational_horizon_years=None,
+	land_value_appreciation=None,
+	water_rights_value=None,
+	varietal_ip_value=None,
+	infrastructure_value=None,
+	identified_date=None,
+	target_close_date=None,
+	actual_close_date=None,
+	rationale=None,
+	recommendation=None,
+	notes=None,
+) -> dict:
+	"""Move a target through the pipeline, or revise its scores and
+	economics.\n\n`accretive_score` IS REFUSED.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(
+		compintel_tools.TARGET, acquisition_target, "acquisition_target", allowed
+	)
+	inner: dict = {"acquisition_target": named}
+	for key, given in (
+		("entity_name", entity_name),
+		("market_participant", market_participant),
+		("strategic_plan", strategic_plan),
+		("status", status),
+		("action_level", action_level),
+		("strategic_fit_score", strategic_fit_score),
+		("financial_health_score", financial_health_score),
+		("synergy_score", synergy_score),
+		("cultural_fit_score", cultural_fit_score),
+		("estimated_value", estimated_value),
+		("estimated_acquisition_cost", estimated_acquisition_cost),
+		("projected_revenue_uplift", projected_revenue_uplift),
+		("projected_cost_savings", projected_cost_savings),
+		("acreage", acreage),
+		("payback_period_years", payback_period_years),
+		("irr_estimate", irr_estimate),
+		("intergenerational_horizon_years", intergenerational_horizon_years),
+		("land_value_appreciation", land_value_appreciation),
+		("water_rights_value", water_rights_value),
+		("varietal_ip_value", varietal_ip_value),
+		("infrastructure_value", infrastructure_value),
+		("identified_date", identified_date),
+		("target_close_date", target_close_date),
+		("actual_close_date", actual_close_date),
+		("rationale", rationale),
+		("recommendation", recommendation),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.update_acquisition_target(inner).data
+
+
+# ── 244. update_competitive_move ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_competitive_move", limit=guard.WRITE_LIMIT, mutating=True)
+def update_competitive_move(
+	user: str,
+	competitive_move=None,
+	market_participant=None,
+	move_type=None,
+	strategic_plan=None,
+	severity=None,
+	observed_date=None,
+	description=None,
+	source=None,
+	confidence=None,
+	impact_assessment=None,
+	market_impact_pct=None,
+	revenue_impact=None,
+	response_urgency=None,
+	recommended_response=None,
+	actual_response=None,
+	response_date=None,
+	outcome=None,
+	notes=None,
+) -> dict:
+	"""Revise a move, or — the usual reason — record what was actually done
+	about it and how it turned out.\n\nA RESPONSE DATE WITH NO RESPONSE
+	IS REFUSED.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(compintel_tools.MOVE, competitive_move, "competitive_move", allowed)
+	inner: dict = {"competitive_move": named}
+	for key, given in (
+		("market_participant", market_participant),
+		("move_type", move_type),
+		("strategic_plan", strategic_plan),
+		("severity", severity),
+		("observed_date", observed_date),
+		("description", description),
+		("source", source),
+		("confidence", confidence),
+		("impact_assessment", impact_assessment),
+		("market_impact_pct", market_impact_pct),
+		("revenue_impact", revenue_impact),
+		("response_urgency", response_urgency),
+		("recommended_response", recommended_response),
+		("actual_response", actual_response),
+		("response_date", response_date),
+		("outcome", outcome),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.update_competitive_move(inner).data
+
+
+# ── 245. update_market_participant ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_market_participant", limit=guard.WRITE_LIMIT, mutating=True)
+def update_market_participant(
+	user: str,
+	market_participant=None,
+	participant_name=None,
+	participant_type=None,
+	customer=None,
+	strategic_plan=None,
+	relationship_status=None,
+	industry_segment=None,
+	geography=None,
+	crops=None,
+	market_position=None,
+	market_share_pct=None,
+	employee_count=None,
+	estimated_revenue=None,
+	estimated_acreage=None,
+	strengths=None,
+	weaknesses=None,
+	key_assets=None,
+	vulnerability_windows=None,
+	notes=None,
+) -> dict:
+	"""Revise a participant record — the estimates age, and an assessment
+	nobody has touched in three seasons is describing a.
+
+	THE HR GATE, not the field-ops one. A competitive register names
+	other businesses and what this one thinks of them; it is a holding-
+	company fact, and the picker holding the phone is entitled to their
+	own work rather than to a rival's vulnerability windows.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another farm cannot be mapped by
+	watching which error comes back.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(
+		compintel_tools.PARTICIPANT, market_participant, "market_participant", allowed
+	)
+	inner: dict = {"market_participant": named}
+	for key, given in (
+		("participant_name", participant_name),
+		("participant_type", participant_type),
+		("customer", customer),
+		("strategic_plan", strategic_plan),
+		("relationship_status", relationship_status),
+		("industry_segment", industry_segment),
+		("geography", geography),
+		("crops", crops),
+		("market_position", market_position),
+		("market_share_pct", market_share_pct),
+		("employee_count", employee_count),
+		("estimated_revenue", estimated_revenue),
+		("estimated_acreage", estimated_acreage),
+		("strengths", strengths),
+		("weaknesses", weaknesses),
+		("key_assets", key_assets),
+		("vulnerability_windows", vulnerability_windows),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return compintel_tools.update_market_participant(inner).data
