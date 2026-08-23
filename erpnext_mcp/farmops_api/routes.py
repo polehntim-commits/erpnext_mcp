@@ -1135,6 +1135,13 @@ ROUTES = (
 	Route("/mobile", mobile_api.update_acquisition_target),
 	Route("/mobile", mobile_api.update_competitive_move),
 	Route("/mobile", mobile_api.update_market_participant),
+	# v0.124.0. `list_tasks_by_location` shipped as a tool in v0.122.0 and was
+	# missed by v0.123.0's routing pass, which swept the HACCP, traceability,
+	# sensor and market registers and not `fieldwork`. It is open on enrolment
+	# for the reason its wrapper gives: it is a third reader of `list_my_tasks`
+	# and `list_available_for_me`, both of which are already mounted open, and
+	# it answers for the authenticated caller alone.
+	Route("/mobile", mobile_api.list_tasks_by_location),
 )
 
 #: Path → Route. Built once at import; there is nothing dynamic about it.

@@ -736,6 +736,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/update_acquisition_target",
 		"/mobile/update_competitive_move",
 		"/mobile/update_market_participant",
+		"/mobile/list_tasks_by_location",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):
@@ -2514,10 +2515,20 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	it is worth a test that drives each one as the least-privileged caller who
 	can reach it at all.
 
-	THE FOURTH TEST IS THE ONE THAT KEEPS THIS HONEST: the three sets below are
-	compared against the route table, so a route added later and left out of
-	this file fails here rather than going quietly ungated.
+	THE FOURTH TEST IS THE ONE THAT KEEPS THIS HONEST, and until v0.124.0 it
+	did not: it asserted only that every method NAMED here is mounted, which is
+	the direction that cannot go wrong on its own. Mounting a route and leaving
+	it out of these sets — the way a method goes quietly ungated — passed. It
+	was proved by doing it: `list_tasks_by_location` was mounted with no entry
+	below and all four tests stayed green. The count of mounted `/mobile` routes
+	is now checked against the pre-v0.123.0 surface as well, so a route added
+	after that release must be classified here or this fails.
 	"""
+
+	#: The mobile surface as it stood at v0.122.0, before the seventy-two.
+	#: The three sets below account for every `/mobile` route mounted SINCE, and
+	#: `ROUTES` also carries the two `/files` paths, which are not in either.
+	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
 		"assign_soil_profile",
@@ -2592,6 +2603,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"list_recall_plans",
 		"list_soil_compaction_profiles",
 		"list_supplier_verifications",
+		"list_tasks_by_location",
 		"list_traceability_lots",
 		"list_verification_records",
 		"trace_backward",
@@ -2605,12 +2617,19 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	#: test that could not tell them apart would pass on the wrong refusal.
 	RESTRICTED = "is restricted to"
 
-	def test_the_three_sets_are_exactly_the_routes_this_release_added(self):
+	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 72, "a method is named in two sets at once")
-		mounted = {route.path for route in ROUTES}
+		self.assertEqual(len(named), 73, "a method is named in two sets at once")
+		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
+		self.assertEqual(
+			len(mounted) - self.SURFACE_BEFORE_V0_123,
+			len(named),
+			"a /mobile route was mounted after v0.122.0 and not classified above. Every "
+			"route added since then is gated by one line in its own wrapper body, and an "
+			"unclassified one is a method no test drives as a least-privileged caller.",
+		)
 
 	def test_a_picker_is_refused_every_write_and_the_recall_drill(self):
 		"""The writes are a foreman's. A picker meets the dispatch gate."""

@@ -910,6 +910,7 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"update_acquisition_target",
 		"update_competitive_move",
 		"update_market_participant",
+		"list_tasks_by_location",
 	}
 
 	def _whitelisted(self, module):

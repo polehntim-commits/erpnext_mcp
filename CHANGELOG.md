@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.124.0 — 2026-08-23 — the seventy-third route, and the test that would not have noticed
+
+**One mobile route, and a repair to the assertion covering the last seventy-two.**
+The mobile route table goes from 274 to 275.
+
+**THE v0.123.0 SURFACE HOLDS.** Re-derived from the registry rather than from the
+release notes: all twenty-eight HACCP, food-safety and traceability methods have a
+wrapper and a route, as do the sensor, MRL, soil-compaction, variety-care and
+competitive registers. Sixty-five tools were added between v0.116.0 and v0.123.0;
+fifty-six are mounted.
+
+**`list_tasks_by_location`** shipped as a tool in v0.122.0 and was missed by
+v0.123.0's routing pass, which swept the new registers and not `fieldwork`. It is
+open on enrolment because it is a third reader of `list_my_tasks` and
+`list_available_for_me` — both already mounted open — and answers for the
+authenticated caller alone.
+
+**THE EIGHT STRATEGIC PLAN AND OBJECTIVE METHODS ARE DELIBERATELY NOT MOUNTED.**
+A Strategic Plan holds the vision, the SWOT and the exit, and the writes supersede
+a farm's stated strategy. `routes.py` keeps a class of tool unreachable from a
+handset rather than gating it; publishing these is a decision to take deliberately.
+
+**A GATE TEST WAS ASSERTING ONE DIRECTION AND CLAIMING BOTH.**
+`test_the_three_sets_are_exactly_the_routes_this_release_added` checked that every
+method named in the three gate sets is mounted, never that every mounted route is
+named — so a route mounted without being classified went quietly ungated, which is
+the failure it existed to catch. Proved by mounting one and watching all four tests
+stay green. The count of `/mobile` routes is now checked against the v0.122.0
+surface, so a later route must be classified or the test fails.
+
 ## 0.123.0 — 2026-08-23 — the registers a phone was standing in front of and could not reach
 
 **Seventy-two mobile routes.** No new DocType, no new MCP tool, no existing tool

@@ -17409,3 +17409,57 @@ def update_market_participant(
 		if given not in (None, ""):
 			inner[key] = given
 	return compintel_tools.update_market_participant(inner).data
+
+
+# ── 246. list_tasks_by_location ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_tasks_by_location", limit=guard.READ_LIMIT)
+def list_tasks_by_location(
+	user: str,
+	location_filter=None,
+	skill=None,
+	task_type=None,
+	urgency=None,
+	company=None,
+	limit=None,
+) -> dict:
+	"""One trip's worth of work per place: what this worker holds and what they
+	could take, grouped by where it is.
+
+	v0.124.0. THE TOOL SHIPPED IN v0.122.0 AND THE ROUTE DID NOT — the pass
+	that mounted seventy-two methods a release later was written against the
+	HACCP and traceability registers and this one sits in `fieldwork`, so it
+	was not in the sweep. It is the only method added since v0.116.0, outside
+	the strategy register, that a handset still could not reach.
+
+	OPEN ON ENROLMENT, AND IT COULD NOT HONESTLY BE ANYTHING ELSE. This is a
+	third reader of `list_my_tasks` and `list_available_for_me` — both already
+	on this surface, both open — and it answers for the caller and nobody
+	else. A gate here would close a screen onto the caller's own work while
+	leaving the two calls it is assembled from wide open, which refuses
+	nothing and only costs a trip.
+
+	`worker_id` IS NOT ACCEPTED, for the reason `list_my_tasks` does not
+	accept `employee`: the tool resolves the Employee from the authenticated
+	user, and an account that can name somebody else in a request body is not
+	scoped to anything. `guard.endpoint` injects the caller at `user` and
+	`routes.py` drops the key even when a body carries it.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company` refuses an
+	entity this caller cannot reach rather than quietly answering for a
+	different one, and the tool's own `_company_for` falls back to the
+	worker's preferred entity when nothing is named.
+	"""
+	allowed = guard.require_scope(user)
+	wanted = guard.require_company(user, company, allowed)
+	inner: dict = {"company": wanted} if wanted else {}
+	for key, given in (
+		("location_filter", location_filter),
+		("skill", skill),
+		("task_type", task_type),
+		("urgency", urgency),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return fieldwork.list_tasks_by_location(inner).data
