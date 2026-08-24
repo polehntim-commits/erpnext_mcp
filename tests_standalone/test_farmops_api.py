@@ -658,6 +658,9 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# only people it is about. What each role sees beyond that is narrowed by
 		# `overlays.layers_for` and what was held back is NAMED in the answer.
 		"/mobile/get_map_overlays",
+		# v0.125.0. The polygon `get_map_overlays` does not carry — see
+		# `routes.py` for why fields, parcels and the overlay layers are one call.
+		"/mobile/list_field_boundaries",
 		# v0.123.0. THE FOOD-SAFETY, TRACEABILITY, SENSOR AND MARKET REGISTERS.
 		# Seventy-two methods, HERE FOR THIS SET'S ORDINARY REASON: `MobileAPI.swift`
 		# names none of them yet, so the server half ships first and the iOS half is a
@@ -2594,6 +2597,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"get_verification_record",
 		"list_corrective_action_records",
 		"list_food_safety_plans",
+		"list_field_boundaries",
 		"list_hazard_analyses",
 		"list_iot_devices",
 		"list_iot_readings",
@@ -2619,7 +2623,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 73, "a method is named in two sets at once")
+		self.assertEqual(len(named), 74, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

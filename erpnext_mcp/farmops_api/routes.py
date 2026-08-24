@@ -503,6 +503,15 @@ ROUTES = (
 	# What each role sees BEYOND that is narrowed by `overlays.layers_for`, and
 	# what it held back is named in the answer rather than silently missing.
 	Route("/mobile", mobile_api.get_map_overlays),
+	# v0.125.0. THE POLYGON `get_map_overlays` DOES NOT CARRY. That route answers
+	# what is true of a block; this answers what SHAPE it is, for the map view
+	# that draws one `MapPolygon` per block. Fields always carry their boundary
+	# — `list_fields` never strips it — and parcels and the overlay layers are
+	# opt in, off the same two arguments `get_map_overlays` already takes. Open
+	# on enrolment for the reason every other read on this line is: a map with
+	# no blocks drawn on it is not a map, and every enrolled worker's handset
+	# needs one, not only a foreman's.
+	Route("/mobile", mobile_api.list_field_boundaries),
 	Route("/mobile", mobile_api.create_farm_location),
 	Route("/mobile", mobile_api.create_field),
 	Route("/mobile", mobile_api.create_irrigation_zone),

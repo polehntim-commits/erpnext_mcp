@@ -3,6 +3,31 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.125.0 — 2026-08-24 — the shape of a block, for the map that opens first
+
+**One mobile route: `list_field_boundaries`.** The mobile route table goes from
+275 to 276. iOS's new Today tab draws every field as a `MapPolygon`, and nothing
+on this surface answered with a shape before now — `get_map_overlays` answers
+what is TRUE of a block and `list_farm_locations` answers what a picker may
+route work to, and neither carries a boundary.
+
+**FIELDS ALWAYS CARRY THEIR POLYGON**, because `list_fields` never strips it —
+unlike `list_parcels`, which drops the boundary from every row on purpose (see
+`_describe_parcel`'s v0.32.0 comment) since a parcel's shape is a few kilobytes
+nobody asked to draw. `include_parcels` opts a caller into it anyway, read back
+in one batched query rather than one `get_parcel` call per parcel, which would
+also run every parcel's lease and related-asset lookup for a shape alone.
+
+**THE OVERLAY LAYERS RIDE ALONG BY DEFAULT**, off the same `overlays.build` this
+app's `get_map_overlays` already calls — not a second HTTP round trip through
+that guarded endpoint, which would throttle and audit the same call twice for
+one screen. `include_overlays=false` skips it for a caller that wants geometry
+alone.
+
+**OPEN ON ENROLMENT**, for the reason `list_farm_locations` and
+`get_map_overlays` both are: a map with no blocks drawn on it is not a map, and
+every enrolled worker's handset needs one to work from, not only a foreman's.
+
 ## 0.124.0 — 2026-08-23 — the seventy-third route, and the test that would not have noticed
 
 **One mobile route, and a repair to the assertion covering the last seventy-two.**

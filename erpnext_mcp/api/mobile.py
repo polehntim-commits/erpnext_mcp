@@ -14073,6 +14073,149 @@ def get_map_overlays(user: str, company=None, blocks=None, layers=None, limit=No
 	return answer
 
 
+def _field_boundary_row(row: dict) -> dict:
+	"""One Field's row from `list_fields`, trimmed to what draws a shape on a map.
+
+	`list_fields` already carries the polygon — unlike `list_parcels` below, a
+	Field's boundary is never stripped from its list answer, because a block IS
+	the unit this app's map draws in. This is the same row with the irrigation,
+	NDVI and food-safety columns a map overlay does not need left off, so a
+	handset loading every block on the farm is not also downloading its spray
+	history.
+	"""
+	return {
+		"doctype": farm_tools.FIELD,
+		"name": row.get("name"),
+		"label": row.get("field_name") or row.get("name"),
+		"company": row.get("owning_entity") or None,
+		"parcel": row.get("parcel") or None,
+		"county": row.get("county") or None,
+		"acreage": row.get("acreage"),
+		"crop": row.get("crop") or None,
+		"variety": row.get("variety") or None,
+		"block_number": row.get("block_number") or None,
+		"block_ticker": row.get("block_ticker") or None,
+		"has_boundary": row.get("has_boundary", False),
+		"boundary_geojson": row.get("boundary_geojson"),
+		"boundary_centroid": row.get("boundary_centroid"),
+		"boundary_bbox_geojson": row.get("boundary_bbox_geojson"),
+	}
+
+
+def _parcel_boundary_fields(names: list) -> dict:
+	"""Parcel → `{boundary_geojson, boundary_bbox_geojson}`, for every name given, in one query.
+
+	`list_parcels` deliberately strips the polygon from every row it returns —
+	see `_describe_parcel` in `tools/realestate.py` — because a few kilobytes of
+	coordinates on every row of a land register nobody asked to draw is weight
+	for nothing. This route is the one caller that DOES want to draw them, so it
+	reads the two boundary columns back in a single batched query rather than
+	calling `get_parcel` once per parcel, which would also run its lease and
+	related-asset lookups for a shape it never asked for.
+	"""
+	wanted = sorted({str(name) for name in (names or []) if name})
+	if not wanted:
+		return {}
+	fields = compat.existing_fields(
+		realestate_tools.PARCEL, ("name", "boundary_geojson", "boundary_bbox_geojson")
+	)
+	rows = frappe.db.get_all(realestate_tools.PARCEL, filters={"name": ("in", wanted)}, fields=fields)
+	return {str(row["name"]): dict(row) for row in rows}
+
+
+def _parcel_boundary_row(row: dict, boundary: dict) -> dict:
+	"""One Parcel from `list_parcels`, with its polygon put back for the map."""
+	return {
+		"doctype": realestate_tools.PARCEL,
+		"name": row.get("name"),
+		"label": row.get("parcel_name") or row.get("name"),
+		"company": row.get("owning_entity") or None,
+		"county": row.get("county") or None,
+		"state": row.get("state") or None,
+		"use_type": row.get("use_type") or None,
+		"acreage": row.get("acreage"),
+		"has_boundary": row.get("mapped", False),
+		"boundary_geojson": boundary.get("boundary_geojson") or None,
+		"boundary_centroid": row.get("boundary_centroid"),
+		"boundary_bbox_geojson": boundary.get("boundary_bbox_geojson") or None,
+	}
+
+
+# ── 174. list_field_boundaries ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_field_boundaries", limit=guard.READ_LIMIT)
+def list_field_boundaries(
+	user: str, company=None, include_parcels=None, include_overlays=None, layers=None
+) -> dict:
+	"""Every block's boundary polygon, for the map view a handset opens first.
+
+	iOS's Today tab draws a `MapPolygon` per block; `get_map_overlays` answers
+	what is TRUE of a block and was never meant to carry the shape of one — see
+	`_boundary_summary`'s comment on why a list of blocks does not repeat a
+	polygon on every reader that has no use for it. This is the reader that does.
+
+	OPEN ON ENROLMENT, for the same reason `list_farm_locations` and
+	`get_map_overlays` are: a map with no blocks drawn on it is not a map, and
+	every enrolled worker's handset needs one to work from, not only a
+	foreman's.
+
+	FIELDS ALWAYS COME BACK WITH THEIR POLYGON, because `list_fields` never
+	stripped it. PARCELS ARE OPT IN — `include_parcels` — because a parcel
+	usually contains several blocks already drawn, and the boundary is fetched
+	for them only when this call is the one place asking for it.
+
+	OVERLAYS RIDE ALONG BY DEFAULT so the same call that draws the shapes can
+	also colour them, off the same `overlays.build` `get_map_overlays` calls —
+	not a second HTTP round trip through that guarded endpoint, which would
+	throttle and audit twice for one screen. `include_overlays=false` skips it
+	for a caller that only wants the geometry, and `layers` narrows it exactly
+	as it does there.
+	"""
+	allowed = guard.require_scope(user)
+	entity = _company(user, company, allowed)
+
+	inner = {"limit": farm_tools.REGISTER_CAP}
+	if entity:
+		inner["company"] = entity
+	fields = farm_tools.list_fields(inner).data.get("fields") or []
+	fields = guard.scoped([{**row, "company": row.get("owning_entity") or None} for row in fields], allowed)
+	field_rows = [_field_boundary_row(row) for row in fields]
+
+	parcel_rows = []
+	if _as_flag(include_parcels, False):
+		try:
+			parcels = realestate_tools.list_parcels(inner).data.get("parcels") or []
+		except ToolError:
+			# `list_parcels` requires a company; an account with none reads as no
+			# parcels rather than an error a field-boundary caller cannot act on.
+			parcels = []
+		parcels = guard.scoped(
+			[{**row, "company": row.get("owning_entity") or None} for row in parcels], allowed
+		)
+		boundaries = _parcel_boundary_fields([row.get("name") for row in parcels])
+		parcel_rows = [_parcel_boundary_row(row, boundaries.get(str(row.get("name")), {})) for row in parcels]
+
+	overlay = None
+	if _as_flag(include_overlays, True):
+		shown = overlays.layers_for(user)
+		wanted, refused = overlays.requested_layers(layers, shown["visible"])
+		overlay = overlays.build(company=entity, visible=wanted, limit=overlays.SUBJECT_CAP)
+		overlay["role"] = shown
+		overlay["withheld"] = shown["withheld"]
+		overlay["refused_layers"] = refused
+		overlay["blocks"] = guard.scoped(overlay.get("blocks") or [], allowed)
+
+	return {
+		"company": entity or None,
+		"fields": field_rows,
+		"field_count": len(field_rows),
+		"parcels": parcel_rows,
+		"parcel_count": len(parcel_rows),
+		"include_parcels": bool(parcel_rows) or _as_flag(include_parcels, False),
+		"overlays": overlay,
+	}
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # v0.123.0 — THE FOOD-SAFETY, TRACEABILITY, SENSOR AND MARKET REGISTERS
 # ════════════════════════════════════════════════════════════════════════════

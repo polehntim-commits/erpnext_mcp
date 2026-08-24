@@ -911,6 +911,11 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"update_competitive_move",
 		"update_market_participant",
 		"list_tasks_by_location",
+		# v0.125.0. The field-boundary map read, HERE FOR THIS SET'S ORDINARY
+		# REASON — `MobileAPI.swift` does not name it yet, so the server half is
+		# published first and the Today tab's `MapPolygon` mirror is a client
+		# change rather than a release of both.
+		"list_field_boundaries",
 	}
 
 	def _whitelisted(self, module):
