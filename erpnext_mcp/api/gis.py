@@ -95,8 +95,38 @@ needs no network at all and must keep working.
 
 NOTHING HERE IS A GENERAL HTTP PROXY. The host and path come from `COUNTIES`
 below, which is a literal in this file; the caller chooses a key in that dict and
-supplies a tax lot or a coordinate pair, both validated before they are
-formatted. There is no argument from which a URL could be built.
+supplies a tax lot, an account number or a coordinate pair, all validated before
+they are formatted. There is no argument from which a URL could be built.
+
+────────────────────────────────────────────────────────────────────────────
+v0.126.0: THE TAX LOT SEARCH HAD NEVER MATCHED A PARCEL
+────────────────────────────────────────────────────────────────────────────
+
+Read against the live layer rather than against the docstring, the search built
+in v0.33.0 could not succeed. `MapTaxlot` on Wasco's server is stored SPACE-
+DELIMITED and UNPADDED — `2N 11E 1 CC 4039` — and this file sent
+`MapTaxlot='2N11E35BA-01600'`, the compact ORMAP spelling off a deed. Those are
+never equal, and an ArcGIS query that matches nothing answers HTTP 200 with an
+empty feature list. So the form reported "Wasco County, Oregon has no parcel
+matching that tax lot number" for every tax lot in the county, which read as a
+county problem and was ours.
+
+The old allowlist closed the other direction at the same time: it refused any
+value containing a space, so an operator who typed the county's OWN spelling was
+told it was "not shaped like a tax lot number". Both halves of the round trip
+were shut, and neither said so.
+
+`_tax_lot_parts` now translates. It reads the grammar the layer actually holds —
+verified across all 15,516 rows — and accepts the deed's compact spelling, the
+county's spaced one, and the hyphenated middle ground, emitting the one the
+server will match. The allowlist is TIGHTER than before, not looser: every part
+is matched against digits and a known letter, so the clause cannot contain a
+character no branch allowed.
+
+AND AN ACCOUNT NUMBER IS NOW A SEARCH, which is the one an operator can read off
+a tax statement without transcribing five fields in the right order. `AccountNum`
+is an integer column, so `_account_clause` formats from `int()` and the clause
+carries no quotes at all.
 """
 
 from __future__ import annotations
@@ -144,6 +174,10 @@ COUNTIES = {
 		"label": "Wasco County, Oregon",
 		"url": "https://public.co.wasco.or.us/gisserver/rest/services/Taxlots/FeatureServer/0/query",
 		"tax_lot_field": "MapTaxlot",
+		#: The assessor's account number, and an INTEGER column rather than a
+		#: string one — so its clause carries no quotes at all. See
+		#: `_account_clause`.
+		"account_field": "AccountNum",
 		"spatial_reference": 2913,
 		#: Where each thing this app wants lives in the county's own schema, in
 		#: the order to try. Read case-insensitively — an ArcGIS layer's field
@@ -169,15 +203,46 @@ SAVEABLE = {
 	"Irrigation Zone": ("zone", farm_tools.set_zone_boundary),
 }
 
-#: What a Wasco tax lot looks like: `2N11E35BA-01600`. Township, range, section,
-#: quarter, lot. Letters, digits, a hyphen, sometimes a dot.
+#: THE COUNTY DOES NOT STORE THE SPELLING ANYBODY TYPES, and that one fact is
+#: why v0.33.0's tax lot search never returned a parcel. Wasco's layer holds
+#: `MapTaxlot` SPACE-DELIMITED and UNPADDED — `2N 11E 1 CC 4039`, `1N 13E 7 200`
+#: — while every deed, every tax bill and this app's own form description use
+#: the compact ORMAP spelling `2N11E35BA-01600`. `MapTaxlot='2N11E35BA-01600'`
+#: matches nothing, ever, and an ArcGIS query that matches nothing is an HTTP 200
+#: with an empty feature list: the form said "the county has no parcel matching
+#: that tax lot number" and every word of that was wrong.
 #:
-#: THIS IS AN ALLOWLIST AND NOT AN ESCAPE, which is the important part. The value
-#: goes into an ArcGIS `where` clause, which is a SQL-ish expression evaluated by
-#: somebody else's server — so the safe move is to refuse everything that is not
-#: shaped like a tax lot rather than to try to neutralise what a quote could do
-#: inside a dialect this app does not implement and cannot test against.
-_TAX_LOT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,39}$")
+#: Worse, the OLD allowlist below refused the county's own spelling on the way
+#: in, because it had no space in it. So both halves of the round trip were shut.
+#:
+#: The grammar here was read off all 15,516 rows of the live layer rather than
+#: guessed: township is one digit and N or S, range is two digits and E or W,
+#: section is one or two digits (0 for a lot that is not in a section), the
+#: quarter is one or two letters and often absent, and the lot is three to five
+#: digits. Nothing is zero-padded and nothing is hyphenated.
+_TOWNSHIP = re.compile(r"^\d{1,2}[NS]$")
+_RANGE = re.compile(r"^\d{1,2}[EW]$")
+_SECTION = re.compile(r"^\d{1,2}$")
+_QUARTER = re.compile(r"^[A-Z]{1,3}$")
+_LOT = re.compile(r"^\d{1,5}$")
+
+#: Anything a person might put between the parts: a space, a hyphen, a dot, a
+#: slash, an underscore. Split on, never sent.
+_SEPARATORS = re.compile(r"[\s.\-_/]+")
+
+#: The compact ORMAP spelling, which is the one printed on a deed and the one
+#: already sitting in `parcel_id` on parcels imported before this release.
+#:
+#: IT IS ONLY PARSEABLE BECAUSE IT IS PADDED. `2N11E35BA01600` splits because the
+#: township and range end in their own letter, the section is exactly two digits
+#: and the lot exactly five — so the quarter is whatever letters are left in the
+#: middle. The unpadded run-together `2N11E7200` is genuinely ambiguous (section
+#: 7 lot 200, or section 72 lot 00?) and is refused by name rather than guessed.
+_COMPACT = re.compile(r"^(\d{1,2}[NS])(\d{1,2}[EW])(\d{2})([A-Z]{0,3})(\d{5})$")
+
+#: An assessor's account number: `7503`. Digits, and an INTEGER column at the far
+#: end, so the clause it builds has no quotes in it to escape.
+_ACCOUNT = re.compile(r"^\d{1,9}$")
 
 #: How long to wait for a county server that a farm's bench reaches over the
 #: same connection everything else uses. Fifteen seconds is past a slow answer
@@ -272,21 +337,118 @@ def _county(name: str = "") -> tuple:
 	return key, config
 
 
+#: The sentence every tax lot refusal ends with. One place, because a person who
+#: has just been told "no" needs to be told what yes looks like, and there are
+#: five ways to get here.
+_TAX_LOT_HELP = (
+	"Wasco County stores tax lots as township, range, section, quarter, lot — "
+	"'2N 11E 1 CC 4039', or '1N 13E 7 200' where there is no quarter. The compact "
+	"spelling off a deed, '2N11E35BA-01600', is accepted and translated. If you have "
+	"the assessor's account number instead, search by that."
+)
+
+
+def _tax_lot_parts(tax_lot) -> tuple:
+	"""`(township, range, section, quarter, lot)` in the county's own spelling.
+
+	THE TRANSLATION IS THE WHOLE FIX. Whatever the operator typed — the deed's
+	`2N11E35BA-01600`, the county's `2N 11E 35 BA 1600`, the half-way house
+	`2N-11E-35-BA-1600` — comes out as the five parts the layer actually holds,
+	with the section and the lot stripped back to the unpadded numbers it stores.
+
+	STILL AN ALLOWLIST AND NOT AN ESCAPE, and a tighter one than v0.33.0's. Every
+	part is matched against a regex of digits and a known letter before it is
+	formatted, so there is no quote to smuggle and no expression to build — the
+	clause this ends in cannot contain a character no branch here allowed.
+	"""
+	text = str(tax_lot if tax_lot is not None else "").strip().upper()
+	if not text:
+		raise ToolError(f"which tax lot? {_TAX_LOT_HELP}")
+
+	# SEPARATED FIRST, COMPACT SECOND, and the deed's own `2N11E35BA-01600` needs
+	# both: it has a hyphen, so it splits — into two pieces rather than five. So
+	# the split is TRIED and the compact parse is what catches everything the
+	# split did not resolve into the four or five parts a tax lot has.
+	tokens = [token for token in _SEPARATORS.split(text) if token]
+	if len(tokens) not in (4, 5):
+		compact = _COMPACT.match("".join(tokens))
+		if not compact:
+			raise ToolError(
+				f"{tax_lot!r} is not shaped like a tax lot. Written with no separators, the "
+				"section has to be two digits and the lot five — '2N11E35BA01600' — because "
+				"'2N11E7200' could be section 7 lot 200 or section 72 lot 00, and guessing would "
+				f"import the wrong piece of ground. {_TAX_LOT_HELP}"
+			)
+		tokens = [token for token in compact.groups() if token]
+
+	if len(tokens) == 4:
+		township, range_, section, lot = tokens
+		quarter = ""
+	elif len(tokens) == 5:
+		township, range_, section, quarter, lot = tokens
+	else:  # pragma: no cover - the compact fallback above already refused these
+		raise ToolError(
+			f"{tax_lot!r} has {len(tokens)} part(s) and a tax lot has four or five. {_TAX_LOT_HELP}"
+		)
+
+	checks = (
+		(_TOWNSHIP, township, "township", "1N or 2S"),
+		(_RANGE, range_, "range", "11E or 13E"),
+		(_SECTION, section, "section", "7, 35, or 0 where there is none"),
+		(_LOT, lot, "lot", "200 or 4039"),
+	)
+	for pattern, value, label, example in checks:
+		if not pattern.match(value):
+			raise ToolError(f"{value!r} is not a {label} — Wasco's look like {example}. {_TAX_LOT_HELP}")
+	if quarter and not _QUARTER.match(quarter):
+		raise ToolError(
+			f"{quarter!r} is not a quarter — Wasco's look like CC or A, and many lots have none. "
+			f"{_TAX_LOT_HELP}"
+		)
+
+	# The layer pads NOTHING: section 0, section 7, lot 200, lot 4039. A deed's
+	# `01600` and a form's `1600` are the same lot and only one of them matches.
+	return township, range_, str(int(section)), quarter, str(int(lot))
+
+
+def canonical_tax_lot(tax_lot) -> str:
+	"""`'2N 11E 35 BA 1600'` — the county's own spelling, from any of ours."""
+	township, range_, section, quarter, lot = _tax_lot_parts(tax_lot)
+	return " ".join(part for part in (township, range_, section, quarter, lot) if part)
+
+
 def _tax_lot_clause(config: dict, tax_lot: str) -> str:
-	"""`MapTaxlot='2N11E35BA-01600'`, from a value that has been proven harmless.
+	"""`MapTaxlot='2N 11E 35 BA 1600'`, from a value proven harmless part by part.
 
 	The quoting here is trivial precisely because the validation above is not:
-	the value has already been refused unless it is letters, digits, dots and
-	hyphens, so there is no quote to escape and no expression to smuggle.
+	every part has already been matched against digits and a known letter, so
+	there is no quote to escape and no expression to smuggle.
 	"""
-	value = str(tax_lot or "").strip().upper()
-	if not _TAX_LOT.match(value):
+	return f"{config['tax_lot_field']}='{canonical_tax_lot(tax_lot)}'"
+
+
+def _account_clause(config: dict, account) -> str:
+	"""`AccountNum=7503`. AN INTEGER COLUMN, so the clause carries no quotes.
+
+	`AccountNum` is `esriFieldTypeInteger` on the live layer, and quoting an
+	integer is the kind of thing an ArcGIS backend answers with a type error
+	rather than a match. The value is parsed to an `int` and formatted from the
+	int — which is a stronger guarantee than any allowlist, because there is no
+	path from a string the caller supplied to the string that is sent.
+	"""
+	text = str(account if account is not None else "").strip()
+	if not text:
+		raise ToolError("which account? An assessor's account number looks like 7503.")
+	if not _ACCOUNT.match(text):
 		raise ToolError(
-			f"{tax_lot!r} is not shaped like a tax lot number. Wasco County's look like "
-			"'2N11E35BA-01600' — township, range, section, quarter, lot — and this lookup "
-			"accepts letters, digits, dots and hyphens only."
+			f"{account!r} is not an account number. Wasco's are plain digits — 7503 — with no "
+			"letters, spaces or punctuation. A number with a hyphen in it is a tax lot; search "
+			"by that instead."
 		)
-	return f"{config['tax_lot_field']}='{value}'"
+	number = int(text)
+	if number <= 0:
+		raise ToolError(f"{account!r} is not an account number this county issues; they start at 1.")
+	return f"{config['account_field']}={number}"
 
 
 def _degrees(value, label: str, limit: float) -> float:
@@ -464,9 +626,11 @@ def _computed_acres(geometry: dict):
 
 # ── the whitelisted surface: two methods ────────────────────────────────────
 @frappe.whitelist()
-def query_county_parcels(county=None, tax_lot=None, lat=None, lon=None):
-	"""Ask a county's parcel layer for a shape, by tax lot number or by a point."""
-	return speaks_frappe(_query_county_parcels, county=county, tax_lot=tax_lot, lat=lat, lon=lon)
+def query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon=None):
+	"""Ask a county's parcel layer for a shape, by tax lot, by account, or by a point."""
+	return speaks_frappe(
+		_query_county_parcels, county=county, tax_lot=tax_lot, account=account, lat=lat, lon=lon
+	)
 
 
 @frappe.whitelist()
@@ -475,8 +639,13 @@ def save_boundary(doctype=None, name=None, geojson=None, dry_run=0):
 	return speaks_frappe(_save_boundary, doctype=doctype, name=name, geojson=geojson, dry_run=dry_run)
 
 
-def _query_county_parcels(county=None, tax_lot=None, lat=None, lon=None):
-	"""Ask a county's parcel layer for a shape, by tax lot number or by a point.
+def _query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon=None):
+	"""Ask a county's parcel layer for a shape, by tax lot, by account, or by a point.
+
+	THREE WAYS TO ASK, AND EXACTLY ONE PER CALL. The account number is the one an
+	operator can actually read off a tax statement without transcribing five
+	fields, and it is the layer's own integer key — so it is the search that
+	cannot be spelled wrong. See `_account_clause` and `_tax_lot_parts`.
 
 	WRITE PERMISSION ON Parcel IS THE GATE, and it is deliberately stricter than
 	the read this method performs. The only thing an imported polygon is for is
@@ -488,13 +657,23 @@ def _query_county_parcels(county=None, tax_lot=None, lat=None, lon=None):
 	_may_write("Parcel")
 
 	key, config = _county(county)
-	tax_lot = str(tax_lot or "").strip()
+	tax_lot = str(tax_lot if tax_lot is not None else "").strip()
+	account = str(account if account is not None else "").strip()
 	has_point = lat not in (None, "") and lon not in (None, "")
 
-	if tax_lot and has_point:
+	asked_for = [
+		label
+		for label, given in (
+			("tax lot number", bool(tax_lot)),
+			("account number", bool(account)),
+			("point", has_point),
+		)
+		if given
+	]
+	if len(asked_for) > 1:
 		raise ToolError(
-			"pass either a tax lot number or a point, not both. They are two different questions "
-			"and answering them together would hide which one matched."
+			f"pass one of these, not {len(asked_for)}: {', '.join(asked_for)}. They are separate "
+			"questions and answering them together would hide which one matched."
 		)
 
 	params = {
@@ -504,8 +683,14 @@ def _query_county_parcels(county=None, tax_lot=None, lat=None, lon=None):
 		"f": "geojson",
 	}
 	if tax_lot:
-		asked = {"tax_lot": str(tax_lot).strip().upper()}
+		asked = {"tax_lot": canonical_tax_lot(tax_lot)}
 		params["where"] = _tax_lot_clause(config, tax_lot)
+	elif account:
+		params["where"] = _account_clause(config, account)
+		# The clause is `AccountNum=7503` and the number in it has already been
+		# through `int()`, so reading it back off the clause records exactly what
+		# the county was asked rather than what the box was typed into.
+		asked = {"account": int(params["where"].split("=", 1)[1])}
 	elif has_point:
 		latitude = _degrees(lat, "lat", 90.0)
 		longitude = _degrees(lon, "lon", 180.0)
@@ -520,16 +705,17 @@ def _query_county_parcels(county=None, tax_lot=None, lat=None, lon=None):
 		params["inSR"] = 4326
 		params["spatialRel"] = "esriSpatialRelIntersects"
 	else:
-		raise ToolError("pass a tax lot number, or a lat and lon to look under a point on the map.")
+		raise ToolError(
+			"pass a tax lot number, an assessor's account number, or a lat and lon to look under "
+			"a point on the map."
+		)
 
 	payload = _fetch(config["url"], params)
 	features, warnings = parse_features(payload, config)
 
 	if not features:
-		warnings.append(
-			f"{config['label']} has no parcel matching that "
-			f"{'tax lot number' if tax_lot else 'point'}. Nothing was changed."
-		)
+		matched_on = "tax lot number" if tax_lot else ("account number" if account else "point")
+		warnings.append(f"{config['label']} has no parcel matching that {matched_on}. Nothing was changed.")
 
 	audit.record(
 		tool_name="desk:query_county_parcels",

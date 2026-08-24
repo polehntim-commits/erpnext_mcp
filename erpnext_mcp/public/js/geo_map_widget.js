@@ -989,7 +989,27 @@ frappe.provide("erpnext_mcp.geo_map");
 			);
 	}
 
+	/** Two ways to name one parcel, and the form clears whichever you are not using.
+	 *
+	 * THE ACCOUNT NUMBER IS THE ONE A PERSON CAN ACTUALLY READ OFF A TAX BILL. A
+	 * tax lot is five fields in a fixed order and a character wrong in any of them
+	 * returns a real parcel somewhere else; the account number is four digits and
+	 * the layer's own integer key. It is the search that cannot be mistyped into a
+	 * different farm.
+	 *
+	 * THE FIELDS CLEAR EACH OTHER RATHER THAN REFUSING. `tax_lot` is pre-filled
+	 * from this form's Assessor Parcel ID, which is the right default and would
+	 * otherwise make "fill in one or the other" an error message on every single
+	 * account-number search. Typing in one box empties the other, so the rule is
+	 * visible as you type instead of arriving after you press Search. The refusal
+	 * below stays as the guard for the case where something fills both anyway.
+	 */
 	function open_county_import(frm, ctx) {
+		const only_one = (typed, cleared) => () => {
+			if (String(dialog.get_value(typed) || "").trim()) {
+				dialog.set_value(cleared, "");
+			}
+		};
 		const dialog = new frappe.ui.Dialog({
 			title: __("Import from County GIS"),
 			fields: [
@@ -999,8 +1019,18 @@ frappe.provide("erpnext_mcp.geo_map");
 					label: __("Tax Lot Number"),
 					default: frm.doc.parcel_id || "",
 					description: __(
-						"Wasco County tax lots look like 2N11E35BA-01600 — township, range, section, quarter, lot. It is the Assessor Parcel ID on this form."
+						"Wasco County tax lots are township, range, section, quarter, lot — 2N 11E 1 CC 4039, or 1N 13E 7 200 where there is no quarter. The compact spelling off a deed, 2N11E35BA-01600, works too. It is the Assessor Parcel ID on this form."
 					),
+					onchange: only_one("tax_lot", "account"),
+				},
+				{
+					fieldtype: "Data",
+					fieldname: "account",
+					label: __("Account Number"),
+					description: __(
+						"The assessor's account number off a tax statement — 7503. Plain digits. Fill in this or the tax lot number, not both; typing in one empties the other."
+					),
+					onchange: only_one("account", "tax_lot"),
 				},
 				{
 					fieldtype: "HTML",
@@ -1015,12 +1045,25 @@ frappe.provide("erpnext_mcp.geo_map");
 			primary_action_label: __("Search"),
 			primary_action(values) {
 				const lot = String((values && values.tax_lot) || "").trim();
-				if (!lot) {
-					frappe.msgprint(__("Enter a tax lot number, or use Find Under a Point."));
+				const account = String((values && values.account) || "").trim();
+				if (lot && account) {
+					frappe.msgprint(
+						__(
+							"Search by tax lot number or by account number, not both. They are two questions and the answer would not say which one matched — clear one of them."
+						)
+					);
+					return;
+				}
+				if (!lot && !account) {
+					frappe.msgprint(
+						__("Enter a tax lot number or an account number, or use Find Under a Point.")
+					);
 					return;
 				}
 				dialog.hide();
-				query_county({ tax_lot: lot }).then((result) => preview_county(frm, ctx, result));
+				query_county(lot ? { tax_lot: lot } : { account: account }).then((result) =>
+					preview_county(frm, ctx, result)
+				);
 			},
 			secondary_action_label: __("Find Under a Point"),
 			secondary_action() {
@@ -1174,6 +1217,14 @@ frappe.provide("erpnext_mcp.geo_map");
 		if (feature.tax_lot) {
 			parts.push(`<strong>${escape_html(feature.tax_lot)}</strong>`);
 		}
+		// THE ACCOUNT NUMBER WAS ALWAYS EXTRACTED AND NEVER SHOWN. It is the
+		// county's own key for this parcel and the one thing on this line a person
+		// can check against a tax statement in a glance — and from v0.126.0 it is
+		// also a way to search, so a reader who sees it here can come back to the
+		// same parcel without retyping five fields in the right order.
+		if (feature.account) {
+			parts.push(escape_html(__("account {0}", [feature.account])));
+		}
 		if (feature.taxpayer) {
 			parts.push(escape_html(feature.taxpayer));
 		}
@@ -1239,6 +1290,19 @@ frappe.provide("erpnext_mcp.geo_map");
 		consider("parcel_id", __("Assessor Parcel ID"), feature.tax_lot);
 		consider("acreage", __("Acreage"), feature.county_acres);
 		consider("county", __("County"), county_name(result));
+
+		if (feature.account) {
+			// NOT `consider`, BECAUSE PARCEL HAS NOWHERE TO PUT IT. There is no
+			// account-number field on the doctype, so the number is reported here
+			// rather than dropped — it is what somebody types into Account Number
+			// to pull this same parcel back next season.
+			kept.push(
+				__(
+					"The county's account number for this parcel is {0}. Nothing on this form holds it — note it if you want to search by it later.",
+					[feature.account]
+				)
+			);
+		}
 
 		if (feature.taxpayer) {
 			kept.push(

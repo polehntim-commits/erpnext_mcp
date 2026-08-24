@@ -44,7 +44,10 @@ SIX CLAIMS.
    `boundary_geojson` directly would pass every other test in this file.
 """
 
+import inspect
 import json
+import pathlib
+import re
 import unittest
 
 import frappe
@@ -66,25 +69,41 @@ FIELD_DOCNAME = "Yellow Camp Block 3 - MC"
 ZONE_DOCNAME = "YC3-Zone2 - MC"
 
 #: What Wasco County's FeatureServer actually answers with, trimmed to the keys
-#: this app reads. Field names and casing are the county's own — see
+#: this app reads. Field names, casing AND SPELLING are the county's own — see
 #: `COUNTIES["wasco"]["properties"]`, which is a list of spellings for exactly
 #: this reason.
+#:
+#: `MapTaxlot` IS SPACE-DELIMITED AND UNPADDED, and this fixture said
+#: `2N11E35BA-01600` until v0.126.0. That was the compact ORMAP spelling off a
+#: deed, which is what a person types and NOT what the layer stores — so the
+#: fixture agreed with the bug rather than with the county, and the suite was
+#: green while no tax lot search could ever return a parcel. It was read off the
+#: live layer this time: 15,516 rows, none padded, none hyphenated.
+#:
+#: `AccountNum` IS AN INTEGER, not a string. It is `esriFieldTypeInteger` on the
+#: layer and arrives as a JSON number, which is the shape `_text` has to survive
+#: for the account to reach the preview at all.
 COUNTY_ANSWER = {
 	"type": "FeatureCollection",
 	"features": [
 		{
 			"type": "Feature",
 			"properties": {
-				"MapTaxlot": "2N11E35BA-01600",
-				"Taxpayer": "ORCHARD HOLDINGS LLC",
+				"MapTaxlot": "1N 13E 7 200",
+				"Taxpayer": "HIGHLAND LTD LIABILITY CO",
 				"CalculatedAcres": 330.4,
-				"AccountNum": "11245",
+				"AccountNum": 7503,
 				"Shape__Area": 14389472.5,
 			},
 			"geometry": PARCEL_OUTLINE,
 		}
 	],
 }
+
+#: The compact spelling of the same lot, which is what is printed on the deed and
+#: what is already sitting in `parcel_id` on parcels imported before v0.126.0.
+#: `canonical_tax_lot` turns this into the fixture's `MapTaxlot` above.
+COMPACT_SPELLING = "1N13E0700200"
 
 
 class GISTestCase(GeoTestCase):
@@ -156,6 +175,93 @@ class TheSaveSurfaceIsClosed(unittest.TestCase):
 				self.assertIn(".or.us/", config["url"])
 
 
+# ── the map widget and the method it calls ──────────────────────────────────
+class TheWidgetAndTheMethodAgree(unittest.TestCase):
+	"""v0.126.0. A SEARCH BOX THAT SENDS AN ARGUMENT NOBODY READS.
+
+	`query_county_parcels` is a `@frappe.whitelist()` method, and Frappe forwards
+	the form dict to whatever names it declares. An argument the browser sends
+	that the method does not name is a TypeError in the browser console; an
+	argument the method grew that the browser never sends is a feature that
+	shipped and does nothing. Neither is visible from either file alone, and
+	neither is visible to any test that reads only Python — which is how the
+	account box could have been added to the dialog and wired to nothing.
+
+	READ OUT OF THE JAVASCRIPT, not asserted as a substring of it. A `assertIn`
+	on the whole file passes on a mention in a comment; this pulls the keys out of
+	the object literals actually passed to `query_county` and compares them with
+	the method's real signature.
+	"""
+
+	WIDGET = (
+		pathlib.Path(__file__).resolve().parent.parent / "erpnext_mcp" / "public" / "js" / "geo_map_widget.js"
+	)
+
+	def widget_source(self) -> str:
+		self.assertTrue(self.WIDGET.exists(), f"{self.WIDGET} is gone")
+		return self.WIDGET.read_text(encoding="utf-8")
+
+	def arguments_the_browser_sends(self) -> set:
+		"""Every key in every object literal handed to `query_county(...)`."""
+		source = self.widget_source()
+		sent = set()
+		for match in re.finditer(r"\bquery_county\(", source):
+			start = match.end()
+			depth = 1
+			index = start
+			while index < len(source) and depth:
+				depth += {"(": 1, ")": -1}.get(source[index], 0)
+				index += 1
+			sent.update(re.findall(r"\{[^{}]*?\b(\w+)\s*:", source[start : index - 1]))
+			sent.update(re.findall(r"[,{]\s*(\w+)\s*:", source[start : index - 1]))
+		return sent
+
+	def test_the_browser_sends_nothing_the_method_does_not_name(self):
+		accepted = set(inspect.signature(gis.query_county_parcels).parameters)
+		self.assertTrue(self.arguments_the_browser_sends(), "no query_county call sites were found")
+		self.assertLessEqual(self.arguments_the_browser_sends(), accepted)
+
+	def test_every_way_of_asking_has_a_caller(self):
+		"""The other direction: an argument the server grew and the dialog never
+		offers is a feature nobody can reach. `county` is the exception and is
+		deliberate — one county is configured, and the browser does not choose."""
+		accepted = set(inspect.signature(gis.query_county_parcels).parameters) - {"county"}
+		self.assertEqual(accepted, self.arguments_the_browser_sends())
+
+	def test_the_dialog_offers_a_box_for_each_of_the_two_searches(self):
+		"""v0.126.0 added the account box. A `fieldname` is what `values.account`
+		in the primary action reads, so a box named anything else is a search that
+		always sends an empty string."""
+		source = self.widget_source()
+		dialog = source[source.index("function open_county_import") :]
+		dialog = dialog[: dialog.index("\n\tfunction ", 1)]
+		for fieldname in ("tax_lot", "account"):
+			with self.subTest(fieldname=fieldname):
+				self.assertIn(f'fieldname: "{fieldname}"', dialog)
+
+	def test_the_preview_prints_the_account_number_it_extracts(self):
+		"""`feature.account` HAS BEEN EXTRACTED SINCE v0.33.0 AND SHOWN SINCE
+		v0.126.0. It is the county's own key for the parcel and, from this
+		release, the thing somebody types back in to find it again — a value
+		parsed, carried across the wire and then dropped on the floor is the
+		easiest kind of dead code to keep."""
+		source = self.widget_source()
+		describe = source[source.index("function describe_feature") :]
+		describe = describe[: describe.index("\n\t}")]
+		self.assertIn("feature.account", describe)
+
+	def test_the_widget_no_longer_tells_people_the_spelling_that_never_matched(self):
+		"""The dialog's own description asked for `2N11E35BA-01600` and nothing
+		else, which is the compact ORMAP spelling the layer does not store. It is
+		still accepted — it is what is on the deed — but the shape shown FIRST has
+		to be the one the county holds."""
+		source = self.widget_source()
+		dialog = source[source.index("function open_county_import") :]
+		dialog = dialog[: dialog.index("\n\tfunction ", 1)]
+		self.assertIn("2N 11E 1 CC 4039", dialog)
+		self.assertLess(dialog.index("2N 11E 1 CC 4039"), dialog.index("2N11E35BA-01600"))
+
+
 # ── the gates ───────────────────────────────────────────────────────────────
 class TheGatesRefuseWhatTheyShould(GISTestCase):
 	def setUp(self):
@@ -201,6 +307,22 @@ class TheGatesRefuseWhatTheyShould(GISTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			gis.query_county_parcels(tax_lot="2N11E35BA-01600")
 
+	def test_the_account_search_is_behind_the_same_two_gates(self):
+		"""v0.126.0 ADDED AN ARGUMENT, NOT A DOOR. A new way to ask that skipped
+		either gate would be a way for a Family Member to drive the farm's server
+		at the county — so both are asserted against the new parameter rather than
+		assumed to still hold because the old one is gated."""
+		self.answer_with(COUNTY_ANSWER)
+		self.as_user("Guest")
+		with self.assertRaises(frappe.PermissionError):
+			gis.query_county_parcels(account="7503")
+		frappe.local.session.user = "Administrator"
+		STORE.denied_permissions.add(("Parcel", "write"))
+		self.addCleanup(STORE.denied_permissions.discard, ("Parcel", "write"))
+		with self.assertRaises(frappe.PermissionError):
+			gis.query_county_parcels(account="7503")
+		self.assertEqual(self.fetched, [], "the county was asked before the caller was checked")
+
 	def test_an_unknown_doctype_is_refused_by_name(self):
 		with self.assertRaises(frappe.ValidationError) as caught:
 			gis.save_boundary("Housing Unit", "HU-0001", json.dumps(PARCEL_OUTLINE))
@@ -214,44 +336,178 @@ class TheGatesRefuseWhatTheyShould(GISTestCase):
 
 
 # ── the tax lot, and the where clause it lands in ───────────────────────────
-class TheTaxLotIsValidated(unittest.TestCase):
-	"""AN ALLOWLIST AND NOT AN ESCAPE, which is the whole posture.
+class TheTaxLotIsTranslatedAndValidated(unittest.TestCase):
+	"""THE COUNTY'S SPELLING IS NOT ANYBODY'S SPELLING, and until v0.126.0 this
+	class asserted the wrong one.
 
-	The value is formatted into `MapTaxlot='…'` and evaluated by ArcGIS, whose
-	`where` dialect this app does not implement and cannot test against. So
-	anything that is not letters, digits, dots and hyphens is refused outright
-	rather than quoted, escaped or stripped.
+	`MapTaxlot` on the live layer is space-delimited and unpadded —
+	`2N 11E 1 CC 4039` — and v0.33.0 sent the compact ORMAP spelling off a deed,
+	`MapTaxlot='2N11E35BA-01600'`. Those are never equal, so every tax lot search
+	matched nothing, and an ArcGIS query that matches nothing is an HTTP 200 with
+	an empty feature list: the form said the county had no such parcel and the
+	suite agreed, because THE FIXTURE HAD THE SAME MISTAKE IN IT.
+
+	The old allowlist refused a space, so the county's own spelling could not be
+	typed in either. Both directions were shut and neither said so.
+
+	STILL AN ALLOWLIST AND NOT AN ESCAPE, and now a tighter one: each part is
+	matched against digits and a known letter before it is formatted, so the
+	clause cannot carry a character no branch allowed.
 	"""
 
 	CONFIG = gis.COUNTIES["wasco"]
 
-	def test_a_real_tax_lot_becomes_the_clause(self):
+	def test_the_countys_own_spelling_goes_through_unchanged(self):
+		"""The thing v0.33.0 refused outright, because it has spaces in it."""
+		self.assertEqual(
+			gis._tax_lot_clause(self.CONFIG, "2N 11E 1 CC 4039"),
+			"MapTaxlot='2N 11E 1 CC 4039'",
+		)
+
+	def test_the_deeds_compact_spelling_is_translated_into_the_countys(self):
+		"""THE FIX, IN ONE ASSERTION. `2N11E35BA-01600` is what is printed on the
+		deed, what the form's own description asked for and what is already in
+		`parcel_id` on every parcel imported before v0.126.0. It is not what the
+		layer stores, and sending it verbatim is why nothing ever matched."""
 		self.assertEqual(
 			gis._tax_lot_clause(self.CONFIG, "2n11e35ba-01600"),
-			"MapTaxlot='2N11E35BA-01600'",
+			"MapTaxlot='2N 11E 35 BA 1600'",
 		)
+
+	def test_the_padding_a_deed_carries_is_stripped_because_the_layer_has_none(self):
+		"""Section `07` and lot `00200` are the same lot as `7` and `200`, and
+		only one of the two spellings is on the server."""
+		self.assertEqual(gis.canonical_tax_lot("1N 13E 07 0200"), "1N 13E 7 200")
+		self.assertEqual(gis.canonical_tax_lot(COMPACT_SPELLING), "1N 13E 7 200")
+
+	def test_a_lot_with_no_quarter_keeps_its_four_parts(self):
+		"""Roughly a third of the county's lots have no quarter at all. A
+		normaliser that inserted an empty one would produce a double space and
+		match nothing."""
+		self.assertEqual(gis.canonical_tax_lot("1N 11E 0 100"), "1N 11E 0 100")
+		self.assertEqual(gis.canonical_tax_lot("1N11E0000100"), "1N 11E 0 100")
+
+	def test_whatever_a_person_puts_between_the_parts_is_accepted(self):
+		"""A space, a hyphen, a dot, a slash, several of each. They are separators
+		and none of them is ever sent."""
+		for spelling in (
+			"2N 11E 1 CC 4039",
+			"2N-11E-1-CC-4039",
+			"2N.11E.1.CC.4039",
+			"2N/11E/1/CC/4039",
+			"  2n   11e   01   cc   04039  ",
+		):
+			with self.subTest(spelling=spelling):
+				self.assertEqual(gis.canonical_tax_lot(spelling), "2N 11E 1 CC 4039")
+
+	def test_a_run_together_lot_that_is_not_padded_is_refused_rather_than_guessed(self):
+		"""`2N11E7200` IS GENUINELY AMBIGUOUS — section 7 lot 200, or section 72
+		lot 00? The compact spelling only parses because the deed pads the section
+		to two digits and the lot to five, and guessing at an unpadded one would
+		import a real parcel somewhere else in the county."""
+		with self.assertRaises(ToolError) as caught:
+			gis.canonical_tax_lot("2N11E7200")
+		self.assertIn("section 7 lot 200", str(caught.exception))
 
 	def test_every_shape_that_is_not_a_tax_lot_is_refused(self):
 		for value in (
 			"2N11E35BA-01600' OR '1'='1",
 			"'; DROP TABLE taxlots; --",
-			"2N11E35BA 01600",
 			"2N11E35BA%",
 			'2N11"E',
 			"",
 			"   ",
+			None,
 			"-01600",
 			"x" * 41,
+			"2N 11E 1 CC",  # four parts short one
+			"2N 11E 1 CC 4039 9",  # six
+			"2X 11E 7 200",  # a township is N or S
+			"2N 11Q 7 200",  # a range is E or W
+			"2N 11E 123 200",  # sections stop at 36
+			"2N 11E 7 123456",  # lots stop at five digits
+			"2N 11E 7 CCCC 200",  # quarters are one or two letters
 		):
 			with self.subTest(value=value):
 				with self.assertRaises(ToolError):
 					gis._tax_lot_clause(self.CONFIG, value)
 
+	def test_the_refusal_says_what_yes_looks_like(self):
+		"""A person who has just been told no is looking at a form with a number
+		on it that they believe is correct. The sentence has to show the shape
+		that works and name the other way to search."""
+		with self.assertRaises(ToolError) as caught:
+			gis.canonical_tax_lot("not a lot")
+		message = str(caught.exception)
+		self.assertIn("2N 11E 1 CC 4039", message)
+		self.assertIn("account number", message)
+
 	def test_the_clause_never_contains_a_quote_it_did_not_write(self):
 		"""Belt to the brace above: whatever survives validation, the clause it
 		produces has exactly two apostrophes in it."""
-		clause = gis._tax_lot_clause(self.CONFIG, "2N11E35BA-01600")
-		self.assertEqual(clause.count("'"), 2)
+		for spelling in ("2N11E35BA-01600", "2N 11E 1 CC 4039", "1N13E0700200"):
+			with self.subTest(spelling=spelling):
+				clause = gis._tax_lot_clause(self.CONFIG, spelling)
+				self.assertEqual(clause.count("'"), 2)
+
+	def test_no_clause_is_longer_than_the_column_it_is_compared_against(self):
+		"""`MapTaxlot` is 25 characters on the layer. Every part is length-bounded
+		by its own regex, so the longest clause this can build is well inside
+		that — a value that could not possibly match is a value that should have
+		been refused."""
+		longest = gis.canonical_tax_lot("22N 11E 36 ABC 99999")
+		self.assertLessEqual(len(longest), 25)
+
+
+class TheAccountNumberIsAnInteger(unittest.TestCase):
+	"""v0.126.0. THE SEARCH THAT CANNOT BE MISTYPED INTO A DIFFERENT FARM.
+
+	A tax lot is five fields in a fixed order and a character wrong in any one of
+	them returns a real parcel somewhere else, with plausible numbers on it. The
+	assessor's account number is four digits off the top of a tax statement and
+	the layer's own integer key.
+
+	`AccountNum` IS `esriFieldTypeInteger`, so the clause carries NO QUOTES —
+	which is a stronger guarantee than the tax lot's allowlist, because the value
+	is formatted from an `int()` and there is no path from the caller's string to
+	the string that is sent.
+	"""
+
+	CONFIG = gis.COUNTIES["wasco"]
+
+	def test_an_account_number_becomes_an_unquoted_clause(self):
+		self.assertEqual(gis._account_clause(self.CONFIG, "7503"), "AccountNum=7503")
+		self.assertEqual(gis._account_clause(self.CONFIG, 7503), "AccountNum=7503")
+
+	def test_the_clause_has_no_quotes_at_all(self):
+		"""Quoting an integer column is the kind of thing an ArcGIS backend
+		answers with a type error rather than a match."""
+		self.assertNotIn("'", gis._account_clause(self.CONFIG, "7503"))
+		self.assertNotIn('"', gis._account_clause(self.CONFIG, "7503"))
+
+	def test_padding_and_surrounding_space_are_the_same_account(self):
+		self.assertEqual(gis._account_clause(self.CONFIG, " 007503 "), "AccountNum=7503")
+
+	def test_anything_that_is_not_digits_is_refused(self):
+		for value in ("", "   ", None, "75-03", "abc", "7503 OR 1=1", "7503;--", "1" * 10, "7.5"):
+			with self.subTest(value=value):
+				with self.assertRaises(ToolError):
+					gis._account_clause(self.CONFIG, value)
+
+	def test_zero_is_refused_by_name_rather_than_read_as_empty(self):
+		"""`str(x or "")` would turn a 0 into an empty string and report it as
+		"which account?", which is a different and wronger sentence. The county
+		issues no account 0, and that is what the refusal says."""
+		with self.assertRaises(ToolError) as caught:
+			gis._account_clause(self.CONFIG, 0)
+		self.assertIn("start at 1", str(caught.exception))
+
+	def test_a_hyphenated_number_is_pointed_at_the_other_box(self):
+		"""Somebody with a tax lot in their hand who typed it into the wrong
+		field needs to be told which field it belongs in."""
+		with self.assertRaises(ToolError) as caught:
+			gis._account_clause(self.CONFIG, "2N11E35BA-01600")
+		self.assertIn("tax lot", str(caught.exception))
 
 
 class TheCountyRegistry(unittest.TestCase):
@@ -302,11 +558,19 @@ class WhatTheCountyCanSendBack(unittest.TestCase):
 		self.assertEqual(warnings, [])
 		self.assertEqual(len(features), 1)
 		one = features[0]
-		self.assertEqual(one["tax_lot"], "2N11E35BA-01600")
-		self.assertEqual(one["taxpayer"], "ORCHARD HOLDINGS LLC")
+		self.assertEqual(one["tax_lot"], "1N 13E 7 200")
+		self.assertEqual(one["taxpayer"], "HIGHLAND LTD LIABILITY CO")
 		self.assertEqual(one["county_acres"], 330.4)
-		self.assertEqual(one["account"], "11245")
 		self.assertEqual(one["geometry"]["type"], "Polygon")
+
+	def test_an_integer_account_number_survives_into_the_preview(self):
+		"""`AccountNum` IS AN INTEGER COLUMN and arrives as a JSON number. It is
+		carried as text because the only thing the form does with it is print it
+		next to the parcel — but a `_text` that dropped a non-string would have
+		lost it silently, and from v0.126.0 it is also the value somebody types
+		back in to find this parcel again."""
+		one = gis.parse_features(COUNTY_ANSWER, self.CONFIG)[0][0]
+		self.assertEqual(one["account"], "7503")
 
 	@unittest.skipUnless(geo.available(), "needs shapely>=2.0 and h3>=4.0.0")
 	def test_both_acreages_are_reported_and_neither_replaces_the_other(self):
@@ -360,7 +624,7 @@ class WhatTheCountyCanSendBack(unittest.TestCase):
 		}
 		features, warnings = gis.parse_features(payload, self.CONFIG)
 		self.assertEqual(len(features), 1)
-		self.assertEqual(features[0]["tax_lot"], "2N11E35BA-01600")
+		self.assertEqual(features[0]["tax_lot"], "1N 13E 7 200")
 		self.assertTrue(any("not areas" in line for line in warnings))
 
 	def test_a_field_name_in_another_case_is_still_found(self):
@@ -371,13 +635,13 @@ class WhatTheCountyCanSendBack(unittest.TestCase):
 			"type": "FeatureCollection",
 			"features": [
 				{
-					"properties": {"MAPTAXLOT": "2N11E35BA-01600", "CALCULATEDACRES": 12.5},
+					"properties": {"MAPTAXLOT": "1N 13E 7 200", "CALCULATEDACRES": 12.5},
 					"geometry": PARCEL_OUTLINE,
 				}
 			],
 		}
 		one = gis.parse_features(payload, self.CONFIG)[0][0]
-		self.assertEqual(one["tax_lot"], "2N11E35BA-01600")
+		self.assertEqual(one["tax_lot"], "1N 13E 7 200")
 		self.assertEqual(one["county_acres"], 12.5)
 
 	def test_the_esri_json_spelling_of_properties_is_read_too(self):
@@ -386,9 +650,9 @@ class WhatTheCountyCanSendBack(unittest.TestCase):
 		county's server ignores the parameter."""
 		payload = {
 			"type": "FeatureCollection",
-			"features": [{"attributes": {"MapTaxlot": "2N11E35BA-01600"}, "geometry": PARCEL_OUTLINE}],
+			"features": [{"attributes": {"MapTaxlot": "1N 13E 7 200"}, "geometry": PARCEL_OUTLINE}],
 		}
-		self.assertEqual(gis.parse_features(payload, self.CONFIG)[0][0]["tax_lot"], "2N11E35BA-01600")
+		self.assertEqual(gis.parse_features(payload, self.CONFIG)[0][0]["tax_lot"], "1N 13E 7 200")
 
 	def test_a_flood_of_matches_is_capped_and_the_cap_is_reported(self):
 		"""A SILENT TRUNCATION READS AS 'that is all there was'. If the answer is
@@ -426,7 +690,7 @@ class TheSpatialQueryIsBuiltRight(GISTestCase):
 		nothing would fix."""
 		gis.query_county_parcels(tax_lot="2N11E35BA-01600")
 		params = self.fetched[0]["params"]
-		self.assertEqual(params["where"], "MapTaxlot='2N11E35BA-01600'")
+		self.assertEqual(params["where"], "MapTaxlot='2N 11E 35 BA 1600'")
 		self.assertEqual(params["outSR"], 4326)
 		self.assertEqual(params["f"], "geojson")
 		self.assertEqual(params["outFields"], "*")
@@ -443,18 +707,36 @@ class TheSpatialQueryIsBuiltRight(GISTestCase):
 		self.assertEqual(params["spatialRel"], "esriSpatialRelIntersects")
 		self.assertNotIn("where", params)
 
+	def test_an_account_query_asks_the_integer_column_without_quotes(self):
+		"""v0.126.0. `AccountNum` is `esriFieldTypeInteger`, and this is the search
+		an operator can run off a tax statement without transcribing five fields
+		in the right order."""
+		gis.query_county_parcels(account="7503")
+		params = self.fetched[0]["params"]
+		self.assertEqual(params["where"], "AccountNum=7503")
+		self.assertEqual(params["outSR"], 4326)
+		self.assertEqual(params["f"], "geojson")
+		self.assertNotIn("geometry", params)
+
 	def test_the_url_comes_from_the_registry_and_not_from_an_argument(self):
 		gis.query_county_parcels(tax_lot="2N11E35BA-01600")
 		self.assertEqual(self.fetched[0]["url"], gis.COUNTIES["wasco"]["url"])
 
-	def test_both_a_tax_lot_and_a_point_is_refused(self):
-		"""Two different questions. Answering them together would hide which one
+	def test_only_one_of_the_three_ways_to_ask_per_call(self):
+		"""Three different questions. Answering two together would hide which one
 		matched, and the whole value of the preview is knowing what you asked."""
-		with self.assertRaises(frappe.ValidationError):
-			gis.query_county_parcels(tax_lot="2N11E35BA-01600", lat=45.6, lon=-121.18)
-		self.assertEqual(self.fetched, [])
+		for kwargs in (
+			{"tax_lot": "2N11E35BA-01600", "lat": 45.6, "lon": -121.18},
+			{"account": "7503", "lat": 45.6, "lon": -121.18},
+			{"tax_lot": "2N11E35BA-01600", "account": "7503"},
+			{"tax_lot": "2N11E35BA-01600", "account": "7503", "lat": 45.6, "lon": -121.18},
+		):
+			with self.subTest(**kwargs):
+				with self.assertRaises(frappe.ValidationError):
+					gis.query_county_parcels(**kwargs)
+				self.assertEqual(self.fetched, [])
 
-	def test_neither_a_tax_lot_nor_a_point_is_refused(self):
+	def test_none_of_the_three_is_refused(self):
 		with self.assertRaises(frappe.ValidationError):
 			gis.query_county_parcels()
 		self.assertEqual(self.fetched, [])
@@ -473,11 +755,38 @@ class TheSpatialQueryIsBuiltRight(GISTestCase):
 		self.assertEqual(result["features"], [])
 		self.assertTrue(any("no parcel matching" in line for line in result["warnings"]))
 
+	def test_an_empty_answer_names_the_way_it_was_asked(self):
+		""" "No parcel matching that point" and "no parcel matching that account
+		number" send somebody to look in two different places. Before v0.126.0 the
+		sentence said "tax lot number" or "point" and there was no third."""
+		self.answer_with({"type": "FeatureCollection", "features": []})
+		for kwargs, expected in (
+			({"tax_lot": "2N11E35BA-99999"}, "tax lot number"),
+			({"account": "999999"}, "account number"),
+			({"lat": 45.6, "lon": -121.18}, "point"),
+		):
+			with self.subTest(**kwargs):
+				result = gis.query_county_parcels(**kwargs)
+				self.assertTrue(
+					any(f"matching that {expected}" in line for line in result["warnings"]),
+					result["warnings"],
+				)
+
 	def test_the_answer_names_the_county_it_came_from(self):
 		result = gis.query_county_parcels(tax_lot="2N11E35BA-01600")
 		self.assertEqual(result["county"], "wasco")
 		self.assertEqual(result["label"], "Wasco County, Oregon")
-		self.assertEqual(result["query"], {"tax_lot": "2N11E35BA-01600"})
+
+	def test_the_answer_reports_the_spelling_the_county_was_actually_asked(self):
+		"""NOT WHAT WAS TYPED. A person who typed the deed's spelling and got a
+		parcel back wants to see the county's, because that is the string that
+		matched and the one to search with next time."""
+		result = gis.query_county_parcels(tax_lot="2N11E35BA-01600")
+		self.assertEqual(result["query"], {"tax_lot": "2N 11E 35 BA 1600"})
+
+	def test_an_account_answer_reports_the_number_as_a_number(self):
+		result = gis.query_county_parcels(account=" 07503 ")
+		self.assertEqual(result["query"], {"account": 7503})
 
 	def test_a_lookup_leaves_an_audit_row(self):
 		"""An outbound request made by the farm's server on somebody's behalf is
@@ -487,7 +796,15 @@ class TheSpatialQueryIsBuiltRight(GISTestCase):
 			row for row in STORE.rows("MCP Action Log") if row.get("tool_name") == "desk:query_county_parcels"
 		]
 		self.assertEqual(len(rows), 1)
-		self.assertIn("2N11E35BA-01600", rows[0]["arguments_json"])
+		self.assertIn("2N 11E 35 BA 1600", rows[0]["arguments_json"])
+
+	def test_an_account_lookup_leaves_an_audit_row_too(self):
+		gis.query_county_parcels(account="7503")
+		rows = [
+			row for row in STORE.rows("MCP Action Log") if row.get("tool_name") == "desk:query_county_parcels"
+		]
+		self.assertEqual(len(rows), 1)
+		self.assertIn("7503", rows[0]["arguments_json"])
 
 
 # ── saving, which is the part that must not be a shortcut ───────────────────

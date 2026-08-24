@@ -9541,7 +9541,7 @@ documented here rather than in the catalogue proper.
 | Method | What it does |
 | --- | --- |
 | `erpnext_mcp.api.gis.save_boundary` | takes a drawn or imported polygon and calls `set_parcel_boundary`, `set_field_boundary` or `set_zone_boundary` |
-| `erpnext_mcp.api.gis.query_county_parcels` | asks a county's ArcGIS parcel layer for a shape, by tax lot number or by a point |
+| `erpnext_mcp.api.gis.query_county_parcels` | asks a county's ArcGIS parcel layer for a shape, by tax lot number, by assessor's account number or by a point |
 
 They are reached at `/api/method/erpnext_mcp.api.gis.<name>` by a signed-in Desk
 user. `security.authorize()` — the master switch, the shared `X-MCP-Token`, the
@@ -9601,19 +9601,43 @@ in feet, WKID 2913). That polygon is what the assessor, the deed and the tax bil
 are all describing, which makes it a far better starting point than tracing an
 outline off a satellite image by eye.
 
-Two ways to ask: type a tax lot number (`2N11E35BA-01600`), or press **Find Under
-a Point** and click the parcel on the satellite map. Either way the result is
-**drawn on the map first**, dashed, next to the block the operator already knows —
-because a tax lot number typed with one character wrong returns a real parcel
-somewhere else and every number on it looks plausible. **Apply** is what commits
-it, through `save_boundary` like everything else.
+Three ways to ask: type a **tax lot number** (`2N 11E 1 CC 4039`, or the compact
+spelling off a deed, `2N11E35BA-01600`), type the assessor's **account number**
+(`7503`), or press **Find Under a Point** and click the parcel on the satellite
+map. One per search — asking two together would hide which one matched. Either
+way the result is **drawn on the map first**, dashed, next to the block the
+operator already knows — because a tax lot number typed with one character wrong
+returns a real parcel somewhere else and every number on it looks plausible.
+**Apply** is what commits it, through `save_boundary` like everything else.
+
+**The account number is the search that cannot be mistyped into a different
+farm.** A tax lot is five fields in a fixed order; the account number is four
+digits off the top of a tax statement and the layer's own integer key. It is
+printed in the preview beside the tax lot, the taxpayer and both acreages —
+nothing on the Parcel form holds it, so the preview and the import summary are
+where it lives.
 
 **The request is proxied by the server, never made by the browser.** CORS is not
 ours to promise, the URL belongs in one place rather than in a cached JavaScript
 file, and the `where` clause is a query language that the browser is the wrong
 place to be careful about. The tax lot is checked against an **allowlist** —
-letters, digits, dots and hyphens — rather than escaped, because escaping means
-implementing somebody else's SQL dialect correctly without being able to test it.
+each part matched against digits and a known letter — rather than escaped,
+because escaping means implementing somebody else's SQL dialect correctly without
+being able to test it. The account number never becomes a string at all: it is
+parsed to an `int` and formatted from the `int`, into an unquoted
+`AccountNum=7503`, because `AccountNum` is an integer column on the layer.
+
+**The county does not store the spelling anybody types, and v0.126.0 is where
+that was found.** `MapTaxlot` on Wasco's server is space-delimited and unpadded
+— `2N 11E 1 CC 4039` — while every deed and tax bill uses the compact ORMAP
+spelling. v0.33.0 sent the compact one, so `MapTaxlot='2N11E35BA-01600'` matched
+nothing, ever, and an ArcGIS query that matches nothing is an HTTP 200 with an
+empty feature list: the form reported "no parcel matching that tax lot number"
+for every tax lot in the county. The old allowlist refused a space, so the
+county's own spelling could not be typed in either. Both are now translated to
+the one the server will match. An unpadded run-together value like `2N11E7200`
+is refused rather than guessed — it could be section 7 lot 200 or section 72 lot
+00, and both are real parcels.
 
 `x` is longitude and `y` is latitude in an ArcGIS point geometry, which is the
 opposite order from every other pair in this app. Swapping them asks about a point

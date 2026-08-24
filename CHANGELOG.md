@@ -3,6 +3,52 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.126.0 — 2026-08-24 — the tax lot search had never matched a parcel
+
+**THE PARCEL FORM'S COUNTY IMPORT COULD NOT FIND A TAX LOT, AND HAD NOT SINCE
+v0.33.0.** `MapTaxlot` on Wasco County's FeatureServer is stored space-delimited
+and unpadded — `2N 11E 1 CC 4039` — and this app sent the compact ORMAP spelling
+off a deed, `MapTaxlot='2N11E35BA-01600'`. Those are never equal, and an ArcGIS
+query that matches nothing answers HTTP 200 with an empty feature list: the form
+reported "Wasco County, Oregon has no parcel matching that tax lot number" for
+every tax lot in the county, which read as the county's problem and was ours.
+
+**THE OTHER DIRECTION WAS SHUT AT THE SAME TIME.** The old allowlist refused any
+value containing a space, so an operator who typed the county's OWN spelling was
+told it was "not shaped like a tax lot number". No value both passed validation
+here and matched a row there. Neither half was visible from the suite, because
+the test fixture carried the same wrong spelling — forty-eight tests asserting
+that the app sent what the app sent.
+
+**`_tax_lot_parts` NOW TRANSLATES.** The grammar was read off all 15,516 rows of
+the live layer rather than guessed, and the deed's `2N11E35BA-01600`, the
+county's `2N 11E 35 BA 1600` and the hyphenated middle ground all resolve to the
+one spelling the server will match. STILL AN ALLOWLIST AND NOT AN ESCAPE, and a
+tighter one: every part is matched against digits and a known letter before it is
+formatted. The unpadded run-together form `2N11E7200` is refused by name rather
+than guessed at — it could be section 7 lot 200 or section 72 lot 00, and both
+are real parcels somewhere in Wasco County.
+
+**AND AN ACCOUNT NUMBER IS NOW A SEARCH.** `AccountNum=7503` — four digits off
+the top of a tax statement, and the layer's own integer key. It is the search
+that cannot be mistyped into a different farm, where a tax lot is five fields in
+a fixed order and one character wrong returns a real parcel somewhere else with
+plausible numbers on it. `AccountNum` is an integer column, so the clause carries
+no quotes at all and is formatted from an `int()`.
+
+**THE IMPORT DIALOG HAS TWO BOXES**, Tax Lot Number and Account Number, and
+typing in one empties the other — `tax_lot` is pre-filled from the form's
+Assessor Parcel ID, which would otherwise have made "one or the other" an error
+on every account search. The account number is printed in the preview and in the
+import summary: it has been extracted since v0.33.0, carried across the wire and
+then dropped on the floor, and no field on Parcel holds it.
+
+**`TheWidgetAndTheMethodAgree` READS THE JAVASCRIPT.** An argument the browser
+sends that the whitelisted method does not name is a TypeError in a console
+nobody is watching; one the method grew that the browser never sends is a feature
+that shipped and does nothing. Neither is visible from either file alone.
+`test_gis_import.py` goes from 48 to 73.
+
 ## 0.125.0 — 2026-08-24 — the shape of a block, for the map that opens first
 
 **One mobile route: `list_field_boundaries`.** The mobile route table goes from
