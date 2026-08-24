@@ -44,6 +44,14 @@ server half rests on.
    company this login cannot reach falls back rather than 403-ing, because
    `company` here is a filter column on a feedback feed and a 403 is a note that
    never lands.
+
+7. **THE STAMP AN IPHONE SENDS IS NOT ONE A `Datetime` COLUMN TAKES.**
+   `AnInstantOffAnIPhone`. Added after the route went live and every single note
+   500'd on `OperationalError (1292)` — the third time this boundary has cost a
+   register, after `training_completed_at` and the bucket capture queue, and the
+   reason `datetimes.as_mariadb_datetime` is a pure module of its own. The
+   fixture below is the iOS spelling now; it used to be the MariaDB one, which
+   is the whole reason claims 1-6 passed while nothing on the farm could land.
 """
 
 import base64
@@ -75,6 +83,18 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 UUID = "6F1B2C3D-4E5F-4A6B-8C9D-0E1F2A3B4C5D"
 
 
+#: What the handset stamps `submitted_at` with, verbatim: `AppFeedback`
+#: builds it with an `ISO8601DateFormatter` in UTC. **THE FIXTURE USED TO SAY
+#: `2026-08-01 06:42:11` AND THAT IS WHY THIS SUITE PASSED WHILE NO NOTE ON THE
+#: FARM COULD LAND** — a MariaDB-shaped string no iPhone has ever sent, checked
+#: against a store that does not mind either shape. See `AnInstantOffAnIPhone`.
+SENT_AT = "2026-08-01T06:42:11Z"
+
+#: The same instant as a `Datetime` column will take it, which is what must be
+#: on the row afterwards.
+STORED_AT = "2026-08-01 06:42:11"
+
+
 def a_note(**overrides) -> dict:
 	"""What `AppFeedback.requestParams` posts, with the keys it always sends."""
 	body = {
@@ -84,7 +104,7 @@ def a_note(**overrides) -> dict:
 		"screen_label": "Harvest Day",
 		"comment": "The bucket count resets when I lock the phone.",
 		"was_dictated": True,
-		"submitted_at": "2026-08-01 06:42:11",
+		"submitted_at": SENT_AT,
 		"app_version": "1.9.0",
 		"app_build": "412",
 		"device_model": "iPhone17,2",
@@ -350,7 +370,7 @@ class MultipartArrivesAsOneBody(AppFeedbackTestCase):
 				"entry_uuid": UUID,
 				"screen": "bucket_capture",
 				"comment": "The shutter fires before the bucket is in frame.",
-				"submitted_at": "2026-08-02 07:10:00",
+				"submitted_at": "2026-08-02T07:10:00Z",
 				"role": "Checker",
 			},
 			files={"screenshot": ("shot.jpg", JPEG, "image/jpeg")},
@@ -497,3 +517,80 @@ class TheOnlyTwoRefusals(AppFeedbackTestCase):
 				}
 			).insert(ignore_permissions=True)
 		self.assertIn("maximum", str(caught.exception))
+
+
+# ── 7. the instant ──────────────────────────────────────────────────────────
+class AnInstantOffAnIPhone(AppFeedbackTestCase):
+	"""**THE ROUTE WENT LIVE AND EVERY NOTE STILL 500'd, FOR THE THIRD TIME AT
+	THIS BOUNDARY.** `AppFeedback` stamps `submitted_at` with an
+	`ISO8601DateFormatter` in UTC — `2026-08-01T06:42:11Z` — and this tool put
+	that string straight into a `Datetime` column, which MariaDB answers with
+	`OperationalError (1292, "Incorrect datetime value")` at the insert. The
+	note validated, the screenshot stored, the write died. From the handset it
+	looked like nothing at all: a 500 is retried with backoff, so Settings said
+	"Waiting to reach the farm" over a backlog that could never drain.
+
+	It is the same failure as `training_completed_at` (v0.59.1) and as the
+	bucket capture queue, which is why `datetimes.as_mariadb_datetime` is its
+	own pure module. Every JSON producer writing a Frappe `Datetime` goes
+	through it.
+
+	**AND THIS SUITE PASSED THROUGHOUT.** `a_note` claimed to be "what
+	`AppFeedback.requestParams` posts" and posted `2026-08-01 06:42:11`, a shape
+	no iPhone produces, against a store with no opinion about datetime syntax.
+	The fixture is the iOS spelling now, so every test above is also a test that
+	the conversion happened.
+	"""
+
+	def test_the_stamp_the_handset_sends_is_stored_as_the_column_takes_it(self):
+		self.file()
+		self.assertEqual(self.only()["timestamp"], STORED_AT)
+
+	def test_an_offset_is_applied_rather_than_dropped(self):
+		"""One zone in the column for every row. Keeping the wall clock and
+		discarding the offset would file two notes two hours apart as the same
+		moment, and the feed is sorted on this column."""
+		self.file({"submitted_at": "2026-08-01T08:42:11+02:00"})
+		self.assertEqual(self.only()["timestamp"], STORED_AT)
+
+	def test_a_stamp_already_in_the_columns_shape_is_left_alone(self):
+		"""The Desk and the standalone fixtures both send this one."""
+		self.file({"submitted_at": STORED_AT})
+		self.assertEqual(self.only()["timestamp"], STORED_AT)
+
+	def test_the_older_spelling_is_converted_too(self):
+		"""`timestamp` is the fallback key the wrapper declares beside
+		`submitted_at`, and a fallback that skipped the conversion would be the
+		same bug behind a second door."""
+		body = a_note()
+		body.pop("submitted_at")
+		body["timestamp"] = SENT_AT
+		self.assertTrue(self.message(FEEDBACK, body)["created"])
+		self.assertEqual(self.only()["timestamp"], STORED_AT)
+
+	def test_an_unreadable_stamp_costs_the_stamp_and_never_the_note(self):
+		"""The house pattern elsewhere is `as_mariadb_datetime(x) or x` — hand
+		the raw string on so a validator names the field. Wrong here, for the
+		reason the truncation and the screenshot are handled as they are: the
+		caller is a queue that re-sends forever, so a refusal it cannot correct
+		is a note nobody ever reads."""
+		answer = self.file({"submitted_at": "the day after the rain"})
+		self.assertTrue(answer["created"])
+
+		row = self.only()
+		self.assertEqual(row["feedback_text"], "The bucket count resets when I lock the phone.")
+		self.assertTrue(row["timestamp"])
+		self.assertNotIn("T", str(row["timestamp"]))
+
+	def test_a_note_with_no_stamp_at_all_still_lands(self):
+		body = a_note()
+		body.pop("submitted_at")
+		self.assertTrue(self.message(FEEDBACK, body)["created"])
+		self.assertTrue(self.only()["timestamp"])
+
+	def test_the_docname_carries_the_year_the_note_was_written_in(self):
+		"""`autoname` reads `timestamp[:4]`, so a conversion that answered ""
+		would file a 2026 note under whatever `today()` said — the one thing
+		`AppFeedback.autoname` exists to prevent."""
+		self.file()
+		self.assertIn("2026", self.only()["name"])

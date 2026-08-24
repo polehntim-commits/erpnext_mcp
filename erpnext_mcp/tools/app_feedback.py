@@ -62,7 +62,7 @@ sends `screenshot_omitted: "too_large"` rather than holding the note back.
 
 import frappe
 
-from .. import compat
+from .. import compat, datetimes
 from ..args import as_bool, as_str
 from ..erpnext_mcp.doctype.app_feedback import app_feedback as feedback_doctype
 from ..errors import ToolError
@@ -129,6 +129,34 @@ def _existing(entry_uuid: str):
 	"""The note this site already holds under that UUID, or None."""
 	rows = frappe.db.get_all(APP_FEEDBACK, filters={"entry_uuid": entry_uuid}, fields=["name"], limit=1)
 	return rows[0]["name"] if rows else None
+
+
+def _submitted_at(args: dict) -> str:
+	"""When the worker wrote it, as a `Datetime` column will take it.
+
+	**THROUGH `as_mariadb_datetime` BECAUSE THE SENDER IS AN IPHONE, AND THIS
+	IS THE THIRD TIME THAT BOUNDARY HAS COST A REGISTER.** `AppFeedback` stamps
+	every note with an `ISO8601DateFormatter` in UTC — `2026-08-24T22:14:40Z` —
+	and MariaDB answers a DATETIME column set to that string with
+	`OperationalError (1292, "Incorrect datetime value")` at the insert. Same
+	shape, same 1292, same silence as the model registry's
+	`training_completed_at` (v0.59.1) and the bucket capture queue
+	(`api/mobile._bucket_entries`): every field validated, then died on the
+	write. Here it surfaced as a 500 per note and a handset repeating "Waiting
+	to reach the farm" with a backlog nothing could drain. See `datetimes.py`,
+	which exists precisely so this boundary has one answer.
+
+	**AN UNREADABLE STAMP FALLS BACK TO NOW RATHER THAN LOSING THE NOTE.** The
+	house pattern elsewhere is `as_mariadb_datetime(x) or x` — hand the raw
+	string on so a validator can name the field — and it is wrong here for the
+	reason the truncation and the screenshot are handled the way they are: this
+	route's caller is a queue that re-sends forever, so a refusal it cannot
+	correct is a note nobody ever reads. Arrival time is a worse answer than the
+	instant somebody typed and a far better one than no note at all, and it is
+	already what the controller substitutes for a blank.
+	"""
+	sent = as_str(args, "submitted_at") or as_str(args, "timestamp")
+	return datetimes.as_mariadb_datetime(sent) or frappe.utils.now()
 
 
 def _row(name: str) -> dict:
@@ -239,7 +267,7 @@ def submit_app_feedback(args: dict) -> ToolResult:
 		"role": as_str(args, "role"),
 		"designation": as_str(args, "designation"),
 		"company": as_str(args, "company") or None,
-		"timestamp": as_str(args, "submitted_at") or as_str(args, "timestamp") or frappe.utils.now(),
+		"timestamp": _submitted_at(args),
 		"received_at": frappe.utils.now(),
 		"app_version": as_str(args, "app_version"),
 		"app_build": as_str(args, "app_build"),

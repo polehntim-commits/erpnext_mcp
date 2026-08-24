@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.126.1 — 2026-08-24 — the note that reached the farm and died at the column
+
+**THE FEEDBACK ROUTE WENT LIVE IN v0.105.0 AND NOT ONE NOTE HAS EVER BEEN
+FILED.** Every call answered HTTP 500. `submit_app_feedback` put the handset's
+`submitted_at` straight into `App Feedback.timestamp`, and the handset stamps it
+with an `ISO8601DateFormatter` in UTC — `2026-08-24T22:14:40Z` — which MariaDB
+answers with `OperationalError (1292, "Incorrect datetime value")` at the
+insert. The note validated, the screenshot stored, the write died.
+
+**FROM THE PHONE IT LOOKED LIKE NOTHING AT ALL.** A 500 is retried with backoff
+rather than reported, so Settings said "Waiting to reach the farm" over a
+backlog that could never drain, and the one screen a worker can check said the
+same thing it says with no signal. `farmops-api 500
+/farmops/api/mobile/submit_app_feedback` in the container log was the only place
+this was visible.
+
+**THIRD TIME AT THIS BOUNDARY.** `training_completed_at` in v0.59.1, the bucket
+capture queue in `api/mobile._bucket_entries`, and now this: same shape, same
+1292, same silence. `datetimes.as_mariadb_datetime` exists precisely so that
+every JSON producer writing a Frappe `Datetime` has one answer, and this route
+did not call it. `_submitted_at` does now, through both spellings the wrapper
+declares — `submitted_at` and `timestamp`.
+
+**AN UNREADABLE STAMP FALLS BACK TO ARRIVAL TIME RATHER THAN LOSING THE NOTE.**
+The pattern elsewhere is `as_mariadb_datetime(x) or x`, which hands the raw
+string on so a validator can name the field. Wrong here for the reason the
+truncation and the screenshot are handled as they are: this route's caller is a
+queue that re-sends forever, so a refusal it cannot correct is a note nobody
+ever reads.
+
+**AND THE SUITE PASSED THROUGHOUT, FOR THE REASON v0.126.0's DID.** `a_note`
+called itself "what `AppFeedback.requestParams` posts" and posted
+`2026-08-01 06:42:11` — a MariaDB-shaped string no iPhone has ever produced.
+The harness has simulated 1292 since v0.59.1 and would have caught this on the
+day the route shipped; it was never handed the input. The fixture is the iOS
+spelling now, which makes all 38 existing tests conversion tests too, and
+`AnInstantOffAnIPhone` adds 7 more: the offset applied rather than dropped, both
+argument spellings, an already-converted stamp left alone, an unreadable one
+costing the stamp and not the note, and `autoname` still filing a note under the
+year it was written in. `test_app_feedback.py` goes from 38 to 45.
+
 ## 0.126.0 — 2026-08-24 — the tax lot search had never matched a parcel
 
 **THE PARCEL FORM'S COUNTY IMPORT COULD NOT FIND A TAX LOT, AND HAD NOT SINCE
