@@ -3,6 +3,58 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.127.0 — 2026-08-24 — the county's value wins
+
+**AN IMPORT FROM COUNTY GIS NOW OVERWRITES THE PARCEL FORM.** `parcel_id`,
+`acreage` and `county` are replaced with the county's values whether or not
+something is already there, alongside the boundary and everything derived from
+it, which always was. Nothing is skipped and nothing waits for an answer.
+
+**THIS REVERSES A POLICY THE APP HAS ARGUED FOR SINCE v0.34.0**, so it is worth
+saying which changed. That policy filled a blank field, left a populated one
+exactly where it was and reported the difference, on the reasoning that two
+sources which disagree are not the app's to choose between. "Two sources" is the
+part that does not hold: the assessor, the deed and the tax bill all describe the
+lot the county's layer describes, so a figure transcribed into this form years
+ago is not a competing claim but a stale copy of the same one. The app was asking
+the operator to resolve, every time, a question with the same answer every time.
+AN OPERATOR'S DECISION RATHER THAN A DEDUCTION, and it has been made.
+
+**WHAT IS REPORTED IS WHAT WAS REPLACED** — "Acreage: 41.5 replaced with 131.43,
+from the county." — in the summary after the save, with the old value beside the
+new one. A report and not a confirmation: it is the only place the previous value
+exists once the record is saved, which is what makes a wrong import recoverable
+by hand.
+
+**A FIELD THE COUNTY SAID NOTHING ABOUT IS NOT TOUCHED.** Blanking a populated
+field because the layer happened to be silent would be destroying data rather
+than importing any. And a `Float` at zero reads as blank rather than as a
+discarded figure — `acreage` on a new Parcel is `0`, not `""`, and the alternative
+was telling somebody that "Acreage: 0 replaced with 131.43". The zero rule is
+restricted to real numbers; a Data field holding "0" is a value somebody typed.
+
+**THE ACREAGE GUARD CAN NO LONGER FIRE ON AN IMPORT, and that is the one real
+cost.** `set_parcel_boundary` refuses a polygon disagreeing with the recorded
+acreage by more than a quarter, and that refusal used to be the automatic answer
+to "the wrong tax lot was imported". Overwriting the acreage first means the
+polygon is compared against a number off the same measurement, so it agrees by
+construction. THE PREVIEW REPLACES IT and was always the better check — the shape
+is drawn dashed on the satellite image beside the block the operator knows, and
+nothing is written until they press Apply. The guard still protects the AI, the
+phone and a hand-drawn polygon, because it lives in `set_parcel_boundary` and
+none of this touches it.
+
+**`title_holder` IS STILL NEVER WRITTEN**, which is not an exception to the above
+but a different thing: `Taxpayer` is free text off a tax roll and `title_holder`
+is a Link to a Related Party on this site, so writing one into the other is
+inventing a link between two registers by string match rather than using the
+county's value. The name is reported so a person can set it.
+
+`TheCountyValueWins` reads the JavaScript structurally — that `frm.set_value`
+comes before every test of the existing value, that the two early returns are
+about the county's answer rather than the field being occupied, and that the
+overwritten fields are exactly three. `test_gis_import.py` goes from 73 to 79.
+
 ## 0.126.1 — 2026-08-24 — the note that reached the farm and died at the column
 
 **THE FEEDBACK ROUTE WENT LIVE IN v0.105.0 AND NOT ONE NOTE HAS EVER BEEN

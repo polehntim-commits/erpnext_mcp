@@ -9649,17 +9649,47 @@ would ever say what happened. There is a test that reads the outgoing parameters
 report a malformed query as "the county has never heard of your parcel". It is
 checked by name, first.
 
-### What the import fills in, and what it refuses to
+### What the import writes, and what it refuses to
 
-An empty field being filled is not an overwrite; a field that already has a value
-is left exactly where it is and the difference is reported.
+**The county's value wins. Since v0.127.0 an import OVERWRITES what is on the
+form, and does not ask.** v0.34.0 to v0.126.0 did the opposite — it filled a
+blank field, left a populated one exactly where it was and reported the
+difference, on the reasoning that two sources which disagree are not the app's to
+choose between. That is a defensible policy and it is not the one this farm
+wants: the assessor, the deed and the tax bill all describe the lot the county's
+layer describes, so a figure transcribed into this form years ago is the stale
+copy of it.
 
 | Form field | From the county |
 | --- | --- |
-| `parcel_id` | `MapTaxlot` — filled if blank |
-| `acreage` | `CalculatedAcres` — filled if blank |
-| `county` | the service's own label, trimmed to "Wasco" |
+| `parcel_id` | `MapTaxlot` — replaced |
+| `acreage` | `CalculatedAcres` — replaced |
+| `county` | the service's own label, trimmed to "Wasco" — replaced |
+| `boundary_geojson` and everything derived from it | the polygon, through `set_parcel_boundary` — replaced, as it always was |
 | `title_holder` | **never**. `Taxpayer` is free text off a tax roll; `title_holder` is a Link to a Related Party on this site, and matching one to the other by string is how a parcel ends up owned by the wrong entity in an accounting system. It is shown and left to a person. |
+
+**A field the county said nothing about is not touched.** Blanking a populated
+field because the layer happened to be silent about it would be destroying data
+rather than importing any, so the only reason the import skips a field is that
+there is no value to write.
+
+**What is reported is what was replaced**, in the summary after the save, with
+the old value beside the new one — a report and not a confirmation. Nothing waits
+on it, and it is the only place the previous value exists once the record is
+saved, so it is what makes a wrong import recoverable by hand.
+
+**This takes the acreage guard out of the loop, which is the one real cost.**
+`set_parcel_boundary` refuses a polygon that disagrees with the recorded acreage
+by more than a quarter, and that refusal used to be the app's automatic answer to
+"the wrong tax lot was imported" — a parcel recorded at 131 acres would not accept
+a 41-acre lot's shape. Overwriting the acreage with the county's own figure first
+means the polygon is compared against a number off the same measurement, so it
+agrees and the guard cannot fire on an import. **The preview replaces it**, and
+was always the better check: the shape is drawn dashed on the satellite image
+beside the block the operator knows, and nothing is written until they press
+Apply. The guard still protects every other caller — the AI, the phone, a
+hand-drawn polygon — because it lives in `set_parcel_boundary`, which none of
+this touches.
 
 Both acreages are always reported side by side — the county's, computed on its own
 projected grid, and this app's, computed spherically from the same polygon. They

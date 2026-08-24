@@ -262,6 +262,101 @@ class TheWidgetAndTheMethodAgree(unittest.TestCase):
 		self.assertLess(dialog.index("2N 11E 1 CC 4039"), dialog.index("2N11E35BA-01600"))
 
 
+class TheCountyValueWins(unittest.TestCase):
+	"""v0.127.0. AN IMPORT OVERWRITES, AND THE POLICY REVERSED ON PURPOSE.
+
+	v0.34.0 to v0.126.0 filled a blank field and LEFT A POPULATED ONE ALONE,
+	reporting the difference: an acreage typed off a deed and a county GIS that
+	disagreed were two sources, and the app declined to pick between them. That
+	was a defensible policy and it is not the one this farm wants — the assessor,
+	the deed and the tax bill all describe the lot the county's layer describes,
+	so a figure transcribed into this form years ago is the stale copy. The
+	county's value now replaces it, without asking.
+
+	READ STRUCTURALLY OUT OF THE JAVASCRIPT rather than asserted as a substring,
+	for the same reason as `TheWidgetAndTheMethodAgree`: the interesting claim is
+	that NO BRANCH CAN SKIP THE WRITE, and a file that merely contains the words
+	`set_value` proves nothing about whether a condition guards it.
+	"""
+
+	WIDGET = TheWidgetAndTheMethodAgree.WIDGET
+
+	def consider_body(self) -> str:
+		"""The body of `consider`, which is the whole fill policy in one function."""
+		source = self.WIDGET.read_text(encoding="utf-8")
+		self.assertIn("function consider(fieldname, label, value) {", source)
+		start = source.index("function consider(fieldname, label, value) {")
+		depth, index = 0, source.index("{", start)
+		while index < len(source):
+			depth += {"{": 1, "}": -1}.get(source[index], 0)
+			index += 1
+			if not depth:
+				break
+		return source[start:index]
+
+	def test_the_write_is_not_guarded_by_whether_the_field_is_populated(self):
+		"""THE ASSERTION THAT IS ACTUALLY ABOUT THE POLICY. `frm.set_value` comes
+		BEFORE every mention of `current` that is not the two early returns, so no
+		test of the existing value can stand between the county's answer and the
+		field. A keep-what-is-there branch reintroduced later has to move that
+		line to work, and moving it fails here."""
+		body = self.consider_body()
+		write = body.index("frm.set_value(fieldname, value);")
+		self.assertIn("is_blank(current)", body)
+		self.assertLess(write, body.index("is_blank(current)"))
+		self.assertNotIn("else if", body)
+
+	def test_the_only_reasons_to_return_early_are_no_value_and_the_same_value(self):
+		"""Two returns, and neither is about the field being occupied. A county
+		that said nothing has nothing to write — blanking a populated field
+		because the layer happens to be silent would be destroying data rather
+		than importing any — and a value that already matches is written past in
+		silence because there is nothing to report."""
+		body = self.consider_body()
+		self.assertEqual(body.count("return;"), 2)
+		guard = body[: body.index("frm.set_value(fieldname, value);")]
+		self.assertIn('value == null || value === ""', guard)
+		self.assertIn("=== String(value)", guard)
+
+	def test_the_sentence_the_old_policy_spoke_is_gone_from_the_widget(self):
+		""" "left as it was" was the user-visible half of the old behaviour. It
+		cannot survive a change that no longer leaves anything as it was, and its
+		presence anywhere in the file would mean a skip path came back."""
+		source = self.WIDGET.read_text(encoding="utf-8")
+		self.assertNotIn("left as it was", source)
+
+	def test_a_replacement_reports_the_value_it_replaced(self):
+		"""OVERWRITING WITHOUT SAYING WHAT WAS OVERWRITTEN IS THE ONE THING THAT
+		WOULD MAKE A WRONG IMPORT UNRECOVERABLE. The summary is a report and not a
+		confirmation — nothing waits on it — but it has to carry the old value,
+		because after the save that is the only place it exists."""
+		body = self.consider_body()
+		self.assertIn("replaced.push", body)
+		self.assertIn("[label, current, value]", body)
+
+	def test_a_float_field_at_zero_reads_as_blank_and_not_as_a_discarded_figure(self):
+		"""`acreage` ON A PARCEL NOBODY HAS TYPED ONE INTO IS `0`, not null and not
+		"". A blank test that knew only those two would tell somebody creating a
+		parcel that "Acreage: 0 replaced with 131.43" — noise, and a claim that a
+		figure existed and was thrown away. The zero rule is restricted to values
+		that are really numbers, because a Data field holding "0" is a value
+		somebody typed."""
+		source = self.WIDGET.read_text(encoding="utf-8")
+		self.assertIn('typeof value === "number" && value === 0', source)
+
+	def test_title_holder_is_still_never_written_from_the_tax_roll(self):
+		"""NOT AN EXCEPTION TO THE POLICY BUT A DIFFERENT THING. `title_holder` is
+		a Link to a Related Party on this site and `Taxpayer` is free text off a
+		tax roll; writing one into the other is not "use the county's value", it
+		is inventing a link between two registers by string match. The county
+		fields that ARE overwritten are named here so that a fourth one arriving
+		is a deliberate edit."""
+		source = self.WIDGET.read_text(encoding="utf-8")
+		considered = re.findall(r'consider\("(\w+)"', source)
+		self.assertEqual(considered, ["parcel_id", "acreage", "county"])
+		self.assertNotIn('frm.set_value("title_holder"', source)
+
+
 # ── the gates ───────────────────────────────────────────────────────────────
 class TheGatesRefuseWhatTheyShould(GISTestCase):
 	def setUp(self):

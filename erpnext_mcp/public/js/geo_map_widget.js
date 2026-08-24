@@ -1238,27 +1238,48 @@ frappe.provide("erpnext_mcp.geo_map");
 	}
 
 	/**
-	 * Put the county's shape on the form and save it, filling only what is empty.
+	 * Put the county's shape on the form and save it, replacing what is there.
 	 *
-	 * AN EMPTY FIELD BEING FILLED IS NOT AN OVERWRITE, and that line is the whole
-	 * policy here. A parcel whose acreage was typed off the deed and a county
-	 * whose GIS says something different are two sources that disagree, and the
-	 * app's job is to say so rather than to pick — so a value already on the form
-	 * is left exactly where it is and the difference is reported. A blank field
-	 * has no second source to lose.
+	 * THE COUNTY WINS, WHICH IS AN OPERATOR'S DECISION AND NOT A DEDUCTION — and
+	 * v0.34.0 to v0.126.0 did the opposite, so it is worth saying which changed
+	 * and why. Those releases treated a populated field as a second source to be
+	 * protected: an acreage typed off a deed and a county GIS that disagreed were
+	 * two claims, and the form reported the difference rather than picking. That
+	 * is a defensible policy and it is not the one this farm wants. The assessor,
+	 * the deed and the tax bill all describe the same lot the county's layer
+	 * does; a figure typed into this form years ago is a transcription of that
+	 * lot, and when the two disagree it is nearly always the transcription that
+	 * is stale. So from v0.127.0 an import OVERWRITES, and does not ask.
 	 *
-	 * THE ACREAGE MATTERS MORE THAN IT LOOKS. `set_parcel_boundary` REFUSES a
-	 * polygon that disagrees with the recorded acreage by more than a quarter, so
-	 * a parcel recorded at 131 acres and a tax lot that is really 41 will be
-	 * refused by the server — which is the correct outcome and usually means the
-	 * wrong lot was imported. Filling a BLANK acreage from the county is safe for
-	 * the opposite reason: the county's acres and the county's polygon are the
-	 * same measurement, so they cannot disagree with each other.
+	 * WHAT IS REPORTED IS WHAT WAS REPLACED, not a request to confirm it. The
+	 * summary lists the old value beside the new one for every field that
+	 * changed, which is what makes a wrong import recoverable by hand — but
+	 * nothing is skipped and nothing is held back waiting for an answer.
 	 *
-	 * `title_holder` IS NEVER TOUCHED. It is a Link to a Related Party on this
-	 * site, and the county's `Taxpayer` is a free-text name off a tax roll —
-	 * resolving one to the other by string match is how a parcel ends up owned by
-	 * the wrong entity in an accounting system.
+	 * THIS TAKES THE ACREAGE GUARD OUT OF THE LOOP, and that is the one real cost.
+	 * `set_parcel_boundary` REFUSES a polygon that disagrees with the recorded
+	 * acreage by more than a quarter, and until now that refusal was the app's
+	 * automatic answer to "the wrong tax lot was imported": a parcel recorded at
+	 * 131 acres would not accept a 41-acre lot's shape. Overwriting the acreage
+	 * with the county's own figure first means the polygon is then compared
+	 * against a number that came off the same measurement, so it always agrees
+	 * and the guard can no longer fire on an import.
+	 *
+	 * WHAT REPLACES IT IS THE PREVIEW, which was always the better check and is
+	 * why it exists. The county's shape is drawn dashed on the satellite image
+	 * next to the block the operator knows, and nothing is written until they
+	 * press Apply on that row. A wrong lot is obvious there in under a second, in
+	 * a way that an acreage percentage never was. The guard still protects every
+	 * other caller — the AI, the phone, a hand-drawn polygon — because it lives
+	 * in `set_parcel_boundary` and none of this touches it.
+	 *
+	 * `title_holder` IS STILL NEVER TOUCHED, and that is not an exception to the
+	 * policy above but a different thing entirely. It is a Link to a Related Party
+	 * on this site and the county's `Taxpayer` is free text off a tax roll;
+	 * writing one into the other is not "use the county's value", it is inventing
+	 * a link between two registers by string match, which is how a parcel ends up
+	 * owned by the wrong entity in an accounting system. The name is reported so
+	 * a person can set it themselves.
 	 */
 	function apply_county_feature(frm, ctx, feature, result) {
 		ctx.group.clearLayers();
@@ -1268,22 +1289,46 @@ frappe.provide("erpnext_mcp.geo_map");
 		ctx.mark_dirty();
 
 		const filled = [];
+		const replaced = [];
 		const kept = [];
 
+		/** Whether there was anything there to replace, for the summary's wording.
+		 *
+		 * A FLOAT FIELD HAS NO EMPTY. `acreage` on a Parcel that nobody has typed
+		 * one into is `0`, not `""` and not null — so a check that only knew about
+		 * null and the empty string would tell somebody creating a parcel that
+		 * "Acreage: 0 replaced with 131.43", which is both noise and a claim that
+		 * a figure existed and was discarded. The zero test is deliberately
+		 * restricted to values that are actually NUMBERS: a Data field holding the
+		 * string "0" is a value somebody typed.
+		 *
+		 * This decides the WORDING ONLY. Both branches write; nothing here can
+		 * skip a field.
+		 */
+		const is_blank = (value) =>
+			value == null || value === "" || (typeof value === "number" && value === 0);
+
+		/** Write the county's value over whatever is there, and say what moved.
+		 *
+		 * THE ONLY REASON TO RETURN EARLY IS THAT THE COUNTY SAID NOTHING. A field
+		 * the layer did not answer for has no new value to write, and blanking a
+		 * populated field because the county happens to be silent about it would
+		 * be destroying data rather than importing any. A value that already
+		 * matches is written past in silence — there is nothing to report.
+		 */
 		function consider(fieldname, label, value) {
 			if (value == null || value === "") {
 				return;
 			}
 			const current = frm.doc[fieldname];
-			if (!current) {
-				frm.set_value(fieldname, value);
+			if (String(current == null ? "" : current) === String(value)) {
+				return;
+			}
+			frm.set_value(fieldname, value);
+			if (is_blank(current)) {
 				filled.push(__("{0} set to {1}", [label, value]));
-			} else if (String(current) !== String(value)) {
-				kept.push(__("{0}: the county says {1}, this record says {2} — left as it was.", [
-					label,
-					value,
-					current,
-				]));
+			} else {
+				replaced.push(__("{0}: {1} replaced with {2}, from the county.", [label, current, value]));
 			}
 		}
 
@@ -1313,7 +1358,7 @@ frappe.provide("erpnext_mcp.geo_map");
 			);
 		}
 
-		const notes = filled.concat(kept);
+		const notes = replaced.concat(filled, kept);
 		const finish = () =>
 			ctx.save().then((result) => {
 				if (result && notes.length) {
@@ -1328,12 +1373,17 @@ frappe.provide("erpnext_mcp.geo_map");
 		// The form's own fields are saved FIRST, because the boundary tool reads
 		// the acreage it is about to compare against out of the database. Saving
 		// the shape against an acreage that is still only on the screen would
-		// compare it with whatever was there before.
+		// compare it with whatever was there before — WHICH FROM v0.127.0 IS THE
+		// WHOLE POINT OF THE ORDER RATHER THAN A DETAIL OF IT. The acreage on
+		// screen is now the county's, and the polygon is the county's; getting
+		// them to disk in that order is what lets `set_parcel_boundary` compare
+		// two halves of one measurement instead of the new shape against the old
+		// record's number, which is the comparison that would refuse.
 		//
 		// A NEVER-SAVED PARCEL TAKES THE SAME PATH, which is why `is_new` is asked
 		// alongside `is_dirty` rather than left to `save()` to notice. Importing a
 		// tax lot onto a blank Parcel form is the ordinary way to create one from
-		// v0.34.0: the county fills in the parcel ID, the acreage and the county
+		// v0.34.0: the county sets the parcel ID, the acreage and the county
 		// name, and those three are precisely the values the boundary tool is
 		// about to check the polygon against — so they have to be on disk before
 		// the polygon is offered, on a new record exactly as on an old one.
