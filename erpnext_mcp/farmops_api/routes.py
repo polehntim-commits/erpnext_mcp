@@ -1151,6 +1151,32 @@ ROUTES = (
 	# and `list_available_for_me`, both of which are already mounted open, and
 	# it answers for the authenticated caller alone.
 	Route("/mobile", mobile_api.list_tasks_by_location),
+	# v0.130.0. THE STRATEGY REGISTER, which v0.123.0's sweep left behind when it
+	# took the competitive ones beside it. `tools/strategy.py` was the last whole
+	# module in this app with no door onto this transport at all.
+	#
+	# EVERY ONE OF THE EIGHT CARRIES THE HR GATE, reads included, and that is a
+	# departure from the rule that reads open on enrolment. The rule is about the
+	# CALLER'S OWN WORK — a task list, a shift, a re-entry interval — and a
+	# strategic plan is not that. It is the vision, the SWOT, the command
+	# structure and the exit strategy, which is to say what the owners intend to
+	# do with the business, and a picker is entitled to their own work rather
+	# than to that. The competitive registers directly above take the same gate
+	# for the same reason and this is the other half of that decision.
+	#
+	# THE SWITCHES DO NOT REACH THIS TRANSPORT. `allow_list_strategic_plans` and
+	# its seven siblings gate `registry.dispatch`, and nothing on this path goes
+	# through `dispatch` — `api/mobile.py` calls the tool functions directly, so
+	# the switch is never consulted here. The gate above IS the control on this
+	# door, which is why it is an HR role and not enrolment.
+	Route("/mobile", mobile_api.list_strategic_plans),
+	Route("/mobile", mobile_api.get_strategic_plan),
+	Route("/mobile", mobile_api.list_strategic_objectives),
+	Route("/mobile", mobile_api.get_strategic_objective),
+	Route("/mobile", mobile_api.create_strategic_plan),
+	Route("/mobile", mobile_api.update_strategic_plan),
+	Route("/mobile", mobile_api.create_strategic_objective),
+	Route("/mobile", mobile_api.update_strategic_objective),
 )
 
 #: Path → Route. Built once at import; there is nothing dynamic about it.

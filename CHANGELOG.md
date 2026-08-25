@@ -3,6 +3,57 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.130.0 — 2026-08-25 — the last register with no door, and the switch that was never on this side
+
+**THE STRATEGY REGISTER REACHES A HANDSET.** `tools/strategy.py` was the last
+whole module in this app with no route onto the mobile transport at all.
+v0.123.0's sweep took the HACCP, traceability, sensor, MRL and competitive
+registers and left the eight beside them: `list`/`get`/`create`/`update` for
+Strategic Plan and Strategic Objective. 286 routes, up from 278.
+
+**EVERY ONE OF THE EIGHT CARRIES THE HR GATE, READS INCLUDED,** which is a
+departure from this surface's rule that reads open on enrolment. The rule is
+about the CALLER'S OWN WORK — their tasks, their shift, the re-entry interval on
+the block they are walking into. A strategic plan is not that: it is the vision,
+the SWOT, the command structure and the exit strategy, which is what the owners
+intend to do with the business. The competitive registers directly above it took
+the same gate in v0.123.0 for the same reason, and this is the other half of that
+decision. `test_farmops_api.TheNewRegistersAreGated` drives all eight as a plain
+enrolled Field Worker and asserts the refusal.
+
+**THE `allow_<tool>` SWITCHES DO NOT REACH THIS TRANSPORT, AND THAT IS WHY THE
+GATE IS A ROLE.** It is worth writing down plainly because it is the opposite of
+what the switch's name suggests. `settings.tool_enabled` is read inside
+`registry.dispatch`; `api/mobile.py` calls the tool functions directly and never
+goes through `dispatch` — zero call sites. Demonstrated rather than reasoned
+about: with `allow_list_food_safety_plans` set to 0, the MCP path answers
+"the read tool 'list_food_safety_plans' is switched off on this site" and the
+mobile path returns the rows. So on `/farmops/api/mobile/*` the controls are the
+global mobile enable, the Farm Ops role, an Active Mobile Access Grant, and the
+gate written in the wrapper body — and nothing else. Route omission was never a
+security control here, but neither is the switch: the wrapper's own gate is the
+whole of it, which is what `TheNewRegistersAreGated` has said since v0.123.0.
+
+**BOTH DOCNAMES ARE SCOPED ON EVERY CALL THAT TAKES ONE.** `get`/`update` scope
+the plan or objective through `guard.require_scoped_doc`, and the links are
+scoped separately: a `previous_version` a plan is made to supersede, and the
+`strategic_plan` an objective is filed under or moved to. A docname from another
+entity reads as NOT FOUND rather than refused, so another entity's docnames
+cannot be mapped by watching which error comes back. Both DocTypes scope on
+`company`, so the check binds.
+
+**The eight are in `PENDING_IOS_INTEGRATION`, not `MOBILE`.** `MobileAPI.swift`
+names none of them, so there is no Swift Codable to mirror and a contract test
+would be asserting an invented shape. The server half ships first; they move up
+when the constants land.
+
+12,593 tests, green — the same count as v0.129.1, because the eight are driven
+as `subTest` cases inside `TheNewRegistersAreGated`'s existing gate tests rather
+than as new test methods. The coverage that matters was proved by removing
+`personnel.require_hr_role()` from `list_strategic_plans` and watching a Field
+Worker get 200 and the plan register back; with the gate in place the same call
+is refused.
+
 ## 0.129.1 — 2026-08-25 — the polygon was a block and the parcel was not
 
 **The suite has been red since v0.125.0 and the failure was a fixture, not the

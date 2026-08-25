@@ -740,6 +740,17 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/update_competitive_move",
 		"/mobile/update_market_participant",
 		"/mobile/list_tasks_by_location",
+		# v0.130.0. The strategy register — the last module in this app with no
+		# door onto this transport at all. HR-gated on every one of the eight,
+		# reads included; see `TheNewRegistersAreGated.HR_GATED`.
+		"/mobile/list_strategic_plans",
+		"/mobile/get_strategic_plan",
+		"/mobile/list_strategic_objectives",
+		"/mobile/get_strategic_objective",
+		"/mobile/create_strategic_plan",
+		"/mobile/update_strategic_plan",
+		"/mobile/create_strategic_objective",
+		"/mobile/update_strategic_objective",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):
@@ -2575,6 +2586,18 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"update_acquisition_target",
 		"update_competitive_move",
 		"update_market_participant",
+		# v0.130.0. The strategy register, the other half of the same decision:
+		# a plan's vision, SWOT, command structure and exit strategy are what
+		# the owners intend to do with the business, and the reads carry the HR
+		# gate for the same reason the competitive reads above do.
+		"create_strategic_objective",
+		"create_strategic_plan",
+		"get_strategic_objective",
+		"get_strategic_plan",
+		"list_strategic_objectives",
+		"list_strategic_plans",
+		"update_strategic_objective",
+		"update_strategic_plan",
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
@@ -2623,7 +2646,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 74, "a method is named in two sets at once")
+		self.assertEqual(len(named), 82, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
@@ -2653,7 +2676,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	PERSONNEL = "may not change the personnel register"
 
 	def test_a_picker_is_refused_every_competitive_register_read_and_write(self):
-		"""What this farm thinks a rival is worth is not a picker's to read."""
+		"""What this farm thinks a rival is worth — and what it intends to do
+		with itself — is not a picker's to read."""
 		for method in sorted(self.HR_GATED):
 			with self.subTest(method=method):
 				status, body = self.refusal(f"{PREFIX}/mobile/{method}")

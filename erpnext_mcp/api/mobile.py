@@ -156,6 +156,7 @@ from ..tools import shadow_log as shadow_log_tools
 from ..tools import shipments as shipment_tools
 from ..tools import spray as spray_tools
 from ..tools import stock_inventory as stock_tools
+from ..tools import strategy as strategy_tools
 from ..tools import tasktemplates as template_tools
 from ..tools import tax_remittance as remittance_tools
 from ..tools import trace as trace_tools
@@ -17606,3 +17607,376 @@ def list_tasks_by_location(
 		if given not in (None, ""):
 			inner[key] = given
 	return fieldwork.list_tasks_by_location(inner).data
+
+
+# ── 247. list_strategic_plans ───────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_strategic_plans", limit=guard.READ_LIMIT)
+def list_strategic_plans(
+	user: str,
+	company=None,
+	status=None,
+	crop=None,
+	limit=None,
+) -> dict:
+	"""The strategy register for this entity, newest first.
+
+	THE HR GATE, not the field-ops one, and for the same reason the
+	competitive registers carry it: a strategic plan is a holding-company
+	document — the vision, the SWOT, the exit strategy — and the picker
+	holding the phone is entitled to their own work rather than to what
+	the owners intend to do with the business.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR: `guard.require_company`
+	refuses an entity this caller cannot reach, and the tool filters on
+	the one that survives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	for key, given in (
+		("status", status),
+		("crop", crop),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return strategy_tools.list_strategic_plans(inner).data
+
+
+# ── 248. get_strategic_plan ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_strategic_plan", limit=guard.READ_LIMIT)
+def get_strategic_plan(
+	user: str,
+	strategic_plan=None,
+) -> dict:
+	"""One plan in full, with the objectives under it and their KPI state.
+
+	THE HR GATE. See `list_strategic_plans` — this is the same register
+	read one document at a time, and the detail is the part a rival's
+	handset would most want.
+
+	SCOPED ON THE DOCNAME: `guard.require_scoped_doc` refuses a document
+	belonging to an entity this caller cannot reach, and refuses it as
+	NOT FOUND so the docnames of another entity cannot be mapped by
+	watching which error comes back.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(strategy_tools.PLAN, strategic_plan, "strategic_plan", allowed)
+	return strategy_tools.get_strategic_plan({"strategic_plan": named}).data
+
+
+# ── 249. list_strategic_objectives ──────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_strategic_objectives", limit=guard.READ_LIMIT)
+def list_strategic_objectives(
+	user: str,
+	company=None,
+	strategic_plan=None,
+	status=None,
+	due_from=None,
+	due_to=None,
+	limit=None,
+) -> dict:
+	"""The objectives under the plans, with the overdue ones named.
+
+	THE HR GATE, as with the plan itself. An objective carries the KPI
+	target and what was actually measured against it, which is a
+	statement about how the business is doing rather than about the
+	caller's own work.
+
+	THE PLAN FILTER IS SCOPED SEPARATELY when one is named, so a docname
+	from another entity narrows nothing and reads as NOT FOUND rather
+	than silently returning that entity's objectives.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	if strategic_plan not in (None, ""):
+		inner["strategic_plan"] = guard.require_scoped_doc(
+			strategy_tools.PLAN, strategic_plan, "strategic_plan", allowed
+		)
+	for key, given in (
+		("status", status),
+		("due_from", due_from),
+		("due_to", due_to),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return strategy_tools.list_strategic_objectives(inner).data
+
+
+# ── 250. get_strategic_objective ────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_strategic_objective", limit=guard.READ_LIMIT)
+def get_strategic_objective(
+	user: str,
+	strategic_objective=None,
+) -> dict:
+	"""One objective: its KPI target, what was measured, and when.
+
+	THE HR GATE, and SCOPED ON THE DOCNAME the same way
+	`get_strategic_plan` is — a refusal reads as NOT FOUND so another
+	entity's docnames cannot be mapped from the error.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(
+		strategy_tools.OBJECTIVE, strategic_objective, "strategic_objective", allowed
+	)
+	return strategy_tools.get_strategic_objective({"strategic_objective": named}).data
+
+
+# ── 251. create_strategic_plan ──────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_strategic_plan", limit=guard.WRITE_LIMIT, mutating=True)
+def create_strategic_plan(
+	user: str,
+	company=None,
+	plan_name=None,
+	crop=None,
+	status=None,
+	timeframe=None,
+	previous_version=None,
+	effective_date=None,
+	retired_date=None,
+	description=None,
+	vision=None,
+	mission=None,
+	values_text=None,
+	swot=None,
+	porters_five_forces=None,
+	sustainable_advantage=None,
+	analogous_games=None,
+	grand_strategy=None,
+	business_strategy=None,
+	command_structure=None,
+	functional_tactics=None,
+	validation_control=None,
+	exit_strategy=None,
+	notes=None,
+) -> dict:
+	"""Open a strategic plan for this entity.
+
+	THE HR GATE ON THE WRITE TOO. A plan is superseded rather than
+	rewritten — `previous_version` is how a plan points at the one it
+	replaces — so what this creates is a document the business is
+	measured against afterwards, and that is not a picker's call.
+
+	SCOPED BY THE COMPANY IT IS ASKED FOR, and `previous_version` is
+	scoped separately when given so a plan cannot be made to supersede
+	another entity's.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	if previous_version not in (None, ""):
+		inner["previous_version"] = guard.require_scoped_doc(
+			strategy_tools.PLAN, previous_version, "previous_version", allowed
+		)
+	for key, given in (
+		("plan_name", plan_name),
+		("crop", crop),
+		("status", status),
+		("timeframe", timeframe),
+		("effective_date", effective_date),
+		("retired_date", retired_date),
+		("description", description),
+		("vision", vision),
+		("mission", mission),
+		("values_text", values_text),
+		("swot", swot),
+		("porters_five_forces", porters_five_forces),
+		("sustainable_advantage", sustainable_advantage),
+		("analogous_games", analogous_games),
+		("grand_strategy", grand_strategy),
+		("business_strategy", business_strategy),
+		("command_structure", command_structure),
+		("functional_tactics", functional_tactics),
+		("validation_control", validation_control),
+		("exit_strategy", exit_strategy),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return strategy_tools.create_strategic_plan(inner).data
+
+
+# ── 252. update_strategic_plan ──────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_strategic_plan", limit=guard.WRITE_LIMIT, mutating=True)
+def update_strategic_plan(
+	user: str,
+	strategic_plan=None,
+	plan_name=None,
+	crop=None,
+	status=None,
+	timeframe=None,
+	previous_version=None,
+	effective_date=None,
+	retired_date=None,
+	description=None,
+	vision=None,
+	mission=None,
+	values_text=None,
+	swot=None,
+	porters_five_forces=None,
+	sustainable_advantage=None,
+	analogous_games=None,
+	grand_strategy=None,
+	business_strategy=None,
+	command_structure=None,
+	functional_tactics=None,
+	validation_control=None,
+	exit_strategy=None,
+	notes=None,
+) -> dict:
+	"""Revise a plan in place.
+
+	THE HR GATE, and SCOPED ON THE DOCNAME — both the plan being revised
+	and any `previous_version` it is made to point at, so neither can
+	reach out of the caller's entities.
+
+	PASS ONLY WHAT CHANGES. Omitted fields are left alone.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(strategy_tools.PLAN, strategic_plan, "strategic_plan", allowed)
+	inner: dict = {"strategic_plan": named}
+	if previous_version not in (None, ""):
+		inner["previous_version"] = guard.require_scoped_doc(
+			strategy_tools.PLAN, previous_version, "previous_version", allowed
+		)
+	for key, given in (
+		("plan_name", plan_name),
+		("crop", crop),
+		("status", status),
+		("timeframe", timeframe),
+		("effective_date", effective_date),
+		("retired_date", retired_date),
+		("description", description),
+		("vision", vision),
+		("mission", mission),
+		("values_text", values_text),
+		("swot", swot),
+		("porters_five_forces", porters_five_forces),
+		("sustainable_advantage", sustainable_advantage),
+		("analogous_games", analogous_games),
+		("grand_strategy", grand_strategy),
+		("business_strategy", business_strategy),
+		("command_structure", command_structure),
+		("functional_tactics", functional_tactics),
+		("validation_control", validation_control),
+		("exit_strategy", exit_strategy),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return strategy_tools.update_strategic_plan(inner).data
+
+
+# ── 253. create_strategic_objective ─────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("create_strategic_objective", limit=guard.WRITE_LIMIT, mutating=True)
+def create_strategic_objective(
+	user: str,
+	company=None,
+	strategic_plan=None,
+	objective=None,
+	status=None,
+	due_date=None,
+	owner_role=None,
+	kpi_metric=None,
+	kpi_target=None,
+	kpi_actual=None,
+	measured_on=None,
+	notes=None,
+) -> dict:
+	"""Add an objective under a plan, with the KPI it is measured by.
+
+	THE HR GATE, and THE PLAN IS SCOPED ON ITS DOCNAME so an objective
+	cannot be filed under another entity's strategy.
+
+	`owner_role` IS A ROLE RATHER THAN A PERSON, which is the tool's own
+	choice and travels unchanged: an objective outlives whoever held the
+	job when it was written.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	inner: dict = {"company": entity}
+	if strategic_plan not in (None, ""):
+		inner["strategic_plan"] = guard.require_scoped_doc(
+			strategy_tools.PLAN, strategic_plan, "strategic_plan", allowed
+		)
+	for key, given in (
+		("objective", objective),
+		("status", status),
+		("due_date", due_date),
+		("owner_role", owner_role),
+		("kpi_metric", kpi_metric),
+		("kpi_target", kpi_target),
+		("kpi_actual", kpi_actual),
+		("measured_on", measured_on),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return strategy_tools.create_strategic_objective(inner).data
+
+
+# ── 254. update_strategic_objective ─────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("update_strategic_objective", limit=guard.WRITE_LIMIT, mutating=True)
+def update_strategic_objective(
+	user: str,
+	strategic_objective=None,
+	strategic_plan=None,
+	objective=None,
+	status=None,
+	due_date=None,
+	owner_role=None,
+	kpi_metric=None,
+	kpi_target=None,
+	kpi_actual=None,
+	measured_on=None,
+	notes=None,
+) -> dict:
+	"""Revise an objective — most often to record what the KPI actually
+	came in at.
+
+	THE HR GATE, and BOTH DOCNAMES ARE SCOPED: the objective being
+	revised, and the plan it is being moved to when one is named.
+
+	PASS ONLY WHAT CHANGES. Omitted fields are left alone.
+	"""
+	personnel.require_hr_role()
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(
+		strategy_tools.OBJECTIVE, strategic_objective, "strategic_objective", allowed
+	)
+	inner: dict = {"strategic_objective": named}
+	if strategic_plan not in (None, ""):
+		inner["strategic_plan"] = guard.require_scoped_doc(
+			strategy_tools.PLAN, strategic_plan, "strategic_plan", allowed
+		)
+	for key, given in (
+		("objective", objective),
+		("status", status),
+		("due_date", due_date),
+		("owner_role", owner_role),
+		("kpi_metric", kpi_metric),
+		("kpi_target", kpi_target),
+		("kpi_actual", kpi_actual),
+		("measured_on", measured_on),
+		("notes", notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+	return strategy_tools.update_strategic_objective(inner).data

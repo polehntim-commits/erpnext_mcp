@@ -916,6 +916,26 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# published first and the Today tab's `MapPolygon` mirror is a client
 		# change rather than a release of both.
 		"list_field_boundaries",
+		# v0.130.0. The strategy register's eight, HERE FOR THIS SET'S ORDINARY
+		# REASON — `MobileAPI.swift` names none of them, so there is no Swift
+		# Codable to mirror and `test_ios_contract` would be asserting against an
+		# invented contract rather than a copied one. The server half is
+		# published first; they move up to `MOBILE` when the constants land.
+		#
+		# ALL EIGHT ARE HR-GATED, READS INCLUDED, which is a departure from the
+		# rule that reads open on enrolment — see `test_farmops_api.
+		# TheNewRegistersAreGated.HR_GATED`, which drives each of them as a
+		# picker and asserts the refusal. The rule is about the CALLER'S OWN
+		# WORK, and a plan's vision, SWOT, command structure and exit strategy
+		# are what the owners intend to do with the business instead.
+		"list_strategic_plans",
+		"get_strategic_plan",
+		"list_strategic_objectives",
+		"get_strategic_objective",
+		"create_strategic_plan",
+		"update_strategic_plan",
+		"create_strategic_objective",
+		"update_strategic_objective",
 	}
 
 	def _whitelisted(self, module):
