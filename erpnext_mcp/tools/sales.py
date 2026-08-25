@@ -586,7 +586,7 @@ def _invoice_from_items(args: dict) -> ToolResult:
 	if cost_center:
 		cost_center = resolve_cost_center(cost_center, company)
 
-	lines = _manual_lines(args.get("items"), company, default_income, cost_center)
+	lines, rate_adjustments = _manual_lines(args.get("items"), company, default_income, cost_center)
 	taxes = _manual_taxes(args.get("taxes"), company)
 
 	doc = _insert_invoice(
@@ -605,6 +605,10 @@ def _invoice_from_items(args: dict) -> ToolResult:
 	data["items"] = _si_items_out(doc)
 	data["taxes"] = _si_taxes_out(doc)
 	data["settlement_statement"] = None
+	# Reported even though it is empty on the ordinary invoice: a caller who stated an
+	# amount needs to see that the rate moved to honour it, and a key that only exists
+	# when something happened is a key nobody writes a check for.
+	data["rate_adjustments"] = rate_adjustments
 	data["next_step"] = (
 		f"Sales Invoice {doc.name} is a DRAFT and has moved no balance. Submit it in ERPNext, or "
 		"with submit_sales_invoice if this site enables that tool."
@@ -612,12 +616,27 @@ def _invoice_from_items(args: dict) -> ToolResult:
 	return ToolResult(
 		data=data,
 		summary=f"created draft Sales Invoice {doc.name} for {customer} ({company}): "
-		f"{len(lines)} line(s), {data.get('grand_total')}",
+		f"{len(lines)} line(s), {data.get('grand_total')}"
+		+ (
+			f" — {len(rate_adjustments)} line(s) had their RATE adjusted to keep the amount "
+			"you stated; see rate_adjustments"
+			if rate_adjustments
+			else ""
+		),
 		docstatus_delta="none → 0 (draft)",
 	)
 
 
-def _manual_lines(raw, company: str, default_income: str, default_cost_center: str) -> list[dict]:
+def _manual_lines(
+	raw, company: str, default_income: str, default_cost_center: str
+) -> tuple[list[dict], list[dict]]:
+	"""`(lines, rate_adjustments)` from the caller's own `items[]`.
+
+	The second half is the same contract `_settlement_lines_to_invoice_lines`
+	returns and exists for the same reason: a stated amount only survives
+	validate if the rate produces it, so the rate sometimes has to move, and a
+	rate this app changed is not something to change silently.
+	"""
 	if not isinstance(raw, list) or not raw:
 		raise ToolError(
 			"items must be a non-empty list of objects, each with item_code, qty and rate, e.g. "
@@ -626,6 +645,7 @@ def _manual_lines(raw, company: str, default_income: str, default_cost_center: s
 		)
 	income_account = _resolve_income_account(default_income, company)
 	lines = []
+	adjustments: list[dict] = []
 	for index, entry in enumerate(raw, start=1):
 		if not isinstance(entry, dict):
 			raise ToolError(f"items[{index}] must be an object, got {type(entry).__name__}")
@@ -638,7 +658,53 @@ def _manual_lines(raw, company: str, default_income: str, default_cost_center: s
 			raise ToolError(f"items[{index}].qty must be positive, got {qty}. Nothing was created.")
 		if rate < 0:
 			raise ToolError(f"items[{index}].rate cannot be negative, got {rate}. Nothing was created.")
-		amount = as_float(entry.get("amount"), f"items[{index}].amount") or round(qty * rate, 2)
+		# A STATED AMOUNT WINS, AND THE RATE IS WHAT MOVES TO KEEP IT.
+		#
+		# Two things had to be got right here, and only one of them is the coercion.
+		#
+		# First, `as_float` answers 0.0 for an absent value, for "" and for an explicit
+		# 0 alike, so `as_float(...) or round(qty * rate, 2)` could not tell "no amount
+		# stated" from "this line is comped" and invented a figure for the second. The
+		# RAW value still knows the difference, so the branch is on that.
+		#
+		# Second — and this is what the coercion fix alone did NOT solve — ERPNext
+		# recomputes `amount` from qty × rate on every validate, so whatever is written
+		# here is overwritten. The proof is that a stated 615.50 was discarded exactly
+		# like a stated 0: the `or` was never the mechanism. The only way a stated
+		# amount survives is for the RATE to produce it, which is precisely what
+		# `_settlement_lines_to_invoice_lines` already does for a packer's stated gross.
+		# This path now does the same, and reports the adjustment rather than making it
+		# quietly — a rate that differs from the one the caller sent is worth saying out
+		# loud, even when it is the caller's own amount that asked for it.
+		raw_amount = entry.get("amount")
+		stated_rate = rate
+		if raw_amount not in (None, ""):
+			amount = as_float(raw_amount, f"items[{index}].amount")
+			if amount < 0:
+				raise ToolError(
+					f"items[{index}].amount cannot be negative, got {amount}. Nothing was created."
+				)
+			# qty is proven positive above, so this cannot divide by zero.
+			rate = round(amount / qty, 6)
+		else:
+			amount = round(qty * rate, 2)
+		if abs(rate - stated_rate) > 0.0005:
+			adjustments.append(
+				{
+					"line": index,
+					"item_code": item_code,
+					"qty": qty,
+					"stated_rate": stated_rate,
+					"rate": rate,
+					"amount": amount,
+					"note": (
+						f"items[{index}] gave a rate of {stated_rate} and an amount of {amount}, "
+						f"which {qty} × {stated_rate} does not produce. ERPNext recomputes a "
+						f"line's amount from qty × rate, so the RATE was adjusted to {rate} to "
+						f"keep the amount you stated; the rate you sent is kept here beside it."
+					),
+				}
+			)
 		line = {
 			"item_code": item_code,
 			"qty": qty,
@@ -662,7 +728,7 @@ def _manual_lines(raw, company: str, default_income: str, default_cost_center: s
 		elif default_cost_center:
 			line["cost_center"] = default_cost_center
 		lines.append(line)
-	return lines
+	return lines, adjustments
 
 
 #: What a caller may put in `charge_type`. ERPNext has more; these are the three

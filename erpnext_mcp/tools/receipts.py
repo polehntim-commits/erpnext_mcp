@@ -66,7 +66,7 @@ import frappe
 from frappe.utils import today
 
 from .. import compat
-from ..args import as_date, as_float, as_int, as_str, resolve_account, resolve_company
+from ..args import as_date, as_float, as_limit, as_str, resolve_account, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
 from . import expenses, masters, purchasing
@@ -246,8 +246,10 @@ def _date_range(args: dict, filters: dict, fieldname: str = "date") -> tuple:
 
 
 def _limit(args: dict) -> int:
-	limit = as_int(args, "limit", 100) or 100
-	return min(limit, 500)
+	# `as_limit` IS this: default 100, clamped to [1, 500], and it keeps an explicit 0
+	# as 1 rather than swapping in the default. The `or 100` could not — and a 0 that
+	# reached `limit_page_length` would have meant NO LIMIT, not no rows.
+	return as_limit(args)
 
 
 def _optional_field(args: dict) -> str:

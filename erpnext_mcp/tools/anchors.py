@@ -1016,7 +1016,7 @@ def get_anchor_variance_breakdown(args: dict) -> ToolResult:
 	line_report = _match_lines(
 		lines,
 		transactions,
-		day_window=as_int(args, "day_window", DEFAULT_LINE_DAY_WINDOW) or DEFAULT_LINE_DAY_WINDOW,
+		day_window=as_int(args, "day_window", DEFAULT_LINE_DAY_WINDOW),
 		amount_tolerance=_tolerance(args, DEFAULT_LINE_AMOUNT_TOLERANCE),
 	)
 
@@ -1116,7 +1116,7 @@ def list_unmatched_statement_lines(args: dict) -> ToolResult:
 
 	filters = _anchor_filters(args, bank_account=bank_account, company=company or "")
 	rows = _anchor_rows(filters, order_by="period_start asc", limit=MAX_SCAN)
-	day_window = as_int(args, "day_window", DEFAULT_LINE_DAY_WINDOW) or DEFAULT_LINE_DAY_WINDOW
+	day_window = as_int(args, "day_window", DEFAULT_LINE_DAY_WINDOW)
 	amount_tolerance = _tolerance(args, DEFAULT_LINE_AMOUNT_TOLERANCE)
 
 	unmatched, orphan_transactions = [], []
@@ -1402,7 +1402,7 @@ def _rebuild_lines(anchor_name: str, bank_account: str, anchor: dict, args: dict
 	report = _match_lines(
 		lines,
 		transactions,
-		day_window=as_int(args, "day_window", DEFAULT_LINE_DAY_WINDOW) or DEFAULT_LINE_DAY_WINDOW,
+		day_window=as_int(args, "day_window", DEFAULT_LINE_DAY_WINDOW),
 		amount_tolerance=_tolerance(args, DEFAULT_LINE_AMOUNT_TOLERANCE),
 	)
 	matched = {row["idx"]: row for row in report["matched"]}

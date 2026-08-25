@@ -790,7 +790,7 @@ def universal_scan(args: dict) -> ToolResult:
 	_refuse_credential_payload(raw.strip())
 	candidate = scan_target(raw)
 	today = _today()
-	limit = max(1, min(HISTORY_MAX, as_int(args, "history_limit", HISTORY_LIMIT) or HISTORY_LIMIT))
+	limit = max(1, min(HISTORY_MAX, as_int(args, "history_limit", HISTORY_LIMIT)))
 
 	resolved = None
 	for probe in _CASCADE:

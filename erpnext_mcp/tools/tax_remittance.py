@@ -608,8 +608,10 @@ def _window(args: dict, quarter_required: bool = False, annual: bool = False) ->
 	`fiscal_year` and `year` are the same argument under two names, which is what
 	every other tool in this app accepts and so what a model will send.
 	"""
-	year = as_int(args, "fiscal_year") or as_int(args, "year")
-	if not year:
+	year = as_int(args, "fiscal_year")
+	if year is None:
+		year = as_int(args, "year")
+	if year is None:
 		raise ToolError(
 			"fiscal_year is required — the calendar year as YYYY, e.g. 2025. Tax periods are "
 			"calendar periods and never this site's fiscal year. Nothing was computed."

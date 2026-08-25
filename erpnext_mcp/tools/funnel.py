@@ -138,7 +138,7 @@ def validate_public_endpoint(args: dict) -> ToolResult:
 			"present. Generate one on ERPNext MCP Settings first."
 		)
 
-	timeout = min(30, max(1, as_int(args, "timeout_seconds", TIMEOUT_SECONDS) or TIMEOUT_SECONDS))
+	timeout = min(30, max(1, as_int(args, "timeout_seconds", TIMEOUT_SECONDS)))
 	data = {
 		"url": url,
 		"endpoint": f"{url}{MCP_PATH}",
@@ -575,7 +575,7 @@ def get_tailscale_funnel_config(args: dict) -> ToolResult:
 		)
 		return ToolResult(data=data, summary="no local tailscale CLI — reporting what can be seen without it")
 
-	timeout = min(20, max(1, as_int(args, "timeout_seconds", TIMEOUT_SECONDS) or TIMEOUT_SECONDS))
+	timeout = min(20, max(1, as_int(args, "timeout_seconds", TIMEOUT_SECONDS)))
 	status = _run(binary, ["serve", "status", "--json"], timeout)
 	data["serve_status"] = status
 

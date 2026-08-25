@@ -437,7 +437,7 @@ def list_active_reis(args: dict) -> ToolResult:
 
 	filters: dict = {}
 	if include_expired:
-		hours_back = as_int(args, "expired_within_hours", 24) or 24
+		hours_back = as_int(args, "expired_within_hours", 24)
 		since = str(frappe.utils.add_to_date(now, hours=-abs(hours_back)))
 		filters["expires_at"] = (">", since)
 	else:

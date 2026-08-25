@@ -301,7 +301,13 @@ def validated_journal_lines(raw, company: str) -> list[dict]:
 		account = resolve_account(str(entry.get("account") or ""), company)
 		debit = as_float(entry.get("debit"), f"accounts[{index}].debit")
 		credit = as_float(entry.get("credit"), f"accounts[{index}].credit")
-		rate = as_float(entry.get("exchange_rate"), f"accounts[{index}].exchange_rate") or 1.0
+		# Not `as_float(...) or 1.0`: `as_float` cannot distinguish an absent rate from
+		# an explicit 0, so that idiom turned a stated zero into 1.0 on the line above
+		# the refusal that names it — and the `<= 0` half below could never fire for the
+		# value it exists to catch. Branch on the raw value; a stated 0 now reaches the
+		# guard and is refused rather than silently becoming par.
+		raw_rate = entry.get("exchange_rate")
+		rate = as_float(raw_rate, f"accounts[{index}].exchange_rate") if raw_rate not in (None, "") else 1.0
 		if rate <= 0:
 			raise ToolError(
 				f"accounts[{index}] ({account}) has exchange_rate {rate}; a rate must be "

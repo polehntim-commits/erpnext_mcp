@@ -987,6 +987,24 @@ def get_model_file_chunk(args: dict) -> ToolResult:
 # ── 10. pull_model_from_vv ───────────────────────────────────────────────
 
 
+def _timeout(args: dict) -> int:
+	"""`timeout_seconds`, defaulted when absent and REFUSED when zero.
+
+	Not `as_int(...) or DEFAULT`: that reinstated the default for an explicit 0, so a
+	caller asking for a zero-second fetch got a full-length one and a success. Zero is
+	not a shorter timeout, it is a fetch that cannot succeed, and it is worth saying so.
+	"""
+	seconds = as_int(args, "timeout_seconds")
+	if seconds is None:
+		return volume_vision.DEFAULT_TIMEOUT_SECONDS
+	if seconds <= 0:
+		raise ToolError(
+			f"timeout_seconds must be positive, got {seconds}. Omit it for the default of "
+			f"{volume_vision.DEFAULT_TIMEOUT_SECONDS}s. Nothing was fetched."
+		)
+	return seconds
+
+
 def pull_model_from_vv(args: dict) -> ToolResult:
 	"""MUTATING (default OFF). Fetch a trained model straight from Volume Vision
 	and attach it to this ML Model record — the whole manual procedure (curl on a
@@ -1042,7 +1060,7 @@ def pull_model_from_vv(args: dict) -> ToolResult:
 		uuid,
 		prefer_bundle=as_bool(args, "prefer_bundle", True),
 		allow_raw_fallback=as_bool(args, "allow_raw_fallback", True),
-		timeout=as_int(args, "timeout_seconds") or volume_vision.DEFAULT_TIMEOUT_SECONDS,
+		timeout=_timeout(args),
 	)
 	content = fetched["content"]
 	file_name = fetched["file_name"]

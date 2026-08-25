@@ -106,7 +106,7 @@ def get_owner_dashboard(args: dict) -> ToolResult:
 	"""Crews, harvest, compliance, money, weather and what is waiting — in one call."""
 	company = resolve_company(as_str(args, "company"), required=True)
 	as_of = as_date(args, "as_of") or str(frappe.utils.today())
-	preview = max(1, min(as_int(args, "preview", PREVIEW) or PREVIEW, 50))
+	preview = max(1, min(as_int(args, "preview", PREVIEW), 50))
 
 	unavailable: list = []
 	sections: dict = {}

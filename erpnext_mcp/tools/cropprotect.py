@@ -471,7 +471,17 @@ def create_crop_observation(args: dict) -> ToolResult:
 			f"observed_on is {observed_on}, which is in the future. A scouting round is filed after "
 			"it is walked. Nothing was recorded."
 		)
-	season_year = as_int(args, "season_year") or int(str(observed_on)[:4])
+	# Derive the year only when none was given. A stated 0 is refused rather than
+	# quietly replaced by the observation date's year — nothing downstream would
+	# have caught it, and the round would have been filed against a year nobody named.
+	season_year = as_int(args, "season_year")
+	if season_year is None:
+		season_year = int(str(observed_on)[:4])
+	elif season_year <= 0:
+		raise ToolError(
+			f"season_year must be a four-digit calendar year, got {season_year}. "
+			"Omit it to take the year from observed_on. Nothing was recorded."
+		)
 
 	planting = as_str(args, "planting_season")
 	if planting and not frappe.db.exists(PLANTING_SEASON, planting):

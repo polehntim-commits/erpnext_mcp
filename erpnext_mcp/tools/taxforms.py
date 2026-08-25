@@ -619,8 +619,9 @@ def _bulk_selection(args: dict) -> tuple[list[str], dict]:
 			"reasonable default. Nothing was rendered."
 		)
 
-	limit = as_int(args, "limit", BULK_RENDER_DEFAULT_LIMIT) or BULK_RENDER_DEFAULT_LIMIT
-	limit = min(int(limit), BULK_RENDER_MAX_LIMIT)
+	# max(1, ...) not `or BULK_RENDER_DEFAULT_LIMIT`: an explicit 0 is clamped to one
+	# form rather than silently reinstated as the default page.
+	limit = max(1, min(BULK_RENDER_MAX_LIMIT, as_int(args, "limit", BULK_RENDER_DEFAULT_LIMIT)))
 	selection["limit"] = limit
 
 	rows = frappe.db.get_all(

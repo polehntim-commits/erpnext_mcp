@@ -162,7 +162,16 @@ def preview_state_withholding(args: dict) -> ToolResult:
 	work_state = _validate_state(as_str(args, "work_state", required=True))
 
 	filing_status = _resolve_filing_status(employee, as_int(args, "tax_year"))
-	tax_year = as_int(args, "tax_year") or _default_tax_year(employee)
+	# `is None`, not `or`: a stated `tax_year: 0` used to take the employee's default
+	# year. It loads no config and no table, so it is refused rather than computed.
+	tax_year = as_int(args, "tax_year")
+	if tax_year is None:
+		tax_year = _default_tax_year(employee)
+	elif tax_year <= 0:
+		raise ToolError(
+			f"tax_year must be a four-digit calendar year, got {tax_year}. Omit it to take the "
+			"year from the employee's active W-4. Nothing was computed."
+		)
 	config = _load_state_config(employee, work_state, tax_year)
 	table = _load_state_table(work_state, tax_year, filing_status) if work_state == "OR" else []
 

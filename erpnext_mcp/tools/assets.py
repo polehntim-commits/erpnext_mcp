@@ -417,7 +417,9 @@ def create_asset(args: dict) -> ToolResult:
 	purchase_amount = as_float(args.get("purchase_amount"), "purchase_amount")
 	salvage_value = as_float(args.get("salvage_value"), "salvage_value")
 	useful_life_months = as_int(args, "useful_life_months")
-	frequency = as_int(args, "depreciation_frequency_months", 1) or 1
+	# No `or 1`: it reinstated the default above the `<= 0` refusal below, so the one
+	# value that refusal names could never reach it.
+	frequency = as_int(args, "depreciation_frequency_months", 1)
 	depreciation_start = as_date(args, "depreciation_start_date") or purchase_date
 	method = as_str(args, "depreciation_method") or "Straight Line"
 	method = _validated_method(method)

@@ -1689,7 +1689,7 @@ def get_shift_track(args: dict) -> ToolResult:
 	# wrong one for a track: a nine-hour shift at a fix every thirty seconds is
 	# eleven hundred points, and a track cut at five hundred loses the afternoon
 	# without saying which half went.
-	limit = max(1, min(TRACK_CAP, as_int(args, "limit", TRACK_CAP) or TRACK_CAP))
+	limit = max(1, min(TRACK_CAP, as_int(args, "limit", TRACK_CAP)))
 	found = shifts.track_of(row["name"], person, limit=limit + 1)
 	truncated = len(found) > limit
 	found = found[:limit]

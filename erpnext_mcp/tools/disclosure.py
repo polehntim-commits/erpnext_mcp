@@ -220,6 +220,10 @@ def _sections_from(args: dict) -> list:
 		name = str(entry.get("section_name") or "").strip()
 		if not name:
 			raise ToolError(f"sections[{index}] has no section_name.")
+		# Not `cint(...) or index * 10`: `cint` answers 0 for an absent sequence and for a
+		# stated 0 alike, so a caller numbering their first section 0 had it renumbered to
+		# 10 and could be reordered behind a later section that stated 5.
+		raw_sequence = entry.get("sequence")
 		rows.append(
 			{
 				"section_name": name,
@@ -227,7 +231,9 @@ def _sections_from(args: dict) -> list:
 				"label_es": str(entry.get("label_es") or "").strip(),
 				"data_source": str(entry.get("data_source") or "").strip(),
 				"description": str(entry.get("description") or "").strip(),
-				"sequence": frappe.utils.cint(entry.get("sequence")) or index * 10,
+				"sequence": (
+					frappe.utils.cint(raw_sequence) if raw_sequence not in (None, "") else index * 10
+				),
 				"required": 0 if entry.get("required") is False else 1,
 			}
 		)
@@ -551,9 +557,9 @@ def generate_segment_report(args: dict) -> ToolResult:
 	from_date = as_date(args, "from_date") or str(frappe.utils.add_days(to_date, -365))
 	if from_date > to_date:
 		raise ToolError(f"from_date {from_date} is after to_date {to_date}.")
-	threshold = as_int(args, "threshold_pct", default=int(SEGMENT_THRESHOLD * 100)) or int(
-		SEGMENT_THRESHOLD * 100
-	)
+	# No `or int(SEGMENT_THRESHOLD * 100)`: `threshold_pct: 0` means "every segment,
+	# however small", which is a coherent ask and not the same as not asking.
+	threshold = as_int(args, "threshold_pct", default=int(SEGMENT_THRESHOLD * 100))
 
 	root_types = _account_types(company)
 	fields = compat.existing_fields(

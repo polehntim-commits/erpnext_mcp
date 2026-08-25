@@ -4015,7 +4015,8 @@ def generate_tasks_from_compliance_alerts(args: dict) -> ToolResult:
 	)
 	company = _company(args)
 	dry_run = as_bool(args, "dry_run", False)
-	limit = min(as_int(args, "limit") or GENERATE_CAP, GENERATE_CAP)
+	# max(1, ...) not `or GENERATE_CAP`: a 0 survived `min` and reached Frappe as NO LIMIT.
+	limit = max(1, min(GENERATE_CAP, as_int(args, "limit", GENERATE_CAP)))
 
 	wanted = _alert_types(args)
 	filters = {"dismissed": 0}

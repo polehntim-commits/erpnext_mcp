@@ -1012,7 +1012,8 @@ def find_drifted_je_attributions(args: dict) -> ToolResult:
 	to_date = as_date(args, "to_date", required=True)
 	if to_date < from_date:
 		raise ToolError(f"to_date {to_date} is before from_date {from_date}.")
-	limit = min(as_int(args, "limit", 500) or 500, DRIFT_SCAN_CAP)
+	# max(1, ...) not `or 500`: a 0 survived `min` and reached Frappe as NO LIMIT.
+	limit = max(1, min(DRIFT_SCAN_CAP, as_int(args, "limit", 500)))
 	vintage_from = as_date(args, "vintage_from") or V013_RELEASED
 	vintage_to = as_date(args, "vintage_to") or V014_RELEASED
 

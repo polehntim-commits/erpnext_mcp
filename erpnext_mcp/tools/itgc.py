@@ -245,8 +245,8 @@ def generate_access_control_report(args: dict) -> ToolResult:
 	company = resolve_company(as_str(args, "company"), required=False) or ""
 	include_disabled = as_bool(args, "include_disabled", default=False)
 	privileged_only = as_bool(args, "privileged_only", default=False)
-	review_days = as_int(args, "review_period_days", default=ACCESS_REVIEW_DAYS) or ACCESS_REVIEW_DAYS
-	stale_login_days = as_int(args, "stale_login_days", default=90) or 90
+	review_days = as_int(args, "review_period_days", default=ACCESS_REVIEW_DAYS)
+	stale_login_days = as_int(args, "stale_login_days", default=90)
 	limit = as_limit(args)
 
 	today = frappe.utils.today()
@@ -854,9 +854,7 @@ def list_backup_records(args: dict) -> ToolResult:
 	)
 	backups = [_describe_backup(dict(row)) for row in rows[:limit]]
 	verified = [backup for backup in backups if backup["verified"]]
-	window = (
-		as_int(args, "verification_window_days", default=BACKUP_VERIFICATION_DAYS) or BACKUP_VERIFICATION_DAYS
-	)
+	window = as_int(args, "verification_window_days", default=BACKUP_VERIFICATION_DAYS)
 	# THE WINDOW IS ASKED OF THE WHOLE COMPANY, not of the page returned. A
 	# filtered list showing ten failed jobs must not report the verification
 	# control as clear merely because the passing restore is on another page.

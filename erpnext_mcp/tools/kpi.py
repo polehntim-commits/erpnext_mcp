@@ -859,7 +859,9 @@ def _window_args(args: dict) -> dict:
 			"opted into per KPI rather than reached by accident."
 		)
 
-	months = as_int(args, "window_months", windows.DEFAULT_WINDOW_MONTHS) or windows.DEFAULT_WINDOW_MONTHS
+	# No `or DEFAULT_WINDOW_MONTHS`: it reinstated the default above the `< 1` refusal
+	# below, so `window_months: 0` reported a TTM window instead of being refused.
+	months = as_int(args, "window_months", windows.DEFAULT_WINDOW_MONTHS)
 	if months < 1 or months > 120:
 		raise ToolError(
 			f"window_months must be between 1 and 120; got {months}. TTM is 12, which is what the "

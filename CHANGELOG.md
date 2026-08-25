@@ -3,6 +3,58 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.134.0 — 2026-08-25 — the sweep, and the site that was innocent
+
+**THE `coerce(...) or DEFAULT` SWEEP, FINISHED — 22 call sites, plus an AST scan
+so the next one is caught by CI rather than by somebody remembering.** v0.132.0
+fixed two instances and named the rest as residue. This closes it.
+
+**THE SITE EVERYBODY AGREED WAS THE WORST ONE WAS INNOCENT.** `tools/sales.py`
+carried the idiom and was reported as repricing a line comped to `amount: 0` back
+to `qty × rate`. Removing the `or` did not stop the reprice; the test written to
+prove the fix FAILED at `620.0 != 0.0`. `SalesInvoiceDocument.validate` recomputes
+`amount` from `qty × rate` on every validate — real ERPNext does this — so
+whatever `_manual_lines` writes is overwritten. The control that settled it: a
+stated `615.50` was discarded EXACTLY like a stated `0`, and a value that is not a
+zero cannot be the victim of a zero-dropping idiom. Fixed properly by giving the
+manual path the mechanism the settlement path has always used — derive
+`rate = amount / qty` so the product survives validate — and REPORTING the
+adjustment in a new `rate_adjustments` key rather than moving a rate quietly. A
+negative `amount` is now refused.
+
+**SIX `limit` SITES WERE HIDING A WORSE BUG.** Frappe reads `limit_page_length=0`
+as NO LIMIT, so deleting the `or` — the obvious fix — would have turned `limit: 0`
+into an unbounded table scan, green on every existing test. Those six now route
+through the existing `as_limit` helper, which has documented the right policy all
+along: an explicit 0 clamps to 1 rather than falling back to the default. Two were
+hand-rolled reimplementations of `as_limit` sitting beside it.
+
+**TWO FIX SHAPES, AND THE WRONG ONE IS A SILENT NO-OP.** `as_int` carries a
+default, so deleting the `or` is the whole fix. `as_float` carries NO default and
+answers `0.0` for absent, `""` and an explicit `0` alike — there the fix must
+branch on the RAW value, and `as_float(args, key, None)` is not even a valid call.
+
+**THE SCAN.** `tests_standalone/test_zero_drop.py` — 97 sites, 78 the harmless
+`x or 0` identity, 19 flagged and every one allowlisted WITH A REASON. Anchored on
+the `or` rather than on "the same default", because sameness misses the
+value-corruption class entirely. Three controls, including one proving the
+allowlist matches by expression rather than by filename — the failure an allowlist
+is most prone to and that no green run reveals.
+
+**A REASON CAN BE WRONG WHILE ITS VERDICT IS RIGHT.** The `budget_engine` entries
+inherited v0.132.0's claim that removing the `or` raises `ZeroDivisionError`. Re-run
+four ways, it does not: removing either ALONE is safe and only removing BOTH raises,
+and the first is in a function with no division in it. Both stay allowlisted on the
+column-class rule; the stated mechanism was wrong and had already been copied
+forward once. No test in `test_budget.py` sets `threshold_pct` to 0, so the suite
+could never have adjudicated it.
+
+Thirty-two tests, verified on a clean `git archive` extraction rather than the
+shared working tree — which is what caught an allowlist entry for an untracked
+file that no committed tree contains. Not fixed, deliberately: stored
+`Int`/`Float`/`Currency`/`Percent` columns, where an unset field and an explicit
+zero are the same bytes.
+
 ## 0.133.0 — 2026-08-25 — the guard that was correct and bounded nothing
 
 **`query_doctype` SAID ITS REACH WAS `mcp_system_user`'s PERMISSIONS. ON A FRESH

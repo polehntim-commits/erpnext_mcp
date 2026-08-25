@@ -310,7 +310,13 @@ def create_planting_season(args: dict) -> ToolResult:
 	doc.productive_from = as_date(args, "productive_from")
 	doc.productive_through = as_date(args, "productive_through")
 	doc.cost_center = cost_center or None
-	doc.acres = as_float(args.get("acres"), "acres") or _number(field_row.get("acreage"))
+	# Not `as_float(...) or _number(...)`: `as_float` answers 0.0 for absent and for an
+	# explicit 0 alike, so a caller stating `acres: 0` silently inherited the Field's
+	# acreage instead — a different number, from a different source, reported as theirs.
+	raw_acres = args.get("acres")
+	doc.acres = (
+		as_float(raw_acres, "acres") if raw_acres not in (None, "") else _number(field_row.get("acreage"))
+	)
 	doc.trees_planted = as_int(args, "trees_planted") or 0
 	doc.spacing_in_row_ft = as_float(args.get("spacing_in_row_ft"), "spacing_in_row_ft")
 	doc.spacing_between_rows_ft = as_float(args.get("spacing_between_rows_ft"), "spacing_between_rows_ft")
@@ -538,7 +544,12 @@ def _window(args: dict, season: dict) -> tuple[str, str, str]:
 	to_date = as_date(args, "to_date")
 	if from_date and to_date:
 		return from_date, to_date, f"{from_date} to {to_date}"
-	year = as_int(args, "season_year") or season.get("season_year") or season.get("plant_year")
+	# `is None`, not `or`: a stated `season_year: 0` used to fall through to the
+	# planting's own year. It now reaches the refusal below, which is already worded
+	# for exactly this caller.
+	year = as_int(args, "season_year")
+	if year is None:
+		year = season.get("season_year") or season.get("plant_year")
 	if not year:
 		raise ToolError(
 			"no window to sum over. Pass from_date and to_date, or season_year, or give the "

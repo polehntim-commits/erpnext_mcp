@@ -65,7 +65,7 @@ import frappe
 from frappe.utils import getdate, today
 
 from .. import compat
-from ..args import as_bool, as_date, as_float, as_int, as_str, resolve_company
+from ..args import as_bool, as_date, as_float, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
 
@@ -351,9 +351,10 @@ def list_expense_receipts(args: dict) -> ToolResult:
 	elif to_date:
 		filters["receipt_date"] = ("<=", to_date)
 
-	limit = as_int(args, "limit", 100) or 100
-	if limit > 500:
-		limit = 500
+	# `as_limit` IS this: default 100, clamped to [1, 500]. It also clamps an explicit
+	# 0 to 1 instead of discarding it, which the hand-rolled version could not do —
+	# a 0 reached `limit_page_length`, where Frappe reads it as NO LIMIT.
+	limit = as_limit(args)
 
 	# Lowest confidence first, so the receipts a person most needs to open the
 	# photo for are the ones at the top of the page rather than at the end of it.
@@ -1031,9 +1032,10 @@ def get_expense_report(args: dict) -> ToolResult:
 			raise ToolError(f"category must be one of: {', '.join(CATEGORIES)}.")
 		filters["category"] = category
 
-	limit = as_int(args, "limit", 100) or 100
-	if limit > 500:
-		limit = 500
+	# `as_limit` IS this: default 100, clamped to [1, 500]. It also clamps an explicit
+	# 0 to 1 instead of discarding it, which the hand-rolled version could not do —
+	# a 0 reached `limit_page_length`, where Frappe reads it as NO LIMIT.
+	limit = as_limit(args)
 
 	rows = frappe.db.get_all(
 		EXPENSE_RECEIPT,
