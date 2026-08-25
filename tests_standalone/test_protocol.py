@@ -1119,9 +1119,18 @@ class Catalogue(SeededTestCase):
 		reader of `list_available_for_me` and `list_my_tasks`'s own calls that
 		groups the pool and the caller's held work by place instead of two
 		lists a screen has to cross-reference.
+
+		v0.128.0 ADDS TWO READS OVER App Feedback, the register the in-app
+		feedback bubble has been writing into since v0.105.0.
+		`list_app_feedback` is the feed — newest first on when Send was pressed
+		rather than on when the note landed — and `get_app_feedback` is one note
+		in full. Both are reads, so the mutating count stays where it is. The
+		write half stays off the catalogue: a phone files its OWN note under its
+		own login, and `submit_app_feedback` is still reachable only from the
+		mobile surface.
 		"""
-		self.assertEqual(len(registry.TOOLS), 840)
-		self.assertEqual(len(registry.READ_TOOLS), 422)
+		self.assertEqual(len(registry.TOOLS), 842)
+		self.assertEqual(len(registry.READ_TOOLS), 424)
 		self.assertEqual(len(registry.MUTATING_TOOLS), 418)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):

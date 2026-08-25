@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 840 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 842 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 422 read tools are **on** by default and can be switched off individually. A
+All 424 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -17888,10 +17888,15 @@ written since is sitting in a queue on somebody's handset.
 |---|---|
 | `POST /farmops/api/mobile/submit_app_feedback` | One note from the bubble. **Deduplicated on `entry_uuid`.** |
 
-There is no MCP tool. The owner's half of the feature is a **list view** on the
-doctype — sorted by when Send was pressed, filterable by screen and by role —
-which is what `SERVER_CHANGES.md` item 24 asks for and what a Desk list already
-does against the columns this writes.
+The owner's half of the feature is a **list view** on the doctype — sorted by
+when Send was pressed, filterable by screen and by role — which is what
+`SERVER_CHANGES.md` item 24 asks for and what a Desk list already does against
+the columns this writes. **v0.128.0 adds the same feed as two read tools**, for
+the readers who have no Desk: see *Reading the feed* below.
+
+The write half is still not a catalogue tool and will not become one. A phone
+files its **own** note under its own login, and there is no version of "file
+feedback as somebody else" a model should be able to reach.
 
 ### Publishing this route collects a backlog, not a note
 
@@ -17956,6 +17961,53 @@ the bytes got there. Nothing about the surface widens: `routes.bind` still reduc
 whatever comes out of it to the keys the method declares.
 
 `SERVER_CHANGES.md` item 24.
+
+### Reading the feed (v0.128.0)
+
+| | |
+|---|---|
+| `list_app_feedback` | The feed, newest first. Read. |
+| `get_app_feedback` | One note in full, by docname or by `entry_uuid`. Read. |
+
+The Desk list is still the right surface for somebody sitting at one. These exist
+because not every reader has one: the farmops sidecar does not forward
+`/api/resource`, so a client reaching this site over MCP had no way to read a
+single note — and the write half had been filing them since v0.105.0 into a table
+only one transport could see.
+
+**Recency means when Send was pressed.** The feed sorts and ranges on `timestamp`
+by default, not on `received_at`. A phone in a block with no signal holds a note
+for weeks, and a note is not made newer by finding wifi. `date_basis="received"`
+switches both the sort and the date range to arrival, which is the other real
+question — *what landed while I was away*. Every row carries `queued_days`, the
+distance between the two, which is the answer to *why did nobody act on this*.
+
+```bash
+# every complaint filed about the crew board during cherry harvest
+list_app_feedback(screen="my_tasks", from_date="2026-06-15", to_date="2026-07-31")
+```
+
+**`submitted_by` is resolved, never guessed.** Every note has a `user` — the login
+it arrived under, written from the session — and only some have an `employee`,
+because a login with no Employee row still files feedback. The argument takes
+either, is resolved against both registers, and a value in neither is **refused**
+with both named. An empty feed is a real answer on this register, so a typo
+filtered onto the wrong column would be indistinguishable from the truth.
+
+**`company` is filtered only when you pass it, and never inferred.** The write
+refuses a note for nothing but being empty, so a handset that never resolved an
+entity still lands its complaint with the column NULL. Inferring a company on a
+single-company site would silently drop exactly the notes from the
+least-configured phones. Pass one and `without_company` counts what it excluded.
+
+**Four columns answer to two names.** `submitted_at` is the doctype's own label
+for `timestamp` and `comment` is what the write tool already takes the note
+under; both names are on every row. `device_info` composes the five device
+columns, which are only ever read together.
+
+The list carries `has_screenshot` and not the file path — forty notes do not need
+forty private file URLs. `get_app_feedback` returns the `file_url`, which is a
+**private** `File` and still needs an authenticated fetch.
 
 ---
 

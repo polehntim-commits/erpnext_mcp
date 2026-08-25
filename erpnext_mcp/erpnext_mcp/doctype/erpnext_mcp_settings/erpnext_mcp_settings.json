@@ -927,6 +927,10 @@
   "allow_list_shadow_log_entries",
   "allow_get_shadow_log_entry",
   "allow_acknowledge_shadow_log",
+  "app_feedback_section",
+  "allow_list_app_feedback",
+  "app_feedback_col",
+  "allow_get_app_feedback",
   "breakeven_section",
   "allow_get_breakeven_analysis",
   "allow_list_breakeven_analyses",
@@ -7173,6 +7177,29 @@
    "fieldname": "allow_acknowledge_shadow_log",
    "fieldtype": "Check",
    "label": "Acknowledge Shadow Log"
+  },
+  {
+   "fieldname": "app_feedback_section",
+   "fieldtype": "Section Break",
+   "label": "In-App Feedback (v0.128.0)"
+  },
+  {
+   "default": "1",
+   "description": "READ. Every note a worker filed from the in-app feedback bubble, newest first, counted by screen and by role.",
+   "fieldname": "allow_list_app_feedback",
+   "fieldtype": "Check",
+   "label": "List App Feedback"
+  },
+  {
+   "fieldname": "app_feedback_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "READ. One note in full: what was said, which screen, which handset, both stamps and the screenshot.",
+   "fieldname": "allow_get_app_feedback",
+   "fieldtype": "Check",
+   "label": "Get App Feedback"
   },
   {
    "description": "The breakeven calculator. A Breakeven Analysis is a PERSPECTIVE on the chart of accounts the farm already keeps — nothing here posts, nothing is a journal entry, and no number it produces changes what the financial statements say. What it adds is the one thing a chart of accounts cannot hold: which accounts stop mattering when the crop gets bigger. The three reads default ON and none of them ever refuses. The two writes are off until an operator turns them on, and both are 'mutating' because they STORE — the cost lines, the results and the scenario band go onto the analysis, which is what makes this season's breakeven comparable with next season's.",

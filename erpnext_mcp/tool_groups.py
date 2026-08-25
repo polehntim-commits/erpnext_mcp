@@ -275,6 +275,13 @@ SECTION_DOMAIN = {
 	"ml_model_write_section": "platform",
 	"translation_section": "platform",
 	"shadow_log_section": "platform",
+	# v0.128.0. The in-app feedback feed files under `platform` beside the shadow
+	# log, and for the same reason: what a note is ABOUT is the software, not the
+	# orchard. An operator hunting for the switch that opens the complaints the
+	# crew filed about the app should find it in the chip that holds the app's
+	# own registers rather than under Workforce because the notes have names on
+	# them.
+	"app_feedback_section": "platform",
 	"mobile_read_section": "platform",
 	"mobile_write_section": "platform",
 	"push_notification_section": "platform",

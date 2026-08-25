@@ -3,6 +3,60 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.128.0 — 2026-08-24 — the feedback the farm could not read
+
+**TWO READ TOOLS OVER `App Feedback`**, the register the in-app feedback bubble
+has been writing into since v0.105.0. `list_app_feedback` is the feed and
+`get_app_feedback` is one note in full. Both ship **on**, like every other read.
+
+**THE WRITE HALF HAD SOMEWHERE TO GO AND THE READ HALF DID NOT.** v0.105.0 left
+the reads out on the grounds that what an owner wants is to sort by recency and
+filter by screen and role, and a Desk list already does exactly that. That was
+right about the Desk and wrong about everyone else: the farmops sidecar does not
+forward `/api/resource`, so a client reaching this site over MCP has no Desk, no
+list view, and had no way to read a single note. Notes have been accumulating for
+twenty-three releases into a table only one transport could see.
+
+**RECENCY MEANS WHEN SEND WAS PRESSED, NOT WHEN THE NOTE LANDED.** The feed sorts
+and ranges on `timestamp`. A phone in a block with no signal holds a note until it
+finds the yard's wifi, so the two stamps are weeks apart and a note is not made
+newer by finding a signal. `date_basis="received"` switches both to arrival for
+the other real question — what landed while I was away — and every row carries
+`queued_days`, which is the answer to why nobody acted on a complaint.
+
+**A DATE RANGE CLOSES THE DAY, NOT THE MIDNIGHT.** Both columns are `Datetime`,
+and a range bounded at `2026-08-03` would drop everything filed after midnight on
+the 3rd, which is all of it. The suite asserts the wrong bound really does miss
+the note the shipped bound finds, so the claim is not resting on a test that
+would pass either way.
+
+**`submitted_by` IS RESOLVED AGAINST BOTH REGISTERS, NEVER GUESSED.** Every note
+has a `user` — the login it arrived under, written from the session — and only
+some have an `employee`, because a login with no Employee row still files
+feedback. A value in neither is refused with both named rather than filtered onto
+whichever was tried first: an empty feed is a real answer here, and it must not
+also be the shape a typo takes.
+
+**`company` IS NEVER INFERRED.** The write refuses a note for nothing but being
+empty, so a handset that never resolved an entity still lands its complaint with
+the column NULL. `resolve_company` would infer the company on a single-company
+site and the filter it built would silently drop exactly the notes from the
+least-configured phones — the ones most worth reading. Pass a company and
+`without_company` counts what it excluded.
+
+**FOUR COLUMNS ANSWER TO TWO NAMES.** `submitted_at` is the doctype's own label
+for `timestamp` and `comment` is what `submit_app_feedback` already takes the
+note under; both are on every row. `device_info` composes the five device columns,
+which are only ever read together.
+
+**THE WRITE HALF IS STILL NOT A CATALOGUE TOOL.** A phone files its own note under
+its own login, and there is no version of "file feedback as somebody else" a model
+should be able to reach. `submit_app_feedback` stays on the mobile surface.
+
+The list carries `has_screenshot` rather than forty private file paths;
+`get_app_feedback` returns the `file_url`, which is a private `File` and still
+needs an authenticated fetch. 840 → 842 tools = 424 read + 418 mutating.
+
 ## 0.127.0 — 2026-08-24 — the county's value wins
 
 **AN IMPORT FROM COUNTY GIS NOW OVERWRITES THE PARCEL FORM.** `parcel_id`,

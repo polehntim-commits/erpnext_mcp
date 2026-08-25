@@ -48,6 +48,7 @@ from .tools import (
 	advisory,
 	agronomy,
 	anchors,
+	app_feedback,
 	asset_status,
 	asset_tags,
 	assets,
@@ -25565,6 +25566,112 @@ TOOLS = {
 		title="Acknowledge a shadow log entry",
 		available=_needs_doctype("Shadow Log Entry"),
 		requires="the Shadow Log Entry DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	# ── v0.128.0: the in-app feedback bubble's two reads ─────────────────────
+	"list_app_feedback": _tool(
+		app_feedback.list_app_feedback,
+		"Every note a worker filed from the in-app feedback bubble, newest first, "
+		"with a count by screen and by role. Read-only.\n\n"
+		"THE WORKER TYPED ONE THING AND THE APP CAPTURED THE REST. `comment` is "
+		"the only field a person wrote; the screen, the role, the language, "
+		"whether it was dictated, the build and the handset model were all "
+		"captured for them, which is what makes this a feed of complaints WITH "
+		"their context rather than a pile of 'the app is broken'.\n\n"
+		"SORTED ON WHEN SEND WAS PRESSED, NOT ON WHEN IT LANDED. A phone in a "
+		"block with no signal holds a note until it finds the yard's wifi, so the "
+		"two stamps are weeks apart and the recency a reader means is the first. "
+		"`date_basis` switches the range and the sort to `received` for the other "
+		"question — 'what landed while I was away'. Each row carries "
+		"`queued_days`, the distance between them, which is the answer to 'why "
+		"did nobody act on this'.\n\n"
+		"`company` FILTERS ONLY WHEN YOU PASS IT and is never inferred. A note is "
+		"never refused for failing to name a company, so a handset that had not "
+		"resolved an entity still filed — an inferred filter would silently drop "
+		"exactly the notes from the least-configured phones. When you do pass "
+		"one, `without_company` counts what it excluded.\n\n"
+		"AN EMPTY FEED IS A REAL ANSWER and is not the same as a broken one.",
+		{
+			"submitted_by": _field(
+				_STRING,
+				"Whose notes. Takes the LOGIN a note arrived under (the `user` column, e.g. "
+				"'picker@example.com') or the Employee it resolved to ('HR-EMP-00007') — the "
+				"value is resolved against both registers, and one in neither is refused "
+				"rather than filtered on the wrong column.",
+			),
+			"screen": _field(
+				_STRING,
+				"The app's own stable key for the screen the bubble was tapped on — my_tasks, "
+				"harvest_day, bucket_capture. NEVER a translated label: grouping on the key is "
+				"what answers 'which part of this is people struggling with'.",
+			),
+			"role": _field(
+				_STRING,
+				"The role the person was acting as in the app. The app's claim, and it authorises nothing.",
+			),
+			"language": _field(_STRING, "en or es — what the person was READING, not a guess from the text."),
+			"app_version": _field(
+				_STRING, "One build. The commonest useful question is whether complaints stop at a version."
+			),
+			"device_model": _field(
+				_STRING, "The utsname identifier, e.g. 'iPhone17,2'. 'Only on the old handsets' is an answer."
+			),
+			"device_id": _field(
+				_STRING, "One handset, for 'this phone produces every complaint about the scanner'."
+			),
+			"entry_uuid": _field(_STRING, "The handset's own UUID for a note. Unique; matches at most one."),
+			"has_screenshot": _field(_BOOLEAN, "true for the notes with a picture attached."),
+			"was_dictated": _field(
+				_BOOLEAN,
+				"true for the ones spoken rather than typed. THE MEASUREMENT THAT SAYS WHETHER "
+				"THE GLOVES-ON PATH IS USED — dictation was built for a crew that cannot type "
+				"in a row of trees, and this column is the only way to find out if that was right.",
+			),
+			"from_date": _field(_STRING, "Earliest date, YYYY-MM-DD. Inclusive to 00:00:00."),
+			"to_date": _field(_STRING, "Latest date, YYYY-MM-DD. Inclusive to 23:59:59, not to midnight."),
+			"date_basis": _field(
+				_STRING,
+				"'submitted' (default) ranges and sorts on when Send was pressed; 'received' on "
+				"when the note reached the farm. Weeks apart, which is why the doctype keeps both.",
+			),
+			"company": _field(
+				_STRING,
+				"One operation. NOT INFERRED on a single-company site — see `without_company` "
+				"in the answer for what a company filter leaves out.",
+			),
+			"limit": _field(_INTEGER, "Maximum rows. Capped at 500."),
+		},
+		title="List app feedback",
+		available=_needs_doctype("App Feedback"),
+		requires="the App Feedback DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_app_feedback": _tool(
+		app_feedback.get_app_feedback,
+		"One note in full: what was said, who said it, which screen and which "
+		"handset, both stamps, and the screenshot if there is one. Read-only.\n\n"
+		"TAKES THE DOCNAME OR THE HANDSET'S OWN `entry_uuid`. The UUID is unique "
+		"on the doctype and is the only identifier a phone ever knows, which "
+		"makes it the one somebody has when they are chasing 'the app says it "
+		"filed this and I cannot find it'.\n\n"
+		"A CLAIMED EMPLOYEE THAT DISAGREES WITH THE RESOLVED ONE IS WHAT A SHARED "
+		"HANDSET LOOKS LIKE, and both are reported. `employee` is the identity "
+		"that was proved from the login; `claimed_employee` is what the app "
+		"thought. Neither is corrected into the other — the disagreement is the "
+		"fact worth keeping.\n\n"
+		"`screenshot_omitted` NAMES WHY A PICTURE IS MISSING from a note that was "
+		"written with one. An empty value means the worker never took one; those "
+		"are different facts and only the second is somebody's bug. The capture "
+		"itself is a PRIVATE File — it is a screenshot of whatever roster, wage "
+		"or task list was on the screen — and still needs an authenticated fetch.",
+		{
+			"name": _field(
+				_STRING,
+				"The App Feedback docname ('AFB-2026-00042') or the handset's entry_uuid.",
+			),
+			"entry_uuid": _field(_STRING, "The handset's own UUID, if you would rather name it explicitly."),
+		},
+		title="Get app feedback",
+		available=_needs_doctype("App Feedback"),
+		requires="the App Feedback DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── v0.82.0: agricultural master data — crops, markets, units ────────────
 	"list_crops": _tool(

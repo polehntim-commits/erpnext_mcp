@@ -876,8 +876,14 @@ class ToolRegistration(unittest.TestCase):
 		# `list_available_for_me` and `list_my_tasks`'s own calls that groups the
 		# pool and the caller's held work by place. Eighteen reads and fourteen
 		# writes; no existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 840)
-		self.assertEqual(len(self.registry.READ_TOOLS), 422)
+		# v0.128.0 adds two reads over App Feedback, the register the in-app
+		# feedback bubble has been writing into since v0.105.0:
+		# `list_app_feedback` (the feed, newest first on when Send was pressed)
+		# and `get_app_feedback` (one note in full). The write half stays off the
+		# catalogue and reachable only from the mobile surface — a phone files
+		# its own note under its own login. No existing signature changed.
+		self.assertEqual(len(self.registry.TOOLS), 842)
+		self.assertEqual(len(self.registry.READ_TOOLS), 424)
 		self.assertEqual(len(self.registry.MUTATING_TOOLS), 418)
 
 
