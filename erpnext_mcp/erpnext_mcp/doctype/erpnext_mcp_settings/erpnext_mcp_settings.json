@@ -7264,7 +7264,7 @@
   },
   {
    "default": "1",
-   "description": "READ, AND THE ONE GENERIC ONE. Lists records from ANY doctype by field values. It goes through frappe.get_list rather than frappe.db.get_all, so unlike every other read here it is bounded by the DocPerms of the account named in mcp_system_user — on a site where that account is a System Manager, this reads what a System Manager reads. Password fields are never returned and a short register of credential-holding doctypes is refused outright. Untick it if you would rather every register on this site be reachable only through the tool that names it.",
+   "description": "READ, AND THE ONE GENERIC ONE. Lists records from ANY doctype by field values. It goes through frappe.get_list rather than frappe.db.get_all, so unlike every other read here it asks the framework what the caller may see. BUT ASKING ONLY BINDS IF THE ACCOUNT BINDS: calls run as mcp_system_user, which is BLANK ON A FRESH INSTALL and falls back to Administrator, who passes every permission check there is — so until you set that field this tool reads the whole site, and its answers say so in acting_user and permissions_note. Password fields are never returned and a short register of credential-holding doctypes is refused outright; neither of those depends on permissions. Untick this if you would rather every register on this site be reachable only through the tool that names it.",
    "fieldname": "allow_query_doctype",
    "fieldtype": "Check",
    "label": "Query Any Doctype"

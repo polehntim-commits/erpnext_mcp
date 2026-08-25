@@ -33,15 +33,29 @@ smaller hole than the pressure to open an unguarded specific one.
 
 THREE GUARDS, AND EACH ONE CLOSES A DIFFERENT DOOR:
 
-  1. **PERMISSIONS ARE ENFORCED, WHICH MEANS `frappe.get_list`.** Every other
+  1. **PERMISSIONS ARE ASKED FOR, WHICH MEANS `frappe.get_list`.** Every other
      read in this app calls `frappe.db.get_all`, which SKIPS the permission
      check — deliberately, because those tools decide for themselves what they
      return and the switch is the gate. This one cannot decide, so it must ask,
-     and `get_list` is the call that asks. The reach of this tool is therefore
-     exactly the DocPerms of whichever account the operator configured as
-     `mcp_system_user`, and no wider. That is the sentence to read twice: on a
-     site where that account is a System Manager, this tool reads what a System
-     Manager reads.
+     and `get_list` is the call that asks.
+
+     **BUT ASKING IS NOT THE SAME AS BEING BOUNDED, AND ON A DEFAULT INSTALL IT
+     IS NOT BOUNDED AT ALL.** `mcp.handle` runs every call as
+     `settings.effective_user()`, which is the operator's chosen
+     `mcp_system_user` — a Link field that ships with NO DEFAULT — and falls
+     back to `Administrator` until somebody picks one. Frappe's Administrator
+     passes every permission check there is, so on a site where that field is
+     empty this guard is present, correct, and restricting nothing.
+
+     That is not a bug to fix by refusing: running as Administrator is the
+     documented posture of this whole app until an operator configures
+     otherwise, and every mutating tool here already writes as that account.
+     What would be a bug is SAYING otherwise, so `query_doctype` reports the
+     principal it actually ran as in `acting_user` and says in the answer
+     itself, in as many words, when that principal bounds nothing. An operator
+     who wants the guard live sets `mcp_system_user` to an account whose roles
+     they control — that one setting is the whole difference between this tool
+     being scoped and being a reader of the entire site.
 
   2. **A REGISTER OF DOCTYPES THAT ARE REFUSED WHATEVER THE PERMISSIONS SAY.**
      Defence in depth over guard 1, for the stores where even the columns that
@@ -541,6 +555,27 @@ def _requested_order(doctype: str, args: dict) -> str:
 	return f"{column} {(match.group(2) or 'asc').lower()}"
 
 
+#: Principals that pass every permission check Frappe has, so a `get_list` made
+#: as one of them is unrestricted however carefully it was written. Administrator
+#: is the one this app reaches by default: `settings.effective_user()` falls back
+#: to it, and `mcp_system_user` is a Link field with NO shipped default.
+UNBOUNDED_PRINCIPALS = frozenset({"Administrator"})
+
+
+def _acting_principal() -> tuple[str, bool]:
+	"""(the user `get_list` will check, whether that user restricts anything).
+
+	    READ OFF THE SESSION RATHER THAN OFF THE SETTINGS, because the session is
+	    what the framework will actually consult. `mcp.handle` sets it to
+	    `settings.effective_user()` before any tool runs, so the two normally agree —
+	    but reading the session is right even when they do not, and "whose
+	permissions applied" must never be answered from a different source than the
+	    one that applied them.
+	"""
+	principal = str(getattr(frappe.session, "user", "") or "")
+	return principal, bool(principal) and principal not in UNBOUNDED_PRINCIPALS
+
+
 def query_doctype(args: dict) -> ToolResult:
 	"""Read-only. Any register on this site, under this account's own permissions."""
 	doctype = _requested_doctype(args)
@@ -549,6 +584,7 @@ def query_doctype(args: dict) -> ToolResult:
 	order_by = _requested_order(doctype, args)
 	limit = min(as_limit(args), REGISTER_CAP)
 
+	principal, bounding = _acting_principal()
 	selected = _visible_fields(doctype, fields)
 	dropped = [field for field in fields if field not in selected]
 	if not selected:  # pragma: no cover - every doctype has `name`
@@ -589,12 +625,26 @@ def query_doctype(args: dict) -> ToolResult:
 		"filters": filters,
 		"order_by": order_by,
 		"records": records,
+		"acting_user": principal or None,
+		"permissions_bounding": bounding,
 		"note": (
-			"READ THROUGH frappe.get_list, so this answer is bounded by the DocPerms of the "
-			"account this app acts as and not by what the doctype holds. An empty answer from "
-			"a register you know has rows is that account's permissions, not a missing filter."
+			"READ THROUGH frappe.get_list, so what came back is what the account this app "
+			"acts as may read, and not what the doctype holds. An empty answer from a "
+			"register you know has rows is that account's permissions, not a missing filter."
 		),
 	}
+	if not bounding:
+		named = principal or "an unidentified principal"
+		data["permissions_note"] = (
+			f"THIS ANSWER WAS NOT BOUNDED BY PERMISSIONS. The call ran as {named}, which "
+			"passes every permission check on this site, so `frappe.get_list` restricted "
+			"nothing and this tool read the register in full. "
+			"That is the default posture until an operator sets `mcp_system_user` on ERPNext "
+			"MCP Settings to an account whose roles they control — one field, and it is the "
+			"whole difference between this tool being scoped and being a reader of the entire "
+			"site. The refused-doctype register and the Password-field rule applied as normal; "
+			"those do not depend on permissions."
+		)
 	if dropped:
 		data["fields_dropped"] = dropped
 		data["fields_dropped_note"] = (
@@ -609,7 +659,10 @@ def query_doctype(args: dict) -> ToolResult:
 		)
 	return ToolResult(
 		data=data,
-		summary=f"{len(records)} {doctype} record(s), ordered by {order_by}",
+		summary=(
+			f"{len(records)} {doctype} record(s), ordered by {order_by}, read as {principal}"
+			+ ("" if bounding else " — which bounds nothing")
+		),
 	)
 
 

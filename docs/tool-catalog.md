@@ -18764,10 +18764,20 @@ it returns, so it **asks**: it goes through `frappe.get_list`, which applies
 permissions, rather than `frappe.db.get_all`, which every other read here uses
 and which skips them.
 
-**What this tool can see is exactly what the account named in `mcp_system_user`
-may see.** No switch widens that and nothing here overrides a DocPerm. On a site
-where that account is a System Manager, this reads what a System Manager reads —
-which is the sentence to weigh before leaving the switch on.
+**Asking is not the same as being bounded, and on a default install it is not
+bounded at all.** Calls run as `mcp_system_user` — a Link field that ships with
+**no default** — and fall back to `Administrator`, who passes every permission
+check there is. So on a site where nobody has picked that account, this guard is
+present, correct, calls `get_list` exactly as advertised, and restricts nothing.
+
+That is not fixed by refusing: running as Administrator is this app's documented
+posture until an operator configures otherwise, and every mutating tool here
+already writes as that account. What would be wrong is saying otherwise, so every
+answer carries `acting_user`, a boolean `permissions_bounding`, and — when it is
+false — a `permissions_note` saying in as many words that the answer was not
+bounded. **Setting `mcp_system_user` to an account whose roles you control is the
+whole difference between this tool being scoped and being a reader of the entire
+site.**
 
 ```bash
 query_doctype(doctype="Farm Task",

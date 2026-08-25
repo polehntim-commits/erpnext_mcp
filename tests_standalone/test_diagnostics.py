@@ -53,6 +53,11 @@ from .harness import STORE, add_field
 ERROR_LOG = "Error Log"
 PATCH_LOG = "Patch Log"
 
+#: Any principal that is not Administrator. Its ROLES do not matter here — what
+#: is under test is whether the tool reports the account it ran as and whether
+#: that account is one Frappe exempts from permission checks.
+FOREMAN_LOGIN = "foreman@example.test"
+
 #: A traceback shaped like the ones Frappe files, with a credential in the frame
 #: repr — which is what a failed request on this app's own transports leaves in
 #: scope. THE SECRET IS THE POINT OF THE FIXTURE: `TheTracebackIsRedacted`
@@ -340,6 +345,47 @@ class TheGenericReadAsksPermission(DiagnosticsTestCase):
 		message = str(caught.exception)
 		self.assertIn("may not read Company", message)
 		self.assertIn("mcp_system_user", message)
+
+	def test_the_answer_names_the_principal_that_was_actually_checked(self):
+		"""READ OFF THE SESSION, which is what frappe.get_list consults, rather
+		than re-derived from settings — "whose permissions applied" must not be
+		answered from a different source than the one that applied them."""
+		result = self.query(doctype="Company", fields=["name"])
+		self.assertEqual(result["acting_user"], frappe.session.user)
+
+	def test_running_as_administrator_is_reported_as_bounding_nothing(self):
+		"""THE DEFECT THIS PAIR EXISTS FOR, found 2026-08-25. `mcp_system_user`
+		is a Link field with NO shipped default, so `effective_user()` falls back
+		to Administrator and `mcp.handle` runs every call as it — and Frappe's
+		Administrator passes every permission check there is. The guard is then
+		present, correct, calling get_list exactly as advertised, and restricting
+		nothing. Shipping a description that said otherwise was the bug; the fix
+		is that the answer says which of the two it was."""
+		frappe.set_user("Administrator")
+		result = self.query(doctype="Company", fields=["name"])
+		self.assertEqual(result["acting_user"], "Administrator")
+		self.assertFalse(result["permissions_bounding"])
+		self.assertIn("NOT BOUNDED BY PERMISSIONS", result["permissions_note"])
+		self.assertIn("mcp_system_user", result["permissions_note"])
+
+	def test_a_configured_principal_is_reported_as_bounding(self):
+		"""And the note is absent, so it means something when it is present."""
+		frappe.set_user(FOREMAN_LOGIN)
+		result = self.query(doctype="Company", fields=["name"])
+		self.assertEqual(result["acting_user"], FOREMAN_LOGIN)
+		self.assertTrue(result["permissions_bounding"])
+		self.assertNotIn("permissions_note", result)
+
+	def test_the_denied_read_test_below_could_not_have_seen_this(self):
+		"""THE POINT WORTH KEEPING. The permission test in this class denies a
+		DocPerm and requires the refusal, and it passes as Administrator — it
+		proves get_list is the call being made, which is true and worth proving,
+		and says nothing about whether the principal making it restricts
+		anything. Asserted here so the two claims cannot be confused later."""
+		frappe.set_user("Administrator")
+		STORE.denied_permissions.add(("Company", "read"))
+		with self.assertRaises(ToolError):
+			self.query(doctype="Company", fields=["name"])
 
 	def test_the_negative_control_a_db_get_all_would_have_answered_anyway(self):
 		"""The test above is only worth making if the call every other tool uses

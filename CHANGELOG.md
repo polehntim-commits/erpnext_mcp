@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.133.0 — 2026-08-25 — the guard that was correct and bounded nothing
+
+**`query_doctype` SAID ITS REACH WAS `mcp_system_user`'s PERMISSIONS. ON A FRESH
+INSTALL THAT WAS FALSE.** The tool calls `frappe.get_list`, which applies
+permissions, exactly as v0.129.0 described — but `mcp.handle` runs every call as
+`settings.effective_user()`, and `mcp_system_user` is a Link field that ships
+with NO DEFAULT and falls back to `Administrator`. Frappe's Administrator passes
+every permission check there is, so the guard was present, correct, and
+restricting nothing while three separate pieces of documentation told an operator
+it was bounded.
+
+**FIXED BY CORRECTING THE CLAIM, NOT BY REFUSING.** Running as Administrator is
+this app's documented posture until an operator configures otherwise, and every
+mutating tool here already writes as that account — a refusal would be inventing
+a new rule in the wrong place. Every answer now carries `acting_user`, read off
+`frappe.session.user` (the thing `get_list` will actually consult, rather than
+re-derived from the settings that fed it), a boolean `permissions_bounding`, and
+when that is false a `permissions_note` stating that the answer was not bounded,
+which account it ran as, and that one field changes it. The refused-doctype
+register and the Password-field rule are named there as still applying, since
+neither depends on permissions.
+
+**THE TEST THAT PASSED THROUGH THIS.** v0.129.0's permission test denies a
+DocPerm, requires the refusal, and carries a negative control proving
+`db.get_all` would have answered anyway. Both still pass. They prove `get_list`
+is the call being made — true, and worth proving — and say nothing about whether
+the principal making it restricts anything. Proving a guard EXISTS is not proving
+it BINDS, and the difference is invisible when the extra privilege is what makes
+the test pass. Found via a peer session's report that identity set once in a test
+silently reverts to the effective user on the next call.
+
+Four tests, one of them asserting that the older permission test cannot see this.
+
 ## 0.132.0 — 2026-08-25 — the refusal that could not see the value it named
 
 **`as_int(args, "key", DEFAULT) or DEFAULT` SILENTLY DROPS AN EXPLICIT ZERO.**
