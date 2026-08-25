@@ -3,6 +3,42 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.129.1 — 2026-08-25 — the polygon was a block and the parcel was not
+
+**The suite has been red since v0.125.0 and the failure was a fixture, not the
+product.** `test_field_boundaries_route.TheParcelIsOptIn.test_a_parcels_
+boundary_is_read_back_even_though_list_parcels_strips_it` set `BLOCK` — the
+field-sized 25.7-acre polygon `test_mobile_boundaries` uses — onto a parcel that
+`Wave2TestCase.a_parcel` creates at 131.43 acres. `set_parcel_boundary` refused
+the 80.4% disagreement, correctly, by the guard that has been there since
+v0.32.0, and the test errored before it could assert the thing it exists to
+assert.
+
+**THE GUARD IS NOT THE BUG AND WAS NOT TOUCHED.** A parcel traced off an
+assessor's map and a block traced off a drone flight disagreeing by four-fifths
+is not a survey disagreement — it is two figures about different ground, which
+is exactly what that check is for, and it is one of the few automatic
+protections left on the phone and AI write paths. Loosening it to make a test
+pass would have removed a real guard to accommodate a wrong fixture.
+
+**`Wave2TestCase.a_parcel` was the one helper of five that hardcoded the
+acreage.** The same helper in `test_farm.py`, `test_housing.py`,
+`test_locations.py` and `test_geo.py` all read
+`def a_parcel(self, parcel_name="Mill Creek", acreage=131.43, **overrides)`.
+Wave2's took the name alone and wrote 131.43 into the document unconditionally,
+so no caller could ask for a parcel the size of the polygon it was about to set.
+It now takes `acreage` with the same default, and the one test that needs a
+block-sized parcel asks for one.
+
+**The acreage was always incidental to what that test proves**, which is that a
+parcel's polygon is read back through `list_field_boundaries` rather than
+stripped the way `list_parcels` strips it. Nothing about the assertion changed.
+
+12,593 tests, green. CI had been failing on both matrix legs since the first push
+that carried the test — the geo-absent step skips it and the step after installs
+shapely and h3 and runs the suite again, so nothing was hidden; the board was
+simply not being read.
+
 ## 0.129.0 — 2026-08-24 — four questions about the server, not the farm
 
 **`get_server_status`, `list_error_logs`, `query_doctype` AND

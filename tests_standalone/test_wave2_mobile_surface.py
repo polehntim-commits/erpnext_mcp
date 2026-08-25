@@ -153,7 +153,7 @@ class Wave2TestCase(V12TestCase):
 		return user
 
 	# ── furniture ───────────────────────────────────────────────────────────
-	def a_parcel(self, parcel_name="Mill Creek"):
+	def a_parcel(self, parcel_name="Mill Creek", acreage=131.43):
 		"""One parcel, created once. Returns the DOCNAME, which is not the name.
 
 		`Parcel` autonames as `<parcel_name> - <company abbr>`, so a test that
@@ -166,7 +166,7 @@ class Wave2TestCase(V12TestCase):
 			return existing[0]
 		return self.tool_data(
 			"create_parcel",
-			{"owning_entity": MAIN, "parcel_name": parcel_name, "acreage": 131.43, "county": "Wasco"},
+			{"owning_entity": MAIN, "parcel_name": parcel_name, "acreage": acreage, "county": "Wasco"},
 		)["name"]
 
 	def a_block(self, field_name="Ridge Top", **overrides):

@@ -117,7 +117,17 @@ class TheParcelIsOptIn(FieldBoundariesTestCase):
 	def test_a_parcels_boundary_is_read_back_even_though_list_parcels_strips_it(self):
 		"""`realestate.list_parcels` reports `mapped` and a centroid and never the
 		polygon itself — this route is the one caller that wants it anyway."""
-		parcel = self.a_parcel()
+		# THE ACREAGE HAS TO MATCH THE POLYGON OR THE WRITE IS REFUSED BEFORE
+		# THIS TEST GETS TO ASSERT ANYTHING. `BLOCK` is the field-sized polygon
+		# `test_mobile_boundaries` uses — 25.7 acres — and `a_parcel`'s default
+		# is 131.43, so setting one on the other is an 80.4% disagreement and
+		# `set_parcel_boundary` refuses it by the guard that has been there
+		# since v0.32.0. That guard is right: the two figures would be about
+		# different ground. The acreage is incidental to what is under test
+		# here, which is that a parcel's polygon is READ BACK rather than
+		# stripped the way `list_parcels` strips it, so the fixture is made
+		# consistent rather than the guard loosened.
+		parcel = self.a_parcel(acreage=25.7)
 		self.be(MANAGER)
 		mobile_api.set_parcel_boundary(parcel=parcel, boundary_geojson=json.dumps(BLOCK))
 		self.be(WORKER)
