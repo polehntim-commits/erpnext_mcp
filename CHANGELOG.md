@@ -3,6 +3,67 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.132.0 — 2026-08-25 — the refusal that could not see the value it named
+
+**`as_int(args, "key", DEFAULT) or DEFAULT` SILENTLY DROPS AN EXPLICIT ZERO.**
+`as_int` already answers the default for a missing or empty value, so the trailing
+`or` cannot fire on `None` or `""` — the only thing it ever catches is a deliberate
+`0`, which it replaces with the default and reports as success. Found by a peer
+session whose `stale_after_hours: 0` became 16 and closed a shift the refusal
+existed to protect. A regex grep found roughly forty sites; a peer's fuller AST
+sweep puts it at 127 `BoolOp`-over-coercion sites, 78 harmless identity cases and
+49 that really drop a zero. Harmless means `as_int(args, "x") or 0`, which gives
+the same answer either way.
+
+**`generate_mobile_login_qr` HAD A GUARD THAT NAMED THE VALUE IT COULD NOT
+REFUSE.** `if hours <= 0 or hours > 168: raise` sat directly under
+`hours = as_int(args, "expiry_hours", DEFAULT_QR_HOURS) or DEFAULT_QR_HOURS`, so
+the `<= 0` half was unreachable. A caller asking for a zero-hour credential was not
+told no — they were handed a LIVE WORKING LOGIN QR on the default window, with a
+success payload and a PNG. The mistake produced a usable credential rather than an
+error, which is the direction that matters.
+
+**`list_expiring_work_authorizations` ANSWERED A QUESTION ABOUT TODAY WITH THREE
+MONTHS.** `days_ahead: 0` — "who is expired or expiring today" — became 90. It
+over-reports rather than under-reports, so nothing was hidden, which is why it
+survived.
+
+**TWO MORE WERE FIXED, TESTED AND REVERTED, and that is the more useful half.**
+Both failed on one fact: AN EXPLICIT ZERO IS ONLY A DISTINCT VALUE FOR AN
+ARGUMENT. A Frappe `Int`, `Float` or `Percent` field has no empty state — an unset
+one reads back as `0` — so for a stored column "explicitly zero" and "never set"
+are the same bytes.
+
+  * `budget_engine.threshold_pct` — removing the `or` raises **ZeroDivisionError**
+    on `ratio = abs(pct) / threshold`, proven by running it. That `or` was
+    ACCIDENTALLY LOAD-BEARING. And the field is a `Percent` with doctype default
+    "10" whose description defines behaviour only for positive values, so what a
+    stored 0 MEANS is undefined by the product.
+  * `dispatch.actual_duration_minutes` — an `Int` with no default. The write fix
+    stored the zero correctly and the read path at `dispatch.py:895` maps
+    `0 -> None` ("not recorded") on purpose, so the fix was invisible and the
+    schema cannot carry the distinction.
+
+**SO "A TRAILING `or <same default>` IS NEVER LOAD-BEARING" WAS THE WRONG RULE**,
+and it failed on two of four sites the same day it was written. The order that
+works: find a `BoolOp(Or)` with a coercion on the left, whatever is on the right;
+then ask argument-or-column; only then ask whether the fallback equals the default.
+Anchoring the search on "the same default" misses the value-corruption class
+entirely, where the fallback is `active_minutes(doc)` or `round(qty * rate, 2)`.
+
+**AND `args.as_float` IS NOT SHAPED LIKE `as_int`** — no `default` parameter, never
+returns `None`, so absent and explicit-zero are indistinguishable after coercion.
+Deleting the `or` at an `as_float` site changes the ABSENT case too. Those need a
+branch on the raw value before coercion, which makes two fix shapes across the ~40
+sites rather than one. Recorded here because applying the `as_int` recipe to an
+`as_float` site is a no-op or a regression that reads like a fix.
+
+Five tests, each fix with a negative control that was run — including one that
+changes the DEFAULT rather than restoring the `or`, since "remove the `or`" could
+otherwise be satisfied by deleting the default too and nothing would notice.
+12,593 tests at 5f2a76d, 12,598 with these four files, both green, both from clean
+`git archive` extractions rather than the shared tree.
+
 ## 0.131.0 — 2026-08-25 — the farm today: department, crew, worker, and the shift nobody closed
 
 **THREE CALLS BEHIND ONE SCREEN.** The handset has been able to ask about one

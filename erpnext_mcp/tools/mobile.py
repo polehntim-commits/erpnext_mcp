@@ -1132,7 +1132,13 @@ def generate_mobile_login_qr(args: dict) -> ToolResult:
 			"call, forever. Fix public_url, or pass an https:// url. Nothing was written."
 		)
 
-	hours = as_int(args, "expiry_hours", DEFAULT_QR_HOURS) or DEFAULT_QR_HOURS
+	# NOT `... or DEFAULT_QR_HOURS`. `as_int` already answers the default for a
+	# missing or empty value, so the trailing `or` could only fire on an explicit
+	# 0 — and 0 is the exact value THE NEXT LINE IS WRITTEN TO REFUSE. With it
+	# there the refusal was unreachable for the case it names first, and a caller
+	# asking for a zero-hour credential was handed a live working login QR on the
+	# default window instead of being told no.
+	hours = as_int(args, "expiry_hours", DEFAULT_QR_HOURS)
 	if hours <= 0 or hours > 168:
 		raise ToolError(
 			"expiry_hours must be between 1 and 168 (a week). A login QR is valid for the "

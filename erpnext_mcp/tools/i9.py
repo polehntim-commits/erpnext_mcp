@@ -673,7 +673,12 @@ def get_i9_retention_report(args: dict) -> ToolResult:
 def list_expiring_work_authorizations(args: dict) -> ToolResult:
 	"""Employees whose work authorization expires within N days."""
 	company = as_str(args, "company")
-	days_ahead = as_int(args, "days_ahead", 90) or 90
+	# NOT `... or 90`: `as_int` already answers 90 for a missing value, so the
+	# trailing `or` only ever caught an explicit 0 — which is the real question
+	# "who is expired or expiring today", widened without being asked to three
+	# months. It errs toward showing too much rather than too little, which is
+	# why it survived, but it is still not what the caller asked.
+	days_ahead = as_int(args, "days_ahead", 90)
 	filters = {
 		"status": ["not in", ["Destroyed", "Expired"]],
 		"citizenship_status": ["in", ["Alien Authorized to Work", "Lawful Permanent Resident"]],

@@ -671,6 +671,36 @@ class TheLoginCard(MobileTestCase):
 		self.assertIn("between 1 and 168", message)
 		self.assertIn("photo roll", message)
 
+	def test_an_expiry_of_zero_is_refused_by_the_guard_that_names_it(self):
+		"""THE REFUSAL THAT COULD NOT SEE THE VALUE IT NAMED. The guard reads
+		`if hours <= 0 or hours > 168`, and the line above it was
+		`as_int(args, "expiry_hours", DEFAULT_QR_HOURS) or DEFAULT_QR_HOURS` — so
+		an explicit 0 became the default before the check ever ran. The `<= 0`
+		half was unreachable, and a caller asking for a zero-hour credential was
+		handed a LIVE WORKING LOGIN QR on the default window instead of a no.
+
+		That is the direction that matters: the mistake produced a usable
+		credential and a success payload, not an error."""
+		self.make()
+		message = self.tool_error("generate_mobile_login_qr", {"user": WORKER, "expiry_hours": 0})
+		self.assertIn("between 1 and 168", message)
+
+	def test_a_negative_expiry_is_refused_too(self):
+		"""Already reachable before the fix, and asserted here so the `<= 0` half
+		of the guard is covered on both sides of zero rather than only below it."""
+		self.make()
+		self.assertIn(
+			"between 1 and 168",
+			self.tool_error("generate_mobile_login_qr", {"user": WORKER, "expiry_hours": -1}),
+		)
+
+	def test_an_absent_expiry_still_takes_the_default_window(self):
+		"""The other half of the fix: removing the `or` must not have removed the
+		default. A card minted with no expiry_hours is still valid for the
+		shipped window."""
+		self.make()
+		self.assertEqual(self.card()["expiry_hours"], mobile.DEFAULT_QR_HOURS)
+
 	def test_it_says_the_image_is_a_live_credential(self):
 		self.make()
 		note = self.card()["security_note"]

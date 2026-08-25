@@ -519,6 +519,34 @@ class RetentionAndDestruction(I9TestCase):
 		data = self.tool_data("list_expiring_work_authorizations", {"days_ahead": 90})
 		self.assertEqual(data["count"], 1)
 
+	def test_days_ahead_zero_asks_about_today_and_not_about_ninety_days(self):
+		"""`as_int(args, "days_ahead", 90) or 90` turned an explicit 0 back into
+		the default, so "who is expired or expiring TODAY" silently answered with
+		three months of people. It errs toward showing too much rather than too
+		little, which is why it survived — but a window nobody asked for is still
+		the wrong answer, and on a compliance screen it reads as "these eleven are
+		expiring now"."""
+		self._create_draft()
+		self._submit_section_1(
+			citizenship_status="Alien Authorized to Work",
+			alien_registration_number="A012345678",
+			alien_work_authorization_expiry=str(date.today() + timedelta(days=30)),
+		)
+		self._submit_section_2()
+		self.assertEqual(self.tool_data("list_expiring_work_authorizations", {"days_ahead": 90})["count"], 1)
+		self.assertEqual(self.tool_data("list_expiring_work_authorizations", {"days_ahead": 0})["count"], 0)
+
+	def test_days_ahead_zero_still_finds_somebody_expiring_today(self):
+		"""The other direction, so the fix cannot be "0 matches nothing"."""
+		self._create_draft()
+		self._submit_section_1(
+			citizenship_status="Alien Authorized to Work",
+			alien_registration_number="A012345678",
+			alien_work_authorization_expiry=str(date.today()),
+		)
+		self._submit_section_2()
+		self.assertEqual(self.tool_data("list_expiring_work_authorizations", {"days_ahead": 0})["count"], 1)
+
 
 # ── 7 ─────────────────────────────────────────────────────────────────────────
 class OnboardCreatesI9(I9TestCase):
