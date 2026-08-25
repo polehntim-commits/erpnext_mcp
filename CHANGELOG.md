@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.135.1 — 2026-08-25 — three numbers that were wrong before they shipped
+
+**PROSE ONLY. No behaviour changes, no new tests, no code paths touched.**
+
+v0.134.0 published "97 sites, 78 identity, 19 flagged" for the zero-drop scan in
+three places: the module docstring, `RELEASES/v0.134.0.md`, and the changelog. All
+three were already wrong when they shipped. They were measured BEFORE the
+git-tracked filter was added to `scan_tree`, and never re-measured once that filter
+began excluding an untracked file. The real figures are **93 / 75 / 18**. A peer
+ran the scan on an extraction, reported 18, and was right.
+
+Corrected in the two historical documents with a note saying so. **Removed entirely
+from the module docstring**, which now points at `len(ALLOWLIST)` and
+`len(scan_tree())` instead — a count frozen in prose beside code that keeps moving
+is a claim that rots in silence, which is the same class of failure the release it
+was describing exists to prevent.
+
+**ALSO DOCUMENTED: WHICH TEST RUN ESTABLISHES WHICH CLAIM.** Releases here are
+verified on a `git archive` extraction, and an extraction has no `.git` — so
+`_tracked_modules()` answers None, the filter goes inert, and every file present is
+a tracked file anyway. The coverage assertion still runs and still proves the scan
+reaches the package; only `test_an_untracked_module_is_left_out...` skips, because
+there is no untracked file to exclude. So a green extraction proves the scan is
+LIVE but does not exercise the FILTER, and only a git checkout makes both claims.
+Written into the test's docstring so the next person reading a green extraction
+knows what it did and did not establish.
+
 ## 0.135.0 — 2026-08-25 — a nought the custodian wrote, filed as nothing said
 
 **THE PAYLOAD WAS NOT THE ONLY GATE, AND THAT IS THE WHOLE LESSON HERE.**
@@ -77,8 +104,9 @@ default, so deleting the `or` is the whole fix. `as_float` carries NO default an
 answers `0.0` for absent, `""` and an explicit `0` alike — there the fix must
 branch on the RAW value, and `as_float(args, key, None)` is not even a valid call.
 
-**THE SCAN.** `tests_standalone/test_zero_drop.py` — 97 sites, 78 the harmless
-`x or 0` identity, 19 flagged and every one allowlisted WITH A REASON. Anchored on
+**THE SCAN.** `tests_standalone/test_zero_drop.py` — 93 sites, 75 the harmless
+`x or 0` identity, 18 flagged and every one allowlisted WITH A REASON. (Those
+three figures were published as 97/78/19 and corrected in v0.135.1.) Anchored on
 the `or` rather than on "the same default", because sameness misses the
 value-corruption class entirely. Three controls, including one proving the
 allowlist matches by expression rather than by filename — the failure an allowlist

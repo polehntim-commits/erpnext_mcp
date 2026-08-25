@@ -62,12 +62,20 @@ WHAT THIS DELIBERATELY DOES NOT FLAG, AND THE RULE THAT DECIDES
 ────────────────────────────────────────────────────────────────────────────
 
 `x or 0` is NOT this bug. It maps `None → 0` and `0 → 0` — the same answer
-either way — and 78 of the 97 sites in this tree are that harmless identity, with
-19 left flagged and every one of them allowlisted with a reason. Only a fallback
-that differs from the value the coercion ALREADY answers for absent can corrupt
-anything, so the scan ignores `or 0`, `or 0.0`, and — when the coercion answers
-zero for absent — `or None`, `or ""` and `or False` too. That last clause is
-per-call-site rather than per-helper; see `_carries_a_nonzero_default`.
+either way — and the large majority of sites in this tree are that harmless
+identity. Only a fallback that differs from the value the coercion ALREADY
+answers for absent can corrupt anything, so the scan ignores `or 0`, `or 0.0`,
+and — when the coercion answers zero for absent — `or None`, `or ""` and
+`or False` too. That last clause is per-call-site rather than per-helper; see
+`_carries_a_nonzero_default`.
+
+NO EXACT COUNTS ARE QUOTED HERE ON PURPOSE. v0.134.0 shipped "97 sites, 78
+identity, 19 flagged" in this docstring, the release note and the changelog. All
+three were wrong by the time they shipped: they were measured BEFORE the
+git-tracked filter was added, and never re-measured after it started excluding an
+untracked file. The real figures were 93/75/18, and a peer running the scan found
+it. A number frozen in prose beside code that keeps moving is a claim that rots
+silently, so `len(ALLOWLIST)` and `len(scan_tree())` are the answer — run them.
 
 The sharper rule, which cost two reverted fixes to find:
 
@@ -488,6 +496,21 @@ class TheScannerItself(unittest.TestCase):
 		working tree cannot fail the build. A filter is exactly the kind of thing that
 		quietly narrows to nothing — a wrong path prefix, a git that answers oddly —
 		and every 'not flagged' assertion would then pass for the wrong reason.
+
+		WHICH RUN ESTABLISHES WHAT, because the two are not interchangeable and a
+		release here is verified on an extraction:
+
+		  * A GIT CHECKOUT is the only run where the filter is ACTIVE, so it is the
+		    only run that can catch the filter narrowing. This assertion and
+		    `test_an_untracked_module_is_left_out...` both bite there.
+		  * A `git archive` EXTRACTION has no `.git`, so `_tracked_modules()` answers
+		    None and the filter is inert — every file present is a tracked file, which
+		    is the same set by a different route. This assertion still RUNS and still
+		    proves the scan reaches the package; the untracked-file test skips, since
+		    there is no untracked file to exclude.
+
+		So a green extraction proves the scan is live and reaching everything. It does
+		NOT exercise the filter. Both claims matter and only the checkout makes both.
 		"""
 		scanned = {path for path in _scanned_paths()}
 		self.assertGreater(len(scanned), 200, "the scan is reaching far too few modules")
