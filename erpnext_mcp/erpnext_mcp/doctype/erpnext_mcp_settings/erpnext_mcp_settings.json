@@ -931,6 +931,12 @@
   "allow_list_app_feedback",
   "app_feedback_col",
   "allow_get_app_feedback",
+  "diagnostics_section",
+  "allow_get_server_status",
+  "allow_list_error_logs",
+  "diagnostics_col",
+  "allow_query_doctype",
+  "allow_list_sidecar_routes",
   "breakeven_section",
   "allow_get_breakeven_analysis",
   "allow_list_breakeven_analyses",
@@ -7200,6 +7206,43 @@
    "fieldname": "allow_get_app_feedback",
    "fieldtype": "Check",
    "label": "Get App Feedback"
+  },
+  {
+   "fieldname": "diagnostics_section",
+   "fieldtype": "Section Break",
+   "label": "Deployment Diagnostics (v0.129.0)"
+  },
+  {
+   "default": "1",
+   "description": "READ. What this deployment is running: erpnext_mcp, Python and Frappe versions, every installed app, this worker's uptime, and when a migrate last had a patch to apply.",
+   "fieldname": "allow_get_server_status",
+   "fieldtype": "Check",
+   "label": "Get Server Status"
+  },
+  {
+   "default": "1",
+   "description": "READ. Recent Frappe Error Log rows by age, method or traceback substring, with the exception line named and credential-shaped values redacted.",
+   "fieldname": "allow_list_error_logs",
+   "fieldtype": "Check",
+   "label": "List Error Logs"
+  },
+  {
+   "fieldname": "diagnostics_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "READ, AND THE ONE GENERIC ONE. Lists records from ANY doctype by field values. It goes through frappe.get_list rather than frappe.db.get_all, so unlike every other read here it is bounded by the DocPerms of the account named in mcp_system_user — on a site where that account is a System Manager, this reads what a System Manager reads. Password fields are never returned and a short register of credential-holding doctypes is refused outright. Untick it if you would rather every register on this site be reachable only through the tool that names it.",
+   "fieldname": "allow_query_doctype",
+   "fieldtype": "Check",
+   "label": "Query Any Doctype"
+  },
+  {
+   "default": "1",
+   "description": "READ. Every path the farmops sidecar publishes, whether each writes, and which body keys it accepts. NOT an access map: who may call a route is a line in its own wrapper body and is not reported here.",
+   "fieldname": "allow_list_sidecar_routes",
+   "fieldtype": "Check",
+   "label": "List Sidecar Routes"
   },
   {
    "description": "The breakeven calculator. A Breakeven Analysis is a PERSPECTIVE on the chart of accounts the farm already keeps — nothing here posts, nothing is a journal entry, and no number it produces changes what the financial statements say. What it adds is the one thing a chart of accounts cannot hold: which accounts stop mattering when the crop gets bigger. The three reads default ON and none of them ever refuses. The two writes are off until an operator turns them on, and both are 'mutating' because they STORE — the cost lines, the results and the scenario band go onto the analysis, which is what makes this season's breakeven comparable with next season's.",

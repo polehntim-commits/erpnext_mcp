@@ -882,8 +882,11 @@ class ToolRegistration(unittest.TestCase):
 		# and `get_app_feedback` (one note in full). The write half stays off the
 		# catalogue and reachable only from the mobile surface — a phone files
 		# its own note under its own login. No existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 842)
-		self.assertEqual(len(self.registry.READ_TOOLS), 424)
+		# v0.129.0 adds four reads about the deployment rather than the farm:
+		# get_server_status, list_error_logs, list_sidecar_routes and
+		# query_doctype. No existing signature changed.
+		self.assertEqual(len(self.registry.TOOLS), 846)
+		self.assertEqual(len(self.registry.READ_TOOLS), 428)
 		self.assertEqual(len(self.registry.MUTATING_TOOLS), 418)
 
 

@@ -282,6 +282,14 @@ SECTION_DOMAIN = {
 	# own registers rather than under Workforce because the notes have names on
 	# them.
 	"app_feedback_section": "platform",
+	# v0.129.0. The deployment diagnostics file under `platform` for the reason
+	# the shadow log and the feedback feed do: what they answer questions about is
+	# the software and the site, not the orchard. `query_doctype` sits in the same
+	# section as the other three rather than in one of its own, even though it can
+	# reach any register on the site — its chip is decided by what KIND of tool it
+	# is, and it is a diagnostic; filing it under whichever domain its argument
+	# happened to name is not a thing a static table can do.
+	"diagnostics_section": "platform",
 	"mobile_read_section": "platform",
 	"mobile_write_section": "platform",
 	"push_notification_section": "platform",

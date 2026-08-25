@@ -3,6 +3,76 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.129.0 — 2026-08-24 — four questions about the server, not the farm
+
+**`get_server_status`, `list_error_logs`, `query_doctype` AND
+`list_sidecar_routes`.** All four read-only, all four shipping on. Every other
+tool here answers a question about an orchard; these answer questions about the
+deployment the orchard's records live on. 842 → 846 tools = 428 read + 418
+mutating.
+
+**`get_server_status` ANSWERS FOR ONE WORKER AND SAYS SO.** A Frappe bench runs
+several worker processes and the call was answered by whichever took it, so
+`worker_uptime_seconds` is that process's age and two consecutive calls can
+disagree. That is still the deploy question answered: a worker older than the
+deploy has not been restarted, and the version beside it is what that process
+actually imported. `last_patch_applied` is deliberately labelled as the last
+migrate that HAD A PATCH TO APPLY — a release adding only tools writes no Patch
+Log row, so an old stamp here is not evidence a deploy failed.
+
+**`list_error_logs` RETURNS THE END OF THE TRACEBACK AS WELL AS THE START.**
+Python prints the stack first and the exception last, so the truncated head any
+feed necessarily shows is the half with the answer cut off. Every row carries
+`error` (the head, capped) and `exception` (the last line, which is what went
+wrong). `method` matches as a substring, because a caller has a method name off a
+traceback and rarely has the dotted path Frappe filed it under.
+
+**A TRACEBACK IS THE REPR OF WHATEVER WAS IN SCOPE, AND ON A FAILED REQUEST THAT
+IS THE REQUEST BODY.** On this app's own transports the body carries a token, so
+credential-shaped values are replaced before the answer leaves the server and
+`redacted_values` counts them. `strip_secrets` removes credential-shaped KEYS
+from a structure and cannot see inside a string; this is the same judgement
+applied to the one field that is a string.
+
+**`query_doctype` IS THE ONE GENERIC READ AND IT IS SHAPED DIFFERENTLY FROM
+EVERYTHING ELSE HERE — DELIBERATELY, AND WORTH READING BEFORE LEAVING IT ON.**
+Every other read in this app calls `frappe.db.get_all`, which SKIPS the
+permission check, because those tools decide for themselves what they return and
+the switch is the gate. This one cannot decide, so it asks: it goes through
+`frappe.get_list`, which applies permissions. **Its reach is exactly the DocPerms
+of the account named in `mcp_system_user`** — on a site where that account is a
+System Manager, it reads what a System Manager reads. No switch widens that and
+nothing in it overrides a DocPerm.
+
+It is here because the alternative is worse in a specific way: a farm that adds a
+custom doctype next season either waits for a release naming it or goes round
+this app to Frappe's `/api/resource`, which the sidecar does not publish and
+which has no audit row, no switch and no field filtering at all.
+
+**THREE GUARDS, EACH PROVED BY A TEST THAT GOES RED WITHOUT IT.** Permissions via
+`get_list` (proved by denying one and requiring the refusal, which is the only
+way to tell the two calls apart from outside); a register of credential-holding
+doctypes refused outright, because on some of them the token is a plain Data
+column; and Password fields never returned on any doctype, REFUSED when named
+rather than dropped — a caller who asked for a column and got nothing back reads
+the column as empty. `order_by` is interpolated into SQL by Frappe rather than
+parameterised, so it is matched against one column and an optional direction and
+refused by shape otherwise.
+
+**`list_sidecar_routes` IS NOT AN ACCESS MAP, AND THE MISSING COLUMN IS THE
+IMPORTANT ONE.** It reports which paths exist, which write, and which body keys
+each accepts. Who may call one is a line inside that route's own wrapper body and
+is not an attribute of anything readable from here — so there is no gate column
+rather than an incomplete one, because a route missing from a gate column reads
+as open. `arguments` is the transport's own filter rather than documentation of
+it: a key absent from that list is unreachable, not merely unlisted.
+
+**The harness gained `Error Log`, `Patch Log` and a `frappe.__version__`.**
+Without the first two a tool guarded on `require_doctype` refuses against the
+double with "run bench migrate" and is untestable rather than merely unseeded;
+without the third `get_server_status` could have shipped answering
+`frappe_version: null` on every site with no test able to see it.
+
 ## 0.128.0 — 2026-08-24 — the feedback the farm could not read
 
 **TWO READ TOOLS OVER `App Feedback`**, the register the in-app feedback bubble

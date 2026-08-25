@@ -634,6 +634,35 @@ ERPNEXT_SCHEMA = {
 		"owner",
 		"creation",
 	],
+	# v0.129.0. Frappe's own crash register, which `list_error_logs` reads. It is
+	# core rather than this app's, and it is here for the reason every other core
+	# doctype in this table is: a tool guarded on `require_doctype` refuses with
+	# "run bench migrate" against a double that has never heard of it, so its
+	# absence would make the tool untestable rather than merely unseeded.
+	"Error Log": [
+		"name",
+		"method",
+		"error",
+		"reference_doctype",
+		"reference_name",
+		"seen",
+		"owner",
+		"creation",
+		"modified",
+	],
+	# The patch ledger `bench migrate` appends to, which is how
+	# `get_server_status` answers "when was this site last migrated" — and, more
+	# precisely, "when did a migrate last have something to apply", which is not
+	# the same question and is why the tool says so in its own answer.
+	"Patch Log": [
+		"name",
+		"patch",
+		"skipped",
+		"traceback",
+		"owner",
+		"creation",
+		"modified",
+	],
 	"Comment": [
 		"name",
 		"comment_type",
@@ -5182,6 +5211,12 @@ def _build_frappe() -> types.ModuleType:
 	module.msgprint = msgprint
 	module.get_attr = get_attr
 	module.get_site_path = get_site_path
+	# THE REAL `frappe` MODULE CARRIES ITS OWN VERSION and `get_server_status`
+	# reports it, so a double without one would let the tool ship answering
+	# `frappe_version: null` on every site and no test could tell. The number is
+	# a plausible v15, not this machine's — nothing asserts which, only that the
+	# tool reads the attribute rather than inventing a string.
+	module.__version__ = "15.0.0"
 	module.utils = _build_utils()
 
 	# `frappe.session` and `frappe.request` are properties on the real module;

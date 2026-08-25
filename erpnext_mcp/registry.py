@@ -69,6 +69,7 @@ from .tools import (
 	controls,
 	costing,
 	cropprotect,
+	diagnostics,
 	dimensions,
 	discipline,
 	disclosure,
@@ -25566,6 +25567,143 @@ TOOLS = {
 		title="Acknowledge a shadow log entry",
 		available=_needs_doctype("Shadow Log Entry"),
 		requires="the Shadow Log Entry DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	# ── v0.129.0: what the install is doing, rather than what the farm is ────
+	"get_server_status": _tool(
+		diagnostics.get_server_status,
+		"What this deployment is running: the erpnext_mcp version, Python and "
+		"Frappe versions, every installed app's version, how long THIS WORKER has "
+		"been up, and when a migrate last had a patch to apply. Read-only.\n\n"
+		"THE ANSWER IS ONE WORKER, NOT THE BENCH. A Frappe bench runs several "
+		"worker processes and this call was answered by whichever took it, so "
+		"`worker_uptime_seconds` is that process's age and two consecutive calls "
+		"can disagree. That is still the deploy question answered: a worker older "
+		"than the deploy has not been restarted, and the version beside it is "
+		"what that process actually imported.\n\n"
+		"`last_patch_applied` IS NOT THE LAST MIGRATE. A migrate with no new "
+		"patches writes no row, which is the ordinary case for a release that "
+		"adds only tools — so an old stamp here is not evidence that a deploy "
+		"failed. `erpnext_mcp_version` is that evidence.",
+		{},
+		title="Get server status",
+	),
+	"list_error_logs": _tool(
+		diagnostics.list_error_logs,
+		"Recent Frappe Error Log rows, newest first, filtered by age, by method "
+		"or by what the traceback says. Read-only.\n\n"
+		"`exception` IS THE LAST LINE OF THE TRACEBACK, which is where Python "
+		"puts what actually went wrong. `error` is the HEAD of the same "
+		"traceback, truncated — so a feed of forty is readable and the answer is "
+		"not the half that got cut off. Both are on every row; neither alone is "
+		"the row. `get_document_preview` on the docname has the whole thing.\n\n"
+		"CREDENTIAL-SHAPED VALUES ARE REPLACED BEFORE THE ANSWER LEAVES. A "
+		"traceback is the repr of whatever was in scope when something threw, "
+		"and on a failed request that includes the request body — which on this "
+		"app's own transports carries a token. `redacted_values` counts what was "
+		"replaced.\n\n"
+		"`method` MATCHES AS A SUBSTRING, because a caller with a method name has "
+		"it from a traceback or a route table and rarely has the dotted path "
+		"Frappe filed it under. An exact match answering empty would read as "
+		"'nothing failed' rather than 'not spelled the way I guessed'.",
+		{
+			"minutes": _field(_INTEGER, "Only rows from the last N minutes. Counts backwards from now."),
+			"hours": _field(
+				_INTEGER, "Only rows from the last N hours. Adds to `minutes` if both are given."
+			),
+			"since": _field(
+				_STRING,
+				"An explicit floor, 'YYYY-MM-DD HH:MM:SS'. Wins over `minutes`/`hours` when given.",
+			),
+			"method": _field(_STRING, "Substring of the method the error was raised in."),
+			"contains": _field(
+				_STRING, "Substring of the traceback itself — an exception name, a table, a field."
+			),
+			"seen": _field(_BOOLEAN, "false for the ones nobody has opened in the Desk yet."),
+			"limit": _field(_INTEGER, "Maximum rows. Capped at 500."),
+		},
+		title="List error logs",
+		available=_needs_doctype("Error Log"),
+		requires="Frappe's own Error Log DocType — a site without it is not a working Frappe site",
+	),
+	"query_doctype": _tool(
+		diagnostics.query_doctype,
+		"List records from ANY doctype on this site by field values. Read-only, "
+		"and the reach is this account's own DocPerms.\n\n"
+		"THIS IS THE ONE GENERIC READ IN THE CATALOGUE AND IT IS SHAPED "
+		"DIFFERENTLY FROM EVERY OTHER TOOL HERE. The rest read one named register "
+		"and return columns somebody chose; an operator switches each on by name. "
+		"This one cannot decide what it returns, so it ASKS THE FRAMEWORK: it goes "
+		"through `frappe.get_list`, which applies permissions, rather than "
+		"`frappe.db.get_all`, which every other read here uses and which skips "
+		"them. What this tool can see is exactly what the account configured as "
+		"`mcp_system_user` may see — no switch widens that, and nothing here "
+		"overrides a DocPerm.\n\n"
+		"IT IS HERE SO A CUSTOM DOCTYPE DOES NOT NEED A RELEASE. A farm that adds "
+		"a register next season otherwise waits for a tool that names it or goes "
+		"round this app to Frappe's `/api/resource` — which the farmops sidecar "
+		"does not publish and which has no audit row, no switch and no field "
+		"filtering at all.\n\n"
+		"PASSWORD FIELDS ARE NEVER RETURNED, on any doctype, and naming one is "
+		"REFUSED rather than quietly dropped — a caller who asked for a column "
+		"and got nothing back would read the column as empty. A short register of "
+		"credential-holding doctypes is refused outright whatever the permissions "
+		"say, because on some of them the token is a plain Data column and the "
+		"permission check is then the only thing in the way.\n\n"
+		"`order_by` TAKES ONE COLUMN AND AN OPTIONAL DIRECTION. Frappe "
+		"interpolates it into SQL rather than passing it as an argument, so it is "
+		"matched by shape and refused otherwise.",
+		{
+			"doctype": _field(
+				_STRING,
+				"The doctype's LABEL as the Desk shows it — 'Farm Task', not 'farm_task'. Case-sensitive.",
+			),
+			"filters": _field(
+				_OBJECT,
+				'Fieldname to value — {"status": "Open"} — or to an [operator, value] pair — '
+				'{"creation": [">", "2026-08-01"]}. Frappe\'s operators: =, !=, >, <, >=, <=, '
+				"in, not in, like, not like, between, is.",
+			),
+			"fields": _field(
+				_STRING_ARRAY,
+				"Columns to return. Defaults to ['name']. '*' is refused — name what you want, "
+				"because a select-everything on a doctype whose shape you have not read is how "
+				"a 40 KB text column ends up in an answer.",
+			),
+			"order_by": _field(
+				_STRING,
+				"One column and an optional direction: 'creation desc', 'name'. Defaults to "
+				"'modified desc'. Two columns is not available here.",
+			),
+			"limit": _field(_INTEGER, "Maximum rows. Capped at 500."),
+		},
+		required=("doctype",),
+		title="Query any doctype",
+	),
+	"list_sidecar_routes": _tool(
+		diagnostics.list_sidecar_routes,
+		"Every path the farmops sidecar publishes, what each one is called, "
+		"whether it writes, and which body keys it accepts. Read-only.\n\n"
+		"THIS IS NOT AN ACCESS MAP, and the missing column is the important one. "
+		"It says which paths EXIST and which of them write. WHO may call each is "
+		"one line inside that route's own wrapper body — `require_dispatch_role`, "
+		"`require_hr_role`, or nothing at all — and is not an attribute of "
+		"anything readable from here. There is no gate column rather than an "
+		"incomplete one, because a route missing from a gate column reads as "
+		"open.\n\n"
+		"`arguments` IS THE FILTER ITSELF, not documentation of it. The transport "
+		"drops every body key not on that list, so a key absent from it is "
+		"unreachable rather than merely undocumented. `user` is never on it: the "
+		"guard injects the authenticated caller and drops any copy the body "
+		"carried.\n\n"
+		"THE TWO SURFACES ARE SEPARATE ON PURPOSE. A tool being in this catalogue "
+		"does not put it on this table: `create_journal_entry` and `convey_parcel` "
+		"are tools here and are reachable from no handset at any path.",
+		{
+			"contains": _field(_STRING, "Substring of the path — 'i9', 'task', 'bucket'."),
+			"group": _field(_STRING, "'mobile' for the handset methods, 'files' for the two upload paths."),
+			"mutating": _field(_BOOLEAN, "true for only the writes, false for only the reads."),
+		},
+		title="List sidecar routes",
 	),
 	# ── v0.128.0: the in-app feedback bubble's two reads ─────────────────────
 	"list_app_feedback": _tool(

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 842 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 846 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 424 read tools are **on** by default and can be switched off individually. A
+All 428 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -18533,3 +18533,117 @@ rather than folding it into a fake "Unlocated" group — there is no such place.
 `total_estimated_minutes` sums only tasks that carry an estimate;
 `tasks_missing_estimate` says how many in the group did not, so the minutes read
 as a floor rather than a promise.
+
+---
+
+## v0.129.0 — what the install is doing
+
+Four reads about the **server** rather than about the orchard. Every other tool
+in this catalogue answers a question about a farm; these answer questions about
+the deployment the farm's records live on.
+
+| | |
+|---|---|
+| `get_server_status` | Versions, this worker's uptime, the last applied patch. Read. |
+| `list_error_logs` | Frappe's own crash register, filtered and redacted. Read. |
+| `query_doctype` | Records from **any** doctype, under this account's DocPerms. Read. |
+| `list_sidecar_routes` | Every path the farmops sidecar publishes. Read. |
+
+### `get_server_status` answers for one worker
+
+```bash
+get_server_status()
+```
+
+A Frappe bench runs several worker processes and this call was answered by
+whichever one took it, so `worker_uptime_seconds` is **that process's** age and
+two consecutive calls can disagree. That is still the deploy question answered: a
+worker older than the deploy has not been restarted, and `erpnext_mcp_version`
+beside it is what that process actually imported.
+
+`last_patch_applied` is **not** the last migrate. A migrate with no new patches
+writes no Patch Log row, which is the ordinary case for a release that adds only
+tools — so an old stamp here is not evidence that a deploy failed. The version is
+that evidence.
+
+### `list_error_logs` returns the end of the traceback, not just the start
+
+Python prints the call stack first and the exception **last**, so a preview that
+takes the first N characters — which is what any truncated feed does — is a
+preview with the answer cut off. Every row carries both: `error` is the head,
+truncated, and `exception` is the last line. `get_document_preview` on the
+docname has the whole thing when one of them turns out to matter.
+
+```bash
+# what has been failing on the bucket sync in the last two hours
+list_error_logs(hours=2, method="sync_bucket_entries")
+```
+
+`method` matches as a **substring**, because a caller with a method name has it
+off a traceback or a route table and rarely has the dotted path Frappe filed it
+under; an exact match answering empty would read as "nothing failed".
+
+Credential-shaped values are replaced with `<redacted>` before the answer leaves
+the server, and `redacted_values` counts them. A traceback is the repr of
+whatever was in scope when something threw, and on a failed request that includes
+the request body — which on this app's own transports carries a token.
+
+### `query_doctype` is the one generic read, and it asks the framework
+
+Every other read in this catalogue reads one named register and returns columns
+somebody chose; an operator switches each on by name. This one cannot decide what
+it returns, so it **asks**: it goes through `frappe.get_list`, which applies
+permissions, rather than `frappe.db.get_all`, which every other read here uses
+and which skips them.
+
+**What this tool can see is exactly what the account named in `mcp_system_user`
+may see.** No switch widens that and nothing here overrides a DocPerm. On a site
+where that account is a System Manager, this reads what a System Manager reads —
+which is the sentence to weigh before leaving the switch on.
+
+```bash
+query_doctype(doctype="Farm Task",
+              filters={"status": "Open", "creation": [">", "2026-08-01"]},
+              fields=["name", "subject", "status", "location"],
+              order_by="creation desc", limit=50)
+```
+
+It exists so a custom doctype does not need a release. A farm that adds a
+register next season otherwise waits for a tool that names it or goes round this
+app to Frappe's `/api/resource` — which the sidecar does not publish and which
+has no audit row, no switch and no field filtering at all.
+
+Three guards, and each closes a different door:
+
+1. **Permissions are enforced** — `frappe.get_list`, above.
+2. **A short register of doctypes is refused outright**, whatever the permissions
+   say: the settings Single (it holds this endpoint's own token), `User`,
+   `OAuth Bearer Token`, `Token Cache`, `Email Account` and the rest. On some of
+   them the token is a plain Data column, and a permission check that passes is
+   then the only thing in the way.
+3. **Password fields are never returned**, on any doctype. Naming one is
+   **refused** rather than quietly dropped — a caller who asked for a column and
+   got nothing back would read the column as empty.
+
+`order_by` takes one column and an optional direction. Frappe interpolates it
+into SQL rather than passing it as an argument, so it is matched by shape and
+refused otherwise; `'*'` in `fields` is refused for the same family of reasons.
+
+### `list_sidecar_routes` is not an access map
+
+It reports every path the sidecar publishes, whether each writes, and which body
+keys each accepts. What it does **not** report is who may call one, and the
+missing column is the important one: that gate is a line inside each route's own
+wrapper body — `require_dispatch_role`, `require_hr_role`, or nothing at all —
+and is not an attribute of anything readable from here. There is no gate column
+rather than an incomplete one, because a route missing from a gate column reads
+as open.
+
+`arguments` is the filter itself rather than documentation of it: the transport
+drops every body key not on that list, so a key absent from it is unreachable
+rather than merely undocumented. `user` is never on it — the guard injects the
+authenticated caller and drops any copy the body carried.
+
+The two surfaces are separate on purpose. A tool being in this catalogue does not
+put it on that table: `create_journal_entry` and `convey_parcel` are tools here
+and are reachable from no handset at any path.

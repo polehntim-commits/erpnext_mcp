@@ -1128,9 +1128,18 @@ class Catalogue(SeededTestCase):
 		write half stays off the catalogue: a phone files its OWN note under its
 		own login, and `submit_app_feedback` is still reachable only from the
 		mobile surface.
+
+		v0.129.0 ADDS FOUR READS ABOUT THE INSTALL RATHER THAN ABOUT THE FARM.
+		`get_server_status` says what this worker is running and since when,
+		`list_error_logs` reads Frappe's own crash register, `list_sidecar_routes`
+		reports every path the handset transport publishes, and `query_doctype`
+		lists records from any doctype at all — the one generic read in the
+		catalogue, and the only tool here that goes through `frappe.get_list`
+		rather than `frappe.db.get_all`, so its reach is the DocPerms of the
+		account this app acts as and not what its switch says.
 		"""
-		self.assertEqual(len(registry.TOOLS), 842)
-		self.assertEqual(len(registry.READ_TOOLS), 424)
+		self.assertEqual(len(registry.TOOLS), 846)
+		self.assertEqual(len(registry.READ_TOOLS), 428)
 		self.assertEqual(len(registry.MUTATING_TOOLS), 418)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
