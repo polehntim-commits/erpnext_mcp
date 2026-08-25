@@ -3,6 +3,49 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.135.0 — 2026-08-25 — a nought the custodian wrote, filed as nothing said
+
+**THE PAYLOAD WAS NOT THE ONLY GATE, AND THAT IS THE WHOLE LESSON HERE.**
+`generate_quarterly_investment_report` reported a position's `quantity`, `price`
+and `cost_basis` through `coerce(...) or None`, so a custodian who priced a
+holding at zero came back as `null` — the same answer the report gives when the
+custodian said nothing at all. But fixing that in `_holdings` alone would have
+changed nothing a reader ever sees: the holdings table in `_sections` carried a
+SECOND truthiness gate of its own, `if position["quantity"]`, and would still
+have printed a blank cell where the custodian wrote nought. Both layers are
+fixed; the renderer now tests `is not None`.
+
+**A LOT SOLD OUT DURING THE QUARTER, AN OPTION THAT EXPIRED WORTHLESS, A HOLDING
+WRITTEN DOWN TO NOTHING.** All three are ordinary, all three arrive as zeroes,
+and on a document filed as a Prior Statement and read by somebody reconciling it
+against a custodian feed, "0" and "not reported" are not interchangeable.
+
+**OUTPUT-SHAPING LOSS, NOT VALUE CORRUPTION, AND THE DISTINCTION IS WORTH
+KEEPING.** Nothing was repriced and no total moved — `market_value` is derived
+separately and a zero quantity still contributes zero. What was wrong was the
+claim the page made about what the custodian had reported.
+
+**WHY NEITHER COERCION COULD ANSWER THIS.** `args.as_float` takes no default and
+`_money` supplies its own, and both turn `None`, `""` and an explicit `0` into
+`0.0` before any `or` runs — so the v0.132.0 `is None` recipe is a silent no-op
+on this shape. A new `_stated(entry, key)` asks the RAW value instead. This is
+legitimate here for a reason that does not generalise: `holdings` is an argument
+an operator passes, not a stored column, so unlike a Frappe Int or Currency field
+it genuinely has an empty state to distinguish. On the column class — see
+v0.134.0's allowlist — the zero is not recoverable and this fix would be wrong.
+
+**SIX TESTS, THREE OF WHICH FAIL ON THE OLD CODE.** The negative control was RUN,
+not assumed: against the unfixed file the quantity, the price/cost_basis and the
+PDF-bytes tests all fail, and the two asserting that a never-stated figure is
+STILL `null` pass either way — which is what makes them controls rather than
+decoration. This bug class is invisible without them. The tool succeeds, and the
+payload it returns reads perfectly well.
+
+**NOT FLAGGED BY v0.134.0's SCAN, AND CORRECTLY SO.** `or None` is an identity
+fallback there: at an `as_float` site absent and explicit-zero both reach `None`
+either way, so the `or` loses nothing the coercion had not already lost. The scan
+looks for the `or` idiom; this was a bug one layer upstream of it.
+
 ## 0.134.0 — 2026-08-25 — the sweep, and the site that was innocent
 
 **THE `coerce(...) or DEFAULT` SWEEP, FINISHED — 22 call sites, plus an AST scan

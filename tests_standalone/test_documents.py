@@ -409,6 +409,72 @@ class Holdings(DocumentTestCase):
 		self.assertIn("list of position objects", self.report_error(holdings="BRK.B"))
 		self.assertIn("is not an object", self.report_error(holdings=["BRK.B"]))
 
+	# ── a stated zero is a fact the custodian reported ───────────────────────
+	#
+	# `quantity`, `price` and `cost_basis` used to be coerced and then run through
+	# `or None`, which reported a position the custodian had priced at zero as
+	# though the custodian had said nothing about it. A lot sold out during the
+	# quarter, an option that expired worthless and a holding written down to
+	# nothing are all real, and all of them arrive as zeroes. The tests below are
+	# the only thing that can see this: the tool succeeds either way and returns a
+	# payload that reads perfectly well, so nothing else in the suite would notice.
+
+	def test_a_quantity_stated_as_zero_is_reported_as_zero_and_not_as_null(self):
+		data = self.report(
+			dry_run=True,
+			holdings=[{"symbol": "CLOSED", "quantity": 0, "price": 12.5, "market_value": 0}],
+		)
+		position = data["holdings"]["positions"][0]
+		self.assertEqual(position["quantity"], 0.0)
+		self.assertIsNotNone(position["quantity"])
+
+	def test_a_quantity_that_was_never_stated_is_still_null(self):
+		"""The negative control. Without it the test above passes on a fix that
+		simply stopped answering None, which would lose the other half of the
+		distinction rather than restore it."""
+		data = self.report(
+			dry_run=True,
+			holdings=[{"symbol": "AAPL", "market_value": 642600}],
+		)
+		self.assertIsNone(data["holdings"]["positions"][0]["quantity"])
+
+	def test_a_price_and_a_cost_basis_stated_as_zero_survive_too(self):
+		data = self.report(
+			dry_run=True,
+			holdings=[{"symbol": "GIFTED", "quantity": 100, "price": 0, "cost_basis": 0}],
+		)
+		position = data["holdings"]["positions"][0]
+		self.assertEqual(position["price"], 0.0)
+		self.assertEqual(position["cost_basis"], 0.0)
+
+	def test_a_price_and_a_cost_basis_never_stated_are_still_null(self):
+		data = self.report(
+			dry_run=True,
+			holdings=[{"symbol": "BRK.B", "quantity": 1200, "market_value": 552600}],
+		)
+		position = data["holdings"]["positions"][0]
+		self.assertIsNone(position["price"])
+		self.assertIsNone(position["cost_basis"])
+
+	def test_a_zero_quantity_still_derives_a_zero_market_value_from_the_price(self):
+		"""The derivation reads the same raw values, so keeping the zero must not
+		have moved which positions get a computed market value."""
+		data = self.report(
+			dry_run=True,
+			holdings=[{"symbol": "CLOSED", "quantity": 0, "price": 12.5}],
+		)
+		self.assertEqual(data["holdings"]["positions"][0]["market_value"], 0.0)
+
+	def test_the_printed_page_shows_the_zero_rather_than_an_empty_cell(self):
+		"""The payload is not where a reader meets this number. The holdings table
+		carried a truthiness gate of its own, so a fix that stopped at the payload
+		would still have printed a blank where the custodian wrote nought."""
+		data = self.report(
+			holdings=[{"symbol": "CLOSED", "quantity": 0, "price": 0, "cost_basis": 0}],
+		)
+		payload = self.stored(data["document"])
+		self.assertIn(b"0.0000", payload)
+
 
 # ── what the report produces ────────────────────────────────────────────────
 class ReportOutput(DocumentTestCase):

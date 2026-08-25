@@ -108,6 +108,20 @@ def _money(value) -> float:
 	return round(float(value or 0), 2)
 
 
+def _stated(entry: dict, key: str) -> bool:
+	"""True when the caller actually put a value under `key`, zero included.
+
+	Neither coercion in this module can answer this after the fact: `_money`
+	turns None, "" and an explicit 0 all into 0.0, and `args.as_float` takes no
+	default and does the same. So the question has to be asked of the RAW value,
+	before it is coerced. `holdings` is an argument an operator passes rather
+	than a stored column — see the module docstring — so "the custodian did not
+	report this" and "the custodian reported zero" really are two different
+	facts here, and only this check keeps them apart.
+	"""
+	return entry.get(key) not in (None, "")
+
+
 def _fmt(value) -> str:
 	return f"{float(value or 0):,.2f}"
 
@@ -588,23 +602,26 @@ def _holdings(args: dict, closing: float) -> dict:
 		if not isinstance(item, dict):
 			raise ToolError(f"holdings[{index}] is not an object. Nothing was created.")
 		market_value = _money(item.get("market_value"))
-		if (
-			not market_value
-			and item.get("quantity") not in (None, "")
-			and item.get("price") not in (None, "")
-		):
+		if not market_value and _stated(item, "quantity") and _stated(item, "price"):
 			market_value = _money(
 				as_float(item.get("quantity"), "quantity") * as_float(item.get("price"), "price")
 			)
 		total += market_value
+		# Not `... or None` on these three: a custodian who reports a position at
+		# zero — a lot sold out during the quarter, a right that expired worthless,
+		# a holding written down to nothing — SAID zero, and `or None` files that
+		# under "not reported". The coercions cannot tell the two apart once they
+		# have run, so `_stated` asks the raw value first.
 		positions.append(
 			{
 				"symbol": str(item.get("symbol") or "").strip() or None,
 				"description": str(item.get("description") or "").strip() or None,
-				"quantity": as_float(item.get("quantity"), "quantity") or None,
-				"price": _money(item.get("price")) or None,
+				"quantity": (
+					as_float(item.get("quantity"), "quantity") if _stated(item, "quantity") else None
+				),
+				"price": _money(item.get("price")) if _stated(item, "price") else None,
 				"market_value": market_value,
-				"cost_basis": _money(item.get("cost_basis")) or None,
+				"cost_basis": _money(item.get("cost_basis")) if _stated(item, "cost_basis") else None,
 			}
 		)
 	total = _money(total)
@@ -917,10 +934,13 @@ def _sections(report: dict):
 					[
 						position["symbol"] or "",
 						position["description"] or "",
-						f"{position['quantity']:,.4f}" if position["quantity"] else "",
-						_fmt(position["price"]) if position["price"] else "",
+						# `is not None`, not truthiness: the payload above now keeps a
+						# stated zero, and a blank cell on the page would throw it away
+						# again one layer further out.
+						f"{position['quantity']:,.4f}" if position["quantity"] is not None else "",
+						_fmt(position["price"]) if position["price"] is not None else "",
 						_fmt(position["market_value"]),
-						_fmt(position["cost_basis"]) if position["cost_basis"] else "",
+						_fmt(position["cost_basis"]) if position["cost_basis"] is not None else "",
 					]
 					for position in holdings["positions"]
 				],
