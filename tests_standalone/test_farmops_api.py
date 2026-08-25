@@ -751,6 +751,14 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/update_strategic_plan",
 		"/mobile/create_strategic_objective",
 		"/mobile/update_strategic_objective",
+		# v0.131.0. The crew drill-down behind "The farm today": department →
+		# crew → worker, and the fourth ending for a shift nobody closed. Two
+		# reads and one write, all three on the dispatch gate — see
+		# `TheNewRegistersAreGated.DISPATCH_GATED` for why the reads carry it.
+		"/mobile/get_crew_overview",
+		"/mobile/get_worker_detail",
+		"/mobile/list_active_shifts",
+		"/mobile/end_stale_shift",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):
@@ -2571,6 +2579,23 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"update_recall_plan",
 		"update_soil_compaction_profile",
 		"update_supplier_verification",
+		# v0.131.0. The crew drill-down, and TWO OF THE THREE ARE READS — which
+		# is a departure from this surface's rule that reads open on enrolment.
+		# That rule is about the caller's OWN work: their tasks, their shift,
+		# the re-entry interval on the block they are walking into.
+		# `get_crew_overview` and `get_worker_detail` are the opposite reading —
+		# they name other people, where they are, who they are under and what
+		# they have picked — so they take the same gate as the writes.
+		#
+		# NOT `HR_GATED`, and that is the other half of the decision. Running
+		# the crew IS the Foreman's job on this farm; there is no personnel
+		# office to send them to. The registers in HR_GATED are what the OWNERS
+		# intend to do with the business, which a picker is not entitled to and
+		# a foreman has no need of. A crew list is the opposite of both.
+		"end_stale_shift",
+		"get_crew_overview",
+		"list_active_shifts",
+		"get_worker_detail",
 	}
 
 	HR_GATED: ClassVar[set[str]] = {
@@ -2646,7 +2671,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 82, "a method is named in two sets at once")
+		self.assertEqual(len(named), 86, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

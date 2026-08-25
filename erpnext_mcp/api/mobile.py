@@ -113,6 +113,7 @@ from ..tools import (
 	asset_tags,
 	badges,
 	bucket_log,
+	crew_view,
 	dispatch,
 	docvalidation,
 	fieldwork,
@@ -17980,3 +17981,196 @@ def update_strategic_objective(
 		if given not in (None, ""):
 			inner[key] = given
 	return strategy_tools.update_strategic_objective(inner).data
+
+
+# ── 255. get_crew_overview ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_crew_overview", limit=guard.READ_LIMIT)
+def get_crew_overview(user: str, company=None) -> dict:
+	"""The farm today: every department this caller may see, its open crews,
+	and who is standing in each of them.
+
+	THE DISPATCH GATE, ON A READ, AND THAT IS A DEPARTURE WORTH ARGUING.
+	The rule on this surface is that reads open on enrolment, because the
+	reads are the CALLER'S OWN WORK — their tasks, their shift, the
+	re-entry interval on the block they are about to walk into. This is not
+	that. It names other people, where they are, who they are under and how
+	many buckets they have picked, which is the crew roster of the whole
+	department seen from outside. A picker's own day is answered by
+	list_my_tasks and get_shift_crew_timeline and neither of them changes.
+
+	IT IS NOT HR-GATED EITHER, AND THAT IS THE OTHER HALF OF THE SAME
+	DECISION. Running the crew IS the Foreman's job on this farm — there is
+	no personnel office to refer them to — so a gate that sent them looking
+	for one would stop the work rather than protect anybody. The competitive
+	and strategy registers are HR-gated because they are what the OWNERS
+	intend to do with the business; a crew list is what the foreman is
+	holding a phone to find out.
+
+	THE DEPARTMENT SCOPE IS APPLIED INSIDE THE TOOL and is a second
+	restriction on top of the entity scope, not a substitute for it. A
+	Foreman sees their own department and its children; a Farm Manager sees
+	every department in the entities they may reach. An account with no
+	linked Employee, or an Employee with no department, gets an EMPTY
+	overview and the sentence saying which — never the whole farm.
+	"""
+	guard.require_dispatch_role(user, "the crew overview")
+	allowed = guard.require_scope(user)
+
+	inner: dict = {}
+	named = guard.require_company(user, company, allowed)
+	if named:
+		inner["company"] = named
+
+	result = crew_view.get_crew_overview(inner)
+	data = result.data
+	# The belt to the braces, as everywhere else on this transport: the tool
+	# already filtered on the caller's entities, and this drops any crew that
+	# reached the payload through a path nobody thought about.
+	for department in data.get("departments") or []:
+		department["crews"] = guard.scoped(department.get("crews") or [], allowed)
+	return data
+
+
+# ── 255b. list_active_shifts ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_active_shifts", limit=guard.READ_LIMIT)
+def list_active_shifts(
+	user: str,
+	company=None,
+	department=None,
+	stale_only=None,
+	stale_after_hours=None,
+	limit=None,
+) -> dict:
+	"""Every shift running right now, one row each — the supervisor's glance.
+
+	THE SAME DISPATCH GATE AS THE OVERVIEW, AND THE SAME ARGUMENT. It names
+	other people's crews, where they are and who has them, which is not
+	the caller's own work — and it is not HR-gated either, because
+	running the crew IS the Foreman's job on this farm.
+
+	IT IS THE LIGHT READ AND THAT IS WHY IT IS A SEPARATE ROUTE. A phone
+	polling "what is running" every couple of minutes should not be
+	pulling every worker on every crew with their current task and their
+	bucket count, which is what `get_crew_overview` returns. Both go
+	through one shared read inside the tool, so the two cannot come to
+	disagree about which shifts are open or who may see them.
+
+	`stale_only` IS THE RUNAWAY WORKLIST — the crews open past the
+	threshold, which are the shifts keeping their whole crew off every
+	other roster. `end_stale_shift` closes one.
+	"""
+	guard.require_dispatch_role(user, "the active shift board")
+	allowed = guard.require_scope(user)
+
+	inner: dict = {}
+	named = guard.require_company(user, company, allowed)
+	if named:
+		inner["company"] = named
+	for key, given in (
+		("department", department),
+		("stale_only", stale_only),
+		("stale_after_hours", stale_after_hours),
+		("limit", limit),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+
+	data = crew_view.list_active_shifts(inner).data
+	# The belt to the braces, as everywhere else on this transport.
+	data["shifts"] = guard.scoped(data.get("shifts") or [], allowed)
+	return data
+
+
+# ── 256. get_worker_detail ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_worker_detail", limit=guard.READ_LIMIT)
+def get_worker_detail(user: str, employee=None) -> dict:
+	"""One worker's shift, their day's jobs and their compliance standing.
+
+	THE SAME DISPATCH GATE AS THE OVERVIEW ABOVE, AND FOR THE SAME REASON —
+	this is the drill-down from it, and a gate on the list that the detail
+	did not carry would be no gate at all.
+
+	WHAT IT WITHHOLDS IS THE SECURITY CONTENT AND IT IS DONE IN THE TOOL.
+	`crew_view.WORKER_FIELDS` is the whole of what this says about a person:
+	name, job title, department, company, status, start date and photo. No
+	date of birth, no home address, no bank account, no wage, and from the
+	I-9 register NOTHING BUT THE STATUS WORD — not the documents, not the
+	numbers on them. A foreman needs to know that somebody's authorisation
+	needs re-verifying; the document it would be checked against is
+	get_i9_form's to hand over and get_i9_form is gated on the personnel
+	roles.
+
+	THE DOCNAME IS SCOPED TWICE. `require_scoped_doc` proves the Employee is
+	in an entity this account may reach — an Employee of another company
+	reads as NOT FOUND rather than as refused, so the register cannot be
+	mapped from the error — and the tool then refuses a worker whose
+	DEPARTMENT is outside the caller's scope, which is the check the entity
+	scope cannot make on a single-company farm.
+	"""
+	guard.require_dispatch_role(user, "another worker's detail")
+	allowed = guard.require_scope(user)
+	named = _employee_argument(employee, allowed)
+	return crew_view.get_worker_detail({"employee": named}).data
+
+
+# ── 257. end_stale_shift ─────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("end_stale_shift", limit=guard.WRITE_LIMIT, mutating=True)
+def end_stale_shift(
+	user: str,
+	shift=None,
+	farm_shift=None,
+	end_datetime=None,
+	ended_at=None,
+	reason=None,
+	stale_after_hours=None,
+	supervisor_signature_file_token=None,
+	reviewed_on=None,
+	foreman_notes=None,
+) -> dict:
+	"""Close a shift nobody clocked out of, release its crew, and pay them.
+
+	THE DISPATCH GATE, because this ends somebody ELSE'S shift. Every other
+	write on this transport that reaches another person's record carries it,
+	and this one reaches a whole crew's: it sets an end time on the shift,
+	a `left_at` on every crew member still on it, and one Attendance row
+	each. A picker cannot close the crew they are standing in.
+
+	IT IS FENCED SO IT CANNOT BECOME THE ORDINARY CLOSE. The shift must
+	still be OPEN and must have been open longer than the staleness
+	threshold — sixteen hours by default, past the end of anything anybody
+	works — and a younger shift is refused BY NAME with `end_shift` named
+	as the tool for it. `stale_after_hours` lowers the threshold
+	deliberately; it is an argument rather than a setting because the number
+	is a judgement about one shift.
+
+	THE SIGNATURE IS OPTIONAL AND ITS ABSENCE COMES BACK IN THE ANSWER.
+	`supervisor_review_owed` is true when none was passed, and the shift
+	carries no invented attestation — see `tools/crew_view.py` for the whole
+	argument. Where the supervisor IS there, pass the token on this call:
+	once the shift is closed, `end_shift` will not reopen it to add one.
+
+	`end_datetime` IS REQUIRED AND IS NOT DEFAULTED TO NOW. A crew that
+	stopped at 14:00 on Tuesday, clocked out on Thursday morning by a
+	default, would be paid for forty hours.
+	"""
+	guard.require_dispatch_role(user, "closing another crew's shift")
+	allowed = guard.require_scope(user)
+	named = guard.require_scoped_doc(FARM_SHIFT, shift or farm_shift, "shift", allowed)
+
+	inner: dict = {"shift": named}
+	for key, given in (
+		("end_datetime", end_datetime or ended_at),
+		("reason", reason),
+		("stale_after_hours", stale_after_hours),
+		("supervisor_signature_file_token", supervisor_signature_file_token),
+		("reviewed_on", reviewed_on),
+		("foreman_notes", foreman_notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+
+	return crew_view.end_stale_shift(inner).data

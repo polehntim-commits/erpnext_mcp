@@ -512,6 +512,10 @@
   "allow_update_break_policy",
   "allow_get_shift_production",
   "allow_get_shift_crew_timeline",
+  "allow_get_crew_overview",
+  "allow_get_worker_detail",
+  "allow_list_active_shifts",
+  "allow_end_stale_shift",
   "allow_log_shift_location",
   "allow_create_heat_exposure_event",
   "weather_section",
@@ -4397,6 +4401,34 @@
    "fieldname": "allow_get_shift_crew_timeline",
    "fieldtype": "Check",
    "label": "Get Shift Crew Timeline"
+  },
+  {
+   "default": "1",
+   "description": "READ. WHO IS OUT ON THE FARM RIGHT NOW, by department, by crew, by name. The screen a foreman opens at six in the morning: every department the calling account may see, the open crews under each, and under each crew the people standing in it with the job they are on and the buckets they have picked. A crew IS an open Farm Shift — there is no Crew doctype — and the department is read through the crew's foreman. SCOPED TWICE: entities, then department. A Foreman sees their own department and its children; a Farm Manager sees every department in the entities they may reach. ON by default because looking at the roster cannot change it.",
+   "fieldname": "allow_get_crew_overview",
+   "fieldtype": "Check",
+   "label": "Get Crew Overview"
+  },
+  {
+   "default": "1",
+   "description": "READ. One worker's open shift, their day's task assignments and their compliance standing — the drill-down from Get Crew Overview. IT DELIBERATELY CARRIES LESS THAN Get Employee: name, job title, department, company, status, start date and photo, and nothing else off the Employee register. No date of birth, no home address, no bank account, no wage. From the I-9 register it carries the STATUS WORD and the work-authorisation date and nothing else at all. The compliance block reports standing (current / due_soon / expired / missing) and never evidence. ON by default; it is a read whose whole security content is what it withholds.",
+   "fieldname": "allow_get_worker_detail",
+   "fieldtype": "Check",
+   "label": "Get Worker Detail"
+  },
+  {
+   "default": "1",
+   "description": "READ. Every shift running right now, one row each — the supervisor's glance. Shift, crew leader, department, start time, hours open, worker count, location and a stale flag. THE SAME QUESTION AS Get Crew Overview AT A DIFFERENT WEIGHT: that one nests every worker under every crew, which is hundreds of objects on a forty-crew farm; this is one line each, small enough to poll. Not List Shifts either — that is the register, and it carries no department, no crew size and no department scoping. Scoped by entity AND department. ON by default because looking at the board cannot change it.",
+   "fieldname": "allow_list_active_shifts",
+   "fieldtype": "Check",
+   "label": "List Active Shifts"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Closes a shift nobody clocked out of, sets left_at on every crew member still on it, and writes their Attendance. THE FOURTH ENDING: End Shift needs a supervisor's signature and Cancel Shift says the day was not worked; this is the runaway crew, where nobody was standing there to sign. The signature is OPTIONAL here and its absence is RECORDED — supervisor_review_owed comes back true and no attestation is invented. Fenced by a staleness threshold (16 hours by default) so it cannot become a signature-free End Shift, and end_datetime is required rather than defaulted so a Tuesday crew clocked out on Thursday is not paid for forty hours.",
+   "fieldname": "allow_end_stale_shift",
+   "fieldtype": "Check",
+   "label": "End Stale Shift"
   },
   {
    "default": "0",

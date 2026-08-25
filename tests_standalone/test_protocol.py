@@ -1138,9 +1138,9 @@ class Catalogue(SeededTestCase):
 		rather than `frappe.db.get_all`, so its reach is the DocPerms of the
 		account this app acts as and not what its switch says.
 		"""
-		self.assertEqual(len(registry.TOOLS), 846)
-		self.assertEqual(len(registry.READ_TOOLS), 428)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 418)
+		self.assertEqual(len(registry.TOOLS), 850)
+		self.assertEqual(len(registry.READ_TOOLS), 431)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 419)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

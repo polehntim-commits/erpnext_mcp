@@ -885,9 +885,9 @@ class ToolRegistration(unittest.TestCase):
 		# v0.129.0 adds four reads about the deployment rather than the farm:
 		# get_server_status, list_error_logs, list_sidecar_routes and
 		# query_doctype. No existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 846)
-		self.assertEqual(len(self.registry.READ_TOOLS), 428)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 418)
+		self.assertEqual(len(self.registry.TOOLS), 850)
+		self.assertEqual(len(self.registry.READ_TOOLS), 431)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 419)
 
 
 if __name__ == "__main__":

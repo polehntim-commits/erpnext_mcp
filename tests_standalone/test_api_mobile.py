@@ -936,6 +936,15 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"update_strategic_plan",
 		"create_strategic_objective",
 		"update_strategic_objective",
+		# v0.131.0. The crew drill-down. Here rather than in `MOBILE` because
+		# `MobileAPI.swift` names none of the three — this is the server half of
+		# "The farm today", shipped ahead of the screen that will call it. Move
+		# them up when the Swift lands, which is also when they need Codable
+		# mirrors in `test_ios_contract.py`.
+		"get_crew_overview",
+		"get_worker_detail",
+		"list_active_shifts",
+		"end_stale_shift",
 	}
 
 	def _whitelisted(self, module):

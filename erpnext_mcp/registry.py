@@ -68,6 +68,7 @@ from .tools import (
 	compliance,
 	controls,
 	costing,
+	crew_view,
 	cropprotect,
 	diagnostics,
 	dimensions,
@@ -29965,6 +29966,197 @@ TOOLS = {
 		title="Food safety dashboard",
 		available=_needs_doctype("Food Safety Plan"),
 		requires="the Food Safety Plan DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_crew_overview": _tool(
+		crew_view.get_crew_overview,
+		"WHO IS OUT ON THE FARM RIGHT NOW, by department, by crew, by name. "
+		"Read-only.\n\n"
+		"THE SCREEN A FOREMAN OPENS AT SIX IN THE MORNING. `list_shifts` is a "
+		"register listing — a flat page of rows with no crew on them and no "
+		"structure over them — and the question this answers is not about a "
+		"shift at all. It returns every department the calling account may see, "
+		"the open crews under each, and under each crew the people standing in "
+		"it with the job they are on and the buckets they have picked.\n\n"
+		"A CREW IS AN OPEN Farm Shift AND THERE IS NO Crew DOCTYPE. The thing a "
+		"foreman means by 'my crew' already exists as an open shift — the people "
+		"are on it, the person answerable for them is on it, and so are the "
+		"start time and the block. A DEPARTMENT is read through the crew's "
+		"foreman (`Employee.department`), because Farm Shift carries no "
+		"department column; move a foreman between departments and their crews "
+		"move with them.\n\n"
+		"SCOPED TWICE. Entities first, as everything here is. Then DEPARTMENT: a "
+		"Foreman sees their own department and its children, a Farm Manager sees "
+		"every department in the entities they may reach. An account with no "
+		"linked Employee or an Employee with no department gets an EMPTY answer "
+		"and `scope.reason` saying which — never the whole farm by default.\n\n"
+		"`stale_shifts` IS THE WORKLIST IT EXISTS TO PRODUCE. A crew open longer "
+		"than sixteen hours is a shift nobody clocked out of, and it keeps its "
+		"whole crew off every other roster because start_shift refuses a second "
+		"open shift for the same person. end_stale_shift closes one.",
+		{
+			"company": _COMPANY,
+		},
+		title="The farm today — crews by department",
+		available=_needs_doctype("Farm Shift"),
+		requires="the Farm Shift DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_active_shifts": _tool(
+		crew_view.list_active_shifts,
+		"EVERY SHIFT RUNNING RIGHT NOW, one row each — the supervisor's glance. "
+		"Read-only.\n\n"
+		"Returns `shifts`, each with `shift`, `shift_type`, `crew_leader` and "
+		"`crew_leader_name`, `department` and `department_name`, `company`, "
+		"`location` and `farm_location_gps`, `start_datetime`, `hours_open`, "
+		"`worker_count`, `still_on_shift` and `stale`. Plus `scope`, `count`, "
+		"`worker_count` and `stale_shifts`.\n\n"
+		"THE SAME QUESTION AS get_crew_overview AT A DIFFERENT WEIGHT, and both "
+		"go through one shared read so they cannot disagree. The overview nests "
+		"every worker under every crew under every department — on a forty-crew "
+		"farm that is hundreds of worker objects, each with a current task and a "
+		"bucket count. This is one line per crew, small enough to poll.\n\n"
+		"IT IS NOT list_shifts EITHER. That is the REGISTER — a period, a "
+		"foreman, a shift type, open or closed — and it is the right tool for "
+		"'what did we run last week'. It carries no department, no crew size and "
+		"no department scoping, so a Foreman calling it sees every crew in every "
+		"entity they can reach. This carries all three, is open-only by "
+		"construction, and answers 'what is running right now, of the crews that "
+		"are mine to know about'.\n\n"
+		"SCOPED TWICE, exactly as get_crew_overview is: entities first, then "
+		"DEPARTMENT — a Foreman sees their own department and its children, a "
+		"Farm Manager sees every department in the entities they may reach. An "
+		"account with no linked Employee, or an Employee with no department, "
+		"gets an EMPTY answer and `scope.reason` saying which.\n\n"
+		"`stale_only` IS THE RUNAWAY WORKLIST. A shift open past the threshold "
+		"keeps its whole crew off every other roster, because start_shift "
+		"refuses a second open shift for the same person — so a forgotten "
+		"clock-out is why somebody cannot be rostered this morning, not a "
+		"tidiness problem. end_stale_shift closes one.",
+		{
+			"company": _COMPANY,
+			"department": _field(
+				_STRING,
+				"Narrow to one department. It NARROWS and cannot widen — naming a department "
+				"outside the caller's scope returns nothing rather than reaching into it.",
+			),
+			"stale_only": _field(
+				_BOOLEAN,
+				"Only the crews open longer than the staleness threshold — the runaway "
+				"worklist. Default false.",
+			),
+			"stale_after_hours": _field(
+				_INTEGER,
+				"How many hours open counts as stale. Default 16. An explicit 0 is refused "
+				"rather than read as absent.",
+			),
+			"limit": _LIMIT,
+		},
+		title="Shifts running right now",
+		available=_needs_doctype("Farm Shift"),
+		requires="the Farm Shift DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"get_worker_detail": _tool(
+		crew_view.get_worker_detail,
+		"One worker's open shift, their day's task assignments and their "
+		"compliance standing — the drill-down from get_crew_overview. Read-only.\n\n"
+		"IT IS NOT `get_employee` AND IT DELIBERATELY CARRIES LESS. This is the "
+		"crew screen: name, job title, department, company, status, start date "
+		"and photo, and NOTHING ELSE off the Employee register. No date of "
+		"birth, no home address, no bank account, no wage. From the I-9 register "
+		"it carries THE STATUS WORD AND THE WORK-AUTHORISATION DATE and nothing "
+		"else at all — not the documents, not the numbers on them. A foreman "
+		"needs to know somebody's authorisation needs re-verifying; the document "
+		"it would be checked against is get_i9_form's to hand over, and that "
+		"tool is gated on the personnel roles.\n\n"
+		"THE COMPLIANCE BLOCK REPORTS STANDING AND NEVER EVIDENCE. Training "
+		"comes back per curriculum as `current` / `due_soon` / `expired` / "
+		"`missing` through the same cell function get_training_compliance_report "
+		"uses, so the two cannot disagree about what expired means. "
+		"Certifications are matched on `Certification.holder`, which is a Data "
+		"column rather than a Link, so `certifications_matched_by` reports which "
+		"spelling answered.\n\n"
+		"SCOPED TWICE, LIKE THE OVERVIEW. The worker's company must be one the "
+		"caller may reach, AND their department must be inside the caller's "
+		"department scope — which is the check the entity scope cannot make on a "
+		"single-company farm.",
+		{
+			"employee": _field(
+				_STRING,
+				"The Employee docname, employee number, name, or linked login. Refused when "
+				"their department is outside the calling account's scope.",
+			),
+		},
+		required=("employee",),
+		title="One worker's day and standing",
+		available=_needs_doctype("Farm Shift"),
+		requires="the Farm Shift DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"end_stale_shift": _tool(
+		crew_view.end_stale_shift,
+		"MUTATING (default OFF). Close a shift nobody clocked out of, release "
+		"its crew and write their Attendance.\n\n"
+		"THE FOURTH ENDING, AND THE FIRST THAT ADMITS NOBODY WAS THERE TO SIGN "
+		"IT. end_shift closes a shift with a supervisor's signature; "
+		"cancel_shift says the day was not worked and writes no Attendance. Both "
+		"assume somebody is standing there at the moment of the ending. A "
+		"runaway crew is the case where nobody was — the shift started at 06:00 "
+		"on Tuesday, the phone died, and it is Thursday with the shift still "
+		"Active, still fetched for weather, and still blocking every one of its "
+		"crew from being rostered onto anything else.\n\n"
+		"THE SIGNATURE IS OPTIONAL AND ITS ABSENCE IS RECORDED RATHER THAN "
+		"HIDDEN. Pass `supervisor_signature_file_token` and the close is an "
+		"attestation identical to end_shift's. Omit it and the shift closes with "
+		"`supervisor_review_signature` EMPTY and `supervisor_review_owed: true` "
+		"in the answer — no attestation is invented, because a signature dated "
+		"today against a Tuesday nobody reviewed is worse evidence than an "
+		"honest gap. Note that once the shift is closed end_shift will not "
+		"reopen it to add one.\n\n"
+		"IT IS FENCED SO IT CANNOT BECOME THE ORDINARY CLOSE. The shift must be "
+		"OPEN and must have been open longer than `stale_after_hours` — sixteen "
+		"by default, past the end of anything anybody works. A younger shift is "
+		"REFUSED BY NAME with end_shift named as the tool for it.\n\n"
+		"`end_datetime` IS REQUIRED AND IS NOT DEFAULTED TO NOW. A crew that "
+		"stopped at 14:00 on Tuesday and is clocked out on Thursday would be "
+		"credited with forty hours by a default, and every one of them would "
+		"reach an Attendance row and a pay cheque. `reason` is required too: "
+		"this close carries no contemporaneous signature unless one is passed, "
+		"so the sentence is the only account of why somebody who was not there "
+		"ended it.\n\n"
+		"THE CREW ROWS ARE KEPT. Every member still carrying no `left_at` gets "
+		"the shift's end time — the same storage remove_worker_from_shift uses. "
+		"The row is the only record they were on the shift at all, which is what "
+		"a wage claim turns on.",
+		{
+			"shift": _field(_STRING, "The Farm Shift docname, e.g. SHIFT-2026-0001."),
+			"farm_shift": _field(_STRING, "Alias for shift."),
+			"end_datetime": _field(
+				_STRING,
+				"When work ACTUALLY stopped, YYYY-MM-DD HH:MM:SS. Required and never "
+				"defaulted — every crew member's Attendance row spans to this instant.",
+			),
+			"ended_at": _field(_STRING, "Alias for end_datetime."),
+			"reason": _field(
+				_STRING,
+				"Why this shift was ended by somebody who was not standing there. Required.",
+			),
+			"stale_after_hours": _field(
+				_INTEGER,
+				"How many hours a shift must have been open to count as stale. Default 16. "
+				"Lower it deliberately for an operation that runs short shifts.",
+			),
+			"supervisor_signature_file_token": _field(
+				_STRING,
+				"Optional File docname. Pass it where the supervisor IS available and the "
+				"close becomes an FSMA §112.161(b) attestation; omit it and the review is "
+				"reported as owed.",
+			),
+			"reviewed_on": _field(_STRING, "When the review was signed, if a signature is passed."),
+			"foreman_notes": _field(_STRING, "Anything else about the ending, kept on the shift."),
+		},
+		required=("shift", "end_datetime", "reason"),
+		mutating=True,
+		title="Close a runaway shift",
+		available=_needs_doctype("Farm Shift"),
+		requires="the Farm Shift DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 }
 

@@ -1177,6 +1177,45 @@ ROUTES = (
 	Route("/mobile", mobile_api.update_strategic_plan),
 	Route("/mobile", mobile_api.create_strategic_objective),
 	Route("/mobile", mobile_api.update_strategic_objective),
+	# v0.131.0. THE CREW DRILL-DOWN — the three calls behind "the farm today".
+	#
+	# THE READS CARRY THE DISPATCH GATE AND THAT IS THE DEPARTURE. Everywhere
+	# else on this transport a read opens on enrolment, because the reads are the
+	# CALLER'S OWN WORK — their tasks, their shift, the re-entry interval on the
+	# block they are walking into. These two are not: they name other people,
+	# where they are, who they are under and what they have picked. A picker's
+	# own day is still answered by `list_my_tasks` and `get_shift_crew_timeline`
+	# and neither of those moves.
+	#
+	# THEY ARE NOT HR-GATED, WHICH IS THE OTHER HALF OF THE SAME DECISION.
+	# Running the crew IS the Foreman's job on this farm — there is no personnel
+	# office to refer them to — so the gate that fits is the one that already
+	# means "foreman or above" and not the one that means "the office". The
+	# strategy register directly above takes the HR gate because it is what the
+	# OWNERS intend to do with the business; a crew list is what the foreman is
+	# holding a phone to find out.
+	#
+	# THE SECOND SCOPE IS A DEPARTMENT AND IT IS NEW ON THIS SURFACE. Entity
+	# scoping is the whole of what every other shift route applies, and on a
+	# single-company farm with four departments it separates nothing — all four
+	# foremen can reach every crew. `crew_view._visible_departments` draws the
+	# line: a Foreman sees their own department and its children, a Farm Manager
+	# sees every department in the entities they may reach, and an account with
+	# no linked Employee gets an EMPTY answer with the sentence saying why rather
+	# than the whole farm.
+	Route("/mobile", mobile_api.get_crew_overview),
+	Route("/mobile", mobile_api.get_worker_detail),
+	# The light read beside the nested one. `get_crew_overview` carries every
+	# worker on every crew with their task and their bucket count, which is what
+	# a drill-down screen wants and NOT what a phone polling "what is running"
+	# every two minutes should be pulling. Both go through one shared read inside
+	# `tools/crew_view.py`, so the board and the drill-down cannot come to
+	# disagree about which shifts are open or who may see them.
+	Route("/mobile", mobile_api.list_active_shifts),
+	# The write. It ends somebody else's shift and pays their crew, so the
+	# dispatch gate is the least it could carry — and it is fenced by a staleness
+	# threshold as well, so it cannot become a signature-free `end_shift`.
+	Route("/mobile", mobile_api.end_stale_shift),
 )
 
 #: Path → Route. Built once at import; there is nothing dynamic about it.

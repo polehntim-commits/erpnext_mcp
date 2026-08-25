@@ -3,6 +3,181 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.131.0 — 2026-08-25 — the farm today: department, crew, worker, and the shift nobody closed
+
+**THREE CALLS BEHIND ONE SCREEN.** The handset has been able to ask about one
+shift since v0.19.3 — `get_shift`, `get_shift_production`,
+`get_shift_crew_timeline` — and every one of them takes a docname the caller must
+already have. Nothing answered the question a foreman opens the app with at six
+in the morning, which is not about a shift at all: WHO IS OUT THERE RIGHT NOW,
+AND UNDER WHOM. `list_shifts` is a register listing — a flat page of rows with no
+crew on them and no structure over them — so a screen built on it needs three
+round trips per crew and then invents the grouping itself. 850 tools, up from
+846; 290 routes, up from 286.
+
+**AND `list_active_shifts` IS THE SAME QUESTION AT A DIFFERENT WEIGHT.** The
+overview nests every worker under every crew under every department — on a
+forty-crew farm with fifteen people each that is six hundred worker objects,
+each carrying a current task and a bucket count — and the board a supervisor
+glances at wants one line per crew: what is running, who has it, where, since
+when, how many people. Small enough for a phone to poll. 850 tools and 290
+routes with it.
+
+**THE TWO CANNOT DISAGREE, WHICH IS WHY BOTH GO THROUGH ONE SHARED READ.**
+`_open_shifts_visible_to` decides which shifts are open, in which entities, in
+which departments, which are stale and how many were withheld — once — and the
+two callers shape what comes back rather than re-deriving it. A farm where the
+board showed four crews and the drill-down showed three is a farm where nobody
+trusts either, and two functions each deriving "which shifts are open" arrive
+there the first time one of them grows a filter. The test asserts the two return
+the same set and is not vacuously equal on empty.
+
+**IT IS ALSO NOT `list_shifts`, AND THAT IS WORTH BEING EXACT ABOUT** in an app
+that keeps arguing against a catalogue with two answers to one question.
+`list_shifts` is the REGISTER — a period, a foreman, a shift type, open or
+closed — and it is the right tool for "what did we run last week". It carries no
+department, no crew size and NO DEPARTMENT SCOPING, so a Foreman calling it sees
+every crew in every entity they can reach. The new one carries all three, is
+open-only by construction, and answers "what is running right now, of the crews
+that are mine to know about". `stale_only` narrows it to the runaway worklist.
+
+**A CREW IS AN OPEN Farm Shift AND NO Crew DOCTYPE WAS ADDED.** The thing a
+foreman means by "my crew" already exists: the people are on it, the person
+answerable for them is on it, and so are the start time and the block. A register
+beside it would put two answers on the farm to "who is Ana working under today"
+and guarantee they disagree by the second week. A DEPARTMENT is read through the
+crew's foreman, because `Farm Shift` carries no department column — a derivation
+stated rather than hidden, with a consequence a caller can see: move a foreman
+between departments and yesterday's crews move with them. The alternative was a
+schema change to five tools and a migration of every shift on the register, for a
+column that would then be kept in step with the foreman's own by hand.
+
+**THE DEPARTMENT SCOPE IS NEW AND IT IS THE POINT OF THE RELEASE.**
+`require_company_scope` is the whole of the scoping every other shift tool
+applies, which is correct for those tools and separates nothing here: a farm with
+ONE company and four departments has four foremen who can all reach every shift
+on the site. So a Foreman sees their own department and its children — walked
+down `parent_department`, in Python over one query per level rather than through
+`lft`/`rgt`, because the nested-set bounds are a cache of the parent links and a
+tree edited outside Frappe HR's controller has stale ones. A Farm Manager sees
+every department in the entities they may reach.
+
+**AN ACCOUNT WITH NO DEPARTMENT SCOPE GETS NOTHING, AND A SENTENCE.** A login
+with no linked Employee, and an Employee with no department, are two different
+problems with two different people who can fix them, and neither falls open to
+the whole farm — inferring a management scope from a blank column is how a scoped
+read stops being scoped. `scope.reason` says which it was, because an empty list
+on a phone is otherwise indistinguishable from a quiet morning. Proved by
+negative control rather than asserted: forcing `_visible_departments` to answer
+unrestricted turns eleven tests red, including the two that matter — a Foreman
+seeing the Packhouse crew, and a worker detail from another department answering
+instead of refusing.
+
+**`get_worker_detail` IS NOT `get_employee` WITH A SCOPE CHECK IN FRONT.** The
+Employee register holds a date of birth, a home address, a bank account and a
+salary; the I-9 register beside it holds a social security number and a passport
+number. `WORKER_FIELDS` is the whole of what leaves the building — name, job
+title, department, company, status, start date, photo — and it is a tuple rather
+than a `get_doc`, so a column added to Employee next year does not silently join
+the payload. THE I-9 CONTRIBUTES ITS STATUS WORD AND THE WORK-AUTHORISATION DATE
+AND NOTHING ELSE AT ALL. A foreman needs to know somebody's authorisation needs
+re-verifying; the document it would be checked against is `get_i9_form`'s to hand
+over, and that tool is gated on the personnel roles. The withholding is asserted
+as an ABSENCE against a seeded record — the fixture stores a date of birth and an
+SSN precisely so that a payload omitting them is a statement about the tool.
+
+**`end_stale_shift` IS THE FOURTH ENDING, AND THE FIRST THAT ADMITS NOBODY WAS
+THERE TO SIGN IT.** `end_shift` closes with a supervisor's signature and writes
+the crew's Attendance; `cancel_shift` says the day was not worked and writes
+none. Both assume somebody is standing there. A runaway crew is the case where
+nobody was — the shift started at 06:00 on Tuesday, the phone died, and it is
+Thursday with the shift still Active, still fetched for weather, and still
+blocking every one of its crew from being rostered onto anything else, because
+`_refuse_a_second_open_shift` bites.
+
+**THE SIGNATURE IS OPTIONAL THERE AND ITS ABSENCE IS RECORDED RATHER THAN
+HIDDEN.** `end_shift` is right to refuse without one — §112.161(b) asks for a
+review that is dated AND signed, and a signature-free close of an ordinary shift
+would turn the attestation into a checkbox within a week. But the supervisor who
+could sign for Tuesday is not there on Thursday, and the choice on Thursday is
+between an unsigned close and a shift that stays open for ever. So it closes,
+leaves `supervisor_review_signature` EMPTY, and returns `supervisor_review_owed:
+true` — a signature dated today against a Tuesday nobody reviewed is worse
+evidence than an honest gap. Pass the token where the supervisor IS available and
+the close is indistinguishable from `end_shift`'s.
+
+**IT IS FENCED SO IT CANNOT BECOME THE ORDINARY CLOSE.** Sixteen hours by
+default, past the end of anything anybody works; a younger shift is refused BY
+NAME with `end_shift` named as the tool for it. `end_datetime` is required and
+never defaulted — a Tuesday crew clocked out by a default on Thursday morning
+would be credited with forty hours, and every one of them would reach an
+Attendance row and a pay cheque. THE CREW IS RELEASED AND THE ROWS ARE KEPT:
+everyone still carrying no `left_at` gets the shift's end time, which is the same
+storage `remove_worker_from_shift` uses, and Attendance is written through the
+same bridge `end_shift` uses, because a close that wrote none would be wrong in
+the employer's favour on a day the crew actually worked.
+
+**ALL THREE CARRY THE DISPATCH GATE, AND TWO OF THEM ARE READS.** That is a
+departure from this surface's rule that reads open on enrolment — a rule about
+the caller's OWN work, their tasks and their shift and the re-entry interval on
+the block they are walking into. These name other people, where they are, who
+they are under and what they have picked. They are NOT HR-gated either: running
+the crew IS the Foreman's job on this farm and there is no personnel office to
+send them to, which is what separates a crew list from the strategy register
+above it. Proved by removing the gate line and watching
+`TheNewRegistersAreGated` go red naming `get_crew_overview`.
+
+**THE `allow_` SWITCHES DO NOT REACH THE HANDSET.** They gate
+`registry.dispatch`, and `api/mobile.py` calls the tool functions directly. On
+`/farmops/api/mobile/*` the controls are the global mobile enable, the Farm Ops
+role, an Active grant and the gate in the wrapper body — which is why the gate is
+a role and not a switch. The switches are real on the MCP path and asserted
+there.
+
+**THE TWO TRANSPORTS ARE GATED AT THE SAME WIDTH, WHICH TOOK A NARROWER ROLE
+SET THAN `SHIFT_ROLES`.** The wrappers carry `guard.require_dispatch_role` =
+{Foreman, Farm Manager}; `SHIFT_ROLES` adds Crew Leader. Gating the tool bodies
+on `SHIFT_ROLES` would have REFUSED a Crew Leader on the handset and ALLOWED
+them over MCP — the exact shape `SHIFT_ROLES`' own comment says it exists to
+prevent, running backwards, and worst on `end_stale_shift`, which is the write
+that skips the supervisor signature. `CREW_VIEW_ROLES` is `SHIFT_ROLES` minus
+Crew Leader, and the substantive argument matches the consistency one: a Crew
+Leader runs a crew they are already on, and these three answer ACROSS crews.
+
+**A DESTROYED I-9 COULD HAVE ANSWERED FOR A LIVE ONE.** `employee` is not
+unique on that register and two rows per person is the DESIGNED rehire path —
+`destroy_i9` sets the status and SAVES the row, and `create_i9_form` refuses a
+new form until the old one is Destroyed. The first version of `_i9_of` filtered
+on neither status nor order, so the tie-break was whatever the driver did. The
+failure direction is the bad one: a destroyed row reading `Complete` beside a
+live one reading `Reverification Needed` would show a worker who may not legally
+work today as clear, on the screen a foreman uses to decide exactly that. Five
+other readers in `tools/i9.py` already exclude it by name; this was the only one
+that did not. Found in peer review, and the test seeds the destroyed row FIRST
+so a reader taking whichever came back first would take the wrong one.
+
+**AND THE TESTS THEMSELVES WERE PARTLY VACUOUS UNTIL THE IDENTITY WAS
+RE-ASSERTED PER CALL.** `security.capture_calling_user` saves `session.user` at
+the start of a request and `mcp.handle` then runs `frappe.set_user(effective_user())`,
+which on this transport is the MCP System User — Administrator, which holds a
+management role. So a test that set the acting user once and then made three
+calls was testing the intended principal on the first and the system user on the
+other two, and every scoping assertion after the first passed as a manager. It
+surfaced as a Crew Leader being ALLOWED a worker detail the test claimed to
+refuse. Every guard in the release is now proved by negative
+control rather than asserted, measured against the 63 tests as shipped: removing
+the per-call re-assertion turns 5 red, forcing the department scope open turns 11
+red, letting a Destroyed I-9 answer turns 2 red, widening `CREW_VIEW_ROLES` back
+to `SHIFT_ROLES` turns 1 red, deleting the wrapper's dispatch-gate line turns
+`TheNewRegistersAreGated` red naming the route, and making the board derive its
+own open-shift set instead of sharing one turns 8 red.
+
+**A ZERO THRESHOLD WAS BEING SILENTLY REPLACED BY THE DEFAULT.**
+`as_int(...) or STALE_AFTER_HOURS` reads `0` as absent, so
+`stale_after_hours: 0` — the deliberately absurd value the refusal exists to
+catch — became 16 and CLOSED the shift instead. Caught by the test that asserted
+the refusal, fixed by testing `is None`.
+
 ## 0.130.0 — 2026-08-25 — the last register with no door, and the switch that was never on this side
 
 **THE STRATEGY REGISTER REACHES A HANDSET.** `tools/strategy.py` was the last

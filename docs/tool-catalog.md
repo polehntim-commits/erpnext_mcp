@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 846 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 850 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 428 read tools are **on** by default and can be switched off individually. A
+All 431 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -7940,6 +7940,174 @@ reconstructed hourly from the archive cannot be read as a live quarter-hour one.
 **`breaks` is per person and null without a policy.** Entitlement is a function
 of hours worked, so the four-hour picker and the ten-hour foreman are owed
 different numbers across the same afternoon.
+
+## 210d. `get_crew_overview`
+
+**Read-only**, default ON (`allow_get_crew_overview`). v0.131.0.
+
+**Arguments:** `company` (optional; all of the caller's entities otherwise).
+
+**Returns** `departments` — one entry per department the caller may see, each
+with `crews`, and each crew with `crew_leader`/`crew_leader_name`,
+`start_datetime`, `hours_open`, `location`, `worker_count`, `still_on_shift`,
+`buckets_accepted`, `stale`, and `workers`. Each worker carries `employee`,
+`employee_name`, `role`, `joined_at`, `current_task` and `bucket_count`. Plus
+`scope`, `stale_shifts`, `crew_count`, `worker_count` and — when either applies —
+`withheld_note` and `truncation_note`.
+
+**The screen a foreman opens at six in the morning.** `list_shifts` is a register
+listing: a flat page of rows ordered by start time, with no crew on them and no
+structure over them. The question this answers is not about a shift at all — it
+is *who is out there right now, and under whom*. A client building it from
+`list_shifts` needs three round trips per crew and then has to invent the
+grouping itself.
+
+**A crew is an open Farm Shift and there is no Crew doctype.** The thing a
+foreman means by "my crew" already exists: the people are on it, the person
+answerable for them is on it, and so are the start time and the block. A register
+beside it would put two answers on the farm to "who is Ana working under today".
+
+**A department is read through the crew's foreman.** `Farm Shift` carries no
+department column, so the department of a crew is `Employee.department` of the
+person answerable for it. That has a visible consequence: move a foreman between
+departments and yesterday's crews move with them.
+
+**Scoped twice.** Entities first, as everything here is. Then *department*: a
+Foreman sees their own department and its children (walked down
+`parent_department`), a Farm Manager sees every department in the entities they
+may reach. An account with no linked Employee, or an Employee with no department,
+gets an **empty** answer and `scope.reason` saying which — never the whole farm
+by default, and never a bare empty list that reads on a phone as a quiet morning.
+
+**`stale_shifts` is the worklist it exists to produce.** A crew open longer than
+sixteen hours is a shift nobody clocked out of, and it keeps its whole crew off
+every other roster — `start_shift` refuses a second open shift for the same
+person. `end_stale_shift` closes one.
+
+## 210d-i. `list_active_shifts`
+
+**Read-only**, default ON (`allow_list_active_shifts`). v0.131.0.
+
+**Arguments:** `company`, `department`, `stale_only`, `stale_after_hours`,
+`limit` — all optional.
+
+**Returns** `shifts` — one row per running crew, each with `shift`,
+`shift_type`, `crew_leader`/`crew_leader_name`, `department`/`department_name`,
+`company`, `location`, `farm_location_gps`, `start_datetime`, `hours_open`,
+`worker_count`, `still_on_shift` and `stale`. Plus `scope`, `count`,
+`worker_count`, `stale_shifts` and `stale_after_hours`.
+
+**The supervisor's glance.** One line per crew: what is running, who has it,
+where, since when, how many people. Small enough for a phone to poll.
+
+**The same question as `get_crew_overview` at a different weight, and the two
+cannot disagree.** The overview nests every worker under every crew under every
+department — on a forty-crew farm with fifteen people each that is six hundred
+worker objects, every one carrying a current task and a bucket count, and a
+board does not want any of it. Both go through one shared read inside
+`tools/crew_view.py`, so "which shifts are open, in which entities, in which
+departments, and which are stale" is decided once. A farm where the board showed
+four crews and the drill-down showed three is a farm where nobody trusts either.
+
+**It is not `list_shifts` either, and the difference is worth being exact
+about.** `list_shifts` is the **register** — a period, a foreman, a shift type,
+open or closed, ordered by start time — and it is the right tool for "what did
+we run last week". It carries no department, no crew size and **no department
+scoping**, so a Foreman calling it sees every crew in every entity they can
+reach. This carries all three, is open-only by construction, and answers "what
+is running right now, of the crews that are mine to know about".
+
+**Scoped twice, exactly as the overview is.** Entities first, then department. An
+explicit `department` **narrows and cannot widen** — naming one outside the
+caller's scope returns nothing rather than reaching into it.
+
+**`stale_only` is the runaway worklist.** A shift open past the threshold keeps
+its whole crew off every other roster, because `start_shift` refuses a second
+open shift for the same person — so a forgotten clock-out is why somebody cannot
+be rostered this morning, not a tidiness problem. `end_stale_shift` closes one.
+
+## 210e. `get_worker_detail`
+
+**Read-only**, default ON (`allow_get_worker_detail`). v0.131.0.
+
+**Arguments:** `employee` (docname, employee number, name, or linked login).
+Required.
+
+**Returns** `employee`, `employee_name`, `designation`, `department`, `company`,
+`status`, `date_of_joining`, `photo`, `current_shift`, `task_assignments_today`
+and `compliance`.
+
+**It is not `get_employee` with a scope check in front, and it deliberately
+carries less.** The Employee register holds a date of birth, a home address, a
+bank account and a salary; the I-9 register beside it holds a social security
+number and a passport number. A foreman running a crew needs none of that and
+this returns none of it. What leaves the building is the tuple `WORKER_FIELDS`
+rather than a `get_doc`, so a column added to Employee next year does not
+silently join the payload.
+
+**The compliance block reports standing and never evidence.** Training comes back
+per curriculum as `current` / `due_soon` / `expired` / `missing`, through the
+same cell function `get_training_compliance_report` uses, so the two cannot
+disagree about what expired means. The I-9 contributes **its status word and the
+work-authorisation date and nothing else at all** — not the documents, not the
+numbers on them. A foreman needs to know somebody's authorisation needs
+re-verifying; the document it would be checked against is `get_i9_form`'s to hand
+over, and that tool is gated on the personnel roles.
+
+**Certifications are matched by name and it is said so.**
+`Certification.holder` is a `Data` column rather than a Link — a certificate may
+be held by a person, a related party or the Company itself — so a worker's
+certificates are found by matching that text against their docname and their
+employee name, and `certifications_matched_by` reports which answered.
+
+**Scoped twice, like the overview.** The worker's company must be one the caller
+may reach, *and* their department must be inside the caller's department scope —
+which is the check the entity scope cannot make on a single-company farm.
+
+## 210f. `end_stale_shift`
+
+**MUTATING**, default OFF (`allow_end_stale_shift`). v0.131.0.
+
+**Arguments:** `shift` (or `farm_shift`), `end_datetime` (or `ended_at`) and
+`reason`, all required; `stale_after_hours`, `supervisor_signature_file_token`,
+`reviewed_on` and `foreman_notes` optional.
+
+**Returns** the closed shift, plus `workers_released`, `attendance_created`,
+`hours_open_before_close`, `supervisor_review_owed` and `review_note`.
+
+**The fourth ending, and the first that admits nobody was there to sign it.**
+`end_shift` closes a shift with a supervisor's signature and writes the crew's
+Attendance; `cancel_shift` says the day was not worked and writes none. Both
+assume somebody is standing there at the moment of the ending. A runaway crew is
+the case where nobody was: the shift started at 06:00 on Tuesday, the phone died,
+and it is Thursday morning with the shift still Active, still fetched for
+weather, still reported as work in progress, and still blocking every one of its
+crew from being rostered onto anything else.
+
+**The signature is optional here and its absence is recorded rather than
+hidden.** Pass `supervisor_signature_file_token` and the close is an FSMA
+§112.161(b) attestation identical to `end_shift`'s. Omit it and the shift closes
+with `supervisor_review_signature` empty and `supervisor_review_owed: true` in
+the answer — no attestation is invented, because a signature dated today against
+a Tuesday nobody reviewed is worse evidence than an honest gap. Note that once
+the shift is closed, `end_shift` will not reopen it to add one.
+
+**It is fenced so it cannot become the ordinary close.** The shift must be open
+*and* must have been open longer than `stale_after_hours` — sixteen by default,
+past the end of anything anybody works. A younger shift is refused **by name**
+with `end_shift` named as the tool for it.
+
+**`end_datetime` is required and is not defaulted to now.** A crew that stopped
+at 14:00 on Tuesday and is clocked out on Thursday morning would be credited with
+forty hours by a default, and every one of them would reach an Attendance row and
+a pay cheque. `reason` is required for the same family of reason: this close
+carries no contemporaneous signature unless one is passed, so the sentence is the
+only account of why somebody who was not there ended it.
+
+**The crew rows are kept.** Every member still carrying no `left_at` gets the
+shift's end time — the same storage `remove_worker_from_shift` uses. The row is
+the only record they were on the shift at all, which is what a wage claim turns
+on.
 
 ## 211. `list_heat_exposure_events`
 
