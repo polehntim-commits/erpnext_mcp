@@ -3,6 +3,58 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.138.0 — 2026-08-26 — the page it was signed on is the proof it was signed
+
+**THE DECISION v0.137.0 WROTE DOWN AND DID NOT TAKE.** A phone-built I-9 can reach
+`Complete` now, and the compliance sweep agrees that it should. Full note in
+`RELEASES/v0.138.0.md`.
+
+**THE SECOND WITNESS, AND IT TAKES ALL THREE COLUMNS:** `signed_pdf` on the record
+WITH `section_1_signed_at` and `section_2_signed_at` beside it. That is the
+employer's app asserting both attestations were made, with the retained page to
+show for it — 8 CFR § 274a.2(b)(1)'s question. A scan on its own could be a blank
+form somebody photographed; timestamps on their own are a claim with nothing
+behind it. It is a WEAKER witness than a capture this server timed, and the app
+says so: `signed_pdf_on` keeps the arrival clock unaltered beside the client's
+claim. Per FORM, not per section — the uploaded page carries both signatures or it
+is not the retained form.
+
+**FOUR THINGS MOVED IN ONE COMMIT so they cannot disagree.** `unsigned_boxes`
+returns `[]` on a phone-attested form and reads the image columns exactly as
+before otherwise. `advance_if_signed` learned no second rule — it asks
+`unsigned_boxes`, which now has two ways to answer. Both `i9_section_1_unsigned`
+and `i9_section_2_unsigned` gained one scope filter, built by
+`compliance_rules.i9_attestation_group()`, which reads the column names off
+`tools/i9` rather than restating them. Section 2's status gate inherits it.
+`test_i9_phone_attestation.py` checks rule and status against each other over all
+**thirty-two** states of the five columns, read off the shipped rule specs.
+
+**`attach_signed_i9` NOW CALLS `advance_if_signed`** — after the columns are
+written — and reports the status it left behind rather than the one it walked in
+on. The mobile `upload_signed_i9` passes it through; the response shape is
+unchanged, one value in it is now true. It still moves one edge and only that
+edge. `list_pending_i9_verifications` and `i9_verification_overdue` key on STATUS,
+so the third Critical and the permanent dispatch-list errand clear with it.
+
+**NEW SCOPE-FILTER OPERATOR `any`** — the one disjunction in the vocabulary,
+because "not attested" is an AND of an OR and no arrangement of ANDed filters says
+it. Names no `field`, passes when at least one member passes, goes one level deep
+(a boolean expression language belongs in `custom_python`), refuses an empty
+group, and passes when this site has none of its columns — the same fail-safe
+direction every absent column takes. `compliance_rules.filter_fields` is the
+consequence for callers building a SELECT from a filter list.
+
+**PATCH `widen_i9_attestation_filters`**, because `seed_compliance_rules` leaves an
+existing rule_id alone by design. It appends to the live row, keeps a filter an
+operator added, is idempotent, and never raises. Existing alerts on attested forms
+are dismissed by the next sweep.
+
+**ALSO FIXED — two audit rows that have never been written.** `I-9 Audit Log.action`
+did not carry `Completed` or `Signature Collected`, and `_log_action` swallows an
+insert it cannot make, so since v0.64.2 every completion and every
+`collect_form_signature` capture on an I-9 was silently dropped. Both options are
+on the DocType now; neither call site changed.
+
 ## 0.137.0 — 2026-08-25 — the server was not there when it was signed
 
 **ARCHITECTURE CORRECTION.** The iOS app builds and seals the retained I-9 on the

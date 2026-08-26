@@ -1075,6 +1075,11 @@ def collect_form_signature(args: dict) -> ToolResult:
 	advanced = i9.advance_if_signed(name) if box.doctype == I9_FORM else ""
 
 	if box.doctype == I9_FORM:
+		# `Signature Collected` was not a valid `action` on I-9 Audit Log until
+		# v0.138.0, so this row has never been written either — same swallow, same
+		# missing Select option as the `Completed` row `i9.advance_if_signed` writes
+		# one line up. Found together and fixed together: a capture on a federal
+		# form left no audit trail at all, which is the one thing the log exists for.
 		i9._log_action(
 			name,
 			str(doc.get("employee") or ""),

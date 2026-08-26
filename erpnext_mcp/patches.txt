@@ -19,3 +19,4 @@ erpnext_mcp.patches.rename_discipline_record
 erpnext_mcp.patches.backfill_alert_subject_employee
 erpnext_mcp.patches.backfill_planting_rootstock
 erpnext_mcp.patches.backfill_observation_type
+erpnext_mcp.patches.widen_i9_attestation_filters

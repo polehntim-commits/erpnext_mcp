@@ -76,7 +76,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Action",
-   "options": "Created\nSection 1 Submitted\nsection_1_correction\nDocuments Uploaded\nSection 2 Signed\nReceipt Accepted\nViewed\nPrinted\nSigned Copy Filed\nExported\nStatus Changed\nReverification Flagged\nSection 3 Reverified\nDestroyed",
+   "options": "Created\nSection 1 Submitted\nsection_1_correction\nDocuments Uploaded\nSection 2 Signed\nReceipt Accepted\nSignature Collected\nViewed\nPrinted\nSigned Copy Filed\nCompleted\nExported\nStatus Changed\nReverification Flagged\nSection 3 Reverified\nDestroyed",
    "read_only": 1,
    "reqd": 1,
    "search_index": 1

@@ -788,6 +788,31 @@ REQUIRED_SIGNATURES = (
 	("section_2_signature", "Section 2 (the employer's attestation)"),
 )
 
+#: THE OTHER WAY AN ATTESTATION IS PROVED, and from v0.138.0 the ordinary one.
+#: The columns above hold a picture of a signature taken at a pad THIS SERVER
+#: was holding — which is the only way a signature could arrive until the iOS
+#: app began building and sealing the retained I-9 itself. On that path the
+#: server is not present at the signing: it receives the finished page through
+#: `attach_signed_i9` and the employer's app states, per section, the moment
+#: each attestation was made. Nothing ever fills the image columns again.
+#:
+#: SO THE TEST HAD TO GROW A SECOND LIMB, and these three columns are it: the
+#: retained signed copy is on the record, and both signing moments are recorded
+#: beside it. That is the employer asserting both attestations were made, with
+#: the page an inspection would be shown to back the assertion — which is what
+#: 8 CFR 274a.2(b)(1) asks an employer to have kept. It is a WEAKER witness than
+#: a capture this server timed itself, and it is said so out loud in
+#: `signed_pdf_on`: the server's own arrival clock stays unaltered beside the
+#: client's claim, and an audit can compare the two.
+#:
+#: ALL THREE OR NONE. A signed copy on its own could be a blank form somebody
+#: scanned; a pair of timestamps on their own is an app asserting a signature
+#: with nothing to show for it. Neither half is an attestation, and reading
+#: either as one would move a federal record to Complete on less evidence than
+#: the record it replaced.
+SIGNED_COPY_FIELD = "signed_pdf"
+ATTESTATION_TIMESTAMPS = ("section_1_signed_at", "section_2_signed_at")
+
 
 def _remote_addr() -> str:
 	"""The caller's address, or "" where the request has none.
@@ -803,13 +828,44 @@ def _remote_addr() -> str:
 		return ""
 
 
+def phone_attested(doc) -> bool:
+	"""Whether the retained signed copy AND both signing moments are on the record.
+
+	The phone-built half of the attestation test — see `SIGNED_COPY_FIELD` and
+	`ATTESTATION_TIMESTAMPS` above for why it exists and why it takes all three.
+
+	PER FORM RATHER THAN PER SECTION, and that is deliberate. The page the phone
+	uploads is ONE page carrying BOTH signatures; there is no such artefact as a
+	signed copy of half an I-9. So a form whose signed copy has landed and whose
+	two moments are both recorded has both attestations or neither, and asking
+	the question section by section would invent a state the evidence cannot be
+	in. A form part-signed at a pad and part-signed on a handset still answers
+	correctly, because `unsigned_boxes` reads the image column as well and the
+	section signed at the pad was never in doubt.
+	"""
+	if not str(doc.get(SIGNED_COPY_FIELD) or "").strip():
+		return False
+	return all(str(doc.get(field) or "").strip() for field in ATTESTATION_TIMESTAMPS)
+
+
 def unsigned_boxes(doc) -> list:
 	"""Which of the two required attestations this form is still missing.
 
 	Empty means the form carries both and may be Complete. Returns the LABELS
 	rather than the fieldnames, because every caller uses them in a sentence
 	somebody reads.
+
+	TWO WAYS TO SATISFY IT SINCE v0.138.0, and until then only one — which is
+	why every phone-built I-9 shipped before it rests at `Awaiting Verification`
+	for ever with two Criticals against it. A signature IMAGE in the column is
+	one proof: this server held the pad and timed the capture. `phone_attested`
+	is the other: the sealed page is on the record and the employer's app has
+	stated when each section was signed. The image columns are still read and are
+	still the better evidence where they exist; they are no longer the ONLY
+	evidence, because on the shipped architecture nothing fills them.
 	"""
+	if phone_attested(doc):
+		return []
 	return [label for field, label in REQUIRED_SIGNATURES if not str(doc.get(field) or "").strip()]
 
 
@@ -833,6 +889,16 @@ def advance_if_signed(name: str) -> str:
 	RETURNS THE NEW STATUS, or "" where nothing moved. NEVER RAISES: the
 	signature is on the record by the time this runs and is the irreplaceable
 	artefact — the same ordering rule every step after a capture obeys.
+
+	v0.138.0: TWO MOMENTS CALL THIS, NOT ONE. A capture landing at the pad is
+	still one of them. The other is `attach_signed_i9` — because on a phone-built
+	form no capture ever lands here, the sealed page IS the arrival, and without a
+	call from there the edge this function exists to move would have nothing left
+	to move it. WHAT MAY MOVE IT is unchanged and is `unsigned_boxes`: this
+	function did not learn a second rule, it asks the same question of a function
+	that now has two ways to answer yes. That is the whole reason the change went
+	in there and not here — a status that could advance on evidence the sweep does
+	not accept would be the same disagreement in the other direction.
 	"""
 	try:
 		doc = frappe.get_doc(I9_FORM, name)
@@ -845,6 +911,13 @@ def advance_if_signed(name: str) -> str:
 		doc.save()
 	except Exception:  # pragma: no cover - see the docstring
 		return ""
+	# `Completed` WAS NOT A VALID `action` UNTIL v0.138.0, so this row has never
+	# been written on any site since v0.64.2 added it: `_log_action` swallows what
+	# it cannot insert — deliberately, because an audit row must never be the
+	# reason a signature is lost — and the Select on I-9 Audit Log did not carry
+	# the option. The transition an inspection is most likely to ask about was the
+	# one transition with no row for it. The option is on the DocType now; the call
+	# is unchanged.
 	_log_action(
 		name,
 		str(doc.get("employee") or ""),
@@ -1426,6 +1499,12 @@ def submit_i9_section_2(args: dict) -> ToolResult:
 	# `Awaiting Verification`, which is a status this tool already ACCEPTS as
 	# input: signing the outstanding box advances it (see `advance_if_signed`),
 	# and re-submitting with the signature does too.
+	#
+	# v0.138.0: AND SO DOES THE SEALED PAGE ARRIVING. `unsigned_boxes` accepts a
+	# phone-built attestation as well now — the retained copy on the record with
+	# both signing moments beside it — so a Section 2 filed AFTER the app has
+	# already uploaded its sealed page completes the form in this call rather than
+	# parking it. The gate did not learn a second rule; the function it asks did.
 	missing = unsigned_boxes(doc)
 	doc.status = "Awaiting Verification" if missing else "Complete"
 	doc.flags.ignore_permissions = True
@@ -2531,6 +2610,26 @@ def attach_signed_i9(args: dict) -> ToolResult:
 		update_modified=False,
 	)
 
+	# ── THE PAGE ARRIVING IS THE MOMENT, ON THIS PATH ───────────────────
+	#
+	# v0.138.0. `advance_if_signed` was written for a signature landing at the
+	# pad, because that was the only way one could land. On a phone-built form
+	# nothing lands there — the app seals the page itself and files it here — so
+	# nothing was left to notice, and every such form rested at `Awaiting
+	# Verification` permanently with `i9_section_1_unsigned` and
+	# `i9_section_2_unsigned` against it. This call is the other trigger.
+	#
+	# IT DECIDES NOTHING ITSELF. Whether the arrival is enough is `unsigned_boxes`'
+	# question and it is asked in there, which is the same question the compliance
+	# sweep asks — so the status and the sweep cannot disagree about this form. It
+	# still moves the one edge and only where Section 2 was genuinely filed; a
+	# scan filed against a form nobody has verified moves nothing.
+	#
+	# AFTER THE COLUMNS ARE WRITTEN, because the evidence it reads is the metadata
+	# this call just recorded. Before them it would read the record as it was and
+	# answer about a form that no longer exists.
+	advanced = advance_if_signed(name)
+
 	_log_action(
 		name,
 		str(row.get("employee") or ""),
@@ -2543,6 +2642,11 @@ def attach_signed_i9(args: dict) -> ToolResult:
 			# are the client's claim rather than the server's observation, so the
 			# audit row records that they were taken and when they were taken.
 			"signing_metadata": sorted(metadata) or None,
+			# And whether filing it completed the form. `advance_if_signed` writes
+			# its own "Completed" row when it moves; this says which upload was the
+			# one that moved it, which is the question an inspection asks of a
+			# status that changed without anybody calling a status tool.
+			"advanced_to": advanced or None,
 		},
 	)
 
@@ -2551,7 +2655,11 @@ def attach_signed_i9(args: dict) -> ToolResult:
 			"name": name,
 			"employee": row.get("employee"),
 			"employee_name": row.get("employee_name"),
-			"status": row.get("status"),
+			# THE STATUS AFTER THIS CALL, not the one it walked in on. `row` was read
+			# before the file was filed and before `advance_if_signed` ran, and a
+			# handset that showed the caller "Awaiting Verification" for a form this
+			# very call completed would be reporting the past as the present.
+			"status": advanced or row.get("status"),
 			"signed_pdf": stored,
 			"file_docname": file_name,
 			"replaced": existing or None,

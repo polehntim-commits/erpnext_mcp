@@ -40,6 +40,7 @@ from erpnext_mcp.patches import (
 	rename_discipline_record,
 	repoint_producer_task_template,
 	set_default_tool_switches,
+	widen_i9_attestation_filters,
 )
 from erpnext_mcp.tools import company
 
@@ -68,6 +69,7 @@ PATCHES = (
 	("erpnext_mcp.patches.migrate_incident_tool_switches", migrate_incident_tool_switches),
 	("erpnext_mcp.patches.backfill_planting_rootstock", backfill_planting_rootstock),
 	("erpnext_mcp.patches.backfill_observation_type", backfill_observation_type),
+	("erpnext_mcp.patches.widen_i9_attestation_filters", widen_i9_attestation_filters),
 )
 
 

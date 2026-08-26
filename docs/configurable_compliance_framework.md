@@ -544,7 +544,36 @@ sleeps in on the camp's inspection list.
 ```
 
 Operators: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `in`, `nin`, `isnull`,
-`isnotnull`, `contains`, `ncontains`.
+`isnotnull`, `istrue`, `isfalse`, `contains`, `ncontains`, and `any`.
+
+**`any` is the one disjunction, and it arrived in v0.138.0 for one rule.** The
+list above is ANDed, which is right and covers every shipped rule but
+`i9_section_1_unsigned`: an I-9 section is attested *either* by a signature image
+captured at a pad the server was holding *or* by the sealed page arriving with
+both signing moments recorded beside it, so "not attested" is an AND of an OR and
+no arrangement of ANDed filters says it.
+
+```json
+[
+  {"field": "section_1_signature", "op": "isnull"},
+  {"op": "any", "value": [
+    {"field": "signed_pdf", "op": "isnull"},
+    {"field": "section_1_signed_at", "op": "isnull"},
+    {"field": "section_2_signed_at", "op": "isnull"}
+  ]}
+]
+```
+
+A group names no `field` of its own and passes when at least one filter nested in
+its `value` passes. It goes **one level deep** — `any` inside `any` is refused at
+authoring time, because a boolean expression language belongs in `custom_python`,
+which this rule already has, and a nested-group vocabulary stopping short of that
+would be a worse version of both. An empty group is refused for the reason every
+other check in `parse_filters` exists: it passes every row, so the rule would look
+scoped and be unscoped. A group none of whose columns this site has **passes**,
+which is the same fail-safe direction every absent column takes here — a group can
+only ever exclude rows, so passing it widens the scan and says so in a warning
+rather than going quiet on a site that has not run `install_compliance_fields`.
 
 **Filters are evaluated in Python, not pushed into SQL, and `default` is why.**
 In SQL, `status != 'Active'` excludes every row whose status was never set —

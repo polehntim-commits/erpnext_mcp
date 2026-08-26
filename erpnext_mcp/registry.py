@@ -660,9 +660,13 @@ _RULE_DRAFT_ARGUMENTS = {
 	"scope_filters": _field(
 		{"type": "array", "items": _OBJECT},
 		'ANDed filters: [{"field", "op", "value", "default"}]. Ops: eq, ne, gt, lt, '
-		"gte, lte, in, nin, isnull, isnotnull, contains, ncontains. `default` is what "
-		"an EMPTY column is read as, and it matters more than it looks: in SQL "
-		"`status != 'Active'` excludes every row whose status was never set.",
+		"gte, lte, in, nin, isnull, isnotnull, istrue, isfalse, contains, ncontains. "
+		"`default` is what an EMPTY column is read as, and it matters more than it "
+		"looks: in SQL `status != 'Active'` excludes every row whose status was never "
+		'set. The one disjunction is `any`: {"op": "any", "value": [ ...filters... ]} '
+		"names no field of its own and passes when at least one of the filters nested "
+		"in it passes. It goes ONE level deep — a boolean expression language belongs "
+		"in custom_python, which this rule already has.",
 	),
 	"message_template": _field(
 		_STRING,
@@ -12587,7 +12591,15 @@ TOOLS = {
 		"A FUTURE timestamp is refused; nothing else is verifiable and none of it is "
 		"treated as though it were. A column already filled is never overwritten — a "
 		"moment captured at the pad is better evidence than one restated by an upload — "
-		"and the answer reports which columns this call actually filled.",
+		"and the answer reports which columns this call actually filled.\n\n"
+		"AND IT MAY COMPLETE THE FORM. v0.138.0: a signed copy on the record WITH both "
+		"section_N_signed_at moments beside it is the attestation test satisfied — the "
+		"employer's app asserting both signatures were made, with the retained page to "
+		"show for it — so an I-9 whose Section 2 was filed advances from Awaiting "
+		"Verification to Complete as this call lands. `status` in the answer is the "
+		"status AFTER the call. All three columns or none: a scan with no moments moves "
+		"nothing. One edge only — a form nobody verified, or one somebody set to "
+		"Expired, is not touched.",
 		{
 			"i9_form": _field(_STRING, "The I-9 Form docname, e.g. I9-2026-0001."),
 			"name": _field(_STRING, "An I-9 Form docname, or an employee."),

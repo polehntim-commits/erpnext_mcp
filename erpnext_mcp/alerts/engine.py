@@ -558,7 +558,7 @@ def _gate_index(table: dict, company: str, warnings: list) -> dict:
 		return {}
 	company_field = compat.first_field(doctype, *_COMPANY_FIELDS)
 	wanted = ["name", table["subject_field"], table["date_field"]]
-	wanted.extend(entry["field"] for entry in table["scope_filters"])
+	wanted.extend(compliance_rules.filter_fields(table["scope_filters"]))
 	fields = compat.existing_fields(doctype, dict.fromkeys(wanted))
 	rows = frappe.db.get_all(
 		doctype,
@@ -614,7 +614,7 @@ def _latest_child_index(config: dict, company: str, warnings: list) -> dict:
 
 	wanted = [config["parent_field"], config["order_by"]]
 	wanted.extend(entry["field"] for entry in config["conditions"])
-	wanted.extend(entry["field"] for entry in config["scope_filters"])
+	wanted.extend(compliance_rules.filter_fields(config["scope_filters"]))
 	if config["parentfield"]:
 		wanted.append("parentfield")
 	fields = ["name"]

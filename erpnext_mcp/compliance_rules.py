@@ -229,7 +229,28 @@ FILTER_OPS = {
 	"isfalse": "a check box is not ticked (value is ignored)",
 	"contains": "the value appears in the column, case-insensitively",
 	"ncontains": "the value does not appear in the column",
+	"any": (
+		"at least ONE of the filters nested in `value` passes — the only disjunction in this "
+		"vocabulary, and it names no `field` of its own"
+	),
 }
+
+#: v0.138.0. THE ONE OR, AND WHY THERE IS EXACTLY ONE. Every other entry above
+#: asks one question of one column, and the list they sit in is ANDed — which is
+#: the right default and covers every shipped rule but one. `i9_section_1_unsigned`
+#: is that one: an I-9 Section is attested EITHER by a signature image captured
+#: at a pad this server was holding OR by the sealed page arriving with both
+#: signing moments recorded beside it (see `tools/i9.phone_attested`), and "not
+#: attested" is therefore an AND of an OR. No arrangement of ANDed filters says
+#: it, and the alternative was moving two shipped rules out of the declarative
+#: vocabulary and into Python — which is a bigger, more permanent widening than
+#: this.
+#:
+#: ONE LEVEL DEEP AND NO FURTHER, refused at authoring time. `any` inside `any`
+#: is a boolean expression language, and this app already has `custom_python` in
+#: a sandbox for the case a fixed vocabulary does not reach. A nested-group
+#: vocabulary that stopped short of that would be a worse version of both.
+_GROUP_OPS = ("any",)
 
 #: Ops that take no `value`.
 _NULLARY_OPS = ("isnull", "isnotnull", "istrue", "isfalse")
@@ -424,13 +445,16 @@ def as_list(raw, label: str) -> list:
 	return parsed
 
 
-def parse_filters(raw, label: str = "scope_filters") -> list:
+def parse_filters(raw, label: str = "scope_filters", nested: bool = False) -> list:
 	"""Validate a scope-filter list, or refuse saying which entry and why.
 
 	REFUSED AT AUTHORING TIME, which is the whole point of doing it here: a
 	filter with a typo'd operator asks for nothing and looks like it asks for
 	something, and discovering that from an empty calendar three weeks later is
 	the failure this app is written against.
+
+	`nested` is set when this is parsing the inside of an `any` group, and all it
+	does is refuse a second one — see `_GROUP_OPS`.
 	"""
 	out = []
 	for index, entry in enumerate(as_list(raw, label)):
@@ -439,15 +463,18 @@ def parse_filters(raw, label: str = "scope_filters") -> list:
 				f'{label}[{index}] must be an object like {{"field": "status", "op": "eq", '
 				f'"value": "Active"}}, got {type(entry).__name__}.'
 			)
-		field = str(entry.get("field") or "").strip()
-		if not field:
-			raise ValueError(f"{label}[{index}] names no `field`.")
 		op = str(entry.get("op") or "eq").strip().lower()
 		if op not in FILTER_OPS:
 			raise ValueError(
 				f"{label}[{index}] uses operator {op!r}, which is not one of: "
 				f"{', '.join(sorted(FILTER_OPS))}."
 			)
+		if op in _GROUP_OPS:
+			out.append(_parse_group(entry, op, label, index, nested))
+			continue
+		field = str(entry.get("field") or "").strip()
+		if not field:
+			raise ValueError(f"{label}[{index}] names no `field`.")
 		value = entry.get("value")
 		if op in _LIST_OPS:
 			if not isinstance(value, (list, tuple)):
@@ -472,6 +499,48 @@ def parse_filters(raw, label: str = "scope_filters") -> list:
 		if "default" in entry:
 			row["default"] = entry["default"]
 		out.append(row)
+	return out
+
+
+def _parse_group(entry: dict, op: str, label: str, index: int, nested: bool) -> dict:
+	"""One `any` group: its own `field` is empty and its `value` is a filter list."""
+	if nested:
+		raise ValueError(
+			f"{label}[{index}] nests `{op}` inside another one. Groups go one level deep: a "
+			"boolean expression language belongs in custom_python, which this app already has."
+		)
+	members = parse_filters(entry.get("value"), f"{label}[{index}].value", nested=True)
+	if not members:
+		# An empty group passes every row, which reads as a filter and scopes
+		# nothing — the exact failure this parser exists to catch.
+		raise ValueError(
+			f"{label}[{index}] uses `{op}` with no filters in its `value`. An empty group passes "
+			"every row, so the rule would look scoped and be unscoped."
+		)
+	# `field` is present and empty rather than absent, because every reader of a
+	# parsed filter list indexes it — see `filter_fields` for the one that has to
+	# look past it.
+	return {"field": "", "op": op, "value": members}
+
+
+def filter_fields(filters: list) -> list:
+	"""Every column a parsed filter list reads, groups included, in order.
+
+	The callers that build a SELECT from a filter list cannot just read `field`
+	off each entry any more: an `any` group names no column of its own and every
+	column it does read is one level down. A SELECT missing those columns is not a
+	crash — `row_matches` skips a filter whose column is not present, which widens
+	the scan rather than narrowing it — so this would have been a rule that quietly
+	stopped scoping.
+	"""
+	out = []
+	for entry in filters or []:
+		if entry.get("op") in _GROUP_OPS:
+			out.extend(filter_fields(entry.get("value") or []))
+			continue
+		field = str(entry.get("field") or "")
+		if field:
+			out.append(field)
 	return out
 
 
@@ -996,20 +1065,61 @@ def row_matches(row: dict, filters: list, present_fields: set | None = None) -> 
 	"""
 	warnings = []
 	for entry in filters or []:
-		field = entry["field"]
-		if present_fields is not None and field not in present_fields:
-			warnings.append(
-				f"scope filter on {field!r} was skipped: this site's target doctype has no such "
-				"column. The rule ran without it, so it scanned MORE rows than it was scoped to, "
-				"not fewer."
-			)
+		if entry.get("op") in _GROUP_OPS:
+			matched = _group_passes(row, entry, present_fields, warnings)
+			if not matched:
+				return False, warnings
 			continue
-		value = row.get(field)
-		if value in (None, "") and "default" in entry:
-			value = entry["default"]
-		if not _passes(value, entry["op"], entry.get("value")):
+		answered, passed = _entry_passes(row, entry, present_fields, warnings)
+		if answered and not passed:
 			return False, warnings
 	return True, warnings
+
+
+def _entry_passes(row: dict, entry: dict, present_fields: set | None, warnings: list) -> tuple:
+	"""(could this site answer the filter, did the row pass it).
+
+	Split out of `row_matches` so an `any` group can ask the same question of its
+	members and get the SAME answer to "this column is not on this site" — which
+	is the whole reason it is one function and not two: a group that treated an
+	absent column as a FAILED test could fail the whole group, and narrow a rule on
+	a site that has simply not installed the field. Every skip here widens the scan
+	and says so; none of them narrows it.
+	"""
+	field = entry["field"]
+	if present_fields is not None and field not in present_fields:
+		warning = (
+			f"scope filter on {field!r} was skipped: this site's target doctype has no such "
+			"column. The rule ran without it, so it scanned MORE rows than it was scoped to, "
+			"not fewer."
+		)
+		if warning not in warnings:
+			warnings.append(warning)
+		return False, True
+	value = row.get(field)
+	if value in (None, "") and "default" in entry:
+		value = entry["default"]
+	return True, _passes(value, entry["op"], entry.get("value"))
+
+
+def _group_passes(row: dict, entry: dict, present_fields: set | None, warnings: list) -> bool:
+	"""Does the row pass at least one member of an `any` group?
+
+	A GROUP NONE OF WHOSE COLUMNS THIS SITE HAS PASSES, and it is the same
+	direction every other absent column takes here: the rule scans MORE rows than
+	it was scoped to and says so in a warning, rather than going quiet on a site
+	that has not run `install_compliance_fields`. A group is a NARROWING — it can
+	only ever exclude rows — so passing it is the fail-safe answer.
+	"""
+	answerable = False
+	for member in entry.get("value") or []:
+		answered, passed = _entry_passes(row, member, present_fields, warnings)
+		if not answered:
+			continue
+		answerable = True
+		if passed:
+			return True
+	return not answerable
 
 
 def _passes(value, op: str, wanted) -> bool:
@@ -1531,6 +1641,35 @@ def seed_specs() -> list:
 #: It also means this list is the shape an AI-proposed rule will arrive in when
 #: `propose_compliance_rule` is wired: a dict of declarative fields, a citation,
 #: a kairotic gate, and nothing executable anywhere in it.
+def i9_attestation_group() -> dict:
+	"""The scope filter that spares an I-9 the phone attestation test satisfies.
+
+	v0.138.0, AND THE COLUMN NAMES COME FROM `tools/i9` RATHER THAN FROM HERE.
+	That is the whole point of it being a function. `unsigned_boxes` decides what
+	`Complete` means and `i9_section_1_unsigned` / `i9_section_2_unsigned` decide
+	what an inspection is warned about, and the release this was written for exists
+	because those two disagreed: every phone-built I-9 was signed, sealed and
+	retained, rested at `Awaiting Verification` for ever, and carried two Criticals
+	saying nobody had signed it. Restating the three column names in this file
+	would leave the same disagreement one edit away.
+
+	IT IS THE NEGATION, because a scope filter says WHEN TO FIRE. `phone_attested`
+	is true when all three columns are filled; this group passes when at least one
+	is empty, which is exactly `not phone_attested`. The pair are tested against
+	each other over the whole truth table in `test_i9_phone_attestation.py` —
+	sharing the column names stops them naming different columns, not from reading
+	them in opposite directions.
+	"""
+	from .tools import i9
+
+	return {
+		"op": "any",
+		"value": [
+			{"field": field, "op": "isnull"} for field in (i9.SIGNED_COPY_FIELD, *i9.ATTESTATION_TIMESTAMPS)
+		],
+	}
+
+
 def declarative_seed_specs() -> list:
 	from .services import weather
 
@@ -1957,6 +2096,18 @@ def declarative_seed_specs() -> list:
 				# it without saying so.
 				{"field": "status", "op": "nin", "value": ["Draft", "Destroyed"]},
 				{"field": "section_1_signature", "op": "isnull"},
+				# v0.138.0. AND NOT ONE THE PHONE ALREADY ATTESTED. The column
+				# above is a picture of a signature captured at a pad this server
+				# was holding, and on the shipped architecture nothing fills it any
+				# more: the app builds and seals the retained page itself and files
+				# it with `attach_signed_i9`. Without this group the rule raised a
+				# Critical on every phone-built I-9 in the register — forms that are
+				# signed, sealed and retained — which is worse than a rule that
+				# raises nothing: an inspection board where the Criticals are known
+				# to be wrong is a board nobody reads. `i9_attestation_group` names
+				# the same three columns `tools/i9.phone_attested` reads, from the
+				# same place, so the sweep and the status cannot disagree.
+				i9_attestation_group(),
 			],
 			"message_template": (
 				"Section 1 of {{ row.employee_name }}'s I-9 ({{ row.name }}) has no employee "
@@ -1998,7 +2149,12 @@ def declarative_seed_specs() -> list:
 				"the deadline is already watched by i9_verification_overdue and a second "
 				"countdown on the same record would be two rows for one errand. Silences by "
 				"itself the moment a signature is attached, and does not fire on a Draft "
-				"(nothing has been submitted to sign) or on a Destroyed form (past retention)."
+				"(nothing has been submitted to sign) or on a Destroyed form (past retention). "
+				"From v0.138.0 it does not fire on a form the handset attested either: a sealed "
+				"signed_pdf on the record WITH both section_1_signed_at and section_2_signed_at "
+				"beside it is the employer asserting both signatures were made and producing the "
+				"retained page to show for it. All three or none — a scan on its own could be a "
+				"blank form, and timestamps on their own show nothing."
 			),
 			"authored_by": AUTHOR_SYSTEM,
 			"enabled": 1,
@@ -2027,6 +2183,9 @@ def declarative_seed_specs() -> list:
 				{"field": "verification_date", "op": "isnotnull"},
 				{"field": "section_2_signature", "op": "isnull"},
 				{"field": "status", "op": "ne", "value": "Destroyed"},
+				# Section 1's twin, and see the note there. The evidence is the same
+				# page: it carries both attestations or it is not the retained form.
+				i9_attestation_group(),
 			],
 			"message_template": (
 				"Section 2 of {{ row.employee_name }}'s I-9 ({{ row.name }}) records a "
@@ -2069,7 +2228,10 @@ def declarative_seed_specs() -> list:
 				"empty — somebody examined the documents and nobody signed for it. A form with "
 				"no verification date raises nothing here, because Section 2 has not been "
 				"filled in at all and that is i9_verification_overdue's question. Silences the "
-				"moment a signature is attached."
+				"moment a signature is attached — or, from v0.138.0, when the handset files the "
+				"sealed signed_pdf with both section_N_signed_at moments recorded beside it, "
+				"which is the same page carrying the same two attestations Section 1 is spared "
+				"by."
 			),
 			"authored_by": AUTHOR_SYSTEM,
 			"enabled": 1,

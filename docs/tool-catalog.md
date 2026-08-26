@@ -11511,6 +11511,23 @@ timestamp is refused; nothing else is verifiable and none of it is treated as
 though it were. A column already filled is never overwritten, and the answer's
 `signing_metadata` reports which columns the call actually filled.
 
+| Parameter | Required | Description |
+|---|---|---|
+| `section_1_signed_at` / `section_2_signed_at` | | When each attestation was made. A future moment is refused |
+| `section_N_gps_lat` / `section_N_gps_lon` | | Where the handset said it was, as a pair per section |
+
+**And it may complete the form** (v0.138.0). A signed copy on the record **with
+both** `section_N_signed_at` moments beside it is the attestation test satisfied
+— the employer's app asserting both signatures were made, with the retained page
+to show for it — so an I-9 whose Section 2 has been filed advances from `Awaiting
+Verification` to `Complete` as this call lands, and the answer's `status` is the
+status **after** the call. All three columns or none: a scan with no moments is a
+page somebody could have photographed blank, and moments with no page are a claim
+with nothing behind it. One edge only — a form nobody has verified, or one
+somebody set to `Expired`, is not touched. The same test spares the form
+`i9_section_1_unsigned` and `i9_section_2_unsigned`, so the status and the sweep
+cannot disagree.
+
 ### `collect_form_signature`
 
 **MUTATING (default OFF).** Attaches one signature capture to the box on an I-9
