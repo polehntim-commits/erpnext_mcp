@@ -136,9 +136,10 @@ import re
 
 import frappe
 
-from .. import audit, geo, security
+from .. import audit, fsa, geo, security
 from ..errors import ToolError
 from ..tools import farm as farm_tools
+from ..tools import fsa as fsa_tools
 from ..tools import realestate as realestate_tools
 
 try:  # pragma: no cover - a bench without Frappe's own HTTP client
@@ -192,6 +193,11 @@ COUNTIES = {
 }
 
 DEFAULT_COUNTY = "wasco"
+
+#: The one doctype the FSA import writes to. Named rather than passed in: a CLU
+#: is a FIELD boundary and nothing else, which is the whole reason the county
+#: import is on Parcel and this one is not.
+FIELD_DOCTYPE = "Field"
 
 #: The doctypes a boundary can be saved to, the argument each tool wants it
 #: under, and the tool itself. THIS IS THE WHOLE REACHABLE SURFACE of
@@ -637,6 +643,125 @@ def query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon=
 def save_boundary(doctype=None, name=None, geojson=None, dry_run=0):
 	"""Save a drawn or imported boundary, through the tool that validates it."""
 	return speaks_frappe(_save_boundary, doctype=doctype, name=name, geojson=geojson, dry_run=dry_run)
+
+
+@frappe.whitelist()
+def read_fsa_clu(content=None, filename=None):
+	"""Parse an uploaded FSA Common Land Unit file. Reads nothing on the site."""
+	return speaks_frappe(_read_fsa_clu, content=content, filename=filename)
+
+
+@frappe.whitelist()
+def import_fsa_clu(content=None, filename=None, parcel=None, create_missing=0, apply=0):
+	"""Match a whole CLU file against this site's blocks, and optionally write."""
+	return speaks_frappe(
+		_import_fsa_clu,
+		content=content,
+		filename=filename,
+		parcel=parcel,
+		create_missing=create_missing,
+		apply=apply,
+	)
+
+
+def _read_fsa_clu(content=None, filename=None):
+	"""Turn the bytes a browser just read off a memory stick into CLUs on a map.
+
+	NO FILE RECORD IS CREATED. The upload goes into this request, is parsed, and
+	the shapes come back — nothing is stored, so a grower who picked the wrong
+	export off the stick has not left a copy of it on the site. The whole point of
+	the panel this feeds is looking BEFORE anything is written.
+
+	WRITE PERMISSION ON Field IS THE GATE, and it is deliberately stricter than
+	the parse this performs. The only thing a CLU polygon is for here is setting a
+	block's boundary; gating on `read` would leave the site parsing arbitrary
+	uploaded archives for any signed-in account, which is a larger surface than
+	the feature needs.
+	"""
+	_named_user()
+	_may_write(FIELD_DOCTYPE)
+
+	payload = fsa.read(fsa.decode_upload(content, "the uploaded file"), str(filename or ""))
+	clus = []
+	for index, feature in enumerate(payload.get("features") or [], start=1):
+		attributes = fsa.canonical_attributes(feature.get("properties") or {})
+		entry = {
+			"index": index,
+			"clu": fsa.clu_key(attributes),
+			"suggested_field_name": fsa.suggested_field_name(attributes),
+			"farm_number": attributes.get("farm_number"),
+			"tract_number": attributes.get("tract_number"),
+			"clu_number": attributes.get("clu_number"),
+			"clu_identifier": attributes.get("clu_identifier"),
+			"calc_acres": attributes.get("calc_acres"),
+			"hel_type": attributes.get("hel_type"),
+			"geometry": None,
+			"computed_acres": None,
+			"error": "",
+		}
+		try:
+			geometry = geo.parse(feature.get("geometry"), f"CLU {entry['clu']}")
+			entry["geometry"] = geometry
+			entry["computed_acres"] = geo.area_acres(geometry)
+		except ToolError as error:
+			entry["error"] = str(error)
+		clus.append(entry)
+
+	return {
+		"format": payload.get("format"),
+		"crs": payload.get("crs"),
+		"source_files": payload.get("source_files") or [],
+		"warnings": list(payload.get("warnings") or []),
+		"clu_count": len(clus),
+		"clus": clus,
+	}
+
+
+def _import_fsa_clu(content=None, filename=None, parcel=None, create_missing=0, apply=0):
+	"""The whole file at once, through the same tool the AI calls.
+
+	THE GATE IS COARSER THAN `save_boundary`'S AND SAYS SO. That method knows
+	which record it is about and asks Frappe whether this person may write to
+	THAT document; a bulk import does not know which blocks it will touch until
+	after it has matched them, so the check here is write permission on Field as
+	a doctype. A site that scopes somebody to one company with a User Permission
+	should not put this button in front of them — the per-CLU report names every
+	block it changed, which is the compensating control and not a substitute for
+	the one above.
+	"""
+	user = _named_user()
+	_may_write(FIELD_DOCTYPE)
+
+	truthy = ("1", "true", "True", "yes")
+	arguments = {
+		"file_base64": content,
+		"filename": str(filename or ""),
+		"create_missing": str(create_missing) in truthy,
+		"apply": str(apply) in truthy,
+	}
+	if parcel:
+		arguments["parcel"] = str(parcel)
+		owner = frappe.db.get_value("Parcel", str(parcel), "owning_entity")
+		if owner:
+			arguments["owning_entity"] = owner
+
+	result = fsa_tools.import_fsa_clu_boundaries(arguments)
+	data = dict(result.data or {})
+
+	audit.record(
+		tool_name="desk:import_fsa_clu_boundaries",
+		arguments={
+			"filename": arguments["filename"],
+			"parcel": arguments.get("parcel"),
+			"create_missing": arguments["create_missing"],
+			"apply": arguments["apply"],
+		},
+		summary=result.summary,
+		docstatus_delta=result.docstatus_delta,
+		caller_ip=_caller_ip(),
+	)
+
+	return {"user": user, "summary": result.summary, **data}
 
 
 def _query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon=None):

@@ -11,10 +11,12 @@ FIRST: the test that a gate works is a test that the call fails without it.
 
 SIX CLAIMS.
 
-1. **THE SURFACE IS TWO METHODS AND THREE DOCTYPES.** `TheSaveSurfaceIsClosed`.
+1. **THE SURFACE IS FOUR METHODS AND THREE DOCTYPES.** `TheSaveSurfaceIsClosed`.
    There is no dispatcher and no method-name argument, so `create_journal_entry`
    is not reachable and neither is Housing Unit — asserted by enumerating what
-   the module exports rather than by trusting the docstring.
+   the module exports rather than by trusting the docstring. It was two until
+   v0.139.0 added the FSA CLU pair; the enumeration is the point, and a fifth
+   arriving without somebody editing that line is what it is for.
 
 2. **PERMISSION IS CHECKED HERE, NOT INHERITED.** `TheGatesRefuseWhatTheyShould`.
    The boundary tools end in `doc.save(ignore_permissions=True)`, which is right
@@ -136,15 +138,23 @@ class GISTestCase(GeoTestCase):
 
 # ── the closed surface ──────────────────────────────────────────────────────
 class TheSaveSurfaceIsClosed(unittest.TestCase):
-	"""Two methods, three doctypes, and no way to name a fourth of either."""
+	"""Four methods, three doctypes, and no way to name one more of either."""
 
-	def test_exactly_two_methods_are_whitelisted(self):
+	def test_exactly_four_methods_are_whitelisted(self):
+		"""Two since v0.33.0, and the FSA CLU pair since v0.139.0 — `read_fsa_clu`,
+		which parses an upload and stores nothing, and `import_fsa_clu`, which runs
+		the whole file through `import_fsa_clu_boundaries`. Enumerated rather than
+		described, because a whitelisted method is reachable by anyone signed in
+		and one arriving unnoticed is the thing this asserts against."""
 		exported = {
 			name
 			for name in dir(gis)
 			if not name.startswith("_") and getattr(getattr(gis, name), "__wrapped_whitelisted__", False)
 		}
-		self.assertEqual(exported, {"query_county_parcels", "save_boundary"})
+		self.assertEqual(
+			exported,
+			{"query_county_parcels", "save_boundary", "read_fsa_clu", "import_fsa_clu"},
+		)
 
 	def test_the_saveable_doctypes_are_the_three_that_carry_a_polygon(self):
 		self.assertEqual(set(gis.SAVEABLE), {"Parcel", "Field", "Irrigation Zone"})

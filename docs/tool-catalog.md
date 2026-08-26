@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 850 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 852 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 431 read tools are **on** by default and can be switched off individually. A
+All 432 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -18872,3 +18872,113 @@ authenticated caller and drops any copy the body carried.
 The two surfaces are separate on purpose. A tool being in this catalogue does not
 put it on that table: `create_journal_entry` and `convey_parcel` are tools here
 and are reachable from no handset at any path.
+
+---
+
+## v0.139.0 — the boundaries the government already drew
+
+A farm's field boundaries already exist. The Farm Service Agency drew them, they
+are what its acreage report, its crop insurance and every program payment are
+measured against, and the grower can walk into the county office and be handed
+the lot. Tracing those same shapes off a satellite image produces a second set of
+boundaries that disagrees with the first by a few percent — and only one of the
+two is the one FSA pays on.
+
+| | |
+|---|---|
+| `read_fsa_clu_file` | What is in a Common Land Unit export. Touches nothing on the site. Read. |
+| `import_fsa_clu_boundaries` | Match those CLUs to this farm's blocks and set their boundaries. **MUTATING**, dry run by default. |
+
+### The four things the office actually hands out
+
+A zipped **shapefile** set (`.shp` with `.shx`, `.dbf` and `.prj`), a bare `.shp`
+with those sidecars, **KML or KMZ**, or **GeoJSON**. All four are read here, and
+the `.dbf` is where every CLU attribute lives — the geometry file has none.
+
+**The column names are not stable and never were.** The 2008 public release
+spelled them `CLUID`, `TRACTNBR`, `CLUNBR`, `CALCACRES`; an office export today
+may spell the same four `CLU_IDENTIFIER`, `TRACT_NUMBER`, `CLU_NUMBER`,
+`CALCULATED_ACRES`, and dBase truncates anything past ten characters while it is
+at it. Every spelling is matched against one squashed key, so `TRACT_NBR`,
+`tract nbr` and `TractNbr` are one column rather than three. A column this app
+has never heard of is kept verbatim rather than dropped.
+
+### The coordinate system is the part that usually stops an import dead
+
+FSA's own distribution is geographic NAD83 — degrees, which is what GeoJSON
+wants. A set that has been through a vendor comes back projected, and in US
+agriculture that is one of four things: **Albers Equal Area** (EPSG:5070, the
+FSA/NRCS house projection), a **UTM** zone, a **State Plane Lambert Conformal
+Conic**, or **Web Mercator** — in metres or in US survey feet. Those coordinates
+are not degrees, and handing them to a GeoJSON reader produces a polygon "not on
+Earth", which is a true error message and a useless one.
+
+All four are un-projected here, against the ellipsoid the file's own `.prj`
+names, from the closed-form inverses in USGS Professional Paper 1395. **Anything
+else is refused by name** — "this is Oregon State Plane North, which I cannot
+un-project" is a sentence somebody can act on. No datum shift is applied: NAD83
+and WGS84 differ by a metre or so and share an ellipsoid for these purposes, and
+a file that says NAD27 is reported as such rather than quietly moved.
+
+```bash
+read_fsa_clu_file(file_base64="UEsDBBQ...", filename="clu_wasco_2026.zip")
+```
+
+**Returns** `format`, `crs`, `clu_count`, `farm_numbers`, a per-tract summary,
+`total_calc_acres` against `total_computed_acres`, and one row per CLU carrying
+its farm, tract and field number, FSA's `calc_acres`, the CLU identifier, the HEL
+classification, the acreage the polygon itself encloses and where it is.
+
+### Why `import_field_boundary_geojson` could not do this
+
+That tool matches on `properties.field_name` and `properties.parcel_hint`. **A
+CLU carries neither** — it carries a farm number, a tract number, a field number
+within that tract, a GUID and FSA's own acreage, and the grower calls the block
+"the top of Dry Hollow". A completely correct file therefore matches nothing
+through that door, and the report comes back saying every field is unregistered.
+
+So the matching here is on what a CLU actually has, in the order of how much the
+identifier is worth:
+
+1. **The CLU GUID**, against `fsa_clu_identifier` on a block imported before.
+   This is what makes next year's file an update rather than a second copy of the
+   farm.
+2. **Tract and field number**, against `fsa_tract_number` + `fsa_clu_number` —
+   what the office says out loud and what every acreage report is filed under.
+3. **The field number as the block number**, within one parcel. A farm that
+   numbered its blocks the way FSA numbers its fields matches here on the first
+   import, before anything carries an FSA column at all. Compared after
+   normalising, so block `"03"` and field 3 are one block.
+4. **The block's name**, for a farm already using `T1234-3`.
+
+The report says which of the four each match used. Forty matches by
+`clu_identifier` on a second run is the pair working; forty by `block_number`
+again means something renamed itself.
+
+```bash
+# the whole farm, one call, nothing written
+import_fsa_clu_boundaries(file_base64="UEsDBBQ...",
+                          tract_parcels={"1234": "Yellow Camp", "1235": "Dry Hollow"})
+
+# and then, having read the plan
+import_fsa_clu_boundaries(file_base64="UEsDBBQ...",
+                          tract_parcels={"1234": "Yellow Camp", "1235": "Dry Hollow"},
+                          apply=True)
+```
+
+**It never creates a block unless asked.** A CLU matching nothing is reported and
+skipped; `create_missing=true` registers it as `T<tract>-<field>` under its
+parcel, with FSA's own acreage. A boundary landing on the wrong block is a spray
+record pointing at the wrong ground, and a farm that has to reconcile forty
+invented blocks will not notice the two that were right to invent.
+
+**Every check `set_field_boundary` makes still applies, per CLU.** The polygon is
+parsed, self-intersection is refused, and a shape enclosing more than 25% away
+from the block's recorded acreage is refused rather than saved. FSA's `CALCACRES`
+is stored in `fsa_calc_acres` because it is the number the payment is made on —
+and it is never what the app computes with: centroid, bounding box, H3 coverage
+and computed acres all come from the polygon.
+
+**A file spanning several parcels is the normal case.** One FSA farm number
+covers several tracts and several tax lots, so `tract_parcels` maps each tract to
+the Parcel it sits on; `parcel` alone is the single-parcel shorthand.

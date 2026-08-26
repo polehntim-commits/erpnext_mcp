@@ -1137,10 +1137,17 @@ class Catalogue(SeededTestCase):
 		catalogue, and the only tool here that goes through `frappe.get_list`
 		rather than `frappe.db.get_all`, so its reach is the DocPerms of the
 		account this app acts as and not what its switch says.
+
+		v0.139.0 ADDS THE TWO THAT READ THE GOVERNMENT'S OWN COPY OF THE FARM.
+		`read_fsa_clu_file` says what is in a Common Land Unit export from the FSA
+		county office and touches nothing on the site;
+		`import_fsa_clu_boundaries` matches those CLUs against the blocks that are
+		already here and sets their boundaries. The pair is one read and one write
+		on purpose — the file is looked at before it is believed.
 		"""
-		self.assertEqual(len(registry.TOOLS), 850)
-		self.assertEqual(len(registry.READ_TOOLS), 431)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 419)
+		self.assertEqual(len(registry.TOOLS), 852)
+		self.assertEqual(len(registry.READ_TOOLS), 432)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 420)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

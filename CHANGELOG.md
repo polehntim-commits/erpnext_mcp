@@ -3,6 +3,59 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.139.0 — 2026-08-26 — the boundaries the government already drew
+
+**A FARM'S FIELD BOUNDARIES ALREADY EXIST.** The Farm Service Agency drew them,
+its acreage report and every program payment are measured against them, and the
+grower can be handed the lot at the county office. Two tools now read what the
+office actually gives out. Full note in `RELEASES/v0.139.0.md`.
+
+**`read_fsa_clu_file`** (read, default ON) says what is in a Common Land Unit
+export and touches nothing on the site. **`import_fsa_clu_boundaries`**
+(MUTATING, default OFF, dry run by default) matches those CLUs against the blocks
+already registered and sets their boundaries.
+
+**FOUR FORMATS, NO NEW DEPENDENCY.** A zipped shapefile set (`.shp` + `.dbf` +
+`.prj`), a bare `.shp` (refused, with what else to send), KML/KMZ, and GeoJSON.
+`erpnext_mcp/fsa.py` reads the 1998 shapefile specification and dBase III
+directly; `pyshp` and `pyproj` are not dependencies of this app and neither
+format will ever change again.
+
+**FOUR PROJECTIONS INVERTED** — Albers Equal Area (EPSG:5070, the FSA/NRCS house
+projection), Transverse Mercator (every UTM zone), Lambert Conformal Conic (State
+Plane, in metres or US survey feet) and Web Mercator — from USGS Professional
+Paper 1395, against the ellipsoid the file's own `.prj` names. Checked against
+`pyproj` to the fourth decimal of a millimetre. Anything else is **refused by
+name**: a boundary transformed by a guess is worse than one never transformed.
+The false origin is converted with the coordinates, which is the failure with no
+symptom — feet subtracted as metres gives a valid polygon 1,100 km away.
+
+**`import_field_boundary_geojson` COULD NOT DO THIS.** It matches on
+`properties.field_name` and `parcel_hint`, and a CLU carries neither. Matching is
+now on what a CLU has, in order: the CLU GUID, then tract + field number, then the
+field number against a block number on a parcel, then the block's name — and the
+report says which was used. It never creates a block unless `create_missing` is
+set.
+
+**RING NESTING IS BY CONTAINMENT AND NOT BY WINDING.** The specification says
+outer rings run clockwise; half the tools that write shapefiles do not enforce it,
+and a ten-acre field with a wetland exclusion then comes back as twelve acres in
+two pieces — a number nobody would question.
+
+**SEVEN COLUMNS ON Field** in a new FSA Farm Records section: farm, tract and CLU
+number, the CLU identifier (not unique, on purpose), FSA's calculated acres, the
+HEL classification and the import date. FSA's acreage is KEPT and never computed
+with — every derived figure still comes from the polygon, and `get_field` reports
+both under an `fsa` key that appears only on blocks that have one.
+
+**"Import from FSA (CLU)" ON THE BLOCK FORM AND ON NO OTHER**, which is the exact
+mirror of the county import being on Parcel and on no other: a county publishes
+tax lots, FSA publishes fields. The file is read in the browser and never stored.
+`api/gis.py` exports four whitelisted methods now, enumerated by a test.
+
+**852 tools** (432 read, 420 mutating). `tests_standalone/test_fsa_clu.py` adds
+80, writing real shapefile and dBase bytes rather than mocking the parse.
+
 ## 0.138.0 — 2026-08-26 — the page it was signed on is the proof it was signed
 
 **THE DECISION v0.137.0 WROTE DOWN AND DID NOT TAKE.** A phone-built I-9 can reach

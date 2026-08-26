@@ -43,6 +43,15 @@
   "organic_col",
   "organic_cert_agency",
   "transition_start_date",
+  "fsa_section",
+  "fsa_farm_number",
+  "fsa_tract_number",
+  "fsa_clu_number",
+  "fsa_col",
+  "fsa_clu_identifier",
+  "fsa_calc_acres",
+  "fsa_hel_type",
+  "fsa_import_date",
   "boundary_section",
   "boundary_geojson",
   "boundary_centroid_lat",
@@ -312,6 +321,62 @@
    "label": "Transition Start Date"
   },
   {
+   "collapsible": 1,
+   "fieldname": "fsa_section",
+   "fieldtype": "Section Break",
+   "label": "FSA Farm Records"
+  },
+  {
+   "description": "The FSA farm number this block is administered under. One farm number covers several tracts, and several parcels. Written by import_fsa_clu_boundaries from the county office's own CLU file; it is what an acreage report, an ARC/PLC election and a crop insurance schedule are all filed against.",
+   "fieldname": "fsa_farm_number",
+   "fieldtype": "Data",
+   "label": "FSA Farm Number"
+  },
+  {
+   "description": "The FSA tract number. A tract is a unit of ownership history rather than a tax lot, so one Parcel may hold several tracts and one tract may cross two parcels. This is half of the pair the office says out loud — 'tract 1234, field 3' — and half of what a re-import matches on.",
+   "fieldname": "fsa_tract_number",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "FSA Tract Number"
+  },
+  {
+   "description": "The CLU (field) number within the tract. The other half of 'tract 1234, field 3'.",
+   "fieldname": "fsa_clu_number",
+   "fieldtype": "Data",
+   "label": "FSA Field Number"
+  },
+  {
+   "fieldname": "fsa_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "FSA's own identifier for this Common Land Unit, which is a GUID. NOT UNIQUE HERE ON PURPOSE: a farm that splits one CLU into two blocks it manages differently is a normal thing to do, and both blocks then carry the same CLU identifier honestly. It is the first thing a re-import matches on, which is what makes next year's file an update rather than a second copy of the farm.",
+   "fieldname": "fsa_clu_identifier",
+   "fieldtype": "Data",
+   "label": "CLU Identifier"
+  },
+  {
+   "description": "FSA's calculated acreage for this CLU, kept exactly as the file gave it. This is the number a payment is made on, so it is worth having beside the app's own — but nothing here computes with it: Computed Area (acres) comes from the polygon and is what a per-acre figure uses.",
+   "fieldname": "fsa_calc_acres",
+   "fieldtype": "Float",
+   "label": "FSA Calculated Acres",
+   "precision": "2"
+  },
+  {
+   "description": "FSA's highly erodible land classification for this CLU — typically HEL, NHEL, UHEL or EX. Conservation compliance on a HEL field is a condition of every program payment the farm receives.",
+   "fieldname": "fsa_hel_type",
+   "fieldtype": "Data",
+   "label": "HEL Classification"
+  },
+  {
+   "description": "When this block last took a boundary from an FSA CLU file. FSA revises CLUs — a split, a combination, a re-measure — so a boundary imported three years ago may no longer be the one the acreage report is measured against.",
+   "fieldname": "fsa_import_date",
+   "fieldtype": "Date",
+   "label": "CLU Imported On",
+   "read_only": 1
+  },
+  {
    "description": "The shape on the ground. Everything below the polygon is DERIVED from it on save and must not be edited by hand — a figure a person can change independently of the polygon is a figure that will disagree with it, and the disagreement surfaces as a geofence saying no to somebody standing in the right place.",
    "fieldname": "boundary_section",
    "fieldtype": "Section Break",
@@ -427,7 +492,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-03 22:00:00.000000",
+ "modified": "2026-08-26 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Field",

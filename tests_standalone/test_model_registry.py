@@ -885,9 +885,16 @@ class ToolRegistration(unittest.TestCase):
 		# v0.129.0 adds four reads about the deployment rather than the farm:
 		# get_server_status, list_error_logs, list_sidecar_routes and
 		# query_doctype. No existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 850)
-		self.assertEqual(len(self.registry.READ_TOOLS), 431)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 419)
+		# v0.139.0 adds two over the FSA county office's own Common Land Unit
+		# file: one read, `read_fsa_clu_file`, which says what is in an export
+		# and touches nothing on the site, and one write,
+		# `import_fsa_clu_boundaries`, which matches those CLUs against the
+		# blocks already registered and sets their boundaries. The seven `fsa_`
+		# columns on Field are new columns on an existing register and carry no
+		# tools of their own — no existing signature changed.
+		self.assertEqual(len(self.registry.TOOLS), 852)
+		self.assertEqual(len(self.registry.READ_TOOLS), 432)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 420)
 
 
 if __name__ == "__main__":

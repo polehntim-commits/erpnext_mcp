@@ -278,11 +278,13 @@
   "geo_tools_section",
   "allow_find_fields_containing_point",
   "allow_find_fields_by_h3_cell",
+  "allow_read_fsa_clu_file",
   "geo_tools_col",
   "allow_set_field_boundary",
   "allow_set_zone_boundary",
   "allow_set_parcel_boundary",
   "allow_import_field_boundary_geojson",
+  "allow_import_fsa_clu_boundaries",
   "family_tools_section",
   "allow_list_family_members",
   "allow_get_family_member",
@@ -2864,6 +2866,13 @@
    "label": "Find Fields by H3 Cell"
   },
   {
+   "default": "1",
+   "description": "READ. What is in a Common Land Unit file from the FSA county office \u2014 a zipped shapefile, a KML or KMZ, or GeoJSON. Reports every CLU's farm, tract and field number, FSA's own acreage, the HEL classification and where on the ground it is. Reads nothing on this site and writes nothing.",
+   "fieldname": "allow_read_fsa_clu_file",
+   "fieldtype": "Check",
+   "label": "Read an FSA CLU File"
+  },
+  {
    "fieldname": "geo_tools_col",
    "fieldtype": "Column Break",
    "label": ""
@@ -2895,6 +2904,13 @@
    "fieldname": "allow_import_field_boundary_geojson",
    "fieldtype": "Check",
    "label": "Import Field Boundaries"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Set block boundaries from the FSA county office's own CLU file, matched on the CLU identifier, on tract and field number, or on the block number. Dry run by default, per-CLU errors, and it registers a block only when asked to.",
+   "fieldname": "allow_import_fsa_clu_boundaries",
+   "fieldtype": "Check",
+   "label": "Import FSA CLU Boundaries"
   },
   {
    "fieldname": "family_tools_section",

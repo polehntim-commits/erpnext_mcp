@@ -166,6 +166,17 @@ frappe.provide("erpnext_mcp.geo_map");
 	const SAVE_METHOD = "erpnext_mcp.api.gis.save_boundary";
 	const COUNTY_METHOD = "erpnext_mcp.api.gis.query_county_parcels";
 
+	//: v0.139.0. The two the FSA import uses. `read_fsa_clu` parses an upload and
+	//: answers with shapes, storing nothing; `import_fsa_clu` runs the whole file
+	//: through `import_fsa_clu_boundaries`, which is the same tool the AI calls.
+	const FSA_READ_METHOD = "erpnext_mcp.api.gis.read_fsa_clu";
+	const FSA_IMPORT_METHOD = "erpnext_mcp.api.gis.import_fsa_clu";
+
+	//: The browser's own guard on the upload, matching `fsa.MAX_BYTES` on the
+	//: server. Checked here as well so a mis-picked imagery file is refused
+	//: before it is read into memory and base64-expanded by a third.
+	const FSA_MAX_BYTES = 8 * 1024 * 1024;
+
 	//: THE COLOURS MEAN A STATE, NOT A DOCTYPE. v0.32.0 gave each form's own
 	//: shape its own colour, which was fine when every shape was equally fixed.
 	//: With three layers that can be on one map at once — the container above,
@@ -942,6 +953,23 @@ frappe.provide("erpnext_mcp.geo_map");
 		controls.appendChild(save_button);
 		controls.appendChild(revert_button);
 
+		if (conf.fsa) {
+			const fsa_button = button(__("Import from FSA (CLU)"), "default");
+			fsa_button.addEventListener("click", () =>
+				open_fsa_import(frm, {
+					L: L,
+					map: map,
+					group: group,
+					controls: controls,
+					conf: conf,
+					save: save,
+					mark_dirty: mark_dirty,
+					style: DRAWN_STYLE,
+				})
+			);
+			controls.appendChild(fsa_button);
+		}
+
 		if (conf.county) {
 			const import_button = button(__("Import from County GIS"), "default");
 			import_button.addEventListener("click", () =>
@@ -1408,6 +1436,428 @@ frappe.provide("erpnext_mcp.geo_map");
 	function county_name(result) {
 		const label = String((result && result.label) || "").trim();
 		return label ? label.split(",")[0].replace(/\s+County$/i, "").trim() : "";
+	}
+
+	// ── the FSA CLU import ───────────────────────────────────────────────────
+	//
+	// WHY THIS IS ON THE BLOCK FORM WHEN THE COUNTY IMPORT IS NOT. A county
+	// publishes TAX LOTS, which is what a Parcel is, and it has never heard of an
+	// orchard block — so a county button here would offer to set a block's
+	// boundary to the whole lot it sits in. FSA publishes the opposite: a Common
+	// Land Unit IS a field, drawn at the resolution the farm is actually farmed
+	// at, and it is the shape the farm's own acreage report and every program
+	// payment are already measured against. It belongs on this form and on no
+	// other, for the same reason the county's belongs on Parcel and on no other.
+	//
+	// THE FILE NEVER TOUCHES DISK. It is read in the browser, posted as base64,
+	// parsed inside the request and answered with shapes. Nothing is stored, so
+	// picking the wrong export off a memory stick leaves nothing behind.
+
+	/** Read a file the operator picked, without uploading it as a File record. */
+	function read_local_file(input) {
+		return new Promise((resolve, reject) => {
+			const file = input && input.files && input.files[0];
+			if (!file) {
+				reject(new Error("no file"));
+				return;
+			}
+			if (file.size > FSA_MAX_BYTES) {
+				reject(
+					new Error(
+						__("That file is {0} MB. A whole farm's CLU set is tens of kilobytes.", [
+							Math.round(file.size / (1024 * 1024)),
+						])
+					)
+				);
+				return;
+			}
+			const reader = new FileReader();
+			reader.onerror = () => reject(reader.error || new Error("unreadable"));
+			reader.onload = () =>
+				resolve({
+					filename: file.name,
+					// `readAsDataURL` gives `data:<type>;base64,<payload>`; the server
+					// strips the prefix itself, so it is left on rather than trimmed in
+					// two places that could disagree about the pattern.
+					content: String(reader.result || ""),
+				});
+			reader.readAsDataURL(file);
+		});
+	}
+
+	/** The file picker, and the two things that can be done with what it reads. */
+	function open_fsa_import(frm, ctx) {
+		const input_id = `erpnext-mcp-fsa-${Math.random().toString(36).slice(2)}`;
+		const dialog = new frappe.ui.Dialog({
+			title: __("Import from FSA (CLU)"),
+			fields: [
+				{
+					fieldtype: "HTML",
+					fieldname: "picker",
+					options: `<div>
+						<input type="file" id="${input_id}" accept=".zip,.kmz,.kml,.shp,.json,.geojson" />
+						<div class="text-muted" style="margin-top:6px">${escape_html(
+							__(
+								"What the county FSA office gives out: a zipped shapefile (.zip holding .shp, .shx, .dbf and .prj), a .kmz or .kml, or GeoJSON. The file is read here and posted for parsing — it is not stored on the site."
+							)
+						)}</div>
+					</div>`,
+				},
+				{
+					fieldtype: "Check",
+					fieldname: "whole_file",
+					label: __("Match the whole file against every block on this farm"),
+					description: __(
+						"Off: the CLUs are listed and you pick the one that is this block. On: every CLU in the file is matched against the blocks already registered — by CLU identifier, by tract and field number, then by block number — and you get the plan before anything is written."
+					),
+				},
+				{
+					fieldtype: "Check",
+					fieldname: "create_missing",
+					label: __("Register blocks for CLUs that match nothing"),
+					depends_on: "whole_file",
+					description: __(
+						"A CLU matching no block is skipped and reported unless this is ticked, in which case it is registered as T<tract>-<field> under this block's parcel, with FSA's own acreage."
+					),
+				},
+			],
+			primary_action_label: __("Read the file"),
+			primary_action() {
+				const input = document.getElementById(input_id);
+				const whole_file = !!dialog.get_value("whole_file");
+				const create_missing = !!dialog.get_value("create_missing");
+				read_local_file(input).then(
+					(picked) => {
+						dialog.hide();
+						if (whole_file) {
+							plan_fsa_import(frm, ctx, picked, create_missing);
+						} else {
+							read_fsa_file(picked).then((result) => preview_fsa(frm, ctx, result));
+						}
+					},
+					(error) =>
+						frappe.msgprint({
+							title: __("No file read"),
+							indicator: "orange",
+							message: escape_html(
+								error && error.message === "no file"
+									? __("Choose a file first.")
+									: (error && error.message) || __("That file could not be read.")
+							),
+						})
+				);
+			},
+		});
+		dialog.show();
+	}
+
+	/** Ask the server to parse it. The browser never interprets the format itself. */
+	function read_fsa_file(picked) {
+		return frappe
+			.call({
+				method: FSA_READ_METHOD,
+				args: { content: picked.content, filename: picked.filename },
+				freeze: true,
+				freeze_message: __("Reading the CLU file…"),
+			})
+			.then((response) => (response && response.message) || null)
+			.catch((error) =>
+				explain_failure(
+					error,
+					__("The file was not read. Nothing was imported and nothing on this record changed.")
+				)
+			);
+	}
+
+	/** Draw every CLU in the file and let somebody pick the one this block is.
+	 *
+	 * THE PREVIEW IS THE POINT, exactly as it is for the county. A farm's file
+	 * holds every field it has, several of them adjacent and similarly shaped, and
+	 * "tract 1234 field 3" is not a sentence anybody can check against the ground
+	 * from memory. Drawn on the satellite image, the right one is obvious.
+	 */
+	function preview_fsa(frm, ctx, result) {
+		if (!result) {
+			return;
+		}
+		(result.warnings || []).forEach((line) =>
+			frappe.show_alert({ message: escape_html(line), indicator: "orange" }, 12)
+		);
+		const clus = (result.clus || []).filter((clu) => clu.geometry);
+		if (!clus.length) {
+			frappe.msgprint({
+				title: __("Nothing to import"),
+				indicator: "orange",
+				message: escape_html(
+					__("That file parsed and holds no usable field shapes. Ask the office for the CLU layer rather than the tract or farm layer.")
+				),
+			});
+			return;
+		}
+
+		const layers = new ctx.L.FeatureGroup();
+		ctx.map.addLayer(layers);
+		clus.forEach((clu) => {
+			ctx.L.geoJSON(clu.geometry, { style: PREVIEW_STYLE }).eachLayer((layer) =>
+				layers.addLayer(layer)
+			);
+		});
+		try {
+			ctx.map.fitBounds(layers.getBounds().pad(0.15), { maxZoom: MAX_FIT_ZOOM });
+		} catch (error) {
+			// Nothing to fit to. The shapes are still on the map at whatever view.
+		}
+
+		const panel = document.createElement("div");
+		panel.className = "erpnext-mcp-fsa-result";
+		panel.style.marginTop = "10px";
+		panel.style.padding = "8px 10px";
+		panel.style.border = "1px solid var(--border-color, #d0d7de)";
+		panel.style.borderRadius = "6px";
+		panel.style.maxHeight = "260px";
+		panel.style.overflowY = "auto";
+
+		const heading = document.createElement("div");
+		heading.className = "text-muted";
+		heading.style.marginBottom = "6px";
+		heading.textContent = __(
+			"{0} CLU(s) in {1}, read as {2}. Nothing is saved until you press Apply on one of them.",
+			[clus.length, result.source_files && result.source_files.length ? result.source_files[0] : __("the file"), (result.crs && result.crs.name) || __("degrees")]
+		);
+		panel.appendChild(heading);
+
+		function close() {
+			ctx.map.removeLayer(layers);
+			panel.remove();
+		}
+
+		clus.forEach((clu) => {
+			const row = document.createElement("div");
+			row.style.display = "flex";
+			row.style.alignItems = "center";
+			row.style.gap = "8px";
+			row.style.padding = "4px 0";
+
+			const apply = button(__("Apply"), "primary");
+			apply.style.marginRight = "0";
+			apply.addEventListener("click", () => {
+				close();
+				apply_fsa_clu(frm, ctx, clu);
+			});
+			row.appendChild(apply);
+
+			const label = document.createElement("span");
+			label.innerHTML = describe_clu(clu);
+			row.appendChild(label);
+			panel.appendChild(row);
+		});
+
+		const discard = button(__("Discard"), "default");
+		discard.style.marginTop = "6px";
+		discard.addEventListener("click", close);
+		panel.appendChild(discard);
+
+		ctx.controls.appendChild(panel);
+	}
+
+	/** One CLU in a sentence, with BOTH acreages whenever the file gave one.
+	 *
+	 * FSA's `CALCACRES` is the figure a program payment is made on; the computed
+	 * one is what this app's own arithmetic makes of the polygon. They routinely
+	 * differ by a percent and showing one of them would hide the disagreement
+	 * rather than settle it.
+	 */
+	function describe_clu(clu) {
+		const parts = [];
+		if (clu.tract_number && clu.clu_number) {
+			parts.push(`<strong>${escape_html(__("Tract {0}, field {1}", [clu.tract_number, clu.clu_number]))}</strong>`);
+		} else if (clu.clu_number) {
+			parts.push(`<strong>${escape_html(__("Field {0}", [clu.clu_number]))}</strong>`);
+		} else {
+			parts.push(`<strong>${escape_html(clu.clu || "")}</strong>`);
+		}
+		if (clu.calc_acres) {
+			parts.push(escape_html(__("{0} acres (FSA)", [clu.calc_acres])));
+		}
+		if (clu.computed_acres) {
+			parts.push(escape_html(__("{0} acres computed", [clu.computed_acres])));
+		}
+		if (clu.hel_type) {
+			parts.push(escape_html(clu.hel_type));
+		}
+		return parts.join(" · ");
+	}
+
+	/** Put one CLU on this block: its shape, and the numbers that identify it.
+	 *
+	 * THE IDENTIFIERS ARE WHY THIS IS NOT JUST A SHAPE. A boundary with no CLU
+	 * identifier on the record beside it cannot be recognised next season, so
+	 * next season's file creates a second copy of the block rather than updating
+	 * this one. The farm, tract and field numbers are written for the same
+	 * reason the county import writes the parcel ID: they are the identity the
+	 * office and the farm both use out loud.
+	 *
+	 * FSA'S ACREAGE IS WRITTEN TO ITS OWN FIELD AND NEVER OVER `acreage`. The
+	 * block's recorded acreage is what the boundary is checked against, and
+	 * overwriting it with the number that came in the same file would make that
+	 * check compare the import against itself.
+	 */
+	function apply_fsa_clu(frm, ctx, clu) {
+		ctx.group.clearLayers();
+		ctx.L.geoJSON(clu.geometry, { style: ctx.style }).eachLayer((layer) =>
+			ctx.group.addLayer(layer)
+		);
+		ctx.mark_dirty();
+
+		const notes = [];
+		function carry(fieldname, label, value) {
+			if (value == null || value === "") {
+				return;
+			}
+			if (!frm.fields_dict[fieldname]) {
+				// A site that has not migrated to v0.139.0 has no FSA columns. The
+				// boundary still applies; the identifiers are reported rather than
+				// written, because a `set_value` on a field that is not there is a
+				// silent no-op and would read as success.
+				notes.push(
+					__("{0} is {1}. This site has no field for it — run bench migrate to keep it.", [
+						label,
+						value,
+					])
+				);
+				return;
+			}
+			const current = frm.doc[fieldname];
+			if (String(current == null ? "" : current) === String(value)) {
+				return;
+			}
+			frm.set_value(fieldname, value);
+			notes.push(__("{0} set to {1}", [label, value]));
+		}
+
+		carry("fsa_clu_identifier", __("CLU Identifier"), clu.clu_identifier);
+		carry("fsa_farm_number", __("FSA Farm Number"), clu.farm_number);
+		carry("fsa_tract_number", __("FSA Tract Number"), clu.tract_number);
+		carry("fsa_clu_number", __("FSA Field Number"), clu.clu_number);
+		carry("fsa_calc_acres", __("FSA Calculated Acres"), clu.calc_acres);
+		carry("fsa_hel_type", __("HEL Classification"), clu.hel_type);
+
+		if (clu.calc_acres && frm.doc.acreage) {
+			const drift = Math.abs(clu.calc_acres - frm.doc.acreage) / Math.max(clu.calc_acres, frm.doc.acreage);
+			if (drift > 0.05) {
+				notes.push(
+					__(
+						"FSA calls this {0} acres and this block is recorded as {1}. Both figures are kept — the acreage on this form is not changed by an import.",
+						[clu.calc_acres, frm.doc.acreage]
+					)
+				);
+			}
+		}
+
+		const finish = () =>
+			ctx.save().then((result) => {
+				if (result && notes.length) {
+					frappe.msgprint({
+						title: __("Imported from FSA"),
+						indicator: "blue",
+						message: `<ul>${notes.map((line) => `<li>${escape_html(line)}</li>`).join("")}</ul>`,
+					});
+				}
+			});
+
+		// The identifiers reach disk BEFORE the polygon, for the same reason the
+		// county import saves the acreage first: `set_field_boundary` reads the
+		// record it is about to compare against out of the database, so anything
+		// still only on the screen is not part of that comparison.
+		if (frm.is_dirty() || frm.is_new()) {
+			save_record(frm).then(finish, (error) =>
+				explain_failure(
+					error,
+					__("The record was not saved, so the CLU boundary was not applied. Fill in the required fields and import again.")
+				)
+			);
+			return;
+		}
+		finish();
+	}
+
+	/** The whole file at once: the plan first, and the write only on a second press.
+	 *
+	 * TWO ROUND TRIPS WITH THE SAME FILE, and that is deliberate rather than
+	 * wasteful. The dry run is the output worth reading — forty lines saying which
+	 * block each CLU landed on and how it was recognised — and a person who has
+	 * read it is a person who can say yes to it. A one-press version would be a
+	 * button that silently rewrote every boundary on the farm.
+	 */
+	function plan_fsa_import(frm, ctx, picked, create_missing) {
+		const parcel = frm.doc.parcel || "";
+		const run = (apply) =>
+			frappe
+				.call({
+					method: FSA_IMPORT_METHOD,
+					args: {
+						content: picked.content,
+						filename: picked.filename,
+						parcel: parcel,
+						create_missing: create_missing ? 1 : 0,
+						apply: apply ? 1 : 0,
+					},
+					freeze: true,
+					freeze_message: apply ? __("Importing the CLU file…") : __("Matching the CLU file…"),
+				})
+				.then((response) => (response && response.message) || null)
+				.catch((error) =>
+					explain_failure(
+						error,
+						apply
+							? __("The import did not finish. Every block it had already changed is listed in the MCP Action Log.")
+							: __("The file was not matched. Nothing was imported and nothing on this record changed.")
+					)
+				);
+
+		run(false).then((plan) => {
+			if (!plan) {
+				return;
+			}
+			const lines = (plan.results || []).map((entry) => {
+				const where = entry.field
+					? __("{0} (matched by {1})", [entry.field, entry.matched_by || __("name")])
+					: entry.field_name
+						? __("would be registered as {0}", [entry.field_name])
+						: __("no block");
+				const reason = entry.reason ? ` — ${entry.reason}` : "";
+				return `<li><strong>${escape_html(entry.clu || "")}</strong>: ${escape_html(
+					entry.action
+				)} → ${escape_html(where)}${escape_html(reason)}</li>`;
+			});
+			frappe.msgprint({
+				title: __("{0} CLU(s) matched", [plan.feature_count || 0]),
+				indicator: "blue",
+				message: `<div>${escape_html(
+					__(
+						"{0} boundary(ies) would be set, {1} block(s) created, {2} skipped, {3} refused. Nothing has been written.",
+						[plan.would_set || 0, plan.would_create || 0, plan.skipped || 0, plan.errors || 0]
+					)
+				)}</div><ul style="max-height:280px;overflow-y:auto">${lines.join("")}</ul>`,
+				primary_action: {
+					label: __("Apply to {0} block(s)", [(plan.would_set || 0) + (plan.would_create || 0)]),
+					action() {
+						frappe.hide_msgprint();
+						run(true).then((done) => {
+							if (!done) {
+								return;
+							}
+							frappe.msgprint({
+								title: __("Imported from FSA"),
+								indicator: "green",
+								message: escape_html(done.summary || ""),
+							});
+							frm.reload_doc();
+						});
+					},
+				},
+			});
+		});
 	}
 
 	// ── one linked record's shape, for context underneath ────────────────────

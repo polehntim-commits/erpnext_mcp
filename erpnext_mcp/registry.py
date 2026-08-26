@@ -86,6 +86,7 @@ from .tools import (
 	files,
 	fill_pipeline,
 	fiscal,
+	fsa,
 	funnel,
 	garnishments,
 	governance,
@@ -7325,6 +7326,115 @@ TOOLS = {
 		required=("feature_collection",),
 		mutating=True,
 		title="Import field boundaries from GeoJSON",
+		available=_geo_ready("Field"),
+		requires=_GEO_REQUIRES,
+	),
+	# ── the boundaries the government already drew ──────────────────────────
+	"read_fsa_clu_file": _tool(
+		fsa.read_fsa_clu_file,
+		"WHAT IS IN THE FILE THE FSA OFFICE GAVE YOU. Reads a Common Land Unit "
+		"export — a zipped shapefile (.shp with its .dbf and .prj), a KML or KMZ, "
+		"or GeoJSON — and reports every CLU in it: farm, tract and field number, "
+		"FSA's CALCACRES, the CLU identifier, the HEL classification, the acreage "
+		"the polygon itself encloses, and where on Earth each one is. Reads "
+		"nothing on this site and writes nothing.\n\n"
+		"THE COORDINATE SYSTEM IS HANDLED, which is the part that usually stops "
+		"an import dead. FSA's own distribution is geographic NAD83 (degrees, "
+		"which is what GeoJSON wants); a set that has been through a vendor comes "
+		"back in Albers Equal Area, a UTM zone, a State Plane Lambert or Web "
+		"Mercator, in metres or in US survey feet. All four are un-projected here "
+		"against the ellipsoid the file's own .prj names. Anything else is refused "
+		"by name rather than being transformed by a guess.\n\n"
+		"CALL THIS FIRST. import_fsa_clu_boundaries takes the same file and says "
+		"which block each CLU would land on; this one says what the file is, which "
+		"is the question when a grower has three exports on a memory stick and "
+		"does not know which is the current one.",
+		{
+			"file_base64": _field(
+				_STRING,
+				"The file, base64-encoded. A .zip of the shapefile set, a .kmz, a .kml or a "
+				"GeoJSON. A `data:` prefix is accepted and ignored.",
+			),
+			"filename": _field(_STRING, "What the file is called, used only to say so in the report."),
+			"feature_collection": _field(
+				_OBJECT,
+				"GeoJSON you have already converted, instead of `file_base64`. Object or JSON string.",
+			),
+			"include_geometry": _field(
+				_BOOLEAN,
+				"Return each CLU's polygon as well as its attributes. Default false — forty "
+				"boundaries is a large answer and the attributes are what a person reads.",
+			),
+			"as_feature_collection": _field(
+				_BOOLEAN,
+				"Also return the file as a GeoJSON FeatureCollection with `field_name` and "
+				"`parcel_hint` on every Feature, which is the shape "
+				"import_field_boundary_geojson takes. Default false.",
+			),
+			"parcel": _field(
+				_STRING, "The `parcel_hint` to put on every Feature of `as_feature_collection`."
+			),
+			"tract_parcels": _field(
+				_OBJECT,
+				'Per-tract `parcel_hint` for `as_feature_collection`, e.g. {"1234": "Yellow Camp"}.',
+			),
+		},
+		title="Read an FSA CLU file",
+		available=_needs_doctype("Field"),
+		requires="the Field DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"import_fsa_clu_boundaries": _tool(
+		fsa.import_fsa_clu_boundaries,
+		"MUTATING (default OFF, DRY RUN BY DEFAULT). Set block boundaries from the "
+		"FSA county office's own CLU file — the whole farm in one call, matched to "
+		"the blocks this site already has.\n\n"
+		"WHY NOT import_field_boundary_geojson. That tool matches on "
+		"`properties.field_name` and `properties.parcel_hint`, and a CLU carries "
+		"neither — it carries a farm number, a tract number, a field number and a "
+		"GUID. A correct file therefore matches nothing through that door. This "
+		"one matches on what a CLU actually has, in this order: the CLU identifier "
+		"against a block imported before, then tract + field number, then the field "
+		"number against the block number on a parcel, then the block's name. The "
+		"report says which of the four each match used.\n\n"
+		"NEVER CREATES A BLOCK UNLESS ASKED. A CLU matching nothing is reported and "
+		"skipped; `create_missing=true` registers it as `T<tract>-<field>` under the "
+		"parcel given, with FSA's own acreage. A boundary on the wrong block is a "
+		"spray record pointing at the wrong ground.\n\n"
+		"EVERY CHECK set_field_boundary MAKES STILL APPLIES, per CLU: the polygon is "
+		"parsed, self-intersection is refused, and a shape enclosing more than 25% "
+		"away from the block's recorded acreage is refused rather than saved. FSA's "
+		"CALCACRES is stored in `fsa_calc_acres` and is never what the app computes "
+		"with. `apply=true` writes; without it you get the plan, which is the "
+		"output worth reading.",
+		{
+			"file_base64": _field(
+				_STRING,
+				"The file, base64-encoded: the .zip the office gave you, or its .kmz, .kml or GeoJSON.",
+			),
+			"filename": _field(_STRING, "What the file is called, for the report."),
+			"feature_collection": _field(_OBJECT, "GeoJSON already converted, instead of `file_base64`."),
+			"parcel": _field(
+				_STRING,
+				"The Parcel these CLUs sit on, for matching by block number and for creating "
+				"anything missing. A file spanning several parcels wants `tract_parcels`.",
+			),
+			"tract_parcels": _field(
+				_OBJECT,
+				'Which Parcel each FSA tract belongs to, e.g. {"1234": "Yellow Camp", "1235": '
+				'"Dry Hollow"}. One farm number covers several tracts and several parcels, so '
+				"this is the normal case rather than the exception.",
+			),
+			"create_missing": _field(
+				_BOOLEAN,
+				"Register a block for a CLU that matches nothing, named `T<tract>-<field>`, "
+				"under its parcel. Default false.",
+			),
+			"owning_entity": _field(_STRING, "The company whose blocks and parcels this matches against."),
+			"company": _field(_STRING, "Alias for owning_entity."),
+			"apply": _field(_BOOLEAN, "Actually write. Default false, which reports the plan only."),
+		},
+		mutating=True,
+		title="Import FSA CLU boundaries",
 		available=_geo_ready("Field"),
 		requires=_GEO_REQUIRES,
 	),

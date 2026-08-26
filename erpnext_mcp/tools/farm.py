@@ -100,6 +100,17 @@ _FIELD_FIELDS = (
 	"organic_certified",
 	"organic_cert_agency",
 	"transition_start_date",
+	# v0.139.0. FSA's own identifiers for this block, written by
+	# `import_fsa_clu_boundaries` off the county office's CLU file. Read here
+	# because a register that cannot say which tract a block is on cannot answer
+	# the question an acreage report is filed under.
+	"fsa_farm_number",
+	"fsa_tract_number",
+	"fsa_clu_number",
+	"fsa_clu_identifier",
+	"fsa_calc_acres",
+	"fsa_hel_type",
+	"fsa_import_date",
 	"boundary_geojson",
 	"boundary_centroid_lat",
 	"boundary_centroid_lon",
@@ -389,6 +400,7 @@ def _describe_field(row: dict, observed: dict | None = None, counties: dict | No
 		# `_parcel_counties`.
 		"county": counties.get(row.get("parcel")) or None,
 		**_boundary_summary(row),
+		**_fsa_summary(row),
 		"satellite_provider": row.get("satellite_provider") or None,
 		"imagery_asset_ref": row.get("imagery_asset_ref") or None,
 		"last_ndvi_pull_date": _date_str(row.get("last_ndvi_pull_date")),
@@ -397,6 +409,33 @@ def _describe_field(row: dict, observed: dict | None = None, counties: dict | No
 		"imagery_notes": row.get("imagery_notes") or None,
 		"notes": row.get("notes") or None,
 	}
+
+
+def _fsa_summary(row: dict) -> dict:
+	"""FSA's identifiers for this block, and NOTHING AT ALL when it has none.
+
+	v0.139.0. An `fsa` key present on every block on every farm would put seven
+	nulls on every row of every register, for the majority of farms that have
+	never imported a CLU file — so the key appears only where there is something
+	in it. A caller reading `described.get("fsa")` gets the tract number or
+	nothing, which is the same shape either way.
+
+	FSA'S ACREAGE IS REPORTED BESIDE THE APP'S, NEVER INSTEAD OF IT.
+	`fsa_calc_acres` is the figure a program payment is made on and
+	`area_computed_acres` is what this app's arithmetic gets from the polygon;
+	they routinely differ by a percent and a register that showed one of them
+	would be hiding the disagreement rather than resolving it.
+	"""
+	found = {
+		"farm_number": row.get("fsa_farm_number") or None,
+		"tract_number": row.get("fsa_tract_number") or None,
+		"clu_number": row.get("fsa_clu_number") or None,
+		"clu_identifier": row.get("fsa_clu_identifier") or None,
+		"calc_acres": _float_or_none(row.get("fsa_calc_acres")),
+		"hel_type": row.get("fsa_hel_type") or None,
+		"imported_on": _date_str(row.get("fsa_import_date")),
+	}
+	return {"fsa": found} if any(value is not None for value in found.values()) else {}
 
 
 def _float_or_none(value):
