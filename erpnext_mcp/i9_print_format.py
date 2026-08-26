@@ -228,6 +228,7 @@ I9_TEMPLATE = """
         <span class="val">
           {%- if doc.section_1_signed_at %}{{ doc.section_1_signed_at }}
             {%- if doc.section_1_signed_ip %} from {{ doc.section_1_signed_ip }}{% endif %}
+            {%- if doc.section_1_signed_gps %} at {{ doc.section_1_signed_gps }}{% endif %}
           {%- else %}<span class="empty">not yet attested</span>{% endif %}
         </span></td>
       <td style="width:50%"><span class="lbl">Signature capture on file</span>
@@ -309,6 +310,8 @@ I9_TEMPLATE = """
       <td style="width:25%"><span class="lbl">Section 2 attested</span>
         <span class="val">
           {%- if doc.section_2_signed_at %}{{ doc.section_2_signed_at }}
+            {%- if doc.section_2_signed_ip %} from {{ doc.section_2_signed_ip }}{% endif %}
+            {%- if doc.section_2_signed_gps %} at {{ doc.section_2_signed_gps }}{% endif %}
           {%- else %}<span class="empty">not yet attested</span>{% endif %}
         </span></td>
     </tr>
@@ -316,7 +319,15 @@ I9_TEMPLATE = """
       <td><span class="lbl">Document path</span>
         <span class="val">{{ doc.document_path or "" }}</span></td>
       <td><span class="lbl">Copies of documents stored</span>
-        <span class="val">{% if doc.document_copies_stored %}yes{% else %}no{% endif %}</span></td>
+        <span class="val">
+          {%- set copies = [] %}
+          {%- if doc.list_a_doc_copy %}{% set _ = copies.append("List A") %}{% endif %}
+          {%- if doc.list_b_doc_copy %}{% set _ = copies.append("List B") %}{% endif %}
+          {%- if doc.list_c_doc_copy %}{% set _ = copies.append("List C") %}{% endif %}
+          {%- if copies %}{{ copies | join(", ") }} on file
+          {%- elif doc.document_copies_stored %}yes
+          {%- else %}no{% endif %}
+        </span></td>
       <td><span class="lbl">Signature capture on file</span>
         <span class="val">{% if doc.section_2_signature %}yes{% else %}no{% endif %}</span></td>
       <td><span class="lbl">Signed federal copy filed</span>

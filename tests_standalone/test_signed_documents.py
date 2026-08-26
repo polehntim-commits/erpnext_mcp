@@ -712,6 +712,60 @@ class ThePureSealModule(EvidenceTestCase):
 			pdf_seal._coordinates({"gps_latitude": 45.5, "gps_longitude": -122.6}), "45.500000, -122.600000"
 		)
 
+	def test_an_unset_float_column_is_not_a_place_in_the_gulf_of_guinea(self):
+		"""v0.136.0, AND THIS ONE SHIPPED. Every sealed I-9 this app produced
+		carried `Coordinates 0.000000, 0.000000` on its verification page.
+
+		The guard above tests `in (None, "")`, which is correct about the
+		ARGUMENT `signing_evidence.record` passes and never sees the value that
+		comes back out of the database: `gps_latitude` and `gps_longitude` are
+		`Float`, MariaDB stores those `NOT NULL DEFAULT 0`, and a signature that
+		reported no fix reads back as two zeroes. 0°N 0°E is open water about
+		300 miles off Ghana, so the page told an inspector where somebody stood
+		and was wrong — which is the one direction that matters on a record whose
+		whole purpose is to state what was and was not observed.
+
+		THE LITERAL ZEROES BELOW ARE LOAD-BEARING AND MUST NOT BE "SIMPLIFIED"
+		INTO A SEEDED ROW. `STORE.seed` stores the dict it is handed verbatim and
+		does not model `NOT NULL DEFAULT 0`, so a fixture that seeds
+		`gps_latitude=None` and reads it back gets `None` in this suite and `0.0`
+		on a bench. The standalone double CANNOT reproduce this bug class through
+		normal seeding — handing `_coordinates` the value the database would
+		return is the only shape of test that exercises it, and a version rewritten
+		to look more realistic would go vacuously green.
+
+		`tools/housing._gps` has guarded the same pair the same way since it was
+		written; this is the module that did not.
+		"""
+		self.assertEqual(pdf_seal._coordinates({"gps_latitude": 0.0, "gps_longitude": 0.0}), "")
+		self.assertEqual(pdf_seal._coordinates({"gps_latitude": 0, "gps_longitude": 0}), "")
+
+	def test_the_seal_page_omits_the_line_entirely_for_a_signature_with_no_fix(self):
+		"""Not "Coordinates: —", which invites the reading that a fix was taken
+		and lost. The row is dropped, exactly as `Device` is."""
+		lines = dict(
+			pdf_seal.block_lines(
+				{
+					"document_type": "I-9 Form",
+					"document_name": "I9-2026-0011",
+					"gps_latitude": 0.0,
+					"gps_longitude": 0.0,
+				}
+			)
+		)
+		self.assertNotIn("Coordinates", lines)
+
+	def test_a_zero_on_one_axis_alone_is_kept_because_it_is_a_real_place(self):
+		"""The equator and the prime meridian are real lines. Treating any zero
+		as unset would be the zero-drop `test_zero_drop.py` exists to catch,
+		committed while fixing its mirror image."""
+		self.assertEqual(
+			pdf_seal._coordinates({"gps_latitude": 0.0, "gps_longitude": -122.6}), "0.000000, -122.600000"
+		)
+		self.assertEqual(
+			pdf_seal._coordinates({"gps_latitude": 45.5, "gps_longitude": 0.0}), "45.500000, 0.000000"
+		)
+
 	def test_a_long_token_wraps_by_measurement_rather_than_running_off_the_page(self):
 		"""A 71-character hash contains no spaces, so a word-only wrapper hands
 		back one line and reportlab draws it off the right edge — silently, which

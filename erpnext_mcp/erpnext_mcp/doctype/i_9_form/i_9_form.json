@@ -43,6 +43,7 @@
   "section_1_signature",
   "section_1_signed_at",
   "section_1_signed_ip",
+  "section_1_signed_gps",
   "preparer_section",
   "preparer_used",
   "preparer_name",
@@ -56,18 +57,21 @@
   "list_a_doc_number",
   "list_a_doc_expiry",
   "list_a_is_receipt",
+  "list_a_doc_copy",
   "list_b_section",
   "list_b_doc_title",
   "list_b_doc_authority",
   "list_b_doc_number",
   "list_b_doc_expiry",
   "list_b_is_receipt",
+  "list_b_doc_copy",
   "list_c_section",
   "list_c_doc_title",
   "list_c_doc_authority",
   "list_c_doc_number",
   "list_c_doc_expiry",
   "list_c_is_receipt",
+  "list_c_doc_copy",
   "receipt_section",
   "receipt_pending",
   "receipt_expires_on",
@@ -78,6 +82,7 @@
   "section_2_signature",
   "section_2_signed_at",
   "section_2_signed_ip",
+  "section_2_signed_gps",
   "verification_date",
   "section_3_break",
   "reverifications",
@@ -308,6 +313,13 @@
    "read_only": 1
   },
   {
+   "description": "Where the handset said it was when the attestation was made, as \"latitude,longitude\". Corroboration, not verification — the server cannot check it. Blank means no fix was reported.",
+   "fieldname": "section_1_signed_gps",
+   "fieldtype": "Data",
+   "label": "Section 1 Signed GPS",
+   "read_only": 1
+  },
+  {
    "fieldname": "preparer_section",
    "fieldtype": "Section Break",
    "label": "Preparer / Translator"
@@ -386,6 +398,13 @@
    "label": "List A Document Is a Receipt"
   },
   {
+   "description": "Photograph or scan of the List A document that was examined, filed by the app as it is captured and attached to the Employee record. This column references it so the copy is produced WITH the form, as 8 CFR 274a.2(b)(3) requires of an employer who keeps copies.",
+   "fieldname": "list_a_doc_copy",
+   "fieldtype": "Attach",
+   "label": "List A Document Copy",
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.document_path=='List B + C'",
    "fieldname": "list_b_section",
    "fieldtype": "Section Break",
@@ -424,6 +443,13 @@
    "label": "List B Document Is a Receipt"
   },
   {
+   "description": "Photograph or scan of the List B (identity) document that was examined, filed by the app as it is captured and attached to the Employee record. This column references it so the copy is produced WITH the form, as 8 CFR 274a.2(b)(3) requires of an employer who keeps copies.",
+   "fieldname": "list_b_doc_copy",
+   "fieldtype": "Attach",
+   "label": "List B Document Copy",
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.document_path=='List B + C'",
    "fieldname": "list_c_section",
    "fieldtype": "Section Break",
@@ -460,6 +486,13 @@
    "fieldname": "list_c_is_receipt",
    "fieldtype": "Check",
    "label": "List C Document Is a Receipt"
+  },
+  {
+   "description": "Photograph or scan of the List C (employment authorization) document that was examined, filed by the app as it is captured and attached to the Employee record. This column references it so the copy is produced WITH the form, as 8 CFR 274a.2(b)(3) requires of an employer who keeps copies.",
+   "fieldname": "list_c_doc_copy",
+   "fieldtype": "Attach",
+   "label": "List C Document Copy",
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.receipt_pending",
@@ -518,6 +551,13 @@
    "fieldname": "section_2_signed_ip",
    "fieldtype": "Data",
    "label": "Section 2 Signed IP",
+   "read_only": 1
+  },
+  {
+   "description": "Where the handset said it was when the verifier certified the documents, as \"latitude,longitude\". Corroboration, not verification. Blank means no fix was reported.",
+   "fieldname": "section_2_signed_gps",
+   "fieldtype": "Data",
+   "label": "Section 2 Signed GPS",
    "read_only": 1
   },
   {

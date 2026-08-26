@@ -12184,6 +12184,13 @@ TOOLS = {
 			),
 			"email": _field(_STRING, "Email address."),
 			"phone": _field(_STRING, "Phone number."),
+			"gps_lat": _field(
+				_NUMBER,
+				"Decimal degrees, -90 to 90. Where the handset was when the attestation was "
+				"made. Recorded ONLY alongside a signature, and only as a pair with gps_lon — "
+				"corroboration rather than verification, since the server cannot check it.",
+			),
+			"gps_lon": _field(_NUMBER, "Decimal degrees, -180 to 180. Sent with gps_lat or not at all."),
 			"citizenship_status": _field(
 				_STRING,
 				"US Citizen, Noncitizen National, Lawful Permanent Resident, or Alien Authorized to Work.",
@@ -12355,6 +12362,13 @@ TOOLS = {
 			"verifier_title": _field(_STRING, "Title of the verifier. Overrides the roster's."),
 			"section_2_signature": _field(_STRING, "Attach URL or base64 of the verifier signature."),
 			"verification_date": _field(_STRING, "YYYY-MM-DD. Must be within 3 business days of hire."),
+			"gps_lat": _field(
+				_NUMBER,
+				"Decimal degrees, -90 to 90. Where the handset was when the attestation was "
+				"made. Recorded ONLY alongside a signature, and only as a pair with gps_lon — "
+				"corroboration rather than verification, since the server cannot check it.",
+			),
+			"gps_lon": _field(_NUMBER, "Decimal degrees, -180 to 180. Sent with gps_lat or not at all."),
 		},
 		# `verifier_name` is NOT required here any more, and the tool is what
 		# decides. A site with an authorized signer roster takes the name off the
@@ -12507,7 +12521,19 @@ TOOLS = {
 		"back with attach_signed_i9.\n\n"
 		"THE SSN BOX IS EMPTY unless include_full_ssn is passed AND store_full_ssn "
 		"is on in I-9 Settings. This is the only tool in the app that reads the "
-		"encrypted full number back, and the read is recorded in the audit row.\n\n"
+		"encrypted full number back, and the read is recorded in the audit row. An "
+		"EMPTY BOX NOW EXPLAINS ITSELF: where the record holds ssn_last_four, "
+		"Additional Information states it as XXX-XX-1234 and says why the nine-cell "
+		"box is blank — the box has no way to show four digits as four, and five "
+		"empty cells followed by four digits reads as an SSN beginning 0000. Where "
+		"the employer is enrolled in E-Verify the same line says the full number is "
+		"still required, and the empty box is named in `incomplete`.\n\n"
+		"COPIES OF THE EXAMINED DOCUMENTS ARE NAMED where the app photographed them: "
+		"attach_onboarding_document points list_a/b/c_doc_copy at the picture as it "
+		"is filed, and Additional Information records which lists are retained with "
+		"the form, as 8 CFR 274a.2(b)(3) asks of an employer who keeps copies.\n\n"
+		"WHERE EACH SIGNATURE WAS MADE is printed beside when and from what address, "
+		"off section_1/2_signed_gps, where the handset reported a fix.\n\n"
 		"A SNAPSHOT, NOT A VIEW. Anything that edits the form afterwards leaves the "
 		"PDF stale; REFUSES a second render unless overwrite is passed, because that "
 		"field probably holds the copy somebody already had signed. Refused on a "

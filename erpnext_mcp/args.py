@@ -132,6 +132,53 @@ def as_float(value, key: str) -> float:
 		raise ToolError(f"{key} must be a number, got {value!r}") from None
 
 
+def as_gps(args: dict, latitude_key: str = "gps_lat", longitude_key: str = "gps_lon") -> str:
+	"""One fix as `"45.523100,-122.676500"`, or "". v0.136.0.
+
+	ONE `Data` COLUMN RATHER THAN TWO `Float`s, and the reason is the bug this
+	was written for. A Frappe `Float` is `NOT NULL DEFAULT 0` in MariaDB, so a
+	signature that reported no location comes back out of the database as
+	`0.0, 0.0` — which is not "unknown", it is a point in the Gulf of Guinea
+	about 300 miles off Ghana, and `pdf_seal` duly printed it onto every sealed
+	I-9 this app has produced. A string column has an empty value that means
+	empty, so "no fix" and "a fix at the origin" stop being the same row.
+
+	ALL OR NOTHING. A latitude with no longitude is a point on a line rather
+	than a place, which is the rule `signatures._context` already applies to the
+	Signing Evidence pair; half a fix recorded as though it were a whole one is
+	worse than none. Both keys are read for either spelling the clients use.
+
+	THE (0, 0) PAIR IS REFUSED HERE TOO, for the reason above — a handset whose
+	location services returned nothing before the fix landed sends two zeroes,
+	and no farm this app serves is in the ocean. A zero on ONE axis is kept:
+	the equator and the prime meridian are real lines and a coordinate on one
+	of them is a real place.
+
+	`as_float` IS DELIBERATELY NOT USED FOR THE ABSENCE TEST. It answers 0.0 for
+	absent, for "" and for an explicit 0 alike, so branching on its result would
+	be the zero-drop `tests_standalone/test_zero_drop.py` exists to catch. The
+	raw values decide whether there is a fix at all; `as_float` only parses one
+	that is already known to be there.
+
+	THE SPELLING PRECEDENCE MATCHES `signatures._context` AND HAS TO. That
+	function reads the same argument dict to build the Signing Evidence row while
+	this one builds the column on the form, and both describe ONE signature. A
+	caller sending `gps_latitude` and `gps_lat` with different values would
+	otherwise put one location in the register and a different one on the record
+	— two answers to "where was this signed" with nothing to say which is right.
+	So `gps_latitude` wins here exactly as it wins there; `latitude_key` is the
+	fallback rather than the first look.
+	"""
+	latitude = args.get("gps_latitude", args.get(latitude_key, args.get("latitude")))
+	longitude = args.get("gps_longitude", args.get(longitude_key, args.get("longitude")))
+	if latitude is None or latitude == "" or longitude is None or longitude == "":
+		return ""
+	fix = (as_float(latitude, latitude_key), as_float(longitude, longitude_key))
+	if fix == (0.0, 0.0):
+		return ""
+	return f"{fix[0]:.6f},{fix[1]:.6f}"
+
+
 #: What a model actually sends when it means yes or no. JSON booleans are the
 #: common case; the strings turn up whenever a client stringifies its arguments.
 _TRUE_WORDS = ("1", "true", "yes", "y", "on")

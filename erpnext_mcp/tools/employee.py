@@ -1824,16 +1824,31 @@ def attach_employee_document(args: dict) -> ToolResult:
 	if already == (EMPLOYEE, employee):
 		# The retry case. A phone whose call timed out does not know whether it
 		# landed, and the only safe answer is the one it would have got.
+		# THE CROSS-REFERENCE IS RETRIED TOO, and this branch is the reason it has
+		# to be. v0.136.0. `link_document_copy` never raises and answers "" when
+		# there is no open I-9 yet — which is a real ordering on a bad link, where
+		# the photograph lands before the section it belongs to. If this early
+		# return skipped the link, that form would never acquire the reference:
+		# the file is attached, so every later attempt takes this path. Linking
+		# here is idempotent (it writes the same URL to the same column) and is
+		# what makes a retry converge instead of preserving the gap.
+		stored_url = str(row.get("file_url") or "")
+		data = {
+			"employee": employee,
+			"document_kind": kind,
+			"file_token": docname,
+			"file_url": stored_url,
+			"file_name": stored_name,
+			"is_private": True,
+			"already_attached": True,
+		}
+		from . import i9 as i9_tool
+
+		linked = i9_tool.link_document_copy(employee, kind, stored_url)
+		if linked:
+			data["i9_form"] = linked
 		return ToolResult(
-			data={
-				"employee": employee,
-				"document_kind": kind,
-				"file_token": docname,
-				"file_url": str(row.get("file_url") or ""),
-				"file_name": stored_name,
-				"is_private": True,
-				"already_attached": True,
-			},
+			data=data,
 			summary=f"{stored_name} is already filed against {employee} — nothing changed",
 			docstatus_delta="none",
 		)
@@ -1854,19 +1869,44 @@ def attach_employee_document(args: dict) -> ToolResult:
 	# The URL AFTER the move, not the one that was read a moment ago: a file that
 	# has just changed directory has a different URL.
 	stored_url = str(handle.get("file_url") or row.get("file_url") or "")
-	return ToolResult(
-		data={
-			"employee": employee,
-			"document_kind": kind,
-			"file_token": docname,
-			"file_url": stored_url,
-			"file_name": stored_name,
-			"is_private": True,
-			"already_attached": False,
-		},
-		summary=f"filed {stored_name} ({kind}) against {employee} as a private attachment",
-		docstatus_delta="none",
-	)
+
+	# ── THE EXAMINED DOCUMENT ALSO GETS NAMED ON THE I-9 ────────────────
+	#
+	# v0.136.0, and it is the step that was missing rather than a new feature.
+	# The wizard has photographed the List A / List B+C documents at the tailgate
+	# for several releases and filed them here; the I-9 itself held a
+	# `document_copies_stored` tickbox and no way to say WHICH copies. 8 CFR
+	# 274a.2(b)(3) has an employer who keeps copies retain them WITH the form and
+	# produce them with it, so the cross-reference is part of the record rather
+	# than a convenience.
+	#
+	# IMPORTED HERE RATHER THAN AT MODULE SCOPE because `tools/i9` imports THIS
+	# module — a top-level import would be a cycle. This is the only call that
+	# needs it.
+	#
+	# BEST-EFFORT, AND THE ANSWER SAYS SO. `link_document_copy` never raises: the
+	# photograph has already landed and the worker has put their passport away,
+	# so a failed cross-reference must not read as a failed upload and send
+	# somebody back to photograph it again. `i9_form` is the form it was linked
+	# to, or absent where nothing was.
+	from . import i9 as i9_tool
+
+	linked = i9_tool.link_document_copy(employee, kind, stored_url)
+
+	data = {
+		"employee": employee,
+		"document_kind": kind,
+		"file_token": docname,
+		"file_url": stored_url,
+		"file_name": stored_name,
+		"is_private": True,
+		"already_attached": False,
+	}
+	summary = f"filed {stored_name} ({kind}) against {employee} as a private attachment"
+	if linked:
+		data["i9_form"] = linked
+		summary += f" and referenced it on I-9 {linked}"
+	return ToolResult(data=data, summary=summary, docstatus_delta="none")
 
 
 def set_employee_photo(args: dict) -> ToolResult:

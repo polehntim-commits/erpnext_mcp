@@ -2554,12 +2554,87 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		name = frappe.db.get_value("I-9 Form", {"employee": self.NEW_HIRE}, "name")
 		self.assertEqual(frappe.db.get_value("I-9 Form", name, "generated_pdf"), row["file_url"])
 
-	def test_34_the_full_ssn_is_not_an_argument_a_handset_has(self):
-		"""It would print a nine-digit number onto a page a phone could mail
-		anywhere, and it needs a retention decision an operator makes."""
+	def test_34_the_full_ssn_is_an_argument_the_site_still_has_to_have_allowed(self):
+		"""v0.136.0. THIS TEST USED TO ASSERT THE OPPOSITE AND IS REPLACED RATHER
+		THAN DELETED, because the decision it pinned really was made and really
+		has changed.
+
+		What it said: `include_full_ssn` "would print a nine-digit number onto a
+		page a phone could mail anywhere, and it needs a retention decision an
+		operator makes". The first clause stopped being true when the app began
+		SEALING the page — the captures are stamped into the page content and the
+		AcroForm is flattened, so nobody writes the number on it afterwards, and
+		what shipped instead was a federal form with nine empty cells that an
+		operator read as "the SSN was never collected". The second clause is
+		still true, and the decision it describes is `store_full_ssn` in I-9
+		Settings — made in the Desk, by an operator, and enforced by
+		`i9._full_ssn` against every caller regardless of transport.
+
+		So the argument is accepted here and the GATE is asserted below: a site
+		that never opted into keeping nine digits is refused, in the tool's own
+		words, rather than quietly handed a blank comb.
+		"""
 		import inspect
 
-		self.assertNotIn("include_full_ssn", inspect.signature(mobile_api.generate_i9_pdf).parameters)
+		self.assertIn("include_full_ssn", inspect.signature(mobile_api.generate_i9_pdf).parameters)
+
+	def test_34a_a_site_that_does_not_keep_nine_digits_refuses_to_print_them(self):
+		"""The gate, exercised end to end through the transport rather than
+		asserted about the signature. `store_full_ssn` is off out of the box, and
+		the refusal NAMES it — a caller who asked for the number and got a blank
+		comb would otherwise have to guess whether the site or the record was the
+		reason."""
+		self.the_hr_furniture()
+		self.the_i9_document_table()
+		self.wire("create_i9_form", employee=self.NEW_HIRE, company=MAIN, hire_date=frappe.utils.today())
+		self.wire(
+			"submit_i9_section_1",
+			employee=self.NEW_HIRE,
+			citizenship_status="US Citizen",
+			ssn_last_four="8888",
+			date_of_birth="1994-03-11",
+			address_street="1420 Orchard Road",
+		)
+		with self.assertRaises(Exception) as caught:
+			self.wire("generate_i9_pdf", employee=self.NEW_HIRE, include_full_ssn=True)
+		self.assertIn("store_full_ssn", str(caught.exception))
+
+	def test_34b_the_blank_comb_explains_itself_on_the_rendered_page(self):
+		"""The bug this release exists to fix, at the transport. An ordinary
+		render — no `include_full_ssn` — must report the number as on file rather
+		than produce nine empty cells and say nothing about them."""
+		self.the_hr_furniture()
+		self.the_i9_document_table()
+		self.wire("create_i9_form", employee=self.NEW_HIRE, company=MAIN, hire_date=frappe.utils.today())
+		self.wire(
+			"submit_i9_section_1",
+			employee=self.NEW_HIRE,
+			citizenship_status="US Citizen",
+			ssn_last_four="8888",
+			date_of_birth="1994-03-11",
+			address_street="1420 Orchard Road",
+		)
+		row = self.wire("generate_i9_pdf", employee=self.NEW_HIRE)
+		self.assertFalse(row["full_ssn_printed"])
+
+		name = frappe.db.get_value("I-9 Form", {"employee": self.NEW_HIRE}, "name")
+		record = frappe.db.get_value("I-9 Form", name, i9_tools._i9_fields(), as_dict=True)
+		record["name"] = name
+		page = i9_pdf.plan(record, {"name": "Test Farm LLC"})[i9_pdf.PAGE_FORM]
+		self.assertNotIn("US Social Security Number", page)
+		self.assertIn("SSN on file: XXX-XX-8888", page["Additional Information"])
+
+	def test_34c_the_handset_is_told_what_this_site_wants_collected(self):
+		"""`get_i9_form` carries the two I-9 Settings switches, which is the read
+		that lets the wizard decide whether to send nine digits at all. Without
+		it the app sends four unconditionally — which it did, on every site."""
+		self.the_hr_furniture()
+		self.the_i9_document_table()
+		self.wire("create_i9_form", employee=self.NEW_HIRE, company=MAIN, hire_date=frappe.utils.today())
+		row = self.wire("get_i9_form", employee=self.NEW_HIRE)
+		self.assertIn("site_policy", row)
+		self.assertFalse(row["site_policy"]["store_full_ssn"])
+		self.assertFalse(row["site_policy"]["enrolled_in_e_verify"])
 
 	def test_35_upload_signed_i9(self):
 		"""The photograph of the signed sheet, filed against the record.

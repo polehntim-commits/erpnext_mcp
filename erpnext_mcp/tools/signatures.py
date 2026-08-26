@@ -149,7 +149,7 @@ from dataclasses import field as dataclass_field
 import frappe
 
 from .. import compat, roles
-from ..args import as_bool, as_float, as_str
+from ..args import as_bool, as_float, as_gps, as_str
 from ..errors import ToolError
 from ..result import ToolResult
 from . import badges, files, i9, signers, signing_evidence, taxforms, w4
@@ -219,6 +219,16 @@ class SignatureBox:
 	signed_at_field: str
 	#: Where the address it arrived from is written, if the doctype has one.
 	signed_ip_field: str = ""
+	#: Where the coordinates it arrived from are written, if the doctype has a
+	#: column for them. v0.136.0. THE SAME FIX THE EVIDENCE ROW GETS, written a
+	#: second time on the form itself — not a duplicate of the register but the
+	#: 8 CFR 274a.2(h) context that has to survive on the RECORD, beside the
+	#: timestamp and the address, for a reader who has the form and not the
+	#: register. `Signing Evidence` can fail to write and by design does not take
+	#: the signature down with it; a location that lived only there would go with
+	#: it. Empty on a box whose doctype has no such column, exactly like
+	#: `signed_ip_field`.
+	signed_gps_field: str = ""
 	#: "I-9" or "W-4" where the roster gates this box; empty where it does not.
 	form_type: str = ""
 	#: The child table this box lives in, empty for a box on the form itself.
@@ -290,6 +300,7 @@ SIGNATURE_BOXES = (
 		label="I-9 Section 1 (employee attestation)",
 		signed_at_field="section_1_signed_at",
 		signed_ip_field="section_1_signed_ip",
+		signed_gps_field="section_1_signed_gps",
 		alert_types=("i9_section_1_unsigned",),
 		signer_role="employee",
 		form_label="Form I-9, Employment Eligibility Verification",
@@ -308,6 +319,7 @@ SIGNATURE_BOXES = (
 		label="I-9 Section 2 (employer verification)",
 		signed_at_field="section_2_signed_at",
 		signed_ip_field="section_2_signed_ip",
+		signed_gps_field="section_2_signed_gps",
 		form_type="I-9",
 		name_field="verifier_name",
 		title_field="verifier_title",
@@ -490,7 +502,15 @@ def hash_exclusions(doctype: str) -> tuple:
 	for box in SIGNATURE_BOXES:
 		if doctype and box.doctype != doctype:
 			continue
-		for name in (box.field, box.signed_at_field, box.signed_ip_field):
+		# `signed_gps_field` IS ON THIS LIST FOR THE REASON THE OTHER THREE ARE,
+		# and leaving it off would have been the exact false alarm the docstring
+		# above describes. It is written in the same breath as the image and the
+		# timestamp, so an employer signing Section 2 in the packing shed would
+		# otherwise change a column covered by the fingerprint the worker's
+		# Section 1 evidence row recorded that morning — and the sealed page
+		# would report the worker's own attestation as no longer matching the
+		# record they attested to.
+		for name in (box.field, box.signed_at_field, box.signed_ip_field, box.signed_gps_field):
 			if name:
 				columns.add(name)
 	return tuple(sorted(columns))
@@ -1026,6 +1046,15 @@ def collect_form_signature(args: dict) -> ToolResult:
 	_write(target, box.signed_at_field, frappe.utils.now())
 	if box.signed_ip_field:
 		_write(target, box.signed_ip_field, _remote_addr())
+	# WRITTEN ONLY WHERE THERE IS A FIX, not blanked where there is not. A pad
+	# that reported coordinates last time and cannot get a lock this time is a
+	# handset under a tree, and clearing the column would replace a location that
+	# was recorded with one that was not — the same overwrite the printed-name
+	# rule below refuses. `as_gps` returns "" for a missing pair and for (0, 0).
+	if box.signed_gps_field:
+		fix = as_gps(args)
+		if fix:
+			_write(target, box.signed_gps_field, fix)
 	# The printed name goes on ONLY where the roster supplied one and the box has
 	# nothing in it. A form that already names its verifier is a form where
 	# somebody examined the documents and this call is finishing their signature,

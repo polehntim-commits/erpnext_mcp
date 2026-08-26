@@ -525,6 +525,15 @@ def record(
 		"hashed_fields": hashed_fields or "",
 		"device_id": device_id or "",
 		"ip_address": ip_address or "",
+		# `None` HERE COMES BACK AS `0.0`, AND THAT CANNOT BE FIXED ON THIS SIDE.
+		# Both columns are `Float`, which MariaDB stores `NOT NULL DEFAULT 0`, so
+		# a signature that reported no fix is indistinguishable in the row from
+		# one taken at 0°N 0°E. Passing `None` is still the honest argument — it
+		# is what the caller knows — and the reader is where the distinction has
+		# to be made: `pdf_seal._coordinates` treats the exact pair (0, 0) as
+		# unset and prints nothing, rather than placing the signer in the Gulf of
+		# Guinea. Do not "fix" this by writing a sentinel; a Float column has no
+		# room for one that is not also a coordinate.
 		"gps_latitude": gps_latitude,
 		"gps_longitude": gps_longitude,
 	}

@@ -538,10 +538,32 @@ class AdditionalInformation(unittest.TestCase):
 		self.assertLessEqual(len(body), i9_pdf.ADDITIONAL_INFORMATION_LIMIT)
 
 	def test_nothing_is_written_when_there_is_nothing_to_say(self):
+		# `ssn_last_four` JOINED THIS LIST IN v0.136.0 and the fixture had to say
+		# so. The claim here has always been "a record with nothing to report
+		# writes no prose", and the four values below were what "nothing" meant.
+		# An SSN on file is now a fifth thing worth reporting — the comb is blank
+		# and the record holds four digits — so a fixture still carrying one is
+		# a record that DOES have something to say, and leaving it in would have
+		# turned this into an assertion that the new line never appears.
+		bare = a_record(
+			section_1_signed_at=None,
+			section_2_signed_at=None,
+			receipt_pending=0,
+			list_a_is_receipt=0,
+			ssn_last_four="",
+		)
+		self.assertEqual(self.note(bare, employer=EMPLOYER_NO_EIN), "")
+
+	def test_an_otherwise_bare_record_still_reports_the_ssn_it_holds(self):
+		"""The other half of the test above, so "nothing to say" cannot quietly
+		grow to cover something the form should be saying."""
 		bare = a_record(
 			section_1_signed_at=None, section_2_signed_at=None, receipt_pending=0, list_a_is_receipt=0
 		)
-		self.assertEqual(self.note(bare, employer=EMPLOYER_NO_EIN), "")
+		self.assertEqual(
+			self.note(bare, employer=EMPLOYER_NO_EIN),
+			"SSN on file: XXX-XX-6789. The box above takes nine digits or none, and this site retains four.",
+		)
 
 	# v0.48.0. The EIN, and the reason it is here rather than in a box of its own.
 	def test_the_employer_ein_is_written_and_is_labelled(self):
@@ -555,6 +577,294 @@ class AdditionalInformation(unittest.TestCase):
 		page = i9_pdf.plan(a_record(), EMPLOYER)[i9_pdf.PAGE_FORM]
 		self.assertEqual(page["Employers Business or Org Address"], EMPLOYER["address"])
 		self.assertNotIn("12-3456789", page["Employers Business or Org Name"])
+
+
+# ── 4b ────────────────────────────────────────────────────────────────────────
+class TheSocialSecurityNumberSaysWhyItIsBlank(unittest.TestCase):
+	"""v0.136.0. The comb is unchanged; the EMPTY comb stopped saying nothing.
+
+	THE BUG THIS PINS. `ssn_last_four` was on the record, the Desk print format
+	had shown `XXX-XX-6789` off it since v0.47.1, and the federal page showed
+	nine empty cells and no explanation — so an operator holding the sealed PDF
+	concluded the number had never been collected. It had; this app keeps four
+	digits unless a site opts into nine, and a nine-cell comb cannot show four
+	as four.
+	"""
+
+	def note(self, record=None, employer=EMPLOYER, full_ssn="") -> str:
+		planned = i9_pdf.plan(record or a_record(), employer, [], full_ssn=full_ssn)
+		return planned[i9_pdf.PAGE_FORM].get("Additional Information", "")
+
+	def test_the_blank_box_names_the_four_digits_the_record_holds(self):
+		self.assertIn("SSN on file: XXX-XX-6789", self.note())
+
+	def test_it_says_why_the_box_is_blank_rather_than_only_that_it_is(self):
+		"""A page reporting a gap without its reason sends somebody looking for
+		a bug. The reason is that the box cannot show four digits as four."""
+		self.assertIn("takes nine digits or none, and this site retains four", self.note())
+
+	def test_nine_digits_in_the_comb_means_nothing_is_said_in_prose(self):
+		"""Repeating part of an SSN in a box that does not need it would put a
+		piece of the number on the page a second time."""
+		planned = i9_pdf.plan(a_record(), EMPLOYER, [], full_ssn="123456789")
+		page = planned[i9_pdf.PAGE_FORM]
+		self.assertEqual(page["US Social Security Number"], "123456789")
+		self.assertNotIn("XXX-XX", page.get("Additional Information", ""))
+		self.assertNotIn("SSN on file", page.get("Additional Information", ""))
+
+	def test_a_record_holding_no_ssn_at_all_asserts_nothing(self):
+		"""`_incomplete_boxes` is where "you still have to collect this" belongs.
+		A line on the form commenting on its own gaps is the form editorialising."""
+		self.assertNotIn("SSN on file", self.note(a_record(ssn_last_four="")))
+
+	def test_an_e_verify_employer_is_told_the_number_is_still_required(self):
+		"""Optional on Form I-9, REQUIRED by E-Verify — which submits nine digits
+		and cannot be run from four. The same sentence to both would tell one of
+		them something untrue about their own obligation."""
+		body = self.note(employer=dict(EMPLOYER, e_verify=True))
+		self.assertIn("E-Verify requires the full number", body)
+
+	def test_an_employer_who_does_not_use_e_verify_is_not_told_to_act(self):
+		self.assertNotIn("E-Verify", self.note())
+
+	def test_the_full_number_never_appears_in_the_prose_box(self):
+		"""The whole SSN belongs in the comb or nowhere. A nine-digit string in
+		a free-text box is the number in a place nothing was gated on."""
+		body = self.note(a_record(ssn_last_four="6789"), full_ssn="")
+		self.assertNotIn("123456789", body)
+		self.assertNotIn("123-45-6789", body)
+
+
+# ── 4c ────────────────────────────────────────────────────────────────────────
+class TheExaminedDocumentCopiesAreNamed(unittest.TestCase):
+	"""v0.136.0. 8 CFR 274a.2(b)(3): copies kept must be retained WITH the form.
+
+	The wizard has photographed the examined documents at the tailgate for
+	several releases and filed them against the Employee. The I-9 held a
+	`document_copies_stored` tickbox and no way to say WHICH copies, so a form
+	that could not name them could not be produced complete.
+	"""
+
+	def note(self, **overrides) -> str:
+		planned = i9_pdf.plan(a_record(**overrides), EMPLOYER, [])
+		return planned[i9_pdf.PAGE_FORM].get("Additional Information", "")
+
+	def test_a_photographed_document_is_named_by_its_list_and_its_title(self):
+		body = self.note(list_a_doc_copy="/private/files/i9_list_a_doc.jpg")
+		self.assertIn("Document copies retained with this form: List A", body)
+
+	def test_the_form_that_holds_them_is_named_so_they_can_be_found(self):
+		body = self.note(list_a_doc_copy="/private/files/i9_list_a_doc.jpg")
+		self.assertIn("(I-9 I9-2026-0001)", body)
+
+	def test_the_file_url_is_never_printed_on_a_federal_form(self):
+		"""A private path looks like something a reader can open and is not — it
+		needs a session this app does not hand out — and a retained I-9 outlives
+		every URL scheme it was printed under."""
+		body = self.note(list_a_doc_copy="/private/files/i9_list_a_doc.jpg")
+		self.assertNotIn("/private/files", body)
+		self.assertNotIn(".jpg", body)
+
+	def test_two_lists_are_both_named(self):
+		body = self.note(
+			list_a_doc_title="",
+			list_b_doc_title="Driver's License",
+			list_c_doc_title="Social Security Card (Unrestricted)",
+			list_b_doc_copy="/private/files/b.jpg",
+			list_c_doc_copy="/private/files/c.jpg",
+		)
+		self.assertIn("List B, List C", body)
+
+	def test_no_photographs_means_no_line_rather_than_an_empty_one(self):
+		self.assertNotIn("Document copies retained", self.note())
+
+
+# ── 4d ────────────────────────────────────────────────────────────────────────
+class WhereTheSignatureWasMade(unittest.TestCase):
+	"""v0.136.0. The coordinates beside the moment and the address.
+
+	THE BUG THIS PINS IS THE ZERO. Both GPS columns on `Signing Evidence` are
+	`Float`, which MariaDB stores `NOT NULL DEFAULT 0`, so a signature that
+	reported no fix reads back as `0.0, 0.0` — and the sealed page duly printed
+	`Coordinates 0.000000, 0.000000`, which is open water in the Gulf of Guinea.
+	The I-9's own columns are `Data` for exactly that reason, and this renderer
+	refuses the pair a second time.
+	"""
+
+	def note(self, **overrides) -> str:
+		planned = i9_pdf.plan(a_record(**overrides), EMPLOYER, [])
+		return planned[i9_pdf.PAGE_FORM].get("Additional Information", "")
+
+	def test_a_fix_is_printed_beside_the_address_it_arrived_from(self):
+		body = self.note(section_1_signed_gps="45.523100,-122.676500")
+		self.assertIn("from IP 10.0.0.5 at 45.523100, -122.676500", body)
+
+	def test_both_sections_carry_their_own(self):
+		body = self.note(
+			section_1_signed_gps="45.523100,-122.676500",
+			section_2_signed_gps="46.600000,-120.510000",
+		)
+		self.assertIn("at 45.523100, -122.676500", body)
+		self.assertIn("at 46.600000, -120.510000", body)
+
+	def test_null_island_is_not_a_place_a_signature_was_made(self):
+		"""The exact pair (0, 0) is an unset Float, not a location off Ghana."""
+		body = self.note(section_1_signed_gps="0.0,0.0")
+		self.assertNotIn("0.000000, 0.000000", body)
+		self.assertNotIn(" at ", body.split("Section 2")[0])
+
+	def test_a_zero_on_one_axis_alone_is_a_real_place_and_is_kept(self):
+		"""The equator and the prime meridian are real lines. Refusing a zero
+		anywhere would be the zero-drop this narrow rule exists to avoid."""
+		self.assertIn("at 0.000000, -122.676500", self.note(section_1_signed_gps="0.0,-122.676500"))
+
+	def test_no_fix_prints_no_coordinates_and_still_prints_the_attestation(self):
+		body = self.note()
+		self.assertIn("Section 1 signed by Maria Garcia", body)
+		self.assertNotIn(" at ", body.split("Section 2")[0])
+
+	def test_a_column_holding_something_that_is_not_a_fix_prints_nothing(self):
+		"""Half a value rendered onto a federal form as though it were a location
+		is the failure `_us_date` refuses one field along."""
+		for junk in ("45.5231", "not,a,fix", "north,west", "", ",", "45.5231,"):
+			with self.subTest(junk=junk):
+				self.assertNotIn(" at ", self.note(section_1_signed_gps=junk).split("Section 2")[0])
+
+
+# ── 4e ────────────────────────────────────────────────────────────────────────
+class TheProseBoxIsASharedBudget(unittest.TestCase):
+	"""v0.136.0. 900 characters, and v0.136.0 added two more claimants to them.
+
+	THE REGRESSION THIS CATCHES WAS REAL AND WAS FOUND BY MEASURING RATHER THAN
+	BY A TEST FAILING. A form carrying a receipt, an E-Verify SSN note, two
+	located attestations and a fourth reverification came to EXACTLY 900
+	characters, and the line that fell off the end was `_overflow_note` — the one
+	entry the module calls the failure mode that matters most, because a page
+	that looks complete and is missing a season is worse than a page that says it
+	is incomplete.
+	"""
+
+	def _fixture(self):
+		"""Every claimant on the box at once, which is a real form and not a
+		contrived one: a seasonal worker on a receipt, at an E-Verify farm, whose
+		authorization has been renewed four times."""
+		record = a_record(
+			list_a_is_receipt=1,
+			receipt_expires_on="2026-11-23",
+			section_1_signed_gps="45.523100,-122.676500",
+			section_2_signed_gps="45.523100,-122.676500",
+			list_a_doc_copy="/private/files/a.jpg",
+			list_b_doc_copy="/private/files/b.jpg",
+			list_c_doc_copy="/private/files/c.jpg",
+		)
+		entries = [
+			a_reverification(reverification_date=f"20{27 + n}-05-01", document_number=f"SRC{n}")
+			for n in range(5)
+		]
+		return record, dict(EMPLOYER, e_verify=True), entries
+
+	def _crowded(self) -> str:
+		record, employer, entries = self._fixture()
+		return i9_pdf.plan(record, employer, entries)[i9_pdf.PAGE_FORM]["Additional Information"]
+
+	def _all_of_it(self) -> str:
+		"""Every line the builders produce, with no budget applied — what the box
+		WOULD hold. `_fit` is what stands between this and the page."""
+		record, employer, entries = self._fixture()
+		return "\n".join(
+			i9_pdf._receipt_lines(record)
+			+ i9_pdf._ssn_lines(record, "", employer)
+			+ i9_pdf._attestation_lines(record)
+			+ i9_pdf._overflow_note(entries)
+			+ i9_pdf._employer_lines(employer)
+			+ i9_pdf._document_copy_lines(record)
+		)
+
+	def test_the_crowded_case_really_does_overrun(self):
+		"""THE CONTROL FOR EVERY OTHER TEST IN THIS CLASS. A fixture that fits
+		inside the budget proves nothing about what happens when one does not —
+		the first draft of this class used four reverifications, came to 844
+		characters, and passed identically against the bug it was written for.
+		"""
+		self.assertGreater(len(self._all_of_it()), i9_pdf.ADDITIONAL_INFORMATION_LIMIT)
+
+	def test_the_crowded_case_fits(self):
+		self.assertLessEqual(len(self._crowded()), i9_pdf.ADDITIONAL_INFORMATION_LIMIT)
+
+	def test_the_page_still_says_reverifications_are_missing_from_it(self):
+		"""NOT just that the note begins — the WHOLE sentence. The old character
+		cut left the note's opening words in place and stopped mid-clause, so an
+		assertion on the first few words passes against the bug; that is what the
+		first draft of this test did. The claim is that a reader learns the page
+		is incomplete and where the rest is, so the assertion is the end of the
+		sentence that tells them.
+		"""
+		self.assertIn("attach a second Supplement B page for the file.", self._crowded())
+
+	def test_the_opening_never_promises_a_list_it_did_not_print(self):
+		"""The entries are a separate group and ARE dropped here. So the sentence
+		above them may not say they are "listed here" — a page announcing a list
+		and showing none is the failure `_overflow_note` exists to prevent, one
+		level down."""
+		body = self._crowded()
+		self.assertIn("are NOT on this page", body)
+		self.assertNotIn("SRC4", body)
+		self.assertNotIn("listed here", body)
+
+	def test_a_short_group_behind_a_dropped_one_still_fits(self):
+		"""Order decides priority, not eligibility. Dropping the 300-character
+		overflow LIST must not also drop the 25-character EIN behind it."""
+		self.assertIn("Employer EIN: 12-3456789.", self._crowded())
+
+	def test_no_line_is_cut_mid_sentence(self):
+		"""The old rule sliced the joined body and appended a full stop, so the
+		result ENDED IN A FULL STOP while stopping mid-clause — an `endswith(".")`
+		check passes against it. What actually distinguishes the two is whether
+		every line is one this app composed WHOLE, so each is checked against the
+		set of openings the builders produce.
+		"""
+		openings = (
+			"RECEIPT under 8 CFR",
+			"SSN on file:",
+			"Section 1 signed",
+			"Section 2 signed",
+			"Electronically signed pursuant",
+			"Employer EIN:",
+			"Document copies retained",
+			"Supplement B has",
+		)
+		for line in self._crowded().split("\n"):
+			if line.startswith("  "):  # an indented overflow entry
+				continue
+			self.assertTrue(line.startswith(openings), f"{line!r} is not a line this module composes whole")
+
+	def test_the_receipt_deadline_outranks_the_bookkeeping(self):
+		"""What somebody still owes, and by when, is the first thing kept."""
+		self.assertTrue(self._crowded().startswith("RECEIPT under 8 CFR"))
+
+	def test_the_bookkeeping_is_what_gets_dropped(self):
+		"""The other half of the ordering claim. The copies line goes, and it goes
+		because the lists it names are printed in the Section 2 boxes above it."""
+		self.assertNotIn("Document copies retained", self._crowded())
+
+	def test_a_single_group_longer_than_the_whole_budget_is_still_said(self):
+		"""Dropping it would say nothing at all where the caller passed one very
+		long note, and a note the reader can see is truncated beats none."""
+		body = i9_pdf._fit([["x" * (i9_pdf.ADDITIONAL_INFORMATION_LIMIT + 400)]])
+		self.assertEqual(len(body), i9_pdf.ADDITIONAL_INFORMATION_LIMIT)
+		self.assertTrue(body.endswith("."))
+
+	def test_nothing_is_dropped_when_everything_fits(self):
+		self.assertEqual(i9_pdf._fit([["one."], ["two.", "three."]]), "one.\ntwo.\nthree.")
+
+	def test_a_group_is_kept_whole_or_not_at_all(self):
+		"""The rule that stops a heading being orphaned from what it introduces."""
+		big = "y" * 500
+		body = i9_pdf._fit([["a."], [big, big], ["b."]])
+		self.assertEqual(body, "a.\nb.")
+
+	def test_empty_groups_cost_nothing_and_leave_no_blank_lines(self):
+		self.assertEqual(i9_pdf._fit([[], ["one."], [], [""], ["two."]]), "one.\ntwo.")
 
 
 # ── 5 ─────────────────────────────────────────────────────────────────────────

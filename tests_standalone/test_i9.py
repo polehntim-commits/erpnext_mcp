@@ -1522,3 +1522,253 @@ class PatchSection1(I9TestCase):
 		self.configure(enabled=1)
 		result = self.tool("patch_i9_section_1", {"i9_form": name, "phone": "509-555-0142"})
 		self.assertTrue(result.get("isError"))
+
+
+# ── 17 ────────────────────────────────────────────────────────────────────────
+class WhereTheAttestationWasMade(I9TestCase):
+	"""v0.136.0. The coordinates, beside the moment and the address.
+
+	ONE `Data` COLUMN PER SECTION RATHER THAN TWO `Float`s, and the shape is the
+	whole fix. `Signing Evidence` keeps the pair as Floats, MariaDB stores those
+	`NOT NULL DEFAULT 0`, and a signature that reported no fix came back out as
+	`0.0, 0.0` — which the sealed verification page printed as a location off the
+	coast of Ghana. A string column has an empty value that means empty.
+	"""
+
+	def _stored(self, employee="HR-EMP-00001", *fields):
+		name = frappe.db.get_value("I-9 Form", {"employee": employee}, "name")
+		return frappe.db.get_value("I-9 Form", name, list(fields), as_dict=True)
+
+	def test_a_fix_sent_with_a_signature_is_written(self):
+		self._create_draft()
+		self._submit_section_1(gps_lat=45.5231, gps_lon=-122.6765)
+		self.assertEqual(
+			self._stored("HR-EMP-00001", "section_1_signed_gps")["section_1_signed_gps"],
+			"45.523100,-122.676500",
+		)
+
+	def test_section_2_carries_its_own(self):
+		self._create_draft()
+		self._submit_section_1()
+		self._submit_section_2(gps_lat=46.6, gps_lon=-120.51)
+		self.assertEqual(
+			self._stored("HR-EMP-00001", "section_2_signed_gps")["section_2_signed_gps"],
+			"46.600000,-120.510000",
+		)
+
+	def test_a_section_nobody_signed_acquires_no_location(self):
+		"""The rule the moment and the address already follow. A location on an
+		attestation that was never made is a record asserting more than it knows."""
+		self._create_draft()
+		self._submit_section_1(section_1_signature="", gps_lat=45.5231, gps_lon=-122.6765)
+		row = self._stored("HR-EMP-00001", "section_1_signed_gps", "section_1_signed_at")
+		self.assertFalse(row["section_1_signed_gps"])
+		self.assertFalse(row["section_1_signed_at"])
+
+	def test_null_island_is_refused_rather_than_stored(self):
+		"""A handset whose location services returned nothing before the fix
+		landed sends two zeroes. No farm this app serves is in the ocean."""
+		self._create_draft()
+		self._submit_section_1(gps_lat=0, gps_lon=0)
+		self.assertEqual(self._stored("HR-EMP-00001", "section_1_signed_gps")["section_1_signed_gps"], "")
+
+	def test_a_zero_on_one_axis_alone_is_kept(self):
+		"""The equator is a real line. Refusing every zero would be the zero-drop
+		this narrow rule exists to avoid, committed while fixing its mirror image."""
+		self._create_draft()
+		self._submit_section_1(gps_lat=0, gps_lon=-122.6765)
+		self.assertEqual(
+			self._stored("HR-EMP-00001", "section_1_signed_gps")["section_1_signed_gps"],
+			"0.000000,-122.676500",
+		)
+
+	def test_half_a_fix_is_no_fix(self):
+		self._create_draft()
+		self._submit_section_1(gps_lat=45.5231)
+		self.assertEqual(self._stored("HR-EMP-00001", "section_1_signed_gps")["section_1_signed_gps"], "")
+
+	def test_a_form_filed_without_coordinates_is_unaffected(self):
+		"""Every caller before this release, and most after it."""
+		self._create_draft()
+		self._submit_section_1()
+		self.assertEqual(self._stored("HR-EMP-00001", "section_1_signed_gps")["section_1_signed_gps"], "")
+
+	def test_get_i9_form_reports_it_back(self):
+		self._create_draft()
+		self._submit_section_1(gps_lat=45.5231, gps_lon=-122.6765)
+		data = self.tool_data("get_i9_form", {"employee": "HR-EMP-00001"})
+		self.assertEqual(data["section_1_signed_gps"], "45.523100,-122.676500")
+
+	def test_the_form_column_and_the_evidence_row_cannot_disagree(self):
+		"""TWO READERS OF ONE ARGUMENT DICT DESCRIBING ONE SIGNATURE.
+		`args.as_gps` builds the column on the form and `signatures._context`
+		builds the Signing Evidence row. They accept the same spellings, so a
+		caller sending two of them must not put one location in the register and
+		a different one on the record — that is two answers to "where was this
+		signed" with nothing to say which is right.
+		"""
+		from erpnext_mcp.args import as_gps
+		from erpnext_mcp.tools import signatures
+
+		for args in (
+			{"gps_lat": 45.5231, "gps_lon": -122.6765},
+			{"gps_latitude": 45.5231, "gps_longitude": -122.6765},
+			{"gps_latitude": 1.0, "gps_longitude": 2.0, "gps_lat": 9.9, "gps_lon": 9.9},
+		):
+			with self.subTest(args=args):
+				context = signatures._context(args)
+				self.assertEqual(as_gps(args), f"{context['latitude']:.6f},{context['longitude']:.6f}")
+
+
+# ── 18 ────────────────────────────────────────────────────────────────────────
+class TheExaminedDocumentPhotographsReachTheForm(I9TestCase):
+	"""v0.136.0. 8 CFR 274a.2(b)(3) — copies kept are retained WITH the I-9.
+
+	The wizard photographs the List A / List B+C documents at the tailgate and
+	files them against the EMPLOYEE, which is the right home for the bytes. The
+	I-9 held a `document_copies_stored` tickbox and no way to say WHICH copies,
+	so a form that keeps them could not be produced complete.
+	"""
+
+	def _form(self, employee="HR-EMP-00001") -> str:
+		self._create_draft(employee=employee)
+		self._submit_section_1(employee=employee)
+		return str(frappe.db.get_value("I-9 Form", {"employee": employee}, "name"))
+
+	def test_every_kind_it_maps_is_one_the_upload_path_accepts(self):
+		"""The two lists are in different modules and a spelling that drifted
+		would make this a silent no-op rather than an error."""
+		from erpnext_mcp.tools import employee as employee_tool
+
+		for kind in i9.DOCUMENT_COPY_KINDS:
+			self.assertIn(kind, employee_tool.ONBOARDING_KINDS)
+
+	def test_a_list_b_photograph_lands_on_the_list_b_column(self):
+		name = self._form()
+		linked = i9.link_document_copy("HR-EMP-00001", "i9_list_b_document", "/private/files/b.jpg")
+		self.assertEqual(linked, name)
+		self.assertEqual(frappe.db.get_value("I-9 Form", name, "list_b_doc_copy"), "/private/files/b.jpg")
+
+	def test_each_list_lands_on_its_own_column(self):
+		name = self._form()
+		for kind, column, url in (
+			("i9_list_a_document", "list_a_doc_copy", "/private/files/a.jpg"),
+			("i9_list_b_document", "list_b_doc_copy", "/private/files/b.jpg"),
+			("i9_list_c_document", "list_c_doc_copy", "/private/files/c.jpg"),
+		):
+			i9.link_document_copy("HR-EMP-00001", kind, url)
+			self.assertEqual(frappe.db.get_value("I-9 Form", name, column), url)
+
+	def test_a_kind_that_is_not_an_examined_document_links_nothing(self):
+		"""`i9_section_2_document` is a scan of the FORM, which belongs in
+		`signed_pdf` through `attach_signed_i9` — that call checks it is a PDF
+		and refuses to replace an existing one silently."""
+		self._form()
+		for kind in ("i9_section_1_signature", "i9_section_2_document", "profile_photo", "other", ""):
+			self.assertEqual(i9.link_document_copy("HR-EMP-00001", kind, "/private/files/x.jpg"), "")
+
+	def test_a_worker_with_no_i9_at_all_is_not_an_error(self):
+		"""The photograph has already landed and the worker has put their
+		passport away. A cross-reference that raised would report a failed upload."""
+		self.assertEqual(
+			i9.link_document_copy("HR-EMP-00002", "i9_list_b_document", "/private/files/b.jpg"), ""
+		)
+
+	def test_a_destroyed_form_takes_no_fresh_photograph(self):
+		"""`employee` is not unique on this register — `destroy_i9` sets the
+		status and SAVES rather than deleting, so a rehired worker has two rows.
+		Linking a current document onto the record that certifies its own
+		disposal would reconstitute part of a form the certificate says is gone.
+
+		THE DESTROYED ROW IS SEEDED FIRST on purpose: the standalone double's
+		`get_value` ignores `order_by` and answers in insertion order, so a
+		fixture built the other way round would pass while proving nothing.
+		"""
+		STORE.seed(
+			"I-9 Form",
+			[
+				{
+					"name": "I9-OLD-0001",
+					"employee": "HR-EMP-00009",
+					"company": MAIN,
+					"status": "Destroyed",
+					"hire_date": str(date.today()),
+				}
+			],
+		)
+		self.assertEqual(
+			i9.link_document_copy("HR-EMP-00009", "i9_list_b_document", "/private/files/b.jpg"), ""
+		)
+		self.assertFalse(frappe.db.get_value("I-9 Form", "I9-OLD-0001", "list_b_doc_copy"))
+
+	def test_an_empty_url_links_nothing(self):
+		self._form()
+		self.assertEqual(i9.link_document_copy("HR-EMP-00001", "i9_list_b_document", ""), "")
+
+	def test_a_photograph_on_the_record_ticks_the_box_that_says_so(self):
+		"""A form holding a picture of a passport while answering "copies
+		stored: no" is a record an inspector would be right to distrust."""
+		name = self._form()
+		self.assertFalse(frappe.db.get_value("I-9 Form", name, "document_copies_stored"))
+		i9.link_document_copy("HR-EMP-00001", "i9_list_b_document", "/private/files/b.jpg")
+		self.assertTrue(frappe.db.get_value("I-9 Form", name, "document_copies_stored"))
+
+	def test_a_retry_links_the_form_the_first_call_could_not_find(self):
+		"""THE ORDERING THAT MAKES THE EARLY RETURN MATTER. On a bad link the
+		photograph can land before the section it belongs to, so the first call
+		finds no I-9 and links nothing. Every later attempt takes the
+		`already_attached` path — so if that path skipped the cross-reference,
+		the form would never acquire it. Linking there is idempotent and is what
+		makes the retry converge.
+		"""
+		self.assertEqual(
+			i9.link_document_copy("HR-EMP-00001", "i9_list_b_document", "/private/files/b.jpg"), ""
+		)
+		name = self._form()
+		self.assertEqual(
+			i9.link_document_copy("HR-EMP-00001", "i9_list_b_document", "/private/files/b.jpg"), name
+		)
+		self.assertEqual(frappe.db.get_value("I-9 Form", name, "list_b_doc_copy"), "/private/files/b.jpg")
+
+	def test_linking_the_same_photograph_twice_changes_nothing(self):
+		name = self._form()
+		first = i9.link_document_copy("HR-EMP-00001", "i9_list_b_document", "/private/files/b.jpg")
+		second = i9.link_document_copy("HR-EMP-00001", "i9_list_b_document", "/private/files/b.jpg")
+		self.assertEqual(first, second)
+		self.assertEqual(frappe.db.get_value("I-9 Form", name, "list_b_doc_copy"), "/private/files/b.jpg")
+
+	def test_a_kind_that_links_nothing_ticks_nothing(self):
+		"""The tickbox follows the photograph rather than the attempt."""
+		name = self._form()
+		i9.link_document_copy("HR-EMP-00001", "profile_photo", "/private/files/face.jpg")
+		self.assertFalse(frappe.db.get_value("I-9 Form", name, "document_copies_stored"))
+
+
+# ── 19 ────────────────────────────────────────────────────────────────────────
+class TheSsnBoxIsOnlyMissingForAnEVerifyEmployer(I9TestCase):
+	"""v0.136.0. Optional on Form I-9; required by E-Verify.
+
+	Listing the blank comb as an unfinished box for a farm that does not use
+	E-Verify would send them looking for work that does not exist. Not listing it
+	for one that does hides a real gap.
+	"""
+
+	def _boxes(self, e_verify: bool, full_ssn: str = "") -> list:
+		record = {"ssn_last_four": "8888"}
+		return i9._incomplete_boxes(record, {"e_verify": e_verify}, full_ssn)
+
+	def test_an_e_verify_employer_is_told_the_box_is_empty(self):
+		self.assertTrue(any("Social Security Number" in box for box in self._boxes(True)))
+
+	def test_everybody_else_is_not(self):
+		self.assertFalse(any("Social Security Number" in box for box in self._boxes(False)))
+
+	def test_printing_the_nine_digits_closes_it(self):
+		self.assertFalse(any("Social Security Number" in box for box in self._boxes(True, "123456789")))
+
+	def test_four_digits_do_not_close_it_because_they_never_reach_the_comb(self):
+		self.assertTrue(any("Social Security Number" in box for box in self._boxes(True, "8888")))
+
+	def test_the_reason_is_named_so_it_is_actionable(self):
+		named = [box for box in self._boxes(True) if "Social Security Number" in box]
+		self.assertIn("E-Verify", named[0])

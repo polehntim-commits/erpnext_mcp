@@ -202,15 +202,49 @@ def _coordinates(evidence: dict) -> str:
 
 	A latitude with no longitude is a point on a line rather than a place, and
 	printing half a fix on a verification page would be worse than printing none.
+
+	EXACTLY (0, 0) IS NOT A PLACE, IT IS AN UNSET FLOAT COLUMN. v0.136.0, and
+	this is the bug that put `Coordinates 0.000000, 0.000000` on every sealed
+	I-9 this app has produced. `gps_latitude` and `gps_longitude` are `Float`
+	on Signing Evidence, `signing_evidence.record` passes `None` for a signature
+	that reported no fix, and Frappe CASTS `None` TO `0.0` on insert — so the
+	`in (None, "")` test above, which is correct about the argument, is never
+	reached by the value that comes back out of the database. The row says 0.0
+	and this page said the attestation was made at 0°N 0°E, which is open water
+	in the Gulf of Guinea about 300 miles off Ghana.
+
+	Printing a location a signer was not at is the one direction that matters on
+	a verification page: an inspector reading coordinates has been told where
+	somebody stood, and a record asserting more than it knows is the failure
+	`signing_evidence.py` opens by arguing against. A blank line says "not
+	recorded", which is true.
+
+	ONLY THE EXACT PAIR IS TREATED AS UNSET, not either value on its own. A
+	latitude of 0 with a real longitude is a point on the equator and a real
+	place; a farm at exactly 0.000000, 0.000000 is in the ocean. The narrow rule
+	is what keeps this from being a second zero-drop of the kind
+	`test_zero_drop.py` exists to catch.
+
+	`tools/housing._gps` IS THE PRECEDENT AND HAS DONE THIS SINCE IT WAS WRITTEN,
+	which makes this a consistency fix rather than a new rule — it guards
+	`in (None, "")` and then `if not float(latitude) and not float(longitude)`,
+	the second line being exactly the check added here. `housing.check_coordinates`
+	states the reasoning in the same words this docstring reaches for: a record
+	carrying half a coordinate "would sit on a map at longitude zero — off the
+	coast of Ghana, on the same meridian as everything else anybody forgot to
+	finish."
 	"""
 	latitude = evidence.get("gps_latitude")
 	longitude = evidence.get("gps_longitude")
 	if latitude in (None, "") or longitude in (None, ""):
 		return ""
 	try:
-		return f"{float(latitude):.6f}, {float(longitude):.6f}"
+		fix = (float(latitude), float(longitude))
 	except (TypeError, ValueError):  # pragma: no cover - a column holding prose
 		return ""
+	if fix == (0.0, 0.0):
+		return ""
+	return f"{fix[0]:.6f}, {fix[1]:.6f}"
 
 
 # ── drawing it ──────────────────────────────────────────────────────────────

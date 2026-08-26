@@ -119,7 +119,7 @@ import frappe
 from frappe.utils import getdate
 
 from .. import compat, i9_pdf, roles, security
-from ..args import as_bool, as_date, as_int, as_str, resolve_company
+from ..args import as_bool, as_date, as_gps, as_int, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
 from . import artifacts, files, signers
@@ -300,6 +300,10 @@ def _i9_fields() -> list[str]:
 		"alien_work_authorization_expiry",
 		"section_1_signed_at",
 		"section_1_signed_ip",
+		# v0.136.0. Beside the address it belongs with. See `_signed_gps` for why
+		# one Data column holding "lat,lon" rather than two Floats: an unset
+		# Float reads back as 0.0, and 0, 0 is a place in the Gulf of Guinea.
+		"section_1_signed_gps",
 		"preparer_used",
 		"preparer_name",
 		"preparer_address",
@@ -309,16 +313,19 @@ def _i9_fields() -> list[str]:
 		"list_a_doc_number",
 		"list_a_doc_expiry",
 		"list_a_is_receipt",
+		"list_a_doc_copy",
 		"list_b_doc_title",
 		"list_b_doc_authority",
 		"list_b_doc_number",
 		"list_b_doc_expiry",
 		"list_b_is_receipt",
+		"list_b_doc_copy",
 		"list_c_doc_title",
 		"list_c_doc_authority",
 		"list_c_doc_number",
 		"list_c_doc_expiry",
 		"list_c_is_receipt",
+		"list_c_doc_copy",
 		"receipt_pending",
 		"receipt_expires_on",
 		"document_copies_stored",
@@ -326,6 +333,7 @@ def _i9_fields() -> list[str]:
 		"verifier_title",
 		"section_2_signed_at",
 		"section_2_signed_ip",
+		"section_2_signed_gps",
 		"verification_date",
 		"retention_until",
 		"destruction_eligible_date",
@@ -968,6 +976,12 @@ def submit_i9_section_1(args: dict) -> ToolResult:
 		doc.section_1_signature = sig
 		doc.section_1_signed_at = frappe.utils.now()
 		doc.section_1_signed_ip = _remote_addr()
+		# WHERE, ON THE SAME TERMS AS WHEN AND FROM WHAT ADDRESS. v0.136.0.
+		# Written only inside this branch for the reason the two lines above
+		# are: a location stamped onto a section nobody signed is a record of
+		# where an attestation that was never made was not made. Empty when the
+		# client sent no fix — `as_gps` refuses half a pair and refuses (0, 0).
+		doc.section_1_signed_gps = as_gps(args)
 
 	doc.preparer_used = as_bool(args, "preparer_used", False)
 	if doc.preparer_used:
@@ -1389,6 +1403,8 @@ def submit_i9_section_2(args: dict) -> ToolResult:
 		doc.section_2_signature = sig
 		doc.section_2_signed_at = frappe.utils.now()
 		doc.section_2_signed_ip = _remote_addr()
+		# Same rule and same reason as Section 1's. See there.
+		doc.section_2_signed_gps = as_gps(args)
 
 	# ── COMPLETE MEANS SIGNED, AND UNTIL v0.64.2 IT DID NOT ─────────────
 	#
@@ -1952,12 +1968,21 @@ def _employer_block(company: str) -> dict:
 	that is otherwise complete; `render_i9_pdf` reports which parts came back
 	empty, and an empty box on a printed I-9 is a box somebody writes in.
 	"""
-	block = {"name": "", "address": "", "ein": ""}
+	block = {"name": "", "address": "", "ein": "", "e_verify": False}
 	try:
 		settings = frappe.get_doc(I9_SETTINGS)
 		block["name"] = str(settings.get("business_legal_name") or "").strip()
 		block["address"] = str(settings.get("business_address") or "").strip()
 		block["ein"] = str(settings.get("business_ein") or "").strip()
+		# v0.136.0, and it belongs beside the EIN rather than anywhere else: the
+		# module docstring of `i9_pdf` already argues that the EIN is on this
+		# block because it is an E-VERIFY datum with no box on Form I-9. Whether
+		# the employer is enrolled decides one thing on the printed page — the
+		# Social Security Number box is optional on Form I-9 and REQUIRED by
+		# E-Verify, which submits nine digits and cannot be run from four — so
+		# `i9_pdf._ssn_lines` needs to know before it can say what a blank box
+		# means for this employer.
+		block["e_verify"] = bool(int(settings.get("enrolled_in_e_verify") or 0))
 	except Exception:  # pragma: no cover - a site whose Single has not migrated
 		pass
 
@@ -2168,7 +2193,7 @@ def render_i9_pdf(args: dict) -> ToolResult:
 		"reverifications": len(reverifications),
 		"reverifications_not_on_page": overflow,
 		"employer": employer,
-		"incomplete": _incomplete_boxes(record),
+		"incomplete": _incomplete_boxes(record, employer, ssn),
 		"note": _RENDER_NOTE,
 	}
 	summary = f"I-9 {name} rendered onto the USCIS form as {file_name} ({len(pdf):,} bytes) and attached" + (
@@ -2235,7 +2260,7 @@ _REQUIRED_BOXES = (
 )
 
 
-def _incomplete_boxes(record: dict) -> list[str]:
+def _incomplete_boxes(record: dict, employer: dict | None = None, full_ssn: str = "") -> list[str]:
 	"""The named boxes a printed copy of this record will have nothing in."""
 	missing = [label for column, label in _REQUIRED_BOXES if not str(record.get(column) or "").strip()]
 	documents = [
@@ -2243,6 +2268,16 @@ def _incomplete_boxes(record: dict) -> list[str]:
 	]
 	if not documents:
 		missing.append("Section 2: no List A or List B+C document recorded")
+
+	# THE SSN BOX IS NAMED ONLY FOR AN E-VERIFY EMPLOYER, because only for an
+	# E-Verify employer is it missing. v0.136.0. Form I-9's Social Security
+	# Number box is OPTIONAL — a farm that does not use E-Verify has a complete
+	# form with nine empty cells, and listing it as an unfinished box would send
+	# them looking for work that does not exist. E-Verify submits nine digits and
+	# cannot be run from four, so for an enrolled employer the same blank box is
+	# a real gap and this is the answer the app's "still to complete" panel reads.
+	if (employer or {}).get("e_verify") and not i9_pdf._ssn_digits(full_ssn):
+		missing.append("Section 1: Social Security Number (required — this employer uses E-Verify)")
 	return missing
 
 
@@ -2262,6 +2297,93 @@ def _render_notes(args: dict) -> list[str]:
 	raise ToolError(
 		f"additional_information must be a string or a list of strings, got {type(raw).__name__}."
 	)
+
+
+#: The onboarding document kinds that are photographs of an EXAMINED document,
+#: mapped to the column on the I-9 that should point at them. The keys are
+#: `employee.ONBOARDING_KINDS` spellings; they are not repeated from memory
+#: there, they are asserted equal to it in `tests_standalone/test_i9.py`.
+#:
+#: `i9_section_2_document` IS NOT ON THIS LIST. It is the kind the app uses for
+#: a scan of the completed Section 2 page itself, which is a copy of the FORM
+#: rather than of a document that was examined — `signed_pdf` is where that
+#: belongs, through `attach_signed_i9`, which checks it is a PDF and refuses to
+#: replace an existing one silently.
+DOCUMENT_COPY_KINDS = {
+	"i9_list_a_document": "list_a_doc_copy",
+	"i9_list_b_document": "list_b_doc_copy",
+	"i9_list_c_document": "list_c_doc_copy",
+}
+
+
+def link_document_copy(employee: str, kind: str, file_url: str) -> str:
+	"""Point this worker's open I-9 at a document photograph just filed. v0.136.0.
+
+	THE PHOTOGRAPHS WERE ALREADY BEING COLLECTED AND WERE GOING NOWHERE THE FORM
+	COULD SEE THEM. The onboarding wizard has photographed the List A or List B+C
+	documents at the tailgate for several releases and filed them with
+	`attach_onboarding_document`, which hangs them off the EMPLOYEE. That is the
+	right home for the bytes — it is one upload path with one permission check —
+	but it left the I-9 itself holding a `document_copies_stored` tickbox and no
+	way to answer "which copies, and are they still there". 8 CFR 274a.2(b)(3)
+	says an employer who keeps copies must retain them WITH the I-9 and produce
+	them with it, so a form that cannot name them is a form that cannot be
+	produced complete.
+
+	NOTHING IS MOVED, RE-UPLOADED OR RE-ATTACHED. The File stays attached to the
+	Employee, where `attach_employee_document` put it and where its refusal to
+	re-point an existing attachment keeps it. This writes the URL into an
+	`Attach` column on the I-9 — which is a string column holding a path, exactly
+	as `generated_pdf` and `signed_pdf` are — so the form REFERENCES the copy and
+	two records do not each half-own one photograph.
+
+	IT NEVER RAISES, AND THAT IS THE SAME ARGUMENT `signing_evidence.record`
+	MAKES. The photograph is the irreplaceable artefact and it has already landed
+	by the time this is called; a worker whose document is back in their pocket
+	is not standing there any more. A wizard step that filed the picture and then
+	failed on the cross-reference must not report a failure that would have the
+	operator photograph a passport a second time. The caller reports what this
+	returned instead — "" means nothing was linked.
+
+	THE DESTROYED ROW IS EXCLUDED BY NAME. `employee` is not unique on I-9 Form:
+	`destroy_i9` sets the status and SAVES rather than deleting, so a rehired
+	worker has two or more rows by construction. Linking a fresh photograph of a
+	current document onto a record that certifies its own disposal would
+	reconstitute part of a form the destruction certificate says is gone.
+	"""
+	column = DOCUMENT_COPY_KINDS.get(str(kind or "").strip().lower())
+	if not column or not str(file_url or "").strip():
+		return ""
+	try:
+		rows = frappe.db.get_all(
+			I9_FORM,
+			filters={"employee": employee, "status": ["!=", "Destroyed"]},
+			fields=["name"],
+			order_by="modified desc",
+			limit_page_length=1,
+		)
+		if not rows:
+			return ""
+		name = str(rows[0].get("name") or "")
+		if not name:
+			return ""
+		# THE TICKBOX IS SET TOO, because otherwise the record contradicts
+		# itself. `document_copies_stored` is what Section 2 was told by whoever
+		# submitted it and what the Desk print format reports; a form holding a
+		# photograph of a passport while answering "copies stored: no" is a
+		# record an inspector would be right to distrust. Only ever set, never
+		# cleared: this call knows a copy arrived and cannot know that one was
+		# removed. Section 2's own write is the only thing that unticks it, and
+		# it cannot run after this — the status has already moved past it.
+		frappe.db.set_value(
+			I9_FORM,
+			name,
+			{column: file_url, "document_copies_stored": 1},
+			update_modified=False,
+		)
+	except Exception:  # pragma: no cover - a site mid-migrate, or no I-9 at all
+		return ""
+	return name
 
 
 def attach_signed_i9(args: dict) -> ToolResult:

@@ -3,6 +3,70 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.136.0 — 2026-08-25 — the number that was collected, the place that was not, and the photographs nobody filed
+
+Three things a sealed I-9 should have said and did not, all reported off one real
+hire, and all the same shape: **the record held the fact and the page did not say
+it.** Full note in `RELEASES/v0.136.0.md`.
+
+**THE SSN BOX WAS BLANK AND THE NUMBER HAD BEEN COLLECTED.** `ssn_last_four` was
+on the record and the Desk print format has shown `XXX-XX-1234` off it since
+v0.47.1; the federal page showed nine empty cells and no explanation, which reads
+as "never collected". Masking it in that box is not available — the template's
+field is a **nine-cell comb with `/MaxLen 9`** (`/Ff 29360128`), so `XXX-XX-8888`
+truncates to `XXX-XX-88` — and `_ssn_digits` still refuses a partial, because
+four digits in nine cells read as a number beginning `0000`. So the empty box now
+**explains itself** in Additional Information: the last four, why the box is
+blank, and — for an E-Verify employer, who needs nine digits and cannot run on
+four — that the number is still required, with the box named in `incomplete`.
+
+Adding lines to that box overran it: `Additional Information` holds 900
+characters for **legibility** reasons, and a form with a receipt, an E-Verify SSN
+note, two located attestations and a fourth reverification hit the limit exactly
+— dropping `_overflow_note`, the one entry that stops a reverification history
+vanishing silently. Prose tightened, the overflow note moved ahead of the
+bookkeeping lines, and truncation now drops **whole groups** rather than slicing
+mid-sentence and appending a full stop that made the fragment look finished.
+Groups rather than lines because the first attempt orphaned a heading — a page
+announcing a list of missing reverifications and showing none. Worst case
+875/900. The tests for this were vacuous on the first draft and are now
+controlled by an assertion that the fixture really does overrun.
+
+The full-nine path is now reachable end to end: `generate_i9_pdf` accepts
+`include_full_ssn`, `submit_i9_section_1` accepts `ssn`, and `get_i9_form`
+returns `site_policy` — the read whose absence was forcing the handset to send
+four digits unconditionally on every site. **Both gates unchanged**: the caller
+asks, the site has `store_full_ssn` on, and a site that never opted in is refused
+by name rather than handed a blank comb.
+
+**EVERY SEALED I-9 PLACED THE SIGNATURE IN THE GULF OF GUINEA.** `Coordinates
+0.000000, 0.000000` on the verification page. The evidence columns are `Float`,
+MariaDB stores those `NOT NULL DEFAULT 0`, and `pdf_seal._coordinates` guarded on
+`in (None, "")` — correct about the argument, never reached by the value the
+database returns. Fixed at the reader, because a `Float` has no empty value that
+is not also a coordinate. **Only the exact pair `(0, 0)`**: a zero on one axis is
+the equator or the prime meridian and is a real place, and refusing every zero
+would be a zero-drop committed while fixing its mirror image.
+
+The I-9 also gains `section_1_signed_gps` / `section_2_signed_gps` — one `Data`
+column each holding `"lat,lon"`, for that same reason — filled by both write
+paths through one helper, printed beside the moment and the address, and added to
+the document-fingerprint exclusion set so Section 2's signature cannot invalidate
+Section 1's.
+
+**THE DOCUMENT PHOTOGRAPHS WENT NOWHERE THE FORM COULD SEE.** The wizard files
+them against the Employee; the I-9 held a tickbox and no way to say which copies.
+8 CFR 274a.2(b)(3) has an employer who keeps copies retain them **with** the form.
+`list_a/b/c_doc_copy` now point at each photograph as it is filed, and Additional
+Information records which lists are retained. Nothing is moved or re-attached,
+the file path is never printed on the page, the link never raises, and the
+Destroyed row is excluded by name.
+
+**NOT IN THIS RELEASE:** the iOS half. The phone still sends four SSN digits and
+still sends no GPS on the I-9 signature path — both are two-line client changes
+against server arguments that now exist. The seal page no longer claims a
+location either way, which is the half that was actively wrong.
+
 ## 0.135.1 — 2026-08-25 — three numbers that were wrong before they shipped
 
 **PROSE ONLY. No behaviour changes, no new tests, no code paths touched.**

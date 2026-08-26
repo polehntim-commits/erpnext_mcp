@@ -72,14 +72,27 @@ signature box's own (empty, sometimes opaque) appearance over the signature.
 A form with no capture on it behaves exactly as it always did: boxes empty, no
 flattening, a page to print and sign with a pen.
 
-**NO SOCIAL SECURITY NUMBER UNLESS ASKED FOR BY NAME.** `tools/i9.py` keeps the
-last four digits in a column and the nine in Frappe's encrypted `__Auth` table,
-and says at length that nothing in this app reads the nine back. This is the
-call site that has a real reason to — a printed I-9 has an SSN box — so it is
-an argument (`full_ssn`) rather than a lookup, the caller has to pass it, and
-`tools/i9.render_i9_pdf` will only fetch it when an operator asks in the same
-breath. Absent it the comb stays empty, which is the same page an employee gets
-handed to fill in by hand. Nine digits, no dashes: the box is a 9-cell comb.
+**NO SOCIAL SECURITY NUMBER UNLESS ASKED FOR BY NAME — BUT THE EMPTY BOX NOW
+EXPLAINS ITSELF.** `tools/i9.py` keeps the last four digits in a column and the
+nine in Frappe's encrypted `__Auth` table, and says at length that nothing in
+this app reads the nine back. This is the call site that has a real reason to —
+a printed I-9 has an SSN box — so it is an argument (`full_ssn`) rather than a
+lookup, the caller has to pass it, and `tools/i9.render_i9_pdf` will only fetch
+it when an operator asks in the same breath. Nine digits, no dashes: the box is
+a 9-cell comb, `/MaxLen 9`, with the comb flag set.
+
+WHAT CHANGED IN v0.136.0 IS WHAT AN EMPTY COMB SAYS. It used to say nothing, and
+an operator holding the rendered page reasonably concluded the number had never
+been collected — the record had `ssn_last_four`, the Desk print format had shown
+`XXX-XX-1234` off it since v0.47.1, and the federal page showed nine blank cells
+with no explanation. `_ssn_lines` puts the explanation in Additional Information:
+the last four, the reason the box is blank, and — where the employer is enrolled
+in E-Verify, which requires nine digits and cannot be run from four — that the
+number still has to be entered. The comb ITSELF is unchanged and `_ssn_digits`
+still refuses a partial, because five empty cells followed by `8888` reads as an
+SSN beginning 0000 to anybody who is not looking closely. A masked `XXX-XX-8888`
+cannot go in that box either: eleven characters into a nine-cell comb with
+`/MaxLen 9` truncates to `XXX-XX-88`.
 
 **NO ALTERNATIVE-PROCEDURE TICK.** `CB_Alt` says the employer used the DHS
 alternative (remote) document-examination procedure. Nothing in this app records
@@ -414,6 +427,33 @@ def _flag(value) -> bool:
 	return value in (1, "1", True, "True")
 
 
+def _coordinates(value) -> str:
+	"""`45.523100, -122.676500` from the stored `"lat,lon"`, or "". v0.136.0.
+
+	READ BACK RATHER THAN RE-DERIVED. `args.as_gps` is what wrote the column and
+	is where the rules live — all-or-nothing, and the exact pair (0, 0) refused
+	as an unset Float rather than treated as a place off the coast of Ghana.
+	This only has to render what survived that, and to render NOTHING for a
+	column holding anything it does not recognise: a half-written value printed
+	onto a federal form as though it were a location is the failure mode the
+	whole `_us_date` rule was written for, one field along.
+
+	SPACED AFTER THE COMMA, unlike the stored form. The column is a machine
+	value and this is a sentence in a box a person reads.
+	"""
+	text = _text(value)
+	if text.count(",") != 1:
+		return ""
+	latitude, _, longitude = text.partition(",")
+	try:
+		fix = (float(latitude), float(longitude))
+	except (TypeError, ValueError):
+		return ""
+	if fix == (0.0, 0.0):
+		return ""
+	return f"{fix[0]:.6f}, {fix[1]:.6f}"
+
+
 def _document(record: dict, prefix: str) -> dict:
 	"""One list's four values off the record.
 
@@ -562,12 +602,13 @@ def _attestation_lines(record: dict) -> list[str]:
 		if part
 	) or _text(record.get("employee_name"))
 
-	for label, who, stamp, address, capture in (
+	for label, who, stamp, address, fix, capture in (
 		(
 			"Section 1",
 			employee,
 			record.get("section_1_signed_at"),
 			record.get("section_1_signed_ip"),
+			record.get("section_1_signed_gps"),
 			record.get("section_1_signature"),
 		),
 		(
@@ -575,6 +616,7 @@ def _attestation_lines(record: dict) -> list[str]:
 			_text(record.get("verifier_name")),
 			record.get("section_2_signed_at"),
 			record.get("section_2_signed_ip"),
+			record.get("section_2_signed_gps"),
 			record.get("section_2_signature"),
 		),
 	):
@@ -588,6 +630,9 @@ def _attestation_lines(record: dict) -> list[str]:
 		where = _text(address)
 		if where:
 			sentence += f" from IP {where}"
+		coordinates = _coordinates(fix)
+		if coordinates:
+			sentence += f" at {coordinates}"
 		sentence += " via the Farm Ops app"
 		if _text(capture):
 			# Only claimable when there is a capture to have stamped. A record
@@ -631,6 +676,95 @@ def _receipt_lines(record: dict) -> list[str]:
 	return lines
 
 
+def _ssn_lines(record: dict, full_ssn: str, employer: dict) -> list[str]:
+	"""What the page says about an SSN box it could not fill. v0.136.0.
+
+	SAID ONLY WHEN THE BOX IS EMPTY. Where nine digits went into the comb there
+	is nothing to explain and repeating the last four in prose would put a piece
+	of somebody's Social Security number on the page a second time, in a box that
+	does not need it. `full_ssn` here is the value `_section_1` was given, so the
+	two cannot disagree about whether the comb was filled.
+
+	THE BLANK BOX WAS THE WHOLE BUG. `ssn_last_four` is on the record, the Desk
+	print format has printed `XXX-XX-1234` off it since v0.47.1, and the federal
+	page this app produces showed nine empty cells and said nothing — so an
+	operator holding the PDF concluded the number had not been collected, when
+	what had happened was that this app deliberately keeps four digits and the
+	comb has no way to show four as four. `_ssn_digits` still refuses to write
+	them into the comb, and that refusal is still right: five empty cells
+	followed by `8888` reads as an SSN beginning 0000 to anybody not looking
+	closely. The fix is to say so in the box the form provides for saying things.
+
+	E-VERIFY CHANGES WHAT A BLANK BOX MEANS, WHICH IS WHY IT IS IN THE SENTENCE.
+	The Social Security Number is OPTIONAL on Form I-9 for an employer who does
+	not use E-Verify — a blank box there is a complete form — and REQUIRED for
+	one who does, because E-Verify submits nine digits and cannot be run from
+	four. Printing the same sentence to both would tell one of them something
+	untrue about their own obligation.
+	"""
+	if _ssn_digits(full_ssn):
+		return []
+
+	last_four = "".join(character for character in _text(record.get("ssn_last_four")) if character.isdigit())
+	if not last_four:
+		# Nothing collected at all. `tools/i9._incomplete_boxes` names the empty
+		# box in the render result, which is where "you still have to collect
+		# this" belongs; a line on the page asserting an absence would be this
+		# form commenting on its own gaps.
+		return []
+
+	sentence = (
+		f"SSN on file: XXX-XX-{last_four}. The box above takes nine digits or none, and this "
+		f"site retains four"
+	)
+	if (employer or {}).get("e_verify"):
+		sentence += ". E-Verify requires the full number: have the employee enter it above"
+	return [sentence + "."]
+
+
+#: What each list's document-copy column is called on the page. Section 2's own
+#: labels, so a line in Additional Information names the same list as the block
+#: it is talking about three inches further up.
+DOCUMENT_COPY_FIELDS = {
+	"a": "list_a_doc_copy",
+	"b": "list_b_doc_copy",
+	"c": "list_c_doc_copy",
+}
+
+
+def _document_copy_lines(record: dict) -> list[str]:
+	"""Which examined documents were photographed, and where they live. v0.136.0.
+
+	THE FILE NAME, NEVER THE URL. A `/private/files/...` path printed on a
+	federal form is a line that looks like something a reader should be able to
+	open and is not — it needs a Frappe session this app does not hand out — and
+	a retained I-9 outlives every URL scheme it was printed under. The docname of
+	the I-9 is what locates the copies for good, and it is on the page already.
+
+	8 CFR 274a.2(b)(3) IS WHY THIS IS WORTH A LINE AT ALL. An employer MAY keep
+	copies of the documents they examined; if they do, the copies must be
+	retained WITH the I-9 and produced with it. So a page that mentions them is
+	stating the shape of the record an inspector should be handed, and a page
+	that does not leaves them looking like loose photographs of somebody's
+	passport in a filing system.
+	"""
+	present = [LIST_LABELS[key] for key in ("a", "b", "c") if _text(record.get(DOCUMENT_COPY_FIELDS[key]))]
+	if not present:
+		return []
+
+	# THE LIST LETTER ALONE, NOT THE DOCUMENT TITLE. The title is printed in the
+	# Section 2 box three inches above this one, and repeating "Driver's License"
+	# here costs 20 characters of a box whose real limit is legibility — spent
+	# saying something the page already says. `ADDITIONAL_INFORMATION_LIMIT` is
+	# a shared budget and the reverification overflow note is the entry that
+	# must not be squeezed out of it.
+	where = _text(record.get("name"))
+	sentence = "Document copies retained with this form: " + ", ".join(present)
+	if where:
+		sentence += f" (I-9 {where})"
+	return [sentence + "."]
+
+
 def _employer_lines(employer: dict) -> list[str]:
 	"""The employer facts Section 2 collects and has no box for. Today: the EIN.
 
@@ -654,14 +788,21 @@ def _overflow_note(reverifications: list) -> list[str]:
 	A silent truncation on a reverification history is the failure mode that
 	matters most here: the page would look complete and would be missing the
 	season somebody is asking about.
+
+	THE FIRST LINE DOES NOT PROMISE THE REST. v0.136.0: it used to say the extra
+	entries "are listed here", and `_additional_information` now offers this
+	opening and the entries below it to `_fit` as SEPARATE groups — so on a
+	crowded form the statement survives and the list may not. A sentence saying
+	"listed here" above nothing would be the page lying about its own contents,
+	which is the failure this function exists to prevent, one level down.
 	"""
 	extra = list(reverifications or [])[SUPPLEMENT_B_ROWS:]
 	if not extra:
 		return []
 	lines = [
 		f"Supplement B has {SUPPLEMENT_B_ROWS} rows and this employee has "
-		f"{len(reverifications)} reverification(s). The {len(extra)} most recent are listed "
-		f"here and are on the I-9 Form record in full; attach a second Supplement B page "
+		f"{len(reverifications)} reverification(s). The {len(extra)} most recent are NOT on this "
+		f"page and are on the I-9 Form record in full; attach a second Supplement B page "
 		f"for the file."
 	]
 	for entry in extra:
@@ -676,30 +817,105 @@ def _overflow_note(reverifications: list) -> list[str]:
 	return lines
 
 
-def _additional_information(record: dict, employer: dict, reverifications: list, notes: list | None) -> str:
+def _additional_information(
+	record: dict,
+	employer: dict,
+	reverifications: list,
+	notes: list | None,
+	full_ssn: str = "",
+) -> str:
 	"""The Section 2 free-text box, as one string the widget will take.
 
 	ORDER IS DELIBERATE: the receipt first, because it is the only entry that
-	names something still owed and has a deadline on it; then the attestations;
-	then the employer facts the form has no box for; then anything the caller
-	added; then the overflow.
+	names something still owed and has a deadline on it; then the SSN, because
+	it explains a box a reader has already looked at and found empty; then the
+	attestations; then the reverifications that did not fit on Supplement B;
+	then the employer facts the form has no box for; then the document copies;
+	then anything the caller added.
+
+	THE ORDER IS THE TRUNCATION ORDER, WHICH IS WHY THE OVERFLOW NOTE MOVED UP.
+	v0.136.0. It used to be last, which was safe while three entries shared the
+	box and stopped being safe the moment v0.136.0 added two more: a form with a
+	receipt, an E-Verify SSN note, two located attestations and a fourth
+	reverification came to exactly the 900-character limit, and what fell off the
+	end was the note saying a reverification is missing from the page. That is
+	the one entry `_overflow_note` exists to prevent — a page that looks complete
+	and is missing the season somebody is asking about — so it now outranks the
+	EIN, the copies and the caller's own lines, all of which are bookkeeping
+	about facts printed elsewhere on the form or held on the record.
+
+	WHAT DOES NOT FIT IS DROPPED WHOLE. See `_fit`.
 
 	NEWLINE-SEPARATED, not space-separated. The box is the form's one multiline
 	field, and a viewer wraps a paragraph but does not invent the breaks between
 	four separate statements — run together, the receipt deadline and the
 	Section 1 timestamp read as one sentence.
 	"""
-	lines: list[str] = []
-	lines.extend(_receipt_lines(record))
-	lines.extend(_attestation_lines(record))
-	lines.extend(_employer_lines(employer))
-	lines.extend(_text(note) for note in (notes or []) if _text(note))
-	lines.extend(_overflow_note(reverifications))
+	overflow = _overflow_note(reverifications)
+	groups: list[list[str]] = [
+		_receipt_lines(record),
+		_ssn_lines(record, full_ssn, employer),
+		_attestation_lines(record),
+		# TWO GROUPS, NOT ONE, and this is the whole reason `_fit` counts groups.
+		# The first line states that reverifications are missing from the page;
+		# the rest name them. The statement is the part that must survive — a
+		# reader who learns the page is incomplete can go to the record, and a
+		# reader who learns nothing cannot — so the entries are offered
+		# separately and are dropped first when the box is full.
+		overflow[:1],
+		overflow[1:],
+		_employer_lines(employer),
+		_document_copy_lines(record),
+		[_text(note) for note in (notes or []) if _text(note)],
+	]
+	return _fit(groups)
 
-	body = "\n".join(line for line in lines if line)
-	if len(body) > ADDITIONAL_INFORMATION_LIMIT:
-		body = body[: ADDITIONAL_INFORMATION_LIMIT - 1].rstrip() + "."
-	return body
+
+def _fit(groups: list[list[str]]) -> str:
+	"""The groups that fit, each whole, as one string. v0.136.0.
+
+	WHOLE LINES RATHER THAN A CHARACTER CUT. The old rule sliced the joined body
+	at `ADDITIONAL_INFORMATION_LIMIT` and appended a full stop, which on a box
+	that ran long produced a sentence that stopped in the middle and ENDED IN A
+	FULL STOP — `"... the List B entry above records a receipt for a."` is a
+	statement about a federal document that nobody wrote, and it looks complete.
+	Dropping the line instead loses the same information and invents none.
+
+	WHOLE GROUPS RATHER THAN WHOLE LINES, because a line-at-a-time rule orphans
+	a heading. `_overflow_note` opens by saying two reverifications are not on
+	this page and then lists them; keeping the opening and dropping the list
+	produces a page that announces a list and shows none, which is a worse
+	artefact than either the truncation or the omission. A group is kept only if
+	all of it fits.
+
+	A LATER GROUP MAY STILL FIT WHEN AN EARLIER ONE DID NOT. The groups are
+	ordered by consequence and a long one near the front should not starve three
+	short ones behind it — dropping the 300-character overflow LIST does not mean
+	dropping the 25-character EIN. Order decides priority, not eligibility.
+
+	NOTHING THAT IS DROPPED IS LOST. It is on the I-9 Form record and comes back
+	through `get_i9_form`; this box is a summary whose real limit is legibility
+	rather than storage. See `ADDITIONAL_INFORMATION_LIMIT`.
+
+	A SINGLE GROUP LONGER THAN THE WHOLE BUDGET IS STILL CUT, because dropping it
+	would say nothing at all where the caller passed one very long note, and a
+	note the reader can see is truncated beats an absent one.
+	"""
+	kept: list[str] = []
+	used = 0
+	for group in groups:
+		lines = [line for line in group if line]
+		if not lines:
+			continue
+		cost = sum(len(line) for line in lines) + len(lines) - (0 if kept else 1)
+		if used + cost <= ADDITIONAL_INFORMATION_LIMIT:
+			kept.extend(lines)
+			used += cost
+			continue
+		if not kept:
+			body = "\n".join(lines)
+			return body[: ADDITIONAL_INFORMATION_LIMIT - 1].rstrip() + "."
+	return "\n".join(kept)
 
 
 def _supplement_a(record: dict) -> dict:
@@ -824,7 +1040,7 @@ def plan(
 	entries = list(reverifications or [])
 	page_one = _section_1(record, full_ssn)
 	page_one.update(_section_2(record, employer))
-	additional = _additional_information(record, employer, entries, notes)
+	additional = _additional_information(record, employer, entries, notes, full_ssn)
 	if additional:
 		page_one["Additional Information"] = additional
 

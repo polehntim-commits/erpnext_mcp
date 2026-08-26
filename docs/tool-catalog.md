@@ -11453,6 +11453,26 @@ in this app, it needs the site switch as well as the argument, and it writes
 `full_ssn: true` into the I-9 Audit Log row so a page carrying somebody's number
 is findable afterwards.
 
+**An empty SSN box explains itself** (v0.136.0). Where the record holds
+`ssn_last_four` and the comb was not filled, Additional Information states it as
+`XXX-XX-1234` and says why the box is blank: it has nine cells, and four digits
+written into it read as a number beginning `0000`. Where the employer is
+enrolled in E-Verify the same line adds that the full number is still required,
+and `incomplete` names the box. Before this the page showed nine empty cells and
+said nothing, which read as "the SSN was never collected" when it had been.
+
+**Copies of the examined documents are named.** `attach_onboarding_document`
+points `list_a_doc_copy` / `list_b_doc_copy` / `list_c_doc_copy` at each
+photograph as it is filed, and Additional Information records which lists are
+retained with the form — 8 CFR 274a.2(b)(3) has an employer who keeps copies
+retain them **with** the I-9 and produce them with it. The file name is never
+printed: a private path is not something a reader of the paper can open.
+
+**Where each signature was made** is printed beside when and from what address,
+off `section_1_signed_gps` / `section_2_signed_gps`, where the handset reported
+a fix. Exactly `0, 0` is treated as an unset value rather than a location in the
+Gulf of Guinea; a zero on one axis alone is a real place and is kept.
+
 ### `attach_signed_i9`
 
 **MUTATING (default OFF).** Files an already-uploaded signed or scanned I-9
