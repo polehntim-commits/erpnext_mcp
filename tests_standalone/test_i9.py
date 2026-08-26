@@ -40,7 +40,7 @@ v0.47.0, and each of the four is a federal requirement the app did not meet:
 """
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import frappe
 
@@ -1745,30 +1745,164 @@ class TheExaminedDocumentPhotographsReachTheForm(I9TestCase):
 
 
 # ── 19 ────────────────────────────────────────────────────────────────────────
-class TheSsnBoxIsOnlyMissingForAnEVerifyEmployer(I9TestCase):
-	"""v0.136.0. Optional on Form I-9; required by E-Verify.
+class TheSignedCopyCarriesItsOwnMetadata(I9TestCase):
+	"""v0.137.0. The phone builds the I-9; the server was at neither signing.
 
-	Listing the blank comb as an unfinished box for a farm that does not use
-	E-Verify would send them looking for work that does not exist. Not listing it
-	for one that does hides a real gap.
+	THE HOLE THE ARCHITECTURE LEFT. `section_1_signed_at`, `_signed_ip` and
+	`_signed_gps` used to be filled as a side effect of the server RECEIVING a
+	signature. The retained page is rendered and sealed on the handset now and
+	arrives whole through `attach_signed_i9`, so nothing filled them and the only
+	timestamp on the record was `signed_pdf_on` — which answers "when did the file
+	arrive", a different question from the one 8 CFR 274a.2(h)(2) asks.
 	"""
 
-	def _boxes(self, e_verify: bool, full_ssn: str = "") -> list:
-		record = {"ssn_last_four": "8888"}
-		return i9._incomplete_boxes(record, {"e_verify": e_verify}, full_ssn)
+	def setUp(self):
+		# `allow_attach_signed_i9` is not in `I9_TOOLS_ON`, because every mutating
+		# tool in this app ships OFF and an operator ticks it deliberately. The
+		# switch is the subject of `test_i9_pdf.AttachSignedTool`; here it is
+		# furniture, so it is turned on the same way that file turns it on.
+		super().setUp()
+		self.configure(enabled=1, **dict(I9_TOOLS_ON, allow_attach_signed_i9=1))
+		# STAMPED FROM THE HARNESS CLOCK, NEVER HARDCODED. `frappe.utils.now()`
+		# here is a fixed base plus one second per call, so a literal date is
+		# whatever the double says relative to it — a 2026-08-25 fixture is in the
+		# FUTURE to a clock anchored in July, and every one of these tests failed
+		# on the refusal that is supposed to fire only for a broken client.
+		signing = datetime.fromisoformat(str(frappe.utils.now())) - timedelta(hours=2)
+		self.SIGNED_1 = signing.strftime("%Y-%m-%d %H:%M:%S")
+		self.SIGNED_2 = (signing + timedelta(minutes=28)).strftime("%Y-%m-%d %H:%M:%S")
 
-	def test_an_e_verify_employer_is_told_the_box_is_empty(self):
-		self.assertTrue(any("Social Security Number" in box for box in self._boxes(True)))
+	def _ready(self, employee="HR-EMP-00001") -> str:
+		"""A form with both sections filed and no signature ever sent to us."""
+		self._create_draft(employee=employee)
+		self._submit_section_1(employee=employee, section_1_signature="")
+		self._submit_section_2(employee=employee, section_2_signature="")
+		return str(frappe.db.get_value("I-9 Form", {"employee": employee}, "name"))
 
-	def test_everybody_else_is_not(self):
-		self.assertFalse(any("Social Security Number" in box for box in self._boxes(False)))
+	def _a_scan(self, name="signed-i9.pdf") -> str:
+		STORE.seed("File", [{"name": name, "file_name": name, "file_url": f"/private/files/{name}"}])
+		return name
 
-	def test_printing_the_nine_digits_closes_it(self):
-		self.assertFalse(any("Social Security Number" in box for box in self._boxes(True, "123456789")))
+	def _filed(self, name, **extra):
+		payload = {"i9_form": name, "file_token": self._a_scan()}
+		payload.update(extra)
+		return self.tool_data("attach_signed_i9", payload)
 
-	def test_four_digits_do_not_close_it_because_they_never_reach_the_comb(self):
-		self.assertTrue(any("Social Security Number" in box for box in self._boxes(True, "8888")))
+	def _stored(self, name, *fields):
+		return frappe.db.get_value("I-9 Form", name, list(fields), as_dict=True)
 
-	def test_the_reason_is_named_so_it_is_actionable(self):
-		named = [box for box in self._boxes(True) if "Social Security Number" in box]
-		self.assertIn("E-Verify", named[0])
+	def test_the_moment_each_section_was_signed_is_recorded(self):
+		name = self._ready()
+		self._filed(name, section_1_signed_at=self.SIGNED_1, section_2_signed_at=self.SIGNED_2)
+		row = self._stored(name, "section_1_signed_at", "section_2_signed_at")
+		self.assertEqual(str(row["section_1_signed_at"]), self.SIGNED_1)
+		self.assertEqual(str(row["section_2_signed_at"]), self.SIGNED_2)
+
+	def test_each_section_keeps_its_own_coordinates(self):
+		name = self._ready()
+		self._filed(
+			name,
+			section_1_signed_at=self.SIGNED_1,
+			section_1_gps_lat=45.5231,
+			section_1_gps_lon=-122.6765,
+			section_2_signed_at=self.SIGNED_2,
+			section_2_gps_lat=46.6,
+			section_2_gps_lon=-120.51,
+		)
+		row = self._stored(name, "section_1_signed_gps", "section_2_signed_gps")
+		self.assertEqual(row["section_1_signed_gps"], "45.523100,-122.676500")
+		self.assertEqual(row["section_2_signed_gps"], "46.600000,-120.510000")
+
+	def test_one_sections_fix_is_never_copied_onto_the_other(self):
+		"""The reason the coordinate keys are named per section rather than left
+		to an alias chain: a phone that got a lock for Section 1 and not for
+		Section 2 must not have the record claim both were made in one place."""
+		name = self._ready()
+		self._filed(name, section_1_gps_lat=45.5231, section_1_gps_lon=-122.6765)
+		row = self._stored(name, "section_1_signed_gps", "section_2_signed_gps")
+		self.assertEqual(row["section_1_signed_gps"], "45.523100,-122.676500")
+		self.assertFalse(row["section_2_signed_gps"])
+
+	def test_the_address_is_the_servers_own_observation(self):
+		name = self._ready()
+		self._filed(name, section_1_signed_at=self.SIGNED_1)
+		self.assertTrue(self._stored(name, "section_1_signed_ip")["section_1_signed_ip"])
+
+	def test_the_arrival_time_stays_a_separate_fact_from_the_signing_time(self):
+		"""`signed_pdf_on` is the server's clock and answers a different question.
+		Collapsing them would lose the hour the crew spent out of signal."""
+		name = self._ready()
+		self._filed(name, section_1_signed_at=self.SIGNED_1)
+		row = self._stored(name, "section_1_signed_at", "signed_pdf_on")
+		self.assertEqual(str(row["section_1_signed_at"]), self.SIGNED_1)
+		self.assertTrue(row["signed_pdf_on"])
+		self.assertNotEqual(str(row["signed_pdf_on"]), self.SIGNED_1)
+
+	def test_a_timestamp_in_the_future_is_refused(self):
+		"""The one claim that cannot be true, and what a skewed clock produces."""
+		name = self._ready()
+		result = self.tool(
+			"attach_signed_i9",
+			{"i9_form": name, "file_token": self._a_scan(), "section_1_signed_at": "2099-01-01 00:00:00"},
+		)
+		self.assertTrue(result.get("isError"))
+		self.assertIn("future", str(result))
+
+	def test_a_refused_timestamp_files_nothing_at_all(self):
+		"""Resolved before the File is touched, so the refusal costs nothing. A
+		check that fired after the bytes were moved would leave the file private
+		and re-pointed with the record not updated."""
+		name = self._ready()
+		self.tool(
+			"attach_signed_i9",
+			{"i9_form": name, "file_token": self._a_scan(), "section_1_signed_at": "2099-01-01 00:00:00"},
+		)
+		self.assertFalse(self._stored(name, "signed_pdf")["signed_pdf"])
+
+	def test_a_moment_captured_at_the_pad_is_not_replaced_by_one_restated(self):
+		"""A signature that DID reach the server was timed by the server as the
+		ink landed. An upload restating it must keep the better record."""
+		name = self._ready()
+		pad = (datetime.fromisoformat(self.SIGNED_1) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+		frappe.db.set_value("I-9 Form", name, "section_1_signed_at", pad)
+		self._filed(name, section_1_signed_at=self.SIGNED_1)
+		self.assertEqual(str(self._stored(name, "section_1_signed_at")["section_1_signed_at"]), pad)
+
+	def test_the_answer_says_which_columns_it_actually_filled(self):
+		"""Otherwise a phone believes it wrote something it did not."""
+		name = self._ready()
+		pad = (datetime.fromisoformat(self.SIGNED_1) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+		frappe.db.set_value("I-9 Form", name, "section_1_signed_at", pad)
+		data = self._filed(name, section_1_signed_at=self.SIGNED_1, section_2_signed_at=self.SIGNED_2)
+		self.assertNotIn("section_1_signed_at", data["signing_metadata"])
+		self.assertEqual(data["signing_metadata"]["section_2_signed_at"], self.SIGNED_2)
+
+	def test_null_island_is_refused_here_too(self):
+		name = self._ready()
+		self._filed(name, section_1_gps_lat=0, section_1_gps_lon=0)
+		self.assertFalse(self._stored(name, "section_1_signed_gps")["section_1_signed_gps"])
+
+	def test_half_a_fix_is_no_fix(self):
+		name = self._ready()
+		self._filed(name, section_1_gps_lat=45.5231)
+		self.assertFalse(self._stored(name, "section_1_signed_gps")["section_1_signed_gps"])
+
+	def test_an_upload_carrying_no_metadata_behaves_exactly_as_before(self):
+		"""Every caller that predates this release, and the Desk."""
+		name = self._ready()
+		data = self._filed(name)
+		self.assertTrue(data["signed_pdf"])
+		self.assertEqual(data["signing_metadata"], {})
+
+	def test_the_audit_row_records_that_a_claim_was_taken(self):
+		"""The moment and the place are the client's word rather than the
+		server's, so the log says which columns came in that way."""
+		name = self._ready()
+		self._filed(name, section_1_signed_at=self.SIGNED_1)
+		rows = [
+			r
+			for r in STORE.rows("I-9 Audit Log")
+			if r.get("action") == "Signed Copy Filed" and r.get("i9_form") == name
+		]
+		self.assertEqual(len(rows), 1)
+		self.assertIn("section_1_signed_at", json.dumps(rows[0].get("details")))

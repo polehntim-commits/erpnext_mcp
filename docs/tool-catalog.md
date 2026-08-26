@@ -11453,13 +11453,11 @@ in this app, it needs the site switch as well as the argument, and it writes
 `full_ssn: true` into the I-9 Audit Log row so a page carrying somebody's number
 is findable afterwards.
 
-**An empty SSN box explains itself** (v0.136.0). Where the record holds
-`ssn_last_four` and the comb was not filled, Additional Information states it as
-`XXX-XX-1234` and says why the box is blank: it has nine cells, and four digits
-written into it read as a number beginning `0000`. Where the employer is
-enrolled in E-Verify the same line adds that the full number is still required,
-and `incomplete` names the box. Before this the page showed nine empty cells and
-said nothing, which read as "the SSN was never collected" when it had been.
+**The retained copy is built on the phone** (v0.137.0). The iOS app renders and
+seals the I-9 on the handset — where the nine digits already are — and files the
+finished file with `attach_signed_i9`. This tool draws the WORKING copy an
+operator prints from the Desk, so the SSN box is the phone's to fill and this
+page leaves it empty.
 
 **Copies of the examined documents are named.** `attach_onboarding_document`
 points `list_a_doc_copy` / `list_b_doc_copy` / `list_c_doc_copy` at each
@@ -11500,6 +11498,18 @@ status. Scans only: `.pdf`, `.jpg`, `.jpeg`, `.png`, `.heic`, `.heif`, `.tiff`,
 
 **A second signed copy is refused** unless `overwrite` is passed. It is the one
 write on this doctype that could not be undone from the record itself.
+
+**It also carries the signing metadata** (v0.137.0). The retained I-9 is built and
+signed on the handset, so the server is present at neither signing and the columns
+that used to be filled as a side effect of receiving a signature stayed empty.
+`section_1_signed_at` / `section_2_signed_at` carry when each attestation was
+actually made — the **client's claim**, since `signed_pdf_on` records only when
+the file arrived, and the two differ by however long the crew was out of signal.
+`section_N_gps_lat` / `_lon` carry where the handset said it was, as a pair per
+section so one section's fix is never copied onto the other. A **future**
+timestamp is refused; nothing else is verifiable and none of it is treated as
+though it were. A column already filled is never overwritten, and the answer's
+`signing_metadata` reports which columns the call actually filled.
 
 ### `collect_form_signature`
 

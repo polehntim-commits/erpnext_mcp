@@ -72,27 +72,22 @@ signature box's own (empty, sometimes opaque) appearance over the signature.
 A form with no capture on it behaves exactly as it always did: boxes empty, no
 flattening, a page to print and sign with a pen.
 
-**NO SOCIAL SECURITY NUMBER UNLESS ASKED FOR BY NAME — BUT THE EMPTY BOX NOW
-EXPLAINS ITSELF.** `tools/i9.py` keeps the last four digits in a column and the
-nine in Frappe's encrypted `__Auth` table, and says at length that nothing in
-this app reads the nine back. This is the call site that has a real reason to —
-a printed I-9 has an SSN box — so it is an argument (`full_ssn`) rather than a
-lookup, the caller has to pass it, and `tools/i9.render_i9_pdf` will only fetch
-it when an operator asks in the same breath. Nine digits, no dashes: the box is
-a 9-cell comb, `/MaxLen 9`, with the comb flag set.
+**NO SOCIAL SECURITY NUMBER UNLESS ASKED FOR BY NAME.** `tools/i9.py` keeps the
+last four digits in a column and the nine in Frappe's encrypted `__Auth` table,
+and says at length that nothing in this app reads the nine back. This is the
+call site that has a real reason to — a printed I-9 has an SSN box — so it is
+an argument (`full_ssn`) rather than a lookup, the caller has to pass it, and
+`tools/i9.render_i9_pdf` will only fetch it when an operator asks in the same
+breath. Absent it the comb stays empty, which is the same page an employee gets
+handed to fill in by hand. Nine digits, no dashes: the box is a 9-cell comb.
 
-WHAT CHANGED IN v0.136.0 IS WHAT AN EMPTY COMB SAYS. It used to say nothing, and
-an operator holding the rendered page reasonably concluded the number had never
-been collected — the record had `ssn_last_four`, the Desk print format had shown
-`XXX-XX-1234` off it since v0.47.1, and the federal page showed nine blank cells
-with no explanation. `_ssn_lines` puts the explanation in Additional Information:
-the last four, the reason the box is blank, and — where the employer is enrolled
-in E-Verify, which requires nine digits and cannot be run from four — that the
-number still has to be entered. The comb ITSELF is unchanged and `_ssn_digits`
-still refuses a partial, because five empty cells followed by `8888` reads as an
-SSN beginning 0000 to anybody who is not looking closely. A masked `XXX-XX-8888`
-cannot go in that box either: eleven characters into a nine-cell comb with
-`/MaxLen 9` truncates to `XXX-XX-88`.
+THE PHONE BUILDS THE RETAINED PAGE NOW, AND THIS ONE IS THE WORKING COPY.
+v0.137.0: the iOS app renders and seals the I-9 on the handset — where the nine
+digits already are — and uploads the finished file through `attach_signed_i9`.
+So the SSN belongs on the phone's page and this module has no part in placing
+it. An earlier draft of v0.136.0 wrote an explanatory line about the blank comb
+into Additional Information; it was removed, because a page that is not the
+retained record should not be commenting on a box the retained record fills.
 
 **NO ALTERNATIVE-PROCEDURE TICK.** `CB_Alt` says the employer used the DHS
 alternative (remote) document-examination procedure. Nothing in this app records
@@ -676,52 +671,6 @@ def _receipt_lines(record: dict) -> list[str]:
 	return lines
 
 
-def _ssn_lines(record: dict, full_ssn: str, employer: dict) -> list[str]:
-	"""What the page says about an SSN box it could not fill. v0.136.0.
-
-	SAID ONLY WHEN THE BOX IS EMPTY. Where nine digits went into the comb there
-	is nothing to explain and repeating the last four in prose would put a piece
-	of somebody's Social Security number on the page a second time, in a box that
-	does not need it. `full_ssn` here is the value `_section_1` was given, so the
-	two cannot disagree about whether the comb was filled.
-
-	THE BLANK BOX WAS THE WHOLE BUG. `ssn_last_four` is on the record, the Desk
-	print format has printed `XXX-XX-1234` off it since v0.47.1, and the federal
-	page this app produces showed nine empty cells and said nothing — so an
-	operator holding the PDF concluded the number had not been collected, when
-	what had happened was that this app deliberately keeps four digits and the
-	comb has no way to show four as four. `_ssn_digits` still refuses to write
-	them into the comb, and that refusal is still right: five empty cells
-	followed by `8888` reads as an SSN beginning 0000 to anybody not looking
-	closely. The fix is to say so in the box the form provides for saying things.
-
-	E-VERIFY CHANGES WHAT A BLANK BOX MEANS, WHICH IS WHY IT IS IN THE SENTENCE.
-	The Social Security Number is OPTIONAL on Form I-9 for an employer who does
-	not use E-Verify — a blank box there is a complete form — and REQUIRED for
-	one who does, because E-Verify submits nine digits and cannot be run from
-	four. Printing the same sentence to both would tell one of them something
-	untrue about their own obligation.
-	"""
-	if _ssn_digits(full_ssn):
-		return []
-
-	last_four = "".join(character for character in _text(record.get("ssn_last_four")) if character.isdigit())
-	if not last_four:
-		# Nothing collected at all. `tools/i9._incomplete_boxes` names the empty
-		# box in the render result, which is where "you still have to collect
-		# this" belongs; a line on the page asserting an absence would be this
-		# form commenting on its own gaps.
-		return []
-
-	sentence = (
-		f"SSN on file: XXX-XX-{last_four}. The box above takes nine digits or none, and this "
-		f"site retains four"
-	)
-	if (employer or {}).get("e_verify"):
-		sentence += ". E-Verify requires the full number: have the employee enter it above"
-	return [sentence + "."]
-
-
 #: What each list's document-copy column is called on the page. Section 2's own
 #: labels, so a line in Additional Information names the same list as the block
 #: it is talking about three inches further up.
@@ -822,23 +771,21 @@ def _additional_information(
 	employer: dict,
 	reverifications: list,
 	notes: list | None,
-	full_ssn: str = "",
 ) -> str:
 	"""The Section 2 free-text box, as one string the widget will take.
 
 	ORDER IS DELIBERATE: the receipt first, because it is the only entry that
-	names something still owed and has a deadline on it; then the SSN, because
-	it explains a box a reader has already looked at and found empty; then the
-	attestations; then the reverifications that did not fit on Supplement B;
-	then the employer facts the form has no box for; then the document copies;
-	then anything the caller added.
+	names something still owed and has a deadline on it; then the attestations;
+	then the reverifications that did not fit on Supplement B; then the employer
+	facts the form has no box for; then the document copies; then anything the
+	caller added.
 
 	THE ORDER IS THE TRUNCATION ORDER, WHICH IS WHY THE OVERFLOW NOTE MOVED UP.
 	v0.136.0. It used to be last, which was safe while three entries shared the
-	box and stopped being safe the moment v0.136.0 added two more: a form with a
-	receipt, an E-Verify SSN note, two located attestations and a fourth
-	reverification came to exactly the 900-character limit, and what fell off the
-	end was the note saying a reverification is missing from the page. That is
+	box and stopped being safe the moment v0.136.0 added more: a form with a
+	receipt, two located attestations, retained document copies and a fourth
+	reverification reached the 900-character limit, and what fell off the end was
+	the note saying a reverification is missing from the page. That is
 	the one entry `_overflow_note` exists to prevent — a page that looks complete
 	and is missing the season somebody is asking about — so it now outranks the
 	EIN, the copies and the caller's own lines, all of which are bookkeeping
@@ -854,7 +801,6 @@ def _additional_information(
 	overflow = _overflow_note(reverifications)
 	groups: list[list[str]] = [
 		_receipt_lines(record),
-		_ssn_lines(record, full_ssn, employer),
 		_attestation_lines(record),
 		# TWO GROUPS, NOT ONE, and this is the whole reason `_fit` counts groups.
 		# The first line states that reverifications are missing from the page;
@@ -1040,7 +986,7 @@ def plan(
 	entries = list(reverifications or [])
 	page_one = _section_1(record, full_ssn)
 	page_one.update(_section_2(record, employer))
-	additional = _additional_information(record, employer, entries, notes, full_ssn)
+	additional = _additional_information(record, employer, entries, notes)
 	if additional:
 		page_one["Additional Information"] = additional
 

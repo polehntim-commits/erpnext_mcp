@@ -313,7 +313,7 @@
    "read_only": 1
   },
   {
-   "description": "Where the handset said it was when the attestation was made, as \"latitude,longitude\". Corroboration, not verification — the server cannot check it. Blank means no fix was reported.",
+   "description": "Where the handset said it was when the attestation was made, as \"latitude,longitude\". Filled by whichever path carried the signature: the section submit, the signature pad, or attach_signed_i9 for an I-9 built and signed on the phone. Corroboration, not verification — the server cannot check it. Blank means no fix was reported.",
    "fieldname": "section_1_signed_gps",
    "fieldtype": "Data",
    "label": "Section 1 Signed GPS",
@@ -554,7 +554,7 @@
    "read_only": 1
   },
   {
-   "description": "Where the handset said it was when the verifier certified the documents, as \"latitude,longitude\". Corroboration, not verification. Blank means no fix was reported.",
+   "description": "Where the handset said it was when the verifier certified the documents, as \"latitude,longitude\". Filled by whichever path carried the signature, including attach_signed_i9 for an I-9 built and signed on the phone. Corroboration, not verification. Blank means no fix was reported.",
    "fieldname": "section_2_signed_gps",
    "fieldtype": "Data",
    "label": "Section 2 Signed GPS",

@@ -538,32 +538,10 @@ class AdditionalInformation(unittest.TestCase):
 		self.assertLessEqual(len(body), i9_pdf.ADDITIONAL_INFORMATION_LIMIT)
 
 	def test_nothing_is_written_when_there_is_nothing_to_say(self):
-		# `ssn_last_four` JOINED THIS LIST IN v0.136.0 and the fixture had to say
-		# so. The claim here has always been "a record with nothing to report
-		# writes no prose", and the four values below were what "nothing" meant.
-		# An SSN on file is now a fifth thing worth reporting — the comb is blank
-		# and the record holds four digits — so a fixture still carrying one is
-		# a record that DOES have something to say, and leaving it in would have
-		# turned this into an assertion that the new line never appears.
-		bare = a_record(
-			section_1_signed_at=None,
-			section_2_signed_at=None,
-			receipt_pending=0,
-			list_a_is_receipt=0,
-			ssn_last_four="",
-		)
-		self.assertEqual(self.note(bare, employer=EMPLOYER_NO_EIN), "")
-
-	def test_an_otherwise_bare_record_still_reports_the_ssn_it_holds(self):
-		"""The other half of the test above, so "nothing to say" cannot quietly
-		grow to cover something the form should be saying."""
 		bare = a_record(
 			section_1_signed_at=None, section_2_signed_at=None, receipt_pending=0, list_a_is_receipt=0
 		)
-		self.assertEqual(
-			self.note(bare, employer=EMPLOYER_NO_EIN),
-			"SSN on file: XXX-XX-6789. The box above takes nine digits or none, and this site retains four.",
-		)
+		self.assertEqual(self.note(bare, employer=EMPLOYER_NO_EIN), "")
 
 	# v0.48.0. The EIN, and the reason it is here rather than in a box of its own.
 	def test_the_employer_ein_is_written_and_is_labelled(self):
@@ -577,62 +555,6 @@ class AdditionalInformation(unittest.TestCase):
 		page = i9_pdf.plan(a_record(), EMPLOYER)[i9_pdf.PAGE_FORM]
 		self.assertEqual(page["Employers Business or Org Address"], EMPLOYER["address"])
 		self.assertNotIn("12-3456789", page["Employers Business or Org Name"])
-
-
-# ── 4b ────────────────────────────────────────────────────────────────────────
-class TheSocialSecurityNumberSaysWhyItIsBlank(unittest.TestCase):
-	"""v0.136.0. The comb is unchanged; the EMPTY comb stopped saying nothing.
-
-	THE BUG THIS PINS. `ssn_last_four` was on the record, the Desk print format
-	had shown `XXX-XX-6789` off it since v0.47.1, and the federal page showed
-	nine empty cells and no explanation — so an operator holding the sealed PDF
-	concluded the number had never been collected. It had; this app keeps four
-	digits unless a site opts into nine, and a nine-cell comb cannot show four
-	as four.
-	"""
-
-	def note(self, record=None, employer=EMPLOYER, full_ssn="") -> str:
-		planned = i9_pdf.plan(record or a_record(), employer, [], full_ssn=full_ssn)
-		return planned[i9_pdf.PAGE_FORM].get("Additional Information", "")
-
-	def test_the_blank_box_names_the_four_digits_the_record_holds(self):
-		self.assertIn("SSN on file: XXX-XX-6789", self.note())
-
-	def test_it_says_why_the_box_is_blank_rather_than_only_that_it_is(self):
-		"""A page reporting a gap without its reason sends somebody looking for
-		a bug. The reason is that the box cannot show four digits as four."""
-		self.assertIn("takes nine digits or none, and this site retains four", self.note())
-
-	def test_nine_digits_in_the_comb_means_nothing_is_said_in_prose(self):
-		"""Repeating part of an SSN in a box that does not need it would put a
-		piece of the number on the page a second time."""
-		planned = i9_pdf.plan(a_record(), EMPLOYER, [], full_ssn="123456789")
-		page = planned[i9_pdf.PAGE_FORM]
-		self.assertEqual(page["US Social Security Number"], "123456789")
-		self.assertNotIn("XXX-XX", page.get("Additional Information", ""))
-		self.assertNotIn("SSN on file", page.get("Additional Information", ""))
-
-	def test_a_record_holding_no_ssn_at_all_asserts_nothing(self):
-		"""`_incomplete_boxes` is where "you still have to collect this" belongs.
-		A line on the form commenting on its own gaps is the form editorialising."""
-		self.assertNotIn("SSN on file", self.note(a_record(ssn_last_four="")))
-
-	def test_an_e_verify_employer_is_told_the_number_is_still_required(self):
-		"""Optional on Form I-9, REQUIRED by E-Verify — which submits nine digits
-		and cannot be run from four. The same sentence to both would tell one of
-		them something untrue about their own obligation."""
-		body = self.note(employer=dict(EMPLOYER, e_verify=True))
-		self.assertIn("E-Verify requires the full number", body)
-
-	def test_an_employer_who_does_not_use_e_verify_is_not_told_to_act(self):
-		self.assertNotIn("E-Verify", self.note())
-
-	def test_the_full_number_never_appears_in_the_prose_box(self):
-		"""The whole SSN belongs in the comb or nowhere. A nine-digit string in
-		a free-text box is the number in a place nothing was gated on."""
-		body = self.note(a_record(ssn_last_four="6789"), full_ssn="")
-		self.assertNotIn("123456789", body)
-		self.assertNotIn("123-45-6789", body)
 
 
 # ── 4c ────────────────────────────────────────────────────────────────────────
@@ -759,9 +681,9 @@ class TheProseBoxIsASharedBudget(unittest.TestCase):
 		)
 		entries = [
 			a_reverification(reverification_date=f"20{27 + n}-05-01", document_number=f"SRC{n}")
-			for n in range(5)
+			for n in range(6)
 		]
-		return record, dict(EMPLOYER, e_verify=True), entries
+		return record, EMPLOYER, entries
 
 	def _crowded(self) -> str:
 		record, employer, entries = self._fixture()
@@ -773,7 +695,6 @@ class TheProseBoxIsASharedBudget(unittest.TestCase):
 		record, employer, entries = self._fixture()
 		return "\n".join(
 			i9_pdf._receipt_lines(record)
-			+ i9_pdf._ssn_lines(record, "", employer)
 			+ i9_pdf._attestation_lines(record)
 			+ i9_pdf._overflow_note(entries)
 			+ i9_pdf._employer_lines(employer)
@@ -811,10 +732,15 @@ class TheProseBoxIsASharedBudget(unittest.TestCase):
 		self.assertNotIn("SRC4", body)
 		self.assertNotIn("listed here", body)
 
-	def test_a_short_group_behind_a_dropped_one_still_fits(self):
-		"""Order decides priority, not eligibility. Dropping the 300-character
-		overflow LIST must not also drop the 25-character EIN behind it."""
-		self.assertIn("Employer EIN: 12-3456789.", self._crowded())
+	def test_short_groups_behind_a_dropped_one_still_fit(self):
+		"""ORDER DECIDES PRIORITY, NOT ELIGIBILITY, and this is the assertion that
+		says so. The ~280-character overflow LIST does not fit; the 25-character
+		EIN and the copies line behind it do, and a rule that stopped at the first
+		group too big to fit would have thrown both away for no reason.
+		"""
+		body = self._crowded()
+		self.assertIn("Employer EIN: 12-3456789.", body)
+		self.assertIn("Document copies retained with this form: List A, List B, List C", body)
 
 	def test_no_line_is_cut_mid_sentence(self):
 		"""The old rule sliced the joined body and appended a full stop, so the
@@ -825,7 +751,6 @@ class TheProseBoxIsASharedBudget(unittest.TestCase):
 		"""
 		openings = (
 			"RECEIPT under 8 CFR",
-			"SSN on file:",
 			"Section 1 signed",
 			"Section 2 signed",
 			"Electronically signed pursuant",
@@ -841,11 +766,6 @@ class TheProseBoxIsASharedBudget(unittest.TestCase):
 	def test_the_receipt_deadline_outranks_the_bookkeeping(self):
 		"""What somebody still owes, and by when, is the first thing kept."""
 		self.assertTrue(self._crowded().startswith("RECEIPT under 8 CFR"))
-
-	def test_the_bookkeeping_is_what_gets_dropped(self):
-		"""The other half of the ordering claim. The copies line goes, and it goes
-		because the lists it names are printed in the Section 2 boxes above it."""
-		self.assertNotIn("Document copies retained", self._crowded())
 
 	def test_a_single_group_longer_than_the_whole_budget_is_still_said(self):
 		"""Dropping it would say nothing at all where the caller passed one very

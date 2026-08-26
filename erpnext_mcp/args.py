@@ -132,7 +132,54 @@ def as_float(value, key: str) -> float:
 		raise ToolError(f"{key} must be a number, got {value!r}") from None
 
 
-def as_gps(args: dict, latitude_key: str = "gps_lat", longitude_key: str = "gps_lon") -> str:
+def as_datetime_claim(value, key: str, now: str) -> str:
+	"""A moment a CLIENT states, checked only for the thing that cannot be true.
+
+	v0.137.0. Every other timestamp in this app is the server's own clock, on the
+	argument that a handset which could set one could backdate it. That argument
+	holds wherever the server is present at the event — and fails where it is
+	not: an I-9 built and signed on a phone in an orchard with no bars and
+	uploaded at the shed an hour later has an attestation moment the server never
+	saw, and stamping `now()` would record the upload and call it the signature.
+
+	SO THE CLAIM IS TAKEN AND ONLY THE IMPOSSIBLE IS REFUSED. A timestamp in the
+	FUTURE cannot describe something that has happened, and it is what a
+	clock-skewed or tampered client produces; everything else is unverifiable in
+	both directions and is recorded as the claim it is. Callers keep the server's
+	own arrival time separately, so the two can be compared later.
+	"""
+	if value in (None, ""):
+		raise ToolError(f"{key} must be a date and time, got {value!r}")
+	try:
+		moment = frappe.utils.get_datetime(value)
+	except (TypeError, ValueError):
+		# A REFUSAL RATHER THAN A TRACEBACK. This value comes off a handset, so a
+		# malformed one is an ordinary bad request and the caller has to be told
+		# which argument to fix — an unhandled ValueError halfway through filing a
+		# federal record says only that something went wrong.
+		raise ToolError(f"{key} must be a date and time like '2026-08-25 16:32:20', got {value!r}.") from None
+	if moment is None:  # pragma: no cover - a Frappe that answers None rather than raising
+		raise ToolError(f"{key} must be a date and time, got {value!r}")
+	if frappe.utils.get_datetime(moment) > frappe.utils.get_datetime(now):
+		raise ToolError(
+			f"{key} is {value!r}, which is in the future. A signature cannot have been made "
+			f"later than now, so this is a clock that is wrong rather than a moment that "
+			f"happened. Nothing was changed."
+		)
+	return str(moment)
+
+
+#: The spellings a client may use for ONE unqualified fix, in precedence order.
+#: THE ORDER MATCHES `signatures._context` AND HAS TO: that function reads the
+#: same argument dict to build the Signing Evidence row while `as_gps` builds the
+#: column on the form, and both describe one signature. A caller sending
+#: `gps_latitude` and `gps_lat` with different values would otherwise put one
+#: location in the register and a different one on the record — two answers to
+#: "where was this signed" with nothing to say which is right.
+GPS_KEYS = (("gps_latitude", "gps_longitude"), ("gps_lat", "gps_lon"), ("latitude", "longitude"))
+
+
+def as_gps(args: dict, *pairs: tuple) -> str:
 	"""One fix as `"45.523100,-122.676500"`, or "". v0.136.0.
 
 	ONE `Data` COLUMN RATHER THAN TWO `Float`s, and the reason is the bug this
@@ -146,13 +193,13 @@ def as_gps(args: dict, latitude_key: str = "gps_lat", longitude_key: str = "gps_
 	ALL OR NOTHING. A latitude with no longitude is a point on a line rather
 	than a place, which is the rule `signatures._context` already applies to the
 	Signing Evidence pair; half a fix recorded as though it were a whole one is
-	worse than none. Both keys are read for either spelling the clients use.
+	worse than none.
 
-	THE (0, 0) PAIR IS REFUSED HERE TOO, for the reason above — a handset whose
-	location services returned nothing before the fix landed sends two zeroes,
-	and no farm this app serves is in the ocean. A zero on ONE axis is kept:
-	the equator and the prime meridian are real lines and a coordinate on one
-	of them is a real place.
+	THE (0, 0) PAIR IS REFUSED, for the reason above — a handset whose location
+	services returned nothing before the fix landed sends two zeroes, and no farm
+	this app serves is in the ocean. A zero on ONE axis is kept: the equator and
+	the prime meridian are real lines and a coordinate on one of them is a real
+	place.
 
 	`as_float` IS DELIBERATELY NOT USED FOR THE ABSENCE TEST. It answers 0.0 for
 	absent, for "" and for an explicit 0 alike, so branching on its result would
@@ -160,23 +207,24 @@ def as_gps(args: dict, latitude_key: str = "gps_lat", longitude_key: str = "gps_
 	raw values decide whether there is a fix at all; `as_float` only parses one
 	that is already known to be there.
 
-	THE SPELLING PRECEDENCE MATCHES `signatures._context` AND HAS TO. That
-	function reads the same argument dict to build the Signing Evidence row while
-	this one builds the column on the form, and both describe ONE signature. A
-	caller sending `gps_latitude` and `gps_lat` with different values would
-	otherwise put one location in the register and a different one on the record
-	— two answers to "where was this signed" with nothing to say which is right.
-	So `gps_latitude` wins here exactly as it wins there; `latitude_key` is the
-	fallback rather than the first look.
+	NAMED PAIRS READ ONLY WHAT THEY NAME, and that is why they are a parameter
+	rather than another entry in `GPS_KEYS`. v0.137.0 files a whole signed I-9 in
+	one call and carries a fix for EACH section — `section_1_gps_lat` and
+	`section_2_gps_lat` — so a caller reporting only Section 1's must not have it
+	silently copied onto Section 2 by an alias chain falling through to a bare
+	`gps_lat`. Passing pairs replaces the default chain outright; passing none
+	keeps it, which is what every single-fix caller wants.
 	"""
-	latitude = args.get("gps_latitude", args.get(latitude_key, args.get("latitude")))
-	longitude = args.get("gps_longitude", args.get(longitude_key, args.get("longitude")))
-	if latitude is None or latitude == "" or longitude is None or longitude == "":
-		return ""
-	fix = (as_float(latitude, latitude_key), as_float(longitude, longitude_key))
-	if fix == (0.0, 0.0):
-		return ""
-	return f"{fix[0]:.6f},{fix[1]:.6f}"
+	for latitude_key, longitude_key in pairs or GPS_KEYS:
+		latitude = args.get(latitude_key)
+		longitude = args.get(longitude_key)
+		if latitude is None or latitude == "" or longitude is None or longitude == "":
+			continue
+		fix = (as_float(latitude, latitude_key), as_float(longitude, longitude_key))
+		if fix == (0.0, 0.0):
+			return ""
+		return f"{fix[0]:.6f},{fix[1]:.6f}"
+	return ""
 
 
 #: What a model actually sends when it means yes or no. JSON booleans are the

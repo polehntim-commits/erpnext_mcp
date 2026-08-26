@@ -4812,6 +4812,35 @@ def _build_utils() -> types.ModuleType:
 
 	module.time_diff_in_seconds = time_diff_in_seconds
 
+	def get_datetime(value=None):
+		"""frappe.utils.get_datetime — a datetime from whatever shape it arrives in.
+
+		ADDED DELIBERATELY in v0.137.0, which is the process this harness asks for
+		when a tool reaches for a framework function it does not implement.
+		`args.as_datetime_claim` needs it to compare a CLIENT-STATED signing moment
+		against now, because a phone-built I-9 is signed in an orchard and uploaded
+		at the shed and the server was present at neither.
+
+		FAITHFUL IN THE WAY THAT MATTERS HERE: it keeps the TIME. A double built on
+		`_getdate` would answer midnight for every value, so a signature stamped
+		16:32 and one stamped 23:59 would compare equal and a future-time refusal
+		would fire a day late. Real Frappe accepts `datetime`, `date`, and both the
+		space- and `T`-separated string forms; so does this.
+		"""
+		if value is None:
+			# `_now()` hands back a STRING and advances the harness clock one
+			# second per call — see its own definition. Parsing it here rather
+			# than returning it keeps this function's contract (a datetime) the
+			# same as real Frappe's.
+			return datetime.datetime.fromisoformat(_now())
+		if isinstance(value, datetime.datetime):
+			return value
+		if isinstance(value, datetime.date):
+			return datetime.datetime(value.year, value.month, value.day)
+		return datetime.datetime.fromisoformat(str(value).strip().replace("T", " "))
+
+	module.get_datetime = get_datetime
+
 	def add_to_date(
 		date=None,
 		years=0,

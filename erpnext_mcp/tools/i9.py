@@ -119,7 +119,7 @@ import frappe
 from frappe.utils import getdate
 
 from .. import compat, i9_pdf, roles, security
-from ..args import as_bool, as_date, as_gps, as_int, as_str, resolve_company
+from ..args import as_bool, as_date, as_datetime_claim, as_gps, as_int, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
 from . import artifacts, files, signers
@@ -1968,21 +1968,12 @@ def _employer_block(company: str) -> dict:
 	that is otherwise complete; `render_i9_pdf` reports which parts came back
 	empty, and an empty box on a printed I-9 is a box somebody writes in.
 	"""
-	block = {"name": "", "address": "", "ein": "", "e_verify": False}
+	block = {"name": "", "address": "", "ein": ""}
 	try:
 		settings = frappe.get_doc(I9_SETTINGS)
 		block["name"] = str(settings.get("business_legal_name") or "").strip()
 		block["address"] = str(settings.get("business_address") or "").strip()
 		block["ein"] = str(settings.get("business_ein") or "").strip()
-		# v0.136.0, and it belongs beside the EIN rather than anywhere else: the
-		# module docstring of `i9_pdf` already argues that the EIN is on this
-		# block because it is an E-VERIFY datum with no box on Form I-9. Whether
-		# the employer is enrolled decides one thing on the printed page — the
-		# Social Security Number box is optional on Form I-9 and REQUIRED by
-		# E-Verify, which submits nine digits and cannot be run from four — so
-		# `i9_pdf._ssn_lines` needs to know before it can say what a blank box
-		# means for this employer.
-		block["e_verify"] = bool(int(settings.get("enrolled_in_e_verify") or 0))
 	except Exception:  # pragma: no cover - a site whose Single has not migrated
 		pass
 
@@ -2193,7 +2184,7 @@ def render_i9_pdf(args: dict) -> ToolResult:
 		"reverifications": len(reverifications),
 		"reverifications_not_on_page": overflow,
 		"employer": employer,
-		"incomplete": _incomplete_boxes(record, employer, ssn),
+		"incomplete": _incomplete_boxes(record),
 		"note": _RENDER_NOTE,
 	}
 	summary = f"I-9 {name} rendered onto the USCIS form as {file_name} ({len(pdf):,} bytes) and attached" + (
@@ -2260,7 +2251,7 @@ _REQUIRED_BOXES = (
 )
 
 
-def _incomplete_boxes(record: dict, employer: dict | None = None, full_ssn: str = "") -> list[str]:
+def _incomplete_boxes(record: dict) -> list[str]:
 	"""The named boxes a printed copy of this record will have nothing in."""
 	missing = [label for column, label in _REQUIRED_BOXES if not str(record.get(column) or "").strip()]
 	documents = [
@@ -2269,15 +2260,6 @@ def _incomplete_boxes(record: dict, employer: dict | None = None, full_ssn: str 
 	if not documents:
 		missing.append("Section 2: no List A or List B+C document recorded")
 
-	# THE SSN BOX IS NAMED ONLY FOR AN E-VERIFY EMPLOYER, because only for an
-	# E-Verify employer is it missing. v0.136.0. Form I-9's Social Security
-	# Number box is OPTIONAL — a farm that does not use E-Verify has a complete
-	# form with nine empty cells, and listing it as an unfinished box would send
-	# them looking for work that does not exist. E-Verify submits nine digits and
-	# cannot be run from four, so for an enrolled employer the same blank box is
-	# a real gap and this is the answer the app's "still to complete" panel reads.
-	if (employer or {}).get("e_verify") and not i9_pdf._ssn_digits(full_ssn):
-		missing.append("Section 1: Social Security Number (required — this employer uses E-Verify)")
 	return missing
 
 
@@ -2386,6 +2368,66 @@ def link_document_copy(employee: str, kind: str, file_url: str) -> str:
 	return name
 
 
+#: The signing metadata a phone-built I-9 carries home with it, per section.
+#: v0.137.0. Each entry is (column prefix, the caller's two coordinate keys).
+SIGNING_METADATA_SECTIONS = (
+	("section_1", ("section_1_gps_lat", "section_1_gps_lon")),
+	("section_2", ("section_2_gps_lat", "section_2_gps_lon")),
+)
+
+
+def _signing_metadata(args: dict, name: str, row: dict) -> dict:
+	"""When and where each section was signed, as the handset reports it. v0.137.0.
+
+	THE ARCHITECTURE MOVED AND THIS IS THE HOLE IT LEFT. The iOS app builds and
+	seals the retained I-9 on the phone and files the finished file here, so the
+	signatures no longer arrive at the server as separate calls — and every
+	column that used to be filled as a side effect of receiving one
+	(`section_1_signed_at`, `_signed_ip`, `_signed_gps`) stayed empty. 8 CFR
+	274a.2(h)(2) asks for a record of WHO signed and WHEN, and a retained form
+	whose only timestamp is "when the file arrived" does not have it: a crew
+	signs in an orchard with no bars and the phone uploads at the shed an hour
+	later.
+
+	THE TIMESTAMP IS THE CLIENT'S CLAIM AND IS RECORDED AS ONE. `submit_signature`
+	refuses a client-supplied `signed_on` and stamps its own, on the argument that
+	a handset which could set it could backdate it. That argument is sound and
+	does not survive the move: the server is no longer present at the signing, so
+	stamping its own clock would record the upload and label it the attestation —
+	a wrong answer rather than a missing one. So the claim is taken, and the
+	server's own arrival time is kept separately and unaltered in `signed_pdf_on`.
+	Both are on the record and an audit can compare them.
+
+	A FUTURE TIMESTAMP IS REFUSED, because it is the one claim that cannot be
+	true and the one a clock-skewed or tampered handset produces. Everything else
+	is corroboration this app does not pretend to verify.
+
+	NOTHING ALREADY RECORDED IS OVERWRITTEN. A signature that DID come through
+	`collect_form_signature` was timed at the pad, by the server, at the moment
+	it was drawn; a later upload restating it must not replace the better record
+	with the weaker one.
+	"""
+	updates: dict = {}
+	now = frappe.utils.now()
+	for prefix, gps_keys in SIGNING_METADATA_SECTIONS:
+		stamp = as_str(args, f"{prefix}_signed_at")
+		fix = as_gps(args, gps_keys)
+		if not stamp and not fix:
+			continue
+		if stamp:
+			moment = as_datetime_claim(stamp, f"{prefix}_signed_at", now)
+			if not str(row.get(f"{prefix}_signed_at") or "").strip():
+				updates[f"{prefix}_signed_at"] = moment
+				# The address is the server's own observation and is the one part
+				# of this packet the caller cannot state. It goes on beside the
+				# moment it belongs to rather than on its own.
+				if not str(row.get(f"{prefix}_signed_ip") or "").strip():
+					updates[f"{prefix}_signed_ip"] = _remote_addr()
+		if fix and not str(row.get(f"{prefix}_signed_gps") or "").strip():
+			updates[f"{prefix}_signed_gps"] = fix
+	return updates
+
+
 def attach_signed_i9(args: dict) -> ToolResult:
 	"""File the signed or scanned copy against the I-9 record it belongs to.
 
@@ -2413,7 +2455,24 @@ def attach_signed_i9(args: dict) -> ToolResult:
 	"""
 	name = _resolve_form(args)
 	row = frappe.db.get_value(
-		I9_FORM, name, ["employee", "employee_name", "status", "signed_pdf"], as_dict=True
+		I9_FORM,
+		name,
+		[
+			"employee",
+			"employee_name",
+			"status",
+			"signed_pdf",
+			# v0.137.0. Read so `_signing_metadata` can see what is already
+			# recorded: a moment captured at the pad is better evidence than one
+			# restated by an upload, and must not be replaced by it.
+			"section_1_signed_at",
+			"section_1_signed_ip",
+			"section_1_signed_gps",
+			"section_2_signed_at",
+			"section_2_signed_ip",
+			"section_2_signed_gps",
+		],
+		as_dict=True,
 	)
 	if not row:  # pragma: no cover - resolved a moment ago
 		raise ToolError(f"no I-9 Form called {name!r} on this site.")
@@ -2434,6 +2493,12 @@ def attach_signed_i9(args: dict) -> ToolResult:
 			f"was filed in error; the existing File stays attached to the record either way. "
 			f"Nothing was changed."
 		)
+
+	# RESOLVED BEFORE THE FILE IS TOUCHED. `_signing_metadata` refuses a
+	# timestamp in the future, and a refusal that fired after the File had been
+	# made private and re-pointed would leave the bytes moved and the record not
+	# updated — the same ordering `submit_i9_section_2` uses for its signer check.
+	metadata = _signing_metadata(args, name, row)
 
 	file_name, file_url = _signed_copy(args)
 	# THROUGH THE DOCUMENT, NOT THROUGH `db.set_value`, and the difference is the
@@ -2456,10 +2521,13 @@ def attach_signed_i9(args: dict) -> ToolResult:
 	# changed directory has a different URL, and the form has to hold the one
 	# that now resolves.
 	stored = str(handle.get("file_url") or file_url)
+	# `signed_pdf_on` IS THE SERVER'S OWN CLOCK AND STAYS THAT WAY. It records
+	# when the file ARRIVED, which is a different fact from when either section
+	# was signed, and keeping the two apart is what lets an audit compare them.
 	frappe.db.set_value(
 		I9_FORM,
 		name,
-		{"signed_pdf": stored, "signed_pdf_on": frappe.utils.now()},
+		{"signed_pdf": stored, "signed_pdf_on": frappe.utils.now(), **metadata},
 		update_modified=False,
 	)
 
@@ -2471,6 +2539,10 @@ def attach_signed_i9(args: dict) -> ToolResult:
 			"file": stored,
 			"file_docname": file_name,
 			"replaced": existing or None,
+			# WHICH COLUMNS THIS UPLOAD FILLED, by name. The moment and the place
+			# are the client's claim rather than the server's observation, so the
+			# audit row records that they were taken and when they were taken.
+			"signing_metadata": sorted(metadata) or None,
 		},
 	)
 
@@ -2483,6 +2555,10 @@ def attach_signed_i9(args: dict) -> ToolResult:
 			"signed_pdf": stored,
 			"file_docname": file_name,
 			"replaced": existing or None,
+			# Reported rather than assumed. A caller that sent a fix for a section
+			# already carrying one is told it was kept, instead of believing it
+			# overwrote it.
+			"signing_metadata": {key: metadata[key] for key in sorted(metadata)},
 		},
 		summary=f"signed I-9 filed against {name}" + (f", replacing {existing}" if existing else ""),
 	)

@@ -2135,7 +2135,6 @@ def submit_i9_section_1(
 	employee=None,
 	citizenship_status=None,
 	ssn_last_four=None,
-	ssn=None,
 	gps_lat=None,
 	gps_lon=None,
 	address_street=None,
@@ -2189,23 +2188,6 @@ def submit_i9_section_1(
 	`preparer_used` without carrying that signature would record an attestation
 	nobody made. An operator files those in the Desk.
 
-	`ssn` TAKES ALL NINE DIGITS AND IS NEW IN v0.136.0. `ssn_last_four` is
-	unchanged and remains what a handset should send by default. The tool has
-	accepted a full `ssn` since v0.47.0 and this transport did not carry one, so
-	a site that had switched `store_full_ssn` ON in I-9 Settings — the deliberate
-	act of saying "we run E-Verify and we keep the whole number" — still could
-	not be given it by the app that collects it, and the encrypted column stayed
-	empty on every phone-filed form. The wizard holds all nine (it draws two
-	federal forms from them) and threw eight away at the transport.
-
-	BOTH GATES STILL APPLY AND NEITHER IS THIS TRANSPORT'S. `tools/i9` reduces
-	whatever arrives to four digits for `ssn_last_four` regardless, and writes
-	the nine to the encrypted `ssn_full` column ONLY where `store_full_ssn` is
-	on. A phone that sends nine to a site that never asked for them has written
-	four, exactly as before. `get_i9_form` now reports that switch back to the
-	client so the app can send four to a site that wants four — the reason it
-	sent four unconditionally was that it had no way to find out.
-
 	`gps_lat` AND `gps_lon` ARE RECORDED ONLY ALONGSIDE A SIGNATURE, which is the
 	tool's rule and not this one's: they land in `section_1_signed_gps` in the
 	same branch that stamps the moment and the address, so a section nobody
@@ -2228,7 +2210,6 @@ def submit_i9_section_1(
 	}
 	for key, value in (
 		("ssn_last_four", ssn_last_four),
-		("ssn", ssn),
 		("gps_lat", gps_lat),
 		("gps_lon", gps_lon),
 		("address_street", address_street),
@@ -3045,52 +3026,7 @@ def get_i9_form(user: str, employee=None, docname=None) -> dict:
 		personnel.require_hr_role()
 
 	result = i9.get_i9_form({"employee": person})
-	data = dict(result.data)
-
-	# ── WHAT THIS SITE WANTS COLLECTED, SO THE APP CAN STOP GUESSING ────
-	#
-	# v0.136.0. Two booleans OFF I-9 SETTINGS, not off this worker's record —
-	# they are facts about the employer's own policy, and the app needs them
-	# BEFORE it decides what to put on the wire. `OnboardingI9Section1.apiParams`
-	# sends four SSN digits with a comment saying it holds all nine and that
-	# "a handset cannot read" whether the site wants them, "so sending nine
-	# digits to find out would be transmitting the most sensitive number on the
-	# form on the chance the site wanted it". That reasoning was right and the
-	# missing read is what forced it: `store_full_ssn` was reachable only through
-	# the MCP `get_i9_settings` tool, which no phone calls.
-	#
-	# So a farm that switched full-SSN storage on — the deliberate act of saying
-	# "we run E-Verify and we keep the whole number" — could never be given one
-	# by the app that collects it, and `ssn_full` stayed empty on every
-	# phone-filed form on every site. `submit_i9_section_1` takes `ssn` from this
-	# release; this is how the app knows whether to send it.
-	#
-	# NEITHER IS A SECRET AND NEITHER NAMES ANYBODY. They are two switches on a
-	# Single doctype describing what the employer does, readable by any caller
-	# who already got this far — which is the worker themselves or somebody
-	# holding the HR role, both gated above.
-	data["site_policy"] = _i9_site_policy()
-	return data
-
-
-def _i9_site_policy() -> dict:
-	"""The two I-9 Settings switches a client has to know before it posts.
-
-	NEVER RAISES, and returns the CONSERVATIVE answer when it cannot find out. A
-	site mid-migrate answers `store_full_ssn: false`, which makes the app send
-	four digits — the behaviour every release before v0.136.0 had. Guessing
-	`true` on a failed read would have a handset transmit nine digits to a site
-	that may never have asked for them, which is the one error worth ruling out
-	by construction.
-	"""
-	try:
-		policy = i9.get_i9_settings({}).data
-	except Exception:  # pragma: no cover - a site whose Single has not migrated
-		return {"store_full_ssn": False, "enrolled_in_e_verify": False}
-	return {
-		"store_full_ssn": bool(policy.get("store_full_ssn")),
-		"enrolled_in_e_verify": bool(policy.get("enrolled_in_e_verify")),
-	}
+	return result.data
 
 
 # ── 33. generate_i9_pdf ─────────────────────────────────────────────────────
@@ -3102,7 +3038,6 @@ def generate_i9_pdf(
 	docname=None,
 	overwrite=None,
 	additional_information=None,
-	include_full_ssn=None,
 ) -> dict:
 	"""Fill the federal form from the record and hand the phone a URL for it.
 
@@ -3115,35 +3050,19 @@ def generate_i9_pdf(
 	record; this hands back `file_url`, which is what the app opens, prints and
 	hands to the two people who have to sign it.
 
-	`include_full_ssn` IS ACCEPTED FROM v0.136.0, AND THE ARGUMENT THAT REFUSED IT
-	IS WORTH RESTATING BECAUSE IT WAS HALF RIGHT. It said the number needs "a
+	`include_full_ssn` IS NOT ACCEPTED HERE and is not a rename away — it is
+	absent. It would print somebody's nine-digit Social Security number onto a
+	page a phone in a packing shed could then mail anywhere, and it needs a
 	decision about the site's own retention policy that belongs to an operator
-	with the Desk in front of them rather than to whoever is holding the handset",
-	and concluded that the phone must therefore never ask. The first half is
-	correct and the conclusion did not follow: THAT DECISION IS `store_full_ssn`
-	IN I-9 SETTINGS, it is made in the Desk by an operator, and the tool has
-	refused every caller without it since v0.47.0. A flag on this call is not a
-	second policy — it is the caller saying which of the two pages they want, and
-	a site that never switched storage on has no nine digits to print either way.
+	with the Desk in front of them rather than to whoever is holding the handset.
 
-	WHAT THE OLD SHAPE ACTUALLY PRODUCED was the bug this release exists to fix.
-	"The rendered page leaves the box empty and the employee writes the number on
-	it, which is how the paper form has always worked" describes a page that gets
-	PRINTED and signed with a pen. The app now seals and flattens the PDF with the
-	captured signatures stamped into the page content, so nobody is writing
-	anything on it afterwards — the employee typed all nine digits into the wizard
-	and went back to work, and what came out the other end was a federal form with
-	nine empty cells that an operator read as "the SSN was never collected".
-
-	THREE GATES, ALL OF THEM ALREADY HERE. `require_hr_role` above; the site's
-	`store_full_ssn`, enforced by `i9._full_ssn`, which REFUSES rather than
-	silently blanks when the caller asks and the site does not keep them; and the
-	read is written into the audit row with `full_ssn: true`, because a page
-	carrying somebody's Social Security number is an event a retention audit
-	should be able to find. Omitted or false, this is the page it always was —
-	and `_ssn_lines` now prints the last four and the reason the box is blank into
-	Additional Information, so an unset flag no longer produces a page that says
-	nothing about a number the record holds.
+	AND FROM v0.137.0 THE QUESTION DOES NOT ARISE HERE AT ALL. The iOS app builds
+	and seals the retained I-9 on the handset, where the nine digits already are,
+	and uploads the finished file through `upload_signed_i9`. This endpoint draws
+	the WORKING copy — the page an operator prints from the Desk — so the SSN is
+	the phone's to place and this one leaves the box empty. v0.136.0 briefly
+	accepted the flag; it was reverted rather than left as a capability nothing
+	needs, because the argument for refusing it was never really about the flag.
 
 	`overwrite` IS FORWARDED, because the wizard's realistic second call is the
 	one after a correction — a misspelled name, a document number typed wrong —
@@ -3164,8 +3083,6 @@ def generate_i9_pdf(
 		inner["overwrite"] = overwrite
 	if additional_information is not None:
 		inner["additional_information"] = additional_information
-	if include_full_ssn is not None:
-		inner["include_full_ssn"] = include_full_ssn
 
 	result = i9.render_i9_pdf(inner)
 	data = result.data
@@ -3181,12 +3098,6 @@ def generate_i9_pdf(
 		"incomplete": data.get("incomplete") or [],
 		"reverifications_not_on_page": data.get("reverifications_not_on_page") or 0,
 		"replaced": data.get("replaced"),
-		# WHETHER THE NINE DIGITS WENT ON THE PAGE, reported rather than assumed
-		# from what was asked for. A caller that passed the flag to a site whose
-		# `store_full_ssn` is off is refused outright by the tool, so `false` here
-		# means the flag was not passed — and the app showing "SSN: on file, not
-		# printed" is telling the truth about the artefact it is holding.
-		"full_ssn_printed": bool(data.get("full_ssn_printed")),
 		"note": data.get("note"),
 	}
 
@@ -3194,7 +3105,19 @@ def generate_i9_pdf(
 # ── 34. upload_signed_i9 ────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("upload_signed_i9", mutating=True, limit=guard.UPLOAD_LIMIT)
-def upload_signed_i9(user: str, employee=None, docname=None, file_token=None, overwrite=None) -> dict:
+def upload_signed_i9(
+	user: str,
+	employee=None,
+	docname=None,
+	file_token=None,
+	overwrite=None,
+	section_1_signed_at=None,
+	section_1_gps_lat=None,
+	section_1_gps_lon=None,
+	section_2_signed_at=None,
+	section_2_gps_lat=None,
+	section_2_gps_lon=None,
+) -> dict:
 	"""File the photographed or scanned signed copy against the I-9 record.
 
 	THE OTHER HALF OF `generate_i9_pdf`, and the half that is the federal record.
@@ -3222,6 +3145,36 @@ def upload_signed_i9(user: str, employee=None, docname=None, file_token=None, ov
 	harms nobody; this WRITES the document the employer will be inspected on, and
 	an account that could file its own signed I-9 could file one nobody signed.
 
+	THE SIGNING METADATA TRAVELS WITH THE FILE FROM v0.137.0, and it is here
+	because the architecture moved. The app now BUILDS and seals the I-9 on the
+	handset — the signatures are drawn into the page on the phone and the finished
+	file comes up this route — so the server is no longer present when either
+	section is signed and the columns that used to be filled as a side effect of
+	receiving a signature stayed empty on every phone-built form.
+
+	8 CFR 274a.2(h)(2) asks for a record of who signed and WHEN. `signed_pdf_on`
+	answers "when the file arrived", which is a different question: a crew signs
+	in an orchard with no bars and the phone uploads at the shed an hour later. So
+	`section_1_signed_at` / `section_2_signed_at` carry the moment each attestation
+	was actually made, and `section_N_gps_lat` / `_lon` carry where the handset
+	said it was — sent as a PAIR per section, because half a fix is a point on a
+	line rather than a place, and named per section so one section's location can
+	never be copied onto the other.
+
+	THE TIMESTAMPS ARE THE CLIENT'S CLAIM. `submit_signature` refuses a
+	client-supplied `signed_on` and stamps its own, on the argument that a handset
+	which could set it could backdate it — sound wherever the server witnesses the
+	event, and not survivable here, where stamping `now()` would record the upload
+	and label it the attestation. Only a FUTURE timestamp is refused, because it
+	is the one claim that cannot be true. The server's own arrival time is kept
+	separately and unaltered in `signed_pdf_on`, so an audit can compare them, and
+	the IP is the server's own observation.
+
+	NOTHING ALREADY RECORDED IS OVERWRITTEN. A section that was signed at the pad
+	through `submit_signature` was timed by the server at the moment the ink
+	landed; a later upload restating it keeps the better record. The answer
+	reports which columns this call actually filled.
+
 	Every other refusal is the tool's: a Destroyed I-9, a file that is not a scan,
 	a second signed copy without `overwrite`. The File is made private on the way
 	in whatever it was.
@@ -3240,6 +3193,16 @@ def upload_signed_i9(user: str, employee=None, docname=None, file_token=None, ov
 	inner = {"employee": person, "file_token": file_token}
 	if overwrite is not None:
 		inner["overwrite"] = overwrite
+	for key, value in (
+		("section_1_signed_at", section_1_signed_at),
+		("section_1_gps_lat", section_1_gps_lat),
+		("section_1_gps_lon", section_1_gps_lon),
+		("section_2_signed_at", section_2_signed_at),
+		("section_2_gps_lat", section_2_gps_lat),
+		("section_2_gps_lon", section_2_gps_lon),
+	):
+		if value is not None:
+			inner[key] = value
 
 	result = i9.attach_signed_i9(inner)
 	data = result.data
@@ -3251,6 +3214,11 @@ def upload_signed_i9(user: str, employee=None, docname=None, file_token=None, ov
 		"signed_pdf": data.get("signed_pdf"),
 		"file_token": data.get("file_docname"),
 		"replaced": data.get("replaced"),
+		# WHICH COLUMNS THIS UPLOAD ACTUALLY FILLED. A phone that sent a moment
+		# for a section already timed at the pad kept the earlier record, and this
+		# is how it finds out — the alternative is a client that believes it wrote
+		# something it did not.
+		"signing_metadata": data.get("signing_metadata") or {},
 	}
 
 

@@ -12521,13 +12521,10 @@ TOOLS = {
 		"back with attach_signed_i9.\n\n"
 		"THE SSN BOX IS EMPTY unless include_full_ssn is passed AND store_full_ssn "
 		"is on in I-9 Settings. This is the only tool in the app that reads the "
-		"encrypted full number back, and the read is recorded in the audit row. An "
-		"EMPTY BOX NOW EXPLAINS ITSELF: where the record holds ssn_last_four, "
-		"Additional Information states it as XXX-XX-1234 and says why the nine-cell "
-		"box is blank — the box has no way to show four digits as four, and five "
-		"empty cells followed by four digits reads as an SSN beginning 0000. Where "
-		"the employer is enrolled in E-Verify the same line says the full number is "
-		"still required, and the empty box is named in `incomplete`.\n\n"
+		"encrypted full number back, and the read is recorded in the audit row. The "
+		"iOS app builds and seals the RETAINED copy on the handset, where the nine "
+		"digits already are, and files it with attach_signed_i9; this tool draws the "
+		"working copy an operator prints from the Desk.\n\n"
 		"COPIES OF THE EXAMINED DOCUMENTS ARE NAMED where the app photographed them: "
 		"attach_onboarding_document points list_a/b/c_doc_copy at the picture as it "
 		"is filed, and Additional Information records which lists are retained with "
@@ -12581,7 +12578,16 @@ TOOLS = {
 		"MADE PRIVATE ON THE WAY IN, whatever it was: a signed I-9 names a person, "
 		"their date of birth and their immigration status. Scans only (.pdf, .jpg, "
 		".png, .heic, .tiff). REFUSES a second signed copy unless overwrite is passed. "
-		"Refused on a Destroyed I-9. Logged to I-9 Audit Log as Signed Copy Filed.",
+		"Refused on a Destroyed I-9. Logged to I-9 Audit Log as Signed Copy Filed.\n\n"
+		"IT ALSO CARRIES THE SIGNING METADATA, because the retained I-9 is built and "
+		"signed on the handset and the server is present at neither. section_1/2_signed_at "
+		"is when each attestation was made — the CLIENT's claim, since signed_pdf_on "
+		"records only when the file arrived and the two differ by however long the crew "
+		"was out of signal. section_N_gps_lat/lon is where the handset said it was. "
+		"A FUTURE timestamp is refused; nothing else is verifiable and none of it is "
+		"treated as though it were. A column already filled is never overwritten — a "
+		"moment captured at the pad is better evidence than one restated by an upload — "
+		"and the answer reports which columns this call actually filled.",
 		{
 			"i9_form": _field(_STRING, "The I-9 Form docname, e.g. I9-2026-0001."),
 			"name": _field(_STRING, "An I-9 Form docname, or an employee."),
@@ -12594,6 +12600,24 @@ TOOLS = {
 				"Replace a signed copy that was filed in error. The File that was there "
 				"stays attached to the record.",
 			),
+			"section_1_signed_at": _field(
+				_STRING,
+				"When Section 1 was actually signed, 'YYYY-MM-DD HH:MM:SS'. Refused if it "
+				"is in the future. Ignored where the column is already filled.",
+			),
+			"section_1_gps_lat": _field(
+				_NUMBER,
+				"Decimal degrees, -90 to 90. Where the handset was when Section 1 was "
+				"signed. Sent with section_1_gps_lon or not at all.",
+			),
+			"section_1_gps_lon": _field(_NUMBER, "Decimal degrees, -180 to 180. Pairs with the above."),
+			"section_2_signed_at": _field(
+				_STRING, "When Section 2 was actually signed. Same rules as Section 1's."
+			),
+			"section_2_gps_lat": _field(
+				_NUMBER, "Where the handset was when Section 2 was signed. Pairs with the below."
+			),
+			"section_2_gps_lon": _field(_NUMBER, "Decimal degrees, -180 to 180. Pairs with the above."),
 		},
 		mutating=True,
 		title="File the signed I-9",

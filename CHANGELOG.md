@@ -3,6 +3,56 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.137.0 — 2026-08-25 — the server was not there when it was signed
+
+**ARCHITECTURE CORRECTION.** The iOS app builds and seals the retained I-9 on the
+handset — where the SSN digits and the signatures already are — and uploads the
+finished file through `attach_signed_i9`. The server does not draw the retained
+page and does not receive the signatures separately. v0.136.0 was written against
+the opposite assumption; the half of it that depended on that is reverted here and
+the half that stores facts is kept and finished. Full note in
+`RELEASES/v0.137.0.md`.
+
+**REVERTED:** `i9_pdf._ssn_lines` and its Additional Information entry;
+`include_full_ssn` on the mobile `generate_i9_pdf`; `ssn` on
+`submit_i9_section_1`; `site_policy` on `get_i9_form`; the E-Verify entry in
+`_incomplete_boxes` and `e_verify` on `_employer_block`. `test_ios_contract`'s
+`test_34` is **restored to the assertion v0.136.0 replaced**. `_full_ssn`,
+`_store_full_ssn_enabled` and the `full_ssn` argument to `plan`/`fill_i9_pdf` are
+untouched — they predate all of this and are still how a Desk operator prints the
+comb deliberately.
+
+**KEPT:** the GPS columns, the document-copy columns and their wiring, the
+`pdf_seal` Null Island fix, and `_fit`'s whole-group truncation. All of it stores
+or reports facts rather than drawing a page, which is what the new shape needs
+more of.
+
+**NEW — the signed copy carries its own metadata.** `attach_signed_i9` and the
+mobile `upload_signed_i9` take `section_1/2_signed_at` and
+`section_N_gps_lat`/`_lon`, because nothing else fills those columns any more:
+they used to be written as a side effect of the server RECEIVING a signature, and
+on a phone-built form the only timestamp left was `signed_pdf_on` — *when the file
+arrived*, which is not the question 8 CFR 274a.2(h)(2) asks. A crew signs in an
+orchard with no bars and uploads at the shed an hour later.
+
+The timestamps are the CLIENT's claim and are recorded as one: stamping `now()`
+would record the upload and label it the attestation, so only a **future**
+timestamp is refused. `signed_pdf_on` keeps the server's arrival time separate and
+unaltered; the IP stays the server's own observation. Nothing already recorded is
+overwritten — a moment captured at the pad is better evidence than one restated —
+and the answer reports which columns the call actually filled. Coordinates are
+named per section and read only what they name, so one section's fix can never be
+copied onto the other. Resolved before the file is touched, so a bad timestamp
+refuses having changed nothing.
+
+**KNOWN, NOT FIXED:** a phone-built I-9 can never reach `Complete`. Measured, not
+predicted — `unsigned_boxes` tests the signature IMAGE columns, which nothing
+fills any more, so every such form rests at `Awaiting Verification` and the sweep
+raises two Criticals on a form that is signed, sealed and retained. Fixing it
+changes what `Complete` means on a federal record and touches `unsigned_boxes`,
+`advance_if_signed`, two compliance rules and Section 2's status gate together;
+that is an operator's decision and the release note sets out the shape.
+
 ## 0.136.0 — 2026-08-25 — the number that was collected, the place that was not, and the photographs nobody filed
 
 Three things a sealed I-9 should have said and did not, all reported off one real
