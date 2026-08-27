@@ -3,6 +3,60 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.140.0 — 2026-08-26 — the shift nobody closed, and the block nobody was told about
+
+**TWO THINGS THIS SERVER ALREADY KNEW AND WAS NOT TELLING THE ONE PERSON WHO
+COULD ACT ON THEM.** Full note in `RELEASES/v0.140.0.md`.
+
+**THE WEATHER SWEEP NOW RINGS THE CREW LEADER ON A HEAT CROSSING.** It has
+written the reading and the Threshold Crossed event since v0.19.4 — *the heat
+index reached 84 °F at 11:45* — and the foreman standing in that block found out
+the next time they opened the app, which on a picking crew is at lunch. OAR
+437-004-1131 attaches its obligations **at the crossing**. The push carries the
+shift, the block, both temperatures, the company's own threshold, and an `action`
+naming `log_shift_break` with a `Cool-Down`, so the handset can go straight to the
+break rather than to a screen.
+
+**TO ONE NAMED PERSON, AND IT IS THE ONLY PUSH IN THIS APP THAT IS.** Not the
+office — `alert_payload` goes to dispatch roles because an expiring I-9 is the
+employer's obligation, and this one belongs to whoever is standing in the field.
+Not the crew — a break horn is twenty people's news and this is one person's
+decision. A shift with no foreman falls back to the supervisors and the report
+says which happened.
+
+**IT PIERCES DO NOT DISTURB, WHICH NOTHING ELSE ADDED SINCE v0.107.0 DOES.**
+`INTERRUPTION_ACTIVE` exists because a server that overrides a foreman's Focus
+nightly is silenced by the second week and takes the break horn with it. This is
+not nightly: a shift crosses **once**.
+
+**AND THE FENCE THAT MAKES THAT TRUE IS NOT THE TIMELINE'S FENCE.**
+`already_crossed` asks whether the shift carries any Threshold Crossed event,
+which is right for the timeline and wrong here: a Spray shift over the **wind**
+limit at 09:00 in cool air would spend the shift's one event, and the phone would
+never ring on the hottest afternoon of the season. `weather.heat_announced_for`
+reads the stored snapshot numbers on each event instead. Wind is not pushed at
+all, and a backfill rings nobody.
+
+**NOTHING IT DOES CAN COST THE READING.** No p8 key, no enrolled handset, a
+transport that 503s — each is a named report beside a timeline written anyway,
+surfaced on `fetch_weather_now` as `heat_push`, absent rather than zeroed when no
+horn was attempted.
+
+**`end_stale_shift`'s `end_datetime` IS NOW OPTIONAL** and defaults to the start
+plus eight hours, clamped so it can never reach past now. The old refusal argued
+against a default of `now` and was right to: a Tuesday crew clocked out on
+Thursday would be credited with forty hours. But that error **grows with the
+delay**, and how long nobody noticed is the quantity this tool selects on. Eight
+does not grow — 20 hours open and 120 hours open both pay 8. The answer carries
+`end_datetime_assumed`, and the shift's own notes record the assumption as one.
+
+**ONE BUG FOUND ON THE WAY:** `foreman_notes` was accepted and then silently
+discarded on any shift that already carried notes. Every line is kept now.
+
+**No new tool, no new doctype, no migration.** `tests_standalone/test_heat_push.py`
+adds 27 and `TheAssumedEndTime` adds 9, each class carrying the negative control
+its design turns on.
+
 ## 0.139.0 — 2026-08-26 — the boundaries the government already drew
 
 **A FARM'S FIELD BOUNDARIES ALREADY EXIST.** The Farm Service Agency drew them,

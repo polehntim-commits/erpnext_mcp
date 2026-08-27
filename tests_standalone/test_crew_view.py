@@ -861,14 +861,6 @@ class TheStaleShiftIsFenced(CrewViewTestCase):
 		self.assertIn("reason is required", message)
 		self.assertIn("STILL OPEN", message)
 
-	def test_the_end_time_is_required_and_never_defaulted(self):
-		"""A default would pay a Tuesday crew for Wednesday and Thursday."""
-		self.as_manager()
-		self.open_shift("SHIFT-CV-0505", HARVEST_FOREMAN, [HARVEST_PICKER], started_hours_ago=20)
-		message = self.tool_error("end_stale_shift", {"shift": "SHIFT-CV-0505", "reason": "phone died"})
-		self.assertIn("end_datetime is required", message)
-		self.assertIn("NOT defaulted to now", message)
-
 	def test_an_end_before_the_start_is_refused(self):
 		self.as_manager()
 		self.open_shift("SHIFT-CV-0506", HARVEST_FOREMAN, [HARVEST_PICKER], started_hours_ago=20)
@@ -896,6 +888,131 @@ class TheStaleShiftIsFenced(CrewViewTestCase):
 		self.assertIn(
 			"recorded as leaving after", self.close("SHIFT-CV-0508", end_datetime=self.hours_ago(3))
 		)
+
+
+class TheAssumedEndTime(CrewViewTestCase):
+	"""v0.140.0. `end_datetime` is optional, and the default is bounded.
+
+	THE CLAIM THIS CLASS EXISTS TO HOLD is not "there is a default" — it is that
+	the default does not grow with the delay. `now` was refused outright until
+	this release and the refusal's own sentence said why: a crew that stopped at
+	14:00 on Tuesday and is clocked out on Thursday would be credited with forty
+	hours. Eight hours from the start is credited with eight whether the shift was
+	found on Thursday or in November, which is the whole of the difference and the
+	only reason a default is allowable at all.
+
+	SO THE NEGATIVE CONTROL IS THE IMPORTANT TEST. `test_the_default_does_not_grow
+	_with_how_long_nobody_noticed` runs the same close against a shift left open
+	for twenty hours and one left open for a hundred and twenty, and requires the
+	SAME number of paid hours out of both. A default of `now` passes every other
+	test in this class and fails that one.
+	"""
+
+	def stale(self, name, hours_open=20.0, **overrides):
+		return self.open_shift(
+			name, HARVEST_FOREMAN, [HARVEST_PICKER], started_hours_ago=hours_open, **overrides
+		)
+
+	def close(self, shift, **overrides):
+		payload = {"shift": shift, "reason": "phone died at 14:00"}
+		payload.update(overrides)
+		return self.tool_data("end_stale_shift", payload)
+
+	def test_an_omitted_end_time_is_eight_hours_from_the_start(self):
+		self.as_manager()
+		self.stale("SHIFT-CV-0700")
+		data = self.close("SHIFT-CV-0700")
+		self.assertEqual(data["shift_hours"], float(crew_view.ASSUMED_SHIFT_HOURS))
+		self.assertEqual(
+			self.raw("SHIFT-CV-0700")["end_datetime"],
+			frappe.utils.add_to_date(
+				self.hours_ago(20),
+				hours=crew_view.ASSUMED_SHIFT_HOURS,
+				as_string=True,
+				as_datetime=True,
+			),
+		)
+
+	def test_the_default_does_not_grow_with_how_long_nobody_noticed(self):
+		"""THE NEGATIVE CONTROL. A default of `now` passes everything else here."""
+		self.as_manager()
+		self.stale("SHIFT-CV-0701", hours_open=20)
+		self.stale("SHIFT-CV-0702", hours_open=120)
+		self.assertEqual(
+			self.close("SHIFT-CV-0701")["shift_hours"],
+			self.close("SHIFT-CV-0702")["shift_hours"],
+		)
+
+	def test_the_assumption_is_reported_as_one(self):
+		"""An assumption that reads like a measurement is the dishonest version."""
+		self.as_manager()
+		self.stale("SHIFT-CV-0703")
+		data = self.close("SHIFT-CV-0703")
+		self.assertTrue(data["end_datetime_assumed"])
+		self.assertEqual(data["assumed_shift_hours"], crew_view.ASSUMED_SHIFT_HOURS)
+		self.assertIn("NOBODY STATED WHEN WORK STOPPED", data["end_time_note"])
+		self.assertIn(str(data["end_datetime"]), data["end_time_note"])
+
+	def test_a_stated_end_time_is_not_flagged_as_assumed(self):
+		self.as_manager()
+		self.stale("SHIFT-CV-0704")
+		data = self.close("SHIFT-CV-0704", end_datetime=self.hours_ago(6))
+		self.assertFalse(data["end_datetime_assumed"])
+		self.assertIsNone(data["assumed_shift_hours"])
+		self.assertNotIn("end_time_note", data)
+
+	def test_the_shift_itself_records_that_the_time_was_assumed(self):
+		"""The answer is read once; the document is read by whoever asks later."""
+		self.as_manager()
+		self.stale("SHIFT-CV-0705")
+		self.close("SHIFT-CV-0705")
+		notes = str(self.raw("SHIFT-CV-0705").get("foreman_notes") or "")
+		self.assertIn("ASSUMED end time", notes)
+		self.assertIn("8 hours from the start", notes)
+
+	def test_a_stated_close_says_nothing_about_an_assumption(self):
+		self.as_manager()
+		self.stale("SHIFT-CV-0706")
+		self.close("SHIFT-CV-0706", end_datetime=self.hours_ago(6))
+		self.assertNotIn("ASSUMED", str(self.raw("SHIFT-CV-0706").get("foreman_notes") or ""))
+
+	def test_the_crew_is_paid_the_assumed_span_and_not_the_open_one(self):
+		"""The Attendance row is where the assumption actually costs money."""
+		self.as_manager()
+		self.stale("SHIFT-CV-0707")
+		data = self.close("SHIFT-CV-0707")
+		self.assertEqual(data["attendance_created"], 1)
+		self.assertEqual(data["attendance"]["created"][0]["hours"], float(crew_view.ASSUMED_SHIFT_HOURS))
+
+	def test_a_lowered_threshold_clamps_the_assumption_to_now(self):
+		"""Otherwise the default would land in the future and refuse itself.
+
+		`stale_after_hours` is an argument, so an operation running short shifts
+		may fence at four — and start-plus-eight on a five-hour-old shift is three
+		hours from now. Unclamped, this tool's own future check would refuse the
+		default it had just computed.
+		"""
+		self.as_manager()
+		self.stale("SHIFT-CV-0708", hours_open=5)
+		data = self.close("SHIFT-CV-0708", stale_after_hours=4)
+		self.assertTrue(data["end_datetime_assumed"])
+		self.assertLess(data["shift_hours"], float(crew_view.ASSUMED_SHIFT_HOURS))
+		self.assertGreaterEqual(data["shift_hours"], 4.0)
+
+	def test_the_callers_own_notes_survive_a_shift_that_already_has_notes(self):
+		"""Both sentences are kept. Neither is chosen over the other.
+
+		Until v0.140.0 this read `doc.foreman_notes or as_str(args, ...)`, which
+		silently discarded the caller's line on any shift that already carried
+		one — and a shift with a history is the ordinary case, not the corner.
+		"""
+		self.as_manager()
+		self.stale("SHIFT-CV-0709", foreman_notes="Started late, fog on the block.")
+		self.close("SHIFT-CV-0709", foreman_notes="Crew confirmed by radio they left at 14:00.")
+		notes = str(self.raw("SHIFT-CV-0709").get("foreman_notes") or "")
+		self.assertIn("fog on the block", notes)
+		self.assertIn("confirmed by radio", notes)
+		self.assertIn("ADMINISTRATIVE CLOSE", notes)
 
 
 class TheStaleCloseReleasesTheCrew(CrewViewTestCase):

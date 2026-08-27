@@ -24,6 +24,15 @@ a fact about a place and a moment, and so is "this reading is above the threshol
 in Weather Settings" — both are arithmetic, both are written automatically, and a
 Threshold Crossed compliance event is exactly that and nothing more.
 
+IT RINGS ONE PHONE ON A HEAT CROSSING, AND THAT IS NOT A COMPLIANCE DECISION
+EITHER. v0.140.0. The timeline has said "the heat index reached 84 °F at 11:45"
+since v0.19.4, and until now the only person who could act on that — the foreman
+standing on the block — found out by opening the app. A notification is not a
+record and does not claim to be one: it carries the shift, the place and the two
+numbers, and what it asks for is that somebody LOOK. Once per shift, addressed to
+the crew leader by name, and never on a backfill — see `_push_heat_crossing` and
+`heat_announced_for` for the whole of it.
+
 A HEAT EXPOSURE EVENT IS NOT WRITTEN HERE AND WILL NOT BE. That record says which
 crew was exposed, whether water was provided at the required rate, whether the
 rest cycle was actually taken rather than merely offered, whether anybody showed
@@ -897,17 +906,122 @@ def already_crossed(shift: str, at_or_before: str) -> bool:
 	return False
 
 
-def evaluate_thresholds(shift: dict, reading: dict) -> dict:
-	"""Log the crossing if this reading is the first one, and align the heat record.
+def heat_announced_for(shift: str, limits: dict) -> bool:
+	"""Whether this shift has already logged a Threshold Crossed event ABOUT HEAT. v0.140.0.
 
-	TWO THINGS HAPPEN AND A THIRD DELIBERATELY DOES NOT.
+	THE SIBLING OF `already_crossed`, AND NOT THE SAME QUESTION. That one asks
+	whether the shift carries any Threshold Crossed event at all, which is the
+	right fence for the timeline: one row per shift is what stops nine hours above
+	eighty degrees becoming thirty-six identical rows. It is the WRONG fence for
+	the horn, because of a case that reads like a corner and is not: a Spray shift
+	crosses the WIND threshold at 09:00 in cool air, gets its one event, and then
+	the afternoon turns hot. `already_crossed` says yes, the crossing was recorded
+	— and the foreman's phone would never ring on the hottest day of the season,
+	for a reason nobody would ever find.
+
+	SO THIS READS THE STORED NUMBERS RATHER THAN THE PROSE. Every Threshold
+	Crossed event carries `weather_snapshot_temp_f` and
+	`weather_snapshot_heat_index_f` — the reading that produced it — so "was this
+	event about heat" is answerable from the columns, against the same limits the
+	crossing itself was judged against. Matching on the description text would be
+	a fence made of a sentence somebody may reword.
+	"""
+	for row in shifts.events_of(shift):
+		if str(row.get("event_type") or "") != THRESHOLD_EVENT:
+			continue
+		if _heat_crossing(
+			{
+				"temp_f": row.get("weather_snapshot_temp_f"),
+				"heat_index_f": row.get("weather_snapshot_heat_index_f"),
+			},
+			limits,
+		):
+			return True
+	return False
+
+
+def _push_heat_crossing(shift: dict, reading: dict, limits: dict, when: str) -> dict:
+	"""Ring the crew leader standing in it. Never raises. v0.140.0.
+
+	WHO. THE SHIFT'S OWN FOREMAN, and this is the one push in this app that is
+	addressed to a single named person rather than to a role or to a crew.
+	`alert_payload`'s comment argues that a compliance alert goes to supervisors
+	because the subject cannot act on it and the employer can; the same reasoning
+	lands somewhere else here. The obligation OAR 437-004-1131 creates — water at
+	the required rate, shade within reach, the preventative cool-down cycle,
+	observation for heat illness signs — belongs to the person who is standing on
+	the block, and the compliance rule of the same name already says so in code:
+	`producer_assigned_to_expression` is `row.foreman`. A push to the office would
+	reach people who cannot call a break in a field they are not in.
+
+	A SHIFT WITH NO FOREMAN FALLS BACK TO THE SUPERVISORS AND SAYS SO. That is an
+	imported or hand-written shift rather than one `start_shift` produced, and the
+	choice there is between the wrong recipients and nobody at all. `recipients`
+	in the report names which of the two happened, because "it rang the office"
+	and "it rang the crew leader" are different states of the same farm.
+
+	Never raises, for the reason every other entry point in this module does not:
+	this runs inside a cron sweep with nobody watching, and a notification that
+	could not be sent must never be able to cost the weather reading or the
+	timeline event that were already written by the time it runs.
+	"""
+	report = {"sent": 0, "reason": "", "recipients": ""}
+	try:
+		from . import push as push_service
+
+		foreman = str(shift.get("foreman") or "").strip()
+		if foreman:
+			recipients = [foreman]
+			report["recipients"] = "foreman"
+		else:
+			recipients = push_service.supervisor_employees(str(shift.get("company") or ""))
+			report["recipients"] = "supervisors"
+		report["foreman"] = foreman or None
+
+		payload = push_service.heat_payload(
+			shift=str(shift.get("name") or ""),
+			location=str(shift.get("location") or ""),
+			temp_f=reading.get("temp_f"),
+			heat_index_f=reading.get("heat_index_f"),
+			reading_datetime=str(reading.get("reading_datetime") or "") or str(when or ""),
+			threshold_temp_f=limits.get("heat_threshold_temp_f"),
+			threshold_heat_index_f=limits.get("heat_threshold_heat_index_f"),
+		)
+		answer = push_service.send_push_to_employees(
+			recipients,
+			payload,
+			# PRIORITY 10, unlike the compliance sweep's 5. A crew is in the sun
+			# now; a battery saved by holding this until the phone next wakes is
+			# saved at the cost of the thing the notification is for.
+			priority=push_service.PRIORITY_IMMEDIATE,
+			# The shift docname. A foreman with two handsets gets one notification,
+			# and a resend — which the fence above makes rare and does not make
+			# impossible — replaces its predecessor rather than stacking.
+			collapse_id=str(shift.get("name") or ""),
+		)
+		report.update({key: answer.get(key) for key in ("employees", "tokens", "sent", "failed", "skipped")})
+		report["reason"] = str(answer.get("reason") or "")
+	except Exception as exc:  # pragma: no cover - send_push_to_employees is itself wrapped
+		report["reason"] = f"error: {exc}"
+		_log(f"heat push for {shift.get('name')!r} failed: {type(exc).__name__}: {exc}")
+	return report
+
+
+def evaluate_thresholds(shift: dict, reading: dict) -> dict:
+	"""Log the crossing if this reading is the first one, ring the foreman, align the record.
+
+	THREE THINGS HAPPEN AND A FOURTH DELIBERATELY DOES NOT.
 
 	It writes a Threshold Crossed compliance event, because "the heat index
 	reached 84 °F at 11:45" is arithmetic over a stored reading and needs nobody's
-	judgement. It moves an existing Heat Exposure Event's `threshold_crossed_at`
-	EARLIER where this reading proves the crossing happened before the time on the
-	record, because the earliest crossing is the one -1131's obligations run from
-	and a later time understates the exposure period.
+	judgement. It PUSHES to the crew leader on a heat crossing — v0.140.0, and see
+	`_push_heat_crossing` for why that one named person and not the office — once
+	per shift, because until then the timeline said it was 84 °F at 11:45 and the
+	only person who could act on that learned it by opening the app. It moves an
+	existing Heat Exposure Event's `threshold_crossed_at` EARLIER where this
+	reading proves the crossing happened before the time on the record, because
+	the earliest crossing is the one -1131's obligations run from and a later time
+	understates the exposure period.
 
 	IT NEVER CREATES A HEAT EXPOSURE EVENT. That record names which crew was
 	exposed, what water was provided, whether the rest cycle was taken and whether
@@ -925,6 +1039,12 @@ def evaluate_thresholds(shift: dict, reading: dict) -> dict:
 	if not reasons:
 		return out
 	out["crossed"] = reasons
+
+	# READ BEFORE THE EVENT IS APPENDED, because the event this call is about to
+	# write would itself answer the question. `heat_announced_for` is the horn's
+	# one-per-shift fence and it has to be evaluated against the shift as it was
+	# when this reading arrived.
+	announced_before = heat_announced_for(name, limits)
 
 	when = str(reading.get("reading_datetime") or "") or frappe.utils.now()
 	if not already_crossed(name, when):
@@ -959,6 +1079,14 @@ def evaluate_thresholds(shift: dict, reading: dict) -> dict:
 
 	if _heat_crossing(reading, limits):
 		out["heat_event_updated"] = _align_heat_event(name, when)
+		# WIND IS NOT PUSHED AND HEAT IS. A spray block over the wind threshold is
+		# a reason to stop spraying, which the applicator standing in it already
+		# knows from the boom; heat is the one where the condition is survivable
+		# minute to minute and the obligation is not, and where -1131 runs a clock
+		# from the crossing. Gated on `_heat_crossing` rather than on `reasons`
+		# being non-empty for exactly that reason.
+		if not announced_before:
+			out["heat_push"] = _push_heat_crossing(shift, reading, limits, when)
 	return out
 
 
@@ -1059,6 +1187,14 @@ def fetch_for_shift(shift: dict, use_cache: bool = True) -> dict:
 	report["crossed"] = crossings["crossed"]
 	report["event_logged"] = crossings["event_logged"]
 	report["heat_event_updated"] = crossings["heat_event_updated"]
+	# v0.140.0. PRESENT ONLY WHEN A HORN WAS ATTEMPTED, which is what makes its
+	# absence readable: a hot shift with no `heat_push` key is one that had
+	# already crossed, and a hot shift with `heat_push: {"sent": 0, "reason":
+	# "no_tokens"}` is a foreman who never enrolled a handset. A zero under a key
+	# that is always there could not tell those two apart, and they are different
+	# people to go and see.
+	if crossings.get("heat_push") is not None:
+		report["heat_push"] = crossings["heat_push"]
 	return report
 
 

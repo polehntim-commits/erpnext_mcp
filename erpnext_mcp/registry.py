@@ -30293,13 +30293,18 @@ TOOLS = {
 		"OPEN and must have been open longer than `stale_after_hours` — sixteen "
 		"by default, past the end of anything anybody works. A younger shift is "
 		"REFUSED BY NAME with end_shift named as the tool for it.\n\n"
-		"`end_datetime` IS REQUIRED AND IS NOT DEFAULTED TO NOW. A crew that "
-		"stopped at 14:00 on Tuesday and is clocked out on Thursday would be "
-		"credited with forty hours by a default, and every one of them would "
-		"reach an Attendance row and a pay cheque. `reason` is required too: "
-		"this close carries no contemporaneous signature unless one is passed, "
-		"so the sentence is the only account of why somebody who was not there "
-		"ended it.\n\n"
+		"`end_datetime` IS OPTIONAL AND ITS DEFAULT IS A WORKING DAY — start plus "
+		"eight hours, clamped so it can never reach past now. NOT a default of "
+		"`now`, which is the one this tool refused outright until v0.140.0: a "
+		"crew that stopped at 14:00 on Tuesday and is clocked out on Thursday "
+		"would be credited with forty hours by that, and the error GROWS with "
+		"how long nobody noticed — which is the quantity this tool selects on. "
+		"Eight does not grow. Pass `end_datetime` wherever somebody knows the "
+		"real time; where nobody does, the answer says `end_datetime_assumed: "
+		"true` and the shift's notes record the assumption as one. `reason` is "
+		"required either way: this close carries no contemporaneous signature "
+		"unless one is passed, so the sentence is the only account of why "
+		"somebody who was not there ended it.\n\n"
 		"THE CREW ROWS ARE KEPT. Every member still carrying no `left_at` gets "
 		"the shift's end time — the same storage remove_worker_from_shift uses. "
 		"The row is the only record they were on the shift at all, which is what "
@@ -30309,8 +30314,10 @@ TOOLS = {
 			"farm_shift": _field(_STRING, "Alias for shift."),
 			"end_datetime": _field(
 				_STRING,
-				"When work ACTUALLY stopped, YYYY-MM-DD HH:MM:SS. Required and never "
-				"defaulted — every crew member's Attendance row spans to this instant.",
+				"When work ACTUALLY stopped, YYYY-MM-DD HH:MM:SS. Optional: omitted, it "
+				"defaults to the start plus eight hours, clamped to now. Every crew "
+				"member's Attendance row spans to this instant, so pass it wherever "
+				"anybody knows the real time.",
 			),
 			"ended_at": _field(_STRING, "Alias for end_datetime."),
 			"reason": _field(
@@ -30331,7 +30338,7 @@ TOOLS = {
 			"reviewed_on": _field(_STRING, "When the review was signed, if a signature is passed."),
 			"foreman_notes": _field(_STRING, "Anything else about the ending, kept on the shift."),
 		},
-		required=("shift", "end_datetime", "reason"),
+		required=("shift", "reason"),
 		mutating=True,
 		title="Close a runaway shift",
 		available=_needs_doctype("Farm Shift"),

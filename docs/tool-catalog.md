@@ -8066,14 +8066,16 @@ which is the check the entity scope cannot make on a single-company farm.
 
 ## 210f. `end_stale_shift`
 
-**MUTATING**, default OFF (`allow_end_stale_shift`). v0.131.0.
+**MUTATING**, default OFF (`allow_end_stale_shift`). v0.131.0; `end_datetime`
+became optional in v0.140.0.
 
-**Arguments:** `shift` (or `farm_shift`), `end_datetime` (or `ended_at`) and
-`reason`, all required; `stale_after_hours`, `supervisor_signature_file_token`,
-`reviewed_on` and `foreman_notes` optional.
+**Arguments:** `shift` (or `farm_shift`) and `reason`, both required;
+`end_datetime` (or `ended_at`), `stale_after_hours`,
+`supervisor_signature_file_token`, `reviewed_on` and `foreman_notes` optional.
 
 **Returns** the closed shift, plus `workers_released`, `attendance_created`,
-`hours_open_before_close`, `supervisor_review_owed` and `review_note`.
+`hours_open_before_close`, `end_datetime_assumed`, `supervisor_review_owed` and
+`review_note`.
 
 **The fourth ending, and the first that admits nobody was there to sign it.**
 `end_shift` closes a shift with a supervisor's signature and writes the crew's
@@ -8097,12 +8099,18 @@ the shift is closed, `end_shift` will not reopen it to add one.
 past the end of anything anybody works. A younger shift is refused **by name**
 with `end_shift` named as the tool for it.
 
-**`end_datetime` is required and is not defaulted to now.** A crew that stopped
-at 14:00 on Tuesday and is clocked out on Thursday morning would be credited with
-forty hours by a default, and every one of them would reach an Attendance row and
-a pay cheque. `reason` is required for the same family of reason: this close
-carries no contemporaneous signature unless one is passed, so the sentence is the
-only account of why somebody who was not there ended it.
+**`end_datetime` is optional and its default is a working day, not `now`.** A
+default of `now` was refused outright until v0.140.0 and was right to be: a crew
+that stopped at 14:00 on Tuesday and is clocked out on Thursday morning would be
+credited with forty hours by it. But that argument is against a default that
+**grows with the delay** — and how long nobody noticed is exactly the quantity
+this tool selects its subjects on. Start plus eight hours does not grow, and is
+clamped so it can never reach past now. A crew that worked six is overpaid by two
+rather than by thirty-four; a crew that worked ten is underpaid by two, which is
+the direction somebody notices. The answer says `end_datetime_assumed: true` and
+the shift's own notes record the assumption as one. `reason` is required either
+way: this close carries no contemporaneous signature unless one is passed, so the
+sentence is the only account of why somebody who was not there ended it.
 
 **The crew rows are kept.** Every member still carrying no `left_at` gets the
 shift's end time — the same storage `remove_worker_from_shift` uses. The row is
@@ -8234,6 +8242,14 @@ the reading crosses. Refuses a closed shift (a `current` reading filed against a
 crew who went home is true about the place and false about the shift) and one with
 no coordinates.
 
+**Since v0.140.0 a heat crossing also rings the shift's foreman**, once per shift,
+with the block, both temperatures and an `action` naming `log_shift_break` with a
+`Cool-Down` — the same horn the scheduled sweep sends, because this tool runs the
+same evaluation. The outcome comes back as `heat_push`; the key is **absent**
+rather than zeroed when no horn was attempted, so "this shift had already crossed"
+stays distinguishable from "the horn reached nobody". Wind crossings ring nobody,
+and nothing about the push can cost the reading.
+
 ## 214. `backfill_weather_for_shift`
 
 **MUTATING (default OFF).** `shift`. Reconstructs a **closed** shift's timeline
@@ -8244,9 +8260,11 @@ and a reading is never edited — so running it over a shift that was also swept
 keeps the live readings and fills the gaps. Returns `added`, `skipped_as_duplicate`
 and `failed`.
 
-It writes **no** compliance events, and that is the one judgement call in the tool:
-a `Threshold Crossed` row dated last July on a closed and signed shift would be an
-observation nobody made, sitting beside water breaks somebody did. The crossings
+It writes **no** compliance events and rings **no** handset, and that is the one
+judgement call in the tool: a `Threshold Crossed` row dated last July on a closed
+and signed shift would be an observation nobody made, sitting beside water breaks
+somebody did — and a phone that buzzes about Tuesday on Thursday teaches its owner
+to ignore the one that buzzes about now. The crossings
 are counted and reported instead, which is also the sentence that tells a foreman
 whether the shift needed a heat record at all.
 

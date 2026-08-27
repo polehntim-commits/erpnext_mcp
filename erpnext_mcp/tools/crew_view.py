@@ -139,6 +139,22 @@ that runs eight-hour shifts and wants twelve; it is an argument rather than a
 setting because the number is a judgement about one shift and not a property of
 the farm.
 
+`end_datetime` IS OPTIONAL AND ITS DEFAULT IS A WORKING DAY, NOT `now`. v0.140.0.
+Until then it was required outright, and the argument for that was sound as far
+as it went: a crew that stopped at 14:00 on Tuesday and is clocked out on
+Thursday morning would be credited with forty hours by a default of `now`, and
+every one of them would reach an Attendance row and a pay cheque. But that
+argument is against a default that GROWS WITH THE DELAY — and how long nobody
+noticed is precisely the quantity this tool selects its subjects on, so the
+worse the neglect the wronger the number. `ASSUMED_SHIFT_HOURS` is eight and
+does not grow at all: an ordinary day's work, clamped so it can never reach past
+this instant. A crew that worked six is overpaid by two rather than by
+thirty-four; a crew that worked ten is underpaid by two, which is the direction
+somebody notices and therefore the direction that gets corrected. The answer
+carries `end_datetime_assumed: true` and the shift's own notes say so, because
+an assumption that reads like a measurement is the only version of this that
+would be dishonest.
+
 THE CREW IS RELEASED AND THE ROWS ARE KEPT. Every crew member still carrying no
 `left_at` gets the shift's end time, which is what "removes the workers" means
 operationally and is the same storage `remove_worker_from_shift` uses — the row
@@ -215,6 +231,25 @@ DEPTH_CAP = 12
 #: Sixteen: past the end of any shift a person actually works, and short of the
 #: twenty-four that would let a genuinely forgotten night crew sit another day.
 STALE_AFTER_HOURS = 16
+
+#: The span an administrative close credits when the caller does not state one.
+#:
+#: EIGHT, AND THE NUMBER IS THE WHOLE OF THE ARGUMENT. A default of `now` was
+#: refused outright until v0.140.0 and was right to be: a crew that stopped at
+#: 14:00 on Tuesday, clocked out on Thursday morning, would be credited with
+#: forty hours, and every one of them would reach an Attendance row and a pay
+#: cheque. That failure is UNBOUNDED — it grows with how long nobody noticed,
+#: which is exactly the quantity a stale shift is selected on.
+#:
+#: Eight hours is bounded by construction and does not grow with the delay. It
+#: is an ordinary day's work, so a crew that worked an ordinary day is paid
+#: correctly by it; a crew that worked six is overpaid by two rather than by
+#: thirty-four, and a crew that worked ten is UNDERPAID by two — which is the
+#: direction that matters, because it is the one somebody complains about and
+#: therefore the one that gets corrected. `end_datetime` is still the right
+#: answer and is still what the caller should send; this is what happens when
+#: nobody knows, and the answer says so in `end_datetime_assumed`.
+ASSUMED_SHIFT_HOURS = 8
 
 #: The most crews one overview will describe, and the most workers under each.
 #: A forty-crew farm is a real farm; four hundred is a runaway query, and the
@@ -1339,6 +1374,21 @@ def _certificates_of(person: str, employee_name: str) -> dict:
 	}
 
 
+def _assumed_end(start: str, now: str) -> str:
+	"""`start` plus a working day, and never later than this instant. v0.140.0.
+
+	THE CLAMP IS NOT DECORATION. `stale_after_hours` is an argument, so a caller
+	may lower the fence to four for an operation that runs short shifts — and
+	then `start + 8h` is in the FUTURE, which the future check below refuses. A
+	default that made the tool refuse itself would be a default nobody could use;
+	a default that paid the crew for hours nobody has reached yet would be the
+	forty-hour bug in miniature. Clamped, the assumption is "a working day, or as
+	much of one as has actually elapsed", which is true in both cases.
+	"""
+	end = frappe.utils.add_to_date(start, hours=ASSUMED_SHIFT_HOURS, as_string=True, as_datetime=True)
+	return now if shifts.to_the_second(str(end)) > shifts.to_the_second(now) else str(end)
+
+
 # ── 3. end_stale_shift ──────────────────────────────────────────────────────
 def end_stale_shift(args: dict) -> ToolResult:
 	"""MUTATING. Close a runaway shift nobody clocked out of, and release its crew."""
@@ -1380,7 +1430,8 @@ def end_stale_shift(args: dict) -> ToolResult:
 		)
 
 	now = frappe.utils.now()
-	open_for = shifts.hours_between(str(row.get("start_datetime") or ""), now)
+	start = str(row.get("start_datetime") or "")
+	open_for = shifts.hours_between(start, now)
 	if open_for is None or open_for < threshold:
 		raise ToolError(
 			f"{row['name']} started at {row.get('start_datetime')} and has been open "
@@ -1392,17 +1443,17 @@ def end_stale_shift(args: dict) -> ToolResult:
 			"a runaway. Nothing was changed."
 		)
 
+	# v0.140.0. THE END TIME IS OPTIONAL AND ITS ABSENCE IS ANSWERED WITH A
+	# WORKING DAY, NOT WITH `now`. See `ASSUMED_SHIFT_HOURS` for why those are
+	# different defaults and not two spellings of one: `now` grows with how long
+	# nobody noticed, and how long nobody noticed is the quantity this tool
+	# selects its subjects on. A stated `end_datetime` is still the right answer
+	# and is still what a caller who knows should send.
 	end = as_str(args, "end_datetime") or as_str(args, "ended_at") or as_str(args, "actual_end_time")
-	if not end:
-		raise ToolError(
-			"end_datetime is required and is NOT defaulted to now. A crew that stopped work at "
-			"14:00 on Tuesday and is being clocked out on Thursday morning would be credited "
-			"with forty hours by a default, and every one of those hours would reach their "
-			"Attendance row and their pay. The caller states when work actually stopped. "
-			"THE SHIFT IS STILL OPEN and nothing was changed."
-		)
+	end_assumed = not end
+	if end_assumed:
+		end = _assumed_end(start, now)
 
-	start = str(row.get("start_datetime") or "")
 	if shifts.to_the_second(end) < shifts.to_the_second(start):
 		raise ToolError(
 			f"this call ends the shift at {end} and it started at {start} — it would have "
@@ -1460,10 +1511,25 @@ def end_stale_shift(args: dict) -> ToolResult:
 	note = (
 		f"ADMINISTRATIVE CLOSE by {actor} at {now}: the shift was open "
 		+ (f"{open_for} hour(s)" if open_for is not None else "for an unreadable span")
-		+ f" and was ended at {end}. {reason}"
+		+ f" and was ended at {end}"
+		+ (
+			f" — an ASSUMED end time, {ASSUMED_SHIFT_HOURS} hours from the start, because "
+			"nobody stated when work actually stopped"
+			if end_assumed
+			else ""
+		)
+		+ f". {reason}"
 	)
-	existing = str(doc.foreman_notes or as_str(args, "foreman_notes") or "").strip()
-	doc.foreman_notes = f"{existing}\n\n{note}".strip() if existing else note
+	# EVERY LINE IS KEPT AND NONE OF THEM IS CHOSEN OVER ANOTHER. Until v0.140.0
+	# this read `doc.foreman_notes or as_str(args, "foreman_notes")`, which
+	# silently DROPPED the caller's sentence on any shift that already carried
+	# notes — which is the ordinary case, because a foreman's own notes are what
+	# a shift with any history has. An argument the caller was accepted and then
+	# discarded is worse than one that was refused.
+	lines = [
+		part for part in (str(doc.foreman_notes or "").strip(), as_str(args, "foreman_notes"), note) if part
+	]
+	doc.foreman_notes = "\n\n".join(lines)
 	doc.flags.ignore_permissions = True
 	doc.save(ignore_permissions=True)
 
@@ -1482,6 +1548,8 @@ def end_stale_shift(args: dict) -> ToolResult:
 		"hours_open_before_close": open_for,
 		"stale_after_hours": threshold,
 		"closure_reason": reason,
+		"end_datetime_assumed": end_assumed,
+		"assumed_shift_hours": ASSUMED_SHIFT_HOURS if end_assumed else None,
 		"workers_released": released,
 		"workers_released_count": len(released),
 		"attendance": bridge,
@@ -1511,6 +1579,15 @@ def end_stale_shift(args: dict) -> ToolResult:
 			"supervisor_signature_file_token on this call: once the shift is closed, end_shift "
 			"will not reopen it to add one."
 		)
+	if end_assumed:
+		data["end_time_note"] = (
+			f"NOBODY STATED WHEN WORK STOPPED, so this close assumed {ASSUMED_SHIFT_HOURS} hours "
+			f"from the start and ended the shift at {end}. That is an ASSUMPTION and it is on "
+			"the record as one — it reached every crew member's Attendance row and therefore "
+			"their pay. Where somebody knows the real time, pass end_datetime; where the "
+			"assumption turns out to be wrong, it is the Attendance rows that need correcting, "
+			"because this shift will not close a second time."
+		)
 	if not released:
 		data["crew_note"] = (
 			"Every crew member already had a left_at, so nobody needed releasing — this was a "
@@ -1524,6 +1601,7 @@ def end_stale_shift(args: dict) -> ToolResult:
 			f"closed stale {row['name']} at {end} after {open_for} hour(s) open; "
 			f"{len(released)} worker(s) released; "
 			f"{len(bridge.get('created') or [])} Attendance record(s) written"
+			+ (f"; end time ASSUMED ({ASSUMED_SHIFT_HOURS}h from start)" if end_assumed else "")
 			+ ("" if signature else "; supervisor review OWED")
 		),
 		docstatus_delta="0 → 0 (closed, administratively)",

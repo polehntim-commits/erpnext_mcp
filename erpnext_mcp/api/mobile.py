@@ -18237,9 +18237,14 @@ def end_stale_shift(
 	argument. Where the supervisor IS there, pass the token on this call:
 	once the shift is closed, `end_shift` will not reopen it to add one.
 
-	`end_datetime` IS REQUIRED AND IS NOT DEFAULTED TO NOW. A crew that
-	stopped at 14:00 on Tuesday, clocked out on Thursday morning by a
-	default, would be paid for forty hours.
+	`end_datetime` IS OPTIONAL AND DEFAULTS TO A WORKING DAY — start plus
+	eight hours, clamped so it can never reach past now. NOT `now`, which is
+	the default this tool refused outright until v0.140.0: a crew that
+	stopped at 14:00 on Tuesday and is clocked out on Thursday morning would
+	be paid for forty hours by that, and the error grows with how long
+	nobody noticed. Eight does not grow. The answer carries
+	`end_datetime_assumed` so the handset can say on screen that the time it
+	is showing was assumed rather than recorded.
 	"""
 	guard.require_dispatch_role(user, "closing another crew's shift")
 	allowed = guard.require_scope(user)

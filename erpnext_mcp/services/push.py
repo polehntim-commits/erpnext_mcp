@@ -8,6 +8,14 @@ most of a crew's phones. That is exactly one phone: the one the break was called
 on. Every other worker on the shift learns about the break when somebody shouts.
 This module is the other twenty phones.
 
+v0.140.0 ADDS THE ONE THAT GOES THE OTHER WAY. `heat_payload` reaches ONE phone
+— the crew leader's — and it is the only push in this app addressed to a single
+named person rather than to a crew or to a role. The weather sweep already knew
+at 11:45 that the block had crossed the heat threshold; the foreman found out by
+opening the app. See `services/weather.evaluate_thresholds` for where it fires
+and `heat_payload` for why it is allowed to pierce Do Not Disturb when a nightly
+compliance alert is not.
+
 ────────────────────────────────────────────────────────────────────────────
 IT DEGRADES TO NOTHING, AND THAT IS THE DESIGN
 ────────────────────────────────────────────────────────────────────────────
@@ -134,6 +142,7 @@ CATEGORY_BREAK = "FARM_BREAK"
 CATEGORY_TEST = "FARM_TEST"
 CATEGORY_TASK = "FARM_TASK"
 CATEGORY_COMPLIANCE = "FARM_COMPLIANCE"
+CATEGORY_HEAT = "FARM_HEAT"
 
 #: How much prose survives into a notification body. An APNs payload is capped at
 #: 4KB and a `Compliance Alert.alert_message` has no such cap — the rules compose
@@ -488,6 +497,119 @@ def alert_payload(
 		payload["due_date"] = due_date
 	if subject_name:
 		payload["subject_name"] = subject_name
+	return payload
+
+
+def _degrees(value) -> str:
+	"""A temperature the way a lock screen should read it, or "" for no reading.
+
+	Whole degrees. A heat index printed to one decimal place says the instrument
+	is precise to a tenth of a degree, which it is not — the number is computed
+	from an ambient reading and a humidity percentage, and the tenth is arithmetic
+	rather than measurement. It also costs three characters on a line that has a
+	block name and two temperatures to fit.
+	"""
+	try:
+		return f"{round(float(value))}°F"
+	except (TypeError, ValueError):
+		return ""
+
+
+def heat_payload(
+	shift: str,
+	location: str = "",
+	temp_f=None,
+	heat_index_f=None,
+	reading_datetime: str = "",
+	threshold_temp_f=None,
+	threshold_heat_index_f=None,
+	alert: str = "",
+) -> dict:
+	"""The APNs payload for a shift that has just crossed the heat threshold. v0.140.0.
+
+	WHY THIS IS NOT `alert_payload`. A compliance alert is news for the morning:
+	`INTERRUPTION_ACTIVE`, priority 5, addressed to whichever supervisors hold a
+	dispatch role, and carrying a docname the reader opens when they get to it.
+	Every one of those four is wrong for this. The crew is in the sun NOW, the
+	person who can do something about it is the one standing with them, and the
+	thing they must do — call the cool-down, put it on the timeline — has a clock
+	on it that OAR 437-004-1131 runs from the moment of the crossing, not from
+	the moment somebody read a notification.
+
+	SO IT RIDES AT THE BREAK HORN'S LEVEL, and that is a deliberate use of the
+	scarcest thing this app has. `INTERRUPTION_LEVEL` is `time-sensitive`: it
+	pierces Focus and Do Not Disturb, and `INTERRUPTION_ACTIVE`'s own comment
+	argues that a server which overrides a foreman's Do Not Disturb nightly gets
+	trained out of by the second week. This is not nightly. A shift crosses the
+	threshold at most ONCE — see `weather.heat_announced_for`, which is the same
+	one-per-shift fence that keeps the Threshold Crossed event from becoming
+	thirty-six identical rows — so a foreman who is pierced by this is being
+	pierced on the hot days and on no others.
+
+	THE NUMBERS ARE IN THE BODY AND NOT ONLY IN THE CUSTOM KEYS, for the reason
+	`task_payload` gives about urgency: the lock screen is where "do I stop the
+	crew" is actually decided, and a key the app has to be opened to read is not
+	on the lock screen.
+
+	`action` IS A DICTIONARY AND IT NAMES A ROUTE THIS APP ACTUALLY PUBLISHES.
+	`log_shift_break` is a real mobile endpoint and `Cool-Down` is a real
+	`BREAK_KINDS` entry; a payload that named a screen invented for the payload
+	would be a contract with nobody on the other end of it. Nested rather than
+	flattened because it is one composite thing — where to go and what to do when
+	you get there — and because `shift` is already a top-level key meaning the
+	docname, which is what every other payload in this module spells that way.
+	"""
+	place = _trim(location, 60)
+	ambient = _degrees(temp_f)
+	index = _degrees(heat_index_f)
+	measured = " / ".join(part for part in (ambient, f"{index} heat index" if index else "") if part)
+
+	sentence = [part for part in (place, measured) if part]
+	body = " — ".join(sentence) if sentence else "The latest reading is at the heat threshold."
+	body = _trim(f"{body}. Call the cool-down and log it.")
+
+	payload = {
+		"aps": {
+			"alert": {"title": "Heat threshold crossed", "body": body},
+			# NOT one of the two break tones. Those two are learned sounds meaning
+			# "stop work" and "resume", played to a whole crew; this reaches one
+			# phone and asks its owner to decide. Spending a crew tone on a
+			# foreman's prompt is how the crew tone stops meaning anything — the
+			# argument `SOUND_DEFAULT` already makes for tasks and alerts.
+			"sound": SOUND_DEFAULT,
+			"interruption-level": INTERRUPTION_LEVEL,
+			"category": CATEGORY_HEAT,
+		},
+		# Beside `aps` and not inside it, for the reason `break_payload` argues.
+		"shift": shift,
+		"phase": "heat",
+		"action": {
+			"open": "shift",
+			"shift": shift,
+			"then": "log_break",
+			"endpoint": "log_shift_break",
+			"break_kind": "Cool-Down",
+		},
+	}
+	if location:
+		payload["location"] = location
+	if temp_f not in (None, ""):
+		payload["temp_f"] = temp_f
+		# THE SAME NUMBER UNDER THE NAME THE HANDSET ASKS FOR, exactly as
+		# `shifts.describe_event_row` carries both. `temp_f` is this server's
+		# spelling everywhere; `ambient_temp_f` is what the iOS heat-break payload
+		# reads. Both, from one value, so they cannot drift.
+		payload["ambient_temp_f"] = temp_f
+	if heat_index_f not in (None, ""):
+		payload["heat_index_f"] = heat_index_f
+	if reading_datetime:
+		payload["reading_datetime"] = reading_datetime
+	if threshold_temp_f not in (None, ""):
+		payload["threshold_temp_f"] = threshold_temp_f
+	if threshold_heat_index_f not in (None, ""):
+		payload["threshold_heat_index_f"] = threshold_heat_index_f
+	if alert:
+		payload["compliance_alert"] = alert
 	return payload
 
 

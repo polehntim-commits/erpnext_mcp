@@ -225,6 +225,12 @@ def fetch_weather_now(args: dict) -> ToolResult:
 		"threshold_event_logged": report["event_logged"],
 		"heat_exposure_event_updated": report.get("heat_event_updated"),
 	}
+	# v0.140.0. PRESENT ONLY WHEN A HORN WAS ATTEMPTED. See `fetch_for_shift`:
+	# the key's absence on a hot shift means this one had already crossed and the
+	# crew leader was rung then, which is a different fact from a horn that
+	# reached zero handsets and has to stay readable as one.
+	if report.get("heat_push") is not None:
+		data["heat_push"] = report["heat_push"]
 	if not report["added"]:
 		data["note"] = (
 			f"Open-Meteo answered, and this shift already carries a reading for "
@@ -241,6 +247,16 @@ def fetch_weather_now(args: dict) -> ToolResult:
 				else "This shift already carried a Threshold Crossed event at or before this "
 				"reading, so no second one was logged — one crossing per shift, or a hot "
 				"afternoon buries the water breaks under thirty-six identical rows. "
+			)
+			+ (
+				(
+					f"The crew leader's handset was rung: {report['heat_push'].get('sent') or 0} "
+					f"device(s) reached"
+					+ (f" ({report['heat_push'].get('reason')})" if report["heat_push"].get("reason") else "")
+					+ ". "
+				)
+				if report.get("heat_push") is not None
+				else ""
 			)
 			+ "WHAT THE SHIFT DOES ABOUT IT IS THE FOREMAN'S CALL. Nothing here creates a Heat "
 			"Exposure Event: that record says which crew was exposed, what water was provided, "
