@@ -308,6 +308,14 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# has been calling it on every raise and falling back on the 404 since
 		# the compliance-to-task sheet shipped. This is the release that answers.
 		"materialize_task_for_alert",
+		# v0.141.0, `SERVER_CHANGES.md` item 36. HERE RATHER THAN IN
+		# `PENDING_IOS_INTEGRATION` because `MobileAPI.swift` already names it —
+		# `cancelShift = path("cancel_shift")` — and `ShiftAPI.cancelShift` has
+		# been posting to it and degrading on the 404 since the crew drill-down's
+		# long-press menu shipped. This is the release that answers. The tool has
+		# been in `tools/shifts.py` for many releases; what it never had was a
+		# door onto this transport.
+		"cancel_shift",
 	}
 	FILES: ClassVar[set[str]] = {"stage_file_chunk", "finalize_staged_file"}
 

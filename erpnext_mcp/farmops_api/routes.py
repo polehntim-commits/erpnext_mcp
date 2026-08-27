@@ -1216,6 +1216,24 @@ ROUTES = (
 	# dispatch gate is the least it could carry — and it is fenced by a staleness
 	# threshold as well, so it cannot become a signature-free `end_shift`.
 	Route("/mobile", mobile_api.end_stale_shift),
+	# v0.141.0, `SERVER_CHANGES.md` item 36. THE THIRD ENDING, AND THE ONE A
+	# PHONE COULD NOT REACH. `cancel_shift` has been in `tools/shifts.py` for
+	# many releases and on the MCP registry only: probed against the deployed
+	# sidecar, `/mobile/end_shift` and `/mobile/clock_out_worker` answer 401 with
+	# no credential and `/mobile/cancel_shift` answered the sidecar's own 404.
+	# `MobileAPI.cancelShift` was bound in the app the whole time and the crew
+	# drill-down's long-press menu offered the row against it.
+	#
+	# THE MISSING ROUTE WAS NOT A MISSING BUTTON, IT WAS PAYROLL. A shift formed
+	# and then not worked has one correct ending, and a foreman who cannot find
+	# it either leaves the shift open — which holds its whole crew off every
+	# other roster, because `start_shift` refuses a second open shift for the
+	# same person — or closes it with `end_shift`, which attests a day happened
+	# and writes an Attendance row per crew member for a day nobody worked.
+	#
+	# Dispatch-gated beside `end_stale_shift` for the same reason: it ends a
+	# shift a whole crew is rostered on.
+	Route("/mobile", mobile_api.cancel_shift),
 )
 
 #: Path → Route. Built once at import; there is nothing dynamic about it.

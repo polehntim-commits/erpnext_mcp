@@ -18263,3 +18263,77 @@ def end_stale_shift(
 			inner[key] = given
 
 	return crew_view.end_stale_shift(inner).data
+
+
+# ── 258. cancel_shift ────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("cancel_shift", limit=guard.WRITE_LIMIT, mutating=True)
+def cancel_shift(
+	user: str,
+	shift=None,
+	farm_shift=None,
+	cancellation_reason=None,
+	reason=None,
+	cancelled_at=None,
+	foreman_notes=None,
+) -> dict:
+	"""Call a shift off from the handset: it was formed and then not worked.
+
+	THE THIRD ENDING, AND UNTIL THIS RELEASE IT WAS THE ONE A PHONE COULD NOT
+	REACH. `tools/shifts.py` has carried `cancel_shift` for many releases and it
+	was published on the MCP registry alone — item 36 of `SERVER_CHANGES.md`
+	probed the deployed sidecar and got the "is not a Farm Ops API method" 404
+	where `end_shift`, `clock_out_worker` and `log_shift_break` all answer 401.
+	`MobileAPI.cancelShift` has been bound in the app the whole time and the crew
+	drill-down's long-press menu has offered **Cancel Shift** against it.
+
+	IT COSTS MONEY RATHER THAN CONVENIENCE, which is why it is worth a route of
+	its own rather than a note in the office's queue. A foreman in the yard at
+	06:40 with the heat already up and the crew sent home had two endings
+	available and both were wrong. Leaving the shift OPEN leaves something the
+	weather sweep walks for ever, `list_shifts` reports as work in progress, and
+	— the expensive part — that keeps its whole crew off every other roster,
+	because `start_shift` refuses a second open shift for the same person: one
+	forgotten Tuesday costs a crew their Wednesday. Closing it with `end_shift`
+	files an FSMA §112.161(b) attestation that a day happened and writes one
+	Attendance record per crew member for a day nobody worked. The silent one is
+	the one that looks like tidying up.
+
+	THE DISPATCH GATE, for the reason `end_stale_shift` above carries it: this
+	ends a shift a whole crew is rostered on, and a picker cannot call off the
+	crew they are standing in. It is the gate the drill-down that offers the
+	button is already behind, so the row is drawn for exactly the accounts the
+	call will accept.
+
+	NOTHING IS RELAXED ON THE WAY THROUGH. Every refusal the tool makes — already
+	cancelled, already CLOSED by a signed review, no reason given, cancelled
+	before the shift started — is a sentence worth putting in front of a foreman
+	verbatim, and the client shows all four. In particular the missing reason is
+	NOT pre-empted here: the tool's own sentence is about the decision rather
+	than about a field, and a wrapper that answered "cancellation_reason is
+	required" first would replace it with the worse one.
+
+	`farm_shift` IS ACCEPTED AS A SECOND SPELLING OF `shift`, and `reason` as a
+	second spelling of `cancellation_reason` — both because the tool itself takes
+	both and `routes.bind` reduces a body to the keys this signature DECLARES, so
+	an undeclared alias is dropped before any guard sees it and the call comes
+	back saying the argument was required while it sat in the body. The two shift
+	spellings disagreeing is refused rather than resolved, by `_one_spelling`:
+	one of them names a shift that is not being called off and nothing in the
+	body says which.
+	"""
+	guard.require_dispatch_role(user, "cancelling a crew's shift")
+	allowed = guard.require_scope(user)
+	named_shift, shift_label = _one_spelling(shift, farm_shift, "shift", "farm_shift")
+	name = guard.require_scoped_doc(FARM_SHIFT, named_shift, shift_label, allowed)
+
+	inner: dict = {"shift": name}
+	for key, given in (
+		("cancellation_reason", cancellation_reason or reason),
+		("cancelled_at", cancelled_at),
+		("foreman_notes", foreman_notes),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+
+	return shifts.cancel_shift(inner).data

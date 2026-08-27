@@ -7763,6 +7763,13 @@ weather sweep walks. A shift that is already closed is **refused** — cancellin
 it would claim the day was not worked while the Attendance rows saying it was
 stay on the register.
 
+**It is on the mobile surface too, since v0.141.0.**
+`POST /farmops/api/mobile/cancel_shift`, dispatch-gated beside `end_stale_shift`
+because it ends a shift a whole crew is rostered on. `farm_shift` is accepted as
+a second spelling of `shift` there, and the two disagreeing is refused rather
+than resolved. Until that release the tool was reachable from the office and not
+from the yard, which meant the foreman who needed it closed the shift instead.
+
 ## 208. `create_heat_exposure_event`
 
 **MUTATING, default OFF.** The OAR 437-004-1131 record for one shift, signed and

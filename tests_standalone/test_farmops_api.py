@@ -759,6 +759,10 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/get_worker_detail",
 		"/mobile/list_active_shifts",
 		"/mobile/end_stale_shift",
+		# v0.141.0. `SERVER_CHANGES.md` item 36 — the third ending, published at
+		# last. Dispatch-gated beside `end_stale_shift`; see
+		# `TheNewRegistersAreGated.DISPATCH_GATED`.
+		"/mobile/cancel_shift",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):
@@ -2596,6 +2600,10 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"get_crew_overview",
 		"list_active_shifts",
 		"get_worker_detail",
+		# v0.141.0. The write that ends a shift a whole crew is rostered on, and
+		# it is offered from the same drill-down as `end_stale_shift`. A picker
+		# cannot call off the crew they are standing in.
+		"cancel_shift",
 	}
 
 	HR_GATED: ClassVar[set[str]] = {
@@ -2671,7 +2679,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 86, "a method is named in two sets at once")
+		self.assertEqual(len(named), 87, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

@@ -4262,6 +4262,84 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			self.wire("materialize_task_for_alert", alert=alert["name"])
 
+	# ── v0.141.0: the third ending, and the door it never had ───────────────
+	def test_58_cancel_shift(self):
+		"""`SERVER_CHANGES.md` item 36. The tool is old; the route is new.
+
+		NOTHING IS DECODED OUT OF THE ANSWER, which is why the mirror is
+		`UndecodedResponseModel` and not a struct: `ShiftAPI.cancelShift` calls
+		`FrappeClient.callVoid` and the sheet dismisses on the HTTP status.
+		What is asserted here is the pair of facts that make this a different
+		ending rather than a second close — no Attendance, and the crew kept.
+		"""
+		self.the_hr_furniture()
+		shift = self.a_shift(crew_employees=[self.NEW_HIRE, self.SECOND_HAND])
+		# The fixture site already carries Attendance of its own, so the
+		# assertion is on the DELTA. Zero new rows is the whole difference
+		# between this ending and `end_shift`, which writes one per crew member.
+		before = len(STORE.rows("Attendance"))
+		row = self.wire(
+			"cancel_shift",
+			shift=shift["name"],
+			cancellation_reason="Crew stood down at 06:40, heat index already 94 F",
+		)
+		UndecodedResponseModel.decode(row, "cancel_shift")
+		self.assertEqual(row["status"], "Cancelled")
+		self.assertEqual(row["attendance_created"], 0)
+		self.assertEqual(row["cancelled"]["crew_size"], 2)
+		self.assertEqual(len(STORE.rows("Attendance")), before, "a cancelled day was paid for")
+		self.assertEqual(len(row["crew"]), 2, "the crew rows are what answers a wage claim")
+		# THE END TIME IS WHAT MAKES IT STOP BEING ACTIVE. `status` is computed
+		# from `end_datetime` first, so a Cancelled tick with no end time is a
+		# shift the weather sweep still walks.
+		self.assertTrue(row["end_datetime"])
+		self.assertFalse(row["open"])
+
+	def test_58_the_alias_the_dispatch_surface_already_speaks_is_accepted(self):
+		"""`farm_shift` and `reason`, for the reason `end_shift` declares
+		`farm_shift`: `routes.bind` reduces a body to the keys the signature
+		DECLARES, so an undeclared alias is dropped before any guard sees it and
+		the call answers 'required' about an argument that was in the body."""
+		self.the_hr_furniture()
+		shift = self.a_shift(crew_employees=[self.NEW_HIRE])
+		row = self.wire("cancel_shift", farm_shift=shift["name"], reason="sprayer never arrived")
+		self.assertEqual(row["cancellation_reason"], "sprayer never arrived")
+
+	def test_58_the_two_shift_spellings_disagreeing_is_refused(self):
+		"""One of them names a shift that is not being called off."""
+		self.the_hr_furniture()
+		first = self.a_shift(crew_employees=[self.NEW_HIRE])
+		second = self.a_shift(location="Block 9", crew_employees=[self.SECOND_HAND])
+		with self.assertRaises(Exception):
+			self.wire(
+				"cancel_shift",
+				shift=first["name"],
+				farm_shift=second["name"],
+				cancellation_reason="rain",
+			)
+
+	def test_58_a_missing_reason_is_the_tools_own_sentence_and_not_the_wrappers(self):
+		"""The wrapper does not pre-empt it. The tool's refusal is about the
+		DECISION — a bare Cancelled flag is a gap somebody will be asked about —
+		and a wrapper that answered 'cancellation_reason is required' first would
+		replace it with the worse sentence."""
+		self.the_hr_furniture()
+		shift = self.a_shift(crew_employees=[self.NEW_HIRE])
+		with self.assertRaises(Exception) as caught:
+			self.wire("cancel_shift", shift=shift["name"])
+		self.assertIn("THE SHIFT IS STILL OPEN", str(caught.exception))
+		self.assertIn("cancellation_reason is required", str(caught.exception))
+
+	def test_58_a_field_worker_may_not_call_off_the_crew_they_stand_in(self):
+		"""`guard.require_dispatch_role`, beside `end_stale_shift`. This ends a
+		shift a whole crew is rostered on."""
+		self.the_hr_furniture()
+		shift = self.a_shift(crew_employees=[self.NEW_HIRE])
+		set_roles(WORKER, ["Field Worker"])
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			self.wire("cancel_shift", shift=shift["name"], cancellation_reason="rain")
+
 
 # ── 2. the mirrors are strict enough to have caught the bugs ────────────────
 class TheMirrorsAreStrictEnough(ContractTestCase):
@@ -4459,6 +4537,12 @@ class TheContractIsComplete(ContractTestCase):
 		# a `FarmTask` out of it, so the mirror is `FarmTaskModel` and not a
 		# receipt shape.
 		"materialize_task_for_alert": "test_57",
+		# v0.141.0 — `SERVER_CHANGES.md` item 36. The third ending, published on
+		# this transport at last. `ShiftAPI.cancelShift` calls `callVoid` and
+		# decodes nothing, so the mirror is `UndecodedResponseModel`: what the
+		# tests assert instead is that no Attendance is written and the crew rows
+		# are kept, which is the whole difference between this and `end_shift`.
+		"cancel_shift": "test_58",
 	}
 
 	def _published(self, module):

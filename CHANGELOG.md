@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.141.0 — 2026-08-27 — the third ending, and the door it never had
+
+**`SERVER_CHANGES.md` ITEM 36, IN ONE ROUTE.** `cancel_shift` has been in
+`tools/shifts.py` for many releases and was published on the MCP registry alone.
+Probed against the deployed sidecar, `/farmops/api/mobile/end_shift`,
+`clock_out_worker`, `log_shift_break`, `get_crew_overview` and
+`list_field_boundaries` all answer **401** with no credential;
+`/farmops/api/mobile/cancel_shift` answered the sidecar's own **404**. Full note
+in `RELEASES/v0.141.0.md`.
+
+**THE MISSING ROUTE WAS NOT A MISSING BUTTON, IT WAS PAYROLL.** A shift formed
+and then not worked — weather turned at 06:40, the block was not ready, the
+sprayer never arrived — has one correct ending and it was the one a phone could
+not reach. What a foreman could do instead was leave the shift OPEN, which the
+weather sweep walks for ever and which holds its whole crew off every other
+roster because `start_shift` refuses a second open shift for the same person; or
+close it with `end_shift`, which files an FSMA §112.161(b) attestation that a day
+happened and writes an Attendance row per crew member for a day nobody worked.
+Both wrong, one of them silently.
+
+**DISPATCH-GATED, BESIDE `end_stale_shift`.** It ends a shift a whole crew is
+rostered on, and a picker cannot call off the crew they are standing in — the
+same gate the drill-down that draws the button is already behind.
+
+**NOTHING IS RELAXED ON THE WAY THROUGH.** Already cancelled, already CLOSED by a
+signed review, no reason given, cancelled before the shift started: four refusals
+worth putting in front of a foreman verbatim, and the client shows all four. The
+missing reason is deliberately NOT pre-empted in the wrapper — the tool's
+sentence is about the decision, and "cancellation_reason is required" is the
+worse one.
+
+**`farm_shift` AND `reason` ARE DECLARED**, for the reason `end_shift` declares
+`farm_shift`: `routes.bind` reduces a body to the keys the signature declares, so
+an undeclared alias is dropped before any guard sees it. The two shift spellings
+disagreeing is refused rather than resolved.
+
+**NO CLIENT RELEASE IS NEEDED.** `ShiftAPI.cancelShift` degrades on a 404 and on
+nothing else; a `ToolError` already arrives as a 400 and is shown verbatim.
+
 ## 0.140.0 — 2026-08-26 — the shift nobody closed, and the block nobody was told about
 
 **TWO THINGS THIS SERVER ALREADY KNEW AND WAS NOT TELLING THE ONE PERSON WHO
