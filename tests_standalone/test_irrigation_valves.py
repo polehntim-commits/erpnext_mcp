@@ -81,6 +81,34 @@ LATERAL = "HR-Valve-Lat-01"
 LATERAL_TWO = "HR-Valve-Lat-02"
 
 
+def log_event(asset, to_state, when, cascaded_from=None):
+	"""One Asset State Log row, at a timestamp a test chose.
+
+	MODULE-LEVEL BECAUSE TWO CASE CLASSES SEED THE SAME ROWS. `ValveTestCase`
+	drives the tools and `TheHandsetReadsTheLine` drives the routes; both need
+	runs whose minutes are minutes, and this harness advances its clock one
+	second per call — so a run opened and closed through the tool is one second
+	long and every arithmetic assertion made on it would be about rounding. See
+	this module's docstring.
+	"""
+	rows = STORE.tables.setdefault("Asset State Log", {})
+	name = f"ASL-V-{len(rows) + 1:04d}"
+	rows[name] = {
+		"name": name,
+		"docstatus": 0,
+		"asset_name": asset,
+		"asset_type": "Irrigation Valve",
+		"action": "open_valve" if to_state == "open" else "close_valve",
+		"from_state": "closed" if to_state == "open" else "open",
+		"to_state": to_state,
+		"performed_by": "Administrator",
+		"performed_at": when,
+		"cascaded_from": cascaded_from,
+		"creation": when,
+	}
+	return name
+
+
 class ValveTestCase(V12TestCase):
 	def setUp(self):
 		super().setUp()
@@ -146,21 +174,7 @@ class ValveTestCase(V12TestCase):
 
 	def event(self, asset, to_state, when, cascaded_from=None):
 		"""One Asset State Log row, at a timestamp this test chose."""
-		rows = STORE.tables.setdefault("Asset State Log", {})
-		name = f"ASL-V-{len(rows) + 1:04d}"
-		rows[name] = {
-			"name": name,
-			"docstatus": 0,
-			"asset_name": asset,
-			"asset_type": "Irrigation Valve",
-			"action": "open_valve" if to_state == "open" else "close_valve",
-			"from_state": "closed" if to_state == "open" else "open",
-			"to_state": to_state,
-			"performed_by": "Administrator",
-			"performed_at": when,
-			"cascaded_from": cascaded_from,
-			"creation": when,
-		}
+		return log_event(asset, to_state, when, cascaded_from)
 
 
 # ── 1. the toggle reads the state ───────────────────────────────────────────
@@ -814,3 +828,346 @@ class TheHandsetScansAndCanAct(MobileAPITestCase):
 		self.be()
 		mobile_api.scan_valve(qr_data=LATERAL, toggle=True)
 		self.assertTrue(self.audit_rows("scan_valve"))
+
+
+# ── 8. the handset reads the line ───────────────────────────────────────────
+class TheHandsetReadsTheLine(MobileAPITestCase):
+	"""The four irrigation reads: a list, a valve, a window and a zone.
+
+	SUBCLASSED FROM THE MOBILE CASE FOR THE SAME REASON `TheHandsetScansAndCanAct`
+	IS. What is under test is the ROUTE — the scope check, the two arguments the
+	wrappers add that the tools do not take, and the audit row. The tools
+	beneath them are covered above and in `test_irrigation_runtime`.
+
+	THE SECOND ZONE AND THE SECOND BLOCK ARE THE POINT OF THE FIXTURE. A `field`
+	filter that fanned out over the wrong zones, or over all of them, would pass
+	against a farm with one zone on one block and fail in July.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(
+			enabled=1,
+			public_url="https://umbrel.tail4a2b.ts.net",
+			**{**ON, **ALL_ON},
+		)
+		self.tool_data(
+			"create_parcel",
+			{"owning_entity": MAIN, "parcel_name": "Home Ranch", "acreage": 88.0},
+		)
+		for block, acres in (("Home Ranch Block 1", 14.0), ("Home Ranch Block 2", 9.0)):
+			self.tool_data(
+				"create_field",
+				{
+					"parcel": "Home Ranch",
+					"field_name": block,
+					"acreage": acres,
+					"variety": "Rainier",
+					"planting_year": 2004,
+					"condition": "Good",
+				},
+			)
+		for block, zone_name, number in (
+			(BLOCK, "HR1-Zone1", 1),
+			(BLOCK, "HR1-Zone2", 2),
+			(self.OTHER_BLOCK, "HR2-Zone1", 1),
+		):
+			self.tool_data(
+				"create_irrigation_zone",
+				{
+					"field": block,
+					"zone_name": zone_name,
+					"zone_number": number,
+					"water_source": "well",
+					"sprinkler_type": "drip",
+					"area_sq_ft": 217800,
+					"flow_rate_gpm": 45,
+				},
+			)
+		self.tool_data(
+			"create_irrigation_valve",
+			{"valve_id": MAIN_VALVE, "valve_type": "Main", "zone": ZONE, "company": MAIN},
+		)
+		self.tool_data(
+			"create_irrigation_valve",
+			{"valve_id": LATERAL, "valve_type": "Lateral", "parent_valve": MAIN_VALVE, "company": MAIN},
+		)
+		self.tool_data(
+			"create_irrigation_valve",
+			{"valve_id": LATERAL_TWO, "valve_type": "Lateral", "zone": ZONE_TWO, "company": MAIN},
+		)
+		self.tool_data(
+			"create_irrigation_valve",
+			{"valve_id": self.OTHER_VALVE, "valve_type": "Main", "zone": self.OTHER_ZONE, "company": MAIN},
+		)
+
+	OTHER_BLOCK = "Home Ranch Block 2 - HR"
+	OTHER_ZONE = "HR2-Zone1 - HR"
+	OTHER_VALVE = "HR-Valve-B2-Main"
+
+	# ── the list ────────────────────────────────────────────────────────────
+	def test_the_whole_register_comes_back_without_a_filter(self):
+		self.be()
+		data = mobile_api.list_irrigation_valves()
+		self.assertEqual(data["valve_count"], 4)
+		self.assertEqual(data["open_count"], 0, "a valve nobody has touched is closed, not open")
+
+	def test_a_zone_narrows_it_to_that_zone(self):
+		self.be()
+		data = mobile_api.list_irrigation_valves(zone=ZONE)
+		self.assertEqual([valve["name"] for valve in data["valves"]], [LATERAL, MAIN_VALVE])
+		self.assertEqual(data["zone"], ZONE)
+
+	def test_a_block_fans_out_over_that_blocks_zones_and_no_others(self):
+		"""The argument the tool does not take. `Irrigation Zone.field` is the
+		only join this app has from planted ground to a pipe, and a valve on the
+		next block over must not arrive on this answer."""
+		self.be()
+		data = mobile_api.list_irrigation_valves(field=BLOCK)
+		self.assertEqual(data["field"], BLOCK)
+		self.assertEqual(sorted(data["zones"]), [ZONE, ZONE_TWO])
+		self.assertEqual(
+			sorted(valve["name"] for valve in data["valves"]),
+			sorted([LATERAL, LATERAL_TWO, MAIN_VALVE]),
+		)
+		self.assertNotIn(self.OTHER_VALVE, [valve["name"] for valve in data["valves"]])
+		self.assertEqual(data["valve_count"], 3)
+
+	def test_the_fanned_out_counts_are_the_blocks_and_not_one_zones(self):
+		"""The merge exists so a block's totals are the block's. A per-zone
+		total presented as the block's would be the bug this filter was added
+		to fix, one screen further on."""
+		self.be()
+		data = mobile_api.list_irrigation_valves(field=BLOCK)
+		self.assertEqual(sum(data["by_state"].values()), 3)
+		self.assertEqual(data["by_valve_type"], {"Lateral": 2, "Main": 1})
+		self.assertFalse(data["truncated"])
+
+	def test_a_zone_and_a_block_that_disagree_are_refused(self):
+		self.be()
+		with self.assertRaises(frappe.ValidationError):
+			mobile_api.list_irrigation_valves(zone=self.OTHER_ZONE, field=BLOCK)
+
+	def test_a_zone_on_the_block_named_beside_it_is_accepted(self):
+		self.be()
+		data = mobile_api.list_irrigation_valves(zone=ZONE, field=BLOCK)
+		self.assertEqual(data["zone"], ZONE)
+
+	def test_status_is_the_apps_spelling_of_state(self):
+		self.be()
+		mobile_api.scan_valve(qr_data=LATERAL, toggle=True)
+		STORE.commit()
+
+		opened = mobile_api.list_irrigation_valves(status="open")
+		self.assertEqual([valve["name"] for valve in opened["valves"]], [LATERAL])
+
+		shut = mobile_api.list_irrigation_valves(status="closed")
+		self.assertNotIn(LATERAL, [valve["name"] for valve in shut["valves"]])
+
+	def test_status_all_filters_nothing(self):
+		self.be()
+		self.assertEqual(mobile_api.list_irrigation_valves(status="all")["valve_count"], 4)
+
+	def test_an_unknown_status_is_the_tools_own_refusal(self):
+		"""Not mapped onto `closed` here. The tool names every state its machine
+		defines, which is the sentence worth putting in front of somebody."""
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.list_irrigation_valves(status="half-open")
+		self.assertIn("state must be one of", str(caught.exception))
+
+	def test_another_entitys_valves_are_not_on_the_list(self):
+		"""ENROLLED FIRST, WHICH IS THE WHOLE POINT OF THE TEST. An outsider who
+		is simply not enrolled meets `guard`'s door and never reaches the scope
+		check, and `harness.PermissionError_` subclasses `ValidationError` — so
+		a cross-entity test written without this line passes on the wrong
+		refusal and would go on passing if the scoping were removed."""
+		self.enrol(email=OUTSIDER, name="Ben Ortiz", entities=[OTHER])
+		self.be(OUTSIDER)
+		self.assertEqual(mobile_api.list_irrigation_valves()["valve_count"], 0)
+
+	# ── one valve ───────────────────────────────────────────────────────────
+	def test_a_valve_reads_in_full_without_a_camera(self):
+		self.be()
+		data = mobile_api.get_irrigation_valve(name=LATERAL)
+		self.assertEqual(data["name"], LATERAL)
+		self.assertEqual(data["state"], "closed")
+		self.assertEqual(data["parent_valve"], MAIN_VALVE)
+		self.assertEqual(data["zone"], ZONE)
+		self.assertEqual(data["field"], BLOCK, "the block the zone waters, lifted to the top level")
+		self.assertIn("runtime_today", data)
+		self.assertIn("children", data)
+		self.assertIn("next_action", data)
+
+	def test_the_four_spellings_are_one_argument(self):
+		self.be()
+		for kwargs in ({"name": LATERAL}, {"valve": LATERAL}, {"valve_id": LATERAL}, {"tag_id": LATERAL}):
+			with self.subTest(spelling=sorted(kwargs)[0]):
+				self.assertEqual(mobile_api.get_irrigation_valve(**kwargs)["name"], LATERAL)
+
+	def test_two_spellings_that_disagree_are_refused(self):
+		self.be()
+		with self.assertRaises(frappe.ValidationError):
+			mobile_api.get_irrigation_valve(name=LATERAL, tag_id=MAIN_VALVE)
+
+	def test_naming_no_valve_at_all_is_refused(self):
+		self.be()
+		with self.assertRaises(frappe.ValidationError):
+			mobile_api.get_irrigation_valve()
+
+	def test_the_answer_is_the_shape_a_scan_already_returns(self):
+		"""`valves._status` builds both, which is why the handset needs no second
+		decoder. Asserted rather than assumed because the two could drift."""
+		self.be()
+		scanned = mobile_api.scan_valve(qr_data=LATERAL)
+		STORE.commit()
+		read = mobile_api.get_irrigation_valve(name=LATERAL)
+		shared = set(scanned) & set(read)
+		for key in ("name", "state", "zone", "parent_valve", "child_count", "next_action"):
+			self.assertIn(key, shared)
+			self.assertEqual(scanned[key], read[key], key)
+
+	def test_another_entitys_valve_reads_as_absent(self):
+		self.enrol(email=OUTSIDER, name="Ben Ortiz", entities=[OTHER])
+		self.be(OUTSIDER)
+		with self.assertRaises(Exception) as caught:
+			mobile_api.get_irrigation_valve(name=LATERAL)
+		self.assertNotIn("enrolled Farm Ops credential", str(caught.exception))
+
+	# ── the window ──────────────────────────────────────────────────────────
+	def test_runtime_is_measured_over_a_window_and_carries_its_zone(self):
+		log_event(LATERAL, "open", "2026-07-01 06:00:00")
+		log_event(LATERAL, "closed", "2026-07-01 10:00:00")
+		self.be()
+
+		data = mobile_api.get_valve_runtime(name=LATERAL, from_date="2026-06-01", to_date="2026-07-31")
+		self.assertEqual(data["valve"], LATERAL)
+		self.assertEqual(data["run_count"], 1)
+		self.assertEqual(data["runtime_hours"], 4.0)
+		self.assertEqual(data["zone"], ZONE)
+		self.assertEqual(data["zone_rollup"]["runtime_hours"], 4.0)
+
+	def test_both_date_spellings_reach_the_tool(self):
+		log_event(LATERAL, "open", "2026-07-01 06:00:00")
+		log_event(LATERAL, "closed", "2026-07-01 10:00:00")
+		self.be()
+
+		stated = mobile_api.get_valve_runtime(name=LATERAL, date_from="2026-06-01", date_to="2026-07-31")
+		canonical = mobile_api.get_valve_runtime(name=LATERAL, from_date="2026-06-01", to_date="2026-07-31")
+		self.assertEqual(stated["from"], canonical["from"])
+		self.assertEqual(stated["runtime_minutes"], canonical["runtime_minutes"])
+
+	def test_a_window_that_excludes_the_run_measures_nothing(self):
+		"""The negative control. A window argument that never reached the tool
+		would answer four hours here and the test above would still be green."""
+		log_event(LATERAL, "open", "2026-07-01 06:00:00")
+		log_event(LATERAL, "closed", "2026-07-01 10:00:00")
+		self.be()
+
+		data = mobile_api.get_valve_runtime(name=LATERAL, from_date="2026-05-01", to_date="2026-05-31")
+		self.assertEqual(data["run_count"], 0)
+		self.assertEqual(data["runtime_minutes"], 0.0)
+
+	def test_another_entitys_runtime_is_not_measured(self):
+		self.enrol(email=OUTSIDER, name="Ben Ortiz", entities=[OTHER])
+		self.be(OUTSIDER)
+		with self.assertRaises(Exception) as caught:
+			mobile_api.get_valve_runtime(name=LATERAL)
+		self.assertNotIn("enrolled Farm Ops credential", str(caught.exception))
+
+	# ── the zone ────────────────────────────────────────────────────────────
+	def test_a_zone_reads_with_its_block_its_valves_and_its_runtime(self):
+		log_event(LATERAL, "open", "2026-07-01 06:00:00")
+		log_event(LATERAL, "closed", "2026-07-01 10:00:00")
+		self.be()
+
+		data = mobile_api.get_irrigation_zone(zone=ZONE, from_date="2026-06-01", to_date="2026-07-31")
+		self.assertEqual(data["name"], ZONE)
+		self.assertEqual(data["field"], BLOCK)
+		self.assertEqual(data["area_acres"], 5.0)
+		self.assertIn("boundary_geojson", data)
+		self.assertEqual(data["valve_count"], 2)
+		self.assertEqual(sorted(valve["name"] for valve in data["valves"]), [LATERAL, MAIN_VALVE])
+		self.assertEqual(data["total_runtime"]["runtime_hours"], 4.0)
+		self.assertEqual(data["total_runtime"]["from"], "2026-06-01 00:00:00")
+
+	def test_the_zone_total_is_the_number_beside_a_valve(self):
+		"""One measurement, read two ways. Two that disagreed would be the
+		screen and the report contradicting each other about a water right."""
+		log_event(LATERAL, "open", "2026-07-01 06:00:00")
+		log_event(LATERAL, "closed", "2026-07-01 10:00:00")
+		self.be()
+
+		zone = mobile_api.get_irrigation_zone(zone=ZONE, from_date="2026-06-01", to_date="2026-07-31")
+		valve = mobile_api.get_valve_runtime(name=LATERAL, from_date="2026-06-01", to_date="2026-07-31")
+		self.assertEqual(
+			zone["total_runtime"]["runtime_minutes"],
+			valve["zone_rollup"]["runtime_minutes"],
+		)
+
+	def test_a_zone_with_no_valves_is_answered_rather_than_refused(self):
+		"""`get_water_usage_report` raises on an empty set and is right to. On a
+		zone screen that is an ordinary state and the note says which."""
+		self.a_third_zone()
+		self.be()
+
+		data = mobile_api.get_irrigation_zone(zone="HR1-Zone3 - HR")
+		self.assertEqual(data["valve_count"], 0)
+		self.assertIsNone(data["total_runtime"])
+		self.assertIn("Asset Register.irrigation_zone", data["total_runtime_note"])
+
+	def a_third_zone(self):
+		return self.tool_data(
+			"create_irrigation_zone",
+			{
+				"field": BLOCK,
+				"zone_name": "HR1-Zone3",
+				"zone_number": 3,
+				"water_source": "well",
+				"sprinkler_type": "drip",
+				"area_sq_ft": 43560,
+				"flow_rate_gpm": 12,
+			},
+		)
+
+	def test_the_valves_can_be_left_off(self):
+		self.be()
+		data = mobile_api.get_irrigation_zone(zone=ZONE, include_valves="false")
+		self.assertIsNone(data["valves"])
+		self.assertEqual(data["name"], ZONE)
+
+	def test_another_entitys_zone_reads_as_absent(self):
+		"""`guard.require_scoped_doc` would pass this: it reads a column called
+		`company` and this register calls its own `owning_entity`."""
+		self.enrol(email=OUTSIDER, name="Ben Ortiz", entities=[OTHER])
+		self.be(OUTSIDER)
+		with self.assertRaises(frappe.DoesNotExistError):
+			mobile_api.get_irrigation_zone(zone=ZONE)
+
+	# ── the transport ───────────────────────────────────────────────────────
+	def test_every_one_of_the_four_leaves_an_audit_row(self):
+		self.be()
+		mobile_api.list_irrigation_valves()
+		mobile_api.get_irrigation_valve(name=LATERAL)
+		mobile_api.get_valve_runtime(name=LATERAL)
+		mobile_api.get_irrigation_zone(zone=ZONE)
+		for method in (
+			"list_irrigation_valves",
+			"get_irrigation_valve",
+			"get_valve_runtime",
+			"get_irrigation_zone",
+		):
+			with self.subTest(method=method):
+				self.assertTrue(self.audit_rows(method), f"{method} left no audit row")
+
+	def test_none_of_the_four_is_declared_mutating(self):
+		"""They are reads. A read declared mutating would be metered at
+		`WRITE_LIMIT` and would appear on the route table as a write."""
+		for method in (
+			mobile_api.list_irrigation_valves,
+			mobile_api.get_irrigation_valve,
+			mobile_api.get_valve_runtime,
+			mobile_api.get_irrigation_zone,
+		):
+			with self.subTest(method=method.farm_ops_method):
+				self.assertFalse(getattr(method, "farm_ops_mutating", False))

@@ -3,6 +3,53 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.143.0 — 2026-08-29 — the valves you cannot get a camera in front of
+
+**`scan_valve` WAS THE WHOLE OF WHAT A PHONE COULD DO AT A VALVE, AND A SCAN
+NEEDS A TAG IN FRONT OF THE CAMERA.** Four reads join it on the mobile sidecar:
+`list_irrigation_valves`, `get_irrigation_valve`, `get_valve_runtime` and
+`get_irrigation_zone`. All four have been MCP tools for releases and all four
+answered the sidecar's own 404 on the deployed site, probed 2026-08-29 against
+`0.142.0`. Full note in `RELEASES/v0.143.0.md`.
+
+**AN IRRIGATOR WALKING A SET ASKS A LIST, NOT A SCAN.** Laterals are opened in
+order and shut four hours later, and "which of these is still open" was
+unanswerable from a handset. So was a valve somebody scanned an hour ago, and so
+was a tag that has weathered, been painted over or gone under a season's growth
+— which is exactly the valve most worth reading and the one a camera cannot
+resolve.
+
+**NOTHING NEW IS COMPUTED.** Every figure comes out of `tools/valves.py`,
+`tools/farm.py` and `tools/irrigation.py` with their caps, their state resolution
+and their refusals unchanged. The two arguments a phone asks for that those tools
+do not take are built by calling more of the same tools: `field` on the valve
+list is resolved through `Irrigation Zone.field` — the only join this app has
+from planted ground to a pipe — and fanned out over that block's zones, with
+`zones_measured` naming what was actually read; a zone's valves and its
+`total_runtime` come from `list_irrigation_valves` and `get_water_usage_report`,
+the latter being the same `get_irrigation_runtime` roll-up behind
+`get_valve_runtime`'s `zone_rollup`, so the two cannot disagree. A `zone` and a
+`field` that contradict each other are refused rather than reconciled, and a
+`status` the state machine does not define is refused by the tool in the tool's
+own words.
+
+**A ZONE WITH NO VALVES IS ANSWERED RATHER THAN REFUSED.**
+`get_water_usage_report` raises on an empty set and is right to — a water-rights
+figure measured over no valves is a lie in the shape of a zero — so the zone
+route returns `total_runtime: null` with a note naming
+`Asset Register.irrigation_zone` and how to set it.
+
+**ALL FOUR ARE READS, OPEN ON ENROLMENT, AND NONE OF THEM WRITES.**
+`scan_valve`'s opt-in toggle is still the only way a handset moves a valve. The
+company comes from the scope check and never from the body; the zone route is
+scoped on `owning_entity` by hand, because `guard.require_scoped_doc` reads a
+column called `company` and this register has none.
+
+**`set_zone_boundary` WAS NEVER MISSING** and is unchanged. It has been mounted
+since v0.110.0 and answers 401 on the deployed site. A 404 against that path is a
+GET — this transport is POST-only and answers 405 — or a deployment behind the
+branch.
+
 ## 0.142.0 — 2026-08-28 — the Pearl blocks link to their own catalogue
 
 **`Field.variety` COULD ONLY EVER NAME ONE TREE.** The Pearl blocks carry Black

@@ -764,6 +764,15 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# last. Dispatch-gated beside `end_stale_shift`; see
 		# `TheNewRegistersAreGated.DISPATCH_GATED`.
 		"/mobile/cancel_shift",
+		# v0.143.0. The four irrigation reads. `scan_valve` was the whole of what a
+		# phone could do at a valve, and it needs a tag in front of the camera; the
+		# set-walk is a list. Open on enrolment — see
+		# `TheNewRegistersAreGated.OPEN_ON_ENROLMENT`. `set_zone_boundary` is NOT
+		# here because it has been mounted since v0.110.0.
+		"/mobile/list_irrigation_valves",
+		"/mobile/get_irrigation_valve",
+		"/mobile/get_valve_runtime",
+		"/mobile/get_irrigation_zone",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):
@@ -1364,7 +1373,7 @@ class TheLoginQRImageRoute(FarmOpsAPITestCase):
 
 	def test_the_kill_switch_answers_503_before_the_credential_is_even_read(self):
 		self.configure(enabled=1, farm_ops_mobile_enabled=0, public_url="https://umbrel.tail4a2b.ts.net")
-		status, body = self.refusal(f"{QR_IMAGE}?user={WORKER}", credential=False, method="GET")
+		status, _body = self.refusal(f"{QR_IMAGE}?user={WORKER}", credential=False, method="GET")
 		self.assertEqual(status, 503)
 
 
@@ -2750,6 +2759,16 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"trace_forward",
 		"trace_lot_backward",
 		"trace_lot_forward",
+		# v0.143.0. The four irrigation reads, and they are the clearest case this
+		# surface has of the rule. `routes.py` already says of `scan_valve` that a
+		# valve "is what a worker in a block sees and a foreman at a desk does not";
+		# the irrigator walking a set IS the least-privileged caller here, and a
+		# dispatch gate would take their own work off their own handset. Nothing in
+		# the four writes.
+		"get_irrigation_valve",
+		"get_irrigation_zone",
+		"get_valve_runtime",
+		"list_irrigation_valves",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -2759,7 +2778,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 87, "a method is named in two sets at once")
+		self.assertEqual(len(named), 91, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

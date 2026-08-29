@@ -137,6 +137,7 @@ from ..tools import files as file_tools
 from ..tools import haccp as haccp_tools
 from ..tools import housing as housing_tools
 from ..tools import iot as iot_tools
+from ..tools import irrigation as irrigation_tools
 from ..tools import locations as location_tools
 from ..tools import lots as lot_tools
 from ..tools import map_overlays as map_overlay_tools
@@ -18381,3 +18382,468 @@ def cancel_shift(
 			inner[key] = given
 
 	return shifts.cancel_shift(inner).data
+
+
+# ── 259-262. the irrigation reads ────────────────────────────────────────────
+#
+# WHAT THE PHONE COULD DO AT A VALVE AND WHAT IT COULD NOT. `scan_valve` has
+# been on this surface since v0.117.0 and answers the whole valve screen — state,
+# the line above, what is below, today's runtime, the next action — for a worker
+# who has just pointed a camera at a tag. Every one of those facts was reachable
+# ONLY by scanning. A phone with no tag in front of it could not list the valves
+# on a zone, could not open one it had scanned an hour ago, could not read a
+# week's runtime off it, and could not read the zone itself; probed against the
+# deployed sidecar on 2026-08-29, all four answered "is not a Farm Ops API
+# method" while `scan_valve` and `set_zone_boundary` answered 401.
+#
+# THAT IS THE IRRIGATOR'S WHOLE JOB, and it is the one field role this app has
+# been serving with a camera alone. Somebody walking a set opens a line of
+# laterals in order, comes back four hours later and shuts them, and the
+# question they ask between those two acts — "which of these is still open" —
+# is a list, not a scan. A tag that has weathered, been painted over or been
+# buried under a season of growth is exactly the valve they need to read, and
+# it is the one the camera cannot give them.
+#
+# NOTHING NEW IS COMPUTED HERE. All four delegate to the tools the AI surface
+# has carried since v0.117.0 (`tools/valves.py`) and v0.9.0 (`tools/farm.py`),
+# with their caps, their state resolution and their refusals unchanged. The one
+# thing these wrappers add is the two arguments a phone asks with and those
+# tools do not take — a `field` on the valve list, and the valves and the
+# runtime alongside a zone — and both are built by CALLING more of the same
+# tools rather than by reading the register a second way.
+#
+# ALL FOUR ARE READS AND ALL FOUR ARE OPEN ON ENROLMENT, which is this surface's
+# rule for a read about the caller's own work and the ground they are standing
+# in. A valve is the clearest case of it: `routes.py` already says in as many
+# words that a valve "is what a worker in a block sees and a foreman at a desk
+# does not". The writes stay where they were — `scan_valve`'s toggle is the only
+# way a handset changes a valve, and it is metered at `WRITE_LIMIT`.
+#
+# THEY ARE POST, LIKE EVERY READ ON THIS TRANSPORT. `app.py` answers 405 to a
+# GET on any `/mobile` path and says why: "a GET carries its arguments in a URL,
+# and a URL is logged by every proxy between the handset and here." The
+# `@frappe.whitelist` decorators below name GET as well, because the whitelisted
+# path through Frappe's own handler still accepts one and every other read in
+# this file is declared the same way.
+
+#: Most zones a `field` filter fans `list_irrigation_valves` out over before it
+#: stops and says so. A block with more irrigation zones than this is a block
+#: whose valves are asked for a zone at a time; an unbounded fan-out would be a
+#: handset waiting on a number of reads that grows with somebody else's register.
+VALVE_ZONE_FAN = 25
+
+
+def _valves_over_zones(inner: dict, zones: list, field: str) -> dict:
+	"""`list_irrigation_valves` once per zone, merged into one answer.
+
+	THE TOOL FILTERS ON ONE ZONE AND A BLOCK HAS SEVERAL. `Asset Register` links
+	a valve to an `Irrigation Zone` and nothing links it to a block — the only
+	path from a planted block to a pipe on this site is `Irrigation Zone.field`,
+	which is the same join `get_water_usage_report` walks for its own `field`
+	argument. So the block is resolved to its zones by `list_irrigation_zones`
+	and the valve list is run against each of them.
+
+	MERGED, NOT RE-DERIVED. Every row in `valves` is a row the tool built, with
+	its state resolved the way the cascade resolves it and its child count from
+	the tool's own batched query. What is recomputed here is arithmetic OVER
+	those rows — the counts and the two breakdowns — because a per-zone total is
+	not the block's total and the phone is drawing one screen.
+
+	THE CAP IS THE TOOL'S OWN AND IS REPORTED TWICE. `valve_tools.LIST_CAP`
+	bounds the merged list as it bounds each call, and `zones_measured` names
+	the zones that were actually read: a block whose valves ran past the cap has
+	zones nobody counted, and a total drawn from a silently shortened list is
+	the wrong number to act on.
+	"""
+	merged: list = []
+	measured: list = []
+	truncated = False
+	for zone in zones:
+		data = valve_tools.list_irrigation_valves({**inner, "zone": zone}).data
+		measured.append(zone)
+		merged.extend(data["valves"])
+		truncated = truncated or bool(data["truncated"])
+		if len(merged) >= valve_tools.LIST_CAP:
+			truncated = truncated or len(merged) > valve_tools.LIST_CAP or len(measured) < len(zones)
+			merged = merged[: valve_tools.LIST_CAP]
+			break
+
+	by_state: dict = {}
+	by_type: dict = {}
+	for valve in merged:
+		by_state[valve["state"]] = by_state.get(valve["state"], 0) + 1
+		key = valve["valve_type"] or "(unranked)"
+		by_type[key] = by_type.get(key, 0) + 1
+	open_now = [valve["name"] for valve in merged if valve["is_open"]]
+
+	clock = timezones.Renderer(inner)
+	data = {
+		"company": inner.get("company") or None,
+		"field": field,
+		"zone": None,
+		"zones": list(zones),
+		"zones_measured": measured,
+		"zone_count": len(zones),
+		"parent_valve": inner.get("parent_valve") or None,
+		"valve_type": inner.get("valve_type") or None,
+		"state": inner.get("state") or None,
+		"valve_count": len(merged),
+		"by_state": dict(sorted(by_state.items())),
+		"by_valve_type": dict(sorted(by_type.items())),
+		"open_now": open_now,
+		"open_count": len(open_now),
+		"valves": merged,
+		"limit": valve_tools.LIST_CAP,
+		"truncated": truncated,
+		**clock.block(),
+	}
+	if truncated:
+		data["truncated_note"] = (
+			f"more than {valve_tools.LIST_CAP} valves are on this block's zones and the list "
+			f"stops there — {len(measured)} of {len(zones)} zone(s) were read. Ask for one zone "
+			"at a time: a total drawn from a silently shortened list is the wrong number to act on."
+		)
+	return data
+
+
+# ── 259. list_irrigation_valves ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_irrigation_valves", limit=guard.READ_LIMIT)
+def list_irrigation_valves(
+	user: str,
+	company=None,
+	zone=None,
+	irrigation_zone=None,
+	field=None,
+	block=None,
+	status=None,
+	state=None,
+	parent_valve=None,
+	valve_type=None,
+	include_retired=None,
+	limit=None,
+	timezone=None,
+) -> dict:
+	"""Every valve on a zone or a block, and what each of them is doing now.
+
+	THE READ THE SET-WALK IS MADE OF. An irrigator opens a line of laterals in
+	order and comes back hours later to shut them; between those two acts the
+	question is "which of these is still open", and until this route existed the
+	only way a handset could answer it was to walk back to every tag and scan it.
+
+	`field` IS THIS WRAPPER'S OWN ARGUMENT AND THE TOOL DOES NOT TAKE ONE. It is
+	resolved through `Irrigation Zone.field` — the only join this app has from a
+	planted block to a pipe — and fanned out over that block's zones. See
+	`_valves_over_zones` for the merge and for what the cap reports. `zone` and
+	`field` together are refused rather than reconciled: a zone that does not
+	water the block named alongside it is a body that says two different things
+	and nothing in it says which was meant.
+
+	`status` IS THE APP'S SPELLING OF `state` and `all` means no filter at all.
+	Anything else goes STRAIGHT THROUGH to the tool unresolved, so a valve that
+	is winterized or under repair is named by the tool's own refusal listing
+	every state the machine defines — a wrapper that mapped an unknown word onto
+	`closed` would answer a question nobody asked.
+
+	RETIRED VALVES ARE OUT UNLESS ASKED FOR, which is the tool's default and not
+	a decision made here: a valve that was pulled out of the ground keeps its tag
+	and its history and is not on the line.
+	"""
+	allowed = guard.require_scope(user)
+	entity = _company(user, company, allowed)
+
+	named_zone, zone_label = _one_spelling(zone, irrigation_zone, "zone", "irrigation_zone")
+	named_field, field_label = _one_spelling(field, block, "field", "block")
+
+	inner: dict = {"company": entity}
+	if parent_valve not in (None, ""):
+		inner["parent_valve"] = str(parent_valve)
+	if valve_type not in (None, ""):
+		inner["valve_type"] = str(valve_type)
+	if include_retired not in (None, ""):
+		inner["include_retired"] = include_retired
+	if limit not in (None, ""):
+		inner["limit"] = limit
+	if timezone not in (None, ""):
+		inner["timezone"] = timezone
+
+	# The LABEL is dropped rather than named: unlike `zone` and `field` below,
+	# neither spelling of this one appears in a refusal — an unknown state is
+	# refused by the tool, in the tool's own words, listing every state its
+	# machine defines.
+	wanted_state = _one_spelling(status, state, "status", "state")[0]
+	if wanted_state and wanted_state.lower() not in ("all", "any"):
+		inner["state"] = wanted_state
+
+	if named_zone:
+		docname = _scoped_location("Irrigation Zone", named_zone, zone_label, allowed)
+		if named_field:
+			block_of = str(frappe.db.get_value("Irrigation Zone", docname, "field") or "")
+			wanted_block = _scoped_location("Field", named_field, field_label, allowed)
+			if block_of != wanted_block:
+				frappe.throw(
+					f"{zone_label} {docname} waters "
+					+ (f"{block_of}, not {wanted_block}" if block_of else "no block on this site")
+					+ f". Send the {zone_label} or the {field_label}, not both. Nothing was read.",
+					frappe.ValidationError,
+				)
+		return valve_tools.list_irrigation_valves({**inner, "zone": docname}).data
+
+	if named_field:
+		wanted_block = _scoped_location("Field", named_field, field_label, allowed)
+		zones = [
+			str(row["name"])
+			for row in farm_tools.list_irrigation_zones(
+				{"field": wanted_block, "owning_entity": entity, "limit": VALVE_ZONE_FAN}
+			).data["zones"]
+		]
+		return _valves_over_zones(inner, zones, wanted_block)
+
+	return valve_tools.list_irrigation_valves(inner).data
+
+
+# ── 260. get_irrigation_valve ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_irrigation_valve", limit=guard.READ_LIMIT)
+def get_irrigation_valve(
+	user: str,
+	company=None,
+	name=None,
+	valve=None,
+	valve_id=None,
+	tag_id=None,
+	timezone=None,
+) -> dict:
+	"""One valve in full, WITHOUT having to be standing in front of its tag.
+
+	THE SAME ANSWER `scan_valve` GIVES, from the same `valves._status`, which is
+	the point of it: a handset that can already render a scan renders this with
+	no second decoder. State, the line above it, what is below it, today's
+	runtime on the valve and on its subtree, the actions the machine allows and
+	the one button the screen should draw.
+
+	`tag_id` IS THE DOCNAME AND SO IS EVERY OTHER SPELLING OF IT. `Asset
+	Register` names a row by the ID printed on its tag — that is the whole design
+	of the register, and `valves._describe` returns the one string as both `name`
+	and `valve_id` for exactly this reason. `name`, `valve`, `valve_id` and
+	`tag_id` are therefore four spellings of one argument rather than four ways
+	in, and two of them disagreeing is refused. What this route does NOT take is
+	the string a camera produced: a scanned QR is a URL and unwinding one is
+	`scan_valve`'s job, which also records the scan.
+
+	`field` IS ADDED AND NOTHING ELSE IS. The tool answers the block through
+	`zone_detail.block`, because a valve is linked to a zone and the zone to the
+	ground; a screen that wants the block should not have to know that. Every
+	other fact keeps the tool's own spelling — `children` is the child valves,
+	`gps_latitude`/`gps_longitude` is the position, `last_state_change` is when
+	it was last toggled — because a second name for a fact is the beginning of
+	two answers to one question.
+	"""
+	allowed = guard.require_scope(user)
+	entity = _company(user, company, allowed)
+
+	named, label = _one_spelling(name, valve, "name", "valve")
+	named, label = _one_spelling(named, valve_id, label, "valve_id")
+	named, label = _one_spelling(named, tag_id, label, "tag_id")
+	if not named:
+		frappe.throw(
+			f"{label} is required — the valve's tag ID, which is its docname. "
+			"list_irrigation_valves has them for a zone or a block, and scan_valve is the one "
+			"that takes the string a camera read. Nothing was read.",
+			frappe.ValidationError,
+		)
+
+	inner: dict = {"name": named, "company": entity}
+	if timezone not in (None, ""):
+		inner["timezone"] = timezone
+
+	data = dict(valve_tools.get_irrigation_valve(inner).data)
+	data["field"] = (data.get("zone_detail") or {}).get("block")
+	return data
+
+
+# ── 261. get_valve_runtime ───────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_valve_runtime", limit=guard.READ_LIMIT)
+def get_valve_runtime(
+	user: str,
+	company=None,
+	name=None,
+	valve=None,
+	valve_id=None,
+	tag_id=None,
+	date_from=None,
+	date_to=None,
+	from_date=None,
+	to_date=None,
+	include_zone=None,
+	timezone=None,
+) -> dict:
+	"""How long this valve has run over a window, beside what its whole zone ran.
+
+	THE NUMBER SOMEBODY IS ASKED FOR AT THE DISTRICT OFFICE, and the one an
+	irrigator wants before deciding whether a block has had enough. `runtime_today`
+	on the valve screen answers since midnight; this answers a window, and
+	defaults to the last thirty days rather than to today so a call with no dates
+	is a season's answer rather than a blank one.
+
+	BOTH DATE SPELLINGS WORK, because the tool takes both: `date_from`/`date_to`
+	is what it was asked for and `from_date`/`to_date` is what every other dated
+	tool in this app takes. Declared here as four arguments rather than two
+	because `routes.bind` drops what a signature does not name, and an alias that
+	is not on the signature is an alias that arrives as "no dates given".
+
+	THE ZONE TOTAL COMES BACK ALONGSIDE unless `include_zone` says otherwise, and
+	it is the fact that makes the valve's own figure readable: three hours on a
+	lateral means one thing on a zone that ran forty and another on a zone that
+	ran four.
+	"""
+	allowed = guard.require_scope(user)
+	entity = _company(user, company, allowed)
+
+	named, label = _one_spelling(name, valve, "name", "valve")
+	named, label = _one_spelling(named, valve_id, label, "valve_id")
+	named, label = _one_spelling(named, tag_id, label, "tag_id")
+	if not named:
+		frappe.throw(
+			f"{label} is required — the valve's tag ID, which is its docname. "
+			"list_irrigation_valves has them for a zone or a block. Nothing was measured.",
+			frappe.ValidationError,
+		)
+
+	inner: dict = {"name": named, "company": entity}
+	for key, given in (
+		("date_from", date_from),
+		("date_to", date_to),
+		("from_date", from_date),
+		("to_date", to_date),
+		("include_zone", include_zone),
+		("timezone", timezone),
+	):
+		if given not in (None, ""):
+			inner[key] = given
+
+	return valve_tools.get_valve_runtime(inner).data
+
+
+# ── 262. get_irrigation_zone ─────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_irrigation_zone", limit=guard.READ_LIMIT)
+def get_irrigation_zone(
+	user: str,
+	company=None,
+	zone=None,
+	name=None,
+	include_valves=None,
+	from_date=None,
+	to_date=None,
+	timezone=None,
+) -> dict:
+	"""One zone in full: the block it waters, the valves on it, what it has run.
+
+	THREE TOOLS BEHIND ONE SCREEN, and none of their arithmetic is repeated here.
+	`farm.get_irrigation_zone` is the register's own answer — the block, the
+	acreage, the share of that block, the boundary, the water source and the two
+	compliance notes about an untested source and an unrecorded surface right.
+	`valves.list_irrigation_valves` is the valve list, with each valve's state
+	resolved the way the cascade resolves it. `irrigation.get_water_usage_report`
+	is the runtime, which is `get_irrigation_runtime`'s measurement rolled up —
+	the same function behind `get_valve_runtime`'s `zone_rollup`, so the zone
+	total on this screen and the zone total beside a valve cannot disagree.
+
+	THE RUNTIME IS SKIPPED WHERE THERE ARE NO VALVES rather than refused. The
+	report tool raises when nothing matched, and it is right to: a water-rights
+	filing measured over an empty set is a lie in the shape of a zero. On a zone
+	screen it is an ordinary state — the zone is registered and the valves are
+	not yet — so `total_runtime` comes back null with `total_runtime_note`
+	saying which of the two it is.
+
+	`owning_entity` IS READ OFF THE RECORD AND NEVER TAKEN FROM THE BODY, the
+	same call `_set_one_boundary` makes above and for the same reason:
+	`guard.require_scoped_doc` reads a column called `company` and this register
+	calls its own `owning_entity`, so `_scoped_location` is the check that
+	actually binds. A caller that could name the entity could read a zone it was
+	not scoped to.
+	"""
+	allowed = guard.require_scope(user)
+	entity = _company(user, company, allowed)
+
+	named, label = _one_spelling(zone, name, "zone", "name")
+	docname = _scoped_location("Irrigation Zone", named, label, allowed)
+	owner = str(frappe.db.get_value("Irrigation Zone", docname, "owning_entity") or "")
+
+	inner: dict = {"zone": docname}
+	if owner:
+		inner["owning_entity"] = owner
+	if timezone not in (None, ""):
+		inner["timezone"] = timezone
+
+	data = dict(farm_tools.get_irrigation_zone(inner).data)
+
+	scope: dict = {"company": owner or entity}
+	if timezone not in (None, ""):
+		scope["timezone"] = timezone
+
+	if str(include_valves or "").strip().lower() in ("0", "false", "no"):
+		data["valves"] = None
+		data["valve_count"] = None
+		data["valves_note"] = "include_valves said no. The zone's own record is unaffected by it."
+		return data
+
+	listed = valve_tools.list_irrigation_valves({**scope, "zone": docname}).data
+	data["valves"] = listed["valves"]
+	data["valve_count"] = listed["valve_count"]
+	data["valves_open_now"] = listed["open_now"]
+	data["valves_by_state"] = listed["by_state"]
+	data["valves_truncated"] = listed["truncated"]
+
+	if not listed["valve_count"]:
+		data["total_runtime"] = None
+		data["total_runtime_note"] = (
+			f"no valve on this site names {docname} as its irrigation zone, so there is nothing "
+			"to measure. Runtime is summed from valve open/close events, and the link is "
+			"Asset Register.irrigation_zone — set it with update_registered_asset(irrigation_zone=…) "
+			"on each valve, or register them with create_irrigation_valve."
+		)
+		return data
+
+	measured: dict = {**scope, "irrigation_zone": docname, "group_by": "zone"}
+	for key, given in (("from_date", from_date), ("to_date", to_date)):
+		if given not in (None, ""):
+			measured[key] = given
+	report = irrigation_tools.get_water_usage_report(measured).data
+
+	# THE ROLL-UP AND NOT THE REPORT. `get_water_usage_report` carries a measured
+	# row per valve and this screen already has the valve list above it; sending
+	# both would be the same valves twice, in two shapes, in one answer a phone
+	# has to decode. `get_water_usage_report` itself is where the per-valve
+	# breakdown lives, and `get_valve_runtime` is where one valve's runs do.
+	data["total_runtime"] = {
+		key: report[key]
+		for key in (
+			"from",
+			"to",
+			"from_local",
+			"to_local",
+			"measured_at",
+			"valve_count",
+			"runtime_minutes",
+			"runtime_hours",
+			"open_run_minutes",
+			"total_minutes_including_open",
+			"gallons",
+			"acre_inches",
+			"acre_feet",
+			"priced_minutes",
+			"unpriced_minutes",
+			"unpriced_valves",
+			"unpriced_valve_count",
+			"valves_open_now",
+			"events_truncated",
+			"valves_truncated",
+		)
+		if key in report
+	}
+	if report.get("unpriced_note"):
+		data["total_runtime"]["unpriced_note"] = report["unpriced_note"]
+	return data

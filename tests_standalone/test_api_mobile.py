@@ -953,6 +953,21 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_worker_detail",
 		"list_active_shifts",
 		"end_stale_shift",
+		# v0.143.0. The four irrigation reads, HERE FOR THIS SET'S ORDINARY REASON
+		# — `MobileAPI.swift` names none of the four. It DOES name `scanValve` and
+		# `setZoneBoundary`, which is the point: the valve screen the app already
+		# draws is fed by a camera and nothing else, and these are the reads that
+		# let it be opened without one. There is no Swift Codable to mirror yet, so
+		# a `test_ios_contract` entry would be an invented contract rather than a
+		# copied one; they move up to `MOBILE` when the constants land.
+		#
+		# `get_irrigation_valve` ANSWERS THE SHAPE `scanValve` ALREADY DECODES —
+		# both come out of `valves._status` — so the client half is a constant and
+		# a call site rather than a new model.
+		"list_irrigation_valves",
+		"get_irrigation_valve",
+		"get_valve_runtime",
+		"get_irrigation_zone",
 	}
 
 	def _whitelisted(self, module):

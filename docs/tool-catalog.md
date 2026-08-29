@@ -5249,6 +5249,12 @@ Read-only, default ON (`allow_get_irrigation_zone`).
 `field_acreage_zoned`, `share_of_field` and `compliance_notes` — the gaps in
 sentences rather than left to be inferred.
 
+**The mobile route adds the valves and the runtime.**
+`POST /farmops/api/mobile/get_irrigation_zone` composes this tool with
+`list_irrigation_valves` and `get_water_usage_report` so a zone screen is one
+call; a zone with no valves linked to it gets `total_runtime: null` and a note
+naming `Asset Register.irrigation_zone`, rather than the report tool's refusal.
+
 ---
 
 ## 106. `create_irrigation_zone`
@@ -14308,7 +14314,7 @@ A tag that is not a valve is refused **by naming what it is**, so a worker who
 scanned a tractor learns which screen they wanted rather than being sent back to
 a menu with nothing.
 
-### The mobile route
+### The mobile routes
 
 `POST /api/method/erpnext_mcp.api.mobile.scan_valve` is the iOS scan-to-action:
 it resolves the tag, records the scan, and — only when the body sends
@@ -14323,6 +14329,26 @@ A refused toggle rolls the scan stamp back with it — that is the framework's
 transaction, not a choice — but the audit row survives, because `guard.endpoint`
 commits its failure rows apart from the request. `last_scan_at` records completed
 scans, not attempts.
+
+**v0.143.0 published the four reads beside it**, because until then the scan was
+the *whole* of what a handset could learn about a valve — and a scan needs a tag
+in front of the camera. An irrigator opens a line of laterals in order and comes
+back hours later to shut them; "which of these is still open" is a list, not a
+scan, and a tag that has weathered or gone under a season's growth is exactly the
+valve they need to read.
+
+| Route | What it adds over the tool it calls |
+| --- | --- |
+| `POST /farmops/api/mobile/list_irrigation_valves` | a `field` filter, resolved through `Irrigation Zone.field` and fanned out over that block's zones |
+| `POST /farmops/api/mobile/get_irrigation_valve` | `field` at the top level; four spellings of the tag ID as one argument |
+| `POST /farmops/api/mobile/get_valve_runtime` | nothing but the gate — both date spellings declared so `routes.bind` delivers them |
+| `POST /farmops/api/mobile/get_irrigation_zone` | the zone's valves and its total runtime, from `list_irrigation_valves` and `get_water_usage_report` |
+
+All four are reads, all four are **open on enrolment**, and none of them writes:
+`scan_valve`'s opt-in toggle is still the only way a handset moves a valve. The
+company comes from the scope check rather than from the body, and the zone route
+is scoped on `owning_entity` by hand — `guard.require_scoped_doc` reads a column
+called `company` and this register does not have one.
 
 ### `get_asset_status_report`, and what a scan returns now
 

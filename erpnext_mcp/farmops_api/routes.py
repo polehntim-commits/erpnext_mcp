@@ -1234,6 +1234,40 @@ ROUTES = (
 	# Dispatch-gated beside `end_stale_shift` for the same reason: it ends a
 	# shift a whole crew is rostered on.
 	Route("/mobile", mobile_api.cancel_shift),
+	# v0.143.0. THE FOUR IRRIGATION READS, AND UNTIL THIS RELEASE THE ONLY WAY A
+	# PHONE COULD LEARN ANYTHING ABOUT A VALVE WAS TO POINT A CAMERA AT ITS TAG.
+	# `scan_valve` has been on this table since v0.117.0 and answers the whole
+	# valve screen; `tools/valves.py` has carried the other three since the same
+	# release and `tools/farm.py` has carried `get_irrigation_zone` since v0.9.0,
+	# all four on the MCP registry alone. Probed against the deployed sidecar on
+	# 2026-08-29: `/mobile/scan_valve` and `/mobile/set_zone_boundary` answer 401
+	# with no credential, and all four paths below answered the sidecar's own 404.
+	#
+	# THE MISSING ROUTES WERE THE SET-WALK. An irrigator opens a line of laterals
+	# in order and comes back hours later to shut them, and the question between
+	# those two acts — "which of these is still open" — is a list rather than a
+	# scan. A tag that has weathered, been painted over or gone under a season's
+	# growth is exactly the valve they need to read and the one the camera cannot
+	# give them. So is a valve somebody scanned an hour ago and now wants to check
+	# from the truck.
+	#
+	# OPEN ON ENROLMENT, ALL FOUR, WHICH IS THIS SURFACE'S RULE FOR A READ ABOUT
+	# THE GROUND SOMEBODY IS STANDING IN. This table already says of the route
+	# above them that a valve "is what a worker in a block sees and a foreman at a
+	# desk does not"; a read gated on dispatch would take the irrigator's own work
+	# off the handset of the person doing it. Nothing here writes — `scan_valve`'s
+	# opt-in toggle remains the only way a phone moves a valve, and it keeps its
+	# `WRITE_LIMIT`.
+	#
+	# `set_zone_boundary` IS NOT ON THIS LIST BECAUSE IT WAS NEVER MISSING. It has
+	# been mounted since v0.110.0, `MobileAPI.setZoneBoundary` names it, and the
+	# same probe got 401 rather than 404 from it. A 404 reported against that path
+	# is a GET — the sidecar answers 405 to those and says why — or a deployment
+	# behind this branch.
+	Route("/mobile", mobile_api.list_irrigation_valves),
+	Route("/mobile", mobile_api.get_irrigation_valve),
+	Route("/mobile", mobile_api.get_valve_runtime),
+	Route("/mobile", mobile_api.get_irrigation_zone),
 )
 
 #: Path → Route. Built once at import; there is nothing dynamic about it.
