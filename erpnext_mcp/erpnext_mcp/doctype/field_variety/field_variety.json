@@ -1,0 +1,56 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-28 12:00:00.000000",
+ "description": "A LINK, NOT A SECOND RECORD OF THE VARIETY. One row says one cultivar from the block's own crop catalogue (`Crop Variety`, under `Crop`) is planted in this block, what share of it, and when it went in — the Pearl blocks (Black Pearl, Burgundy Pearl, Ebony Pearl in one field) are why this exists. Grafting, pollination group, expected yield, years to maturity and target Brix all stay on `Crop Variety`, read through the crop this block names; storing them again here would be a second answer to a question the catalogue already answers, and the copy is the one that goes stale. `variety` cannot be a Link field — `Crop Variety` is itself a child table (`istable`) and Frappe Link fields resolve against a standalone DocType's own table — so it is free text, checked on save against the block's crop's own catalogue where that catalogue exists to check against; see `Field._check_varieties`.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "variety",
+  "percentage",
+  "planting_year"
+ ],
+ "fields": [
+  {
+   "columns": 3,
+   "description": "The cultivar, spelled as `Crop.varieties` spells it — 'Black Pearl', 'Burgundy Pearl', 'Ebony Pearl'. Checked against the block's own `crop` on save where a Crop record by that name exists and lists at least one variety; free text otherwise, the same way `Field.crop` itself is free text on a farm that has not built its crop catalogue yet.",
+   "fieldname": "variety",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Variety",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "description": "Share of this block this variety covers, 0-100. OPTIONAL: a block that only names which varieties it carries, without claiming to know the split, leaves this blank rather than guessing. The rows in this table cannot sum to more than 100 — less than 100 is the ordinary case (an unrecorded remainder, or nobody having filled in every row).",
+   "fieldname": "percentage",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Percentage of Block",
+   "precision": "2"
+  },
+  {
+   "columns": 1,
+   "description": "The year THIS variety went into THIS block, where it differs from the block's own Planting Year — a field replanted a section at a time has one planting year per variety, not one for the whole block.",
+   "fieldname": "planting_year",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Planting Year"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-28 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Field Variety",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 0,
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

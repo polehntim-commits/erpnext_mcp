@@ -5005,7 +5005,18 @@ as "we farm all of it".
 
 **`known_varieties` is the autosuggest.** It is what is already planted on this
 site. A hardcoded list would be wrong the first time somebody puts a new variety
-in the ground; what is already there cannot be.
+in the ground; what is already there cannot be. Reads both `Field.variety` and
+the `Field Variety` child table, so a suggestion built from only one cannot
+silently drop the other.
+
+**Every block also reports a `varieties` array**, `{variety, percentage,
+planting_year}` from the `Field Variety` child table — empty for the (usual)
+single-variety block, whose answer stays the four legacy columns above it. Each
+entry LINKS to the block's crop's own `Crop Variety` catalogue rather than
+repeating it; `get_crop` is where rootstock, pollination group, yield and Brix
+for that variety are read. `by_variety` counts a multi-variety block once under
+**every** cultivar it grows, from the child table where a block records one
+there; a block with none falls back to its single `variety` column.
 
 **`last_spray_date` comes from two places and says which.** What is recorded on
 the Field, and — where `farm_precision_ag` is installed — the newest Spray Log
@@ -5042,8 +5053,8 @@ rather than resolved to whichever came first; `parcel` narrows it.
 
 **Arguments:** `parcel` (required), `field_name` (required), `owning_entity` (or
 `company`), `acreage`, `crop` (default `Cherry`), `variety`, `rootstock`,
-`planting_year`, `planting_density_per_acre`, `condition`, `block_number`,
-`external_farm_app_id`, `last_spray_date`, `water_test_last_date`,
+`planting_year`, `planting_density_per_acre`, `varieties`, `condition`,
+`block_number`, `external_farm_app_id`, `last_spray_date`, `water_test_last_date`,
 `wildlife_intrusion_last_report`, `food_safety_zone`,
 `worker_hygiene_station_present`, `organic_status`, `organic_cert_agency`,
 `transition_start_date`, `notes`.
@@ -5051,6 +5062,20 @@ rather than resolved to whichever came first; `parcel` narrows it.
 **The docname is `<field_name> - <parcel abbr>`**, so every parcel may have a
 "Block 3". The parcel's abbreviation is its `abbr`, or initials derived from its
 name when it has none.
+
+**`varieties` is for a block that carries more than one cultivar** — the Pearl
+blocks (Black Pearl, Burgundy Pearl, Ebony Pearl) among them. A list of
+`{variety, percentage, planting_year}` objects, `variety` required on each;
+`percentage` is share of the block, 0–100, optional. This is a LINK to the
+block's crop's own `Crop Variety` catalogue, not a second copy of it — rootstock,
+pollination group, yield and Brix stay on `Crop Variety` and are not accepted
+here. Where the block's `crop` names a `Crop` record with a catalogue,
+`variety` on each row must match one of its entries (case-insensitive) and is
+rewritten to the catalogue's own spelling; a block whose crop has no catalogue
+yet keeps whatever was typed. The rows cannot claim more than 100% of the block
+between them. `variety`/`rootstock`/`planting_year`/`planting_density_per_acre`
+above stay the primary answer for a single-variety block and are never derived
+from this table.
 
 **The food-safety fields are part of the block, not a separate log.**
 `last_spray_date` answers the re-entry interval question a crew is waiting at
@@ -5064,6 +5089,8 @@ all.
 | A `external_farm_app_id` already on another block | that id is the other system's primary key; two of them makes the sync bridge ambiguous |
 | Negative acreage or planting density | not opinions |
 | Blocks whose acreage would sum to **more than the parcel** | two numbers that cannot both be true. Named with the parcel's acreage, the total and the excess |
+| A `varieties` row naming a cultivar not in the block's crop's own catalogue | only checked where that catalogue exists at all; names the catalogue's actual list |
+| `varieties` rows whose `percentage` sums to **more than 100** | a block cannot be more than fully covered |
 
 Blocks summing to *less* than the parcel is the normal case and is left alone —
 roads, ditches, headlands and the house are all real.
@@ -5088,13 +5115,21 @@ certificate.
 **MUTATING**, default OFF (`allow_update_field`).
 
 **Arguments:** `field` (required), plus any of `acreage`, `crop`, `variety`,
-`rootstock`, `planting_year`, `planting_density_per_acre`, `condition`,
-`block_number`, `external_farm_app_id`, `last_spray_date`,
+`rootstock`, `planting_year`, `planting_density_per_acre`, `varieties`,
+`condition`, `block_number`, `external_farm_app_id`, `last_spray_date`,
 `water_test_last_date`, `wildlife_intrusion_last_report`, `food_safety_zone`,
 `worker_hygiene_station_present`, `organic_status`, `organic_cert_agency`,
 `transition_start_date`, `notes`.
 
 **Returns** the block and `changed`, every one as `[before, after]`.
+
+**`varieties`, when passed, REPLACES the child table wholesale** rather than
+merging — these rows carry no caller-visible stable key, so there is no
+principled way to tell "the same row, updated" from "a different row that
+happens to share a name." Omitting the argument leaves the table untouched;
+passing an empty list clears it. Every row is checked against the block's crop's
+own catalogue the same way `create_field`'s is, and a refusal here leaves the
+existing table exactly as it was.
 
 Cannot rename it (the docname is built from `field_name`, and every zone points
 at that docname), cannot move it to another parcel (ground does not move — a
@@ -5146,6 +5181,10 @@ Read-only, default ON (`allow_get_parcel_field_summary`).
 **`unassigned_acreage` is usually the interesting number.** Blocks summing to
 less than the parcel is normal, but a large gap on a parcel somebody thinks is
 fully blocked out is a missing Field.
+
+**`by_variety` counts a multi-variety block once per cultivar**, the same rule
+`list_fields` follows — from the `Field Variety` child table where a block
+records one, falling back to its single `variety` column otherwise.
 
 ---
 

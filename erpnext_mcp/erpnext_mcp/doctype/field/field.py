@@ -49,6 +49,35 @@ CERTIFIED_ORGANIC = "Certified Organic"
 #: that has to be abbreviated by whoever types it is not the same ticker twice.
 TICKER_MAX = 10
 
+#: How many varieties one crop's catalogue is read for. A crop with more
+#: cultivars than this is a data problem, not an orchard, in the same register
+#: `Crop._variety_index` itself has no cap on because it is bounded by one
+#: document's own child table — this reads the table directly instead.
+_CROP_VARIETY_SCAN_CAP = 500
+
+
+def _crop_variety_index(crop_name) -> dict:
+	"""Casefolded variety name → the catalogue's own spelling, for one crop.
+
+	Reads `Crop Variety` directly rather than loading the `Crop` document — the
+	same "ask the table, not the parent" shape `_check_parcel_acreage` below uses
+	for a field's siblings. Returns `{}` when no `Crop` record answers to
+	`crop_name`, or that record names no varieties: the two cases
+	`Field._check_varieties` treats as "nothing to check a spelling against."
+	"""
+	crop_name = str(crop_name or "").strip()
+	if not crop_name or not frappe.db.exists("Crop", crop_name):
+		return {}
+	rows = frappe.db.get_all(
+		"Crop Variety",
+		filters={"parent": crop_name, "parenttype": "Crop"},
+		pluck="variety_name",
+		limit=_CROP_VARIETY_SCAN_CAP,
+	)
+	return {
+		str(value).strip().casefold(): str(value).strip() for value in rows or [] if str(value or "").strip()
+	}
+
 
 class Field(Document):
 	def autoname(self):
@@ -88,9 +117,80 @@ class Field(Document):
 
 		self._check_parcel_acreage(parcel)
 		self._check_block_ticker()
+		self._check_varieties()
 		self._derive_organic_certified()
 		self._check_boundary()
 		self._check_ndvi()
+
+	def _check_varieties(self) -> None:
+		"""Every `varieties` row must name this block's crop's own catalogue variety
+		where that catalogue exists to check against, and the table cannot claim
+		more than 100% of the block between its rows.
+
+		`crop` HERE IS FREE TEXT, NOT A LINK to a `Crop` record — most blocks are
+		registered before anybody has built the crop catalogue, and refusing every
+		`varieties` row until it does would make this table unusable on exactly the
+		farms that need it during onboarding. So the catalogue check applies ONLY
+		when a `Crop` named `self.crop` exists AND lists at least one variety of its
+		own; a block whose crop was never turned into a catalogue record keeps
+		whatever spelling was typed, the same way `Field.crop` itself does.
+
+		THE CATALOGUE'S OWN SPELLING IS WRITTEN BACK when a match is found, on the
+		same reasoning `Crop._resolve_variety` writes it back onto an override row:
+		so the stored row and the catalogue agree exactly, and a reader joining the
+		two is a plain match rather than a second casefold.
+
+		THE PERCENTAGE SUM IS THE SAME "CANNOT BOTH BE TRUE" RULE
+		`_check_parcel_acreage` APPLIES TO ACREAGE, applied here to share of one
+		block: more than 100% between the rows is not a judgement about anyone's
+		records, it is an arithmetic impossibility. Less than 100 is the normal
+		case — an unrecorded remainder, or simply not every row filled in.
+		"""
+		if not self.get("varieties"):
+			return
+
+		known = _crop_variety_index(self.crop)
+		total_percentage = 0.0
+		for index, row in enumerate(self.varieties, start=1):
+			variety = str(row.get("variety") or "").strip()
+			if not variety:
+				frappe.throw(_("Row {0} of Varieties needs a variety.").format(index))
+			if known:
+				found = known.get(variety.casefold())
+				if not found:
+					frappe.throw(
+						_(
+							"Row {0} of Varieties names {1!r}, which is not among {2}'s own "
+							"recorded varieties: {3}. Add it to the Crop's Varieties table first, "
+							"or correct the spelling — a name the catalogue does not have is a "
+							"row that looks recorded and links to nothing."
+						).format(index, variety, self.crop, ", ".join(sorted(known.values()))),
+						title=_("No Such Variety"),
+					)
+				row.variety = found
+			else:
+				row.variety = variety
+
+			percentage = row.get("percentage")
+			if percentage not in (None, ""):
+				percentage = float(percentage)
+				if not 0 <= percentage <= 100:
+					frappe.throw(
+						_("Row {0} of Varieties: Percentage of Block is {1}. It runs 0 to 100.").format(
+							index, percentage
+						)
+					)
+				total_percentage += percentage
+
+		if total_percentage > 100.0001:
+			frappe.throw(
+				_(
+					"The Varieties table totals {0}% of this block, and a block cannot be more "
+					"than 100% covered. Either one row is overstated or the split between them "
+					"is wrong."
+				).format(round(total_percentage, 2)),
+				title=_("Variety Percentage Exceeds 100%"),
+			)
 
 	def _check_block_ticker(self) -> None:
 		"""Normalise the buyer-facing ticker, and refuse a second block claiming it.

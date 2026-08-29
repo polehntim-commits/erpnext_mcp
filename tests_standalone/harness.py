@@ -1416,6 +1416,11 @@ APP_DOCTYPES = {
 	"Lease": "lease",
 	"Related Party": "related_party",
 	"Field": "field",
+	# v0.142.0. Multi-variety blocks — the Pearl blocks and any other field that
+	# carries more than one cultivar. Hangs off Field the same way Crop Variety
+	# hangs off Crop, and for the same reason: `Field.variety` is one column and
+	# can name exactly one of them. See `tools/farm._field_variety_rows`.
+	"Field Variety": "field_variety",
 	"Irrigation Zone": "irrigation_zone",
 	"Housing Unit": "housing_unit",
 	"Housing Assignment": "housing_assignment",
@@ -2537,6 +2542,15 @@ REHYDRATED_CHILD_FIELDS = (
 	# and `remove_authorized_signer` re-read I-9 Settings, find one row and set a
 	# field on it — which is `.set()`, which a bare dict does not have.
 	"authorized_signers",
+	# v0.142.0. `Field._check_varieties` and `Crop._resolve_variety` both write the
+	# catalogue's own spelling back with `row.variety = found` — and `validate()`
+	# runs that check on EVERY save, not only one that touched `varieties` this
+	# call. An `update_field` that changes something else entirely still re-reads
+	# and re-validates whatever variety rows the block already had, so those rows
+	# need to behave as documents on this read too, or the second save of any
+	# block/crop with at least one row already saved raises `AttributeError`
+	# rather than the ValidationError a bad row is supposed to produce.
+	"varieties",
 )
 
 
@@ -4618,6 +4632,12 @@ CHILD_TABLE_SOURCES = {
 	# the crop default while reporting itself as overridden.
 	"Crop Variety Water Requirement": (("Crop", "variety_water_requirements"),),
 	"Crop Variety Protocol": (("Crop", "variety_protocols"),),
+	# v0.142.0. `farm._field_varieties` and `_field_variety_rows` both read and
+	# write Field Variety with a `parent`/`parenttype` filter rather than loading
+	# the Field, on the same shape as Crop Variety above. Without this entry
+	# every multi-variety block would report an empty `varieties` list and read
+	# as a single-variety block — the exact gap this table exists to close.
+	"Field Variety": (("Field", "varieties"),),
 	"Market Grade Standard": (("Market", "grade_standards"),),
 	"Agricultural UOM Context Entry": (("Agricultural UOM Context", "uoms"),),
 	# v0.88.0. `spray.list_spray_applications` filters by BLOCK, and the block

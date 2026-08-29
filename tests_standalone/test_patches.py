@@ -29,6 +29,7 @@ from erpnext_mcp import install, settings
 from erpnext_mcp.patches import (
 	backfill_alert_subject_employee,
 	backfill_completion_signatures,
+	backfill_field_varieties,
 	backfill_observation_type,
 	backfill_planting_rootstock,
 	fix_literal_newlines_in_instructions,
@@ -70,6 +71,7 @@ PATCHES = (
 	("erpnext_mcp.patches.backfill_planting_rootstock", backfill_planting_rootstock),
 	("erpnext_mcp.patches.backfill_observation_type", backfill_observation_type),
 	("erpnext_mcp.patches.widen_i9_attestation_filters", widen_i9_attestation_filters),
+	("erpnext_mcp.patches.backfill_field_varieties", backfill_field_varieties),
 )
 
 
@@ -895,3 +897,136 @@ class BackfillPlantingRootstock(FreshSite):
 			],
 		)
 		backfill_planting_rootstock.execute()
+
+
+
+class BackfillFieldVarieties(FreshSite):
+	"""Copying each block's single variety into its own Field Variety row.
+
+	Only the survival question belongs here — see the module docstring. What
+	belongs elsewhere: whether `create_field`/`update_field` write a correct
+	`varieties` argument, and whether `_describe_field` reports it back. This is
+	just "does a `bench migrate` on a real, already-populated site survive
+	writing the first row into a table that never had one."
+	"""
+
+	def a_parcel(self, name):
+		STORE.seed("Parcel", [{"name": name, "parcel_name": name}])
+
+	def a_field(self, name, field_name, parcel, **extra):
+		STORE.seed(
+			"Field",
+			[{"name": name, "field_name": field_name, "parcel": parcel, **extra}],
+		)
+
+	def a_crop(self, name, varieties=()):
+		STORE.seed(
+			"Crop",
+			[
+				{
+					"name": name,
+					"crop_name": name,
+					"varieties": [
+						{
+							"name": f"cv-{name}-{index}",
+							"parent": name,
+							"parenttype": "Crop",
+							"parentfield": "varieties",
+							"variety_name": variety_name,
+						}
+						for index, variety_name in enumerate(varieties, start=1)
+					],
+				}
+			],
+		)
+
+	def test_it_survives_a_site_with_no_field_variety_doctype_at_all(self):
+		backfill_field_varieties.execute()
+
+	def test_it_reports_the_absence_rather_than_raising(self):
+		report = backfill_field_varieties.backfill_field_varieties()
+		self.assertTrue(report["skipped"])
+		self.assertEqual(report["scanned"], 0)
+
+	def test_it_copies_a_blocks_single_variety_into_its_own_row_at_100_percent(self):
+		"""No Crop record names this block's crop, so there is no catalogue to
+		check the spelling against — the common case on a farm that has not built
+		its crop register yet, and the one the whole `variety` column already
+		worked under."""
+		self.a_parcel("Test Parcel")
+		self.a_field(
+			"Test Parcel - Block 3", "Block 3", "Test Parcel", variety="Black Pearl", planting_year=2019
+		)
+		report = backfill_field_varieties.backfill_field_varieties()
+		self.assertEqual(report["filled"], 1)
+		rows = frappe.db.get_all(
+			"Field Variety",
+			filters={"parent": "Test Parcel - Block 3"},
+			fields=["variety", "percentage", "planting_year"],
+		)
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0]["variety"], "Black Pearl")
+		self.assertEqual(rows[0]["percentage"], 100.0)
+		self.assertEqual(rows[0]["planting_year"], 2019)
+
+	def test_it_writes_the_catalogues_own_spelling_when_the_crop_exists(self):
+		self.a_crop("Cherry", ["Black Pearl", "Bing"])
+		self.a_parcel("Test Parcel")
+		self.a_field("Test Parcel - Block 3", "Block 3", "Test Parcel", crop="Cherry", variety="black pearl")
+		report = backfill_field_varieties.backfill_field_varieties()
+		self.assertEqual(report["filled"], 1)
+		rows = frappe.db.get_all(
+			"Field Variety", filters={"parent": "Test Parcel - Block 3"}, fields=["variety", "percentage"]
+		)
+		self.assertEqual(rows[0]["variety"], "Black Pearl")
+		self.assertEqual(rows[0]["percentage"], 100.0)
+
+	def test_a_variety_not_in_the_crops_catalogue_is_reported_and_not_raised(self):
+		"""The catalogue exists but does not list this spelling — a real gap, and
+		one this patch has no business inventing an answer for."""
+		self.a_crop("Cherry", ["Bing"])
+		self.a_parcel("Test Parcel")
+		self.a_field("Test Parcel - Block 3", "Block 3", "Test Parcel", crop="Cherry", variety="Black Pearl")
+		report = backfill_field_varieties.backfill_field_varieties()
+		self.assertEqual(report["filled"], 0)
+		self.assertEqual(report["not_in_catalogue"], 1)
+		self.assertEqual(frappe.db.get_all("Field Variety", filters={"parent": "Test Parcel - Block 3"}), [])
+
+	def test_it_is_a_no_op_the_second_time(self):
+		self.a_parcel("Test Parcel")
+		self.a_field("Test Parcel - Block 3", "Block 3", "Test Parcel", variety="Black Pearl")
+		backfill_field_varieties.execute()
+		second = backfill_field_varieties.backfill_field_varieties()
+		self.assertEqual(second["filled"], 0)
+		self.assertEqual(second["already_set"], 1)
+		self.assertEqual(len(frappe.db.get_all("Field Variety", filters={"parent": "Test Parcel - Block 3"})), 1)
+
+	def test_it_leaves_a_block_that_already_has_a_variety_row_alone(self):
+		self.a_parcel("Test Parcel")
+		self.a_field(
+			"Test Parcel - Block 3",
+			"Block 3",
+			"Test Parcel",
+			variety="Black Pearl",
+			varieties=[
+				{
+					"name": "fv-1",
+					"parent": "Test Parcel - Block 3",
+					"parenttype": "Field",
+					"parentfield": "varieties",
+					"variety": "Burgundy Pearl",
+				}
+			],
+		)
+		report = backfill_field_varieties.backfill_field_varieties()
+		self.assertEqual(report["filled"], 0)
+		self.assertEqual(report["already_set"], 1)
+		rows = frappe.db.get_all("Field Variety", filters={"parent": "Test Parcel - Block 3"}, fields=["variety"])
+		self.assertEqual([row["variety"] for row in rows], ["Burgundy Pearl"])
+
+	def test_a_block_with_no_variety_is_not_scanned(self):
+		self.a_parcel("Test Parcel")
+		self.a_field("Test Parcel - Block 4", "Block 4", "Test Parcel")
+		report = backfill_field_varieties.backfill_field_varieties()
+		self.assertEqual(report["scanned"], 0)
+		self.assertEqual(report["filled"], 0)

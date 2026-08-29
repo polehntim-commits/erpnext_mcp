@@ -3,6 +3,62 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.142.0 — 2026-08-28 — the Pearl blocks link to their own catalogue
+
+**`Field.variety` COULD ONLY EVER NAME ONE TREE.** The Pearl blocks carry Black
+Pearl, Burgundy Pearl and Ebony Pearl in one field, and a single `Data` column
+can hold exactly one of the three. Full note in `RELEASES/v0.142.0.md`.
+
+**`Field Variety`, A NEW CHILD TABLE, LINKS TO THE CROP'S OWN CATALOGUE — IT DOES
+NOT DUPLICATE IT.** `Crop Variety` already holds one row per cultivar per crop:
+grafting, pollination group, expected yield, years to maturity, target Brix. A
+Field Variety row just says WHICH of those catalogue entries is planted here and
+what share of the block it covers; the catalogue fields stay on `Crop Variety`
+and are read through the block's `crop`, not copied. `variety` cannot itself be a
+Link — `Crop Variety` is a child table (`istable`), and Frappe Link fields
+resolve against a standalone DocType's own table — so it is free text, checked on
+save against the block's crop's own catalogue where one exists
+(`Field._check_varieties`), and rewritten to the catalogue's exact spelling on a
+match. A block whose crop has no catalogue yet keeps whatever was typed, the same
+way `Field.crop` itself is free text on a farm still onboarding.
+`Field.variety`/`rootstock`/`planting_year`/`planting_density_per_acre` are
+UNCHANGED and stay the primary answer for a single-variety block.
+
+**`create_field` AND `update_field` TAKE A NEW `varieties` ARGUMENT** — a list of
+`{variety, percentage, planting_year}` objects, validated whole before any of it
+is written (the same rule `create_crop`'s `varieties` follows). `percentage` is
+share of the block, 0–100, optional; the rows in the table cannot sum to more
+than 100 between them — the same "cannot both be true" rule blocks already follow
+against their parcel's acreage, now applied to one block's own coverage.
+`update_field` replaces the table wholesale when the argument is passed, the same
+rule `update_crop` follows for the same reason: these rows have no
+caller-visible stable key, so a merge cannot tell "same variety, updated share"
+from a coincidence of names.
+
+**EVERY READER THAT DESCRIBES A FIELD NOW REPORTS `varieties` ALONGSIDE THE
+LEGACY COLUMNS**, batched per call the same way `_parcel_counties` and
+`_observed_spray_dates` already are — `list_fields`, `get_field`, `create_field`,
+`update_field`, `get_parcel_field_summary`, `find_fields_containing_point` and
+`find_fields_by_h3_cell`. `by_variety` now counts a multi-variety block once
+under **every** cultivar it grows, not once under whichever name the legacy
+column happens to hold; `known_varieties` (the autosuggest) unions both places a
+variety can be recorded so a suggestion list built from one alone cannot silently
+drop the other.
+
+**THE MOBILE `create_field` ROUTE CARRIES IT TOO**, accepting `varieties` as a
+JSON array or a JSON-encoded string — the same tolerance `create_scale_ticket`
+already gives `items`, for the same `URLSession`/multipart disagreement about
+nested arrays.
+
+**A MIGRATION SEEDS THE FIRST ROW ON EVERY UPGRADING SITE.**
+`backfill_field_varieties` copies each block's existing single `variety` into its
+own Field Variety row at 100%, so a table that would otherwise ship empty on
+every already-populated farm starts with the fact the farm already had. It is a
+seed and not a sync — it only ever fills a block with no child row of its own.
+Where the block's crop resolves to a real catalogue that does not list the
+spelling `Field.variety` already holds, the block is reported by name in
+`not_in_catalogue` rather than silently skipped or forced through.
+
 ## 0.141.0 — 2026-08-27 — the third ending, and the door it never had
 
 **`SERVER_CHANGES.md` ITEM 36, IN ONE ROUTE.** `cancel_shift` has been in

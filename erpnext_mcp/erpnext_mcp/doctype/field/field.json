@@ -23,6 +23,7 @@
   "planting_col",
   "planting_year",
   "planting_density_per_acre",
+  "varieties",
   "condition",
   "soil_profile",
   "productive_section",
@@ -190,6 +191,13 @@
    "fieldname": "planting_density_per_acre",
    "fieldtype": "Int",
    "label": "Planting Density (per acre)"
+  },
+  {
+   "description": "Which of this block's crop's own catalogue varieties (`Crop.varieties`) are actually planted here, and what share of the block each covers — the Pearl blocks carry Black Pearl, Burgundy Pearl and Ebony Pearl in one field, which the single `variety` column above can only ever name one of. A LINK, NOT A SECOND CATALOGUE: rootstock, pollination group, yield and Brix stay on `Crop Variety` and are never copied here. `variety`, `rootstock`, `planting_year` and `planting_density_per_acre` above remain the PRIMARY/LEGACY answer for a single-variety block and are never derived from this table or written back to it.",
+   "fieldname": "varieties",
+   "fieldtype": "Table",
+   "label": "Varieties",
+   "options": "Field Variety"
   },
   {
    "description": "How the block is doing. Fallow is a condition, not a crop: a block out of production still has acreage, a cost centre and a water right.",
@@ -492,7 +500,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-26 12:00:00.000000",
+ "modified": "2026-08-28 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Field",

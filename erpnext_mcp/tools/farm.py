@@ -56,8 +56,25 @@ from ..result import ToolResult
 from .realestate import parcel_row
 
 FIELD = "Field"
+FIELD_VARIETY = "Field Variety"
 IRRIGATION_ZONE = "Irrigation Zone"
 PARCEL = "Parcel"
+
+#: The columns a `varieties` argument may set on one child row, and the ones
+#: `_field_varieties` reads back. Kept in one place so `create_field`,
+#: `update_field` and `_field_varieties` cannot drift on what the table holds.
+#: DELIBERATELY JUST THE LINK: `variety` names one of the block's crop's own
+#: `Crop Variety` catalogue rows (checked on save by `Field._check_varieties`),
+#: and `percentage`/`planting_year` are the two facts that are genuinely about
+#: THIS planting rather than the cultivar in general. Rootstock, pollination
+#: group, yield and Brix stay on `Crop Variety` and are read from there, not
+#: copied here — a second copy is a second answer, and the one that goes stale
+#: is always the one nobody edited.
+_FIELD_VARIETY_FIELDS = (
+	"variety",
+	"percentage",
+	"planting_year",
+)
 
 #: The Frappe app that records what happens on a block, and the doctype it
 #: records sprays in. Both are optional: this app never imports from it, only
@@ -340,10 +357,48 @@ def _parcel_counties(parcel_names) -> dict:
 	return {row["name"]: (row.get("county") or None) for row in rows or []}
 
 
-def _describe_field(row: dict, observed: dict | None = None, counties: dict | None = None) -> dict:
+def _field_varieties(field_names) -> dict:
+	"""Every named block's Field Variety rows, in one query.
+
+	Batched on the same shape as `_parcel_counties` and `_observed_spray_dates`
+	beside it — a per-row query here would be one extra round trip per block on
+	every list call. A block with no rows of its own, or on a site that has not
+	migrated the DocType in yet, is simply absent from the result rather than an
+	error: `_describe_field` reads that as an empty list.
+	"""
+	wanted = sorted({str(name) for name in (field_names or []) if name})
+	if not wanted or not compat.doctype_exists(FIELD_VARIETY):
+		return {}
+	rows = frappe.db.get_all(
+		FIELD_VARIETY,
+		filters={"parent": ("in", wanted), "parenttype": FIELD},
+		fields=["parent", *_FIELD_VARIETY_FIELDS],
+		order_by="parent asc, idx asc",
+		limit=REGISTER_CAP * 20,
+	)
+	out: dict = {}
+	for row in rows or []:
+		out.setdefault(row["parent"], []).append(
+			{
+				"variety": row.get("variety") or None,
+				"percentage": round(float(row.get("percentage") or 0), 2) or None,
+				"planting_year": int(row.get("planting_year") or 0) or None,
+			}
+		)
+	return out
+
+
+def _describe_field(
+	row: dict,
+	observed: dict | None = None,
+	counties: dict | None = None,
+	varieties: dict | None = None,
+) -> dict:
 	observed = observed or {}
 	if counties is None:
 		counties = _parcel_counties([row.get("parcel")])
+	if varieties is None:
+		varieties = _field_varieties([row.get("name")])
 	recorded = _date_str(row.get("last_spray_date"))
 	seen = observed.get(row.get("name")) or None
 	effective = max(filter(None, (recorded, seen)), default=None)
@@ -364,6 +419,11 @@ def _describe_field(row: dict, observed: dict | None = None, counties: dict | No
 		"rootstock": row.get("rootstock") or None,
 		"planting_year": int(row.get("planting_year") or 0) or None,
 		"planting_density_per_acre": int(row.get("planting_density_per_acre") or 0) or None,
+		# v0.142.0. `variety`/`rootstock`/`planting_year`/`planting_density_per_acre`
+		# above stay the PRIMARY/LEGACY answer for a single-variety block. This is
+		# the rest of it, for a block — the Pearl blocks among them — that carries
+		# more than one cultivar and cannot be told apart by the single column.
+		"varieties": varieties.get(row.get("name")) or [],
 		"tree_count_estimate": _tree_count(row),
 		"condition": row.get("condition") or None,
 		# v0.116.0. Which Soil Compaction Profile this block's ground follows, and
@@ -518,12 +578,37 @@ def _known_varieties(company: str = "") -> list:
 	This is the autosuggest. A hardcoded list would be wrong the first time
 	somebody plants a variety that did not exist when this shipped; what is
 	already in the ground cannot be.
+
+	READS BOTH THE LEGACY COLUMN AND THE CHILD TABLE. A single-variety block that
+	has never been touched since v0.142.0 still only has `Field.variety`; a
+	multi-variety block's cultivars live in `Field Variety` and nowhere else. A
+	suggestion list built from only one of the two would silently drop whichever
+	half of the farm records its varieties the other way.
 	"""
 	filters = {"variety": ("is", "set")}
 	if company:
 		filters["owning_entity"] = company
 	rows = frappe.db.get_all(FIELD, filters=filters, pluck="variety", limit=REGISTER_CAP) or []
-	return sorted({str(value).strip() for value in rows if str(value or "").strip()})
+	values = {str(value).strip() for value in rows if str(value or "").strip()}
+
+	if compat.doctype_exists(FIELD_VARIETY):
+		child_filters = {"variety": ("is", "set")}
+		if company:
+			# Field Variety carries no owning_entity of its own, so scoping to one
+			# company means resolving that company's blocks first. None of them
+			# means nothing to union — not "every company's varieties".
+			field_names = frappe.db.get_all(
+				FIELD, filters={"owning_entity": company}, pluck="name", limit=REGISTER_CAP
+			)
+			if not field_names:
+				return sorted(values)
+			child_filters["parent"] = ("in", field_names)
+		child_rows = (
+			frappe.db.get_all(FIELD_VARIETY, filters=child_filters, pluck="variety", limit=REGISTER_CAP * 20) or []
+		)
+		values |= {str(value).strip() for value in child_rows if str(value or "").strip()}
+
+	return sorted(values)
 
 
 # ── 100. list_fields ────────────────────────────────────────────────────────
@@ -585,14 +670,11 @@ def list_fields(args: dict) -> ToolResult:
 	)
 	observed = _observed_spray_dates([row.get("name") for row in rows])
 	counties = _parcel_counties([row.get("parcel") for row in rows])
-	fields = [_describe_field(dict(row), observed, counties) for row in rows]
+	varieties = _field_varieties([row.get("name") for row in rows])
+	fields = [_describe_field(dict(row), observed, counties, varieties) for row in rows]
 
 	acreage = round(sum(row["acreage"] for row in fields), 2)
 	planted = [row["planting_year"] for row in fields if row["planting_year"]]
-	varieties: dict = {}
-	for row in fields:
-		key = row["variety"] or "(unrecorded)"
-		varieties[key] = varieties.get(key, 0) + 1
 
 	data = {
 		"company": company,
@@ -603,7 +685,7 @@ def list_fields(args: dict) -> ToolResult:
 		"average_acreage": round(acreage / len(fields), 2) if fields else 0.0,
 		"oldest_planting_year": min(planted) if planted else None,
 		"newest_planting_year": max(planted) if planted else None,
-		"by_variety": dict(sorted(varieties.items())),
+		"by_variety": dict(sorted(_variety_counts(fields).items())),
 		"known_varieties": _known_varieties(company or ""),
 		"without_acreage": [row["name"] for row in fields if not row["acreage"]],
 		"spray_dates_from_farm_precision_ag": _spray_log_available(),
@@ -674,6 +756,27 @@ def _organic_rollup(fields: list) -> dict:
 		"acreage_by_organic_status": dict(sorted(acres.items())),
 		"without_organic_status": [row["name"] for row in fields if not row["organic_status"]],
 	}
+
+
+def _variety_counts(fields: list) -> dict:
+	"""How many blocks grow each variety.
+
+	A MULTI-VARIETY BLOCK COUNTS ONCE UNDER EVERY VARIETY IT GROWS, read from the
+	child table where a block records one there — the whole reason the table
+	exists is that one block can carry more than one cultivar, and counting it
+	once under whichever name the legacy column happens to hold would undercount
+	every other variety it grows. A block with no child rows falls back to its
+	single `variety` column, which is still the only answer a pre-v0.142.0 block
+	has.
+	"""
+	counts: dict = {}
+	for row in fields:
+		names = {entry["variety"] for entry in row.get("varieties") or [] if entry.get("variety")}
+		if not names:
+			names = {row["variety"] or "(unrecorded)"}
+		for name in names:
+			counts[name] = counts.get(name, 0) + 1
+	return counts
 
 
 def _county_rollup(fields: list) -> dict:
@@ -755,6 +858,50 @@ def get_field(args: dict) -> ToolResult:
 	)
 
 
+def _field_variety_rows(raw) -> list[dict]:
+	"""Validate and normalise the `varieties` argument.
+
+	The whole list is checked before any of it is used, so a bad row at position
+	four cannot leave rows one to three appended to a document that then fails —
+	the same rule `agronomy._variety_rows` follows for Crop Variety, and for the
+	same reason.
+
+	SHAPE ONLY. Whether `variety` actually names one of this block's crop's own
+	catalogue varieties, and whether the rows' `percentage` between them exceeds
+	100, are both semantic checks that need the crop's own record in hand —
+	`Field._check_varieties` makes them on `doc.insert()`/`doc.save()`, the same
+	split `agronomy._water_rows` leaves to `Crop._check_water_requirements`
+	rather than duplicating here.
+	"""
+	if raw in (None, ""):
+		return []
+	if not isinstance(raw, list):
+		raise ToolError("varieties must be a list of objects, each with at least a variety.")
+	allowed = set(_FIELD_VARIETY_FIELDS)
+	out = []
+	for index, entry in enumerate(raw, start=1):
+		if not isinstance(entry, dict):
+			raise ToolError(f"varieties[{index}] is not an object. Nothing was written.")
+		unknown = set(entry) - allowed
+		if unknown:
+			raise ToolError(
+				f"varieties[{index}] has unknown key(s): {', '.join(sorted(unknown))}. Allowed: "
+				f"{', '.join(sorted(allowed))}. A key silently dropped is a fact somebody thinks "
+				f"they recorded. Nothing was written."
+			)
+		variety = str(entry.get("variety") or "").strip()
+		if not variety:
+			raise ToolError(f"varieties[{index}] has no variety. Nothing was written.")
+		out.append(
+			{
+				"variety": variety,
+				"percentage": float(entry.get("percentage") or 0),
+				"planting_year": int(entry.get("planting_year") or 0),
+			}
+		)
+	return out
+
+
 # ── 102. create_field ───────────────────────────────────────────────────────
 def create_field(args: dict) -> ToolResult:
 	"""Register one planted block under a parcel."""
@@ -826,6 +973,13 @@ def create_field(args: dict) -> ToolResult:
 		doc.organic_status = as_choice(FIELD, "organic_status", organic_status, "organic_status")
 	doc.organic_cert_agency = as_str(args, "organic_cert_agency")
 	doc.transition_start_date = as_date(args, "transition_start_date")
+
+	# v0.142.0. Multi-variety blocks — the Pearl blocks and any other field that
+	# carries more than one cultivar. `variety`/`rootstock`/`planting_year`/
+	# `planting_density_per_acre` above stay the primary answer for a
+	# single-variety block; this is additive and nothing here is derived from it.
+	for row in _field_variety_rows(args.get("varieties")):
+		doc.append("varieties", row)
 
 	doc.insert(ignore_permissions=True)
 
@@ -988,11 +1142,24 @@ def update_field(args: dict) -> ToolResult:
 	if "transition_start_date" in args:
 		_stage(changes, doc, "transition_start_date", as_date(args, "transition_start_date") or "")
 
+	#: The child table is REPLACED WHOLESALE when passed, never merged — the same
+	#: rule `agronomy.update_crop` follows for a crop's varieties, and for the
+	#: same reason: these rows have no caller-visible stable key, so a merge has
+	#: no way to tell "same variety, updated percentage" from "a different row
+	#: that happens to share a name". Omitting the argument leaves the table
+	#: untouched; passing an empty list is how a caller clears it.
+	if "varieties" in args:
+		wanted = _field_variety_rows(args.get("varieties"))
+		changes["varieties"] = [f"{len(doc.varieties or [])} row(s)", f"{len(wanted)} row(s)"]
+		doc.set("varieties", [])
+		for entry in wanted:
+			doc.append("varieties", entry)
+
 	if not changes:
 		raise ToolError(
 			"nothing to change. Pass at least one of: acreage, crop, variety, rootstock, "
-			"planting_year, planting_density_per_acre, condition, block_number, block_ticker, "
-			"external_farm_app_id, last_spray_date, water_test_last_date, "
+			"planting_year, planting_density_per_acre, varieties, condition, block_number, "
+			"block_ticker, external_farm_app_id, last_spray_date, water_test_last_date, "
 			"wildlife_intrusion_last_report, productive_from_date, productive_through_date, "
 			"pre_yield_end_date, food_safety_zone, worker_hygiene_station_present, "
 			"organic_status, organic_cert_agency, transition_start_date, "
@@ -1434,7 +1601,8 @@ def get_parcel_field_summary(args: dict) -> ToolResult:
 	)
 	observed = _observed_spray_dates([row.get("name") for row in rows])
 	counties = _parcel_counties([parcel["name"]])
-	fields = [_describe_field(dict(row), observed, counties) for row in rows]
+	varieties_by_field = _field_varieties([row.get("name") for row in rows])
+	fields = [_describe_field(dict(row), observed, counties, varieties_by_field) for row in rows]
 
 	zones = []
 	if compat.doctype_exists(IRRIGATION_ZONE):
@@ -1455,10 +1623,6 @@ def get_parcel_field_summary(args: dict) -> ToolResult:
 	for row in fields:
 		key = row["condition"] or "(unrecorded)"
 		conditions[key] = conditions.get(key, 0) + 1
-	varieties: dict = {}
-	for row in fields:
-		key = row["variety"] or "(unrecorded)"
-		varieties[key] = varieties.get(key, 0) + 1
 
 	return ToolResult(
 		data={
@@ -1478,7 +1642,7 @@ def get_parcel_field_summary(args: dict) -> ToolResult:
 			"oldest_planting_year": min(planted) if planted else None,
 			"newest_planting_year": max(planted) if planted else None,
 			"by_condition": dict(sorted(conditions.items())),
-			"by_variety": dict(sorted(varieties.items())),
+			"by_variety": dict(sorted(_variety_counts(fields).items())),
 			"water_rights": sorted({zone["water_right_id"] for zone in zones if zone["water_right_id"]}),
 			"food_safety_blocks": [row["name"] for row in fields if row["food_safety_zone"]],
 			"blocks_without_hygiene_station": [
@@ -1943,7 +2107,8 @@ def find_fields_containing_point(args: dict) -> ToolResult:
 			matches.append(dict(row))
 
 	counties = _parcel_counties([row.get("parcel") for row in matches])
-	described = [_describe_field(row, None, counties) for row in matches]
+	varieties = _field_varieties([row.get("name") for row in matches])
+	described = [_describe_field(row, None, counties, varieties) for row in matches]
 	unmapped = frappe.db.count(
 		FIELD, {**({"owning_entity": company} if company else {}), "boundary_geojson": ("is", "not set")}
 	)
@@ -2016,7 +2181,8 @@ def find_fields_by_h3_cell(args: dict) -> ToolResult:
 			matches.append(dict(row))
 
 	counties = _parcel_counties([row.get("parcel") for row in matches])
-	described = [_describe_field(row, None, counties) for row in matches]
+	varieties = _field_varieties([row.get("name") for row in matches])
+	described = [_describe_field(row, None, counties, varieties) for row in matches]
 	return ToolResult(
 		data={
 			"cell": cell,

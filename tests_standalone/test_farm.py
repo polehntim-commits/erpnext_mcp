@@ -233,6 +233,181 @@ class CreateField(FarmTestCase):
 		self.assertAudited("create_field", "Success")
 
 
+# ── the `varieties` link to the crop's own catalogue ────────────────────────
+class FieldVarietiesTestCase(FarmTestCase):
+	def a_crop(self, name="Cherry", varieties=()):
+		"""A Crop with a Crop Variety catalogue, seeded directly — the same
+		shortcut `test_patches.BackfillFieldVarieties` uses, since what these
+		tests need is the catalogue in place, not a second exercise of
+		`create_crop`."""
+		STORE.seed(
+			"Crop",
+			[
+				{
+					"name": name,
+					"crop_name": name,
+					"varieties": [
+						{
+							"name": f"cv-{name}-{index}",
+							"parent": name,
+							"parenttype": "Crop",
+							"parentfield": "varieties",
+							"variety_name": variety_name,
+						}
+						for index, variety_name in enumerate(varieties, start=1)
+					],
+				}
+			],
+		)
+
+
+class CreateFieldVarieties(FieldVarietiesTestCase):
+	def test_a_varieties_argument_creates_child_rows_reported_back(self):
+		"""No crop catalogue is recorded, so there is nothing to check the
+		spelling against — the common case on a farm still onboarding."""
+		self.a_parcel()
+		data = self.a_field(
+			variety=None,
+			varieties=[
+				{"variety": "Black Pearl", "percentage": 60, "planting_year": 2019},
+				{"variety": "Burgundy Pearl", "percentage": 40, "planting_year": 2019},
+			],
+		)
+		self.assertEqual(len(data["varieties"]), 2)
+		self.assertEqual({row["variety"] for row in data["varieties"]}, {"Black Pearl", "Burgundy Pearl"})
+		self.assertEqual(sum(row["percentage"] for row in data["varieties"]), 100.0)
+
+	def test_percentage_and_planting_year_are_optional(self):
+		self.a_parcel()
+		data = self.a_field(variety=None, varieties=[{"variety": "Black Pearl"}])
+		self.assertEqual(data["varieties"], [{"variety": "Black Pearl", "percentage": None, "planting_year": None}])
+
+	def test_the_single_variety_column_is_unaffected_and_stays_primary(self):
+		"""The legacy field is not derived from the table and the table is not
+		derived from it — the two coexist on purpose."""
+		self.a_parcel()
+		data = self.a_field(variety="Bing", varieties=[{"variety": "Black Pearl"}])
+		self.assertEqual(data["variety"], "Bing")
+		self.assertEqual(data["varieties"][0]["variety"], "Black Pearl")
+
+	def test_an_unknown_key_is_refused_and_nothing_is_written(self):
+		self.a_parcel()
+		error = self.tool_error(
+			"create_field",
+			{
+				"parcel": "Mill Creek",
+				"field_name": "Block 9",
+				"varieties": [{"variety": "Black Pearl", "rootstock": "Gisela 6"}],
+			},
+		)
+		self.assertIn("unknown key", error)
+		self.assertIn("rootstock", error)
+		self.assertIsNone(STORE.get_raw("Field", "Block 9 - MC"))
+
+	def test_a_row_with_no_variety_is_refused(self):
+		self.a_parcel()
+		error = self.tool_error(
+			"create_field", {"parcel": "Mill Creek", "field_name": "Block 9", "varieties": [{"percentage": 50}]}
+		)
+		self.assertIn("no variety", error)
+
+	def test_the_catalogues_own_spelling_is_written_back(self):
+		self.a_crop("Cherry", ["Black Pearl", "Bing"])
+		self.a_parcel()
+		data = self.a_field(crop="Cherry", variety=None, varieties=[{"variety": "black pearl"}])
+		self.assertEqual(data["varieties"][0]["variety"], "Black Pearl")
+
+	def test_a_variety_not_in_the_crops_catalogue_is_refused(self):
+		self.a_crop("Cherry", ["Bing"])
+		self.a_parcel()
+		error = self.tool_error(
+			"create_field",
+			{
+				"parcel": "Mill Creek",
+				"field_name": "Block 9",
+				"crop": "Cherry",
+				"varieties": [{"variety": "Black Pearl"}],
+			},
+		)
+		self.assertIn("not among", error)
+		self.assertIn("Bing", error)
+		self.assertIsNone(STORE.get_raw("Field", "Block 9 - MC"))
+
+	def test_a_crop_with_no_catalogue_at_all_is_not_checked(self):
+		"""`Cherry` names no Crop record on this site, which is the ordinary
+		state for a farm that has not built its crop register yet."""
+		self.a_parcel()
+		data = self.a_field(variety=None, varieties=[{"variety": "Anything At All"}])
+		self.assertEqual(data["varieties"][0]["variety"], "Anything At All")
+
+	def test_percentages_summing_past_100_are_refused(self):
+		self.a_parcel()
+		error = self.tool_error(
+			"create_field",
+			{
+				"parcel": "Mill Creek",
+				"field_name": "Block 9",
+				"varieties": [
+					{"variety": "Black Pearl", "percentage": 60},
+					{"variety": "Burgundy Pearl", "percentage": 60},
+				],
+			},
+		)
+		self.assertIn("100%", error)
+		self.assertIsNone(STORE.get_raw("Field", "Block 9 - MC"))
+
+	def test_percentages_summing_to_exactly_100_are_allowed(self):
+		self.a_parcel()
+		data = self.a_field(
+			variety=None,
+			varieties=[
+				{"variety": "Black Pearl", "percentage": 60},
+				{"variety": "Burgundy Pearl", "percentage": 40},
+			],
+		)
+		self.assertEqual(len(data["varieties"]), 2)
+
+
+class UpdateFieldVarieties(FieldVarietiesTestCase):
+	def setUp(self):
+		super().setUp()
+		self.a_parcel()
+		self.a_field(variety=None, varieties=[{"variety": "Black Pearl", "percentage": 100}])
+
+	def test_it_replaces_the_table_wholesale(self):
+		data = self.tool_data(
+			"update_field",
+			{"field": "Yellow Camp Block 3", "varieties": [{"variety": "Ebony Pearl", "percentage": 100}]},
+		)
+		self.assertEqual(len(data["varieties"]), 1)
+		self.assertEqual(data["varieties"][0]["variety"], "Ebony Pearl")
+
+	def test_omitting_it_leaves_the_table_untouched(self):
+		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3", "condition": "Fair"})
+		self.assertEqual(data["varieties"], [{"variety": "Black Pearl", "percentage": 100.0, "planting_year": None}])
+
+	def test_an_empty_list_clears_it(self):
+		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3", "varieties": []})
+		self.assertEqual(data["varieties"], [])
+
+	def test_varieties_alone_counts_as_a_change(self):
+		data = self.tool_data(
+			"update_field",
+			{"field": "Yellow Camp Block 3", "varieties": [{"variety": "Ebony Pearl"}]},
+		)
+		self.assertIn("varieties", data["changed"])
+
+	def test_a_variety_not_in_the_crops_catalogue_is_refused_and_the_old_table_survives(self):
+		self.a_crop("Cherry", ["Bing"])
+		error = self.tool_error(
+			"update_field",
+			{"field": "Yellow Camp Block 3", "crop": "Cherry", "varieties": [{"variety": "Black Pearl"}]},
+		)
+		self.assertIn("not among", error)
+		row = STORE.get_raw("Field", "Yellow Camp Block 3 - MC")
+		self.assertEqual([entry["variety"] for entry in row["varieties"]], ["Black Pearl"])
+
+
 class FieldAcreageAgainstTheParcel(FarmTestCase):
 	def test_blocks_summing_past_the_parcel_are_refused(self):
 		self.a_parcel("Doane Road", acreage=14.84)

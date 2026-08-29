@@ -7943,7 +7943,17 @@ def _create_one_location(user: str, register: str, arguments: dict) -> dict:
 			)
 		inner[spec["acres_argument"]] = round(measured * spec.get("acres_factor", 1), 4)
 
-	for key in ("notes", "unit_type", "capacity", "crop", "variety", "block_number", "county", "state"):
+	for key in (
+		"notes",
+		"unit_type",
+		"capacity",
+		"crop",
+		"variety",
+		"varieties",
+		"block_number",
+		"county",
+		"state",
+	):
 		value = arguments.get(key)
 		if value not in (None, ""):
 			inner[key] = value
@@ -8046,6 +8056,31 @@ def create_farm_location(
 	)
 
 
+def _field_varieties_arg(raw):
+	"""Normalise the `varieties` argument, the same way `_receipt_items` does.
+
+	A JSON string is accepted as well as a list, for the same reason
+	`_receipt_items` accepts one for `items`: this transport hands the body
+	through untouched, and `URLSession` posting `application/json` and a
+	`multipart` retry do not agree about nested arrays. `None` and `""` pass
+	through unchanged — a caller not naming varieties at all is different from
+	one sending an empty list, and `farm._field_variety_rows` on the other end
+	reads that difference. The tool refuses anything that is not a list of
+	objects, so a malformed body is still refused; this only spares the phone a
+	500 where the intent was unambiguous.
+	"""
+	if raw in (None, ""):
+		return raw
+	if isinstance(raw, str):
+		try:
+			raw = json.loads(raw)
+		except ValueError:
+			frappe.throw("varieties must be a JSON array of variety objects.", frappe.ValidationError)
+	if not isinstance(raw, list):
+		frappe.throw("varieties must be a list of variety objects.", frappe.ValidationError)
+	return raw
+
+
 # ── 71d. create_field ────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("create_field", mutating=True, limit=guard.WRITE_LIMIT)
@@ -8059,6 +8094,7 @@ def create_field(
 	acreage=None,
 	crop=None,
 	variety=None,
+	varieties=None,
 	block_number=None,
 	notes=None,
 ) -> dict:
@@ -8070,6 +8106,13 @@ def create_field(
 	of each, because `routes.bind` drops what a signature does not name and a
 	method that took one of them would be a silent empty column for whichever
 	caller guessed wrong.
+
+	`varieties` IS THE PEARL BLOCKS' ANSWER. A list of `{variety, percentage,
+	planting_year}` objects, one per cultivar of this block's crop actually
+	planted here — `variety` above stays the primary answer for a block that
+	only ever grows one. `variety` on each object must name one of the crop's
+	own catalogue varieties where that catalogue exists to check against; see
+	`farm._field_variety_rows` and `Field._check_varieties`.
 	"""
 	return _create_one_location(
 		user,
@@ -8081,6 +8124,7 @@ def create_field(
 			"acres": acres if acres not in (None, "") else acreage,
 			"crop": crop,
 			"variety": variety,
+			"varieties": _field_varieties_arg(varieties),
 			"block_number": block_number,
 			"notes": notes,
 		},
