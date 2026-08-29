@@ -44,6 +44,7 @@ import frappe
 
 from erpnext_mcp import __version__, registry
 from erpnext_mcp.errors import ToolError
+from erpnext_mcp.farmops_api import app as sidecar_app
 from erpnext_mcp.farmops_api import routes as sidecar_routes
 from erpnext_mcp.tools import diagnostics
 
@@ -505,10 +506,16 @@ class TheCredentialStoresAreRefused(DiagnosticsTestCase):
 
 # ── 6. the route table is not an access map ─────────────────────────────────
 class TheRouteTableIsHonest(DiagnosticsTestCase):
+	#: `sidecar_routes.ROUTES` plus the one route that is not in it —
+	#: `login_qr_image` is GET, answers a PNG, and its handler carries none of
+	#: `guard.endpoint`'s attributes, so `list_sidecar_routes` merges it in by
+	#: hand rather than reading it off the table. See `sidecar_app.DESCRIBED_ROUTE`.
+	TOTAL_ROUTES = len(sidecar_routes.ROUTES) + 1
+
 	def test_every_mounted_route_is_reported(self):
 		result = self.routes()
-		self.assertEqual(result["count"], len(sidecar_routes.ROUTES))
-		self.assertEqual(result["total_routes"], len(sidecar_routes.ROUTES))
+		self.assertEqual(result["count"], self.TOTAL_ROUTES)
+		self.assertEqual(result["total_routes"], self.TOTAL_ROUTES)
 
 	def test_a_path_carries_the_prefix_a_caller_would_post_to(self):
 		paths = {entry["path"] for entry in self.routes()["routes"]}
@@ -544,8 +551,14 @@ class TheRouteTableIsHonest(DiagnosticsTestCase):
 		)
 
 	def test_user_is_never_an_argument_on_any_route(self):
-		"""The guard injects the authenticated caller and drops any body copy."""
+		"""The guard injects the authenticated caller and drops any body copy —
+		true of every route dispatched through `routes.bind`. `login_qr_image`
+		is the deliberate exception: it is not dispatched that way, and its
+		`user` names the account a credential is minted FOR, which is the
+		opposite of the caller — see `sidecar_app.DESCRIBED_ROUTE`."""
 		for entry in self.routes()["routes"]:
+			if entry["path"] == sidecar_app.QR_IMAGE_PATH:
+				continue
 			with self.subTest(path=entry["path"]):
 				self.assertNotIn("user", entry["arguments"])
 
@@ -560,7 +573,7 @@ class TheRouteTableIsHonest(DiagnosticsTestCase):
 
 		reads = self.routes(mutating=False)
 		self.assertTrue(not any(entry["mutating"] for entry in reads["routes"]))
-		self.assertEqual(reads["count"] + writes["count"], len(sidecar_routes.ROUTES))
+		self.assertEqual(reads["count"] + writes["count"], self.TOTAL_ROUTES)
 
 	def test_the_groups_are_counted_whether_or_not_they_are_filtered_to(self):
 		"""`by_group` is the whole surface even under a filter, so a caller who
@@ -568,7 +581,7 @@ class TheRouteTableIsHonest(DiagnosticsTestCase):
 		result = self.routes(group="files")
 		self.assertTrue(all(entry["group"] == "files" for entry in result["routes"]))
 		self.assertIn("mobile", result["by_group"])
-		self.assertEqual(sum(result["by_group"].values()), len(sidecar_routes.ROUTES))
+		self.assertEqual(sum(result["by_group"].values()), self.TOTAL_ROUTES)
 
 	def test_a_filter_matching_nothing_says_what_there_was(self):
 		result = self.routes(contains="no-such-route")

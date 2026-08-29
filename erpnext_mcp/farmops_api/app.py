@@ -21,6 +21,14 @@ as a JSON object with a status code, or the release has not fixed anything.
 `_failure` is the only way a non-2xx leaves this file, and `dispatch` is wrapped
 so that even a bug in this module's own error handling produces JSON.
 
+THE ONE EXCEPTION IS `GET /mobile/login_qr_image`'s 200. It answers
+`image/png` bytes, not JSON, because its entire reason to exist is that a
+`png_base64` field decoded and re-saved by a human at a terminal was reliably
+producing black or corrupt files — see `_login_qr_image`. Every refusal it can
+give still leaves as `_failure`'s JSON, and it is the only route on this
+surface that is GET, unauthenticated-by-header-only (no body to carry `_auth`
+in), and restricted to an admin role rather than a scoped worker.
+
 ────────────────────────────────────────────────────────────────────────────
 THE ERROR ENVELOPE IS FRAPPE'S, BECAUSE THE APP ALREADY READS FRAPPE'S
 ────────────────────────────────────────────────────────────────────────────
@@ -68,8 +76,11 @@ import traceback
 import frappe
 from werkzeug.wrappers import Request, Response
 
-from .. import __version__
+from .. import __version__, audit, security
 from ..api import guard
+from ..errors import ToolError
+from ..tools import employee as personnel
+from ..tools import mobile as mobile_tools
 from . import auth, session
 from .routes import BY_PATH, PREFIX, bind
 
@@ -84,6 +95,24 @@ DEFAULT_PORT = 5250
 #: answers at the point somebody is standing in a field trying to tell them
 #: apart. It touches no database and opens no Frappe session.
 HEALTH_PATH = f"{PREFIX}/health"
+
+#: `GET /mobile/login_qr_image?user=<email>` — the one route on this surface
+#: that answers a PNG. See `_login_qr_image` and the module docstring.
+QR_IMAGE_PATH = f"{PREFIX}/mobile/login_qr_image"
+
+#: `list_sidecar_routes` describes this app by reading `routes.ROUTES`, and
+#: this path is not in that table — it is not a POST, does not go through
+#: `routes.bind`, and its handler wears none of `guard.endpoint`'s attributes.
+#: WITHOUT THIS, THE DIAGNOSTIC LIES BY OMISSION: an operator auditing "what
+#: does the sidecar publish" would not see the one route that mints a login
+#: credential. `tools/diagnostics.py` merges this in by hand.
+DESCRIBED_ROUTE = {
+	"path": QR_IMAGE_PATH,
+	"method": "login_qr_image",
+	"group": "mobile",
+	"mutating": True,
+	"arguments": ["user"],
+}
 
 #: The same sentence for every way authentication can fail — malformed header,
 #: unknown key, wrong secret, disabled account. A caller learns whether it is
@@ -273,6 +302,113 @@ def _body(request: Request) -> dict:
 	return parsed if isinstance(parsed, dict) else {}
 
 
+def _login_qr_image(request: Request) -> Response:
+	"""`GET /mobile/login_qr_image?user=<email>` — the enrolment PNG, as bytes.
+
+	Every other route on this surface answers JSON and scopes its action to the
+	CALLER's own account. This one does neither: it mints a fresh login
+	credential for the account NAMED in `user`, and answers with the raw PNG
+	`tools.mobile.generate_mobile_login_qr` draws — no `png_base64` field for a
+	client to decode and re-save, which is the exact round-trip that was
+	reliably producing black or corrupt files. Point a browser or `curl` at it
+	with the same `X-FarmOps-Token` any other call here takes, and the bytes
+	that come back are a working QR every time.
+
+	GATED ON A ROLE, NOT ON A MOBILE GRANT. `guard.endpoint` requires the
+	CALLER to hold an Active Mobile Access Grant, which is the right rule for a
+	picker working their own scoped tasks and the wrong one here: the person
+	asking for this is an office account minting somebody ELSE's credential,
+	and may have no grant of their own. `personnel.require_hr_role()` is the
+	gate instead — the same one `api/mobile.py` already runs before a personnel
+	write reaches the register, checked against the CALLER's own roles: this
+	transport never switches to the MCP System User, so `frappe.session.user`
+	is the caller for the whole of this call, exactly as it is for every other
+	`/mobile/*` route.
+	"""
+	if request.method != "GET":
+		return _failure(405, f"{QR_IMAGE_PATH} is GET only.")
+
+	target = str(request.args.get("user") or "").strip()
+	if not target:
+		return _failure(400, "login_qr_image needs `?user=<email>`. Nothing was read.")
+
+	with session.request_session(request=request, body={}):
+		if not guard.mobile_enabled():
+			return _failure(503, "The Farm Ops mobile API is switched off on this site.")
+
+		caller, _source = auth.resolve(request.headers, {})
+		if not caller:
+			logger.info("farmops-api 401 %s from %s", QR_IMAGE_PATH, request.remote_addr)
+			return _failure(401, UNAUTHORIZED)
+
+		ip = security.caller_ip()
+		try:
+			guard.throttle(caller, "login_qr_image", guard.WRITE_LIMIT)
+		except guard.RateLimited as exc:
+			return _failure(429, str(exc))
+
+		session.become(caller)
+		try:
+			personnel.require_hr_role()
+		except ToolError as exc:
+			audit.record(
+				"mobile:login_qr_image",
+				{"user": target},
+				audit.STATUS_ERROR,
+				f"Error — {caller}: {exc}",
+				caller_ip=ip,
+				commit=True,
+			)
+			return _failure(400, str(exc))
+
+		try:
+			result = mobile_tools.generate_mobile_login_qr({"user": target})
+		except ToolError as exc:
+			session.rollback()
+			audit.record(
+				"mobile:login_qr_image",
+				{"user": target},
+				audit.STATUS_ERROR,
+				f"Error — {caller}: {exc}",
+				caller_ip=ip,
+				commit=True,
+			)
+			return _failure(400, str(exc))
+		except Exception as exc:
+			session.rollback()
+			anticipated = _status_for(exc)
+			audit.record(
+				"mobile:login_qr_image",
+				{"user": target},
+				audit.STATUS_ERROR,
+				f"Error — {caller}: {type(exc).__name__}: {exc}",
+				caller_ip=ip,
+				commit=True,
+			)
+			if anticipated:
+				return _failure(anticipated, _message_for(exc, anticipated), type(exc).__name__)
+			logger.error("farmops-api 500 %s caller=%s\n%s", QR_IMAGE_PATH, caller, traceback.format_exc())
+			return _failure(500, INTERNAL)
+
+		session.commit()
+		png = base64.b64decode(result.data["png_base64"])
+		audit.record(
+			"mobile:login_qr_image",
+			{"user": target},
+			audit.STATUS_SUCCESS,
+			f"Success — {caller} minted a login QR for {target}",
+			caller_ip=ip,
+			commit=True,
+		)
+		logger.info("farmops-api 200 %s caller=%s user=%s", QR_IMAGE_PATH, caller, target)
+		return Response(
+			png,
+			status=200,
+			content_type="image/png",
+			headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"},
+		)
+
+
 def dispatch(request: Request) -> Response:
 	"""One request, start to finish. Returns a JSON response for every outcome."""
 	path = (request.path or "").rstrip("/") or "/"
@@ -281,6 +417,9 @@ def dispatch(request: Request) -> Response:
 		# GET or POST, unauthenticated, and deliberately incurious: it proves
 		# this process is answering on this path and says nothing else.
 		return _json({"ok": True, "service": "farmops-api", "version": __version__})
+
+	if path == QR_IMAGE_PATH:
+		return _login_qr_image(request)
 
 	if not path.startswith(f"{PREFIX}/"):
 		return _failure(404, f"{path} is not a Farm Ops API path.")

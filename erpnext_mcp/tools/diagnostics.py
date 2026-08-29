@@ -104,6 +104,7 @@ import frappe
 from .. import __version__, compat
 from ..args import as_int, as_limit, as_str
 from ..errors import ToolError
+from ..farmops_api import app as sidecar_app
 from ..farmops_api import routes as sidecar_routes
 from ..result import ToolResult
 
@@ -701,12 +702,24 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 			}
 		)
 
+	# `login_qr_image` is not in `sidecar_routes.ROUTES` — it is GET, answers a
+	# PNG, and its handler wears none of `guard.endpoint`'s attributes, so it
+	# cannot be read off the table the loop above walks. Merged in by hand so
+	# this diagnostic does not go quiet about the one route that mints a login
+	# credential — see `farmops_api.app.DESCRIBED_ROUTE`.
+	extra = sidecar_app.DESCRIBED_ROUTE
+	total_routes = len(sidecar_routes.ROUTES) + 1
+	by_group[extra["group"]] = by_group.get(extra["group"], 0) + 1
+	if (not group or extra["group"] == group) and (not contains or contains in extra["path"].lower()):
+		if only_mutating is None or only_mutating == "" or compat.checked(only_mutating) == extra["mutating"]:
+			described.append(dict(extra))
+
 	described.sort(key=lambda entry: entry["path"])
 	writes = sum(1 for entry in described if entry["mutating"])
 	data = {
 		"prefix": sidecar_routes.PREFIX,
 		"count": len(described),
-		"total_routes": len(sidecar_routes.ROUTES),
+		"total_routes": total_routes,
 		"mutating_count": writes,
 		"read_count": len(described) - writes,
 		"by_group": dict(sorted(by_group.items())),
@@ -724,17 +737,20 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 			"A tool being in the MCP catalogue does not put it on this table and vice versa. "
 			"The two surfaces are separate on purpose: create_journal_entry and convey_parcel "
 			"are tools here and are reachable from no handset at any path.",
+			"`login_qr_image` is GET and answers a PNG, not JSON — the one route on this "
+			"surface built that way, listed here by hand because it carries no `farm_ops_method` "
+			"attribute for this tool to read off a table.",
 		],
 	}
 	if not described:
 		data["empty_note"] = (
-			f"No route matches. The sidecar publishes {len(sidecar_routes.ROUTES)} paths in "
+			f"No route matches. The sidecar publishes {total_routes} paths in "
 			f"total across {', '.join(sorted(by_group))} — call this with no filters to see "
 			"them."
 		)
 	return ToolResult(
 		data=data,
-		summary=(f"{len(described)} sidecar route(s) of {len(sidecar_routes.ROUTES)}, {writes} mutating"),
+		summary=(f"{len(described)} sidecar route(s) of {total_routes}, {writes} mutating"),
 	)
 
 

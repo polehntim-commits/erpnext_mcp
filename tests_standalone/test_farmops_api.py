@@ -87,6 +87,7 @@ from .test_dispatch import WALK
 #: What the phone will call after the v0.18.0 iOS change.
 CONTEXT = f"{PREFIX}/mobile/get_current_user_context"
 MY_TASKS = f"{PREFIX}/mobile/list_my_tasks"
+QR_IMAGE = f"{PREFIX}/mobile/login_qr_image"
 
 
 class FarmOpsAPITestCase(MobileAPITestCase):
@@ -1286,6 +1287,85 @@ class TheStatusCodesMatterToThePhone(FarmOpsAPITestCase):
 		statuses the app's behaviour turns on cannot drift."""
 		self.configure(enabled=1, farm_ops_mobile_enabled=0)
 		self.assertEqual(self.post(CONTEXT).status_code, 503)
+
+
+# ── the one route that answers a PNG, not JSON ──────────────────────────────
+class TheLoginQRImageRoute(FarmOpsAPITestCase):
+	"""`GET /mobile/login_qr_image?user=<email>` — added so a browser or `curl`
+	gets a working enrolment PNG directly, instead of decoding `png_base64` by
+	hand, which was reliably producing black or corrupt files.
+
+	It is the only route on this surface that is GET and answers `image/png`
+	on success. Every refusal it can give still leaves as `_failure`'s JSON —
+	see `ItIsAlwaysJson` above, which this class does not duplicate.
+	"""
+
+	PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+	def _office(self, user="Administrator"):
+		"""A credential that can call this door: an HR role, no phone grant.
+
+		Deliberately the same recipe `TheSevenGatesStillRun` uses for
+		Administrator — the point of this route is that a credential the grant
+		gate refuses is exactly the one this door must accept.
+		"""
+		frappe.db.set_value("User", user, "api_key", "officekey")
+		STORE.passwords[("User", user, "api_secret")] = "o" * 56
+		return {"api_key": "officekey", "api_secret": "o" * 56}
+
+	def test_an_hr_role_with_no_mobile_grant_gets_a_working_png(self):
+		"""THE POINT OF THE ROUTE. Administrator holds System Manager — an
+		`HR_ROLES` role — and has never been enrolled as a phone. `MY_TASKS`
+		refuses this exact credential with 403 for lacking a grant (see
+		`test_administrator_holds_every_role_and_still_cannot_call_this`), and
+		this route must not: minting a credential for somebody else is an
+		office action, not a picker's, and has no grant to check."""
+		credential = self._office()
+		response = self.post(f"{QR_IMAGE}?user={WORKER}", method="GET", credential=credential)
+		self.assertEqual(response.status_code, 200, response.status_code)
+		self.assertEqual(response.headers["Content-Type"], "image/png")
+		self.assertTrue(response.get_data().startswith(self.PNG_MAGIC))
+
+	def test_the_target_user_is_read_from_the_query_string_not_the_caller(self):
+		"""`user` names whose credential gets minted. The caller is only
+		checked for the role gate and is never itself the target."""
+		self.enrol(email="casey@example.test", name="Casey", role="Field Worker")
+		credential = self._office()
+		before = frappe.db.get_value("Mobile Access Grant", "casey@example.test", "token_issue_count")
+		response = self.post(f"{QR_IMAGE}?user=casey@example.test", method="GET", credential=credential)
+		self.assertEqual(response.status_code, 200, response.status_code)
+		after = frappe.db.get_value("Mobile Access Grant", "casey@example.test", "token_issue_count")
+		self.assertGreater(int(after or 0), int(before or 0))
+
+	def test_the_workers_own_credential_is_refused_by_the_personnel_gate(self):
+		"""Enrolled, active, perfectly valid — and a Field Worker, so
+		`personnel.require_hr_role()` refuses it exactly the way it refuses
+		every other personnel write on this surface: 400, not 403."""
+		status, body = self.refusal(f"{QR_IMAGE}?user={WORKER}", method="GET")
+		self.assertEqual(status, 400)
+		self.assertIn("may not change the personnel register", body["error"])
+
+	def test_no_credential_is_401_not_a_png(self):
+		status, body = self.refusal(f"{QR_IMAGE}?user={WORKER}", credential=False, method="GET")
+		self.assertEqual(status, 401)
+		self.assertIn("usable Farm Ops credential", body["error"])
+
+	def test_a_missing_user_is_400(self):
+		credential = self._office()
+		status, body = self.refusal(QR_IMAGE, method="GET", credential=credential)
+		self.assertEqual(status, 400)
+		self.assertIn("user=", body["error"])
+
+	def test_post_is_refused_get_only(self):
+		credential = self._office()
+		status, body = self.refusal(QR_IMAGE, credential=credential)
+		self.assertEqual(status, 405)
+		self.assertIn("GET only", body["error"])
+
+	def test_the_kill_switch_answers_503_before_the_credential_is_even_read(self):
+		self.configure(enabled=1, farm_ops_mobile_enabled=0, public_url="https://umbrel.tail4a2b.ts.net")
+		status, body = self.refusal(f"{QR_IMAGE}?user={WORKER}", credential=False, method="GET")
+		self.assertEqual(status, 503)
 
 
 # ── 6. byte-identical to the old path ───────────────────────────────────────
