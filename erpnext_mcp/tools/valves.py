@@ -54,7 +54,7 @@ from __future__ import annotations
 import frappe
 
 from .. import compat, timezones
-from ..args import as_bool, as_date, as_limit, as_str, resolve_company
+from ..args import as_bool, as_date, as_float, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
 from . import asset_tags, irrigation, universal_scan
@@ -560,6 +560,225 @@ def create_irrigation_valve(args: dict) -> ToolResult:
 			+ (f", under {parent}" if parent else ", at the head of its line")
 		),
 		docstatus_delta="none → 0 (created)",
+	)
+
+
+# ── update_irrigation_valve ─────────────────────────────────────────────────
+def update_irrigation_valve(args: dict) -> ToolResult:
+	"""Correct a valve's record in place: its rank, its parent, its zone, where it is.
+
+	THE TAG IS THE ONE THING THAT DOES NOT MOVE. The docname IS the printable ID
+	— it is on the label, it is the QR payload, and it is the string every Asset
+	State Log row naming this valve's runtime carries — so a rename is refused
+	rather than performed. Everything a person can get wrong ABOUT a valve is
+	editable here; what the valve is CALLED is settled the moment the tag is
+	printed. A valve that needs a different ID is a new tag and a retirement, not
+	an edit.
+
+	THE SAME THREE REFUSALS `create_irrigation_valve` MAKES, made again, because
+	an edit can put the register into exactly the state the create refused to
+	create: a Main filed underneath a Lateral, a parent that is not a valve, and
+	a zone that does not exist or belongs to another entity. A check that only
+	ran at insert would be a check anybody could get around by creating the valve
+	correctly and then editing it.
+
+	AND ONE REFUSAL CREATE CANNOT MAKE, because a new valve has nothing under it:
+	the rank is checked DOWNWARDS TOO. Demoting a Main to a Lateral while a
+	Sub-Main still hangs off it produces the same upside-down line the create
+	refuses — from the other end — and the closing cascade would honour it. The
+	children are only consulted when `valve_type` is what changed; moving a valve
+	to a different parent does not alter what its own children are.
+
+	A LOOP IS REFUSED AHEAD OF THE CASCADE THAT WOULD WALK IT. `location` is the
+	tree `close_valve` descends, and nothing in the register refuses A → B → A —
+	`_descendants` and `_ancestry` are both written to survive one because the
+	data can contain one. Filing a valve underneath its own descendant is the
+	edit that creates one, and it is the only place this tool can catch it.
+
+	AN UNRANKED PARENT BLOCKS NOTHING HERE, which is a deliberate difference from
+	`create_irrigation_valve`. A valve registered through `register_asset` has no
+	`valve_type` at all, and `_rank` sorts it last — so the create's check refuses
+	to file anything under it. This tool is how that valve gets its rank, and it
+	must not refuse an unrelated edit (a GPS fix, a description) on the grounds
+	of a rank nobody has stated yet. A parent that HAS a rank is checked exactly
+	as the create checks it.
+
+	A RETIRED VALVE IS STILL EDITABLE, unlike a toggled one. Retirement says the
+	valve is not operated; it does not say the record about it was right. The
+	`retired` flag comes back on the answer, so a client that wants to warn can.
+	"""
+	_require()
+	company = resolve_company(as_str(args, "company"))
+	name = as_str(args, "name") or as_str(args, "valve") or as_str(args, "valve_id", required=True)
+	row = _valve_row(name, company or "", verb="changed")
+
+	# THE RENAME IS CAUGHT BY NAME RATHER THAN IGNORED. A caller that sends
+	# `new_valve_id` has stated an intention, and a tool that silently dropped
+	# the key would report "3 field(s) changed" over an edit that did not do the
+	# thing the caller asked for. `valve_id` disagreeing with `name` is the same
+	# request spelled by a client that used one key to find the valve and the
+	# other to rename it.
+	renamed = ""
+	for key in ("new_name", "new_valve_id", "rename_to"):
+		renamed = as_str(args, key)
+		if renamed:
+			break
+	if not renamed and as_str(args, "name") and as_str(args, "valve_id"):
+		stated = as_str(args, "valve_id")
+		if stated != str(row["name"]):
+			renamed = stated
+	if renamed:
+		raise ToolError(
+			f"a valve cannot be renamed from {row['name']!r} to {renamed!r}. The docname IS the "
+			f"tag ID — it is printed on the label, it is what the QR encodes, and it is the "
+			f"string every Asset State Log row carrying this valve's runtime names. Renaming the "
+			f"record would leave the tag in the orchard pointing at a valve that is no longer "
+			f"there. Print the new tag, register it with create_irrigation_valve, and retire this "
+			f"one with retire_asset. Nothing was changed."
+		)
+
+	doc = frappe.get_doc(ASSET_REGISTER, row["name"])
+	changes: dict = {}
+
+	# ── the rank, and the two directions it is checked in ──────────────────
+	retype = "valve_type" in args
+	valve_type = str(row.get("valve_type") or "")
+	if retype:
+		stated = as_str(args, "valve_type")
+		if not stated:
+			raise ToolError(
+				"valve_type cannot be cleared: it is the valve's rank on the line — Main at the "
+				"turnout, Sub-Main off it, Lateral at the row — and an unranked valve is one "
+				"create_irrigation_valve will not file anything underneath. Pass one of "
+				f"{', '.join(VALVE_TYPES)}. Nothing was changed."
+			)
+		valve_type = _as_valve_type(stated, "changed")
+
+	reparent = any(key in args for key in ("parent_valve", "parent_asset", "location"))
+	parent_row: dict = {}
+	if reparent:
+		parent = as_str(args, "parent_valve") or as_str(args, "parent_asset") or as_str(args, "location")
+		if parent:
+			parent_row = _valve_row(parent, company or "", verb="changed")
+			parent = str(parent_row["name"])
+			if parent == str(row["name"]):
+				raise ToolError(
+					f"{row['name']} cannot be its own parent. A valve at the head of its line has "
+					"no parent_valve at all — pass an empty one. Nothing was changed."
+				)
+			descendants, _truncated = asset_tags._descendants(str(row["name"]))
+			below = {str(entry.get("name") or "") for entry in descendants}
+			if parent in below:
+				raise ToolError(
+					f"{parent} already hangs below {row['name']} on this line, so filing "
+					f"{row['name']} underneath it would close the tree into a loop — and "
+					f"`location` is the tree a close_valve cascade walks downwards. Move {parent} "
+					f"out from under {row['name']} first. Nothing was changed."
+				)
+	else:
+		# The parent it already has, read only far enough to rank it. A valve at
+		# the head of its line sits under the block or ranch asset rather than
+		# under another valve, which `_ancestry` stops at for the same reason:
+		# a ranch has no rank and ranks nothing.
+		parent = str(row.get("location") or "")
+		if parent:
+			existing = dict(frappe.db.get_value(ASSET_REGISTER, parent, _fields(), as_dict=True) or {})
+			if str(existing.get("asset_type") or "") == VALVE:
+				parent_row = existing
+
+	if retype or reparent:
+		parent_type = str(parent_row.get("valve_type") or "")
+		if parent_type and _rank(parent_type) > _rank(valve_type):
+			raise ToolError(
+				f"{parent_row['name']} is a {parent_type} and cannot be the parent of a "
+				f"{valve_type}: water runs {' → '.join(VALVE_TYPES)}, and the closing cascade "
+				f"walks that direction. If the line really is plumbed this way, correct the "
+				f"valve_type on {parent_row['name']} first. Nothing was changed."
+			)
+
+	if retype:
+		for child in _children(str(row["name"])):
+			if child.get("retired"):
+				continue
+			child_type = str(child.get("valve_type") or "")
+			if child_type and _rank(child_type) < _rank(valve_type):
+				raise ToolError(
+					f"{child['name']} is a {child_type} hanging off {row['name']}, which cannot "
+					f"be a {valve_type}: that would put a {child_type} below a {valve_type} and "
+					f"the closing cascade would shut the line from the wrong end. Re-rank "
+					f"{child['name']}, or move it, before re-ranking {row['name']}. "
+					f"Nothing was changed."
+				)
+
+	# ── the zone, which is the only link to a flow rate ────────────────────
+	rezone = "zone" in args or "irrigation_zone" in args
+	if rezone:
+		zone = as_str(args, "zone") or as_str(args, "irrigation_zone")
+		if not zone:
+			raise ToolError(
+				"zone cannot be cleared: it is the Irrigation Zone this valve draws through and "
+				"the only link this app has between a valve and a flow rate — without it "
+				"get_water_usage_report counts this valve's minutes and can price none of them, "
+				"and names it in unpriced_valves. Pass the zone it draws through instead. "
+				"Nothing was changed."
+			)
+		if not compat.doctype_exists(IRRIGATION_ZONE) or not frappe.db.exists(IRRIGATION_ZONE, zone):
+			raise ToolError(
+				f"no {IRRIGATION_ZONE} called {zone!r} on this site. list_irrigation_zones has the "
+				"register. Nothing was changed."
+			)
+		# CHECKED AGAINST THE VALVE'S OWN COMPANY and not against the argument.
+		# `company` is optional here — it narrows which valve the name resolves
+		# to — so on a call that omitted it the argument is None and a check
+		# against it would pass anything. The register row states the owner.
+		owner = frappe.db.get_value(IRRIGATION_ZONE, zone, "owning_entity")
+		holder = str(row.get("company") or "") or (company or "")
+		if owner and holder and str(owner) != holder:
+			raise ToolError(
+				f"Irrigation zone {zone!r} belongs to {owner!r}, not {holder!r}. A valve and the "
+				"zone it draws through are the same entity's water. Nothing was changed."
+			)
+		asset_tags._stage(changes, doc, "irrigation_zone", zone)
+
+	# ── what is written ────────────────────────────────────────────────────
+	if retype and compat.has_field(ASSET_REGISTER, "valve_type"):
+		asset_tags._stage(changes, doc, "valve_type", valve_type)
+	if reparent:
+		asset_tags._stage(changes, doc, "location", parent or None)
+	for key in ("description", "nfc_uid"):
+		if key in args:
+			asset_tags._stage(changes, doc, key, as_str(args, key))
+	if "installed_date" in args and compat.has_field(ASSET_REGISTER, "installed_date"):
+		asset_tags._stage(changes, doc, "installed_date", as_date(args, "installed_date"))
+	# A NULL FIX CLEARS THE COLUMN RATHER THAN WRITING 0. `as_float(None)` is
+	# 0.0, and 0.0/0.0 is a real coordinate in the Gulf of Guinea — a valve whose
+	# position was cleared must not come back onto a map off the coast of Africa.
+	for stored, alias in (("gps_latitude", "gps_lat"), ("gps_longitude", "gps_lon")):
+		if stored not in args and alias not in args:
+			continue
+		value = args.get(stored) if stored in args else args.get(alias)
+		if value is None or value == "":
+			asset_tags._stage(changes, doc, stored, None)
+		else:
+			asset_tags._stage(changes, doc, stored, as_float(value, stored))
+
+	if not changes:
+		raise ToolError(
+			f"nothing to change on {row['name']}. Pass at least one of: valve_type, parent_valve, "
+			"zone, description, nfc_uid, installed_date, gps_latitude, gps_longitude. The tag ID "
+			"is the docname and cannot be changed at all."
+		)
+
+	doc.save(ignore_permissions=True)
+
+	after = dict(frappe.db.get_value(ASSET_REGISTER, doc.name, _fields(), as_dict=True) or {})
+	data = _status(after, args)
+	data["changed"] = {key: [before, value] for key, (before, value) in changes.items()}
+
+	return ToolResult(
+		data=data,
+		summary=(f"{doc.name}: {len(changes)} field(s) changed — {', '.join(sorted(changes))}"),
+		docstatus_delta="0 → 0 (updated)",
 	)
 
 

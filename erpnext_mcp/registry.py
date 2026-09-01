@@ -20315,7 +20315,7 @@ TOOLS = {
 	# "Irrigation Valve" since v0.25.0, with a QR label whose payload is its
 	# docname, a parent in the `location` tree, a state machine, a closing
 	# cascade and a state log that `get_irrigation_runtime` above sums into water
-	# minutes. These six tools are the WORKFLOW on top of that register — a
+	# minutes. These seven tools are the WORKFLOW on top of that register — a
 	# toggle that reads the state so a worker does not have to, a rank that lets
 	# a Main filed under a Lateral be refused, and a scan that answers the three
 	# questions somebody standing at a gate actually asked. See
@@ -20374,6 +20374,77 @@ TOOLS = {
 		required=("valve_id", "valve_type"),
 		mutating=True,
 		title="Create an irrigation valve",
+		available=_needs_doctype("Asset Register", "Asset State Log"),
+		requires="the Asset Register and Asset State Log DocTypes — run `bench migrate`",
+	),
+	"update_irrigation_valve": _tool(
+		valves.update_irrigation_valve,
+		"MUTATING (default OFF). Correct a valve's record in place — its rank, "
+		"the valve above it, the zone it draws through, its NFC tag, where it "
+		"is and when it went in the ground.\n\n"
+		"THE TAG ID CANNOT BE CHANGED AND A RENAME IS REFUSED RATHER THAN "
+		"PERFORMED. The docname IS the printable ID: it is on the label, it is "
+		"what the QR encodes, and it is the string every Asset State Log row "
+		"carrying this valve's runtime names. A valve that needs a different ID "
+		"is a new tag from create_irrigation_valve and a retire_asset on this "
+		"one.\n\n"
+		"THE CREATE'S REFUSALS ARE MADE AGAIN, because an edit can otherwise "
+		"reach the state the create refused: a Main filed underneath a Lateral, "
+		"a parent that is not a valve, a zone that does not exist or belongs to "
+		"another entity. AND ONE THE CREATE CANNOT MAKE — the rank is checked "
+		"DOWNWARDS as well, so a Main cannot be demoted to a Lateral while a "
+		"Sub-Main still hangs off it. A valve filed underneath its own "
+		"descendant is refused too: `location` is the tree a closing cascade "
+		"walks, and that edit is the one that closes it into a loop.\n\n"
+		"CLEARING IS NOT THE SAME AS OMITTING. An omitted argument leaves the "
+		"column alone; `zone` and `valve_type` cannot be cleared at all — the "
+		"first is the only link this app has to a flow rate, the second is the "
+		"rank nothing can be filed under. A null gps_latitude/gps_longitude "
+		"DOES clear the fix rather than writing 0, which is a real coordinate.\n\n"
+		"A retired valve is still editable: retirement says it is not operated, "
+		"not that the record about it was right.",
+		{
+			"name": _field(_STRING, "The valve's Asset Register docname, e.g. 'MC-Valve-05'."),
+			"valve_type": _field(
+				_STRING,
+				"Main, Sub-Main or Lateral — the valve's rank on the line. Checked against the "
+				"parent above and the valves hanging below. Cannot be cleared.",
+			),
+			"parent_valve": _field(
+				_STRING,
+				"The valve upstream of this one, as an Asset Register docname. Pass empty to "
+				"move it to the head of its line. This is the tree closing cascades walk.",
+			),
+			"zone": _field(
+				_STRING,
+				"The Irrigation Zone this valve draws through. list_irrigation_zones has the "
+				"register. Cannot be cleared — it is the only link to a flow rate.",
+			),
+			"description": _field(_STRING, "What this valve is, in words."),
+			"nfc_uid": _field(_STRING, "The UID of an NFC tag, if one is attached."),
+			"installed_date": _field(
+				_STRING,
+				"YYYY-MM-DD, when it went into the ground. Distinct from acquired_on, which is "
+				"when it was bought.",
+			),
+			"gps_latitude": _field(
+				_NUMBER,
+				"Where it is. Also accepted as gps_lat. Null clears the fix rather than writing 0.",
+			),
+			"gps_longitude": _field(
+				_NUMBER,
+				"Where it is. Also accepted as gps_lon. Null clears the fix rather than writing 0.",
+			),
+			"company": _field(_STRING, "Company. Inferred on a single-company site."),
+			"timezone": _field(
+				_STRING,
+				"Optional IANA zone — 'America/Los_Angeles'. Every timestamp keeps its stored "
+				"spelling and gains a `*_local` twin rendered in this zone.",
+			),
+		},
+		required=("name",),
+		mutating=True,
+		title="Update an irrigation valve",
 		available=_needs_doctype("Asset Register", "Asset State Log"),
 		requires="the Asset Register and Asset State Log DocTypes — run `bench migrate`",
 	),

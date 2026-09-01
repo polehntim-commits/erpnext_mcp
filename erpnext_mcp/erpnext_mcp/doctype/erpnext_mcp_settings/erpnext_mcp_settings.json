@@ -911,6 +911,7 @@
   "allow_get_irrigation_valve",
   "allow_get_valve_runtime",
   "allow_create_irrigation_valve",
+  "allow_update_irrigation_valve",
   "allow_toggle_irrigation_valve",
   "allow_scan_valve_qr",
   "abc_section",
@@ -7080,6 +7081,13 @@
    "fieldname": "allow_create_irrigation_valve",
    "fieldtype": "Check",
    "label": "Create Irrigation Valve"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Correct a valve already in the register: its rank, the valve above it, the zone it draws through, its NFC tag, where it is and when it went in. The tag ID is the docname and cannot be changed \u2014 a rename is refused. Refuses a Main filed under a Lateral in either direction, and a valve filed under its own descendant.",
+   "fieldname": "allow_update_irrigation_valve",
+   "fieldtype": "Check",
+   "label": "Update Irrigation Valve"
   },
   {
    "default": "0",

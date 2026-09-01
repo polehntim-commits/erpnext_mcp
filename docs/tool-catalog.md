@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 852 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 853 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -14225,7 +14225,7 @@ state machine, a closing cascade, and an `Asset State Log` that
 be a second account of the same pipe — two rows for one gate, two states that
 disagree the first time somebody corrects one, and two answers to "how long did
 zone 3 run" of which the wrong one is whichever a water district happened to
-read. These six are the *workflow* on top of the register that is already there.
+read. These seven are the *workflow* on top of the register that is already there.
 
 Two columns are new on `Asset Register`: `valve_type` (Main, Sub-Main, Lateral)
 and `installed_date`. A third, `last_state_change`, is a **cache of the log**
@@ -14250,6 +14250,48 @@ plumbing.
 under a parent that already has one inherits it, and `zone_source` says which
 happened. Inheriting from anywhere else would be a guess, and this column is what
 `get_water_usage_report` prices gallons with.
+
+### `update_irrigation_valve` — MUTATING, default off
+
+The same valve, corrected in place: rank, parent, zone, NFC tag, description,
+position, installed date.
+
+**The tag ID cannot be changed, and a rename is refused rather than ignored.**
+The docname *is* the printable ID — it is on the label, it is the QR payload, and
+it is the string every `Asset State Log` row carrying this valve's runtime names.
+A record renamed would leave the tag in the orchard pointing at a valve that is
+no longer there. A valve that needs a different ID is a new tag and a
+`retire_asset`, not an edit. `new_valve_id`, `new_name` and a `valve_id` that
+disagrees with `name` are all caught by name, because a silently dropped key
+would report a change that did not happen.
+
+**The create's refusals are made again**, because an edit can otherwise reach
+exactly the state the create refused to create — a Main under a Lateral, a parent
+that is not a valve, a zone that does not exist or belongs to another entity. A
+check that only ran at insert is a check anybody can get around by creating the
+valve correctly and editing it afterwards.
+
+**And one the create cannot make.** A new valve has nothing under it; an existing
+one does, so the rank is checked *downwards* too. Demoting a Main to a Lateral
+while a Sub-Main still hangs off it produces the same upside-down line from the
+other end, and the cascade would honour it. The children are consulted only when
+`valve_type` is what changed — moving a valve to a different parent does not
+alter what its own children are. A valve filed underneath its own descendant is
+refused separately: `location` is the tree `close_valve` descends, and that edit
+is the one that closes it into a loop.
+
+**An unranked parent blocks nothing here**, which is a deliberate difference from
+the create. A valve registered through `register_asset` has no `valve_type` at
+all and `_rank` sorts it last, so the create refuses to file anything under it.
+This tool is how such a valve gets its rank, and it must not refuse a GPS fix or
+a description over a rank nobody has stated yet.
+
+**Clearing is not omitting.** An omitted argument leaves the column alone.
+`zone` and `valve_type` cannot be cleared at all — the first is the only link to
+a flow rate, the second is the rank nothing can be filed under. A null
+`gps_latitude`/`gps_longitude` *does* clear the fix rather than writing `0`,
+which is a real coordinate in the Gulf of Guinea. A retired valve is still
+editable: retirement says it is not operated, not that the record was right.
 
 ### `list_irrigation_valves`, `get_irrigation_valve`
 

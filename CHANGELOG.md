@@ -3,6 +3,53 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.144.0 — 2026-08-31 — the valve was right, the record about it was not
+
+**ONE TOOL: `update_irrigation_valve`.** A valve's rank, its parent, the zone it
+draws through, its NFC tag, its description, its position and its installed date,
+corrected in place. No new doctype, no new column, no existing signature changed.
+Full note in `RELEASES/v0.144.0.md`.
+
+**THE REFUSAL THAT ONLY RAN AT INSERT WAS NOT A REFUSAL.** `create_irrigation_valve`
+has checked rank against the tree since v0.117.0, and there was no way to correct
+a miskeyed valve afterwards except the Desk or a new tag —
+`update_registered_asset` cannot set `valve_type` at all and moves `location`
+without asking what is on the other end. So the create's three refusals are made
+again here: a parent that is not a valve, a zone that does not exist or belongs to
+another entity, and a Main filed underneath a Lateral.
+
+**AND TWO THE CREATE CANNOT MAKE.** The rank is checked DOWNWARDS as well — a
+Main cannot be demoted to a Lateral while a Sub-Main still hangs off it, which is
+the same upside-down line from the other end and one the closing cascade would
+honour. And a valve filed underneath its own descendant is refused at any depth:
+`location` is self-referential, nothing in the register refuses A → B → A, and
+that edit is the one that closes the tree into a loop.
+
+**THE TAG ID CANNOT BE CHANGED AND A RENAME IS REFUSED RATHER THAN IGNORED.** The
+docname IS the printable ID — on the label, in the QR, and named by every Asset
+State Log row this valve's runtime is summed from. `new_valve_id`, `new_name`,
+`rename_to` and a `valve_id` disagreeing with `name` are all caught by name,
+because a silently dropped key reports a change that did not happen.
+
+**CLEARING IS NOT OMITTING.** An omitted argument leaves its column alone. `zone`
+and `valve_type` cannot be cleared at all — the first is the only link this app
+has to a flow rate, the second is the rank nothing can be filed under. A null
+`gps_latitude`/`gps_longitude` DOES clear the fix, and clears it to empty rather
+than to 0: `0.0, 0.0` is a real coordinate in the Gulf of Guinea.
+
+**AN UNRANKED PARENT BLOCKS NOTHING HERE**, deliberately unlike the create. A
+valve registered through `register_asset` has no `valve_type` and `_rank` sorts
+it last, so the create refuses to file anything under it; this tool is how it
+gets a rank, and must not refuse a GPS fix over one nobody has stated yet.
+
+**GPS ON THE TOGGLE WAS ALREADY THERE and nothing was changed for it.**
+`toggle_irrigation_valve` has taken `gps_lat`/`gps_lon` since v0.117.0; verified
+end to end — registry, tool, and `log_asset_state_change` writing the pair onto
+the Asset State Log row for the valve somebody was standing at, but never onto a
+cascaded close, which makes no claim that anybody was there.
+`POST /farmops/api/mobile/scan_valve` carries both to the scan stamp and to the
+toggle.
+
 ## 0.143.0 — 2026-08-29 — the valves you cannot get a camera in front of
 
 **`scan_valve` WAS THE WHOLE OF WHAT A PHONE COULD DO AT A VALVE, AND A SCAN

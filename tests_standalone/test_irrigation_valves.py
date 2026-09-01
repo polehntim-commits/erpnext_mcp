@@ -55,6 +55,7 @@ ALL_ON = {
 	f"allow_{name}": 1
 	for name in (
 		"create_irrigation_valve",
+		"update_irrigation_valve",
 		"list_irrigation_valves",
 		"get_irrigation_valve",
 		"toggle_irrigation_valve",
@@ -159,6 +160,12 @@ class ValveTestCase(V12TestCase):
 		payload.update(kw)
 		return self.tool_data("create_irrigation_valve", payload)
 
+	def an_edit(self, valve, **kw):
+		return self.tool_data("update_irrigation_valve", {"name": valve, **kw})
+
+	def an_edit_refused(self, valve, **kw):
+		return self.tool_error("update_irrigation_valve", {"name": valve, **kw})
+
 	def a_line(self):
 		"""A main, a sub-main under it, and two laterals under that."""
 		self.a_valve(MAIN_VALVE, "Main")
@@ -247,6 +254,35 @@ class TheToggleReadsTheState(ValveTestCase):
 		self.a_valve(LATERAL)
 		data = self.toggle(LATERAL, expect_state="closed")
 		self.assertEqual(data["to_state"], "open")
+
+	# -- the fix the worker was standing at ---------------------------------
+	#
+	# GPS HAS BEEN ON THE TOGGLE SINCE v0.117.0 AND HAD NO TEST. These two are
+	# the confirmation rather than a change: `toggle_irrigation_valve` forwards
+	# `gps_lat`/`gps_lon` to `log_asset_state_change`, which writes them onto the
+	# Asset State Log row. Worth a test because it is the only record of WHERE a
+	# valve was operated from, and on a farm with no printed tags it is the only
+	# evidence anybody was at the gate at all.
+	def test_the_toggle_records_where_the_worker_was_standing(self):
+		self.a_valve(LATERAL)
+		self.toggle(LATERAL, gps_lat=45.9327, gps_lon=-118.3877)
+		row = STORE.rows("Asset State Log")[-1]
+		self.assertEqual(row["asset_name"], LATERAL)
+		self.assertEqual(row["gps_latitude"], 45.9327)
+		self.assertEqual(row["gps_longitude"], -118.3877)
+
+	def test_a_cascaded_close_does_not_claim_anybody_was_there(self):
+		"""A fix taken at the turnout is not where the lateral three hundred
+		yards downhill is, and the cascade's rows must not say it was."""
+		self.a_line()
+		self.toggle(MAIN_VALVE)
+		self.toggle(MAIN_VALVE, gps_lat=45.9327, gps_lon=-118.3877)
+		rows = STORE.rows("Asset State Log")
+		operated = [row for row in rows if row["asset_name"] == MAIN_VALVE][-1]
+		self.assertEqual(operated["gps_latitude"], 45.9327)
+		for row in rows:
+			if row.get("cascaded_from"):
+				self.assertIn(row.get("gps_latitude"), (None, "", 0))
 
 	def test_a_tractor_is_not_a_valve_and_the_refusal_says_what_it_is(self):
 		self.tool_data("register_asset", {"name": "HR-Tractor-1", "asset_type": "Tractor", "company": MAIN})
@@ -435,6 +471,268 @@ class TheRankMustMatchTheLine(ValveTestCase):
 	def test_the_installed_date_is_kept_apart_from_the_purchase_date(self):
 		created = self.a_valve(LATERAL, installed_date="2019-04-02", acquired_on="2018-11-20")
 		self.assertEqual(created["installed_date"], "2019-04-02")
+
+
+# ── 3b. the edit cannot reach what the create refused ───────────────────────
+class TheEditIsHeldToTheCreatesRules(ValveTestCase):
+	"""`update_irrigation_valve`. A check that only ran at insert is a check
+	anybody gets around by creating the valve correctly and editing it after."""
+
+	def test_the_plain_fields_are_corrected_and_the_answer_says_which(self):
+		self.a_valve(LATERAL, description="by the shed", nfc_uid="04AABB")
+		data = self.an_edit(LATERAL, description="by the pump house", nfc_uid="04CCDD")
+		self.assertEqual(data["description"], "by the pump house")
+		self.assertEqual(data["nfc_uid"], "04CCDD")
+		self.assertEqual(data["changed"]["description"], ["by the shed", "by the pump house"])
+		self.assertEqual(sorted(data["changed"]), ["description", "nfc_uid"])
+
+	def test_the_rank_is_corrected_and_the_spelling_is_resolved(self):
+		self.a_valve(LATERAL, "Lateral")
+		data = self.an_edit(LATERAL, valve_type="submain")
+		self.assertEqual(data["valve_type"], "Sub-Main")
+
+	def test_a_valve_is_moved_to_another_parent(self):
+		self.a_valve(MAIN_VALVE, "Main")
+		self.a_valve(SUB_VALVE, "Sub-Main", parent=MAIN_VALVE)
+		self.a_valve(LATERAL, "Lateral", parent=MAIN_VALVE)
+		data = self.an_edit(LATERAL, parent_valve=SUB_VALVE)
+		self.assertEqual(data["parent_valve"], SUB_VALVE)
+		self.assertEqual([entry["name"] for entry in data["parent_chain"]], [SUB_VALVE, MAIN_VALVE])
+
+	def test_an_empty_parent_moves_it_to_the_head_of_its_line(self):
+		self.a_valve(MAIN_VALVE, "Main")
+		self.a_valve(LATERAL, "Lateral", parent=MAIN_VALVE)
+		data = self.an_edit(LATERAL, parent_valve="")
+		self.assertIsNone(data["parent_valve"])
+		self.assertEqual(data["parent_chain"], [])
+
+	# -- the tag ID ----------------------------------------------------------
+	def test_the_tag_id_cannot_be_changed(self):
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL, new_valve_id="HR-Valve-Lat-99")
+		self.assertIn("cannot be renamed", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_a_valve_id_that_disagrees_with_the_name_is_read_as_a_rename(self):
+		"""A client that found the valve by one key and renamed it with the other
+		is asking for the same refused thing, and a silently dropped key would
+		report a change that did not happen."""
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL, valve_id="HR-Valve-Lat-99", description="moved")
+		self.assertIn("cannot be renamed", message)
+		self.assertEqual(self.tool_data("get_irrigation_valve", {"name": LATERAL})["description"], None)
+
+	def test_the_valve_is_still_found_by_valve_id_alone(self):
+		self.a_valve(LATERAL)
+		data = self.tool_data("update_irrigation_valve", {"valve_id": LATERAL, "description": "row 9"})
+		self.assertEqual(data["name"], LATERAL)
+		self.assertEqual(data["description"], "row 9")
+
+	# -- the rank, upwards ---------------------------------------------------
+	def test_a_main_moved_under_a_lateral_is_refused(self):
+		self.a_valve(LATERAL, "Lateral")
+		self.a_valve(MAIN_VALVE, "Main")
+		message = self.an_edit_refused(MAIN_VALVE, parent_valve=LATERAL)
+		self.assertIn("cannot be the parent", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_promoting_a_valve_above_its_own_parent_is_refused(self):
+		"""The same upside-down line reached by re-ranking the child instead of
+		moving it: a Main hanging off a Sub-Main."""
+		self.a_valve(SUB_VALVE, "Sub-Main")
+		self.a_valve(LATERAL, "Lateral", parent=SUB_VALVE)
+		message = self.an_edit_refused(LATERAL, valve_type="Main")
+		self.assertIn("cannot be the parent", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_a_parent_that_is_not_a_valve_is_refused(self):
+		self.a_valve(LATERAL)
+		self.tool_data("register_asset", {"name": "HR-Pump-1", "asset_type": "General", "company": MAIN})
+		message = self.an_edit_refused(LATERAL, parent_valve="HR-Pump-1")
+		self.assertIn("Irrigation Valve", message)
+		self.assertIn("Nothing was changed", message)
+
+	# -- the rank, downwards: the refusal the create cannot make -------------
+	def test_demoting_a_main_that_still_has_a_sub_main_under_it_is_refused(self):
+		self.a_valve(MAIN_VALVE, "Main")
+		self.a_valve(SUB_VALVE, "Sub-Main", parent=MAIN_VALVE)
+		message = self.an_edit_refused(MAIN_VALVE, valve_type="Lateral")
+		self.assertIn(SUB_VALVE, message)
+		self.assertIn("Nothing was changed", message)
+		self.assertEqual(self.tool_data("get_irrigation_valve", {"name": MAIN_VALVE})["valve_type"], "Main")
+
+	def test_demoting_a_main_whose_children_are_laterals_is_allowed(self):
+		"""Two laterals in a row are real plumbing, so a Lateral over a Lateral
+		is not the error the rank check is for."""
+		self.a_valve(MAIN_VALVE, "Main")
+		self.a_valve(LATERAL, "Lateral", parent=MAIN_VALVE)
+		data = self.an_edit(MAIN_VALVE, valve_type="Lateral")
+		self.assertEqual(data["valve_type"], "Lateral")
+
+	def test_a_retired_child_does_not_block_a_re_rank(self):
+		self.a_valve(MAIN_VALVE, "Main")
+		self.a_valve(SUB_VALVE, "Sub-Main", parent=MAIN_VALVE)
+		self.tool_data("retire_asset", {"asset_name": SUB_VALVE})
+		data = self.an_edit(MAIN_VALVE, valve_type="Lateral")
+		self.assertEqual(data["valve_type"], "Lateral")
+
+	def test_moving_a_valve_does_not_consult_its_children(self):
+		"""A parent move cannot change what this valve's own children are, so a
+		line that is already inconsistent below must not block an edit above."""
+		self.a_valve(MAIN_VALVE, "Main")
+		self.a_valve(SUB_VALVE, "Sub-Main", parent=MAIN_VALVE)
+		self.a_valve(LATERAL_TWO, "Main")
+		data = self.an_edit(SUB_VALVE, parent_valve=LATERAL_TWO)
+		self.assertEqual(data["parent_valve"], LATERAL_TWO)
+
+	# -- the loop ------------------------------------------------------------
+	def test_a_valve_filed_under_its_own_child_is_refused(self):
+		self.a_valve(MAIN_VALVE, "Main")
+		self.a_valve(SUB_VALVE, "Sub-Main", parent=MAIN_VALVE)
+		message = self.an_edit_refused(MAIN_VALVE, parent_valve=SUB_VALVE)
+		self.assertIn("loop", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_a_valve_filed_under_its_own_grandchild_is_refused(self):
+		"""The walk is the cascade's own, so the loop is caught at any depth."""
+		self.a_line()
+		message = self.an_edit_refused(MAIN_VALVE, parent_valve=LATERAL)
+		self.assertIn("loop", message)
+
+	def test_a_valve_cannot_be_its_own_parent(self):
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL, parent_valve=LATERAL)
+		self.assertIn("own parent", message)
+
+	# -- the zone ------------------------------------------------------------
+	def test_the_zone_is_moved(self):
+		self.a_zone(ZONE_TWO.split(" - ")[0], number=2, flow=30)
+		self.a_valve(LATERAL)
+		data = self.an_edit(LATERAL, zone=ZONE_TWO)
+		self.assertEqual(data["zone"], ZONE_TWO)
+		self.assertEqual(data["zone_detail"]["flow_rate_gpm"], 30)
+
+	def test_a_zone_that_does_not_exist_is_refused(self):
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL, zone="No Such Zone")
+		self.assertIn("No Such Zone", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_a_zone_belonging_to_another_entity_is_refused(self):
+		"""Checked against the valve's OWN company, so a call that omitted the
+		argument is not a call that skipped the check."""
+		self.a_valve(LATERAL)
+		STORE.tables["Irrigation Zone"][ZONE_TWO.replace("Zone1", "Zone9")] = {
+			"name": "HR1-Zone9 - HR",
+			"zone_name": "HR1-Zone9",
+			"owning_entity": OTHER,
+			"docstatus": 0,
+		}
+		message = self.an_edit_refused(LATERAL, zone="HR1-Zone9 - HR")
+		self.assertIn("belongs to", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_the_zone_cannot_be_cleared(self):
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL, zone="")
+		self.assertIn("cannot be cleared", message)
+		self.assertIn("flow rate", message)
+
+	def test_the_rank_cannot_be_cleared(self):
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL, valve_type="")
+		self.assertIn("cannot be cleared", message)
+
+	def test_a_rank_this_app_does_not_have_is_refused(self):
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL, valve_type="Riser")
+		self.assertIn("Main, Sub-Main, Lateral", message)
+
+	# -- position and dates --------------------------------------------------
+	def test_the_position_is_corrected_under_either_spelling(self):
+		self.a_valve(LATERAL)
+		data = self.an_edit(LATERAL, gps_latitude=45.9327, gps_longitude=-118.3877)
+		self.assertEqual(data["gps_latitude"], 45.9327)
+		data = self.an_edit(LATERAL, gps_lat=45.6, gps_lon=-118.2)
+		self.assertEqual(data["gps_latitude"], 45.6)
+		self.assertEqual(data["gps_longitude"], -118.2)
+
+	def test_a_null_fix_clears_the_column_rather_than_writing_null_island(self):
+		"""0.0/0.0 is a real coordinate in the Gulf of Guinea, and a valve whose
+		position was cleared must not come back onto a map off West Africa."""
+		self.a_valve(LATERAL, gps_latitude=45.9327, gps_longitude=-118.3877)
+		self.an_edit(LATERAL, gps_latitude=None, gps_longitude=None)
+		row = STORE.tables["Asset Register"][LATERAL]
+		self.assertIn(row.get("gps_latitude"), (None, ""))
+		self.assertIn(row.get("gps_longitude"), (None, ""))
+
+	def test_the_installed_date_is_corrected(self):
+		self.a_valve(LATERAL, installed_date="2019-04-02")
+		data = self.an_edit(LATERAL, installed_date="2019-04-20")
+		self.assertEqual(data["installed_date"], "2019-04-20")
+
+	# -- the edges -----------------------------------------------------------
+	def test_an_edit_that_changes_nothing_is_refused_rather_than_reported(self):
+		self.a_valve(LATERAL, description="row 9")
+		message = self.an_edit_refused(LATERAL, description="row 9")
+		self.assertIn("nothing to change", message)
+
+	def test_an_edit_with_no_fields_at_all_says_what_can_be_changed(self):
+		self.a_valve(LATERAL)
+		message = self.an_edit_refused(LATERAL)
+		self.assertIn("valve_type", message)
+		self.assertIn("cannot be changed", message)
+
+	def test_an_unranked_parent_blocks_nothing(self):
+		"""A valve registered through `register_asset` has no rank at all. This
+		tool is how it gets one, so it must not refuse an unrelated edit on the
+		grounds of a rank nobody has stated yet."""
+		self.tool_data(
+			"register_asset",
+			{"name": MAIN_VALVE, "asset_type": "Irrigation Valve", "company": MAIN},
+		)
+		self.tool_data(
+			"register_asset",
+			{
+				"name": LATERAL,
+				"asset_type": "Irrigation Valve",
+				"company": MAIN,
+				"location": MAIN_VALVE,
+			},
+		)
+		data = self.an_edit(LATERAL, valve_type="Lateral")
+		self.assertEqual(data["valve_type"], "Lateral")
+		self.assertEqual(data["parent_valve"], MAIN_VALVE)
+
+	def test_a_retired_valve_is_still_editable(self):
+		"""Retirement says the valve is not operated, not that the record about
+		it was right — unlike the toggle, which refuses one."""
+		self.a_valve(LATERAL)
+		self.tool_data("retire_asset", {"asset_name": LATERAL})
+		data = self.an_edit(LATERAL, description="pulled out 2026-03, tag kept")
+		self.assertTrue(data["retired"])
+		self.assertEqual(data["description"], "pulled out 2026-03, tag kept")
+
+	def test_a_tractor_is_not_a_valve_and_the_refusal_says_what_it_is(self):
+		self.tool_data("register_asset", {"name": "MC-Tractor-02", "asset_type": "Tractor", "company": MAIN})
+		message = self.an_edit_refused("MC-Tractor-02", description="x")
+		self.assertIn("Tractor", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_the_edit_leaves_no_state_log_row(self):
+		"""Correcting a record is not operating the valve. A row here would put
+		minutes into get_water_usage_report that no water accounts for."""
+		self.a_valve(LATERAL)
+		before = len(STORE.rows("Asset State Log"))
+		self.an_edit(LATERAL, description="row 9", valve_type="Sub-Main")
+		self.assertEqual(len(STORE.rows("Asset State Log")), before)
+
+	def test_the_state_is_untouched_by_an_edit(self):
+		self.a_valve(LATERAL)
+		self.toggle(LATERAL)
+		data = self.an_edit(LATERAL, description="row 9")
+		self.assertEqual(data["state"], "open")
+		self.assertTrue(data["is_open"])
 
 
 # ── 4. a valve nobody has touched is closed ─────────────────────────────────
@@ -737,6 +1035,21 @@ class TheHandsetScansAndCanAct(MobileAPITestCase):
 			"create_irrigation_valve",
 			{"valve_id": LATERAL, "valve_type": "Lateral", "parent_valve": MAIN_VALVE, "company": MAIN},
 		)
+
+	def test_a_bare_valve_id_and_a_fix_toggle_it_without_a_printed_tag(self):
+		"""THE ROUTE A FARM WITH NO TAG PRINTER USES. `qr_data` takes the valve ID
+		typed into the manual-entry box as readily as a scanned URL, so the whole
+		scan-and-act flow — including the GPS fix that says where it was done
+		from — is reachable with nothing printed and nothing stuck to the valve."""
+		self.be()
+		data = mobile_api.scan_valve(qr_data=LATERAL, toggle=1, gps_lat=45.9327, gps_lon=-118.3877)
+		self.assertTrue(data["toggled"])
+		self.assertEqual(data["to_state"], "open")
+		row = STORE.rows("Asset State Log")[-1]
+		self.assertEqual(row["gps_latitude"], 45.9327)
+		self.assertEqual(row["gps_longitude"], -118.3877)
+		valve = STORE.tables["Asset Register"][LATERAL]
+		self.assertEqual(valve["gps_latitude"], 45.9327)
 
 	def test_a_scan_alone_reads_the_gate_and_leaves_it_alone(self):
 		self.be()
