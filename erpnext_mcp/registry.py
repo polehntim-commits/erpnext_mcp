@@ -20019,7 +20019,7 @@ TOOLS = {
 			"company": _field(_STRING, "Only assets belonging to this company."),
 			"asset_type": _field(
 				_STRING,
-				"Housing Unit, Irrigation Zone, Irrigation Valve, Sprayer, Tractor, Block, "
+				"Housing Unit, Irrigation Zone, Irrigation Valve, Sprayer, Tractor, Implement, Vehicle, Wind Machine, Block, "
 				"Water Source, Storage, Cold Storage or General.",
 			),
 			"location": _field(_STRING, "Only assets at this location (parent asset docname)."),
@@ -20090,7 +20090,7 @@ TOOLS = {
 			"name": _field(_STRING, "The tag ID that will be printed on the label, e.g. 'MC-Valve-05'."),
 			"asset_type": _field(
 				_STRING,
-				"Housing Unit, Irrigation Zone, Irrigation Valve, Sprayer, Tractor, Block, "
+				"Housing Unit, Irrigation Zone, Irrigation Valve, Sprayer, Tractor, Implement, Vehicle, Wind Machine, Block, "
 				"Water Source, Storage, Cold Storage or General.",
 			),
 			"company": _field(_STRING, "The company that owns this asset."),

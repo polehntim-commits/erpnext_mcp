@@ -57,7 +57,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Asset Type",
-   "options": "\nHousing Unit\nIrrigation Zone\nIrrigation Valve\nSprayer\nTractor\nImplement\nVehicle\nBlock\nWater Source\nStorage\nCold Storage\nGeneral",
+   "options": "\nHousing Unit\nIrrigation Zone\nIrrigation Valve\nSprayer\nTractor\nImplement\nVehicle\nWind Machine\nBlock\nWater Source\nStorage\nCold Storage\nGeneral",
    "reqd": 1,
    "search_index": 1
   },
