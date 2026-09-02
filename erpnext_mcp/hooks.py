@@ -501,18 +501,21 @@ has_permission = {
 #: disagreement and a refusal on screen rather than a quiet save. `api/gis.py`
 #: argues the whole thing, including why `api/guard.py` is the wrong gate here.
 #:
-#: THE OTHER FOUR STAY READ-ONLY — Housing Unit, Asset Register (for non-valve
-#: assets), Farm Shift and Farm Task draw a marker or a track, and none of them
-#: carries a shape anybody should be redrawing from a form.
+#: THE OTHER THREE STAY READ-ONLY — Housing Unit, Farm Shift and Farm Task draw
+#: a marker or a track, and none of them carries a shape anybody should be
+#: redrawing from a form.
 #:
-#: THE ONE EXCEPTION IS IRRIGATION VALVES. `irrigation_valve_map.js` draws a
-#: DRAGGABLE pin for Asset Register records whose `asset_type` is "Irrigation
-#: Valve", and `asset_register_map.js` skips those same records so the two do
-#: not fight over the dashboard section. A valve's position matters at the
-#: resolution of a row, and a coordinate written at scan time from the other
-#: side of a block is wrong by enough to put it on the wrong lateral. Dragging
-#: it is the check that catches the mistakes a GPS fix cannot. The fields are
-#: set on drag and nothing reaches the database until the form is saved.
+#: ASSET REGISTER IS THE FOURTH WRITEABLE MAP, AND IT IS A PIN RATHER THAN A
+#: SHAPE. `asset_register_map.js` draws a DRAGGABLE marker on every record on
+#: the register. v0.145.0 gave that to irrigation valves alone, in a second
+#: script that returned early on everything else while this one returned early
+#: on valves; v0.154.0 folded them together and deleted
+#: `irrigation_valve_map.js`, because the argument for valves was never about
+#: valves. A scan records where the SCANNER was standing, not where the machine
+#: is, and that is as wrong for a pump in a four-acre yard as it is for a valve
+#: on the wrong lateral. Dragging the pin is the check a GPS fix cannot make.
+#: The fields are set on drag and nothing reaches the database until the form is
+#: saved.
 #:
 #: NO `app_include_js` OR `app_include_css`, INCLUDING FOR THE DRAW PLUGIN. Both
 #: would put an asset on every page of the Desk for every user, most of whom will
@@ -536,11 +539,7 @@ doctype_js = {
 	"Field": ["public/js/geo_map_widget.js", "public/js/field_map.js"],
 	"Irrigation Zone": ["public/js/geo_map_widget.js", "public/js/irrigation_zone_map.js"],
 	"Housing Unit": ["public/js/geo_map_widget.js", "public/js/housing_unit_map.js"],
-	"Asset Register": [
-		"public/js/geo_map_widget.js",
-		"public/js/asset_register_map.js",
-		"public/js/irrigation_valve_map.js",
-	],
+	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js"],
 	"Farm Shift": ["public/js/geo_map_widget.js", "public/js/farm_shift_map.js"],
 	"Farm Task": ["public/js/geo_map_widget.js", "public/js/farm_task_map.js"],
 }

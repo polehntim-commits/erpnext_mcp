@@ -3,6 +3,55 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.154.0 — 2026-09-02 — the argument for valves was never about valves
+
+**THE MAP PIN IS NOW DRAGGABLE ON EVERY Asset Register RECORD.** v0.145.0 gave
+that to `Irrigation Valve` alone, in a second form script that returned early on
+everything else while `asset_register_map.js` returned early on valves. A pump, a
+wind machine, a bin trailer, a generator and a cold store all got the read-only
+marker v0.32.0 drew, and correcting one of them meant typing seven decimal places
+into two Float fields.
+
+The case v0.145.0 made was that the coordinate which matters is where the valve
+IS, not where somebody happened to be standing when they scanned it — a valve
+recorded from the far side of a block sits on the wrong lateral and stays wrong
+until a person corrects it. **Every word of that is true of the other twelve
+asset types.** A scan records the scanner's position, not the machine's, and "the
+shop yard" is four acres. So the two scripts are one script, and
+`irrigation_valve_map.js` is deleted rather than generalised in place: a file
+named for valves that draws every asset is a worse lie than the one it fixes.
+
+What is preserved:
+
+- **The zone boundary underneath**, drawn whenever the record names an
+  `irrigation_zone`. That is usually a valve — but it is a field on Asset
+  Register rather than on a valve, so the script asks the RECORD instead of the
+  asset type, and any asset assigned to a zone now gets the same context.
+- **"Valve Location"** as the section title on a valve form. Everything else says
+  "Asset Location", which is what this script's section was already called.
+- **The click-to-place path** for a record with no position, and the coordinate
+  print-out when Leaflet cannot be reached.
+
+`asset_type` is now read in exactly one place in the file — to choose that title.
+The old valve script read it four times, three of them guards that returned
+early, and a test pins the count at one.
+
+**WHAT THIS DOES NOT DO.** A corrected position is a value in two Float columns
+like any other, so a later mobile write carrying GPS overwrites it. That was
+equally true of the valve map and is a property of the columns rather than the
+script; the fix, if it is ever wanted, is a "position confirmed by hand" flag the
+scan path honours, and it is not in this release.
+
+**THE TESTS EXECUTE THE JAVASCRIPT.** `tests_standalone/test_asset_map.py` stubs
+the Desk — `frappe.ui.form.on`, `erpnext_mcp.geo_map`, a Leaflet whose marker
+records how it was constructed, a `frm` whose `set_value` records what it was
+asked to write — runs the real file under `node:vm`, fires `refresh` and then
+`dragend`, and reads the answer back as JSON. Grepping could not have done this:
+`draggable` was already in the tree before this change, in a file that refused to
+run on a tractor. Ten tests over all thirteen asset types, read off the doctype's
+own Select options so a fourteenth is covered without anybody remembering. Nine
+of the ten fail against v0.153.0. Skipped where `node` is absent.
+
 ## 0.153.0 — 2026-09-02 — the register that granted its own roles and forgot the farm's
 
 **`Asset Register` SHIPPED WITH TWO DocPerms AND NEITHER OF THEM WAS THE FARM'S.**

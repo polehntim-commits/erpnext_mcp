@@ -332,11 +332,13 @@ class TheFormScripts(unittest.TestCase):
 		THE WIDGET IS LISTED ONCE, AND EVERY OTHER ENTRY IS A FORM SCRIPT. This
 		read `len(files) == 2` until v0.148.0, which was the same rule written as
 		a count while every doctype happened to have exactly one script. Asset
-		Register has had two since v0.145.0 — `asset_register_map.js` draws a
-		read-only pin for a pump or a bin trailer, `irrigation_valve_map.js`
-		draws a draggable one for a valve, and each returns early on the other's
-		records so they never both render. That is a legitimate pair, and the
-		count assertion had been failing on it since the day it landed.
+		Register had two from v0.145.0 to v0.153.0 — `asset_register_map.js` drew
+		a read-only pin for a pump or a bin trailer and `irrigation_valve_map.js`
+		a draggable one for a valve, each returning early on the other's records
+		— and the count assertion had been failing on that legitimate pair since
+		the day it landed. v0.154.0 merged the two, so every doctype is back to
+		one script; the rule stays written as a rule, because the next pair will
+		not announce itself either.
 
 		Naming the widget twice is still a fault and is still caught: Frappe
 		would evaluate it twice and the second evaluation would re-register every
