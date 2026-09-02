@@ -291,11 +291,16 @@ class MigrateThreeTimes(V12TestCase):
 		# All nine Item columns land on EVERY Item, not only the chemicals — the
 		# `depends_on` on seven of them decides what is SHOWN and Frappe stores the
 		# column either way, which is exactly why none of the nine is `reqd`.
+		#
+		# Three more from v0.148.0, all on Asset: the Link back to the printed
+		# tag and the two read-only columns that make the link auditable — what
+		# kind of machine it is, and when the mirror last agreed with it.
 		self.assertEqual(
 			counts[0],
-			21,
+			24,
 			"six Employee fields, the Attendance bridge, four Asset capex columns, "
-			"nine Item label columns, and the v0.94.0 Company housing-deduction default",
+			"three Asset register-mirror columns, nine Item label columns, and the "
+			"v0.94.0 Company housing-deduction default",
 		)
 		self.assertEqual(counts, [counts[0]] * 3, f"custom fields multiplied across migrations: {counts}")
 

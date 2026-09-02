@@ -22,7 +22,7 @@ import json
 
 import frappe
 
-from .. import compat, timezones
+from .. import asset_mirror, compat, timezones
 from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..render import qr
@@ -292,6 +292,13 @@ def list_assets(args: dict) -> ToolResult:
 	)
 	assets = [_describe_asset(dict(row)) for row in rows]
 
+	# v0.148.0. Which of these are also on the books, in ONE query rather than
+	# one per row — this returns up to five hundred, and a per-row lookup to fill
+	# a column is five hundred round trips.
+	mirrors = asset_mirror.mirrors_for([asset["name"] for asset in assets])
+	for asset in assets:
+		asset["erpnext_asset"] = mirrors.get(asset["name"])
+
 	by_type: dict = {}
 	for asset in assets:
 		key = asset["asset_type"] or "(unrecorded)"
@@ -302,6 +309,11 @@ def list_assets(args: dict) -> ToolResult:
 			"company": company,
 			"asset_count": len(assets),
 			"by_asset_type": dict(sorted(by_type.items())),
+			# The gap, stated as a number. "How much of the tag register is on
+			# the books" is the question this feature exists to make answerable,
+			# and counting `erpnext_asset` by hand across five hundred rows is
+			# not answering it.
+			"on_the_books_count": sum(1 for asset in assets if asset["erpnext_asset"]),
 			"assets": assets,
 		},
 		summary=f"{len(assets)} asset(s)" + (f" for {company}" if company else ""),
@@ -368,6 +380,7 @@ def get_asset_detail(args: dict) -> ToolResult:
 	return ToolResult(
 		data={
 			**described,
+			"erpnext_asset": asset_mirror.mirror_of(row["name"]) or None,
 			"open_tasks": open_tasks,
 			"open_task_count": len(open_tasks),
 			"children": child_list,
@@ -648,6 +661,27 @@ def _attach_photo(asset: str, args: dict) -> str:
 	return token
 
 
+def _with_mirror(described: dict, verdict: dict) -> dict:
+	"""The mirror's verdict, folded into an answer the caller already had.
+
+	ADDITIVE AND NEVER SUBTRACTIVE. Every key the handset reads today is still
+	here and still means the same thing; these three are new, and a client that
+	does not know about them ignores them. That is the whole reason the mobile
+	contract did not have to change for this feature.
+
+	`erpnext_asset_note` IS PRESENT ONLY WHEN THERE IS SOMETHING TO SAY. A key
+	that is always there and usually empty gets read as "no problem" by a person
+	skimming, which is the one reading it must never support: the interesting
+	case is the tag that did NOT reach the books, and it should look different
+	from the one that did.
+	"""
+	described["erpnext_asset"] = verdict.get("asset")
+	described["erpnext_asset_created"] = bool(verdict.get("created"))
+	if verdict.get("reason"):
+		described["erpnext_asset_note"] = verdict["reason"]
+	return described
+
+
 def register_asset(args: dict) -> ToolResult:
 	"""Register a new asset with its tag ID, type, parent and insurance detail.
 
@@ -712,11 +746,23 @@ def register_asset(args: dict) -> ToolResult:
 			"photograph with attach_file_to_document rather than registering it again."
 		)
 
+	# v0.148.0. The same machine on the books, when the switch is on and the tag
+	# carries what ERPNext's Asset demands. AFTER the insert and after the photo,
+	# and it raises nothing: `asset_mirror.sync` returns its verdict rather than
+	# throwing, for the reason `_attach_photo` gives — the tag is the record, and
+	# losing a registration because a second copy of it could not be built would
+	# be the wrong way round.
+	verdict = asset_mirror.sync(
+		dict(doc.as_dict()), location=as_str(args, "asset_location"), photo_file=photo
+	)
+	described = _with_mirror(described, verdict)
+
 	return ToolResult(
 		data=described,
 		summary=f"registered asset {doc.name} ({asset_type})"
 		+ (f", parent {location}" if location else "")
-		+ (", photo attached" if photo else ""),
+		+ (", photo attached" if photo else "")
+		+ (f", ERPNext Asset {verdict['asset']}" if verdict.get("created") else ""),
 		docstatus_delta="none → 0 (created)",
 	)
 
@@ -796,22 +842,40 @@ def update_registered_asset(args: dict) -> ToolResult:
 			state = json.dumps(state)
 		_stage(changes, doc, "current_state", state or None)
 
-	if not changes:
+	# v0.148.0. `asset_location` changes NOTHING on the register — it names the
+	# ERPNext Location the mirrored Asset is filed under — so it is not staged as
+	# a change and it does not, on its own, make this a no-op. A site with more
+	# than one Location gets a mirror refusal naming the argument, and the retry
+	# that follows carries only that argument; refusing it as "nothing to change"
+	# would make the refusal unactionable through the door that raised it.
+	mirror_location = as_str(args, "asset_location")
+	if not changes and not mirror_location:
 		raise ToolError(
 			"nothing to change. Pass at least one of: asset_type, parent_asset (or location), "
 			"description, nfc_uid, serial_number, model, acquired_on, purchase_value, "
-			"replacement_value, gps_latitude, gps_longitude, current_state."
+			"replacement_value, gps_latitude, gps_longitude, current_state — or "
+			"asset_location, which files this asset's ERPNext Asset under an ERPNext "
+			"Location and leaves the register row alone."
 		)
 
-	doc.save(ignore_permissions=True)
+	if changes:
+		doc.save(ignore_permissions=True)
 	described = _describe_asset(dict(doc.as_dict()))
+
+	# v0.148.0. An edit that supplies purchase_value and acquired_on is the edit
+	# that makes a tag mirrorable, so this is where a valve somebody has finally
+	# costed reaches the books. On an asset ALREADY on the books this refreshes
+	# identity only — never the money. `asset_mirror._refresh` says why.
+	verdict = asset_mirror.sync(dict(doc.as_dict()), location=mirror_location)
+	described = _with_mirror(described, verdict)
 
 	return ToolResult(
 		data={
 			**described,
 			"changed": {key: [before, after] for key, (before, after) in changes.items()},
 		},
-		summary=f"{doc.name}: {len(changes)} field(s) changed",
+		summary=f"{doc.name}: {len(changes)} field(s) changed"
+		+ (f", ERPNext Asset {verdict['asset']} created" if verdict.get("created") else ""),
 		docstatus_delta="0 → 0 (updated)",
 	)
 
@@ -845,6 +909,22 @@ def retire_asset(args: dict) -> ToolResult:
 	doc.save(ignore_permissions=True)
 
 	described = _describe_asset(dict(doc.as_dict()))
+
+	# v0.148.0. THE MIRROR IS REPORTED AND IS NOT DISPOSED OF. ERPNext retires an
+	# asset through a scrap or sale journal that posts to the general ledger;
+	# this writes a date on a register row. They are not the same act, and
+	# turning one into the other from here would move a balance nobody asked to
+	# move. What the caller gets is the Asset's name and a sentence saying so.
+	mirror = asset_mirror.mirror_of(doc.name)
+	described["erpnext_asset"] = mirror or None
+	if mirror:
+		described["erpnext_asset_note"] = (
+			f"the tag is retired. ERPNext Asset {mirror} is UNCHANGED and still on the books "
+			"— disposing of a fixed asset posts a scrap or sale journal to the general "
+			"ledger, which is a decision made in the Desk and not a consequence of retiring "
+			"a tag."
+		)
+
 	return ToolResult(
 		data={**described, "reason": reason or None},
 		summary=f"retired {doc.name}" + (f": {reason}" if reason else ""),
@@ -862,6 +942,8 @@ def bulk_create_assets(args: dict) -> ToolResult:
 		raise ToolError("assets is required and must be a list of asset objects.")
 	if len(assets_list) > REGISTER_CAP:
 		raise ToolError(f"bulk_create_assets accepts at most {REGISTER_CAP} assets per call.")
+
+	place = as_str(args, "asset_location")
 
 	created = []
 	errors = []
@@ -895,21 +977,48 @@ def bulk_create_assets(args: dict) -> ToolResult:
 				doc.gps_longitude = float(item["gps_longitude"])
 			except (TypeError, ValueError):
 				pass
+		# v0.148.0. THE TWO FACTS THAT DECIDE WHETHER A ROW REACHES THE BOOKS,
+		# accepted here rather than left to five hundred follow-up edits. Both are
+		# optional and both were absent before this release, so a caller sending
+		# the shape this tool has always taken gets exactly what it always got —
+		# a tag, and no ERPNext Asset. A bad figure is skipped rather than
+		# refused: a rollout of five hundred valves should not be lost to one
+		# mistyped price, and a row that mirrors nothing says so in `created`.
+		for key in ("purchase_value", "replacement_value"):
+			if item.get(key) is not None:
+				try:
+					doc.set(key, float(item[key]))
+				except (TypeError, ValueError):
+					pass
+		if item.get("acquired_on"):
+			doc.acquired_on = str(item["acquired_on"]).strip() or None
 		try:
 			doc.insert(ignore_permissions=True)
-			created.append(_describe_asset(dict(doc.as_dict())))
 		except Exception as exc:
 			errors.append({"index": index, "name": name, "error": str(exc)})
+			continue
+		# OUTSIDE the try, deliberately. `sync` catches its own failures and
+		# returns a verdict, but a row that WAS inserted must not be able to
+		# reach the error list through this branch whatever happens after — that
+		# would report a registered asset as one that failed to register.
+		stored = dict(doc.as_dict())
+		created.append(_with_mirror(_describe_asset(stored), asset_mirror.sync(stored, location=place)))
 
+	mirrored = [row["name"] for row in created if row.get("erpnext_asset")]
 	return ToolResult(
 		data={
 			"company": company,
 			"created_count": len(created),
 			"error_count": len(errors),
+			# The count rather than a re-listing: `created` already carries each
+			# row's own `erpnext_asset` and its reason, and a rollout of five
+			# hundred wants the headline before it wants the five hundred.
+			"mirrored_count": len(mirrored),
 			"created": created,
 			"errors": errors,
 		},
-		summary=f"bulk created {len(created)} asset(s), {len(errors)} error(s)",
+		summary=f"bulk created {len(created)} asset(s), {len(errors)} error(s)"
+		+ (f", {len(mirrored)} on the books" if mirrored else ""),
 		docstatus_delta="none → 0 (created)" if created else "",
 	)
 

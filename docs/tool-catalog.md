@@ -19192,3 +19192,104 @@ operator also uses from the Desk, and a half-configured one is worse than none.
 schedule on the Asset Cost Profile, and ERPNext's own depreciation is switched
 off on them — see tool 61. A category created without a finance book row is
 complete for this app's purposes, and the response says so.
+
+---
+
+## v0.148.0 — the tag on the machine and the asset on the books
+
+No new tool. Three columns on ERPNext's `Asset`, one checkbox, and three
+existing tools that now put a field registration on the books as well as in the
+tag register.
+
+### Two registers describing the same machines in silence
+
+`register_asset` writes `Asset Register` — the tag, the QR, the NFC UID, the
+scan history, the service schedule, the hour meter, and the Link that Farm Task,
+Compliance Alert, Accident Report, Crop Observation, Spray Application, Spray REI
+and Asset State Log all point through.
+
+`create_asset` writes ERPNext's `Asset` — the fixed-asset register,
+`export_insurance_schedule`, `run_depreciation_cycle` and Sustainable CF/Acre.
+
+Nothing connected them. A tractor registered in the field was invisible on the
+books; an asset bought through the books had no tag.
+
+### Why the store did not move
+
+**ERPNext's `Asset` refuses what a field registration has.** The doctype marks
+`item_code`, `company`, `location` and `purchase_date` required;
+`validate_asset_values` throws `MandatoryError("Gross Purchase Amount is
+mandatory")` on a zero; `validate_item` refuses an Item that is not a non-stock
+fixed asset; `validate_cost_center` throws unless the asset or the company names
+one. **The docname is the sticker** — `Asset Register` is `autoname: prompt`, so
+`40-N-1` in the database is `40-N-1` on the tag in the orchard, while Asset is a
+naming series. **Eight doctypes Link to the register.**
+
+So the register keeps the ground truth and a second record is written beside it.
+
+### The gate
+
+A tag reaches the books when it carries `purchase_value` **and** `acquired_on`.
+Otherwise it does not, and the reply names both at once. Inventing a nominal cost
+basis — or reaching for ERPNext's `is_composite_asset`, which skips the amount
+check — puts a number nobody measured into the depreciation run, the insurance
+schedule and Sustainable CF/Acre.
+
+A `purchase_value` of exactly 0.0 refuses like an absent one. It is what a valve
+tagged while walking a line carries, and it is what ERPNext itself throws on.
+
+### New keys on the asset writes
+
+| Key | On | Meaning |
+| --- | --- | --- |
+| `erpnext_asset` | every asset read and write | The ERPNext Asset docname, or `null` |
+| `erpnext_asset_created` | `register_asset`, `update_registered_asset`, `bulk_create_assets` | Whether this call made it |
+| `erpnext_asset_note` | the same, **only when there is something to say** | Why it did not reach the books, or that a retirement left it standing |
+| `on_the_books_count` | `list_assets` | How much of the page is mirrored |
+| `mirrored_count` | `bulk_create_assets` | How much of the batch reached the books |
+
+`erpnext_asset_note` is absent rather than empty on the happy path: a key that is
+always there and usually blank reads as "no problem" to somebody skimming, and
+the interesting case is the tag that did *not* reach the books.
+
+### New arguments
+
+`asset_location` on `register_asset`, `update_registered_asset` and
+`bulk_create_assets` — an ERPNext `Location` docname, which ERPNext marks
+required on the Asset. It defaults to the site's only Location and is needed
+where there is more than one. It changes nothing on the register, so it may be
+passed to `update_registered_asset` **on its own** to retry a mirror that was
+refused for want of it.
+
+`acquired_on`, `purchase_value` and `replacement_value` per row on
+`bulk_create_assets`. Both optional; the shape the tool has always taken still
+works and simply mirrors nothing.
+
+And `serial_number`, `model`, `acquired_on`, `purchase_value` and
+`replacement_value` are now **declared** on `register_asset` and
+`update_registered_asset`. The handlers have read them since v0.78.0 and the
+registry schemas did not list them, so a model calling these tools could not
+discover them.
+
+### What is never mirrored
+
+**Money, onto an Asset that already exists.** An edit to a tag's
+`purchase_value` refreshes the name, the type, the photograph and the sync stamp
+— never `gross_purchase_amount`, which is a figure the ledger has been
+reconciled against.
+
+**A disposal.** `retire_asset` writes a date on a register row; ERPNext disposes
+of a fixed asset through a scrap or sale journal that posts to the GL. The reply
+names the Asset and says it is unchanged.
+
+**A duplicate.** Two Assets carrying a Link to one tag is two sets of books for
+one machine. Reads report neither and writes refuse rather than making a third.
+
+### The switch
+
+`mirror_assets_to_erpnext` on ERPNext MCP Settings, default **0**. What it gates
+is this app inserting into a doctype ERPNext owns, on a trigger a worker with a
+handset pulls. With it off the reply names the checkbox — a silent no-op is
+indistinguishable from a broken feature.
+
+A failed mirror never undoes a registration.

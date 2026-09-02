@@ -899,7 +899,6 @@ class BackfillPlantingRootstock(FreshSite):
 		backfill_planting_rootstock.execute()
 
 
-
 class BackfillFieldVarieties(FreshSite):
 	"""Copying each block's single variety into its own Field Variety row.
 
@@ -999,7 +998,9 @@ class BackfillFieldVarieties(FreshSite):
 		second = backfill_field_varieties.backfill_field_varieties()
 		self.assertEqual(second["filled"], 0)
 		self.assertEqual(second["already_set"], 1)
-		self.assertEqual(len(frappe.db.get_all("Field Variety", filters={"parent": "Test Parcel - Block 3"})), 1)
+		self.assertEqual(
+			len(frappe.db.get_all("Field Variety", filters={"parent": "Test Parcel - Block 3"})), 1
+		)
 
 	def test_it_leaves_a_block_that_already_has_a_variety_row_alone(self):
 		self.a_parcel("Test Parcel")
@@ -1021,7 +1022,9 @@ class BackfillFieldVarieties(FreshSite):
 		report = backfill_field_varieties.backfill_field_varieties()
 		self.assertEqual(report["filled"], 0)
 		self.assertEqual(report["already_set"], 1)
-		rows = frappe.db.get_all("Field Variety", filters={"parent": "Test Parcel - Block 3"}, fields=["variety"])
+		rows = frappe.db.get_all(
+			"Field Variety", filters={"parent": "Test Parcel - Block 3"}, fields=["variety"]
+		)
 		self.assertEqual([row["variety"] for row in rows], ["Burgundy Pearl"])
 
 	def test_a_block_with_no_variety_is_not_scanned(self):

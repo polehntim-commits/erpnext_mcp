@@ -280,7 +280,9 @@ class CreateFieldVarieties(FieldVarietiesTestCase):
 	def test_percentage_and_planting_year_are_optional(self):
 		self.a_parcel()
 		data = self.a_field(variety=None, varieties=[{"variety": "Black Pearl"}])
-		self.assertEqual(data["varieties"], [{"variety": "Black Pearl", "percentage": None, "planting_year": None}])
+		self.assertEqual(
+			data["varieties"], [{"variety": "Black Pearl", "percentage": None, "planting_year": None}]
+		)
 
 	def test_the_single_variety_column_is_unaffected_and_stays_primary(self):
 		"""The legacy field is not derived from the table and the table is not
@@ -307,7 +309,8 @@ class CreateFieldVarieties(FieldVarietiesTestCase):
 	def test_a_row_with_no_variety_is_refused(self):
 		self.a_parcel()
 		error = self.tool_error(
-			"create_field", {"parcel": "Mill Creek", "field_name": "Block 9", "varieties": [{"percentage": 50}]}
+			"create_field",
+			{"parcel": "Mill Creek", "field_name": "Block 9", "varieties": [{"percentage": 50}]},
 		)
 		self.assertIn("no variety", error)
 
@@ -384,7 +387,9 @@ class UpdateFieldVarieties(FieldVarietiesTestCase):
 
 	def test_omitting_it_leaves_the_table_untouched(self):
 		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3", "condition": "Fair"})
-		self.assertEqual(data["varieties"], [{"variety": "Black Pearl", "percentage": 100.0, "planting_year": None}])
+		self.assertEqual(
+			data["varieties"], [{"variety": "Black Pearl", "percentage": 100.0, "planting_year": None}]
+		)
 
 	def test_an_empty_list_clears_it(self):
 		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3", "varieties": []})

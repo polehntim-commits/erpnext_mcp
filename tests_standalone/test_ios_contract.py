@@ -4467,9 +4467,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 			"register_asset",
 			{"name": "MC-Valve-Main", "asset_type": "Irrigation Valve", "company": MAIN},
 		)
-		route = next(
-			r for r in farmops_routes.ROUTES if r.path == "/mobile/update_irrigation_valve"
-		)
+		route = next(r for r in farmops_routes.ROUTES if r.path == "/mobile/update_irrigation_valve")
 		survived = farmops_routes.bind(
 			route,
 			{

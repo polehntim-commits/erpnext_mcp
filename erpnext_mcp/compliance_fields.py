@@ -127,6 +127,14 @@ class ComplianceField:
 	#: make the record unsaveable in the Desk, which is why nothing here combines
 	#: the two.
 	depends_on: str = ""
+	#: Whether the Desk lets anybody type into it. v0.148.0's first use is the
+	#: only one, and it is what makes a DENORMALISED column honest: the three
+	#: Asset columns below are written by `asset_mirror` and by nothing else, and
+	#: a copy of a fact that a second person can edit is a copy that will one day
+	#: disagree with the fact. Anything a human is supposed to answer must NOT be
+	#: read-only — a compliance column nobody can fill in is worse than an absent
+	#: one, because the form looks complete.
+	read_only: bool = False
 	#: What a NEW record starts with. v0.85.0's first use is the only one, and it
 	#: is worth stating what a default on a compliance column does and does not
 	#: mean: it fills the Desk form for a record nobody has typed yet, and it
@@ -147,6 +155,8 @@ class ComplianceField:
 			"description": self.description or self.why,
 			"module": "ERPNext MCP",
 		}
+		if self.read_only:
+			row["read_only"] = 1
 		if self.default:
 			row["default"] = self.default
 		if self.options:
@@ -164,6 +174,7 @@ class ComplianceField:
 			"label": self.label,
 			"fieldtype": self.fieldtype,
 			"required": bool(self.reqd),
+			"read_only": bool(self.read_only),
 			"options": [line for line in self.options.split("\n") if line] if self.options else [],
 			# The rows this field is shown on, when it is not shown on all of
 			# them. Reported rather than left in the code because "the column is
@@ -684,6 +695,84 @@ _ASSET_FIELDS = (
 			"out whether the new capacity did what it was bought to do."
 		),
 	),
+	# ── v0.148.0: the tag and the asset, made the same machine ──────────────
+	#
+	# THREE COLUMNS, AND THE RESTRAINT IS THE DESIGN. `Asset Register` carries
+	# twenty-odd operational columns — GPS, serial, model, the service schedule,
+	# the hour meter, the scan stamps — and the obvious build of this feature
+	# copies all of them onto Asset so the Desk shows everything in one place.
+	# That is the shadow layer this file's own docstring argues against, aimed
+	# the other way: two copies of a coordinate that a person can edit on either
+	# record will disagree, and an insurance schedule reading one of them while a
+	# dispatcher reads the other is worse than a single copy behind one click.
+	#
+	# So exactly one column here is not derivable from somewhere else — the Link
+	# — and the other two exist to make the Link's own truthfulness visible: what
+	# kind of thing it is, so an Asset LIST can be filtered without a join, and
+	# when the mirror last agreed with the tag, so drift is a column rather than
+	# a discovery. Everything else is one click away on the record that owns it.
+	#
+	# ALL THREE ARE READ-ONLY, for the reason the `read_only` flag's own comment
+	# gives: they are written by `asset_mirror` and by nothing else. A denormalised
+	# copy somebody can type over is a copy that lies.
+	ComplianceField(
+		fieldname="asset_register",
+		label="Asset Register Tag",
+		fieldtype="Link",
+		options="Asset Register",
+		read_only=True,
+		framework="Fixed-asset register integrity — the unified asset register (v0.148.0)",
+		why=(
+			"Which printed tag this asset is. Without it the same machine exists twice on "
+			"one site — once on the books and once on a sticker — and no query can tell "
+			"that the tractor in the depreciation schedule and the tractor a worker "
+			"scanned this morning are one tractor."
+		),
+		operational=(
+			"An adjuster holding a serial number, or an accountant holding a depreciation "
+			"line, can reach the scan history, the service record and the photograph "
+			"without knowing this app exists. Without the link, each has half a machine."
+		),
+		description=(
+			"The Asset Register record this Asset mirrors. Written by the mirror and by "
+			"nothing else — the register is the operational record and this Asset is the "
+			"same machine on the books."
+		),
+	),
+	ComplianceField(
+		fieldname="farm_asset_type",
+		label="Farm Asset Type",
+		fieldtype="Data",
+		read_only=True,
+		framework="Fixed-asset register integrity — the unified asset register (v0.148.0)",
+		why=(
+			"The farm's own vocabulary for what the thing is — valve, tractor, wind "
+			"machine, cabin — which is finer than the Asset Category the accounts are "
+			"kept by and is the word anybody on the ground would use to ask for it."
+		),
+		operational=(
+			"Filtering the Asset list to every wind machine, or every valve, without "
+			"opening a record. A category built for depreciation accounts puts four "
+			"unlike machines in one bucket."
+		),
+	),
+	ComplianceField(
+		fieldname="asset_register_synced_at",
+		label="Register Last Synced",
+		fieldtype="Datetime",
+		read_only=True,
+		framework="Fixed-asset register integrity — the unified asset register (v0.148.0)",
+		why=(
+			"When the mirror last agreed with the tag. A denormalised copy with no "
+			"as-of stamp cannot be audited: nobody can tell a column that is current "
+			"from one this app stopped being able to write months ago."
+		),
+		operational=(
+			"Whether the books are being kept up to date by the field at all. A stamp "
+			"months behind the tag's own modified date is a sync that has been failing "
+			"silently, and it is the only thing that would say so."
+		),
+	),
 )
 
 
@@ -998,9 +1087,12 @@ TARGETS = (
 		owner_app="erpnext",
 		purpose=(
 			"The maintenance-versus-growth split every sustainable cash flow figure is "
-			"read through. Maintenance capex replaces what wore out and growth capex buys "
-			"capacity that was never there; an operation that cannot tell them apart "
-			"cannot say whether a good year was earned or borrowed from the orchard."
+			"read through, and the link that makes an asset on the books and a tag in the "
+			"field one machine. Maintenance capex replaces what wore out and growth capex "
+			"buys capacity that was never there; an operation that cannot tell them apart "
+			"cannot say whether a good year was earned or borrowed from the orchard. And "
+			"an operation whose fixed-asset register and whose scanned tags are two "
+			"unconnected lists cannot say how many machines it owns."
 		),
 		fields=_ASSET_FIELDS,
 		absent_note=(

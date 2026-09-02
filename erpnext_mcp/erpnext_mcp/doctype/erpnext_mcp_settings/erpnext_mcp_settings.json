@@ -743,6 +743,8 @@
   "allow_trigger_maintenance_tasks",
   "allow_record_spray_application",
   "allow_cancel_spray_rei",
+  "asset_mirror_col",
+  "mirror_assets_to_erpnext",
   "fill_pipeline_read_section",
   "allow_get_fill_determination",
   "allow_get_fill_thresholds",
@@ -2876,7 +2878,7 @@
   },
   {
    "default": "1",
-   "description": "READ. What is in a Common Land Unit file from the FSA county office \u2014 a zipped shapefile, a KML or KMZ, or GeoJSON. Reports every CLU's farm, tract and field number, FSA's own acreage, the HEL classification and where on the ground it is. Reads nothing on this site and writes nothing.",
+   "description": "READ. What is in a Common Land Unit file from the FSA county office — a zipped shapefile, a KML or KMZ, or GeoJSON. Reports every CLU's farm, tract and field number, FSA's own acreage, the HEL classification and where on the ground it is. Reads nothing on this site and writes nothing.",
    "fieldname": "allow_read_fsa_clu_file",
    "fieldtype": "Check",
    "label": "Read an FSA CLU File"
@@ -5822,6 +5824,18 @@
    "label": "Bulk Create Assets"
   },
   {
+   "fieldname": "asset_mirror_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "default": "0",
+   "description": "POLICY, not a tool switch. OFF (the default) means registering an asset from the field writes the tag register and nothing else. ON means it ALSO creates the ERPNext Asset that puts the machine on the books — in draft, with ERPNext's own depreciation switched off, carrying a link back to the tag — so the same machine appears where an accountant, an adjuster and a lender look for it. A tag with no purchase_value and no acquired_on is NOT mirrored: ERPNext's Asset throws on a zero gross purchase amount, and inventing a cost basis would carry a number nobody measured into the depreciation run and the insurance schedule. A failed mirror never undoes a registration.",
+   "fieldname": "mirror_assets_to_erpnext",
+   "fieldtype": "Check",
+   "label": "Mirror Field Assets into ERPNext Assets"
+  },
+  {
    "default": "1",
    "description": "READ. List valid state-change actions for an asset given its current state and type.",
    "fieldname": "allow_get_available_actions",
@@ -7092,7 +7106,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. Correct a valve already in the register: its rank, the valve above it, the zone it draws through, its NFC tag, where it is and when it went in. The tag ID is the docname and cannot be changed \u2014 a rename is refused. Refuses a Main filed under a Lateral in either direction, and a valve filed under its own descendant.",
+   "description": "WRITE. Correct a valve already in the register: its rank, the valve above it, the zone it draws through, its NFC tag, where it is and when it went in. The tag ID is the docname and cannot be changed — a rename is refused. Refuses a Main filed under a Lateral in either direction, and a valve filed under its own descendant.",
    "fieldname": "allow_update_irrigation_valve",
    "fieldtype": "Check",
    "label": "Update Irrigation Valve"

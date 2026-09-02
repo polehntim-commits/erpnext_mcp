@@ -164,7 +164,7 @@ from attendance would invent all three on a record an inspector reads.
 
 ### `Asset` — erpnext
 
-The maintenance-versus-growth split every sustainable cash flow figure is read through. Maintenance capex replaces what wore out and growth capex buys capacity that was never there; an operation that cannot tell them apart cannot say whether a good year was earned or borrowed from the orchard.
+The maintenance-versus-growth split every sustainable cash flow figure is read through, and the link that makes an asset on the books and a tag in the field one machine. Maintenance capex replaces what wore out and growth capex buys capacity that was never there; an operation that cannot tell them apart cannot say whether a good year was earned or borrowed from the orchard. And an operation whose fixed-asset register and whose scanned tags are two unconnected lists cannot say how many machines it owns.
 
 **The first target in this file that is not about a regulator, and it belongs
 here anyway.** Maintenance capex replaces productive capacity that wore out;
@@ -188,12 +188,39 @@ would demand a classification nobody present can make. The gate is in
 `create_asset` instead, where the person raising the purchase is standing, and
 `backfill_asset_capex_type` classifies the history in bulk.
 
+
+**The tag on the machine and the asset on the books, made one thing (v0.148.0).**
+An asset registered from a handset lands in `Asset Register`, which is where the
+printed tag, the QR, the scan history, the service schedule and eight doctypes'
+link fields all point. It does not land in ERPNext's `Asset`, which is where the
+fixed-asset register, the insurance schedule and the depreciation run all look.
+Without a link between them the same machine exists twice on one site and neither
+copy knows about the other. `asset_mirror` writes the second record and
+`asset_register` is the column that makes it the same machine.
+
+**Three columns and not twenty-three.** `Asset Register` carries GPS, a serial
+number, a model, a service schedule, an hour meter and the scan stamps, and the
+obvious build copies all of them here so the Desk shows everything in one place.
+That is the shadow layer this file argues against, aimed the other way: two
+editable copies of one coordinate will disagree, and an insurance schedule
+reading one while a dispatcher reads the other is worse than a single copy one
+click away. Exactly one column below is not derivable from somewhere else — the
+Link — and the other two exist to make it auditable.
+
+**All three are read-only.** They are written by the mirror and by nothing else.
+A denormalised copy a second person can type over is a copy that will one day
+lie, and the whole value of a mirror is that you can tell when it has stopped
+agreeing.
+
 | Field | Type | Required | Framework | Why the regulator wants it | What breaks in the WORK without it |
 | --- | --- | --- | --- | --- | --- |
 | `capex_type` | Select | no | Managerial accounting — Sustainable CF/Acre (v0.19.5); lender maintenance-capex covenants | Maintenance capex replaces productive capacity that wore out; growth capex adds capacity that was never there. Sustainable cash flow is what is left after the first is funded, and an operation that cannot tell them apart reports growth spending as if it were keeping the orchard whole. | The replacement budget. 'What we spend to stay where we are' and 'what we spend to get bigger' are two different plans, and an operation that cannot separate them funds the second out of the first — which is deferred maintenance with a better name. |
 | `maintenance_portion` | Currency | no | Managerial accounting — Sustainable CF/Acre (v0.19.5) | A single purchase is often both — a bigger tractor replacing a smaller one is the old machine's capacity as maintenance and the difference as growth. Recording only the total forces the whole amount into one bucket and the KPI reads whichever the person picked. | What a replacement reserve is sized against. The maintenance half of a mixed purchase is the recurring number; the growth half happens once. |
 | `growth_portion` | Currency | no | Managerial accounting — Sustainable CF/Acre (v0.19.5) | The other half of the split, stored rather than derived. A portion computed as 'the total minus the other one' cannot disagree with the total, which sounds like a virtue and means a transposed figure is silently absorbed instead of refused. | What the expansion actually cost, separable from what keeping the existing ground going cost. It is the number a return-on-new-planting calculation starts from. |
 | `capex_justification` | Small Text | no | Managerial accounting — Sustainable CF/Acre (v0.19.5) | Required for Growth and Mixed by `create_asset`: what capacity does this add? Classifying a purchase as growth takes it out of the maintenance figure, which raises sustainable cash flow — the one direction in which a misclassification flatters the operation, and therefore the one that needs a sentence behind it. | The reason the purchase was made, in the words of whoever made it, on the record it was made against. It is what next year's planning reads to find out whether the new capacity did what it was bought to do. |
+| `asset_register` | Link | no | Fixed-asset register integrity — the unified asset register (v0.148.0) | Which printed tag this asset is. Without it the same machine exists twice on one site — once on the books and once on a sticker — and no query can tell that the tractor in the depreciation schedule and the tractor a worker scanned this morning are one tractor. | An adjuster holding a serial number, or an accountant holding a depreciation line, can reach the scan history, the service record and the photograph without knowing this app exists. Without the link, each has half a machine. |
+| `farm_asset_type` | Data | no | Fixed-asset register integrity — the unified asset register (v0.148.0) | The farm's own vocabulary for what the thing is — valve, tractor, wind machine, cabin — which is finer than the Asset Category the accounts are kept by and is the word anybody on the ground would use to ask for it. | Filtering the Asset list to every wind machine, or every valve, without opening a record. A category built for depreciation accounts puts four unlike machines in one bucket. |
+| `asset_register_synced_at` | Datetime | no | Fixed-asset register integrity — the unified asset register (v0.148.0) | When the mirror last agreed with the tag. A denormalised copy with no as-of stamp cannot be audited: nobody can tell a column that is current from one this app stopped being able to write months ago. | Whether the books are being kept up to date by the field at all. A stamp months behind the tag's own modified date is a sync that has been failing silently, and it is the only thing that would say so. |
 
 ### `Item` — erpnext
 

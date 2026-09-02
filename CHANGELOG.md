@@ -3,6 +3,57 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.148.0 — 2026-09-02 — the tag on the machine and the asset on the books
+
+**PHASE 3 OF THE UNIFIED ASSET REGISTER.** An asset registered from the handset
+lands in `Asset Register` and never in ERPNext's `Asset`, so the same machine
+exists twice on one site and neither copy knows about the other — invisible on
+the books from the field, untagged from the books. This release writes the second
+record and links it back. Full note in `RELEASES/v0.148.0.md`.
+
+**A MIRROR AND NOT A MIGRATION.** `Asset Register` stays the operational record:
+its docname IS the string on the zip-tied tag, and eight doctypes Link to it.
+ERPNext's Asset is a submittable financial document that marks `item_code`,
+`location` and `purchase_date` required and throws "Gross Purchase Amount is
+mandatory" on a zero — which is what all thirty-three valves on the deployed site
+carry. Moving the store would rename every asset, reprint every tag and repoint
+every link.
+
+**MOST TAGS DO NOT MIRROR, AND THAT IS CORRECT.** A tag reaches the books when it
+carries a purchase value and an acquisition date, and otherwise the reply names
+both. Inventing a nominal cost basis would carry a number nobody measured into
+the depreciation run, `export_insurance_schedule` and Sustainable CF/Acre. A
+`purchase_value` of exactly 0.0 refuses like an absent one.
+
+**`calculate_depreciation = 0` ON EVERY MIRROR**, for the reason `create_asset`
+gives: ERPNext's daily scheduler posts for every asset that has it set, and
+`run_depreciation_cycle` owns the schedule. Both posting means depreciating
+twice, silently, monthly.
+
+**MONEY IS WRITTEN ONCE.** A later edit to a tag's `purchase_value` refreshes
+identity on an existing Asset and never `gross_purchase_amount` — the ledger has
+been reconciled against that figure. Retiring a tag does not dispose of the
+asset either: ERPNext disposes through a journal that posts to the GL.
+
+**THREE READ-ONLY COLUMNS ON ASSET**, installed by `install_compliance_fields`
+on the next migrate: `asset_register` (the Link), `farm_asset_type` and
+`asset_register_synced_at`. Not the twenty-odd operational columns the register
+carries — two editable copies of one coordinate will disagree.
+
+**IT SHIPS OFF.** `mirror_assets_to_erpnext` on ERPNext MCP Settings, default 0.
+A failed mirror never undoes a registration.
+
+**THE MOBILE CONTRACT DID NOT CHANGE.** No argument added, removed or renamed and
+no route moved; the replies gained `erpnext_asset`, `erpnext_asset_created` and
+`erpnext_asset_note`. `list_assets` reports `on_the_books_count`.
+
+**ALSO:** `bulk_create_assets` takes `acquired_on`, `purchase_value` and
+`replacement_value` per row and reports `mirrored_count`; `register_asset` and
+`update_registered_asset` now declare in the registry the five arguments their
+handlers have always read; and a stale `hooks.doctype_js` count assertion that
+had been red on `main` since v0.145.0 is fixed to check the rule it was a proxy
+for.
+
 ## 0.147.0 — 2026-09-01 — the category an asset needs before it can exist
 
 **ONE TOOL: `create_asset_category`.** An ERPNext Asset Category, created from

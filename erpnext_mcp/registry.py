@@ -177,6 +177,22 @@ _BOOLEAN = {"type": "boolean"}
 _OBJECT = {"type": "object"}
 _STRING_ARRAY = {"type": "array", "items": {"type": "string"}}
 
+#: v0.148.0. The same paragraph on the three asset-register writes that can put a
+#: machine on the books, written once because three copies of it would be three
+#: descriptions that drift. Concatenated into each tool's own description rather
+#: than replacing it: what the tool does is still the first thing a model reads.
+MIRROR_NOTE = (
+	"\n\nON THE BOOKS. With `mirror_assets_to_erpnext` ticked on ERPNext MCP "
+	"Settings this ALSO creates the ERPNext Asset for this machine — in draft, "
+	"with ERPNext's own depreciation switched off, linked back to the tag — so "
+	"it appears in the fixed-asset register too. It needs `purchase_value` and "
+	"`acquired_on` to do it: ERPNext's Asset throws on a zero gross purchase "
+	"amount, and a cost basis nobody measured would reach the depreciation run "
+	"and the insurance schedule. Without them the tag is registered and "
+	"`erpnext_asset_note` says what is missing. A failed mirror NEVER undoes a "
+	"registration."
+)
+
 #: `quarter` on the five tax remittance reads, WHICH TAKE EITHER SPELLING.
 #: v0.92.2. A model writes "Q3" because the description says so; the iOS quarter
 #: picker is four buttons and posts the integer 3. `tax_remittance._window`
@@ -20156,7 +20172,7 @@ TOOLS = {
 		"location. The docname IS the printable tag ID — 'MC-Valve-05' on the "
 		"label and 'MC-Valve-05' in the database are the same string.\n\n"
 		"REFUSES: a duplicate name (two tags with the same string would resolve "
-		"to the same record); a location that does not exist in Asset Register.",
+		"to the same record); a location that does not exist in Asset Register." + MIRROR_NOTE,
 		{
 			"name": _field(_STRING, "The tag ID that will be printed on the label, e.g. 'MC-Valve-05'."),
 			"asset_type": _field(
@@ -20170,6 +20186,17 @@ TOOLS = {
 			"nfc_uid": _field(_STRING, "The UID of an NFC tag, if one is attached."),
 			"gps_latitude": _field(_NUMBER, "Where it is."),
 			"gps_longitude": _field(_NUMBER, "Where it is."),
+			"serial_number": _field(_STRING, "The serial or VIN off the plate."),
+			"model": _field(_STRING, "The manufacturer's model designation."),
+			"acquired_on": _field(_STRING, "YYYY-MM-DD. What ERPNext files as the purchase date."),
+			"purchase_value": _field(_NUMBER, "What it cost. ERPNext's Asset refuses a zero."),
+			"replacement_value": _field(_NUMBER, "What replacing it would cost today, for insurance."),
+			"asset_location": _field(
+				_STRING,
+				"An ERPNext Location docname for the mirrored Asset — ERPNext marks one "
+				"required. Defaults to the site's only Location; needed where there is "
+				"more than one.",
+			),
 		},
 		required=("name", "asset_type", "company"),
 		mutating=True,
@@ -20180,7 +20207,11 @@ TOOLS = {
 	"update_registered_asset": _tool(
 		asset_tags.update_registered_asset,
 		"MUTATING (default OFF). Update an asset's fields. Cannot rename — the "
-		"docname IS the tag ID and changing it would orphan every printed label.",
+		"docname IS the tag ID and changing it would orphan every printed label."
+		+ MIRROR_NOTE
+		+ " On an asset ALREADY on the books this refreshes its identity and never "
+		"its money: `gross_purchase_amount` is a figure the ledger has been "
+		"reconciled against and is changed in the Desk.",
 		{
 			"asset_name": _field(_STRING, "The Asset Register docname."),
 			"company": _field(_STRING, "Narrow to one company."),
@@ -20191,6 +20222,19 @@ TOOLS = {
 			"gps_latitude": _field(_NUMBER, "New latitude."),
 			"gps_longitude": _field(_NUMBER, "New longitude."),
 			"current_state": _field(_OBJECT, "Type-specific state as JSON."),
+			"serial_number": _field(_STRING, "New serial or VIN."),
+			"model": _field(_STRING, "New model designation."),
+			"acquired_on": _field(
+				_STRING, "YYYY-MM-DD. Supplying this and purchase_value is what puts a tag on the books."
+			),
+			"purchase_value": _field(_NUMBER, "What it cost. ERPNext's Asset refuses a zero."),
+			"replacement_value": _field(_NUMBER, "What replacing it would cost today."),
+			"asset_location": _field(
+				_STRING,
+				"An ERPNext Location docname for the mirrored Asset. Changes nothing on the "
+				"register, so it may be passed on its own to retry a mirror that was refused "
+				"because the site has more than one Location.",
+			),
 		},
 		required=("asset_name",),
 		mutating=True,
@@ -20219,7 +20263,10 @@ TOOLS = {
 		asset_tags.bulk_create_assets,
 		"MUTATING (default OFF). Bulk registration for initial rollout: up to "
 		"500 assets in one call. Each item needs name and asset_type. Skips "
-		"duplicates and reports them as errors rather than failing the whole batch.",
+		"duplicates and reports them as errors rather than failing the whole batch."
+		+ MIRROR_NOTE
+		+ " Rows carrying neither are still registered; `mirrored_count` says how "
+		"many of the batch reached the books.",
 		{
 			"company": _field(_STRING, "The company that owns all these assets."),
 			"assets": {
@@ -20234,11 +20281,18 @@ TOOLS = {
 						"nfc_uid": _field(_STRING, "NFC tag UID."),
 						"gps_latitude": _field(_NUMBER, "Latitude."),
 						"gps_longitude": _field(_NUMBER, "Longitude."),
+						"acquired_on": _field(_STRING, "YYYY-MM-DD."),
+						"purchase_value": _field(_NUMBER, "What it cost."),
+						"replacement_value": _field(_NUMBER, "What replacing it would cost today."),
 					},
 					"required": ["name", "asset_type"],
 				},
 				"description": "List of asset objects to register.",
 			},
+			"asset_location": _field(
+				_STRING,
+				"An ERPNext Location docname for every Asset mirrored out of this batch.",
+			),
 		},
 		required=("company", "assets"),
 		mutating=True,

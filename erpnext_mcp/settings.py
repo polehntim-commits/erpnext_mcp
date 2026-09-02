@@ -194,6 +194,24 @@ def require_user_context() -> bool:
 	return as_bool(_value("require_user_context"))
 
 
+def asset_mirror_enabled() -> bool:
+	"""Whether registering a field asset ALSO writes an ERPNext Asset. Ships OFF.
+
+	v0.148.0. What this gates is this app inserting into a doctype ERPNext owns,
+	on a trigger a worker with a handset pulls — the fixed-asset register, which
+	the depreciation run, `export_insurance_schedule` and Sustainable CF/Acre are
+	all computed from. Every other mutating capability in this app ships off and
+	this is a stronger case than most of them.
+
+	Turning it off is not a loss of data. `Asset Register` is the operational
+	record either way — the tag, the QR, the scan history and eight doctypes'
+	link fields all point there — and the mirror is a second copy of the machine
+	written where an accountant, an adjuster and a lender look for it. A site
+	that leaves this off has a complete tag register and an untouched book.
+	"""
+	return as_bool(_value("mirror_assets_to_erpnext"))
+
+
 def trade_document_enforcement() -> bool:
 	"""Whether an incomplete document checklist HOLDS a shipment. Ships OFF.
 

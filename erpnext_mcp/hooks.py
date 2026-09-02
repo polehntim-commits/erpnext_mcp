@@ -536,7 +536,11 @@ doctype_js = {
 	"Field": ["public/js/geo_map_widget.js", "public/js/field_map.js"],
 	"Irrigation Zone": ["public/js/geo_map_widget.js", "public/js/irrigation_zone_map.js"],
 	"Housing Unit": ["public/js/geo_map_widget.js", "public/js/housing_unit_map.js"],
-	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js", "public/js/irrigation_valve_map.js"],
+	"Asset Register": [
+		"public/js/geo_map_widget.js",
+		"public/js/asset_register_map.js",
+		"public/js/irrigation_valve_map.js",
+	],
 	"Farm Shift": ["public/js/geo_map_widget.js", "public/js/farm_shift_map.js"],
 	"Farm Task": ["public/js/geo_map_widget.js", "public/js/farm_task_map.js"],
 }

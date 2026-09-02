@@ -604,7 +604,8 @@ def _known_varieties(company: str = "") -> list:
 				return sorted(values)
 			child_filters["parent"] = ("in", field_names)
 		child_rows = (
-			frappe.db.get_all(FIELD_VARIETY, filters=child_filters, pluck="variety", limit=REGISTER_CAP * 20) or []
+			frappe.db.get_all(FIELD_VARIETY, filters=child_filters, pluck="variety", limit=REGISTER_CAP * 20)
+			or []
 		)
 		values |= {str(value).strip() for value in child_rows if str(value or "").strip()}
 

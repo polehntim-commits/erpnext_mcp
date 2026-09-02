@@ -327,12 +327,27 @@ class TheFormScripts(unittest.TestCase):
 		"""ORDER IS LOAD ORDER. Frappe concatenates these into one script in the
 		order given, and each per-doctype file calls into the widget as it is
 		evaluated — so a widget listed second is a ReferenceError that takes the
-		whole form script down."""
+		whole form script down.
+
+		THE WIDGET IS LISTED ONCE, AND EVERY OTHER ENTRY IS A FORM SCRIPT. This
+		read `len(files) == 2` until v0.148.0, which was the same rule written as
+		a count while every doctype happened to have exactly one script. Asset
+		Register has had two since v0.145.0 — `asset_register_map.js` draws a
+		read-only pin for a pump or a bin trailer, `irrigation_valve_map.js`
+		draws a draggable one for a valve, and each returns early on the other's
+		records so they never both render. That is a legitimate pair, and the
+		count assertion had been failing on it since the day it landed.
+
+		Naming the widget twice is still a fault and is still caught: Frappe
+		would evaluate it twice and the second evaluation would re-register every
+		handler it installs.
+		"""
 		for doctype, files in hooks.doctype_js.items():
 			with self.subTest(doctype=doctype):
 				self.assertIsInstance(files, list)
 				self.assertEqual(files[0], self.SHARED_WIDGET)
-				self.assertEqual(len(files), 2, "one widget plus one per-doctype script")
+				self.assertEqual(files.count(self.SHARED_WIDGET), 1, "the shared widget is listed once")
+				self.assertGreaterEqual(len(files), 2, "one widget plus at least one per-doctype script")
 
 	def test_nothing_here_is_a_dotted_path(self):
 		"""The resolver must never walk this hook. `frappe.get_attr` on
