@@ -207,7 +207,15 @@ reading one while a dispatcher reads the other is worse than a single copy one
 click away. Exactly one column below is not derivable from somewhere else — the
 Link — and the other two exist to make it auditable.
 
-**All three are read-only.** They are written by the mirror and by nothing else.
+**And one deliberate second copy: the coordinate (v0.149.0).** Everything else
+on the tag stays on the tag. `gps_latitude` and `gps_longitude` do not, because
+the unified map plots equipment out of the fixed-asset register alongside
+blocks, zones and valves — and a map that had to join through `Asset Register`
+to find a tractor could not plot one somebody created in the Desk. The drift a
+second copy normally invites is answered by refreshing it on every sync and
+stamping when that happened, not by hoping.
+
+**All five are read-only.** They are written by the mirror and by nothing else.
 A denormalised copy a second person can type over is a copy that will one day
 lie, and the whole value of a mirror is that you can tell when it has stopped
 agreeing.
@@ -221,6 +229,8 @@ agreeing.
 | `asset_register` | Link | no | Fixed-asset register integrity — the unified asset register (v0.148.0) | Which printed tag this asset is. Without it the same machine exists twice on one site — once on the books and once on a sticker — and no query can tell that the tractor in the depreciation schedule and the tractor a worker scanned this morning are one tractor. | An adjuster holding a serial number, or an accountant holding a depreciation line, can reach the scan history, the service record and the photograph without knowing this app exists. Without the link, each has half a machine. |
 | `farm_asset_type` | Data | no | Fixed-asset register integrity — the unified asset register (v0.148.0) | The farm's own vocabulary for what the thing is — valve, tractor, wind machine, cabin — which is finer than the Asset Category the accounts are kept by and is the word anybody on the ground would use to ask for it. | Filtering the Asset list to every wind machine, or every valve, without opening a record. A category built for depreciation accounts puts four unlike machines in one bucket. |
 | `asset_register_synced_at` | Datetime | no | Fixed-asset register integrity — the unified asset register (v0.148.0) | When the mirror last agreed with the tag. A denormalised copy with no as-of stamp cannot be audited: nobody can tell a column that is current from one this app stopped being able to write months ago. | Whether the books are being kept up to date by the field at all. A stamp months behind the tag's own modified date is a sync that has been failing silently, and it is the only thing that would say so. |
+| `gps_latitude` | Float | no | Fixed-asset register integrity — the unified asset register (v0.149.0) | Where the asset physically is, on the record an insurer, an assessor and a lender read. A schedule that lists a wind machine and cannot say which corner of which orchard it stands in describes a machine nobody can find. | Walking to it. 'The shop yard' is four acres and a pump, a bin trailer or a generator is findable by coordinate and by nothing else — and the dispatch map plots equipment from this column. |
+| `gps_longitude` | Float | no | Fixed-asset register integrity — the unified asset register (v0.149.0) | The other half, and it is stored rather than derived for the reason every coordinate pair is: half a position is not a position. A record carrying one of the two is a point on the equator or the prime meridian. | The same walk. The mirror writes both columns or neither, so a machine on the map is a machine somebody actually took a fix on. |
 
 ### `Item` — erpnext
 

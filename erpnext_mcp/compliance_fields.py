@@ -773,6 +773,55 @@ _ASSET_FIELDS = (
 			"silently, and it is the only thing that would say so."
 		),
 	),
+	# ── v0.149.0: where the machine is standing ─────────────────────────────
+	#
+	# THE ONE DELIBERATE SECOND COPY IN THIS TARGET, and the argument above about
+	# shadow columns is the reason it needs its own. Everything else on the tag
+	# stays on the tag and is reached through the Link. A coordinate does not,
+	# because the unified map plots equipment out of the FIXED-ASSET register
+	# alongside blocks, zones and valves — and a map that had to join through
+	# `Asset Register` to find a tractor could not plot one somebody created in
+	# the Desk, which is half the machines on a farm that also buys through
+	# invoices.
+	#
+	# THE DRIFT THIS NORMALLY INVITES IS ANSWERED BY REFRESHING, NOT BY HOPING.
+	# `asset_mirror._refresh` rewrites both columns on every sync and stamps
+	# `asset_register_synced_at`, so a stale coordinate is visible as a stale
+	# stamp rather than as a wrong pin. They are read-only for the same reason
+	# the other three are.
+	ComplianceField(
+		fieldname="gps_latitude",
+		label="GPS Latitude",
+		fieldtype="Float",
+		read_only=True,
+		framework="Fixed-asset register integrity — the unified asset register (v0.149.0)",
+		why=(
+			"Where the asset physically is, on the record an insurer, an assessor and a "
+			"lender read. A schedule that lists a wind machine and cannot say which "
+			"corner of which orchard it stands in describes a machine nobody can find."
+		),
+		operational=(
+			"Walking to it. 'The shop yard' is four acres and a pump, a bin trailer or a "
+			"generator is findable by coordinate and by nothing else — and the dispatch "
+			"map plots equipment from this column."
+		),
+	),
+	ComplianceField(
+		fieldname="gps_longitude",
+		label="GPS Longitude",
+		fieldtype="Float",
+		read_only=True,
+		framework="Fixed-asset register integrity — the unified asset register (v0.149.0)",
+		why=(
+			"The other half, and it is stored rather than derived for the reason every "
+			"coordinate pair is: half a position is not a position. A record carrying one "
+			"of the two is a point on the equator or the prime meridian."
+		),
+		operational=(
+			"The same walk. The mirror writes both columns or neither, so a machine on "
+			"the map is a machine somebody actually took a fix on."
+		),
+	),
 )
 
 

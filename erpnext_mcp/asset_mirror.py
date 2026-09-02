@@ -75,6 +75,7 @@ import frappe
 from . import compat, settings
 
 ASSET = "Asset"
+ASSET_REGISTER = "Asset Register"
 
 #: The Link back to the tag, and the column everything here is keyed on. Two
 #: Assets carrying the same value would be two sets of books for one machine, so
@@ -93,11 +94,24 @@ TYPE_FIELD = "farm_asset_type"
 #: being able to update, and without the column that is invisible.
 SYNCED_FIELD = "asset_register_synced_at"
 
-#: All three, in the order the Desk shows them. `compliance_fields.py` is what
+#: Where the machine stands, copied onto the Asset and KEPT CURRENT — this is
+#: the one pair that is deliberately a second copy of a column the register
+#: already has, and the reason is that the unified map plots equipment from the
+#: fixed-asset register alongside blocks, zones and valves. A map that had to
+#: join through `Asset Register` to find a tractor would be a map that cannot
+#: plot an asset somebody created in the Desk.
+#:
+#: KEPT CURRENT IS THE WHOLE OF IT. A coordinate copied once and never refreshed
+#: is worse than no coordinate: it sends somebody to where the tractor was in
+#: March. `_refresh` rewrites both on every sync, and `asset_register_synced_at`
+#: is what says when that last happened.
+GPS_FIELDS = ("gps_latitude", "gps_longitude")
+
+#: All of them, in the order the Desk shows them. `compliance_fields.py` is what
 #: actually creates them and this is what it is checked against: a column added
 #: to one and not the other is a mirror writing into nothing, or a Desk column
 #: nobody fills in, and neither announces itself.
-CUSTOM_FIELDS = (LINK_FIELD, TYPE_FIELD, SYNCED_FIELD)
+CUSTOM_FIELDS = (LINK_FIELD, TYPE_FIELD, SYNCED_FIELD, *GPS_FIELDS)
 
 #: Which Asset Category an `Asset Register.asset_type` belongs in. These are the
 #: six the unified asset register is built on; a site creates them with
@@ -319,12 +333,16 @@ def _sync(row: dict, *, location: str, photo_file: str, verdict: dict) -> dict:
 		doc.set(TYPE_FIELD, row.get("asset_type") or "")
 	if compat.has_field(ASSET, SYNCED_FIELD):
 		doc.set(SYNCED_FIELD, frappe.utils.now())
+	for field, value in _gps_values(row).items():
+		if compat.has_field(ASSET, field):
+			doc.set(field, value)
 	image = _image_url(photo_file)
 	if image and compat.has_field(ASSET, "image"):
 		doc.image = image
 	doc.insert(ignore_permissions=True)
 
 	verdict.update(mirrored=True, asset=doc.name, created=True)
+	verdict["photos"] = copy_photographs(doc.name, tag)
 	return verdict
 
 
@@ -349,11 +367,19 @@ def _refresh(asset: str, row: dict, photo_file: str) -> None:
 		values[TYPE_FIELD] = row.get("asset_type") or ""
 	if compat.has_field(ASSET, SYNCED_FIELD):
 		values[SYNCED_FIELD] = frappe.utils.now()
+	# THE COORDINATE IS REFRESHED AND THE MONEY IS NOT, and the two live one
+	# line apart on purpose. A price is a fact about a transaction that happened
+	# once; a position is a fact about where the thing is standing now, and the
+	# map is read by somebody trying to walk to it.
+	for field, value in _gps_values(row).items():
+		if compat.has_field(ASSET, field):
+			values[field] = value
 	image = _image_url(photo_file)
 	if image and compat.has_field(ASSET, "image"):
 		values["image"] = image
 	if values:
 		frappe.db.set_value(ASSET, asset, values, update_modified=False)
+	copy_photographs(asset, str(row.get("name") or ""))
 
 
 def _missing_facts(row: dict) -> str:
@@ -520,6 +546,120 @@ def _asset_name(row: dict) -> str:
 	if detail and detail != tag:
 		return f"{tag} — {detail}"[:140]
 	return tag[:140]
+
+
+def _gps_values(row: dict) -> dict:
+	"""`{gps_latitude, gps_longitude}` as floats, or `{}` when there is no fix.
+
+	BOTH OR NEITHER. Half a coordinate is not a position — it is a point on the
+	prime meridian or the equator, which the map would plot in the Gulf of
+	Guinea — so a row carrying one and not the other writes nothing rather than
+	writing a place nobody has ever been.
+
+	ZERO IS TREATED AS ABSENT HERE, DELIBERATELY, and it is the one place in this
+	app that is the right call. `Asset Register.gps_latitude` is a Frappe Float:
+	NOT NULL DEFAULT 0, so every valve tagged before anybody switched GPS on
+	reads exactly 0.0 and there is no null to tell it apart from a real reading.
+	Null Island is 1,600 km off the coast of Ghana; there is no farm there, and
+	plotting thirty-three valves into the Atlantic is a worse answer than
+	plotting none. See `a-change-guard-that-drops-zero` — this is the exception
+	that rule's own note calls out, because the alternative is a stored default
+	masquerading as a measurement.
+	"""
+	try:
+		latitude = float(row.get("gps_latitude") or 0)
+		longitude = float(row.get("gps_longitude") or 0)
+	except (TypeError, ValueError):
+		return {}
+	if not latitude or not longitude:
+		return {}
+	return {"gps_latitude": latitude, "gps_longitude": longitude}
+
+
+def copy_photographs(asset: str, tag: str) -> list:
+	"""Put every photograph filed against the tag onto the Asset as well.
+
+	THIS IS THE ONE TIM ASKED FOR, and the reason it is a copy rather than a
+	move is `export_insurance_schedule`, which reads the attachments on the
+	Asset Register and would be emptied by taking them away. So the blob is
+	stored once and TWO File rows point at it: one on the tag, one on the Asset,
+	and the photograph appears in the Attachments sidebar of both.
+
+	`File.create_attachment_copy` IS FRAPPE'S OWN CALL FOR THIS — "efficiently
+	copy an attachment from one document to another by reusing `file_url`". It
+	sets `flags.copy_from_existing_file`, which skips re-writing the bytes while
+	keeping the rest of the insert lifecycle. Hand-rolling the insert would
+	re-read and re-store a megabyte per photograph.
+
+	DELETING EITHER ROW IS SAFE. Frappe's `_delete_file_on_disk` removes the
+	blob only when no OTHER File row shares its `content_hash`, so removing the
+	copy from the Asset leaves the tag's photograph on disk, and removing the
+	tag's leaves the Asset's. That guarantee is why two rows is the right shape
+	and a shared `file_url` with one row would not have been.
+
+	IT RAISES NOTHING. A photograph that could not be copied is reported and the
+	Asset stands — the same trade every other step of this module makes.
+	"""
+	copied: list = []
+	if not asset or not tag or not compat.doctype_exists("File"):
+		return copied
+	existing = {
+		str(row.get("file_url") or "")
+		for row in frappe.db.get_all(
+			"File",
+			filters={"attached_to_doctype": ASSET, "attached_to_name": asset},
+			fields=["file_url"],
+			limit=200,
+		)
+		or []
+	}
+	sources = frappe.db.get_all(
+		"File",
+		filters={"attached_to_doctype": ASSET_REGISTER, "attached_to_name": tag},
+		fields=["name", "file_url"],
+		limit=100,
+	)
+	for row in sources or []:
+		url = str(row.get("file_url") or "")
+		# Already there. Re-copying on every sync would give an Asset a fresh
+		# duplicate of every photograph each time somebody edited its tag.
+		if url and url in existing:
+			continue
+		try:
+			handle = frappe.get_doc("File", row.get("name"))
+			# `callable(...)` AND NOT `hasattr(...)`. Frappe's own Document has no
+			# `__getattr__`, so `hasattr` answers correctly on a bench — and the
+			# standalone double's does, returning None for every unknown key, so
+			# `hasattr` is True there for a method that does not exist. A guard
+			# that is always True would have made the fallback below unreachable
+			# in the only place it can be tested.
+			copier = getattr(handle, "create_attachment_copy", None)
+			if callable(copier):
+				made = copier(ASSET, asset, ignore_permissions=True)
+				copied.append(getattr(made, "name", None) or row.get("name"))
+			else:
+				# An older Frappe with no such helper. The insert re-reads the
+				# blob and Frappe's own content-hash check hands back the same
+				# `file_url`, so the site still stores one copy.
+				made = frappe.get_doc(
+					{
+						"doctype": "File",
+						"file_url": url,
+						"file_name": handle.get("file_name"),
+						"is_private": handle.get("is_private"),
+						"attached_to_doctype": ASSET,
+						"attached_to_name": asset,
+					}
+				).insert(ignore_permissions=True)
+				copied.append(made.name)
+			if url:
+				existing.add(url)
+		except Exception:
+			frappe.log_error(
+				title="erpnext_mcp: copying an asset photograph failed",
+				message=compat.traceback_text(),
+			)
+	return copied
 
 
 def _image_url(photo_file: str) -> str:

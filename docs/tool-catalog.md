@@ -19293,3 +19293,65 @@ handset pulls. With it off the reply names the checkbox — a silent no-op is
 indistinguishable from a broken feature.
 
 A failed mirror never undoes a registration.
+
+---
+
+## v0.149.0 — the photograph reaches the books
+
+### The upload path, end to end
+
+```
+iOS  ChunkUploader.uploadAttachment(jpeg)
+  →  erpnext_mcp.api.files.stage_file_chunk       base64, 512 KB a slice
+  →  erpnext_mcp.api.files.finalize_staged_file   SHA-256 verified
+       ← { file_token: "<File docname>" }         a private Frappe File
+  →  erpnext_mcp.api.mobile.register_asset
+       { ..., photo_file_token: "<File docname>" }
+```
+
+**No multipart body and no base64 crosses `register_asset`.** The bytes went up
+through the chunked route and are already an ERPNext `File`; what the asset call
+receives is that File's docname. Nothing on this surface decodes an image.
+
+`/api/method/upload_file` is deliberately not used — it is the one path the
+Tailscale funnel strips the credential from, which is why the chunked route
+exists.
+
+### Where the photograph ends up
+
+| Record | What it gets |
+| --- | --- |
+| `Asset Register` (the tag) | the File itself, private, as before — this is what `export_insurance_schedule` reads |
+| `Asset` (the books) | a **copy** of the File row, same `file_url`, in the Attachments sidebar |
+| `Asset.image` | the same URL, so the Desk form and list view draw a thumbnail |
+
+One stored blob, two File rows, through Frappe's own
+`File.create_attachment_copy`. Deleting either row leaves the other's copy on
+disk — `_delete_file_on_disk` drops the blob only when no other row shares its
+`content_hash`.
+
+**A tag costed later brings its photographs with it.** A valve photographed in
+the field has no purchase value and therefore no Asset yet; the Asset created
+when somebody prices it receives the field photograph then.
+
+**A second sync does not duplicate.** Already-present URLs are skipped, so
+editing a description does not add another copy of every picture.
+
+`erpnext_asset_photos` on the reply counts what the call filed. It is present
+whenever an Asset exists, and zero means the tag had none to copy.
+
+### `gps_latitude` and `gps_longitude` on the Asset
+
+Written on creation and **rewritten on every sync**, so the unified map can plot
+equipment out of the fixed-asset register alongside blocks, zones and valves
+without joining through the tag register.
+
+**Both or neither.** Half a coordinate is a point on the prime meridian.
+
+**Zero is not a position, and a cleared fix never overwrites a good one.** A
+Frappe Float is `NOT NULL DEFAULT 0`, so a tag with no fix reads exactly 0.0 and
+is indistinguishable from one that read zero. A machine that had a position does
+not lose it to a sync.
+
+**The coordinate is refreshed and the money is not.** A price is a fact about a
+transaction that happened once; a position is where the thing is standing now.

@@ -1080,6 +1080,11 @@ ERPNEXT_SCHEMA = {
 	"Asset": [
 		"name",
 		"asset_name",
+		# ERPNext's Asset really does carry an `image` (an Attach Image), and the
+		# mirror sets it so the Desk form and list view draw the photograph.
+		# Absent from this list until v0.149.0, which made `compat.has_field`
+		# answer False and the assignment a silent no-op the suite could not see.
+		"image",
 		"item_code",
 		"asset_category",
 		"company",
@@ -2972,6 +2977,41 @@ class FileDocument(Document):
 			return
 		STORE.file_contents[self.name] = _as_bytes(self.pop("content"))
 		STORE.put(self)
+
+	def create_attachment_copy(
+		self, attached_to_doctype, attached_to_name, attached_to_field=None, ignore_permissions=False
+	):
+		"""Frappe's own "copy an attachment to a second document" helper, modelled.
+
+		Read out of `frappe/core/doctype/file/file.py` in the shipped image
+		rather than from memory: it copies the row, repoints `attached_to_*`,
+		clears `folder`, sets `flags.copy_from_existing_file` — which is what
+		makes `before_insert` skip re-writing the bytes — and inserts.
+
+		THE BYTES ARE SHARED AND NOT COPIED, which is the property the app
+		depends on and therefore the one this double has to have. Both rows
+		carry the same `file_url` and both can read the same content, exactly as
+		two rows over one blob do on a real site. A double that gave the copy its
+		own bytes would let a bug that duplicates a megabyte per photograph pass
+		here and show up as disk on the bench.
+		"""
+		copy = FileDocument(
+			{
+				"doctype": "File",
+				"file_url": self.get("file_url"),
+				"file_name": self.get("file_name"),
+				"file_size": self.get("file_size"),
+				"is_private": self.get("is_private"),
+				"content_hash": self.get("content_hash"),
+				"attached_to_doctype": attached_to_doctype,
+				"attached_to_name": attached_to_name,
+				"attached_to_field": attached_to_field,
+			}
+		)
+		copy.insert(ignore_permissions=ignore_permissions)
+		if self.name in STORE.file_contents:
+			STORE.file_contents[copy.name] = STORE.file_contents[self.name]
+		return copy
 
 
 def _as_bytes(value) -> bytes:

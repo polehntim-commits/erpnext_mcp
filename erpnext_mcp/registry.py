@@ -190,7 +190,12 @@ MIRROR_NOTE = (
 	"amount, and a cost basis nobody measured would reach the depreciation run "
 	"and the insurance schedule. Without them the tag is registered and "
 	"`erpnext_asset_note` says what is missing. A failed mirror NEVER undoes a "
-	"registration."
+	"registration.\n\nTHE PHOTOGRAPH TRAVELS WITH IT. Every photograph filed "
+	"against the tag is copied onto the ERPNext Asset as a File attachment, so "
+	"it is in the Asset's Attachments in the Desk and not only on the tag — one "
+	"stored blob, two rows, and deleting either leaves the other's copy intact. "
+	"`erpnext_asset_photos` counts what this call filed. A tag costed later "
+	"brings the photographs taken in the field with it."
 )
 
 #: `quarter` on the five tax remittance reads, WHICH TAKE EITHER SPELLING.

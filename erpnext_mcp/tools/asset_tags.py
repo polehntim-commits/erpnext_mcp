@@ -677,6 +677,13 @@ def _with_mirror(described: dict, verdict: dict) -> dict:
 	"""
 	described["erpnext_asset"] = verdict.get("asset")
 	described["erpnext_asset_created"] = bool(verdict.get("created"))
+	# v0.149.0. How many photographs this call put onto the ERPNext Asset. A
+	# COUNT AND NOT A SILENCE: the whole complaint this feature answers is
+	# "I photographed a wind machine and the picture went nowhere", and an
+	# answer that does not say what happened to the photograph cannot settle it.
+	# Zero on a mirrored asset means the tag had none to copy.
+	if verdict.get("asset"):
+		described["erpnext_asset_photos"] = len(verdict.get("photos") or [])
 	if verdict.get("reason"):
 		described["erpnext_asset_note"] = verdict["reason"]
 	return described

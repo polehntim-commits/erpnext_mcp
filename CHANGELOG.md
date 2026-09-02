@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.149.0 — 2026-09-02 — the photograph reaches the books, and so does the coordinate
+
+**EVERY PHOTOGRAPH FILED AGAINST A TAG IS NOW ALSO FILED AGAINST THE ERPNEXT
+ASSET**, through Frappe's own `File.create_attachment_copy`: one stored blob, two
+File rows, visible in the Attachments sidebar of both. A copy and not a move —
+`export_insurance_schedule` reads the tag's attachments and taking them away
+would empty an insurance schedule to fill a sidebar. Deleting either row is safe;
+Frappe drops the blob only when no other row shares its content hash. A tag
+costed weeks later brings the photographs taken in the field with it, and a
+second sync does not duplicate them. `erpnext_asset_photos` counts what a call
+filed. Full note in `RELEASES/v0.149.0.md`.
+
+**NOTHING WAS EVER STORED LOCALLY.** There is no SQLite and no local blob store
+in this app; `stage_file_chunk` writes a private Frappe File verified by SHA-256.
+All thirty-three valve photographs are on the site. What was true is that the
+photograph only ever reached the TAG record and never ERPNext's Asset.
+
+**THE WIND MACHINE AND THE SHED WERE NEVER REGISTERED**, not registered without a
+picture. The handset uploads the photograph BEFORE calling `register_asset` and
+requires one to submit, so an upload that dies on a thin link throws away the
+registration with it — and there is an abandoned session on the site, one chunk
+of three, from that morning. That ordering is in the iOS app and is not changed
+here; the release note says what would fix it.
+
+**`gps_latitude` AND `gps_longitude` ARE NOW COLUMNS ON THE ASSET**, written on
+creation and rewritten on every sync. The one deliberate second copy: the unified
+map plots equipment from the fixed-asset register, and a map that had to join
+through `Asset Register` could not plot an asset created in the Desk. Both are
+written or neither is, and a cleared fix never overwrites a good one — a Frappe
+Float is NOT NULL DEFAULT 0, so a tag with no fix is indistinguishable from one
+reading zero, and Null Island is not in Oregon.
+
+**NO MOBILE ARGUMENT CHANGED.** iOS sends a File docname, not multipart and not
+base64 — the bytes go up through the chunked route and are already an ERPNext
+File by the time `register_asset` is called. There was no format to translate.
+
+**ALSO:** the harness now models `File.create_attachment_copy` and lists
+`Asset.image`, whose absence made the thumbnail assignment a silent no-op; and
+the copy helper is guarded with `callable()` rather than `hasattr()`, which the
+double answers True for on methods that do not exist.
+
 ## 0.148.0 — 2026-09-02 — the tag on the machine and the asset on the books
 
 **PHASE 3 OF THE UNIFIED ASSET REGISTER.** An asset registered from the handset

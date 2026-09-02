@@ -33,7 +33,7 @@ from erpnext_mcp import asset_mirror, compliance_fields
 from erpnext_mcp.tools import asset_tags
 
 from .fixtures import MAIN, MAIN_ABBR, OTHER, OTHER_ABBR, V12TestCase
-from .harness import STORE, add_field, frappe, register_doctype
+from .harness import STORE, FileDocument, add_field, frappe, register_doctype
 
 ALL_ON = {
 	"allow_list_assets": 1,
@@ -66,6 +66,8 @@ class MirrorTestCase(V12TestCase):
 		add_field("Asset", "asset_register", "Link", options="Asset Register")
 		add_field("Asset", "farm_asset_type", "Data")
 		add_field("Asset", "asset_register_synced_at", "Datetime")
+		add_field("Asset", "gps_latitude", "Float")
+		add_field("Asset", "gps_longitude", "Float")
 		self.a_location(YARD)
 
 	def a_location(self, *names):
@@ -589,7 +591,7 @@ class TheColumnsAgree(unittest.TestCase):
 		self.assertEqual(spec.fieldtype, "Link")
 		self.assertEqual(spec.options, "Asset Register")
 
-	def test_all_three_are_read_only(self):
+	def test_every_mirrored_column_is_read_only(self):
 		"""They are written by the mirror and by nothing else. A denormalised copy
 		a second person can type over is a copy that will one day lie."""
 		target = next(t for t in compliance_fields.TARGETS if t.doctype == "Asset")
@@ -605,3 +607,201 @@ class TheColumnsAgree(unittest.TestCase):
 		be a decision somebody made, and `Block` is the only one so far."""
 		unmapped = set(asset_tags.ASSET_TYPES) - set(asset_mirror.CATEGORY_BY_TYPE)
 		self.assertEqual(unmapped, {"Block"}, "an asset type gained or lost a category mapping")
+
+
+# ── the photograph reaches the books ────────────────────────────────────────
+class ThePhotograph(MirrorTestCase):
+	"""v0.149.0, and it is the requirement a lost photograph produced.
+
+	THE BYTES NEVER CROSS THE ASSET CALL. iOS uploads through
+	`stage_file_chunk` → `finalize_staged_file`, which commits ONE private
+	Frappe File and hands back its docname; `register_asset` receives that
+	docname as `photo_file_token`. So there is no multipart body and no base64
+	on this route, and nothing here has to decode an image — what it has to do
+	is make sure the File that already exists is reachable from the Asset.
+	"""
+
+	def a_photo(self, name="asset-MC-Tractor-01.jpg", content=b"jpeg-bytes"):
+		return frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": name,
+				"is_private": 1,
+				"content": content,
+			}
+		).insert(ignore_permissions=True)
+
+	def attachments(self, doctype, name):
+		return [
+			row
+			for row in STORE.rows("File")
+			if row.get("attached_to_doctype") == doctype and row.get("attached_to_name") == name
+		]
+
+	def test_registering_with_a_photo_puts_it_on_the_erpnext_asset(self):
+		token = self.a_photo().name
+		data = self.costed(photo_file_token=token)
+		self.assertEqual(data["erpnext_asset_photos"], 1)
+		self.assertEqual(len(self.attachments("Asset", data["erpnext_asset"])), 1)
+
+	def test_it_stays_on_the_tag_as_well(self):
+		"""A copy and not a move. `export_insurance_schedule` reads the
+		attachments on the Asset Register, and taking the photograph away to put
+		it on the Asset would empty an insurance schedule to fill a sidebar."""
+		token = self.a_photo().name
+		data = self.costed(photo_file_token=token)
+		self.assertEqual(len(self.attachments("Asset Register", "MC-Tractor-01")), 1)
+		self.assertEqual(len(self.attachments("Asset", data["erpnext_asset"])), 1)
+
+	def test_one_blob_and_two_rows(self):
+		"""Frappe's `create_attachment_copy` reuses `file_url` rather than
+		re-storing the bytes, and `_delete_file_on_disk` keeps the blob while any
+		other row shares its content hash. Two rows over one megabyte, not two."""
+		token = self.a_photo().name
+		data = self.costed(photo_file_token=token)
+		urls = {
+			row["file_url"]
+			for row in self.attachments("Asset Register", "MC-Tractor-01")
+			+ self.attachments("Asset", data["erpnext_asset"])
+		}
+		self.assertEqual(len(urls), 1)
+
+	def test_the_thumbnail_is_set_too(self):
+		"""`Asset.image` is what the Desk form and the list view draw. The
+		attachment is what an auditor opens; both are wanted."""
+		token = self.a_photo().name
+		data = self.costed(photo_file_token=token)
+		self.assertTrue(self.asset(data["erpnext_asset"])["image"])
+
+	def test_costing_a_tag_later_brings_its_photographs_with_it(self):
+		"""THE CASE THAT LOSES A PHOTOGRAPH IF IT IS MISSED. A valve is tagged
+		and photographed in the field with no price, so no Asset exists yet.
+		When somebody costs it at the desk weeks later, the photograph taken in
+		the field has to travel to the Asset that is created then — otherwise the
+		only assets with pictures are the ones somebody happened to price on the
+		spot."""
+		self.register(photo_file_token=self.a_photo().name)
+		self.assertEqual(self.assets(), [])
+		data = self.tool_data(
+			"update_registered_asset",
+			{"asset_name": "MC-Tractor-01", "purchase_value": 42000, "acquired_on": "2026-03-01"},
+		)
+		self.assertEqual(data["erpnext_asset_photos"], 1)
+		self.assertEqual(len(self.attachments("Asset", data["erpnext_asset"])), 1)
+
+	def test_a_second_sync_does_not_duplicate_the_photograph(self):
+		"""Every edit to a tag runs the mirror. Copying unconditionally would
+		give an Asset a fresh duplicate of every photograph each time somebody
+		fixed a typo in its description."""
+		data = self.costed(photo_file_token=self.a_photo().name)
+		for note in ("first edit", "second edit"):
+			self.tool_data("update_registered_asset", {"asset_name": "MC-Tractor-01", "description": note})
+		self.assertEqual(len(self.attachments("Asset", data["erpnext_asset"])), 1)
+
+	def test_several_photographs_all_travel(self):
+		created = self.costed(photo_file_token=self.a_photo("one.jpg", b"a").name)
+		second = self.a_photo("two.jpg", b"b")
+		frappe.db.set_value(
+			"File",
+			second.name,
+			{"attached_to_doctype": "Asset Register", "attached_to_name": "MC-Tractor-01"},
+		)
+		self.tool_data("update_registered_asset", {"asset_name": "MC-Tractor-01", "description": "x"})
+		self.assertEqual(len(self.attachments("Asset", created["erpnext_asset"])), 2)
+
+	def test_an_older_frappe_with_no_copy_helper_still_files_the_photograph(self):
+		"""`File.create_attachment_copy` is not on every Frappe, so the code
+		branches — and the branch a bench does NOT take is the one nothing would
+		otherwise exercise. Removing the method from the double is how the
+		fallback gets a test instead of a hope."""
+		token = self.a_photo().name
+		saved = FileDocument.create_attachment_copy
+		del FileDocument.create_attachment_copy
+		try:
+			data = self.costed(photo_file_token=token)
+		finally:
+			FileDocument.create_attachment_copy = saved
+		self.assertEqual(data["erpnext_asset_photos"], 1)
+		self.assertEqual(len(self.attachments("Asset", data["erpnext_asset"])), 1)
+
+	def test_a_photograph_that_cannot_be_copied_does_not_lose_the_asset(self):
+		"""Same trade as everything else here: the machine is the record and the
+		photograph is evidence about it. Both copy paths are broken so the
+		failure is the one being tested and not a silent success down the other."""
+		token = self.a_photo().name
+		saved = FileDocument.create_attachment_copy
+
+		def explode(*args, **kwargs):
+			raise OSError("storage is unavailable")
+
+		FileDocument.create_attachment_copy = explode
+		try:
+			data = self.costed(photo_file_token=token)
+		finally:
+			FileDocument.create_attachment_copy = saved
+		self.assertTrue(data["erpnext_asset"])
+		self.assertEqual(data["erpnext_asset_photos"], 0)
+		self.assertTrue(frappe.db.exists("Asset Register", "MC-Tractor-01"))
+
+	def test_a_tag_with_no_photograph_reports_zero_rather_than_nothing(self):
+		data = self.costed()
+		self.assertEqual(data["erpnext_asset_photos"], 0)
+
+
+# ── where the machine is standing ───────────────────────────────────────────
+class TheCoordinate(MirrorTestCase):
+	def test_a_fix_reaches_the_asset(self):
+		data = self.costed(gps_latitude=45.5823718, gps_longitude=-121.1884677)
+		asset = self.asset(data["erpnext_asset"])
+		self.assertAlmostEqual(float(asset["gps_latitude"]), 45.5823718, places=6)
+		self.assertAlmostEqual(float(asset["gps_longitude"]), -121.1884677, places=6)
+
+	def test_moving_the_tag_moves_the_asset(self):
+		"""THE COORDINATE IS REFRESHED AND THE MONEY IS NOT, and this is the
+		other half of that pair. A position copied once and never updated sends
+		somebody to where the tractor was in March."""
+		data = self.costed(gps_latitude=45.58, gps_longitude=-121.18)
+		self.tool_data(
+			"update_registered_asset",
+			{"asset_name": "MC-Tractor-01", "gps_latitude": 45.60, "gps_longitude": -121.20},
+		)
+		asset = self.asset(data["erpnext_asset"])
+		self.assertAlmostEqual(float(asset["gps_latitude"]), 45.60, places=6)
+		self.assertAlmostEqual(float(asset["gps_longitude"]), -121.20, places=6)
+
+	def test_half_a_coordinate_is_not_a_position(self):
+		"""A latitude with no longitude plots on the prime meridian. There is no
+		farm in the Gulf of Guinea."""
+		data = self.costed(gps_latitude=45.58)
+		self.assertFalse(float(self.asset(data["erpnext_asset"]).get("gps_latitude") or 0))
+
+	def test_a_zero_fix_never_overwrites_a_good_one(self):
+		"""`Asset Register.gps_latitude` is a Frappe Float — NOT NULL DEFAULT 0 —
+		so a tag with no fix reads exactly 0.0 and there is no null to tell it
+		from a reading. Null Island is 1,600 km off Ghana.
+
+		THE ASSERTION IS ABOUT AN OVERWRITE AND NOT ABOUT AN ABSENCE, because an
+		absence is not observable: a Float column on a bench answers 0.0 whether
+		this wrote a zero or wrote nothing, so `assertFalse(lat)` would pass
+		either way and prove nothing. The first version of this test did exactly
+		that and survived a mutation that let zeros through. What IS observable,
+		and what is the actual harm, is a machine that had a good position losing
+		it to a sync — the pin moving from the orchard into the Atlantic.
+		"""
+		data = self.costed(gps_latitude=45.58, gps_longitude=-121.18)
+		asset_name = data["erpnext_asset"]
+		frappe.db.set_value("Asset Register", "MC-Tractor-01", {"gps_latitude": 0, "gps_longitude": 0})
+		self.tool_data("update_registered_asset", {"asset_name": "MC-Tractor-01", "description": "x"})
+		asset = self.asset(asset_name)
+		self.assertAlmostEqual(float(asset["gps_latitude"]), 45.58, places=6)
+		self.assertAlmostEqual(float(asset["gps_longitude"]), -121.18, places=6)
+
+	def test_half_a_fix_never_overwrites_a_good_one_either(self):
+		"""The same harm through the other door: a longitude cleared on its own
+		would otherwise put the pin on the prime meridian at the right latitude,
+		which is a plausible-looking answer and the worst kind."""
+		data = self.costed(gps_latitude=45.58, gps_longitude=-121.18)
+		frappe.db.set_value("Asset Register", "MC-Tractor-01", {"gps_longitude": 0})
+		self.tool_data("update_registered_asset", {"asset_name": "MC-Tractor-01", "description": "x"})
+		asset = self.asset(data["erpnext_asset"])
+		self.assertAlmostEqual(float(asset["gps_longitude"]), -121.18, places=6)
