@@ -565,6 +565,39 @@ ROUTES = (
 	Route("/mobile", mobile_api.register_asset),
 	Route("/mobile", mobile_api.generate_asset_qr),
 	Route("/mobile", mobile_api.attach_file_to_document),
+	# v0.146.0. A REGISTER WRITE, WHICH THE PARAGRAPH ABOVE LISTED AS
+	# DELIBERATELY ABSENT — and it is published here NARROWED TO ONE COLUMN
+	# rather than reversed. The same shape the boundary writes took two hundred
+	# lines up: the sentence that kept it off this table ("rewriting a register
+	# is a desk act") is true of the register and is not true of this field.
+	#
+	# `Asset Register.irrigation_zone` IS A FACT ABOUT THE GROUND, LEARNED AT THE
+	# GATE. It is what `get_water_usage_report` follows to the zone's flow rate to
+	# turn a valve's minutes into gallons, and what `overlays.py` builds the map's
+	# zone→valve mapping off — a zone with no valve naming it draws grey over
+	# ground that is being watered. Nobody at a desk knows which zone a lateral
+	# draws through; the person holding the phone in front of it does.
+	#
+	# IT IS `update_irrigation_valve` AND NOT `update_registered_asset`, WHICH
+	# CAN ALSO SET THIS COLUMN. The generic tool checks only that the zone
+	# EXISTS; the valve-aware one, added in v0.144.0 for exactly this edit,
+	# checks that the zone belongs to the same entity as the valve. On a route
+	# open to any enrolled worker that difference is the whole point.
+	#
+	# THE NARROWING IS THE SIGNATURE AND NOT A CHECK. `mobile_api
+	# .update_irrigation_valve` declares `name`, `zone` and `company` and nothing
+	# else, so `bind` drops `valve_type`, `parent_valve`, the description, the
+	# NFC tag, the installed date and the GPS pair before the handler is ever
+	# called. Repointing a valve's PARENT stays a desk act — it changes what a
+	# closing cascade walks — and it is unreachable here for the same mechanical
+	# reason `allow_cancelled` is unreachable on the attach route.
+	#
+	# `update_registered_asset`, `retire_asset` and `bulk_create_assets` REMAIN
+	# ABSENT. Rewriting a register and retiring a machine are still decisions
+	# made with the handbook open, and a five-hundred-asset load is still a
+	# rollout. The assertion in `test_farmops_api.py` in the other direction is
+	# what keeps those a decision rather than an omission.
+	Route("/mobile", mobile_api.update_irrigation_valve),
 	# Sprint 9 (v0.79.0): what the day actually looks like. Nineteen routes in
 	# four groups, and the gate is different on each group for a stated reason.
 	#

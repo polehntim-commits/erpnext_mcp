@@ -70,7 +70,7 @@ from erpnext_mcp.api import mobile as mobile_api
 from erpnext_mcp.tools import badges as badges_tool
 from erpnext_mcp.tools import i9 as i9_tools
 
-from .fixtures import MAIN, MAIN_ABBR, install_hrms
+from .fixtures import MAIN, MAIN_ABBR, OTHER, install_hrms
 from .harness import STORE, set_roles
 from .test_api_mobile import WORKER, MobileAPITestCase
 from .test_api_mobile import TheSurfaceIsClosed as _MobileSurface
@@ -578,6 +578,48 @@ class StateChangeModel(Codable):
 		("log_name", str, 11),
 		("performed_by", str, 12),
 	)
+
+
+class ValveZoneModel(Codable):
+	"""`ValveZone` — the zone a valve draws through, as the valve payload nests
+	it. The flow rate is the reason the nesting exists: it is what turns the
+	valve's minutes into gallons."""
+
+	SWIFT = "IrrigationValve.swift"
+	LENIENT = (
+		("name", str, 473),
+		("zone_name", str, 474),
+		("flow_rate_gpm", float, 475),
+	)
+
+
+class ValveScanResultModel(Codable):
+	"""`ValveScanResult` — `valves._status`, which is the ONE shape the server
+	composes for the scan, the read and the zone write alike.
+
+	THE DOCNAME IS THE ONLY `try c.decode` IN THE STRUCT, and it is strict on
+	purpose: every follow-up call is addressed at that string and it is also the
+	tag printed on the valve. `state` and `is_open` are lenient with defaults
+	that both mean CLOSED — a row that somehow arrived blank must draw "no
+	water" over a gate that might be running and never the reverse.
+
+	`zone` AND `zone_detail` ARE BOTH TRANSCRIBED. The first is the docname the
+	register holds; the second is the zone's own facts, and the screen shows the
+	flow rate only when the two agree. A mirror carrying one of them would pass
+	on a payload that had them describing different zones.
+	"""
+
+	SWIFT = "IrrigationValve.swift"
+	STRICT = (("name", str, 40),)
+	LENIENT = (
+		("valve_type", str, 47),
+		("state", str, 51),
+		("is_open", bool, 52),
+		("zone", str, 55),
+		("retired", bool, 67),
+		("child_count", int, 79),
+	)
+	NESTED = (("zone_detail", ValveZoneModel, False, 54),)
 
 
 class AvailableActionsModel(Codable):
@@ -4340,6 +4382,182 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			self.wire("cancel_shift", shift=shift["name"], cancellation_reason="rain")
 
+	# ── v0.146.0: the one register column a phone may write ──────────────────
+	def _a_zoned_farm(self):
+		"""A parcel, a block, a zone and an unzoned valve — the state a valve
+		screen actually opens onto."""
+		self.configure(
+			enabled=1,
+			allow_update_irrigation_valve=1,
+			allow_register_asset=1,
+			allow_create_parcel=1,
+			allow_create_field=1,
+			allow_create_irrigation_zone=1,
+		)
+		# NAMED FOR THIS TEST, not for the farm. The fixture site already holds a
+		# "Mill Creek", and a create that collides answers "one parcel per name
+		# per entity" — which reads as a broken fixture rather than as the
+		# duplicate guard doing its job.
+		self.tool_data(
+			"create_parcel",
+			{"owning_entity": MAIN, "parcel_name": "Zone Link Ranch", "acreage": 131.43},
+		)
+		# THE DOCNAMES ARE READ BACK RATHER THAN SPELLED. Both registers build a
+		# docname from the parent's abbreviation, so a literal here is a guess at
+		# the fixture site's company abbreviation and breaks the moment it
+		# changes.
+		block = self.tool_data(
+			"create_field",
+			{"parcel": "Zone Link Ranch", "field_name": "Zone Link Block 1", "acreage": 12.5},
+		)["name"]
+		self.zone = self.tool_data(
+			"create_irrigation_zone",
+			{
+				"field": block,
+				"zone_name": "ZLB1-Zone2",
+				"zone_number": 2,
+				"water_source": "well",
+				"sprinkler_type": "drip",
+				"area_sq_ft": 435600,
+				"flow_rate_gpm": 60,
+			},
+		)["name"]
+		self.tool_data(
+			"register_asset",
+			{"name": "MC-Valve-05", "asset_type": "Irrigation Valve", "company": MAIN},
+		)
+
+	def test_59_update_irrigation_valve(self):
+		"""The link that prices a valve's minutes, set from in front of the gate.
+
+		`IrrigationAPI.setZone` sends `name` and `zone` and reads a
+		`ValveScanResult` back — the same shape the screen was already drawn
+		from, which is why it redraws off the write instead of scanning the
+		valve a second time. `scan_valve` would stamp `last_scan_at`, and
+		picking a zone off a list is not somebody walking up to the tag.
+		"""
+		self._a_zoned_farm()
+		self.be()
+		row = self.wire("update_irrigation_valve", name="MC-Valve-05", zone=self.zone)
+		ValveScanResultModel.decode(row, "update_irrigation_valve")
+		self.assertEqual(row["zone"], self.zone)
+		self.assertEqual(row["changed"]["irrigation_zone"], [None, self.zone])
+		# THE FLOW RATE ARRIVES WITH THE LINK. That is the whole reason the
+		# screen can redraw from this answer: a write that carried the docname
+		# and nothing else would leave the new zone's name beside no gallons at
+		# all until a second read landed.
+		self.assertEqual(row["zone_detail"]["flow_rate_gpm"], 60)
+		# The write is not a scan and must not be recorded as one.
+		self.assertFalse(row.get("scan_recorded"))
+
+	def test_59_the_valves_rank_and_parent_are_unreachable_at_this_path(self):
+		"""THE NARROWING IS THE SIGNATURE, and the drop happens at the transport.
+
+		`parent_valve` is the tree a closing cascade walks; a phone that could
+		repoint it could dry out a block nobody meant to touch. `bind` reduces a
+		body to the keys the signature DECLARES before the handler is called —
+		the same mechanism that keeps `allow_cancelled` unreachable on the
+		attach route. This asserts it where it happens: the body a phone could
+		post, run through `bind`, then wired with what survived.
+		"""
+		from erpnext_mcp.farmops_api import routes as farmops_routes
+
+		self._a_zoned_farm()
+		self.tool_data(
+			"register_asset",
+			{"name": "MC-Valve-Main", "asset_type": "Irrigation Valve", "company": MAIN},
+		)
+		route = next(
+			r for r in farmops_routes.ROUTES if r.path == "/mobile/update_irrigation_valve"
+		)
+		survived = farmops_routes.bind(
+			route,
+			{
+				"name": "MC-Valve-05",
+				"zone": self.zone,
+				"parent_valve": "MC-Valve-Main",
+				"parent_asset": "MC-Valve-Main",
+				"location": "MC-Valve-Main",
+				"valve_type": "Main",
+				"gps_latitude": 45.5,
+				"installed_date": "1998-04-01",
+				"new_valve_id": "MC-Valve-99",
+			},
+		)
+		self.assertEqual(set(survived), {"name", "zone"})
+
+		self.be()
+		row = self.wire("update_irrigation_valve", **survived)
+		self.assertEqual(row["zone"], self.zone)
+		self.assertIsNone(row.get("parent_valve"))
+		self.assertEqual(row["name"], "MC-Valve-05")
+		self.assertEqual(set(row["changed"]), {"irrigation_zone"})
+
+	def test_59_a_zone_belonging_to_another_entity_is_refused(self):
+		"""THE CHECK THAT MADE THIS THE RIGHT TOOL. `update_registered_asset`
+		can set the same column and asks only whether the zone EXISTS; this one
+		asks whose water it is. On a route open to any enrolled worker that is
+		the difference that matters."""
+		self._a_zoned_farm()
+		other = self.tool_data(
+			"create_irrigation_zone",
+			{
+				"field": self.tool_data(
+					"create_field",
+					{
+						"parcel": self.tool_data(
+							"create_parcel",
+							{
+								"owning_entity": OTHER,
+								"parcel_name": "Far Side Ranch",
+								"acreage": 40,
+							},
+						)["name"],
+						"field_name": "Far Side Block 1",
+						"acreage": 10,
+					},
+				)["name"],
+				"zone_name": "FSB1-Zone1",
+				"zone_number": 1,
+				"water_source": "well",
+				"sprinkler_type": "drip",
+				"area_sq_ft": 43560,
+			},
+		)["name"]
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			self.wire("update_irrigation_valve", name="MC-Valve-05", zone=other)
+		self.assertIn("same entity", str(caught.exception))
+
+	def test_59_a_zone_the_farm_has_never_registered_is_refused_by_name(self):
+		"""Not created. A zone invented at a tailgate is a second zone the
+		water report will never merge."""
+		self._a_zoned_farm()
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			self.wire("update_irrigation_valve", name="MC-Valve-05", zone="Zone 9")
+		self.assertIn("Zone 9", str(caught.exception))
+
+	def test_59_naming_no_zone_at_all_is_this_routes_own_sentence(self):
+		"""The tool's "nothing to change" names eight fields this path does not
+		offer, which would send somebody looking for a control that is not
+		there."""
+		self._a_zoned_farm()
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			self.wire("update_irrigation_valve", name="MC-Valve-05")
+		self.assertIn("zone is required", str(caught.exception))
+
+	def test_59_a_valve_in_another_entity_reads_as_not_found(self):
+		"""`guard.require_scoped_doc`, the same refusal `generate_asset_qr`
+		gives — worded so a caller cannot map the site's docnames by watching
+		which error comes back."""
+		self._a_zoned_farm()
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			self.wire("update_irrigation_valve", name="MC-Valve-Nowhere", zone=self.zone)
+		self.assertIn("not found", str(caught.exception).lower())
+
 
 # ── 2. the mirrors are strict enough to have caught the bugs ────────────────
 class TheMirrorsAreStrictEnough(ContractTestCase):
@@ -4543,6 +4761,12 @@ class TheContractIsComplete(ContractTestCase):
 		# tests assert instead is that no Attendance is written and the crew rows
 		# are kept, which is the whole difference between this and `end_shift`.
 		"cancel_shift": "test_58",
+		# v0.146.0 — the zone link, narrowed to that one column and published at
+		# last. It answers `valves._status`, the same shape `scan_valve` and
+		# `get_irrigation_valve` answer, so `IrrigationAPI.setZone` decodes a
+		# `ValveScanResult` and the screen redraws from the write with no second
+		# read and no second decoder.
+		"update_irrigation_valve": "test_59",
 	}
 
 	def _published(self, module):
@@ -4616,6 +4840,7 @@ class TheContractIsComplete(ContractTestCase):
 			FeedbackReceiptModel,
 			AttachedDocumentModel,
 			SignedI9Model,
+			ValveScanResultModel,
 		)
 		for mirror in mirrors:
 			with self.subTest(mirror=mirror.__name__):

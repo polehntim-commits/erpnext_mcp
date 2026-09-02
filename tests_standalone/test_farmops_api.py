@@ -370,6 +370,13 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# rollout rather than anything anybody does at a tailgate. The assertion
 		# below in the other direction is what keeps that a decision rather than
 		# an omission.
+		#
+		# v0.146.0 PUBLISHES ONE COLUMN OF THAT REGISTER, through the valve-aware
+		# tool rather than the generic one. `update_irrigation_valve` narrowed to
+		# `zone` is below with the irrigation reads — the sentence that kept the
+		# register writes off this table is true of the register and is not true
+		# of `irrigation_zone`, which is a fact about the ground that only
+		# somebody standing at the valve reliably knows.
 		"/mobile/register_asset",
 		"/mobile/generate_asset_qr",
 		"/mobile/attach_file_to_document",
@@ -773,6 +780,13 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/get_irrigation_valve",
 		"/mobile/get_valve_runtime",
 		"/mobile/get_irrigation_zone",
+		# v0.146.0. The one register column a phone may write, and it sits with
+		# the irrigation reads rather than with the asset routes because that is
+		# what it is about. Narrowed to `zone` by its signature — see
+		# `test_the_zone_link_reaches_one_column_and_no_other` — and chosen over
+		# `update_registered_asset`, which can set the same column and checks
+		# only that the zone exists rather than whose water it is.
+		"/mobile/update_irrigation_valve",
 	}
 
 	def test_the_route_table_is_exactly_the_twelve_the_app_calls(self):
@@ -976,6 +990,46 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 				kinds = [p.kind for p in inspect.signature(route.handler).parameters.values()]
 				self.assertNotIn(inspect.Parameter.VAR_KEYWORD, kinds)
 				self.assertNotIn(inspect.Parameter.VAR_POSITIONAL, kinds)
+
+	def test_the_zone_link_reaches_one_column_and_no_other(self):
+		"""`update_irrigation_valve` is published NARROWED (v0.146.0), and the
+		narrowing is this signature rather than a check inside the handler.
+
+		The tool takes eight fields. `routes.py` kept every register write off
+		this table because "repointing an asset is a desk act" — a sentence that
+		is true of the register and is not true of `irrigation_zone`, which is a
+		fact about the ground that only somebody standing at the valve reliably
+		knows.
+
+		THE PARENT IS THE ONE THAT MATTERS MOST HERE. `parent_valve` is what a
+		closing cascade walks; a phone that could repoint it could dry out a
+		block nobody meant to touch. It is absent from the signature, so `bind`
+		drops it before the handler runs — the same mechanism that keeps
+		`allow_cancelled` unreachable on the attach route. A field added to that
+		signature later fails HERE rather than quietly widening the surface.
+		"""
+		handler = next(r.handler for r in ROUTES if r.path == "/mobile/update_irrigation_valve")
+		accepted = farmops_routes.accepted_arguments(handler)
+		self.assertEqual(accepted, {"name", "zone", "company"})
+		for field in (
+			"valve_type",
+			"parent_valve",
+			"parent_asset",
+			"location",
+			"description",
+			"nfc_uid",
+			"installed_date",
+			"gps_latitude",
+			"gps_longitude",
+			"gps_lat",
+			"gps_lon",
+			"new_name",
+			"new_valve_id",
+			"rename_to",
+			"irrigation_zone",
+		):
+			with self.subTest(field=field):
+				self.assertNotIn(field, accepted)
 
 	def test_a_kwargs_signature_would_take_every_argument_away(self):
 		"""The safe direction to fail. If one of the eleven ever grew a
@@ -2769,6 +2823,20 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"get_irrigation_zone",
 		"get_valve_runtime",
 		"list_irrigation_valves",
+		# v0.146.0. The zone link, narrowed to that one column — the ONE write in
+		# this set, and open for the same reason the four reads above it are. The
+		# irrigator walking a set is the least-privileged caller here and is also
+		# the only person who knows the answer: which zone a lateral draws
+		# through is read off the ground, not off a document. A dispatch gate
+		# would leave the fact in the head of the one person who has it.
+		#
+		# WHAT KEEPS THIS SAFE IS THE SIGNATURE AND NOT A ROLE. The wrapper
+		# declares `name`, `zone` and `company` and nothing else, so the rank,
+		# the parent, the GPS pair and the rest are unreachable at this path —
+		# see `test_the_zone_link_reaches_one_column_and_no_other`. The zone's
+		# own entity is checked by the tool, which is why it is
+		# `update_irrigation_valve` and not `update_registered_asset`.
+		"update_irrigation_valve",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -2778,7 +2846,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 91, "a method is named in two sets at once")
+		self.assertEqual(len(named), 92, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

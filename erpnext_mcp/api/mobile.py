@@ -8776,6 +8776,76 @@ def generate_asset_qr(user: str, asset_name=None, format=None) -> dict:
 	return asset_tags.generate_asset_qr(inner).data
 
 
+# ── 72a. update_irrigation_valve ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_irrigation_valve", mutating=True, limit=guard.WRITE_LIMIT)
+def update_irrigation_valve(user: str, name=None, zone=None, company=None) -> dict:
+	"""Point one registered valve at the Irrigation Zone it draws through.
+
+	THE PARAGRAPH BESIDE THIS ROUTE IN `routes.py` LISTED THE REGISTER WRITES AS
+	DELIBERATELY ABSENT, and the sentence it gave was "repointing an asset is a
+	desk act". That is still true of the register. It is not true of this column.
+
+	`Asset Register.irrigation_zone` is not a fact about the record — it is a
+	fact about the ground, and it is learned at the gate. It is the link
+	`get_water_usage_report` follows to `Irrigation Zone.flow_rate_gpm` to turn a
+	valve's minutes into gallons, and the map's zone→valve mapping is built off
+	it (`overlays.py`), which is why a zone with no valve naming it draws grey
+	over ground that is being watered. Nobody at a desk knows which zone a
+	lateral draws through; the person holding the phone in front of it does.
+
+	IT IS `update_irrigation_valve` AND NOT `update_registered_asset`, WHICH CAN
+	ALSO SET THIS COLUMN. The generic tool checks only that the zone EXISTS.
+	This one checks that the zone belongs to the same entity as the valve — "a
+	valve and the zone it draws through are the same entity's water" — which is
+	the check a route open to any enrolled worker needs, and it is the check the
+	valve-aware tool was given in v0.144.0 for exactly this edit.
+
+	THE SIGNATURE IS THE NARROWING AND IT IS NOT A CHECK THAT CAN BE FORGOTTEN.
+	The tool takes the rank, the parent, the description, the NFC tag, the
+	installed date and the GPS pair as well. `routes.bind` reduces a body to the
+	keys THIS signature declares and drops the rest without a word, so none of
+	them is reachable at this path however a body is spelled — the same mechanism
+	that keeps `allow_cancelled` unreachable on the attach route below, and the
+	same reason `set_field_boundary` omits `owning_entity`.
+
+	SO THE DESK RULE STANDS FOR EVERYTHING ELSE, and `parent_valve` is the one
+	that matters most. It is the tree a closing cascade walks; a phone that could
+	repoint it could dry out a block nobody meant to touch. Re-ranking is the
+	same kind of act from the other end. Both are absent here, and a body
+	carrying either has it dropped rather than honoured.
+
+	THE ZONE CANNOT BE CLEARED AND THAT IS THE TOOL'S RULE, NOT THIS ROUTE'S. An
+	empty `zone` earns the tool's own sentence — it is the only link this app has
+	to a flow rate, and a valve unlinked from one has minutes nothing can price.
+	A caller that named no zone at all is refused here instead, in this route's
+	vocabulary, rather than by a "nothing to change" naming eight fields this
+	path does not offer.
+
+	THE ANSWER IS `valves._status`, which is the shape `scan_valve` and
+	`get_irrigation_valve` already answer — so the valve screen redraws from the
+	write with no second read and no second decoder, and the zone's flow rate
+	arrives with the link rather than one round trip behind it.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed)
+	valve = guard.require_scoped_doc(asset_tags.ASSET_REGISTER, name, "name", allowed)
+
+	wanted = str(zone or "").strip()
+	if not wanted:
+		frappe.throw(
+			"zone is required — it is the only field this route changes, and it is the "
+			"Irrigation Zone this valve draws through. list_farm_locations has the zone "
+			"register.",
+			frappe.ValidationError,
+		)
+
+	inner = {"name": valve, "zone": wanted}
+	if entity:
+		inner["company"] = entity
+	return valve_tools.update_irrigation_valve(inner).data
+
+
 # ── 73. attach_file_to_document ──────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("attach_file_to_document", mutating=True, limit=guard.WRITE_LIMIT)

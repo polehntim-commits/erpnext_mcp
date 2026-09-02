@@ -316,6 +316,15 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# been in `tools/shifts.py` for many releases; what it never had was a
 		# door onto this transport.
 		"cancel_shift",
+		# v0.146.0. The zone link, narrowed to that one column. HERE RATHER THAN
+		# IN `PENDING_IOS_INTEGRATION` because `MobileAPI.swift` names it —
+		# `updateIrrigationValve = path("update_irrigation_valve")` — and
+		# `IrrigationAPI.setZone` posts to it from both valve screens, degrading
+		# on the 404 the way every route ahead of its bench does. It answers
+		# `valves._status`, which `ValveScanResult` already decodes — the same
+		# shape `scan_valve` and `get_irrigation_valve` answer — so the screen
+		# redraws from the write with no second read.
+		"update_irrigation_valve",
 	}
 	FILES: ClassVar[set[str]] = {"stage_file_chunk", "finalize_staged_file"}
 
