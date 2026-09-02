@@ -8610,6 +8610,35 @@ def update_expense_receipt(
 #: named. Letting the general attach reach Employee would be a second door onto
 #: personnel evidence with one fewer gate on it.
 #:
+#: THE TUPLE'S RULE OF THUMB IS "A REGISTER SOME OTHER ROUTE HERE ALREADY WRITES
+#: INTO", AND TWO ENTRIES DO NOT MEET IT. Enumerated 2026-09-02, at v0.152.0:
+#: nine of the eleven are written by a mutating route on this surface —
+#: `register_asset` / `report_asset_issue` / `log_asset_state_change`,
+#: `complete_task_via_mobile` / `report_field_task`, `create_expense_receipt`,
+#: `create_scale_ticket`, `start_inspection`, `dismiss_compliance_alert`,
+#: `validate_document`, `create_accident_report`. `Housing Inspection` and
+#: `Spray REI` are written by NONE, so for those two the brokered attach in
+#: v0.152.0 is the first write-shaped capability this transport has over the
+#: doctype, and the rule above is not what justifies them.
+#:
+#: WHAT JUSTIFIES THEM INSTEAD, SEPARATELY, BECAUSE THE TWO ARE NOT ALIKE:
+#:
+#:   * `Housing Inspection` is on `ATTACHMENT_PARENTS` with no HR gate, so this
+#:     surface already lets a worker READ one and list what hangs off it. The
+#:     argument is `Accident Report`'s, five paragraphs down — a worker who may
+#:     open the record may photograph what it is about — and a housing
+#:     inspection with the photograph of the thing inspected on it is the point.
+#:
+#:   * `Spray REI` is on NEITHER list and has no mobile read route at all. So a
+#:     caller may now file a photograph against a re-entry interval and cannot
+#:     list it back, which is precisely the asymmetry the `Accident Report` note
+#:     below calls a gap worth closing rather than opening. It is scoped by
+#:     `require_scoped_doc` and closed by this tuple, so it is not dangerous —
+#:     but it is the weakest entry here, and the honest fix is either an
+#:     `ATTACHMENT_PARENTS` entry to match or removal from this tuple. Left as
+#:     it is deliberately, and written down so the next reader inherits the
+#:     question rather than the assumption.
+#:
 #: EVERY ENTRY CARRIES A `company` COLUMN, and that is a requirement rather than
 #: a coincidence: `guard.require_scoped_doc` reads exactly that column to decide
 #: whether the caller may reach the record, so a doctype without one would be
@@ -8865,7 +8894,9 @@ def attach_file_to_document(
 	attaches to ANY document on this site, and publishing that unmodified would
 	put "grow the evidence on a submitted Journal Entry" and "add a page to a
 	verified I-9" inside a field worker's credential. `ATTACHABLE_DOCTYPES` is
-	the set of registers some other route on this surface already writes into,
+	the set of registers some other route on this surface already writes into —
+	with two exceptions, `Housing Inspection` and `Spray REI`, named and argued
+	at the tuple itself —
 	and everything else is refused by name with the list in the sentence.
 
 	`allow_cancelled` IS NOT DECLARED AT ALL, so `routes.bind` cannot deliver it

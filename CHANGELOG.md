@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.152.1 — 2026-09-02 — two entries the tuple's own rule did not cover
+
+**COMMENTS ONLY. NO BEHAVIOUR CHANGED.** v0.152.0 justified brokering the whole
+of `ATTACHABLE_DOCTYPES` on the tuple's stated rule — "the set of registers some
+other route on this surface already writes into". Enumerated against all eleven,
+that rule holds for nine and is false for two: NO mutating mobile route writes
+`Housing Inspection` or `Spray REI`, so for those the brokered attach is the
+first write-shaped capability this transport has over the doctype.
+
+**THE TWO ARE NOT ALIKE AND ARE NOW ARGUED SEPARATELY.** `Housing Inspection` is
+on `ATTACHMENT_PARENTS` with no HR gate, so it rests on `Accident Report`'s
+argument — a worker who may open the record may photograph what it is about.
+`Spray REI` is on neither list and has no mobile read route at all, so a caller
+may now file a photograph against a re-entry interval and cannot list it back —
+the same asymmetry the `Accident Report` note calls a gap worth closing. It stays
+scoped and closed by the tuple, it is the weakest entry there, and the comment
+now says so rather than letting a false general rule carry it.
+
+Narrowing was considered and rejected: it would leave the v0.152.0 bug live on
+eight other registers, to be found one at a time in a field.
+
 ## 0.152.0 — 2026-09-02 — the register believed the worker, the attachment did not
 
 **EVERY ASSET PHOTOGRAPH TAKEN FROM A HANDSET WAS REFUSED, AND THE REGISTRATION

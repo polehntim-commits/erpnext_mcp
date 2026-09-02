@@ -334,8 +334,11 @@ def attach_file_to_authorized_parent(args: dict) -> ToolResult:
 	questions before it gets here — the caller is enrolled and scoped
 	(`require_scope`), the doctype is on `ATTACHABLE_DOCTYPES`, and the docname
 	is a record inside the caller's own entities (`require_scoped_doc`, a company
-	scope Frappe's model cannot express without a User Permission per row). Then
-	Frappe asked a fourth, and the answer was no for nine of the eleven registers
+	scope Frappe's model cannot express without a User Permission per row). For
+	nine of the eleven a mutating route on that same surface already writes the
+	register outright; `Housing Inspection` and `Spray REI` rest on a narrower
+	argument, which is written out at `ATTACHABLE_DOCTYPES` rather than assumed
+	here. Then Frappe asked a fourth, and the answer was no for nine of the eleven registers
 	on that list: `Asset Register` grants `write` to System Manager and Accounts
 	Manager only, and a picker holds neither. So `register_asset` — which inserts
 	with `ignore_permissions=True`, as every write route on that surface does —
