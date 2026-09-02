@@ -20305,6 +20305,41 @@ TOOLS = {
 		available=_needs_doctype("Asset Register"),
 		requires="the Asset Register DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
+	"set_asset_boundary": _tool(
+		asset_tags.set_asset_boundary,
+		"MUTATING (default OFF). Give an asset a FOOTPRINT — the outline a shed, "
+		"a pump house, a cabin or a cold store occupies — as a GeoJSON Polygon or "
+		"MultiPolygon in [longitude, latitude] degrees. The same six columns "
+		"every other boundary on this site carries, computed by the same code: "
+		"centroid, bounding box, H3 cells and area are DERIVED and are not "
+		"arguments.\n\nA valve, a tractor and a sprayer have a position and no "
+		"outline; tracing one is not refused, it gets a warning saying so, "
+		"because guessing which types a farm may have outlines for is how a "
+		"generator pad becomes unrecordable. The recorded GPS pin is checked "
+		"against the outline and REPORTED — a fix taken from across the yard is "
+		"a real thing and refusing it would make the building unrecordable.\n\n"
+		"REFUSES: a self-intersecting or empty polygon, which is a trace with two "
+		"vertices swapped and gives a containment test nobody can trust.",
+		{
+			"asset_name": _field(_STRING, "The Asset Register docname."),
+			"company": _field(_STRING, "Narrow to one company."),
+			"boundary_geojson": _field(
+				_OBJECT,
+				"A GeoJSON Polygon or MultiPolygon, or the same as a JSON string. "
+				"[longitude, latitude] degrees, and the ring has to close.",
+			),
+			"dry_run": _field(
+				_BOOLEAN,
+				"true computes and reports everything and writes nothing — the area, the "
+				"centroid and every warning, so a trace can be checked before it lands.",
+			),
+		},
+		required=("asset_name", "boundary_geojson"),
+		mutating=True,
+		title="Set an asset's footprint",
+		available=_needs_doctype("Asset Register"),
+		requires="the Asset Register DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
 	"generate_asset_qr": _tool(
 		asset_tags.generate_asset_qr,
 		"Generate a QR code image for one asset's tag. Returns the PNG as "

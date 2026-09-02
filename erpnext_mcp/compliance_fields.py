@@ -822,6 +822,23 @@ _ASSET_FIELDS = (
 			"the map is a machine somebody actually took a fix on."
 		),
 	),
+	ComplianceField(
+		fieldname="boundary_geojson",
+		label="Footprint (GeoJSON)",
+		fieldtype="Long Text",
+		read_only=True,
+		framework="Fixed-asset register integrity — the unified asset register (v0.150.0)",
+		why=(
+			"What a building occupies, as against where it is. An insurance schedule that "
+			"lists a cold store and cannot say how big its footprint is, or which side of "
+			"the yard it takes, describes a number rather than a structure."
+		),
+		operational=(
+			"Drawing the shed on the map as a shed instead of as a dot. Which way the shop "
+			"faces, whether the cabin row sits inside the parcel, how much of the yard is "
+			"already built on — none of which a pin can answer."
+		),
+	),
 )
 
 

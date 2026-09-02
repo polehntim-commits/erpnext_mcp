@@ -1145,9 +1145,9 @@ class Catalogue(SeededTestCase):
 		already here and sets their boundaries. The pair is one read and one write
 		on purpose — the file is looked at before it is believed.
 		"""
-		self.assertEqual(len(registry.TOOLS), 854)
+		self.assertEqual(len(registry.TOOLS), 855)
 		self.assertEqual(len(registry.READ_TOOLS), 432)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 422)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 423)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.150.0 — 2026-09-02 — a building drawn as a building, on one map with everything else
+
+**`set_asset_boundary` GIVES AN ASSET A FOOTPRINT** — the outline a shed, a pump
+house, a cabin or a cold store occupies — through the same `geo.derive` that
+computes Field, Parcel and Irrigation Zone boundaries, into the same six columns
+on `Asset Register`. A self-intersecting trace is refused; an outline on a valve
+is warned about and stored; the recorded pin is checked against the outline and
+reported, never enforced. Full note in `RELEASES/v0.150.0.md`.
+
+**`list_field_boundaries(include_assets=true)` IS THE UNIFIED MAP.** Blocks,
+parcels, equipment and buildings in one answer, each row carrying `geometry`:
+`"polygon"` or `"point"`, which is a property of the asset and not a choice the
+caller makes. A building nobody has traced yet falls back to its pin. Retired
+assets are off the map. An asset with neither a fix nor an outline is left off
+AND COUNTED in `asset_unplaced_count` — a Frappe Float is NOT NULL DEFAULT 0, so
+plotting the zeros would put the farm's register in the Gulf of Guinea and
+dropping them silently would hide half the valves.
+
+**`boundary_geojson` JOINS THE GPS PAIR ON ERPNEXT'S ASSET**, written and
+refreshed by the same mirror, so the map can draw a building out of the
+fixed-asset register.
+
+**iOS CANNOT DRAW AN OUTLINE YET AND NOTHING HERE PRETENDS OTHERWISE.**
+`StructurePinView` drops a point, and `MapOverlay.LayerKey` is a fixed Swift
+enum. This is the whole server half — somewhere to put a footprint, a validated
+way to put one there, a map read that returns it — and no mobile route was added
+for the boundary, because nothing calls one yet and publishing a route to every
+handset for a caller that does not exist is surface without a user.
+
+855 tools (was 854), 423 mutating (was 422).
+
 ## 0.149.0 — 2026-09-02 — the photograph reaches the books, and so does the coordinate
 
 **EVERY PHOTOGRAPH FILED AGAINST A TAG IS NOW ALSO FILED AGAINST THE ERPNEXT

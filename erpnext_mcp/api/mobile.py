@@ -14346,7 +14346,12 @@ def _parcel_boundary_row(row: dict, boundary: dict) -> dict:
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("list_field_boundaries", limit=guard.READ_LIMIT)
 def list_field_boundaries(
-	user: str, company=None, include_parcels=None, include_overlays=None, layers=None
+	user: str,
+	company=None,
+	include_parcels=None,
+	include_overlays=None,
+	layers=None,
+	include_assets=None,
 ) -> dict:
 	"""Every block's boundary polygon, for the map view a handset opens first.
 
@@ -14371,6 +14376,24 @@ def list_field_boundaries(
 	throttle and audit twice for one screen. `include_overlays=false` skips it
 	for a caller that only wants the geometry, and `layers` narrows it exactly
 	as it does there.
+
+	ASSETS ARE OPT IN TOO — `include_assets`, v0.150.0 — and they are the layer
+	that makes this ONE map rather than four. Blocks, parcels and zones are
+	ground; a tractor, a wind machine, a valve and a shed are the things standing
+	on it, and a dispatcher deciding where to send somebody is looking for all of
+	them at once. Splitting them across two screens means the person who has to
+	hold both in their head is the one holding the phone.
+
+	EACH ASSET COMES BACK AS A PIN OR AN OUTLINE, WHICH IS A PROPERTY OF THE
+	ASSET AND NOT A CHOICE THE CALLER MAKES. A valve, a tractor and a sprayer
+	have a position; a shed, a pump house, a cabin and a cold store have a
+	footprint. `geometry` is "point" or "polygon" per row and says which, so a
+	client draws a marker or a shape without knowing this app's asset vocabulary
+	— and a building whose outline nobody has traced yet falls back to its pin
+	rather than vanishing off the map.
+
+	OPT IN FOR THE SAME REASON PARCELS ARE: five hundred valves is five hundred
+	rows a caller drawing only blocks has no use for.
 	"""
 	allowed = guard.require_scope(user)
 	entity = _company(user, company, allowed)
@@ -14396,6 +14419,10 @@ def list_field_boundaries(
 		boundaries = _parcel_boundary_fields([row.get("name") for row in parcels])
 		parcel_rows = [_parcel_boundary_row(row, boundaries.get(str(row.get("name")), {})) for row in parcels]
 
+	asset_rows, unplaced_assets = [], 0
+	if _as_flag(include_assets, False):
+		asset_rows, unplaced_assets = _asset_map_rows(entity, allowed)
+
 	overlay = None
 	if _as_flag(include_overlays, True):
 		shown = overlays.layers_for(user)
@@ -14413,8 +14440,108 @@ def list_field_boundaries(
 		"parcels": parcel_rows,
 		"parcel_count": len(parcel_rows),
 		"include_parcels": bool(parcel_rows) or _as_flag(include_parcels, False),
+		"assets": asset_rows,
+		"asset_count": len(asset_rows),
+		# What a legend needs and a caller should not have to count: how many of
+		# these draw as outlines and how many as pins.
+		"asset_polygon_count": sum(1 for row in asset_rows if row["geometry"] == "polygon"),
+		# How many were left off for having nowhere to be drawn. A map quietly
+		# missing half the valves is worse than one that says so.
+		"asset_unplaced_count": unplaced_assets,
+		"include_assets": _as_flag(include_assets, False),
 		"overlays": overlay,
 	}
+
+
+#: Columns the map layer reads off the register. Narrow on purpose — this answer
+#: already carries every block and parcel polygon on the farm, and a serial
+#: number nobody is drawing is bytes over a field link.
+_ASSET_MAP_FIELDS = (
+	"name",
+	"asset_type",
+	"company",
+	"description",
+	"gps_latitude",
+	"gps_longitude",
+	"boundary_geojson",
+	"boundary_centroid_lat",
+	"boundary_centroid_lon",
+	"current_state",
+	"retired_at",
+)
+
+
+def _asset_map_rows(company: str, allowed) -> tuple:
+	"""Every asset with somewhere to be drawn, as pins and outlines.
+
+	RETIRED ASSETS ARE LEFT OFF. A map is a picture of what is out there now, and
+	a decommissioned pump drawn beside a working one is a dispatch sent to the
+	wrong machine.
+
+	AN ASSET WITH NEITHER A FIX NOR AN OUTLINE IS LEFT OFF TOO, rather than
+	drawn at (0, 0). `Asset Register.gps_latitude` is a Frappe Float — NOT NULL
+	DEFAULT 0 — so every asset tagged before anybody switched GPS on reads
+	exactly 0.0, and plotting those puts the farm's whole register in the Gulf of
+	Guinea. The count of what was left off comes back with the rows, because a
+	map quietly missing half the valves is worse than one that says so.
+
+	Returns `(rows, unplaced_count)`.
+	"""
+	if not compat.doctype_exists(asset_tags.ASSET_REGISTER):
+		return [], 0
+	filters = {"retired_at": ("is", "not set")}
+	if company:
+		filters["company"] = company
+	rows = frappe.db.get_all(
+		asset_tags.ASSET_REGISTER,
+		filters=filters,
+		fields=compat.existing_fields(asset_tags.ASSET_REGISTER, _ASSET_MAP_FIELDS),
+		order_by="asset_type asc, name asc",
+		limit=asset_tags.REGISTER_CAP,
+	)
+	rows = guard.scoped([dict(row) for row in rows or []], allowed)
+
+	placed = []
+	for row in rows:
+		shape = str(row.get("boundary_geojson") or "").strip()
+		latitude = float(row.get("gps_latitude") or 0)
+		longitude = float(row.get("gps_longitude") or 0)
+		has_pin = bool(latitude and longitude)
+		if not shape and not has_pin:
+			continue
+		# The outline wins where there is one, and the pin is still reported so a
+		# client can label the shape without computing a centroid of its own.
+		# A building traced but never given a fix still gets a centre, off the
+		# polygon, which is what `boundary_centroid_*` are for.
+		#
+		# BRANCHED ON `shape` RATHER THAN CHAINED WITH `or`, and the difference is
+		# a farm on the equator or the Greenwich meridian. These are stored Frappe
+		# Floats — NOT NULL DEFAULT 0 — so a centroid that legitimately reads 0.0
+		# is indistinguishable from an unset column, and `centroid or pin` would
+		# silently prefer the pin for every building in Ghana, Kenya, Ecuador or
+		# the west of England. `set_asset_boundary` writes all six derived columns
+		# together through `geo.derive`, so a stored shape always has a stored
+		# centroid and there is nothing to fall back FROM.
+		if shape:
+			centre_lat = float(row.get("boundary_centroid_lat") or 0)
+			centre_lon = float(row.get("boundary_centroid_lon") or 0)
+		else:
+			centre_lat, centre_lon = (latitude, longitude) if has_pin else (None, None)
+		placed.append(
+			{
+				"name": row.get("name"),
+				"asset_type": row.get("asset_type") or None,
+				"description": row.get("description") or None,
+				"geometry": "polygon" if shape else "point",
+				"boundary_geojson": shape or None,
+				"gps_latitude": latitude if has_pin else None,
+				"gps_longitude": longitude if has_pin else None,
+				"centroid_lat": centre_lat,
+				"centroid_lon": centre_lon,
+				"current_state": row.get("current_state") or None,
+			}
+		)
+	return placed, len(rows) - len(placed)
 
 
 # ════════════════════════════════════════════════════════════════════════════

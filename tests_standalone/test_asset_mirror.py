@@ -68,6 +68,7 @@ class MirrorTestCase(V12TestCase):
 		add_field("Asset", "asset_register_synced_at", "Datetime")
 		add_field("Asset", "gps_latitude", "Float")
 		add_field("Asset", "gps_longitude", "Float")
+		add_field("Asset", "boundary_geojson", "Long Text")
 		self.a_location(YARD)
 
 	def a_location(self, *names):

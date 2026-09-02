@@ -215,7 +215,11 @@ to find a tractor could not plot one somebody created in the Desk. The drift a
 second copy normally invites is answered by refreshing it on every sync and
 stamping when that happened, not by hoping.
 
-**All five are read-only.** They are written by the mirror and by nothing else.
+**And the footprint (v0.150.0).** A pin says where to walk; an outline says what is
+there. `boundary_geojson` carries the shape a shed, a pump house, a cabin or a
+cold store occupies, so the unified map can draw a building as a building.
+
+**All six are read-only.** They are written by the mirror and by nothing else.
 A denormalised copy a second person can type over is a copy that will one day
 lie, and the whole value of a mirror is that you can tell when it has stopped
 agreeing.
@@ -231,6 +235,7 @@ agreeing.
 | `asset_register_synced_at` | Datetime | no | Fixed-asset register integrity — the unified asset register (v0.148.0) | When the mirror last agreed with the tag. A denormalised copy with no as-of stamp cannot be audited: nobody can tell a column that is current from one this app stopped being able to write months ago. | Whether the books are being kept up to date by the field at all. A stamp months behind the tag's own modified date is a sync that has been failing silently, and it is the only thing that would say so. |
 | `gps_latitude` | Float | no | Fixed-asset register integrity — the unified asset register (v0.149.0) | Where the asset physically is, on the record an insurer, an assessor and a lender read. A schedule that lists a wind machine and cannot say which corner of which orchard it stands in describes a machine nobody can find. | Walking to it. 'The shop yard' is four acres and a pump, a bin trailer or a generator is findable by coordinate and by nothing else — and the dispatch map plots equipment from this column. |
 | `gps_longitude` | Float | no | Fixed-asset register integrity — the unified asset register (v0.149.0) | The other half, and it is stored rather than derived for the reason every coordinate pair is: half a position is not a position. A record carrying one of the two is a point on the equator or the prime meridian. | The same walk. The mirror writes both columns or neither, so a machine on the map is a machine somebody actually took a fix on. |
+| `boundary_geojson` | Long Text | no | Fixed-asset register integrity — the unified asset register (v0.150.0) | What a building occupies, as against where it is. An insurance schedule that lists a cold store and cannot say how big its footprint is, or which side of the yard it takes, describes a number rather than a structure. | Drawing the shed on the map as a shed instead of as a dot. Which way the shop faces, whether the cabin row sits inside the parcel, how much of the yard is already built on — none of which a pin can answer. |
 
 ### `Item` — erpnext
 

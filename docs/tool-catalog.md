@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 854 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 855 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -19355,3 +19355,60 @@ not lose it to a sync.
 
 **The coordinate is refreshed and the money is not.** A price is a fact about a
 transaction that happened once; a position is where the thing is standing now.
+
+---
+
+## v0.150.0 — one map, and a building drawn as a building
+
+### `set_asset_boundary` — the footprint a structure occupies
+
+| Argument | Meaning |
+| --- | --- |
+| `asset_name` | the Asset Register docname |
+| `boundary_geojson` | a GeoJSON Polygon or MultiPolygon, [longitude, latitude] degrees |
+| `company` | narrow to one entity |
+| `dry_run` | compute and report everything, write nothing |
+
+The same six columns every other boundary on this site carries — centroid,
+bounding box, H3 cells at five resolutions, computed area — produced by the same
+`geo.derive` and read back by the same `geo.stored_shape`. All derived, all
+read-only, none of them arguments.
+
+**Refuses** a self-intersecting or empty polygon: a bow tie has an area a
+computer will report and a containment test nobody can trust, and it is what a
+hand-walked trace with two vertices swapped produces.
+
+**Warns and stores** an outline on a valve, a tractor or a sprayer. Guessing
+which asset types a farm may trace is how a generator pad becomes unrecordable.
+
+**Reports** whether the asset's recorded GPS pin falls inside the outline. A fix
+taken from across the yard is a real thing and refusing it would make the
+building unrecordable.
+
+### `list_field_boundaries(include_assets=true)` — the unified map
+
+Opt in, for the reason parcels are: five hundred valves is five hundred rows a
+caller drawing only blocks has no use for.
+
+| Per row | Meaning |
+| --- | --- |
+| `geometry` | `"polygon"` or `"point"` — **a property of the asset, not a caller's choice** |
+| `boundary_geojson` | the outline, where there is one |
+| `gps_latitude`, `gps_longitude` | the pin, where there is one |
+| `centroid_lat`, `centroid_lon` | where to centre or label, from whichever exists |
+| `asset_type`, `description`, `current_state` | what it is and what it is doing |
+
+| On the answer | Meaning |
+| --- | --- |
+| `asset_count` | how many were drawn |
+| `asset_polygon_count` | how many of those are outlines |
+| `asset_unplaced_count` | **how many were left off for having nowhere to be drawn** |
+
+A building nobody has traced yet falls back to its pin rather than vanishing.
+Retired assets are off the map — a decommissioned pump drawn beside a working
+one is a dispatch sent to the wrong machine.
+
+**An asset with neither a fix nor an outline is left off and counted.** A Frappe
+Float is `NOT NULL DEFAULT 0`, so an asset nobody took a fix on reads exactly
+0.0. Plotting those puts the register in the Gulf of Guinea; dropping them
+silently makes a map missing half the valves that does not say so.

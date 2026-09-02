@@ -22,7 +22,7 @@ import json
 
 import frappe
 
-from .. import asset_mirror, compat, timezones
+from .. import asset_mirror, compat, geo, timezones
 from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..render import qr
@@ -1027,6 +1027,118 @@ def bulk_create_assets(args: dict) -> ToolResult:
 		summary=f"bulk created {len(created)} asset(s), {len(errors)} error(s)"
 		+ (f", {len(mirrored)} on the books" if mirrored else ""),
 		docstatus_delta="none → 0 (created)" if created else "",
+	)
+
+
+# ── set_asset_boundary ─────────────────────────────────────────────────────
+#
+#: Asset types a footprint is the natural shape of. A valve, a tractor and a
+#: sprayer have a POSITION and no outline, and this is not a refusal list — it
+#: decides whether an unusual polygon gets a sentence pointing it out. Somebody
+#: tracing the pad a generator sits on is doing something reasonable; somebody
+#: tracing a tractor has almost certainly picked the wrong asset.
+FOOTPRINT_TYPES = frozenset({"Housing Unit", "Storage", "Cold Storage", "Water Source", "Block", "General"})
+
+
+def set_asset_boundary(args: dict) -> ToolResult:
+	"""Give a building its outline, so the map can draw a footprint and not a pin.
+
+	WHY AN ASSET NEEDS A SHAPE AT ALL, when it already has a coordinate. A pin
+	says where to walk. An outline says what is there: which way the shop faces,
+	whether the cabin row is inside the parcel, how much of the yard the cold
+	store takes, which side of the shed the pad is on. For a shed, a pump house
+	or a cabin the footprint IS the fact — and a map that draws every building as
+	an identical dot is a map that cannot answer any of those.
+
+	THE SAME SIX COLUMNS AS EVERY OTHER BOUNDARY ON THIS SITE. Field, Parcel and
+	Irrigation Zone each carry `boundary_geojson` plus five derived values, all
+	produced by `geo.derive` and none editable by hand. A seventh shape stored in
+	a seventh way would need its own reader in every consumer; this one is read
+	by the same `geo.stored_shape` as the other three.
+
+	NOTHING HERE IS REFUSED FOR BEING AN ODD SHAPE TO TRACE. A polygon on a
+	tractor gets a sentence saying so and is stored, because the alternative is
+	guessing which asset types a farm is allowed to have outlines for and being
+	wrong about the generator pad. What IS refused is a polygon that is not a
+	polygon — self-intersecting, empty, or not a shape shapely can read — which
+	is the trace with two vertices swapped and would give a containment test
+	nobody can trust.
+	"""
+	_require()
+	geo.require()
+	company = _company(args)
+	row = asset_row(as_str(args, "asset_name", required=True), company or "")
+
+	geometry = geo.parse(args.get("boundary_geojson"))
+	derived = geo.derive(geometry)
+	shape = derived.pop("shape")
+
+	warnings = list(geo.check_coordinates_look_like_degrees(geometry, "boundary_geojson"))
+	asset_type = str(row.get("asset_type") or "")
+	if asset_type and asset_type not in FOOTPRINT_TYPES:
+		warnings.append(
+			f"{row['name']} is a {asset_type}, which usually has a position rather than a "
+			"footprint. The outline was stored — if this is a pad or an enclosure that is "
+			"right, and if the wrong asset was named it is not."
+		)
+
+	# THE PIN AGAINST THE OUTLINE, reported and never enforced. A fix taken at
+	# the door of a shed is a metre outside it; a fix taken from the far side of
+	# the yard is fifty. Refusing either would make a real building unrecordable,
+	# and saying nothing would leave a pin and an outline disagreeing on a map
+	# with nobody told which to believe.
+	pin_inside = None
+	latitude = float(row.get("gps_latitude") or 0)
+	longitude = float(row.get("gps_longitude") or 0)
+	if latitude and longitude:
+		pin_inside = geo.covers_point(shape, latitude, longitude)
+		if not pin_inside:
+			warnings.append(
+				f"{row['name']}'s recorded position is outside the outline just traced. One of "
+				"the two is wrong, or the fix was taken from across the yard — the map will draw "
+				"them apart either way."
+			)
+
+	dry_run = as_bool(args, "dry_run", False)
+	data = {
+		"asset_name": row["name"],
+		"asset_type": asset_type or None,
+		"area_computed_acres": derived["area_computed_acres"],
+		"boundary_centroid": {
+			"lat": derived["boundary_centroid_lat"],
+			"lon": derived["boundary_centroid_lon"],
+		},
+		"boundary_bbox_geojson": derived["boundary_bbox_geojson"],
+		"h3_cell_counts": {
+			resolution: len(cells) for resolution, cells in sorted(json.loads(derived["h3_cells"]).items())
+		},
+		"recorded_position_inside_boundary": pin_inside,
+		"warnings": warnings,
+		"dry_run": bool(dry_run),
+		"changed": False,
+	}
+	if dry_run:
+		return ToolResult(
+			data=data,
+			summary=(f"dry run: would give {row['name']} a {derived['area_computed_acres']}-acre footprint"),
+		)
+
+	doc = frappe.get_doc(ASSET_REGISTER, row["name"])
+	for field, value in derived.items():
+		doc.set(field, value)
+	doc.save(ignore_permissions=True)
+	data["changed"] = True
+
+	# The footprint travels to the books with everything else, so the unified map
+	# can draw a building out of the fixed-asset register.
+	verdict = asset_mirror.sync(dict(doc.as_dict()))
+	data["erpnext_asset"] = verdict.get("asset")
+
+	return ToolResult(
+		data=data,
+		summary=f"{row['name']}: a {derived['area_computed_acres']}-acre footprint"
+		+ (f", {len(warnings)} warning(s)" if warnings else ""),
+		docstatus_delta="0 → 0 (updated)",
 	)
 
 

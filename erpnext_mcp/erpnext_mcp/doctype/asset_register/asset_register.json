@@ -47,7 +47,15 @@
   "scan_section",
   "last_scan_at",
   "scan_col",
-  "last_scan_by"
+  "last_scan_by",
+  "boundary_section",
+  "boundary_geojson",
+  "boundary_centroid_lat",
+  "boundary_centroid_lon",
+  "boundary_col",
+  "boundary_bbox_geojson",
+  "h3_cells",
+  "area_computed_acres"
  ],
  "fields": [
   {
@@ -315,6 +323,61 @@
    "fieldtype": "Link",
    "label": "Last Scan By",
    "options": "User"
+  },
+  {
+   "description": "The shape the asset occupies on the ground, for anything that has one — a shed, a pump house, a cabin, a cold store. A valve, a tractor and a sprayer have a POSITION and no footprint, and leaving this empty is the right answer for them: the map draws a pin from gps_latitude/gps_longitude for those and an outline from this for the buildings. Everything below the polygon is DERIVED from it on save and must not be edited by hand — a figure a person can change independently of the polygon is a figure that will disagree with it.",
+   "fieldname": "boundary_section",
+   "fieldtype": "Section Break",
+   "label": "Footprint"
+  },
+  {
+   "description": "The building's outline as a GeoJSON Polygon or MultiPolygon, in [longitude, latitude] degrees. Set it with set_asset_boundary rather than by hand: it validates the shape and recomputes everything derived from it. A self-intersecting trace has an area a computer will report and a containment test nobody can trust.",
+   "fieldname": "boundary_geojson",
+   "fieldtype": "Long Text",
+   "label": "Footprint (GeoJSON)"
+  },
+  {
+   "description": "Computed. Where a map opens on this building. For a shape whose true centroid falls outside it — an L-shaped shop — this is an interior point instead.",
+   "fieldname": "boundary_centroid_lat",
+   "fieldtype": "Float",
+   "label": "Centroid Latitude",
+   "precision": "7",
+   "read_only": 1
+  },
+  {
+   "description": "Computed. See Centroid Latitude.",
+   "fieldname": "boundary_centroid_lon",
+   "fieldtype": "Float",
+   "label": "Centroid Longitude",
+   "precision": "7",
+   "read_only": 1
+  },
+  {
+   "fieldname": "boundary_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "description": "Computed. A bounding box is a guaranteed superset of the shape it bounds, which is what makes it the only safe cheap prefilter for 'is this point inside'.",
+   "fieldname": "boundary_bbox_geojson",
+   "fieldtype": "Text",
+   "label": "Bounding Box (GeoJSON)",
+   "read_only": 1
+  },
+  {
+   "description": "Computed. JSON of {resolution: [cells]} at resolutions 6 to 10, holding every cell the shape TOUCHES. A shed is far smaller than one cell at every one of them, so a centre-based fill would return nothing for most buildings.",
+   "fieldname": "h3_cells",
+   "fieldtype": "Long Text",
+   "label": "H3 Cells",
+   "read_only": 1
+  },
+  {
+   "description": "Computed from the polygon by spherical excess. A building footprint is a small fraction of an acre — a 40x60 shed is about 0.055 — and it is here because it is what every other boundary on this site carries and a reader should not have to know which doctype it is looking at.",
+   "fieldname": "area_computed_acres",
+   "fieldtype": "Float",
+   "label": "Computed Area (acres)",
+   "precision": "4",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,

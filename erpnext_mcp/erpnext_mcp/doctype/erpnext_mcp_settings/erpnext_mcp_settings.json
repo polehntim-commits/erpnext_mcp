@@ -738,6 +738,7 @@
   "allow_retire_asset",
   "allow_log_asset_state_change",
   "allow_bulk_create_assets",
+  "allow_set_asset_boundary",
   "allow_universal_scan",
   "allow_record_service",
   "allow_trigger_maintenance_tasks",
@@ -5822,6 +5823,13 @@
    "fieldname": "allow_bulk_create_assets",
    "fieldtype": "Check",
    "label": "Bulk Create Assets"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Give an asset a FOOTPRINT — the outline a shed, a pump house, a cabin or a cold store occupies — as GeoJSON. Everything derived from the polygon (centroid, bounding box, H3 cells, area) is recomputed on save. A polygon on a valve or a tractor is warned about and stored; a self-intersecting one is refused.",
+   "fieldname": "allow_set_asset_boundary",
+   "fieldtype": "Check",
+   "label": "Set an Asset's Footprint"
   },
   {
    "fieldname": "asset_mirror_col",

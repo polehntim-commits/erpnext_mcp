@@ -107,11 +107,16 @@ SYNCED_FIELD = "asset_register_synced_at"
 #: is what says when that last happened.
 GPS_FIELDS = ("gps_latitude", "gps_longitude")
 
+#: The building's outline, carried for the same reason and refreshed the same
+#: way. A pin says where to walk; a footprint says what is there, and the map
+#: draws an outline for a shed and a dot for a valve off these two columns.
+SHAPE_FIELD = "boundary_geojson"
+
 #: All of them, in the order the Desk shows them. `compliance_fields.py` is what
 #: actually creates them and this is what it is checked against: a column added
 #: to one and not the other is a mirror writing into nothing, or a Desk column
 #: nobody fills in, and neither announces itself.
-CUSTOM_FIELDS = (LINK_FIELD, TYPE_FIELD, SYNCED_FIELD, *GPS_FIELDS)
+CUSTOM_FIELDS = (LINK_FIELD, TYPE_FIELD, SYNCED_FIELD, *GPS_FIELDS, SHAPE_FIELD)
 
 #: Which Asset Category an `Asset Register.asset_type` belongs in. These are the
 #: six the unified asset register is built on; a site creates them with
@@ -333,7 +338,7 @@ def _sync(row: dict, *, location: str, photo_file: str, verdict: dict) -> dict:
 		doc.set(TYPE_FIELD, row.get("asset_type") or "")
 	if compat.has_field(ASSET, SYNCED_FIELD):
 		doc.set(SYNCED_FIELD, frappe.utils.now())
-	for field, value in _gps_values(row).items():
+	for field, value in _place_values(row).items():
 		if compat.has_field(ASSET, field):
 			doc.set(field, value)
 	image = _image_url(photo_file)
@@ -371,7 +376,7 @@ def _refresh(asset: str, row: dict, photo_file: str) -> None:
 	# line apart on purpose. A price is a fact about a transaction that happened
 	# once; a position is a fact about where the thing is standing now, and the
 	# map is read by somebody trying to walk to it.
-	for field, value in _gps_values(row).items():
+	for field, value in _place_values(row).items():
 		if compat.has_field(ASSET, field):
 			values[field] = value
 	image = _image_url(photo_file)
@@ -574,6 +579,22 @@ def _gps_values(row: dict) -> dict:
 	if not latitude or not longitude:
 		return {}
 	return {"gps_latitude": latitude, "gps_longitude": longitude}
+
+
+def _place_values(row: dict) -> dict:
+	"""Everything about WHERE this asset is, for the columns the map reads.
+
+	The pin and the outline together, because they are one answer to one
+	question and a caller that wrote one without the other would leave a shed
+	drawn in two places. An asset carrying neither writes neither, which leaves
+	whatever the Asset already had alone — see `_gps_values` on why a cleared
+	fix must never overwrite a good one.
+	"""
+	values = _gps_values(row)
+	shape = str(row.get(SHAPE_FIELD) or "").strip()
+	if shape:
+		values[SHAPE_FIELD] = shape
+	return values
 
 
 def copy_photographs(asset: str, tag: str) -> list:
