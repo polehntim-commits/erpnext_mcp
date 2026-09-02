@@ -5157,6 +5157,77 @@ TOOLS = {
 		available=_needs_doctype("Asset"),
 		requires="ERPNext's Asset DocType",
 	),
+	"create_asset_category": _tool(
+		assets.create_asset_category,
+		"MUTATING (default OFF). Create the ERPNext Asset Category that "
+		"create_asset and register_asset both refuse without. A category is where "
+		"ERPNext keeps the fixed-asset, accumulated-depreciation and "
+		"depreciation-expense accounts, per company, and a unified asset register "
+		"— valves, tractors, wind machines, sheds, cabins — is a handful of these "
+		"created once.\n\n"
+		"IT TAKES ACCOUNTS BECAUSE ERPNEXT WILL NOT SAVE ONE WITHOUT THEM. The "
+		"accounts table is mandatory on ERPNext's Asset Category, so a category "
+		"created from a name alone is refused by Frappe before any controller "
+		'runs ("Data missing in table: Accounts"). fixed_asset_account is the one '
+		"account that has to be given: the two depreciation accounts fall back to "
+		"the Company's own defaults where the site sets them.\n\n"
+		"ASKING FOR ONE THAT EXISTS RETURNS IT AND WRITES NOTHING. The category is "
+		"named after itself, so there can only be one of each name and the end "
+		"state the caller asked for is already true. The reply says created: "
+		"false and lists the accounts rows it found.\n\n"
+		"THE FINANCE BOOK ROW IS ERPNEXT'S SCHEDULE, NOT THIS APP'S. Pass "
+		"depreciation_method, total_number_of_depreciations and "
+		"frequency_of_depreciation together to set ERPNext's own depreciation "
+		"defaults for the category. Nothing in this app reads them — assets made "
+		"by create_asset carry their schedule on the Asset Cost Profile, and "
+		"ERPNext's depreciation is switched off on them — but the category is a "
+		"shared master an operator also uses from the Desk.\n\n"
+		"Refuses an account whose account_type is not the one ERPNext demands for "
+		"that column, an account belonging to another company, and a finance book "
+		"given one or two of its three mandatory values.",
+		{
+			"asset_category_name": _field(
+				_STRING,
+				"What the category is called, e.g. 'Farm Equipment'. This becomes the "
+				"docname — ERPNext names an Asset Category after itself.",
+			),
+			"company": _COMPANY,
+			"fixed_asset_account": _field(
+				_STRING,
+				"The asset account new assets in this category capitalise into. Docname, "
+				"account number or account name. Must be of account_type 'Fixed Asset'.",
+			),
+			"accumulated_depreciation_account": _field(
+				_STRING,
+				"Where depreciation accumulates. Defaults to the Company's own "
+				"accumulated_depreciation_account where the site sets one. Must be of "
+				"account_type 'Accumulated Depreciation'.",
+			),
+			"depreciation_expense_account": _field(
+				_STRING,
+				"Where depreciation is expensed. Defaults to the Company's own "
+				"depreciation_expense_account where the site sets one. Must be of "
+				"account_type 'Depreciation'.",
+			),
+			"depreciation_method": _field(
+				_STRING,
+				"Finance book row: Straight Line, Double Declining Balance, Written Down "
+				"Value or Manual. Needs the two below with it.",
+			),
+			"total_number_of_depreciations": _field(
+				_INTEGER, "Finance book row: how many periods. At least 1."
+			),
+			"frequency_of_depreciation": _field(
+				_INTEGER,
+				"Finance book row: months per period — 1 monthly, 3 quarterly, 12 annually. At least 1.",
+			),
+		},
+		required=("asset_category_name",),
+		mutating=True,
+		title="Create an asset category",
+		available=_needs_doctype("Asset Category"),
+		requires="ERPNext's Asset Category DocType",
+	),
 	"update_asset_allocation": _tool(
 		assets.update_asset_allocation,
 		"MUTATING (default OFF). Replace how an asset's cost is shared out across "

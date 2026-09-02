@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 853 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 854 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -19114,3 +19114,81 @@ and computed acres all come from the polygon.
 **A file spanning several parcels is the normal case.** One FSA farm number
 covers several tracts and several tax lots, so `tract_parcels` maps each tract to
 the Parcel it sits on; `parcel` alone is the single-parcel shorthand.
+
+---
+
+## v0.147.0 — the category an asset needs before it can exist
+
+`create_asset` has refused an asset category the site does not have since
+v0.7.0, and until now there was no way to make one except the Desk. A unified
+asset register — valves, tractors, wind machines, sheds, cabins — is a handful of
+Asset Categories created once, so the tool that creates them is the first step of
+that job rather than an afterthought.
+
+| | |
+|---|---|
+| `create_asset_category` | One ERPNext Asset Category, with the accounts row ERPNext will not save one without. **MUTATING**, off by default. |
+
+**Arguments:** `asset_category_name` (required), `company`,
+`fixed_asset_account`, `accumulated_depreciation_account`,
+`depreciation_expense_account`, `depreciation_method`,
+`total_number_of_depreciations`, `frequency_of_depreciation`.
+
+```json
+{
+  "company": "Example Trading Co",
+  "asset_category_name": "Wind Machines",
+  "fixed_asset_account": "1800 - Fixed Assets - ETC",
+  "accumulated_depreciation_account": "1810 - Accumulated Depreciation - ETC",
+  "depreciation_expense_account": "5200 - Depreciation - ETC"
+}
+```
+
+### It takes accounts because ERPNext will not save one without them
+
+The obvious signature is `asset_category_name` and nothing else, and it does not
+work on a bench. ERPNext marks the `accounts` table on Asset Category `reqd`, so
+Frappe's own mandatory check refuses a category with an empty table — *"Data
+missing in table: Accounts"* — before any controller runs. A tool that took a
+name alone would look right in every test in this repository, because the
+in-memory double does not model that check, and fail on every real site.
+
+So the refusal lives in the tool, where it can name the argument and list what
+the site has:
+
+```
+fixed_asset_account is required. ERPNext marks the accounts table on an Asset Category as mandatory — a category with no accounts row is refused with "Data missing in table: Accounts" — and the fixed asset account is the one column of that row ERPNext has no company default to fall back on. Fixed Asset accounts on Example Trading Co: 1800 - Fixed Assets - ETC. Nothing was created.
+```
+
+**The two depreciation accounts fall back to the Company's own defaults**, which
+is where ERPNext keeps them and where every category on a site otherwise repeats
+them. `fixed_asset_account` has no company default in ERPNext, which is why it is
+the one account that has to be given.
+
+**The account types are checked before the insert.** ERPNext's own controller
+throws on the wrong type at save — *"Row #1: Account Type of X should be Fixed
+Asset"* — which names a row number and a controller the caller never saw. The
+same rule applied here names the argument, says what type it wants, and lists the
+accounts of that type on the company.
+
+### Asking for one that exists returns it and writes nothing
+
+An Asset Category is `autoname: field:asset_category_name`: the name **is** the
+docname, so there can only ever be one of each name and "let there be a category
+called Wind Machines" is already true when it is. The reply carries
+`created: false` and the accounts rows it found, so a caller can see whether the
+company it cares about has one. Adding a row to an existing category is a Desk
+edit; this tool does not touch a category it did not create.
+
+### The finance book row is ERPNext's schedule, not this app's
+
+`depreciation_method`, `total_number_of_depreciations` and
+`frequency_of_depreciation` go together into a finance book row — all three or
+none, because ERPNext marks all three mandatory and throws on a total or a
+frequency below 1. It is written because the category is a shared master an
+operator also uses from the Desk, and a half-configured one is worse than none.
+
+**Nothing in this app reads it.** Assets created by `create_asset` carry their
+schedule on the Asset Cost Profile, and ERPNext's own depreciation is switched
+off on them — see tool 61. A category created without a finance book row is
+complete for this app's purposes, and the response says so.

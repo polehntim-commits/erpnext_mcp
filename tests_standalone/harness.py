@@ -1094,12 +1094,24 @@ ERPNEXT_SCHEMA = {
 		"status",
 		"docstatus",
 	],
-	"Asset Category": ["name", "asset_category_name", "accounts"],
+	"Asset Category": ["name", "asset_category_name", "accounts", "finance_books"],
 	"Asset Category Account": [
+		# ERPNext names this column after its label, not after the doctype it links
+		# to. `company` is here as well because this fixture's Asset Category was
+		# seeded with it before anything wrote one of these rows.
+		"company_name",
 		"company",
 		"fixed_asset_account",
 		"accumulated_depreciation_account",
 		"depreciation_expense_account",
+		"parent",
+		"parenttype",
+	],
+	"Asset Finance Book": [
+		"finance_book",
+		"depreciation_method",
+		"total_number_of_depreciations",
+		"frequency_of_depreciation",
 		"parent",
 		"parenttype",
 	],
@@ -1396,6 +1408,12 @@ ERPNEXT_AUTONAME = {
 	# every idempotent installer in this app writes.
 	"User": "field:email",
 	"Role": "field:role_name",
+	# ERPNext's Asset Category IS its name (`autoname: field:asset_category_name`),
+	# which is what makes `frappe.db.exists("Asset Category", "Wind Machines")` both
+	# the idempotence check `create_asset_category` writes and the Link check
+	# `create_asset` refuses on. A serial-named one would have let the tool insert a
+	# second "Wind Machines" as AC-00002 and then refuse the asset that named it.
+	"Asset Category": "field:asset_category_name",
 }
 
 #: Doctypes this app owns. Their meta is loaded from the shipped JSON so tests
@@ -2375,6 +2393,7 @@ CHILD_TABLES = {
 	("Workflow", "states"): "Workflow Document State",
 	("Workflow", "transitions"): "Workflow Transition",
 	("Asset Category", "accounts"): "Asset Category Account",
+	("Asset Category", "finance_books"): "Asset Finance Book",
 	("Item", "item_defaults"): "Item Default",
 	("Item", "reorder_levels"): "Item Reorder",
 	("Supplier", "accounts"): "Party Account",

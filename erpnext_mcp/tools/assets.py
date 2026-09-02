@@ -448,7 +448,8 @@ def create_asset(args: dict) -> ToolResult:
 			f"no Asset Category named {asset_category!r}. This site has: "
 			f"{', '.join(sorted(str(name) for name in known)) or '<none>'}. An asset category is "
 			"where ERPNext keeps the fixed-asset, accumulated-depreciation and depreciation-"
-			"expense accounts, so it has to exist first. Nothing was created."
+			"expense accounts, so it has to exist first — create_asset_category makes one. "
+			"Nothing was created."
 		)
 
 	allocation = _validated_allocation(args.get("cost_center_allocation"), company)
@@ -1283,4 +1284,254 @@ def _alignment_reading(delta: int) -> str:
 	return (
 		f"The note runs {abs(delta)} month(s) past the asset's last depreciation — interest is "
 		"still being paid on something with no book value left."
+	)
+
+
+# ── 65. create_asset_category ───────────────────────────────────────────────
+
+#: What ERPNext's own `AssetCategory.validate_account_types` insists each column
+#: of an accounts row carries. Checked HERE, before the insert, so a caller that
+#: passed the wrong account is told which argument was wrong and what the site
+#: has instead — rather than receiving ERPNext's "Row #1: Account Type of
+#: <docname> should be Fixed Asset" from a controller three layers down.
+_CATEGORY_ACCOUNT_TYPES = (
+	("fixed_asset_account", "Fixed Asset"),
+	("accumulated_depreciation_account", "Accumulated Depreciation"),
+	("depreciation_expense_account", "Depreciation"),
+)
+
+#: The Select on `Asset Finance Book.depreciation_method`, for the case where
+#: this site's meta cannot answer for a doctype that is ERPNext's, not this
+#: app's. Same four options as the Asset Cost Profile carries.
+_FINANCE_BOOK_METHODS = ("Straight Line", "Double Declining Balance", "Written Down Value", "Manual")
+
+
+def create_asset_category(args: dict) -> ToolResult:
+	"""Create one ERPNext Asset Category — the thing `create_asset` refuses without.
+
+	AN ASSET CATEGORY CANNOT BE CREATED FROM A NAME ALONE, and that is why this
+	tool takes accounts rather than just `asset_category_name`. ERPNext marks the
+	`accounts` table `reqd`, so Frappe's own mandatory check refuses a category
+	with an empty table — "Data missing in table: Accounts" — before any
+	controller runs. The refusal below is that same refusal, made earlier, in
+	words that name the argument that was missing and list what the site has.
+
+	ASKING FOR ONE THAT EXISTS RETURNS IT. An Asset Category is
+	`autoname: field:asset_category_name`, so the name IS the docname and there
+	can only ever be one. "Let there be a category called this" is already
+	satisfied when it is, so this answers with the existing document and writes
+	nothing, rather than raising at a caller who wanted the end state.
+
+	THE FINANCE BOOK ROW IS ERPNEXT'S SCHEDULE, NOT THIS APP'S. It is what
+	ERPNext's own depreciation would use, and this app switches that off on every
+	asset `create_asset` makes (see the module docstring). It is written here
+	because the category is a shared master an operator also uses from the Desk,
+	and a half-configured one is worse than none — but nothing in this app reads
+	it. The schedule this app runs lives on the Asset Cost Profile, per asset.
+	"""
+	compat.require_doctype(
+		"Asset Category",
+		"It ships with ERPNext's Assets module; enable it if this site hid the module.",
+	)
+	name = as_str(args, "asset_category_name", required=True)
+
+	if frappe.db.exists("Asset Category", name):
+		return _existing_asset_category(name)
+
+	company = resolve_company(as_str(args, "company"), required=True)
+	accounts = _category_accounts_row(args, company)
+	finance_book = _category_finance_book(args)
+
+	doc = frappe.new_doc("Asset Category")
+	doc.asset_category_name = name
+	# `company_name`, not `company` — ERPNext names the column on Asset Category
+	# Account after the label, and this is the one place in this app that writes
+	# that row rather than reading it.
+	company_field = compat.first_field("Asset Category Account", "company_name", "company") or "company_name"
+	doc.append("accounts", {company_field: company, **accounts})
+	if finance_book:
+		doc.append("finance_books", dict(finance_book))
+	doc.insert()
+
+	return ToolResult(
+		{
+			"name": doc.name,
+			"asset_category_name": name,
+			"created": True,
+			"company": company,
+			"accounts": [{"company": company, **accounts}],
+			"finance_books": [finance_book] if finance_book else [],
+			"note": (
+				"An Asset Category has no docstatus and therefore no draft state: this one is "
+				"live, and every company on the site can file assets under it. The accounts row "
+				"is per company — a second company needs its own row, added in the Desk."
+				+ (
+					""
+					if finance_book
+					else " No finance book row was written, so ERPNext's own depreciation defaults "
+					"for this category are unset. That is harmless for assets created by "
+					"create_asset, which carry their schedule on the Asset Cost Profile instead."
+				)
+			),
+			"next_step": (
+				f"Pass {doc.name!r} as `asset_category` to create_asset, or to register_asset for "
+				"an asset that is tracked but not depreciated here."
+			),
+		},
+		f"created Asset Category {doc.name} for {company}",
+		docstatus_delta="none → created",
+	)
+
+
+def _existing_asset_category(name: str) -> ToolResult:
+	"""The category that was already there, read back through its parent.
+
+	Not `frappe.db.get_all("Asset Category Account", filters={"parent": name})`:
+	a child table is read through the document that owns it.
+	"""
+	doc = frappe.get_doc("Asset Category", name)
+	company_field = compat.first_field("Asset Category Account", "company_name", "company") or "company_name"
+	accounts = [
+		{
+			"company": row.get(company_field) or None,
+			"fixed_asset_account": row.get("fixed_asset_account") or None,
+			"accumulated_depreciation_account": row.get("accumulated_depreciation_account") or None,
+			"depreciation_expense_account": row.get("depreciation_expense_account") or None,
+		}
+		for row in doc.get("accounts") or []
+	]
+	books = [
+		{
+			"depreciation_method": row.get("depreciation_method") or None,
+			"total_number_of_depreciations": row.get("total_number_of_depreciations") or None,
+			"frequency_of_depreciation": row.get("frequency_of_depreciation") or None,
+		}
+		for row in doc.get("finance_books") or []
+	]
+	return ToolResult(
+		{
+			"name": doc.name,
+			"asset_category_name": doc.get("asset_category_name") or doc.name,
+			"created": False,
+			"accounts": accounts,
+			"finance_books": books,
+			"note": (
+				"NOTHING WAS WRITTEN. An Asset Category is named after itself, so this one "
+				"already is what was asked for. Its accounts are listed above so a caller can "
+				"see whether the company it cares about has a row; adding one to an existing "
+				"category is a Desk edit, not something this tool does."
+			),
+		},
+		f"Asset Category {doc.name} already exists with {len(accounts)} account row(s); nothing was changed",
+	)
+
+
+def _category_accounts_row(args: dict, company: str) -> dict:
+	"""The one accounts row ERPNext will not create an Asset Category without.
+
+	The two depreciation accounts fall back to the Company's own defaults, which
+	is where ERPNext keeps them and where every category on a site otherwise
+	repeats them. `fixed_asset_account` has NO company default in ERPNext, so it
+	is the one account this tool has to be given.
+	"""
+	fixed = as_str(args, "fixed_asset_account")
+	if not fixed:
+		raise ToolError(
+			"fixed_asset_account is required. ERPNext marks the accounts table on an Asset "
+			'Category as mandatory — a category with no accounts row is refused with "Data '
+			'missing in table: Accounts" — and the fixed asset account is the one column of '
+			"that row ERPNext has no company default to fall back on. Fixed Asset accounts on "
+			f"{company}: {_account_candidates(company, 'Fixed Asset')}. Nothing was created."
+		)
+	row = {"fixed_asset_account": resolve_account(fixed, company)}
+	for key in ("accumulated_depreciation_account", "depreciation_expense_account"):
+		given = as_str(args, key)
+		if given:
+			row[key] = resolve_account(given, company)
+		elif compat.has_field("Company", key):
+			default = frappe.db.get_value("Company", company, key)
+			if default:
+				row[key] = default
+	_validate_category_account_types(row, company)
+	return row
+
+
+def _validate_category_account_types(row: dict, company: str) -> None:
+	"""ERPNext's account-type rule, applied before the insert instead of during it."""
+	for key, expected in _CATEGORY_ACCOUNT_TYPES:
+		account = row.get(key)
+		if not account:
+			continue
+		actual = frappe.db.get_value("Account", account, "account_type") or ""
+		if actual != expected:
+			raise ToolError(
+				f"{key} {account!r} is an account of type {actual or '<none>'!r}, and ERPNext's "
+				f"Asset Category accepts only {expected!r} there — it refuses the save otherwise. "
+				f"{expected} accounts on {company}: {_account_candidates(company, expected)}. "
+				"Nothing was created."
+			)
+
+
+def _account_candidates(company: str, account_type: str) -> str:
+	"""The site's own answer to "then which account did you mean", for a refusal."""
+	names = frappe.db.get_all(
+		"Account",
+		filters={"company": company, "account_type": account_type, "is_group": 0},
+		pluck="name",
+		limit=10,
+	)
+	return ", ".join(sorted(str(one) for one in names)) or f"<none — {company} has no {account_type} account>"
+
+
+def _category_finance_book(args: dict) -> dict:
+	"""ERPNext's depreciation defaults for the category: all three, or none.
+
+	`Asset Finance Book` marks the method, the total and the frequency all `reqd`
+	and its parent throws on a total or a frequency below 1, so a row carrying
+	one of the three is a row ERPNext will not save. Refusing here says which of
+	them is missing; refusing there says "Row 1: Total Number of Depreciations
+	must be greater than 0" after the category is already half-made.
+	"""
+	keys = ("depreciation_method", "total_number_of_depreciations", "frequency_of_depreciation")
+	# Presence, not truth: `total_number_of_depreciations=0` is a value somebody
+	# passed and is refused below by name, not silently read as "not given".
+	given = [key for key in keys if args.get(key) not in (None, "")]
+	if not given:
+		return {}
+	missing = [key for key in keys if key not in given]
+	if missing:
+		raise ToolError(
+			"a finance book row needs depreciation_method, total_number_of_depreciations and "
+			f"frequency_of_depreciation together; {', '.join(missing)} was not given. ERPNext "
+			"marks all three mandatory on Asset Finance Book. Pass all three, or none of them "
+			"to create the category without ERPNext depreciation defaults. Nothing was created."
+		)
+	total = as_int(args, "total_number_of_depreciations")
+	frequency = as_int(args, "frequency_of_depreciation")
+	if total < 1 or frequency < 1:
+		raise ToolError(
+			"total_number_of_depreciations and frequency_of_depreciation must both be at least "
+			f"1; got {total} and {frequency}. ERPNext throws on either below 1. Nothing was created."
+		)
+	return {
+		"depreciation_method": _validated_finance_book_method(as_str(args, "depreciation_method")),
+		"total_number_of_depreciations": total,
+		"frequency_of_depreciation": frequency,
+	}
+
+
+def _validated_finance_book_method(method: str) -> str:
+	"""Like `_validated_method`, but reading ERPNext's Select rather than this app's."""
+	options = [
+		line.strip()
+		for line in str(
+			(compat.field_meta("Asset Finance Book", "depreciation_method") or {}).get("options") or ""
+		).split("\n")
+		if line.strip()
+	] or list(_FINANCE_BOOK_METHODS)
+	for option in options:
+		if option.lower() == method.lower():
+			return option
+	raise ToolError(
+		f"depreciation_method must be one of: {', '.join(options)}. Got {method!r}. Nothing was created."
 	)

@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.147.0 — 2026-09-01 — the category an asset needs before it can exist
+
+**ONE TOOL: `create_asset_category`.** An ERPNext Asset Category, created from
+the MCP for the first time. No new doctype, no new column, no existing signature
+changed. Full note in `RELEASES/v0.147.0.md`.
+
+**IT TAKES ACCOUNTS BECAUSE ERPNEXT WILL NOT SAVE ONE WITHOUT THEM.** The
+`accounts` table on Asset Category is `reqd`, so Frappe refuses a category with
+an empty table — "Data missing in table: Accounts" — before any controller runs.
+The in-memory test double does not model that check, so a name-only tool would
+have been green here and broken on every bench. The refusal is made in the tool
+instead, naming the argument and listing the site's own Fixed Asset accounts.
+`accumulated_depreciation_account` and `depreciation_expense_account` fall back
+to the Company's defaults; `fixed_asset_account` has none in ERPNext, which is
+why it is the one account that must be given.
+
+**ASKING FOR ONE THAT EXISTS RETURNS IT AND WRITES NOTHING.** A category is
+`autoname: field:asset_category_name`, so the name is the docname and the end
+state the caller asked for is already true. `created: false`, with the accounts
+rows it found. It does not edit a category it did not create.
+
+**THE ACCOUNT TYPES ARE CHECKED BEFORE THE INSERT.** ERPNext throws "Row #1:
+Account Type of X should be Fixed Asset" from a controller the caller never saw;
+the same rule here names the argument and lists the accounts of that type.
+
+**THE FINANCE BOOK ROW IS ERPNEXT'S SCHEDULE, NOT THIS APP'S.** Method, total and
+frequency go in together or not at all — ERPNext marks all three mandatory and
+throws below 1 — and a `0` is refused for being zero rather than read as absent.
+Nothing in this app reads the row: `create_asset` assets keep their schedule on
+the Asset Cost Profile with ERPNext's own depreciation switched off.
+
+**`create_asset`'S OWN REFUSAL NOW NAMES THE TOOL.** "…so it has to exist
+first — create_asset_category makes one." A refusal that lists the site's
+categories and not the way to add one sends the reader to the Desk for
+something the MCP can now do.
+
+**Harness:** `Asset Category` joins `ERPNEXT_AUTONAME` (`field:asset_category_name`)
+and gains its `finance_books` child table, and `Asset Category Account` gains the
+`company_name` column ERPNext actually reads.
+
 ## 0.144.0 — 2026-08-31 — the valve was right, the record about it was not
 
 **ONE TOOL: `update_irrigation_valve`.** A valve's rank, its parent, the zone it

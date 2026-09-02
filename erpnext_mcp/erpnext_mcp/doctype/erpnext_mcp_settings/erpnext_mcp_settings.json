@@ -204,6 +204,7 @@
   "asset_tools_section",
   "allow_depreciation_note_alignment_check",
   "allow_create_asset",
+  "allow_create_asset_category",
   "allow_update_asset_allocation",
   "asset_tools_col",
   "allow_link_asset_to_note",
@@ -2380,6 +2381,13 @@
    "fieldname": "allow_create_asset",
    "fieldtype": "Check",
    "label": "Create Asset"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Create an ERPNext Asset Category, with the accounts row ERPNext will not save one without. Returns the existing category unchanged when the name is already taken.",
+   "fieldname": "allow_create_asset_category",
+   "fieldtype": "Check",
+   "label": "Create Asset Category"
   },
   {
    "default": "0",

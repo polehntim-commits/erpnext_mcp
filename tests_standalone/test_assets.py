@@ -32,10 +32,11 @@ from .fixtures import (
 	HARVEST,
 	MAIN,
 	MAIN_ABBR,
+	OTHER_ABBR,
 	V7TestCase,
 	install_bbch_dimension,
 )
-from .harness import STORE, frappe
+from .harness import STORE, add_field, frappe
 
 FIELD_WORK = f"110 - Field Work - {MAIN_ABBR}"
 MAIN_CC = f"Main - {MAIN_ABBR}"
@@ -182,6 +183,9 @@ class CreateAsset(AssetTestCase):
 	def test_an_unknown_asset_category_is_refused_with_what_the_site_has(self):
 		message = self.tool_error("create_asset", self.create(asset_category="Spaceships"))
 		self.assertIn(ASSET_CATEGORY, message)
+		# v0.147.0. A refusal that names the site's categories and not the tool that
+		# makes one sends the reader to the Desk for something the MCP can now do.
+		self.assertIn("create_asset_category", message)
 
 	def test_a_salvage_value_at_or_above_the_cost_is_refused(self):
 		message = self.tool_error("create_asset", self.create(salvage_value=12000))
@@ -559,3 +563,229 @@ class AssetSwitches(V7TestCase):
 		self.configure(enabled=1)
 		data = self.tool_data("depreciation_note_alignment_check", {"company": MAIN})
 		self.assertEqual(data["checked"], 0)
+
+
+# ── create_asset_category ───────────────────────────────────────────────────
+FIXED_ASSETS = f"1800 - Fixed Assets - {MAIN_ABBR}"
+
+
+class CreateAssetCategory(V7TestCase):
+	"""The master `create_asset` refuses without, and the reason it takes accounts.
+
+	ERPNext marks the `accounts` table on Asset Category `reqd`, so a category
+	made from a name alone cannot be saved on a bench at all — Frappe's mandatory
+	check refuses it before the controller runs. The standalone double does NOT
+	model that check, which is exactly why the refusal lives in the tool and is
+	tested here: without it this suite would be green over a tool that fails on
+	every real site.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, allow_create_asset_category=1, allow_create_asset=1)
+		# The fixture chart has an Accumulated Depreciation and a Depreciation
+		# account and no Fixed Asset one, because nothing before this wrote the
+		# column that needs it.
+		STORE.seed(
+			"Account",
+			[
+				{
+					"name": FIXED_ASSETS,
+					"account_name": "Fixed Assets",
+					"account_number": "1800",
+					"parent_account": f"Application of Funds (Assets) - {MAIN_ABBR}",
+					"is_group": 0,
+					"root_type": "Asset",
+					"account_type": "Fixed Asset",
+					"account_currency": "USD",
+					"disabled": 0,
+					"company": MAIN,
+				}
+			],
+		)
+
+	def payload(self, **overrides):
+		payload = {
+			"company": MAIN,
+			"asset_category_name": "Wind Machines",
+			"fixed_asset_account": FIXED_ASSETS,
+			"accumulated_depreciation_account": ACCUMULATED_DEPRECIATION,
+			"depreciation_expense_account": DEPRECIATION_EXPENSE,
+		}
+		payload.update(overrides)
+		return payload
+
+	def accounts_of(self, name):
+		return frappe.get_doc("Asset Category", name).get("accounts") or []
+
+	def test_it_creates_the_category_named_after_itself(self):
+		data = self.tool_data("create_asset_category", self.payload())
+		self.assertTrue(data["created"])
+		self.assertEqual(data["name"], "Wind Machines")
+		self.assertTrue(frappe.db.exists("Asset Category", "Wind Machines"))
+
+	def test_the_accounts_row_carries_the_three_accounts_and_the_company(self):
+		self.tool_data("create_asset_category", self.payload())
+		rows = self.accounts_of("Wind Machines")
+		self.assertEqual(len(rows), 1)
+		# `company_name`, not `company`: ERPNext names the column on Asset
+		# Category Account after its label. Writing `company` would store a value
+		# no bench ever reads.
+		self.assertEqual(rows[0].get("company_name"), MAIN)
+		self.assertEqual(rows[0].get("fixed_asset_account"), FIXED_ASSETS)
+		self.assertEqual(rows[0].get("accumulated_depreciation_account"), ACCUMULATED_DEPRECIATION)
+		self.assertEqual(rows[0].get("depreciation_expense_account"), DEPRECIATION_EXPENSE)
+
+	def test_the_depreciation_accounts_fall_back_to_the_companys_own_defaults(self):
+		"""ERPNext keeps both on Company, and a site that set them there should not
+		have to repeat them on every category."""
+		for field in ("accumulated_depreciation_account", "depreciation_expense_account"):
+			add_field("Company", field, fieldtype="Link", options="Account", label=field)
+		STORE.tables["Company"][MAIN]["accumulated_depreciation_account"] = ACCUMULATED_DEPRECIATION
+		STORE.tables["Company"][MAIN]["depreciation_expense_account"] = DEPRECIATION_EXPENSE
+
+		payload = self.payload()
+		payload.pop("accumulated_depreciation_account")
+		payload.pop("depreciation_expense_account")
+		data = self.tool_data("create_asset_category", payload)
+
+		self.assertEqual(data["accounts"][0]["accumulated_depreciation_account"], ACCUMULATED_DEPRECIATION)
+		self.assertEqual(
+			self.accounts_of("Wind Machines")[0].get("depreciation_expense_account"), DEPRECIATION_EXPENSE
+		)
+
+	def test_a_company_with_no_defaults_simply_omits_them(self):
+		"""The negative control for the test above: the fixture Company has neither
+		field, so the fallback has to be absent rather than crashing on a column
+		this site does not have."""
+		payload = self.payload()
+		payload.pop("accumulated_depreciation_account")
+		payload.pop("depreciation_expense_account")
+		data = self.tool_data("create_asset_category", payload)
+		self.assertIsNone(data["accounts"][0].get("accumulated_depreciation_account"))
+		self.assertEqual(data["accounts"][0]["fixed_asset_account"], FIXED_ASSETS)
+
+	def test_no_fixed_asset_account_is_refused_with_what_the_site_has(self):
+		payload = self.payload()
+		payload.pop("fixed_asset_account")
+		message = self.tool_error("create_asset_category", payload)
+		self.assertIn("fixed_asset_account is required", message)
+		self.assertIn("Data missing in table", message)
+		self.assertIn(FIXED_ASSETS, message)
+		self.assertFalse(frappe.db.exists("Asset Category", "Wind Machines"))
+
+	def test_an_account_of_the_wrong_type_is_refused_before_anything_is_written(self):
+		"""ERPNext's own controller throws on this at save. Refusing here names the
+		argument instead of a row number, and leaves no half-made category."""
+		message = self.tool_error(
+			"create_asset_category", self.payload(fixed_asset_account=f"1110 - Bank Checking - {MAIN_ABBR}")
+		)
+		self.assertIn("fixed_asset_account", message)
+		self.assertIn("Fixed Asset", message)
+		self.assertIn("Nothing was created", message)
+		self.assertFalse(frappe.db.exists("Asset Category", "Wind Machines"))
+
+	def test_the_accumulated_and_expense_columns_are_type_checked_too(self):
+		for key in ("accumulated_depreciation_account", "depreciation_expense_account"):
+			with self.subTest(key=key):
+				message = self.tool_error(
+					"create_asset_category", self.payload(**{key: f"1110 - Bank Checking - {MAIN_ABBR}"})
+				)
+				self.assertIn(key, message)
+				self.assertFalse(frappe.db.exists("Asset Category", "Wind Machines"))
+
+	def test_an_account_of_another_company_is_refused(self):
+		message = self.tool_error(
+			"create_asset_category", self.payload(fixed_asset_account=f"1110 - Bank Checking - {OTHER_ABBR}")
+		)
+		self.assertIn("Second Example Ltd", message)
+		self.assertFalse(frappe.db.exists("Asset Category", "Wind Machines"))
+
+	def test_asking_for_one_that_exists_returns_it_and_writes_nothing(self):
+		"""The name IS the docname, so there can only be one. A caller that wants
+		the end state has already got it."""
+		before = len(STORE.rows("Asset Category"))
+		data = self.tool_data("create_asset_category", self.payload(asset_category_name=ASSET_CATEGORY))
+		self.assertFalse(data["created"])
+		self.assertEqual(data["name"], ASSET_CATEGORY)
+		self.assertEqual(len(STORE.rows("Asset Category")), before)
+		self.assertEqual(data["accounts"][0]["depreciation_expense_account"], DEPRECIATION_EXPENSE)
+
+	def test_an_existing_category_with_no_accounts_says_so_rather_than_inventing_one(self):
+		data = self.tool_data("create_asset_category", self.payload(asset_category_name="Unconfigured"))
+		self.assertFalse(data["created"])
+		self.assertEqual(data["accounts"], [])
+
+	def test_a_finance_book_row_is_written_when_all_three_are_given(self):
+		data = self.tool_data(
+			"create_asset_category",
+			self.payload(
+				depreciation_method="written down value",
+				total_number_of_depreciations=60,
+				frequency_of_depreciation=1,
+			),
+		)
+		self.assertEqual(data["finance_books"][0]["depreciation_method"], "Written Down Value")
+		books = frappe.get_doc("Asset Category", "Wind Machines").get("finance_books") or []
+		self.assertEqual(len(books), 1)
+		self.assertEqual(books[0].get("total_number_of_depreciations"), 60)
+		self.assertEqual(books[0].get("frequency_of_depreciation"), 1)
+
+	def test_no_finance_book_arguments_writes_no_row(self):
+		data = self.tool_data("create_asset_category", self.payload())
+		self.assertEqual(data["finance_books"], [])
+		self.assertEqual(frappe.get_doc("Asset Category", "Wind Machines").get("finance_books") or [], [])
+		self.assertIn("No finance book row was written", data["note"])
+
+	def test_one_of_the_three_finance_book_values_is_refused_naming_the_rest(self):
+		message = self.tool_error("create_asset_category", self.payload(depreciation_method="Straight Line"))
+		self.assertIn("total_number_of_depreciations", message)
+		self.assertIn("frequency_of_depreciation", message)
+		self.assertFalse(frappe.db.exists("Asset Category", "Wind Machines"))
+
+	def test_a_zero_is_a_value_somebody_passed_not_a_value_left_out(self):
+		"""`total_number_of_depreciations=0` must be refused for being 0, not read
+		as "not given" and quietly dropped."""
+		message = self.tool_error(
+			"create_asset_category",
+			self.payload(
+				depreciation_method="Straight Line",
+				total_number_of_depreciations=0,
+				frequency_of_depreciation=12,
+			),
+		)
+		self.assertIn("must both be at least 1", message)
+		self.assertIn("got 0 and 12", message)
+
+	def test_an_unknown_depreciation_method_is_refused_with_the_options(self):
+		message = self.tool_error(
+			"create_asset_category",
+			self.payload(
+				depreciation_method="Sum of the Years",
+				total_number_of_depreciations=60,
+				frequency_of_depreciation=1,
+			),
+		)
+		self.assertIn("Straight Line", message)
+		self.assertIn("Written Down Value", message)
+		self.assertFalse(frappe.db.exists("Asset Category", "Wind Machines"))
+
+	def test_the_category_it_makes_is_one_create_asset_accepts(self):
+		"""The whole point of the tool: create_asset refuses a category the site
+		does not have, and this is what stops that being a dead end."""
+		self.tool_data("create_asset_category", self.payload())
+		data = self.tool_data(
+			"create_asset",
+			{
+				"company": MAIN,
+				"asset_name": "Wind Machine 1",
+				"item_code": "WM-1",
+				"asset_category": "Wind Machines",
+				"purchase_date": "2026-01-01",
+				"purchase_amount": 24000,
+				"useful_life_months": 12,
+				"capex_type": "Growth",
+				"capex_justification": "A block that had no frost protection now has it.",
+			},
+		)
+		self.assertEqual(data["asset_category"], "Wind Machines")
