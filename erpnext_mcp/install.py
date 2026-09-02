@@ -111,6 +111,7 @@ from . import (
 	dashboard,
 	i9_documents,
 	i9_print_format,
+	irrigation_workspace,
 	onboard_worker,
 	roles,
 	settings,
@@ -150,6 +151,7 @@ def after_install() -> None:
 	_asset_tag_list_action()
 	_asset_tag_form_action()
 	_onboard_worker()
+	_irrigation_workspace()
 	_settlement_invoice_link()
 	_bank_categorization_fields()
 	_bank_pairing_fields()
@@ -193,6 +195,7 @@ def after_migrate() -> None:
 	_asset_tag_list_action()
 	_asset_tag_form_action()
 	_onboard_worker()
+	_irrigation_workspace()
 	_settlement_invoice_link()
 	_bank_categorization_fields()
 	_bank_pairing_fields()
@@ -1209,6 +1212,37 @@ def _onboard_worker() -> None:
 		print(f"erpnext_mcp: could not build {failure['name']} — {failure['reason']}")
 
 
+def _irrigation_workspace() -> None:
+	"""Build or repair the Irrigation workspace.
+
+	The same three outcomes `_onboard_worker` prints and for the same reason —
+	"somebody has arranged this page" is a success, not a failure, and would go
+	out as silence through `_report_failures`.
+	"""
+	report = irrigation_workspace.install_irrigation_workspace()
+	if report.get("created"):
+		print(
+			f"erpnext_mcp: built the {irrigation_workspace.WORKSPACE_NAME!r} workspace — "
+			f"{report['shortcuts']} shortcut(s). The valves have always been Asset Register "
+			f"records; what was missing was a door to them, and the first card opens the "
+			f"register already filtered to Irrigation Valve. It is at /app/irrigation."
+		)
+	elif report.get("filled"):
+		print(
+			f"erpnext_mcp: filled in the {irrigation_workspace.WORKSPACE_NAME!r} workspace, "
+			f"which was on this site with nothing on it."
+		)
+	elif report.get("existed"):
+		print(
+			f"erpnext_mcp: the {irrigation_workspace.WORKSPACE_NAME!r} workspace has been "
+			f"arranged on this site, so it was left exactly as it is."
+		)
+	elif report.get("note"):
+		print(f"erpnext_mcp: the Irrigation workspace was not built — {report['note']}")
+	for failure in report.get("failed") or []:
+		print(f"erpnext_mcp: could not build {failure['name']} — {failure['reason']}")
+
+
 def _command_center() -> None:
 	"""Build or repair the Compliance Command Center dashboard."""
 	_report_failures("the Compliance Command Center", dashboard.install_command_center)
@@ -1804,6 +1838,7 @@ def before_uninstall() -> None:
 	_remove_asset_tag_list_action()
 	_remove_asset_tag_form_action()
 	_remove_onboard_worker()
+	_remove_irrigation_workspace()
 
 	losses = []
 	for doctype, what in _PRECIOUS_DOCTYPES:
@@ -1935,6 +1970,26 @@ def _remove_onboard_worker() -> None:
 	`onboard_worker.remove_onboard_worker`.
 	"""
 	report = onboard_worker.remove_onboard_worker()
+	if report.get("removed"):
+		print(f"erpnext_mcp: removed the {report['name']!r} workspace.")
+	elif report.get("reason", "").startswith("left alone"):
+		print(f"erpnext_mcp: the {report['name']!r} workspace was {report['reason']}.")
+	elif report.get("reason") not in ("not present", ""):
+		print(
+			f"\nerpnext_mcp: could not remove the {report['name']!r} workspace — "
+			f"{report['reason']}.\nDelete it by hand in the Desk under Workspace.\n"
+		)
+
+
+def _remove_irrigation_workspace() -> None:
+	"""Take the Irrigation landing page off before the app goes.
+
+	`_remove_onboard_worker`'s case exactly: the page points at Asset Register,
+	which SURVIVES the uninstall, so left behind it is a workspace in a module
+	that has gone. A page somebody has moved to another module is theirs and
+	stays — see `irrigation_workspace.remove_irrigation_workspace`.
+	"""
+	report = irrigation_workspace.remove_irrigation_workspace()
 	if report.get("removed"):
 		print(f"erpnext_mcp: removed the {report['name']!r} workspace.")
 	elif report.get("reason", "").startswith("left alone"):

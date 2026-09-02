@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.151.0 — 2026-09-02 — the valves were never missing, the door was
+
+**NO `Irrigation Valve` DOCTYPE WAS ADDED, AND THE REQUEST TO ADD ONE RESTED ON A
+FALSE PREMISE.** All 33 valves are already Frappe documents — `Asset Register`
+rows whose `asset_type` is `Irrigation Valve`, since v0.25.0 — visible in the Desk
+at `/app/asset-register?asset_type=Irrigation%20Valve`, with GPS on every one and
+a draggable pin on the form since v0.145.0. `tools/valves.py` argues why a second
+register would be a second account of the same pipe, and it would have stranded
+the QR payloads, the closing cascade, `get_irrigation_runtime` and v0.149.0's own
+Asset mirror. What was missing was a way to FIND them.
+
+**A NEW `Irrigation` WORKSPACE AT `/app/irrigation`.** Four cards; the first
+carries `stats_filter` — which Frappe's shortcut widget reads both for the count
+badge and, at click, for `frappe.route_options` — so it counts the valves and
+lands on a register already narrowed to them. Built in code rather than shipped as
+a `workspace/*.json`, because a Workspace JSON is force-synced by every `bench
+migrate` and would overwrite an operator's own arrangement of the page. No "open
+valves" card: `current_state` is JSON and an untoggled valve is closed with the
+column empty, so such a filter would miscount.
+
+**`backfill_valve_rank` GIVES EVERY VALVE THE RANK ITS LINE ALREADY STATED.**
+`valve_type` was blank on all 33, and a blank rank on a PARENT scores one past
+Lateral in `create_irrigation_valve`'s guard — which refused every valve anybody
+tried to hang underneath it. The rank is read from `location`, the hierarchy the
+cascade already walks: no valve above it is a Main, valves below it a Sub-Main,
+nothing below a Lateral. No name is interpreted, a stated rank is never rewritten,
+and the assignment is monotonic down every chain.
+
+**THE TEST DOUBLE WAS MISSING `stats_filter`**, so the guard around it answered
+False, the filter was skipped silently and the page built green with an
+unfiltered card. `stats_filter` and `format` are now on `Workspace Shortcut` in
+`harness.py`.
+
+**STILL OPEN:** the site has NO Irrigation Zone records, so no valve names a zone,
+`get_water_usage_report` can price no gallons, and `create_irrigation_valve` —
+which requires a zone — cannot register a valve on this site at all. That needs
+real flow-rate figures, not a code change.
+
 ## 0.150.0 — 2026-09-02 — a building drawn as a building, on one map with everything else
 
 **`set_asset_boundary` GIVES AN ASSET A FOOTPRINT** — the outline a shed, a pump

@@ -1052,7 +1052,23 @@ ERPNEXT_SCHEMA = {
 		"number_cards",
 		"charts",
 	],
-	"Workspace Shortcut": ["name", "label", "type", "link_to", "doc_view", "kanban_board", "color"],
+	# `stats_filter` and `format` are the count badge and its wording, and
+	# `stats_filter` is ALSO the click-through filter: `shortcut_widget.js` sets
+	# `frappe.route_options` from it before routing. Absent from this list, every
+	# `compat.has_field` guard around it answers False and a shortcut that filters
+	# is silently built as one that does not — which is how the Irrigation page's
+	# valve card passed its own build and returned an unfiltered register.
+	"Workspace Shortcut": [
+		"name",
+		"label",
+		"type",
+		"link_to",
+		"doc_view",
+		"kanban_board",
+		"color",
+		"format",
+		"stats_filter",
+	],
 	"Workspace Link": [
 		"name",
 		"type",

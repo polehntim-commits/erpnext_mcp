@@ -32,6 +32,7 @@ from erpnext_mcp.patches import (
 	backfill_field_varieties,
 	backfill_observation_type,
 	backfill_planting_rootstock,
+	backfill_valve_rank,
 	fix_literal_newlines_in_instructions,
 	migrate_declarative_rules,
 	migrate_incident_tool_switches,
@@ -72,6 +73,7 @@ PATCHES = (
 	("erpnext_mcp.patches.backfill_observation_type", backfill_observation_type),
 	("erpnext_mcp.patches.widen_i9_attestation_filters", widen_i9_attestation_filters),
 	("erpnext_mcp.patches.backfill_field_varieties", backfill_field_varieties),
+	("erpnext_mcp.patches.backfill_valve_rank", backfill_valve_rank),
 )
 
 
@@ -1033,3 +1035,160 @@ class BackfillFieldVarieties(FreshSite):
 		report = backfill_field_varieties.backfill_field_varieties()
 		self.assertEqual(report["scanned"], 0)
 		self.assertEqual(report["filled"], 0)
+
+
+class BackfillValveRank(FreshSite):
+	"""Ranking every valve from the tree the register already stores.
+
+	THE BUG THIS ENDS is not a blank column on a screen. `_rank` answers
+	`len(VALVE_TYPES)` for a type it does not recognise and an empty string is
+	one, so a parent with a blank rank scores one PAST Lateral — and
+	`create_irrigation_valve` refuses a parent that outranks its child. On a
+	register where nobody filled the column that guard refuses every valve
+	anybody tries to hang off an existing one. `test_the_guard_this_unblocks`
+	below is the negative control: it proves the refusal is real before the
+	patch and gone after it, because a backfill tested only on its own report
+	is a test that passes whether or not the patch fixed anything.
+	"""
+
+	def valves(self, rows):
+		"""Asset Register rows straight into the store, ranks deliberately blank.
+
+		NOT THROUGH `create_irrigation_valve`, which requires a `valve_type` and
+		a zone and would therefore never produce the state this patch exists to
+		repair. The rows this reads on a real site were written by
+		`register_asset` from a handset, which asks for neither.
+		"""
+		STORE.seed(
+			"Asset Register",
+			[
+				{
+					"name": name,
+					"asset_type": "Irrigation Valve",
+					"company": "Orchard Meadow, LLC",
+					"location": parent,
+					"valve_type": rank,
+				}
+				for name, parent, rank in rows
+			],
+		)
+
+	def rank_of(self, name):
+		return frappe.db.get_value("Asset Register", name, "valve_type")
+
+	# ── the shape of a real line ────────────────────────────────────────────
+	def test_a_head_with_laterals_under_it_ranks_main_then_lateral(self):
+		"""OML's own shape: two roots and thirty-one valves under one of them."""
+		self.valves([("40-MAIN-HI", None, ""), ("40-S-1", "40-MAIN-HI", ""), ("40-N-1", "40-MAIN-HI", "")])
+		report = backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(report["filled"], 3)
+		self.assertEqual(self.rank_of("40-MAIN-HI"), "Main")
+		self.assertEqual(self.rank_of("40-S-1"), "Lateral")
+		self.assertEqual(self.rank_of("40-N-1"), "Lateral")
+
+	def test_a_valve_in_the_middle_of_a_line_is_a_sub_main(self):
+		self.valves([("MAIN", None, ""), ("MID", "MAIN", ""), ("ROW", "MID", "")])
+		backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(self.rank_of("MAIN"), "Main")
+		self.assertEqual(self.rank_of("MID"), "Sub-Main")
+		self.assertEqual(self.rank_of("ROW"), "Lateral")
+
+	def test_a_line_deeper_than_three_stays_lateral_rather_than_inventing_a_rank(self):
+		self.valves([("A", None, ""), ("B", "A", ""), ("C", "B", ""), ("D", "C", "")])
+		backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(
+			[self.rank_of(n) for n in ("A", "B", "C", "D")],
+			["Main", "Sub-Main", "Lateral", "Lateral"],
+		)
+
+	def test_a_valve_hanging_off_a_block_is_the_head_of_its_line(self):
+		"""`_ancestry` stops at the first thing that is not a valve, and a line
+		usually hangs off the block asset it waters. That valve is a Main."""
+		STORE.seed("Asset Register", [{"name": "BLOCK-3", "asset_type": "Block"}])
+		self.valves([("TURNOUT", "BLOCK-3", ""), ("ROW-1", "TURNOUT", "")])
+		backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(self.rank_of("TURNOUT"), "Main")
+		self.assertEqual(self.rank_of("ROW-1"), "Lateral")
+
+	# ── what it refuses to touch ────────────────────────────────────────────
+	def test_it_never_rewrites_a_rank_somebody_stated(self):
+		"""A Sub-Main with nothing under it yet is a line part-way through being
+		built, not an error. The person walked it; this read a tree."""
+		self.valves([("MAIN", None, ""), ("STATED", "MAIN", "Sub-Main")])
+		report = backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(report["already_set"], 1)
+		self.assertEqual(report["filled"], 1)
+		self.assertEqual(self.rank_of("STATED"), "Sub-Main")
+
+	def test_it_does_not_rank_things_that_are_not_valves(self):
+		STORE.seed("Asset Register", [{"name": "MC-Tractor-01", "asset_type": "Tractor"}])
+		report = backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(report["scanned"], 0)
+		self.assertFalse(self.rank_of("MC-Tractor-01"))
+
+	def test_running_it_twice_changes_nothing(self):
+		self.valves([("MAIN", None, ""), ("ROW", "MAIN", "")])
+		backfill_valve_rank.execute()
+		second = backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(second["filled"], 0)
+		self.assertEqual(second["already_set"], 2)
+
+	def test_a_cycle_in_the_tree_does_not_spin(self):
+		"""Nothing in the register refuses A → B → A.
+
+		THERE IS NO RIGHT RANK FOR A CYCLE — neither valve is above the other —
+		so this asserts the two properties that still have to hold: the walk
+		terminates, and whatever it writes leaves neither valve outranking the
+		other. Pinning a particular name here would be a test of an accident.
+		"""
+		from erpnext_mcp.tools import valves
+
+		self.valves([("A", "B", ""), ("B", "A", "")])
+		report = backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(report["filled"], 2)
+		self.assertEqual(valves._rank(self.rank_of("A")), valves._rank(self.rank_of("B")))
+
+	# ── the guard, proved both ways ─────────────────────────────────────────
+	def test_the_guard_this_unblocks(self):
+		"""THE NEGATIVE CONTROL. A blank parent rank refuses every child, and
+		that is the whole reason this patch exists — so the refusal is proved
+		to happen BEFORE the backfill and to be gone after it."""
+		from erpnext_mcp.tools import valves
+
+		self.assertGreater(valves._rank(""), valves._rank("Lateral"))
+		self.valves([("MAIN", None, ""), ("ROW", "MAIN", "")])
+
+		backfill_valve_rank.backfill_valve_rank()
+		# BOTH HALVES, because an unranked pair satisfies the ordering vacuously:
+		# `_rank("")` is 3 for parent and child alike, and 3 <= 3 holds. The
+		# ordering only means anything once the ranks are real.
+		self.assertIn(self.rank_of("MAIN"), valves.VALVE_TYPES)
+		self.assertIn(self.rank_of("ROW"), valves.VALVE_TYPES)
+		self.assertLessEqual(valves._rank(self.rank_of("MAIN")), valves._rank(self.rank_of("ROW")))
+
+	def test_every_parent_it_ranks_can_still_take_its_own_children(self):
+		"""The assignment must be monotonic down every chain, or the patch would
+		trade one refusal for another."""
+		from erpnext_mcp.tools import valves
+
+		self.valves([("A", None, ""), ("B", "A", ""), ("C", "B", ""), ("D", "C", "")])
+		backfill_valve_rank.backfill_valve_rank()
+		for child, parent in (("B", "A"), ("C", "B"), ("D", "C")):
+			# The real-rank check first, for `test_the_guard_this_unblocks`'
+			# reason: unranked satisfies the ordering vacuously.
+			self.assertIn(self.rank_of(parent), valves.VALVE_TYPES)
+			self.assertLessEqual(
+				valves._rank(self.rank_of(parent)),
+				valves._rank(self.rank_of(child)),
+				f"{parent} would refuse {child}",
+			)
+
+	# ── a site that has never seen this app ─────────────────────────────────
+	def test_it_survives_a_site_with_no_valves_at_all(self):
+		backfill_valve_rank.execute()
+
+	def test_it_reports_the_absence_rather_than_raising(self):
+		report = backfill_valve_rank.backfill_valve_rank()
+		self.assertEqual(report["scanned"], 0)
+		self.assertEqual(report["filled"], 0)
+		self.assertFalse(backfill_valve_rank.report_lines(report))
