@@ -645,3 +645,104 @@ class TheCommaInACompanysName(RolesTestCase):
 
 	def test_a_missing_space_after_the_comma_looks_up_as_written(self):
 		self.assertEqual(roles.parse_entity_access(f"{MAIN},{OTHER}"), [MAIN, OTHER])
+
+
+# ── the register the operator could not open ────────────────────────────────
+class TheAssetRegisterIsReadableFromTheDesk(RolesTestCase):
+	"""v0.153.0. The doctype that granted its own roles and forgot the farm's.
+
+	`Asset Register` shipped with two standard DocPerms — System Manager and
+	Accounts Manager — and nothing else, so the person who runs the orchard could
+	not open the list of the orchard's equipment in the Desk. Not a scoping
+	refusal and not a missing workspace link: no permission at all, on the
+	register `register_asset` writes into from every handset on the farm.
+
+	IT IS GRANTED IN THE DOCTYPE JSON AND NOT IN `roles.py`, WHICH IS THE PATTERN
+	THIS APP ALREADY HAS FOR ITS OWN DOCTYPES AND IS NOT THE ONE `Farm Task`
+	USES. Farm Task, Housing Unit and Field carry the same two shipped rows this
+	one did; their Farm Manager access is a Custom DocPerm `install_roles` writes
+	because they are in `DISPATCH`, `CAMP` and `GROUND`. The other pattern —
+	`Container Fill Threshold`, `Bucket Log Session`, `Budget`, `ML Model` and
+	twelve more — ships the grant as a standard DocPerm and deliberately does NOT
+	list the doctype in `ROLE_SPECS`, because `describe_role` reads that tuple and
+	a grant written there would be a silent no-op the catalogue then advertises as
+	truth. The v0.68.1 comment on `FILL_STANDARDS` sets that rule out; this
+	follows it.
+	"""
+
+	def perms(self) -> dict:
+		return {
+			str(row["role"]): row
+			for row in frappe.db.get_all(
+				"DocPerm", filters={"parent": "Asset Register"}, fields="*"
+			)
+			or []
+		}
+
+	def test_the_farm_manager_may_read_write_and_create(self):
+		perms = self.perms()
+		self.assertIn("Farm Manager", perms, "the role that runs the operation")
+		row = perms["Farm Manager"]
+		self.assertEqual(int(row.get("read") or 0), 1)
+		self.assertEqual(int(row.get("write") or 0), 1)
+		self.assertEqual(int(row.get("create") or 0), 1)
+
+	def test_the_farm_manager_may_not_delete(self):
+		"""A tag on a machine is what a scan resolves and what an insurance
+		schedule is built from. Retiring an asset is `retire_asset`, which leaves
+		the row and its history; deleting it takes both away silently."""
+		self.assertEqual(int(self.perms()["Farm Manager"].get("delete") or 0), 0)
+
+	def test_an_employee_may_read_it_and_nothing_more(self):
+		"""Every account on the site holds `Employee`, so this row is the widest
+		grant on the doctype and is read-only by construction."""
+		row = self.perms()["Employee"]
+		self.assertEqual(int(row.get("read") or 0), 1)
+		for denied in ("write", "create", "delete", "submit", "cancel", "amend"):
+			with self.subTest(flag=denied):
+				self.assertEqual(int(row.get(denied) or 0), 0)
+
+	def test_the_employee_row_does_not_hand_out_the_whole_register(self):
+		"""`export`, `share` and `email` are how a list leaves the site. Read in
+		the Desk is what was missing; a spreadsheet of every machine the farm owns
+		in every worker's hands is not the same request."""
+		row = self.perms()["Employee"]
+		for denied in ("export", "share", "email"):
+			with self.subTest(flag=denied):
+				self.assertEqual(int(row.get(denied) or 0), 0)
+
+	def test_the_two_shipped_roles_are_untouched(self):
+		"""Adding rows to a doctype's permission list is how the existing ones get
+		reordered out of existence by a careless rewrite."""
+		perms = self.perms()
+		self.assertEqual(int(perms["System Manager"].get("delete") or 0), 1)
+		self.assertEqual(int(perms["Accounts Manager"].get("write") or 0), 1)
+		self.assertEqual(int(perms["Accounts Manager"].get("delete") or 0), 0)
+
+	def test_no_custom_docperm_is_written_for_it_so_the_standard_rows_survive(self):
+		"""THE TRAP THAT WOULD MAKE ALL OF THE ABOVE A NO-OP ON TIM'S SITE. One
+		Custom DocPerm on a doctype makes Frappe discard EVERY standard DocPerm it
+		has, for every role — see `TheCustomDocPermTrap`. These four rows are
+		standard, so they are live only while nothing writes a custom one, and
+		`install_roles` writes custom rows for exactly `permission_targets()`.
+
+		If a later release adds Asset Register to a `roles.py` group, the mirror in
+		`_mirror_standard_perms` copies these across first and they survive — but
+		the grant written there would then be the live one and this file would be
+		describing history. Fail here instead, so that is a decision somebody makes
+		rather than one they discover.
+		"""
+		self.install()
+		self.assertNotIn("Asset Register", roles.permission_targets())
+		self.assertEqual(custom_perms("Asset Register"), {})
+
+	def test_the_roles_named_here_exist_on_the_site(self):
+		"""A standard DocPerm naming a role the site does not have is a link this
+		app cannot resolve at migrate, and `_mirror_standard_perms` documents the
+		same failure from the other direction. `Employee` comes from ERPNext,
+		which this app requires; `Farm Manager` is `install_roles`' own.
+		"""
+		self.install()
+		for role in ("Farm Manager", "Employee"):
+			with self.subTest(role=role):
+				self.assertTrue(frappe.db.exists("Role", role))

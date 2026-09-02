@@ -3,6 +3,53 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.153.0 — 2026-09-02 — the register that granted its own roles and forgot the farm's
+
+**`Asset Register` SHIPPED WITH TWO DocPerms AND NEITHER OF THEM WAS THE FARM'S.**
+System Manager and Accounts Manager, and nothing else — so the person who runs
+the orchard could not read, write or create a row in the register of the
+orchard's own equipment from the Desk. Not a scoping refusal, not a missing
+navigation link: no permission at all, on the doctype `register_asset` writes
+into from every handset on the farm and the one v0.151.0 had just put a
+workspace shortcut in front of.
+
+Added to `asset_register.json`:
+
+- **`Farm Manager` — read, write, create. No delete.** The same row
+  `Accounts Manager` already had, role swapped. Delete is withheld deliberately:
+  a tag on a machine is what `resolve_asset_tag` scans and what
+  `export_insurance_schedule` is built from, and retiring an asset is
+  `retire_asset`, which keeps the row and its history. Deleting takes both away
+  and says nothing.
+- **`Employee` — read only,** and read only in the strict sense: no write, no
+  create, and no `export`, `share` or `email` either. Every account on the site
+  holds this role, so it is the widest grant on the doctype. Seeing the equipment
+  list in the Desk was the thing missing; a spreadsheet of every machine the farm
+  owns in every worker's hands is a different request and is not granted here.
+
+**THIS IS THE DOCTYPE-JSON PATTERN, NOT THE `Farm Task` ONE, AND THE DIFFERENCE
+IS WORTH STATING BECAUSE THE TWO LOOK ALIKE FROM OUTSIDE.** `Farm Task`,
+`Housing Unit` and `Field` carry the identical two shipped rows this doctype did;
+their Farm Manager access is a *Custom* DocPerm `install_roles` writes because
+they sit in the `DISPATCH`, `CAMP` and `GROUND` groups in `roles.py`. The other
+pattern — `Container Fill Threshold`, `Bucket Log Session`, `Budget`, `ML Model`
+and twelve more — ships the grant as a *standard* DocPerm and deliberately does
+NOT name the doctype in `ROLE_SPECS`, because `describe_role` reads that tuple:
+a grant written there for a doctype whose JSON already carries it is a silent
+no-op that the role catalogue then advertises as truth. The v0.68.1 comment on
+`FILL_STANDARDS` sets that rule out. This follows it, so `roles.py` is unchanged
+and `permission_targets()` still does not name `Asset Register`.
+
+**WHICH IS ALSO WHY THE GRANT REACHES A DEPLOYED SITE AT ALL.** One Custom
+DocPerm on a doctype makes Frappe discard every standard DocPerm it has, for
+every role, silently. Nothing writes a custom row for this one, so `bench
+migrate` re-syncs the JSON and these four rows are live. A test asserts that
+`Asset Register` stays out of `permission_targets()`, so a later release moving
+it into a `roles.py` group is a decision somebody makes rather than one they
+discover.
+
+Seven tests, four of which fail against v0.152.1 for the right reason.
+
 ## 0.152.1 — 2026-09-02 — two entries the tuple's own rule did not cover
 
 **COMMENTS ONLY. NO BEHAVIOUR CHANGED.** v0.152.0 justified brokering the whole
