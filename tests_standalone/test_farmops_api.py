@@ -2540,6 +2540,104 @@ class TheFieldRegistrationFlow(FarmOpsAPITestCase):
 		self.assertEqual(data["attached_to_name"], "MC-Tractor-07")
 		self.assertEqual(data["attached_to_doctype"], "Asset Register")
 
+	def test_the_photograph_is_filed_even_though_the_docperm_refuses_the_write(self):
+		"""v0.152.0. THE REGRESSION, AND THE ONLY TEST HERE THAT WOULD HAVE CAUGHT IT.
+
+		`Asset Register` grants `write` to System Manager and Accounts Manager and
+		to nothing a picker holds, so on the bench every asset photograph came
+		back "is not permitted to write Asset Register" — while `register_asset`,
+		which inserts with `ignore_permissions=True`, had just created the row.
+		The test above passes either way: the harness's `has_permission` is
+		default-allow, so it never asked the question the bench asks.
+
+		`STORE.denied_permissions` is the only lever that makes the double say no.
+		"""
+		STORE.denied_permissions.add(("Asset Register", "write"))
+		self.addCleanup(STORE.denied_permissions.discard, ("Asset Register", "write"))
+		self.register()
+		data = self.message(
+			f"{PREFIX}/mobile/attach_file_to_document",
+			{
+				"doctype": "Asset Register",
+				"name": "MC-Tractor-07",
+				"file_name": "plate.jpg",
+				"file_url": "/private/files/plate.jpg",
+			},
+		)
+		self.assertEqual(data["attached_to_name"], "MC-Tractor-07")
+
+	def test_the_denial_is_real_and_still_stops_the_mcp_transport(self):
+		"""THE NEGATIVE CONTROL ON THE NEGATIVE CONTROL. If `denied_permissions`
+		did not bite, the test above would be green against the unfixed code and
+		would prove nothing. The same denial, asked through `tools/files.py`
+		rather than through the wrapper, must still refuse — that is what makes
+		the pass above a statement about this surface and not about the double.
+		"""
+		from erpnext_mcp.errors import ToolError
+		from erpnext_mcp.tools import files as file_tools
+
+		STORE.denied_permissions.add(("Asset Register", "write"))
+		self.addCleanup(STORE.denied_permissions.discard, ("Asset Register", "write"))
+		self.register()
+		payload = {
+			"doctype": "Asset Register",
+			"name": "MC-Tractor-07",
+			"file_name": "plate.jpg",
+			"file_url": "/private/files/plate.jpg",
+		}
+		with self.assertRaises(ToolError) as caught:
+			file_tools.attach_file_to_document(dict(payload))
+		self.assertIn("not permitted to write", str(caught.exception))
+		# And the brokered door, on the identical payload, does not refuse.
+		self.assertEqual(
+			file_tools.attach_file_to_authorized_parent(dict(payload)).data["attached_to_name"],
+			"MC-Tractor-07",
+		)
+
+	def test_standing_down_the_write_check_stands_down_nothing_else(self):
+		"""THE PERMISSION IS A FACT ABOUT THE SESSION; THE REST ARE FACTS ABOUT THE
+		DOCUMENT. A brokered attach still cannot file the same filename twice —
+		which is `check_attachable` proving it did more than one thing.
+		"""
+		self.register()
+		body = {
+			"doctype": "Asset Register",
+			"name": "MC-Tractor-07",
+			"file_name": "plate.jpg",
+			"file_url": "/private/files/plate.jpg",
+		}
+		self.message(f"{PREFIX}/mobile/attach_file_to_document", dict(body))
+		status, refused = self.refusal(f"{PREFIX}/mobile/attach_file_to_document", dict(body))
+		self.assertGreaterEqual(status, 400)
+		self.assertIn("plate.jpg", json.dumps(refused))
+
+	def test_a_brokered_attach_is_still_refused_outside_the_callers_entities(self):
+		"""The company scope is the check that replaced the DocPerm, so it is the
+		one that has to still be there."""
+		STORE.denied_permissions.add(("Asset Register", "write"))
+		self.addCleanup(STORE.denied_permissions.discard, ("Asset Register", "write"))
+		STORE.seed(
+			"Asset Register",
+			[{"name": "SEL-Tractor-09", "asset_type": "Tractor", "company": OTHER}],
+		)
+		status, _ = self.refusal(
+			f"{PREFIX}/mobile/attach_file_to_document",
+			{
+				"doctype": "Asset Register",
+				"name": "SEL-Tractor-09",
+				"file_name": "plate.jpg",
+				"file_url": "/private/files/plate.jpg",
+			},
+		)
+		self.assertGreaterEqual(status, 400)
+
+	def test_the_brokered_door_is_not_a_registered_tool(self):
+		"""It skips a permission check, so the one thing that must stay true is
+		that no tool caller can reach it by name."""
+		from erpnext_mcp import registry
+
+		self.assertNotIn("attach_file_to_authorized_parent", registry.TOOLS)
+
 	def test_registration_carries_the_capital_columns_an_adjuster_asks_for(self):
 		data = self.register(serial_number="1M0R4045ABC123456", model="John Deere 5075E")
 		self.assertEqual(data["serial_number"], "1M0R4045ABC123456")

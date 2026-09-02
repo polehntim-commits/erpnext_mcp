@@ -15,6 +15,12 @@ doctype's own controller. An attachment with no parent is treated as private to
 its owner. `attach_file_to_document` asks for `write` on the parent, which is
 the permission the Desk's own attach control requires.
 
+ONE FUNCTION HERE DOES NOT, AND IT IS NAMED SO YOU CAN SEE IT COMING:
+`attach_file_to_authorized_parent` skips that write check for the mobile
+transport, which proves the caller's right to the parent with three checks
+Frappe's model cannot make — including a company scope. It is not a registered
+tool and its docstring carries the whole argument.
+
 Note that this means the answer depends on the MCP System User's roles. That is
 the point. Give it the roles it needs and no more.
 
@@ -307,6 +313,49 @@ def attach_file_to_document(args: dict) -> ToolResult:
 	what it says. `allow_cancelled=true` says the caller knows and meant it, which
 	is a different thing from not having noticed.
 	"""
+	return _attach(args, require_parent_write=True)
+
+
+def attach_file_to_authorized_parent(args: dict) -> ToolResult:
+	"""The same attach, for a caller whose right to the parent was already proved.
+
+	v0.152.0. THE WRITE SIDE OF `list_attachments_on_authorized_parent`, and the
+	argument is the one that function already makes on the read side.
+
+	WHAT THIS SKIPS IS `frappe.has_permission(parent, "write")` AND NOTHING ELSE.
+	The parent still has to exist, still may not be cancelled, still has to match
+	the company if one is named, the extension still goes through the site's own
+	allowlist, the duplicate check still runs and `max_attachments` is still
+	honoured. Those are facts about the document; the permission is a fact about
+	the session, and this door exists because on the mobile transport that fact
+	has already been established by a stricter check.
+
+	WHY IT HAD TO EXIST. `api/mobile.attach_file_to_document` asks THREE
+	questions before it gets here — the caller is enrolled and scoped
+	(`require_scope`), the doctype is on `ATTACHABLE_DOCTYPES`, and the docname
+	is a record inside the caller's own entities (`require_scoped_doc`, a company
+	scope Frappe's model cannot express without a User Permission per row). Then
+	Frappe asked a fourth, and the answer was no for nine of the eleven registers
+	on that list: `Asset Register` grants `write` to System Manager and Accounts
+	Manager only, and a picker holds neither. So `register_asset` — which inserts
+	with `ignore_permissions=True`, as every write route on that surface does —
+	created the tag, and the photograph of the thing it was for was refused with
+	"is not permitted to write Asset Register", every time, for every asset type.
+	The registration route and the attach route disagreed about who the caller
+	was, and the register was the one telling the truth.
+
+	NOT REACHABLE FROM THE MCP TRANSPORT, AND NOT REACHABLE FROM `args`. The
+	choice is a Python keyword-only parameter on `_attach`, not a key a caller
+	can set: a schema does not enforce `additionalProperties`, so an `authorized`
+	flag read off the payload would be a way for any tool caller to spend this
+	exemption on a Journal Entry. `registry.py` does not list this function, and
+	the only caller is the mobile wrapper named above.
+	"""
+	return _attach(args, require_parent_write=False)
+
+
+def _attach(args: dict, *, require_parent_write: bool) -> ToolResult:
+	"""The shared body. `require_parent_write` is the only thing that differs."""
 	doctype = as_str(args, "doctype", required=True)
 	name = as_str(args, "name", required=True)
 	file_name = as_str(args, "file_name", required=True)
@@ -335,6 +384,7 @@ def attach_file_to_document(args: dict) -> ToolResult:
 		allow_cancelled=allow_cancelled,
 		company=company,
 		tail="Nothing was attached.",
+		require_parent_write=require_parent_write,
 	)
 	parent = checks["parent"]
 	company_field, parent_company = checks["company_field"], checks["parent_company"]
@@ -366,8 +416,10 @@ def attach_file_to_document(args: dict) -> ToolResult:
 			"dry_run": True,
 			"would_attach": True,
 			"note": (
-				f"Nothing was written. {doctype} {name} exists, is writable, and accepts this "
-				"attachment. Call again with dry_run=false to attach it."
+				f"Nothing was written. {doctype} {name} exists, "
+				# The brokered path did not ask, so it must not claim to have.
+				+ ("is writable, " if require_parent_write else "")
+				+ "and accepts this attachment. Call again with dry_run=false to attach it."
 			),
 		}
 		return ToolResult(
@@ -510,6 +562,7 @@ def check_attachable(
 	allow_cancelled: bool = False,
 	company: str = "",
 	tail: str = "Nothing was attached.",
+	require_parent_write: bool = True,
 ) -> dict:
 	"""Every site-read check that has to pass before a file may hang off a document.
 
@@ -519,11 +572,17 @@ def check_attachable(
 	which is the whole reason it is a separate function — finding out the parent
 	is cancelled after building the file in memory is finding out too late.
 
+	`require_parent_write=False` stands down the Frappe write check AND NOTHING
+	ELSE — every other check below is a fact about the document rather than about
+	the session, so none of them may be skipped. It exists for
+	`attach_file_to_authorized_parent`, whose docstring carries the argument; the
+	default is True and both tool-facing callers take the default.
+
 	Returns the parent's row, whether it has a company field and what that says,
 	and the attachments already on it, so callers do not each re-fetch them.
 	Raises `ToolError` and writes nothing.
 	"""
-	parent = _require_parent_write(doctype, name, tail=tail)
+	parent = _require_parent_write(doctype, name, tail=tail, check_write=require_parent_write)
 	_check_docstatus(doctype, name, parent, allow_cancelled, tail=tail)
 	company_field, parent_company = _check_company(doctype, name, parent, company, tail=tail)
 	_check_extension(file_name, tail=tail)
@@ -606,12 +665,20 @@ def decode_base64_content(file_content: str, tail: str = "Nothing was created.")
 
 
 # ── attach-side validation, all of it read off the site ─────────────────────
-def _require_parent_write(doctype: str, name: str, tail: str = "Nothing was attached.") -> dict:
+def _require_parent_write(
+	doctype: str, name: str, tail: str = "Nothing was attached.", *, check_write: bool = True
+) -> dict:
 	"""Refuse unless the acting user may modify the document being attached to.
 
 	`write`, not `read`: the Desk's attach control is disabled without write
 	permission, and an attachment changes what a document says about itself.
 	Returns the parent's row so the callers below do not each re-fetch it.
+
+	`check_write=False` KEEPS THE TWO EXISTENCE CHECKS AND DROPS ONLY THE
+	PERMISSION. A caller that has already proved its right to this parent by a
+	stricter route still needs to be told that the doctype is not installed or
+	the docname is not there, and those two refusals are the useful half of this
+	function on that path. See `attach_file_to_authorized_parent`.
 	"""
 	if not compat.doctype_exists(doctype):
 		raise ToolError(
@@ -620,7 +687,7 @@ def _require_parent_write(doctype: str, name: str, tail: str = "Nothing was atta
 		)
 	if not frappe.db.exists(doctype, name):
 		raise ToolError(f"no {doctype} named {name!r} on this site. {tail}")
-	if not frappe.has_permission(doctype, "write", doc=name):
+	if check_write and not frappe.has_permission(doctype, "write", doc=name):
 		raise ToolError(
 			f"{frappe.session.user} is not permitted to write {doctype} {name}, so nothing "
 			"may be attached to it. Attachment tools honour Frappe permissions even though "

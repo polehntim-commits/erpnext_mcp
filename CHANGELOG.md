@@ -3,6 +3,43 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.152.0 — 2026-09-02 — the register believed the worker, the attachment did not
+
+**EVERY ASSET PHOTOGRAPH TAKEN FROM A HANDSET WAS REFUSED, AND THE REGISTRATION
+THAT PRECEDED IT SUCCEEDED.** `register_asset` inserts with
+`ignore_permissions=True`, as every write route on the mobile transport does;
+`attach_file_to_document` then asked Frappe for `write` on the parent, and on
+that transport `frappe.session.user` is the person holding the phone. `Asset
+Register` grants `write` to System Manager and Accounts Manager, so the answer
+was "<user> is not permitted to write Asset Register 40-5-MPH, so nothing may be
+attached to it" — for sheds, wind machines, tractors, valves, everything. Nine of
+the eleven doctypes on `ATTACHABLE_DOCTYPES` grant `write` to no role a field
+worker holds, so the route was refusing most of what it advertises.
+
+**`files.attach_file_to_authorized_parent`, THE WRITE-SIDE TWIN OF
+`list_attachments_on_authorized_parent`.** It skips
+`frappe.has_permission(parent, "write")` and NOTHING else — existence, docstatus,
+company match, the site's extension allowlist, the duplicate check and
+`max_attachments` all still run, because those are facts about the document and
+only the permission is a fact about the session. The mobile wrapper already
+proves that session fact with three checks Frappe's model cannot make, including
+a company scope that would need a User Permission per row. It is not a registered
+tool, and the exemption is a keyword-only Python parameter rather than a key read
+off `args` — a schema's `additionalProperties` is advertised and never enforced.
+
+**THE MCP TRANSPORT IS UNCHANGED.** `attach_file_to_document` still asks Frappe
+for `write` and still refuses with the same message; `newhire._paperwork` still
+goes through it. No DocPerm was edited: a Custom DocPerm on `Asset Register`
+makes Frappe ignore every standard permission that doctype has, for every role,
+silently, at `bench migrate`.
+
+**THE SUITE WAS GREEN THROUGHOUT, AND SAYS SO NOW.** The harness's
+`has_permission` double is default-allow, so the v0.78.0 test asserting a
+photograph reaches its asset passed on every commit while the bench refused every
+one. Five tests built on `STORE.denied_permissions` replace that silence,
+including one that fails against v0.151.0 and one that proves the denial itself
+still bites.
+
 ## 0.151.0 — 2026-09-02 — the valves were never missing, the door was
 
 **NO `Irrigation Valve` DOCTYPE WAS ADDED, AND THE REQUEST TO ADD ONE RESTED ON A

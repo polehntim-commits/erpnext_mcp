@@ -210,6 +210,18 @@ The line is drawn at content that is not ledger data:
 - **Comments** (`list_comments`) check `read` on the document, for the same
   reason: a comment thread is what people said to each other about a document,
   not a field of it.
+- **The mobile transport is the one exception, and it is narrower rather than
+  wider.** `api/mobile.attach_file_to_document` calls
+  `files.attach_file_to_authorized_parent`, which skips
+  `frappe.has_permission(parent, "write")` and no other check. It may, because on
+  that transport the caller has already been proved enrolled and scoped, the
+  doctype is on a closed allowlist, and `require_scoped_doc` has confirmed the
+  record is inside the caller's own entities — a company scope Frappe's model
+  cannot express without a User Permission per row. The DocPerm being stood in
+  for is the Desk's, and on nine of the eleven allowlisted registers it grants
+  `write` to no role a field worker holds, which made the route refuse most of
+  what it advertises (v0.152.0). The same brokering on the read side is
+  `mobile.BROKERED_PARENTS`. The MCP tool itself is unchanged and still asks.
 
 Yes, this is an inconsistency. It is a deliberate one, and the shape of it is:
 *numbers in the ledger are gated by the token; things a person wrote or uploaded

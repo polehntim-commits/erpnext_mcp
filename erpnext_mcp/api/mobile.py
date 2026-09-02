@@ -8884,6 +8884,30 @@ def attach_file_to_document(
 	take, because it verifies a SHA-256 before anything is written; this door is
 	for the small attachment that does not justify a session, and the cap stops
 	it quietly becoming the upload path.
+
+	v0.152.0: THIS SURFACE ANSWERS FOR THE WRITE PERMISSION ITSELF, through
+	`files.attach_file_to_authorized_parent`. Until this release the tool asked
+	Frappe for `write` on the parent as well, and on this transport
+	`frappe.session.user` is the person holding the phone — so the answer came
+	back from a DocPerm written for the Desk. `Asset Register` grants `write` to
+	System Manager and Accounts Manager, and nine of the eleven doctypes above
+	grant it to no role a field worker holds. The result was a route that
+	registered a wind machine and then refused its photograph by name:
+	"<user> is not permitted to write Asset Register 40-5-MPH, so nothing may be
+	attached to it." Every asset, every shed, every time.
+
+	THE PERMISSION IS NOT MANUFACTURED, IT IS RELOCATED. The three gates above
+	are strictly narrower than the DocPerm being stood in for — the caller is
+	enrolled and scoped, the doctype is on `ATTACHABLE_DOCTYPES`, and
+	`require_scoped_doc` has confirmed the record is inside the caller's own
+	entities, which is a company scope Frappe cannot express without a User
+	Permission per row. That is the same argument `BROKERED_PARENTS` makes on
+	the read side, and the same one every write route on this surface makes when
+	it inserts with `ignore_permissions=True` — `register_asset` two methods up
+	does exactly that, which is why registration worked and only the attach did
+	not. Nothing changes for the MCP transport: `attach_file_to_document` in
+	`tools/files.py` still asks Frappe, and `newhire._paperwork` still goes
+	through it.
 	"""
 	allowed = guard.require_scope(user)
 
@@ -8925,7 +8949,7 @@ def attach_file_to_document(
 	if dry_run is not None:
 		inner["dry_run"] = dry_run
 
-	return file_tools.attach_file_to_document(inner).data
+	return file_tools.attach_file_to_authorized_parent(inner).data
 
 
 # ══════════════════════════════════════════════════════════════════════════════
