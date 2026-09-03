@@ -63,8 +63,17 @@ const vm = require("vm");
 const SCRIPT = process.argv[2];
 const ASSET_TYPE = process.argv[3];
 const HAS_GPS = process.argv[4] === "1";
+const ZONE = process.argv[5] || "";
 
-const calls = { set_value: [], sections: [], markers: [], dragend_wired: 0, read_only_renders: 0 };
+const calls = {
+	set_value: [], sections: [], markers: [], dragend_wired: 0, read_only_renders: 0,
+	// WHEN the section was added, relative to `refresh` returning. "sync" is
+	// while the handler is still on the stack; "microtask" is the promise gap
+	// Frappe's own dashboard work lands in; "later" is a real round trip.
+	section_timing: [],
+};
+let refresh_returned = false;
+let dashboard_settled = false;
 
 function el() {
 	const node = { style: {}, className: "", innerHTML: "", textContent: "", children: [] };
@@ -100,9 +109,18 @@ const frm = {
 		asset_type: ASSET_TYPE,
 		gps_latitude: HAS_GPS ? 46.2 : null,
 		gps_longitude: HAS_GPS ? -119.2 : null,
-		irrigation_zone: "",
+		irrigation_zone: ZONE,
 	},
-	dashboard: { add_section: function (w, title) { calls.sections.push(String(title)); }, show: function () {} },
+	dashboard: {
+		add_section: function (w, title) {
+			calls.sections.push(String(title));
+			// WHEN, not whether. This records the moment only; it does NOT model
+			// a Frappe that discards a late section, because whether Frappe does
+			// that was never established — see the timing test's docstring.
+			calls.section_timing.push(refresh_returned ? (dashboard_settled ? "later" : "microtask") : "sync");
+		},
+		show: function () {},
+	},
 	set_value: function (field, value) { calls.set_value.push([field, value]); frm.doc[field] = value; },
 	$wrapper: { find: function () { return { first: function () { return { prepend: function () {} }; } }; } },
 };
@@ -111,6 +129,7 @@ const handlers = {};
 const sandbox = {
 	console: console, setTimeout: setTimeout, Promise: Promise, parseFloat: parseFloat, Math: Math,
 	$: function (x) { return x; },
+	window: null,  // replaced below, once the sandbox object exists
 	__: function (s) { return s; },
 	document: { createElement: el, body: { contains: function () { return false; } } },
 	frappe: {
@@ -124,7 +143,13 @@ const sandbox = {
 				if (lat === null || lat === undefined || lng === null || lng === undefined) return null;
 				return [Number(lat), Number(lng)];
 			},
-			fetch_boundary: function () { return Promise.resolve(null); },
+			// A REAL ROUND TRIP, NOT A RESOLVED PROMISE. Modelled with a timer
+			// rather than `Promise.resolve` because the difference between the
+			// two IS the bug: a microtask lands in the gap Frappe clears, and a
+			// server response lands after it.
+			fetch_boundary: function () {
+				return new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 5); });
+			},
 			load_leaflet: function () { return Promise.resolve(L); },
 			add_base_layers: function () {},
 			// The read-only path the pre-v0.154.0 script took for non-valves.
@@ -132,6 +157,7 @@ const sandbox = {
 		},
 	},
 };
+sandbox.window = sandbox;  // the Desk's global, so the build stamp has somewhere to land
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(SCRIPT, "utf8"), sandbox, { filename: SCRIPT });
 
@@ -140,6 +166,13 @@ if (typeof handlers.refresh !== "function") {
 	process.exit(0);
 }
 handlers.refresh(frm);
+refresh_returned = true;
+// Frappe finishes with the dashboard after the handler stack unwinds and after
+// the microtask queue drains — which is the window a `Promise.resolve().then()`
+// section lands in, and the window a network round trip lands well clear of.
+Promise.resolve().then(function () {
+	Promise.resolve().then(function () { dashboard_settled = true; });
+});
 
 // Two promise hops (zone, then leaflet) plus the setTimeout.
 setTimeout(function () {
@@ -151,19 +184,21 @@ setTimeout(function () {
 		dragend_wired: calls.dragend_wired,
 		set_value: calls.set_value,
 		sections: calls.sections,
+		build: sandbox.erpnext_mcp.geo_map.asset_map_build || null,
+		section_timing: calls.section_timing,
 		read_only_renders: calls.read_only_renders,
 	}));
 }, 50);
 """
 
 
-def drive(asset_type: str, has_gps: bool = True, script: Path = SCRIPT) -> dict:
+def drive(asset_type: str, has_gps: bool = True, zone: str = "", script: Path = SCRIPT) -> dict:
 	"""Run the real form script under a stubbed Desk and report what it did."""
 	with tempfile.TemporaryDirectory() as work:
 		harness = Path(work) / "harness.js"
 		harness.write_text(HARNESS, encoding="utf-8")
 		out = subprocess.run(
-			["node", str(harness), str(script), asset_type, "1" if has_gps else "0"],
+			["node", str(harness), str(script), asset_type, "1" if has_gps else "0", zone],
 			capture_output=True,
 			text=True,
 			timeout=60,
@@ -221,6 +256,33 @@ class ThePinIsDraggableOnEveryAsset(unittest.TestCase):
 			with self.subTest(asset_type=asset_type):
 				self.assertEqual(drive(asset_type)["read_only_renders"], 0)
 
+	def test_a_record_with_no_boundary_to_fetch_does_not_defer(self):
+		"""v0.154.1. A SIMPLIFICATION, AND EXPLICITLY NOT A DIAGNOSIS.
+
+		v0.154.0 wrapped the no-boundary branch in `Promise.resolve(null).then()`
+		so both branches could share one line, which put every asset that names no
+		`irrigation_zone` a microtask later than the pre-v0.154.0 script had it.
+		I believed for a while that this was the reported bug and it is NOT: all
+		33 valves on the farm have `irrigation_zone` empty too, so they took the
+		identical deferred path in v0.145.0–v0.153.0 and were draggable throughout.
+		Whatever broke on that site, this was not it.
+
+		The branch is synchronous now anyway, because deferring a call that waits
+		for nothing buys nothing and costs a timing that has to be reasoned about
+		every time somebody reads this file. That is the whole claim here — the
+		test asserts WHEN, and says nothing about what Frappe does afterwards,
+		which was never established.
+		"""
+		for asset_type in asset_types():
+			with self.subTest(asset_type=asset_type):
+				self.assertEqual(drive(asset_type)["section_timing"], ["sync"])
+
+	def test_a_record_with_a_zone_still_waits_for_it(self):
+		"""The other branch keeps its round trip, because there is something to
+		wait for: drawing the pin first and the boundary underneath afterwards
+		means either a redraw or losing the context the boundary is for."""
+		self.assertEqual(drive("Irrigation Valve", zone="Z-NORTH")["section_timing"], ["later"])
+
 	def test_the_valve_keeps_its_own_section_title(self):
 		"""Merging the scripts must not rename the section on the form the farm
 		actually uses. Everything else says "Asset Location", which is what this
@@ -245,6 +307,23 @@ class ThePinIsDraggableOnEveryAsset(unittest.TestCase):
 
 class TheScriptsWereMerged(unittest.TestCase):
 	"""Structure, asserted without node so it holds on every machine."""
+
+	def test_the_build_stamp_matches_the_apps_version(self):
+		"""v0.154.1. THE STAMP EXISTS SO A DEPLOY CAN BE CHECKED FROM THE BROWSER,
+		and a stamp that drifts from the release is worse than none — it would
+		confirm a deploy that had not happened.
+
+		`doctype_js` is read off disk by the SERVER and concatenated into the
+		doctype's cached `meta.__js`. That cache is cleared by `bench migrate` and
+		`bench clear-cache` and by nothing else, so a deploy that pulls code and
+		restarts workers moves `erpnext_mcp.__version__` — which `get_server_status`
+		reports — while the Desk keeps serving the previous release's form script.
+		Comparing `erpnext_mcp.geo_map.asset_map_build` against that version is
+		what tells the two apart.
+		"""
+		from erpnext_mcp import __version__
+
+		self.assertEqual(drive("Tractor")["build"], __version__)
 
 	def test_the_valve_only_script_is_gone(self):
 		"""It existed to do for valves what the register now does for everything.

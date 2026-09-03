@@ -56,6 +56,29 @@
 
 	const MAP_HEIGHT = "400px";
 
+	//: WHICH BUILD OF THIS FILE THE BROWSER IS ACTUALLY RUNNING. v0.154.1.
+	//:
+	//: `doctype_js` files are read off disk by the SERVER and concatenated into
+	//: the doctype's cached `meta.__js`; that cache is invalidated by `bench
+	//: migrate` / `bench clear-cache` and by nothing else. So a deploy that pulls
+	//: new code and restarts the workers updates `erpnext_mcp.__version__` — which
+	//: `get_server_status` reports, and which therefore says 0.154.0 — while the
+	//: Desk goes on serving the form script from the release before it. There was
+	//: no way to tell those two apart from outside, and a day went into finding
+	//: that out the long way.
+	//:
+	//: Now there is: `erpnext_mcp.geo_map.asset_map_build` in the browser console
+	//: against `get_server_status().erpnext_mcp_version`. If they disagree, the
+	//: Python is new and the form script is cached — `bench --site <site>
+	//: clear-cache`, then reload the page.
+	//:
+	//: A test holds this string equal to `erpnext_mcp.__version__`, so it cannot
+	//: drift into being a stamp that lies.
+	const BUILD = "0.154.1";
+	if (window.erpnext_mcp && window.erpnext_mcp.geo_map) {
+		window.erpnext_mcp.geo_map.asset_map_build = BUILD;
+	}
+
 	//: The asset type whose form calls the section by its own name. Everything
 	//: else is "Asset Location", which is what the section was called before
 	//: the two scripts merged.
@@ -139,21 +162,39 @@
 			frm.doc.gps_longitude
 		);
 
-		// Fetch the zone boundary for context, then build the map. The zone
-		// is context and losing it must not lose the map.
 		var zone_name = frm.doc.irrigation_zone || "";
-		var zone_promise = zone_name
-			? erpnext_mcp.geo_map.fetch_boundary(
-					"Irrigation Zone",
-					zone_name,
-					zone_name,
-					"#1f6feb"
-				)
-			: Promise.resolve(null);
+		if (!zone_name) {
+			// SYNCHRONOUS, AND THAT IS THE POINT RATHER THAN A SHORTCUT. v0.154.0
+			// wrapped this branch in `Promise.resolve(null).then(...)` so both
+			// paths could share one line, and it broke every asset that is not a
+			// valve — which is the whole register, because a valve is the only
+			// thing that carries an `irrigation_zone`.
+			//
+			// `frm.refresh()` runs the refresh handlers and then goes on to touch
+			// the dashboard itself. A section added while the handler is still on
+			// the stack is there before any of that; a section added from a
+			// MICROTASK lands in the gap after the handler returns and before
+			// Frappe has finished, and does not survive it. The valve path was
+			// unaffected because `fetch_boundary` is a real round trip to the
+			// server — it comes back long after the dashboard has settled, which
+			// is a third timing again and one that also works.
+			//
+			// So each branch keeps the timing that was proven on the bench:
+			// synchronous when there is nothing to fetch, which is exactly when
+			// the pre-v0.154.0 script called `geo_map.render` from this same
+			// stack frame, and deferred only when something is actually being
+			// waited on.
+			render_map(frm, point, null);
+			return;
+		}
 
-		zone_promise.then(function (zone) {
-			render_map(frm, point, zone);
-		});
+		// The zone boundary is context, and losing it must not lose the map —
+		// `fetch_boundary` catches its own failures and resolves null.
+		erpnext_mcp.geo_map
+			.fetch_boundary("Irrigation Zone", zone_name, zone_name, "#1f6feb")
+			.then(function (zone) {
+				render_map(frm, point, zone);
+			});
 	}
 
 	function render_map(frm, point, zone) {

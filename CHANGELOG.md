@@ -3,6 +3,55 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.154.1 — 2026-09-02 — the Python was new and the form script was not
+
+**THE v0.154.0 MAP DID NOT REACH THE FARM, AND THE CODE WAS NEVER THE REASON.**
+The report was that the pin is still not draggable on wind machines and sheds.
+It is not a bug in the script.
+
+The evidence, in the order it closed the question:
+
+1. `get_server_status` on the deployed bench reports `erpnext_mcp 0.154.0`. The
+   Python is current.
+2. **All 33 irrigation valves have `irrigation_zone` empty.** So under v0.154.0 a
+   valve and a wind machine execute the *identical* path — same branch, same
+   timing, same marker. No asset-type-dependent bug can exist in that file,
+   because the file no longer distinguishes them and the data does not either.
+3. Under v0.153.0 those same zone-less valves went through the same deferred
+   branch in `irrigation_valve_map.js` and **were** draggable. So the branch
+   works.
+4. Therefore the browser is not running v0.154.0's script.
+
+**`doctype_js` IS SERVED FROM A CACHE THAT ONLY `migrate` CLEARS.** Frappe reads
+those files off disk on the SERVER and concatenates them into the doctype's
+`meta.__js`, which is cached in redis. `bench migrate` and `bench clear-cache`
+invalidate it; importing new Python does not. A deploy that pulls code and
+restarts the workers therefore moves `erpnext_mcp.__version__` — which
+`get_server_status` reports — while the Desk goes on serving the *previous*
+release's form script. That is v0.153.0's pair: draggable for valves, read-only
+for everything else, which is the reported symptom exactly. `last_patch_applied`
+on the bench is still v0.151.0's `backfill_valve_rank`, consistent with no
+migrate having run since.
+
+**The remedy is operational:** `bench --site <site> clear-cache` (or a full
+`bench migrate`), then a hard reload.
+
+**SO THE CODE CHANGE HERE IS THE DIAGNOSABILITY, NOT A FIX.**
+`erpnext_mcp.geo_map.asset_map_build` now carries the release the *browser* is
+running. Compared against `get_server_status().erpnext_mcp_version` it separates
+"the deploy did not land" from "the deploy landed and the Desk is serving a
+cached script" in one line, which is the question that could not be asked at all
+today. A test holds the stamp equal to `erpnext_mcp.__version__` so it cannot
+become a stamp that lies.
+
+**One simplification, and it is explicitly not the diagnosis.** The no-boundary
+branch no longer wraps itself in `Promise.resolve(null).then(...)`; it renders
+synchronously, as the pre-v0.154.0 non-valve path did. I spent a while convinced
+this deferral was the bug and it is not — point 3 above disproves it — but
+deferring a call that waits for nothing buys nothing, so it is gone. The test
+asserts only *when* the section is added and models nothing about what Frappe
+does afterwards, because that was never established.
+
 ## 0.154.0 — 2026-09-02 — the argument for valves was never about valves
 
 **THE MAP PIN IS NOW DRAGGABLE ON EVERY Asset Register RECORD.** v0.145.0 gave
