@@ -5287,6 +5287,74 @@ TOOLS = {
 		available=_needs_doctype("Asset"),
 		requires="ERPNext's Asset DocType",
 	),
+	"delete_draft_asset": _tool(
+		assets.delete_draft_asset,
+		"MUTATING (default OFF). Delete a DRAFT Asset and the rows that hold it "
+		"there — docstatus 0 only, a real delete.\n\n"
+		"THE GAP IT FILLS IS THE MIRROR'S OWN WRECKAGE. register_asset builds an "
+		"ERPNext Asset from a tag; when a later step of that build fails, what is "
+		"left is a draft Asset nobody wanted carrying an Asset Activity row that "
+		"stops the Desk deleting it. Asset Activity and Asset Cost Profile rows "
+		"are removed first and are each named in the answer.\n\n"
+		"DRAFTS ONLY, WHATEVER IS ASKED. A SUBMITTED asset is on the fixed-asset "
+		"register: it carries a value the balance sheet includes and that "
+		"export_insurance_schedule and the depreciation run are computed from, so "
+		"deleting it would remove a number other numbers were derived from — "
+		"ERPNext disposes of one through a scrap or sale journal instead. A "
+		"CANCELLED asset is the record that it WAS disposed of. Both are refused.\n\n"
+		"THE Asset Register TAG IS NOT TOUCHED. The tag is the operational record "
+		"and this only ever deletes the copy on the books; it mirrors again on its "
+		"next update_registered_asset.\n\n"
+		"`reason` is mandatory, and the response carries the asset's name, item, "
+		"category, company, date and amount, because once this returns the MCP "
+		"Action Log row is the only record that it existed.",
+		{
+			"asset": _field(_STRING, "The Asset: a docname, or its asset_name."),
+			"company": _field(_STRING, "Narrow the lookup to one company."),
+			"reason": _field(
+				_STRING,
+				"Why it is being deleted, e.g. 'failed mirror of TC-TRAKHOE-1, no Asset "
+				"Category on the site at the time'. Recorded permanently in the audit "
+				"log, which is all that survives the delete.",
+			),
+		},
+		required=("asset", "reason"),
+		mutating=True,
+		destructive=True,
+		title="Delete a draft ERPNext Asset",
+	),
+	"link_tag_to_erpnext_asset": _tool(
+		assets.link_tag_to_erpnext_asset,
+		"MUTATING (default OFF). Point an Asset Register tag at an ERPNext Asset "
+		"that already exists.\n\n"
+		"THE MIRROR ONLY EVER CREATES, AND THAT IS THE GAP. register_asset builds "
+		"a NEW Asset from a tag, so a farm whose tractor is already on the books — "
+		"entered in the Desk, or booked off a purchase invoice — has no way to say "
+		"that a tag and that Asset are the same machine. Registering it anyway "
+		"produces two sets of books for one tractor, which mirror_of then reports "
+		"as a fault rather than resolving.\n\n"
+		"IT WRITES ONE COLUMN: `Asset.asset_register`, the Link this app adds and "
+		"the one mirror_of and get_asset_detail read. No value is restated, no "
+		"category is chosen and no photograph is copied — this is an assertion "
+		"that two rows describe one machine, not a re-mirror.\n\n"
+		"IT WORKS ON A SUBMITTED ASSET. The column is read-only and a submitted "
+		"Asset refuses an ordinary save, so this writes it with db_set and "
+		"update_modified=False: no validation, no controller, and `modified` does "
+		"not move on a submitted financial document.\n\n"
+		"THE TAG IS CLEARED FROM WHEREVER ELSE IT WAS. One tag on two Assets is "
+		"the exact fault mirror_of refuses to resolve. The previous Asset is NOT "
+		"deleted — delete_draft_asset withdraws one that was a failed mirror, with "
+		"a reason attached. An Asset that already carries a DIFFERENT tag is "
+		"refused rather than re-pointed.",
+		{
+			"tag": _field(_STRING, "The Asset Register docname — the string on the sticker."),
+			"asset": _field(_STRING, "The ERPNext Asset: a docname, or its asset_name."),
+			"company": _field(_STRING, "Narrow the Asset lookup to one company."),
+		},
+		required=("tag", "asset"),
+		mutating=True,
+		title="Link a tag to an existing ERPNext Asset",
+	),
 	"link_asset_to_note": _tool(
 		assets.link_asset_to_note,
 		"MUTATING (default OFF). Tie an asset to the note that financed it, and — "

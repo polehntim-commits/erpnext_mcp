@@ -57,8 +57,12 @@ from ..args import (
 )
 from ..errors import ToolError
 from ..result import ToolResult
+from .. import asset_mirror
 from . import mutate
 
+#: ERPNext's own fixed-asset doctype. Spelled once here because the two v0.156.0
+#: tools name it in refusals and `asset_mirror` names the same string.
+ASSET = "Asset"
 PROFILE = "Asset Cost Profile"
 
 #: Percentage points of slack on the allocation total. Two decimals of Percent
@@ -989,6 +993,248 @@ def link_asset_to_note(args: dict) -> ToolResult:
 		f"linked Asset {asset} to {note.get('doctype')} {note.get('name')}"
 		+ (f" ({tenor} months, matched)" if enforce and tenor and not delta else "")
 		+ (f" ({tenor} months, {abs(delta)}-month divergence accepted)" if delta else ""),
+		docstatus_delta="",
+	)
+
+
+#: The doctypes that hold a Link to an Asset and must go before it can. ERPNext
+#: writes an `Asset Activity` row on every insert and on every status change, and
+#: this app writes one `Asset Cost Profile` per asset in `create_asset`. Neither
+#: is a posting: an activity row is a breadcrumb and a cost profile is the shape
+#: of a depreciation nobody has run. Both block `frappe.delete_doc` with
+#: `LinkExistsError`, which is what makes a draft asset undeletable from the Desk
+#: without a person opening two other lists first.
+#:
+#: NOTHING THAT POSTS IS ON THIS LIST AND NOTHING WILL BE. `GL Entry`, `Asset
+#: Depreciation Schedule` and `Asset Movement` are absent deliberately — a draft
+#: asset has none of them, and an asset that does is not a draft. If one turns up
+#: anyway the delete fails with Frappe's own message naming it, which is the right
+#: outcome: it means the docstatus check below has been fooled by something this
+#: comment did not anticipate.
+ASSET_DEPENDANTS = (
+	("Asset Activity", "asset"),
+	(PROFILE, "asset"),
+)
+
+
+# ── 62b. delete_draft_asset ─────────────────────────────────────────────────
+def delete_draft_asset(args: dict) -> ToolResult:
+	"""Delete a DRAFT Asset and the rows that hold it there. Drafts only.
+
+	THE GAP THIS FILLS IS THE MIRROR'S OWN WRECKAGE. `asset_mirror` builds an
+	ERPNext Asset from a tag, and when a later step of that build fails — a
+	category the site did not have, an item it would not accept — what is left is
+	a draft Asset nobody wanted, carrying an `Asset Activity` row that stops the
+	Desk deleting it. A tool that can produce those and not withdraw them is a
+	tool that makes work; `delete_draft_journal_entry` made the same argument
+	about drafts on the ledger and this is the same shape.
+
+	DRAFTS ONLY, WHATEVER IS ASKED, and the reason is stronger here than it is
+	for a journal entry. A SUBMITTED asset is on the fixed-asset register: it has
+	a value in the balance sheet, it may have depreciation posted against it, and
+	`export_insurance_schedule` and Sustainable CF/Acre are both computed from it.
+	Deleting one removes a number other numbers were derived from. ERPNext
+	disposes of a submitted asset through a scrap or sale journal that posts to
+	the ledger — that is a different act and this tool will not stand in for it.
+	A CANCELLED asset is the evidence that it was disposed of, and deleting it
+	leaves the trail with a hole in it.
+
+	THE DEPENDANTS GO FIRST AND ARE NAMED IN THE ANSWER. `ASSET_DEPENDANTS` says
+	which and why; each one deleted is listed by docname, so the audit row
+	describes everything that stopped existing rather than only the asset.
+
+	`reason` IS MANDATORY for `delete_draft_journal_entry`'s reason: once this
+	returns, the MCP Action Log row is the only description of the document that
+	ever existed.
+	"""
+	_require_assets()
+	name = as_str(args, "asset", required=True)
+	reason = as_str(args, "reason", required=True)
+	if len(reason) < 4:
+		raise ToolError("reason must be a real explanation, not a placeholder. Nothing was deleted.")
+
+	asset = resolve_asset(name, as_str(args, "company"))
+	fields = compat.existing_fields(
+		ASSET,
+		(
+			"name",
+			"asset_name",
+			"item_code",
+			"asset_category",
+			"company",
+			"purchase_date",
+			"gross_purchase_amount",
+			"location",
+			"status",
+			"docstatus",
+			asset_mirror.LINK_FIELD,
+		),
+	)
+	row = dict(frappe.db.get_value(ASSET, asset, fields, as_dict=True) or {})
+	docstatus = int(row.get("docstatus") or 0)
+	if docstatus == 1:
+		raise ToolError(
+			f"Asset {asset} is submitted: it is on the fixed-asset register, it carries a value "
+			"the balance sheet includes, and export_insurance_schedule and the depreciation run "
+			"are both computed from it. Deleting it would remove a number other numbers were "
+			"derived from. ERPNext disposes of a submitted asset through a scrap or sale journal "
+			"that posts to the ledger, which is a different act. Nothing was deleted."
+		)
+	if docstatus == 2:
+		raise ToolError(
+			f"Asset {asset} is cancelled, which is the record that it was disposed of. Deleting "
+			"it leaves the trail with a hole in it. Nothing was deleted."
+		)
+
+	removed = []
+	for doctype, field in ASSET_DEPENDANTS:
+		if not compat.doctype_exists(doctype) or not compat.has_field(doctype, field):
+			continue
+		for dependant in frappe.db.get_all(doctype, filters={field: asset}, pluck="name") or []:
+			frappe.delete_doc(doctype, dependant, force=True, ignore_permissions=True)
+			removed.append({"doctype": doctype, "name": str(dependant)})
+
+	deleted = {key: row.get(key) for key in fields if key != "docstatus"}
+	deleted["gross_purchase_amount"] = float(row.get("gross_purchase_amount") or 0)
+	frappe.delete_doc(ASSET, asset, ignore_permissions=False)
+
+	tag = str(row.get(asset_mirror.LINK_FIELD) or "")
+	data = {
+		"deleted": deleted,
+		"reason": reason,
+		"dependants_removed": removed,
+		"dependant_count": len(removed),
+		"asset_register": tag or None,
+		"note": (
+			"A draft Asset has posted nothing, so no balance changed when it was created and none "
+			"changed when it was deleted. The MCP Action Log row for this call is now the only "
+			"record that it existed."
+			+ (
+				f" Asset Register {tag!r} still exists and is unchanged — the tag is the "
+				"operational record and this was only the copy of it on the books. It will "
+				"mirror again on its next update_registered_asset."
+				if tag
+				else ""
+			)
+		),
+	}
+	return ToolResult(
+		data,
+		f"deleted draft Asset {asset}"
+		+ (f" and {len(removed)} linked record(s)" if removed else "")
+		+ (f"; tag {tag} kept" if tag else ""),
+		docstatus_delta="",
+	)
+
+
+# ── 62c. link_tag_to_erpnext_asset ──────────────────────────────────────────
+def link_tag_to_erpnext_asset(args: dict) -> ToolResult:
+	"""Point an Asset Register tag at an ERPNext Asset that already exists.
+
+	THE MIRROR ONLY EVER CREATES, AND THAT IS THE GAP. `asset_mirror.sync` builds
+	a NEW Asset from a tag, so a farm whose tractor is already on the books —
+	entered in the Desk, or booked off a purchase invoice — has no way to say
+	"this tag and that Asset are the same machine". Registering it produces a
+	second Asset and two sets of books for one tractor, which `mirror_of` then
+	reports as a fault rather than resolving.
+
+	IT WRITES ONE COLUMN. `Asset.asset_register` is the Link this app adds and
+	the one `mirror_of` and `get_asset_detail` read; nothing else about either
+	record is touched. No value is restated, no category is chosen, no photograph
+	is copied — this is an assertion that two rows describe one machine, not a
+	re-mirror.
+
+	IT WORKS ON A SUBMITTED ASSET, AND `db_set` IS WHY. The column is
+	`read_only: 1` — the mirror owns it and a Desk user typing over it would make
+	the link lie — and a submitted Asset refuses an ordinary save on any field
+	that is not on ERPNext's own allow-on-submit list. `db_set` with
+	`update_modified=False` writes the column and nothing else: no validation
+	runs, no controller fires, no `modified` stamp moves on a submitted financial
+	document. That is the narrowest write that does the job, and it is the same
+	reason `_refresh` uses `db_set` for the sync stamp.
+
+	THE TAG IS CLEARED FROM WHEREVER ELSE IT WAS FIRST. One tag naming two Assets
+	is the exact fault `mirror_of` refuses to resolve, so re-pointing a tag
+	unlinks it from its previous Asset in the same call and says which. The
+	previous Asset is NOT deleted — it may be a real record somebody keeps, and
+	deciding that is `delete_draft_asset`'s job with a reason attached.
+	"""
+	_require_assets()
+	tag = as_str(args, "tag", required=True)
+	if not compat.doctype_exists(asset_mirror.ASSET_REGISTER):
+		raise ToolError(
+			"this site has no Asset Register doctype, so there are no tags to link. Run "
+			"`bench --site <site> migrate` after upgrading the app. Nothing was changed."
+		)
+	if not frappe.db.exists(asset_mirror.ASSET_REGISTER, tag):
+		raise ToolError(
+			f"no Asset Register called {tag!r} on this site. list_assets has the register, and "
+			"the docname IS the string printed on the sticker. Nothing was changed."
+		)
+	if not compat.has_field(ASSET, asset_mirror.LINK_FIELD):
+		raise ToolError(
+			f"ERPNext's Asset on this site has no {asset_mirror.LINK_FIELD!r} column, which is "
+			"the Link this app adds and the only thing that ties a tag to an Asset. "
+			"install_compliance_fields creates it. Nothing was changed."
+		)
+
+	asset = resolve_asset(as_str(args, "asset", required=True), as_str(args, "company"))
+	previous = [
+		str(name)
+		for name in (
+			frappe.db.get_all(ASSET, filters={asset_mirror.LINK_FIELD: tag}, pluck="name", limit=20)
+			or []
+		)
+		if str(name) != asset
+	]
+	already = str(
+		frappe.db.get_value(ASSET, asset, asset_mirror.LINK_FIELD) or ""
+	)
+	if already and already != tag:
+		raise ToolError(
+			f"Asset {asset} already carries tag {already!r}. One Asset is one machine and so is "
+			"one tag, so re-pointing this Asset would leave that tag with nothing on the books "
+			"and say nothing about why. Link the other tag's Asset instead, or clear this one in "
+			"the Desk first. Nothing was changed."
+		)
+
+	for other in previous:
+		frappe.db.set_value(ASSET, other, asset_mirror.LINK_FIELD, None, update_modified=False)
+	if already != tag:
+		frappe.db.set_value(ASSET, asset, asset_mirror.LINK_FIELD, tag, update_modified=False)
+
+	docstatus = int(frappe.db.get_value(ASSET, asset, "docstatus") or 0)
+	data = {
+		"asset": asset,
+		"tag": tag,
+		"docstatus": docstatus,
+		"already_linked": already == tag,
+		"unlinked_from": previous,
+		"note": (
+			f"Asset Register {tag!r} and Asset {asset} now describe one machine: mirror_of and "
+			"get_asset_detail resolve the pair, and the next update_registered_asset refreshes "
+			"this Asset rather than creating a second one. Only the link column was written — no "
+			"value, category, location or photograph was copied."
+			+ (
+				f" {len(previous)} other Asset(s) carried this tag and were unlinked: "
+				f"{', '.join(previous)}. They still exist; delete_draft_asset withdraws one that "
+				"was a failed mirror."
+				if previous
+				else ""
+			)
+			+ (
+				" The Asset is submitted, so the column was written with db_set: nothing was "
+				"validated, no controller ran and `modified` did not move."
+				if docstatus == 1
+				else ""
+			)
+		),
+	}
+	return ToolResult(
+		data,
+		f"linked tag {tag} to Asset {asset}"
+		+ (f", unlinked from {len(previous)} other(s)" if previous else "")
+		+ (" (already linked)" if already == tag else ""),
 		docstatus_delta="",
 	)
 

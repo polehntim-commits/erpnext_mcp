@@ -3,6 +3,88 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.156.0 — 2026-09-04 — a way back out, and a way to say "that one, already"
+
+Two tools, both about the ERPNext Asset the mirror builds. **857 tools now.**
+
+### `delete_draft_asset` (mutating, default off, destructive)
+
+**THE MIRROR COULD MAKE WRECKAGE AND NOT CLEAR IT UP.** When a step of the build
+fails — a category the site did not have, an item it would not accept — what is
+left is a draft Asset nobody wanted. ERPNext writes an `Asset Activity` row on
+every insert, and this app writes an `Asset Cost Profile`; both hold a Link, so
+`frappe.delete_doc` raises `LinkExistsError` and **the Desk cannot delete it
+either** without a person opening two other lists first. v0.155.0 stopped the
+mirror producing these; this is the way back out for the ones already there.
+
+The dependants go first and are each named in the answer.
+`delete_draft_journal_entry` made the same argument about drafts on the ledger,
+and this follows it down to the mandatory `reason`: once the call returns, the
+MCP Action Log row is the only record that the document existed, so the response
+carries the asset's name, item, category, company, date and amount.
+
+**Drafts only, whatever is asked.** A *submitted* asset is on the fixed-asset
+register — it carries a value the balance sheet includes and that
+`export_insurance_schedule` and the depreciation run are computed from, so
+deleting it removes a number other numbers were derived from. ERPNext disposes
+of one through a scrap or sale journal that posts to the ledger; that is a
+different act and this will not stand in for it. A *cancelled* asset is the
+record that it was disposed of. **`GL Entry`, `Asset Depreciation Schedule` and
+`Asset Movement` are deliberately absent from the dependant list** — a draft has
+none, and one that does is not a draft, so if a delete fails naming one, the
+docstatus check has been fooled and the failure is the correct outcome.
+
+**The `Asset Register` tag is never touched.** The tag is the operational
+record — the sticker, the QR, the scan history, eight doctypes' link fields — and
+this only ever deletes the copy on the books. It mirrors again on its next
+`update_registered_asset`.
+
+### `link_tag_to_erpnext_asset` (mutating, default off)
+
+**THE MIRROR ONLY EVER CREATES.** A farm whose tractor is already on the books —
+entered in the Desk, or booked off a purchase invoice — had no way to say that a
+tag and that Asset are the same machine. Registering it produced a *second*
+Asset, and two Assets on one tag is the exact fault `mirror_of` refuses to
+resolve, so the pair then reported as broken rather than linked.
+
+**It writes one column:** `Asset.asset_register`, the Link this app adds and the
+one `mirror_of` and `get_asset_detail` read. No value is restated, no category
+chosen, no photograph copied. This is an assertion that two rows describe one
+machine, not a re-mirror, and a test pins it — the only column that differs
+before and after is that one.
+
+**It works on a submitted asset,** which is the case it mainly exists for. The
+column is `read_only: 1` — the mirror owns it and a Desk user typing over it
+would make the link lie — and a submitted Asset refuses an ordinary save on any
+field not on ERPNext's allow-on-submit list. `db_set` with
+`update_modified=False` writes the column and nothing else: no validation, no
+controller, and `modified` does not move on a submitted financial document.
+
+**The tag is cleared from wherever else it was**, in the same call, and the
+previous Asset is named. It is **not** deleted — it may be a record somebody
+keeps, and withdrawing one is `delete_draft_asset`'s job with a reason attached.
+An Asset that already carries a *different* tag is refused rather than
+re-pointed: doing so would leave that tag with nothing on the books and say
+nothing about why.
+
+### Tests
+
+Eighteen, and two mutation checks rather than a green tick: emptying
+`ASSET_DEPENDANTS` fails four of them, and dropping the unlink loop fails the one
+that covers it. `Asset Activity` is new to `tests_standalone/harness.py` — a
+double that had never heard of the doctype would let the delete succeed for the
+wrong reason and say nothing.
+
+Four hand-written counts moved with the two new tools — `registry.TOOLS` 855 →
+857 and `MUTATING_TOOLS` 423 → 425, each asserted in two places — and the
+catalogue's own total with them.
+
+**The asset map's build stamp moved to 0.156.0,** which is v0.154.1's stamp doing
+its job rather than a change to the map: a test holds
+`erpnext_mcp.geo_map.asset_map_build` equal to `erpnext_mcp.__version__`, so the
+form script changes on every release and the browser can always be asked which
+one it is running.
+
 ## 0.155.0 — 2026-09-04 — the category was never optional, and the Item said so
 
 **EVERY MIRROR ON THIS FARM HAD BEEN FAILING SINCE v0.148.0.** A tractor

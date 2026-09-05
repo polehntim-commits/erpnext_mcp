@@ -45,6 +45,8 @@ RETIRED_CC = f"190 - Retired Depot - {MAIN_ABBR}"
 
 ALL_ON = {
 	"allow_create_asset": 1,
+	"allow_delete_draft_asset": 1,
+	"allow_link_tag_to_erpnext_asset": 1,
 	"allow_update_asset_allocation": 1,
 	"allow_link_asset_to_note": 1,
 	"allow_run_depreciation_cycle": 1,
@@ -789,3 +791,232 @@ class CreateAssetCategory(V7TestCase):
 			},
 		)
 		self.assertEqual(data["asset_category"], "Wind Machines")
+
+
+# ── delete_draft_asset ──────────────────────────────────────────────────────
+class DeleteDraftAsset(AssetTestCase):
+	"""v0.156.0. The withdrawal the mirror needed and did not have.
+
+	`asset_mirror` builds an ERPNext Asset from a tag, and when a later step of
+	that build fails what is left is a draft Asset nobody wanted — carrying an
+	`Asset Activity` row that makes `frappe.delete_doc` raise `LinkExistsError`,
+	so the Desk cannot delete it either without a person opening two other lists
+	first. `delete_draft_journal_entry` made the same argument about drafts on
+	the ledger; this is that shape, for the register.
+	"""
+
+	TAG = "TC-TRAKHOE-1"
+
+	def setUp(self):
+		super().setUp()
+		add_field("Asset", "asset_register", "Link", options="Asset Register")
+		STORE.seed("Asset Register", [{"name": self.TAG, "asset_type": "Tractor", "company": MAIN}])
+
+	def activity(self, asset, subject="Asset created"):
+		"""The row ERPNext writes on every insert, and the one that blocks a delete."""
+		STORE.seed("Asset Activity", [{"name": f"act-{asset}", "asset": asset, "subject": subject}])
+
+	def test_it_deletes_a_draft_and_says_what_it_was(self):
+		asset = self.an_asset()["asset"]
+		data = self.tool_data(
+			"delete_draft_asset",
+			{"asset": asset, "reason": "duplicate of the mirror created a minute earlier"},
+		)
+		self.assertFalse(frappe.db.exists("Asset", asset))
+		self.assertEqual(data["deleted"]["name"], asset)
+		self.assertEqual(data["deleted"]["gross_purchase_amount"], 12000.0)
+		self.assertEqual(data["deleted"]["company"], MAIN)
+
+	def test_it_removes_the_rows_that_would_have_blocked_it(self):
+		"""THE WHOLE POINT. An `Asset Activity` row is what stops the Desk deleting
+		a failed mirror, and the answer names every dependant it removed rather
+		than reporting a count somebody then has to go and look up."""
+		asset = self.an_asset()["asset"]
+		self.activity(asset)
+		self.assertTrue(frappe.db.exists("Asset Cost Profile", {"asset": asset}))
+
+		data = self.tool_data("delete_draft_asset", {"asset": asset, "reason": "failed mirror"})
+		self.assertEqual(data["dependant_count"], 2)
+		removed = {row["doctype"] for row in data["dependants_removed"]}
+		self.assertEqual(removed, {"Asset Activity", "Asset Cost Profile"})
+		self.assertFalse(frappe.db.get_all("Asset Activity", filters={"asset": asset}))
+		self.assertFalse(frappe.db.get_all("Asset Cost Profile", filters={"asset": asset}))
+
+	def test_a_submitted_asset_is_refused_and_pointed_at_the_journal(self):
+		"""It is on the fixed-asset register: deleting it removes a number the
+		balance sheet and the insurance schedule were derived from."""
+		asset = self.an_asset()["asset"]
+		frappe.db.set_value("Asset", asset, "docstatus", 1)
+		message = self.tool_error("delete_draft_asset", {"asset": asset, "reason": "tidying up"})
+		self.assertIn("submitted", message)
+		self.assertIn("scrap or sale journal", message)
+		self.assertTrue(frappe.db.exists("Asset", asset))
+
+	def test_a_cancelled_asset_is_refused_because_it_is_the_disposal_record(self):
+		asset = self.an_asset()["asset"]
+		frappe.db.set_value("Asset", asset, "docstatus", 2)
+		message = self.tool_error("delete_draft_asset", {"asset": asset, "reason": "tidying up"})
+		self.assertIn("cancelled", message)
+		self.assertTrue(frappe.db.exists("Asset", asset))
+
+	def test_a_reason_is_mandatory_and_a_placeholder_is_not_one(self):
+		"""The audit row is all that survives the delete, so it has to be readable
+		a year later."""
+		asset = self.an_asset()["asset"]
+		self.assertIn("reason", self.tool_error("delete_draft_asset", {"asset": asset}))
+		self.assertIn(
+			"placeholder", self.tool_error("delete_draft_asset", {"asset": asset, "reason": "x"})
+		)
+		self.assertTrue(frappe.db.exists("Asset", asset))
+
+	def test_the_tag_survives_and_the_answer_says_so(self):
+		"""The Asset Register row is the operational record — the tag on the
+		machine, the QR, the scan history — and this only ever deletes the copy on
+		the books."""
+		asset = self.an_asset()["asset"]
+		frappe.db.set_value("Asset", asset, "asset_register", self.TAG)
+		data = self.tool_data("delete_draft_asset", {"asset": asset, "reason": "failed mirror"})
+		self.assertEqual(data["asset_register"], self.TAG)
+		self.assertTrue(frappe.db.exists("Asset Register", self.TAG))
+		self.assertIn("still exists and is unchanged", data["note"])
+
+	def test_it_writes_an_audit_row_carrying_the_reason(self):
+		asset = self.an_asset()["asset"]
+		self.tool_data("delete_draft_asset", {"asset": asset, "reason": "failed mirror of TC-1"})
+		self.assertAudited("delete_draft_asset", status="Success")
+
+	def test_it_is_off_until_an_operator_switches_it_on(self):
+		asset = self.an_asset()["asset"]
+		self.configure(enabled=1, allow_create_asset=1, allow_delete_draft_asset=0)
+		message = self.tool_error("delete_draft_asset", {"asset": asset, "reason": "failed mirror"})
+		self.assertIn("allow_delete_draft_asset", message)
+		self.assertTrue(frappe.db.exists("Asset", asset))
+
+
+# ── link_tag_to_erpnext_asset ───────────────────────────────────────────────
+class LinkTagToErpnextAsset(AssetTestCase):
+	"""v0.156.0. The machine that was on the books before it was tagged.
+
+	The mirror only ever CREATES, so there was no way to say that a tag and an
+	Asset that already exists are one machine — registering it produced a second
+	Asset, which `mirror_of` then reports as a fault rather than resolving.
+	"""
+
+	TAG = "TC-TRAKHOE-1"
+
+	def setUp(self):
+		super().setUp()
+		add_field("Asset", "asset_register", "Link", options="Asset Register")
+		STORE.seed(
+			"Asset Register",
+			[{"name": self.TAG, "asset_type": "Tractor", "company": MAIN}],
+		)
+
+	def link(self, asset, tag=None):
+		return self.tool_data(
+			"link_tag_to_erpnext_asset", {"tag": tag or self.TAG, "asset": asset}
+		)
+
+	def test_it_points_the_tag_at_an_asset_that_already_exists(self):
+		asset = self.an_asset()["asset"]
+		data = self.link(asset)
+		self.assertEqual(data["asset"], asset)
+		self.assertEqual(frappe.db.get_value("Asset", asset, "asset_register"), self.TAG)
+
+	def test_the_mirror_now_resolves_the_pair(self):
+		"""THE REASON THE COLUMN EXISTS. `mirror_of` is what `get_asset_detail`
+		reads to answer `erpnext_asset`, and it is what stops the next
+		`update_registered_asset` creating a second Asset."""
+		from erpnext_mcp import asset_mirror
+
+		asset = self.an_asset()["asset"]
+		self.assertEqual(asset_mirror.mirror_of(self.TAG), "")
+		self.link(asset)
+		self.assertEqual(asset_mirror.mirror_of(self.TAG), asset)
+
+	def test_it_works_on_a_submitted_asset(self):
+		"""The column is read-only and a submitted Asset refuses an ordinary save,
+		so this is written with `db_set`. An asset already on the books is exactly
+		the case this tool exists for, so refusing one would be refusing the whole
+		point."""
+		asset = self.an_asset()["asset"]
+		frappe.db.set_value("Asset", asset, "docstatus", 1)
+		data = self.link(asset)
+		self.assertEqual(data["docstatus"], 1)
+		self.assertEqual(frappe.db.get_value("Asset", asset, "asset_register"), self.TAG)
+		self.assertIn("db_set", data["note"])
+
+	def test_the_tag_is_cleared_from_whichever_asset_had_it(self):
+		"""One tag on two Assets is the exact fault `mirror_of` refuses to
+		resolve, so re-pointing unlinks the previous one in the same call."""
+		from erpnext_mcp import asset_mirror
+
+		stale = self.an_asset()["asset"]
+		frappe.db.set_value("Asset", stale, "asset_register", self.TAG)
+		real = self.an_asset(asset_name="Tractor B", item_code="TRACTOR-B")["asset"]
+
+		data = self.link(real)
+		self.assertEqual(data["unlinked_from"], [stale])
+		self.assertIsNone(frappe.db.get_value("Asset", stale, "asset_register"))
+		self.assertEqual(asset_mirror.mirror_of(self.TAG), real)
+
+	def test_the_unlinked_asset_is_not_deleted(self):
+		"""It may be a real record somebody keeps. Withdrawing one is
+		`delete_draft_asset`'s job, with a reason attached."""
+		stale = self.an_asset()["asset"]
+		frappe.db.set_value("Asset", stale, "asset_register", self.TAG)
+		real = self.an_asset(asset_name="Tractor B", item_code="TRACTOR-B")["asset"]
+		self.link(real)
+		self.assertTrue(frappe.db.exists("Asset", stale))
+
+	def test_an_asset_that_already_carries_a_different_tag_is_refused(self):
+		"""Re-pointing it would leave that other tag with nothing on the books and
+		say nothing about why."""
+		STORE.seed("Asset Register", [{"name": "TC-OTHER", "asset_type": "Tractor", "company": MAIN}])
+		asset = self.an_asset()["asset"]
+		frappe.db.set_value("Asset", asset, "asset_register", "TC-OTHER")
+		message = self.tool_error(
+			"link_tag_to_erpnext_asset", {"tag": self.TAG, "asset": asset}
+		)
+		self.assertIn("TC-OTHER", message)
+		# NOT `assertEqual(get_value(...), "TC-OTHER")`. A refused tool call rolls
+		# the transaction back, taking the `set_value` above with it — so the
+		# document state after a refusal is the fixture's, not the refusal's, and
+		# asserting on it would pass whatever the tool had done. What is checked
+		# is that the tag under test never reached ANY asset, which survives the
+		# rollback because it was never true.
+		self.assertEqual(frappe.db.get_all("Asset", filters={"asset_register": self.TAG}), [])
+
+	def test_linking_the_same_pair_twice_is_not_an_error(self):
+		"""A retry over a bad connection is the ordinary second call."""
+		asset = self.an_asset()["asset"]
+		self.link(asset)
+		data = self.link(asset)
+		self.assertTrue(data["already_linked"])
+		self.assertEqual(frappe.db.get_value("Asset", asset, "asset_register"), self.TAG)
+
+	def test_a_tag_that_does_not_exist_is_refused_by_name(self):
+		asset = self.an_asset()["asset"]
+		message = self.tool_error(
+			"link_tag_to_erpnext_asset", {"tag": "TC-NOPE", "asset": asset}
+		)
+		self.assertIn("TC-NOPE", message)
+		self.assertIsNone(frappe.db.get_value("Asset", asset, "asset_register"))
+
+	def test_nothing_but_the_link_column_is_written(self):
+		"""It is an assertion that two rows describe one machine, not a re-mirror:
+		no value is restated, no category chosen, no photograph copied."""
+		asset = self.an_asset()["asset"]
+		before = dict(STORE.get_raw("Asset", asset))
+		self.link(asset)
+		after = dict(STORE.get_raw("Asset", asset))
+		changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+		self.assertEqual(changed - {"modified"}, {"asset_register"})
+
+	def test_it_is_off_until_an_operator_switches_it_on(self):
+		asset = self.an_asset()["asset"]
+		self.configure(enabled=1, allow_create_asset=1, allow_link_tag_to_erpnext_asset=0)
+		message = self.tool_error(
+			"link_tag_to_erpnext_asset", {"tag": self.TAG, "asset": asset}
+		)
+		self.assertIn("allow_link_tag_to_erpnext_asset", message)

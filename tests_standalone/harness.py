@@ -1115,6 +1115,13 @@ ERPNEXT_SCHEMA = {
 		"status",
 		"docstatus",
 	],
+	# v0.156.0. ERPNext writes one of these on every Asset insert and every
+	# status change, and it is the row that makes a draft Asset undeletable from
+	# the Desk: `frappe.delete_doc` raises `LinkExistsError` on it. Modelled so
+	# `delete_draft_asset` clearing it first is a test rather than a hope — a
+	# double that had never heard of the doctype would let the delete succeed for
+	# the wrong reason and say nothing.
+	"Asset Activity": ["name", "asset", "subject", "date", "user"],
 	"Asset Category": ["name", "asset_category_name", "accounts", "finance_books"],
 	"Asset Category Account": [
 		# ERPNext names this column after its label, not after the doctype it links

@@ -208,6 +208,8 @@
   "allow_update_asset_allocation",
   "asset_tools_col",
   "allow_link_asset_to_note",
+  "allow_delete_draft_asset",
+  "allow_link_tag_to_erpnext_asset",
   "allow_run_depreciation_cycle",
   "notes_tools_section",
   "allow_list_notes_payable",
@@ -2410,6 +2412,20 @@
    "fieldname": "allow_link_asset_to_note",
    "fieldtype": "Check",
    "label": "Link Asset to Note"
+  },
+  {
+   "default": "0",
+   "description": "WRITE, DESTRUCTIVE. Delete a DRAFT ERPNext Asset and the Asset Activity and Asset Cost Profile rows that stop the Desk deleting it \u2014 which is what a failed mirror leaves behind. Refuses a submitted asset (it is on the fixed-asset register; dispose of it with a scrap or sale journal) and a cancelled one. The Asset Register tag is never touched.",
+   "fieldname": "allow_delete_draft_asset",
+   "fieldtype": "Check",
+   "label": "Delete Draft Asset"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Point an Asset Register tag at an ERPNext Asset that already exists, for a machine that was on the books before it was tagged. Writes only the asset_register link column \u2014 no value, category or photograph is copied \u2014 and clears the tag from any other Asset that carried it. Works on a submitted asset.",
+   "fieldname": "allow_link_tag_to_erpnext_asset",
+   "fieldtype": "Check",
+   "label": "Link Tag to ERPNext Asset"
   },
   {
    "default": "0",

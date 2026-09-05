@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 855 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 857 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -3747,6 +3747,91 @@ Asset ACC-ASS-2026-00003 depreciates over 84 month(s) but the note runs 60 — a
 will keep reporting.
 
 ---
+
+## 63a. `delete_draft_asset`
+
+**MUTATING, destructive.** Off by default.
+
+**Arguments:** `asset` (required), `reason` (required), `company`.
+
+The gap it fills is the mirror's own wreckage. `register_asset` builds an
+ERPNext Asset from a tag; when a later step of that build fails — a category the
+site did not have, an item it would not accept — what is left is a draft Asset
+nobody wanted, carrying an `Asset Activity` row that stops the Desk deleting it
+without a person opening two other lists first.
+
+```json
+{"name": "delete_draft_asset",
+ "arguments": {"asset": "ACC-ASS-2026-00019",
+               "reason": "failed mirror of TC-TRAKHOE-1 — the site had no Asset Category at the time"}}
+```
+
+```json
+{
+  "deleted": {
+    "name": "ACC-ASS-2026-00019", "asset_name": "TC-TRAKHOE-1 — Tractor",
+    "item_code": "FARM-ASSET-TRACTOR", "asset_category": "Machinery & Equipment",
+    "company": "Orchard Meadow, LLC", "purchase_date": "2026-06-04",
+    "gross_purchase_amount": 7200.0, "location": "Shop Yard", "status": "Draft"},
+  "reason": "failed mirror of TC-TRAKHOE-1 — the site had no Asset Category at the time",
+  "dependants_removed": [{"doctype": "Asset Activity", "name": "a1b2c3d4e5"}],
+  "dependant_count": 1,
+  "asset_register": "TC-TRAKHOE-1",
+  "note": "A draft Asset has posted nothing … Asset Register 'TC-TRAKHOE-1' still exists and is unchanged …"
+}
+```
+
+**Drafts only, whatever is asked.** A *submitted* asset is on the fixed-asset
+register: it carries a value the balance sheet includes and that
+`export_insurance_schedule` and the depreciation run are computed from, so
+deleting it would remove a number other numbers were derived from. ERPNext
+disposes of one through a scrap or sale journal that posts to the ledger, which
+is a different act. A *cancelled* asset is the record that it was disposed of.
+
+**The tag is never touched.** `Asset Register` is the operational record and this
+only deletes the copy on the books; the tag mirrors again on its next
+`update_registered_asset`.
+
+## 63b. `link_tag_to_erpnext_asset`
+
+**MUTATING.** Off by default.
+
+**Arguments:** `tag` (required), `asset` (required), `company`.
+
+The mirror only ever *creates*. A farm whose tractor is already on the books —
+entered in the Desk, or booked off a purchase invoice — has no way to say that a
+tag and that Asset are the same machine, and registering it anyway produces two
+sets of books for one tractor, which `mirror_of` then reports as a fault rather
+than resolving.
+
+```json
+{"name": "link_tag_to_erpnext_asset",
+ "arguments": {"tag": "TC-TRAKHOE-1", "asset": "ACC-ASS-2026-00004"}}
+```
+
+```json
+{
+  "asset": "ACC-ASS-2026-00004", "tag": "TC-TRAKHOE-1", "docstatus": 1,
+  "already_linked": false, "unlinked_from": ["ACC-ASS-2026-00019"],
+  "note": "Asset Register 'TC-TRAKHOE-1' and Asset ACC-ASS-2026-00004 now describe one machine … Only the link column was written … The Asset is submitted, so the column was written with db_set …"
+}
+```
+
+**It writes one column.** `Asset.asset_register` — the Link this app adds and the
+one `mirror_of` and `get_asset_detail` read. No value is restated, no category is
+chosen, no photograph is copied: this is an assertion that two rows describe one
+machine, not a re-mirror.
+
+**It works on a submitted asset.** The column is `read_only` and a submitted
+Asset refuses an ordinary save, so this writes it with `db_set` and
+`update_modified=False` — no validation, no controller, and `modified` does not
+move on a submitted financial document.
+
+**The tag is cleared from wherever else it was**, because one tag on two Assets
+is the exact fault `mirror_of` refuses to resolve. The previous Asset is *not*
+deleted — `delete_draft_asset` withdraws one that was a failed mirror, with a
+reason attached. An Asset that already carries a **different** tag is refused
+rather than re-pointed.
 
 ## 64. `run_depreciation_cycle`
 
