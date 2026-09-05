@@ -2628,6 +2628,7 @@ class Document(FrappeDict):
 		self._validate_links()
 		self._validate_selects()
 		self._validate_datetimes()
+		self._validate_fixed_asset_item()
 		self._name_children()
 		STORE.put(self)
 		self._run("after_insert")
@@ -2646,6 +2647,7 @@ class Document(FrappeDict):
 		self._validate_links()
 		self._validate_selects()
 		self._validate_datetimes()
+		self._validate_fixed_asset_item()
 		self._name_children()
 		STORE.put(self)
 		self._run("on_update")
@@ -2765,6 +2767,38 @@ class Document(FrappeDict):
 				continue
 			for row in self.get(fieldname) or []:
 				self._validate_selects_on(child_doctype, row)
+
+	def _validate_fixed_asset_item(self):
+		"""Refuse a fixed-asset Item with no Asset Category, as ERPNext does.
+
+		THIS IS THE v0.148.0 GAP AND IT COST TWO RELEASES OF SILENT MIRROR
+		FAILURES. `erpnext/stock/doctype/item/item.py::validate_fixed_asset`
+		throws *"Asset Category is mandatory for Fixed Asset item"* when
+		`is_fixed_asset` is set and `asset_category` is not, and it throws before
+		anything else the Item's own controller does. `asset_mirror` creates that
+		Item on the way to the Asset, and its whole design rested on the belief
+		that a category-less mirror was allowed — which is TRUE of ERPNext's
+		`Asset`, where `asset_category` is `reqd: 0`, and FALSE of the Item that
+		Asset has to hang off. The Asset was never reached.
+
+		The double knew none of it: an Item is a plain row here and ERPNext's
+		controller does not run, so `test_a_site_without_it_still_gets_the_asset`
+		passed on every commit while every real registration of a tractor on a
+		site whose categories did not happen to match `CATEGORY_BY_TYPE` failed at
+		the Item and logged a traceback.
+
+		The non-stock rule is modelled too, because it is the other half of the
+		same function and the mirror already sets `is_stock_item: 0` — so a
+		regression that dropped that line would otherwise pass here as well.
+		"""
+		if self.doctype != "Item" or self.flags.get("ignore_validate"):
+			return
+		if not int(self.get("is_fixed_asset") or 0):
+			return
+		if int(self.get("is_stock_item") or 0):
+			raise ValidationError("Fixed Asset Item must be a non-stock item.")
+		if not str(self.get("asset_category") or "").strip():
+			raise ValidationError("Asset Category is mandatory for Fixed Asset item")
 
 	def _validate_datetimes(self):
 		"""Refuse a Datetime or Date value MariaDB would refuse, as the column does.

@@ -127,10 +127,26 @@ CUSTOM_FIELDS = (LINK_FIELD, TYPE_FIELD, SYNCED_FIELD, *GPS_FIELDS, SHAPE_FIELD)
 #: planted ground: its establishment cost is capitalised against the planting,
 #: not against a machinery category, and filing one under "Machinery &
 #: Equipment" because the table needed an answer would put orchard ground into
-#: an equipment depreciation schedule. An unmapped type mirrors with no
-#: category, which ERPNext allows — `asset_category` is `reqd: 0` on the Asset
-#: and is only consulted when `calculate_depreciation` is on, which here it
-#: never is.
+#: an equipment depreciation schedule.
+#:
+#: THIS COMMENT USED TO END "an unmapped type mirrors with no category, which
+#: ERPNext allows", AND THAT WAS WRONG IN THE WAY THAT COST v0.148.0–v0.154.1.
+#: It is true of the ASSET — `asset_category` is `reqd: 0` there and is only
+#: consulted when `calculate_depreciation` is on, which here it never is. It is
+#: false of the ITEM the Asset has to hang off:
+#: `erpnext/stock/doctype/item/item.py::validate_fixed_asset` throws "Asset
+#: Category is mandatory for Fixed Asset item" on any item with `is_fixed_asset`
+#: and no category. `_item` runs before the Asset is built, so the category-less
+#: mirror this module was designed around never existed — every registration
+#: whose type was not in this table, or whose category the site had not created,
+#: died at the Item and logged a traceback. See `_category` for what happens
+#: instead.
+#: How many Asset Categories to read before deciding there is no single one.
+#: A cap because this runs on a registration, and "how many are there" needs a
+#: handful rather than a table scan; a farm with more than this has certainly
+#: created the one its machines map to.
+CATEGORY_CAP = 50
+
 CATEGORY_BY_TYPE = {
 	"Irrigation Valve": "Irrigation Valve",
 	"Irrigation Zone": "Irrigation Valve",
@@ -301,11 +317,24 @@ def _sync(row: dict, *, location: str, photo_file: str, verdict: dict) -> dict:
 		)
 		return verdict
 
-	category = _category(row)
+	category, category_reason = _category(row)
+	if category_reason:
+		verdict["reason"] = category_reason
+		return verdict
 	item, item_reason = _item(row, category)
 	if not item:
 		verdict["reason"] = item_reason
 		return verdict
+	# THE ASSET IS FILED WHERE ITS ITEM IS FILED, WHICH IS NOT ALWAYS WHERE
+	# `_category` JUST POINTED. The Item is created once per asset type and
+	# reused for every machine of it, so a tractor registered before the farm
+	# created 'Tractor' left `FARM-ASSET-TRACTOR` under whatever category the
+	# site had then — and this module refuses to edit an Item it did not just
+	# create, for the same reason it refuses to flip `is_fixed_asset`. Reading
+	# the category back off the Item is what keeps the two from disagreeing;
+	# ERPNext's own `Asset.set_missing_values` copies it the same direction.
+	if compat.has_field("Item", "asset_category"):
+		category = str(frappe.db.get_value("Item", item, "asset_category") or "") or category
 
 	doc = frappe.new_doc(ASSET)
 	doc.asset_name = _asset_name(row)
@@ -459,21 +488,80 @@ def _location(row: dict, requested: str) -> tuple:
 	)
 
 
-def _category(row: dict) -> str:
-	"""The Asset Category for this type, where the site actually has one.
+def _category(row: dict) -> tuple:
+	"""The Asset Category to file this machine under, or the reason there is none.
 
-	FALLS BACK TO NOTHING RATHER THAN TO SOMETHING. `asset_category` is optional
-	on ERPNext's Asset and is only consulted when depreciation is calculated,
-	which for a mirror it never is — so a site that has not created
-	"Irrigation Valve" yet gets an Asset with no category, and gets it now,
-	rather than a refusal about a master it can create whenever it likes. Filing
-	a valve under whichever category happened to exist would be worse than
-	filing it under none: a wrong category names the wrong depreciation account.
+	A CATEGORY IS NOT OPTIONAL AND NEVER WAS. This function used to return `""`
+	and let the mirror carry on, on the stated grounds that `asset_category` is
+	`reqd: 0` on ERPNext's Asset. It is — and the Item that Asset hangs off
+	refuses to exist without one, so the permissive path led to
+	`ValidationError: Asset Category is mandatory for Fixed Asset item` from
+	`_item`, one frame before the Asset was built. Every mirror on a site whose
+	categories did not happen to match `CATEGORY_BY_TYPE` failed that way, was
+	caught by `sync`, and reported as "building the ERPNext Asset for it failed.
+	The traceback is in the Error Log."
+
+	THREE ANSWERS, IN ORDER, AND ONLY THE FIRST TWO ARE ANSWERS.
+
+	  1. THE MAPPED CATEGORY, when the site has it. Unchanged, and still the only
+	     result that reflects a decision somebody made about this kind of machine.
+
+	  2. THE SITE'S ONLY CATEGORY, when it has exactly one. This is not the
+	     guess the old comment refused — there is nothing to guess between. A
+	     farm with one Asset Category has said that everything it owns is filed
+	     there, and putting a tractor in it is what an accountant would do with
+	     the same information. On Orchard Meadow that is "Machinery & Equipment",
+	     and it is the difference between a tractor reaching the books and a
+	     traceback in the Error Log.
+
+	  3. A REFUSAL NAMING WHAT TO CREATE, when the site has none, or has several
+	     and none of them is this type's. THAT is where the old comment's
+	     argument still holds exactly: with two or more to choose from, choosing
+	     is inventing a depreciation account, and a wrong one does not stay in
+	     the row it was invented in. The reason says which category the type
+	     wants and lists what the site actually has, so the fix is one
+	     `create_asset_category` call rather than a hunt.
+
+	The tag is registered eitherWay; a refusal here loses nothing but the second
+	copy, which is the trade every gate in this module makes.
 	"""
-	wanted = CATEGORY_BY_TYPE.get(str(row.get("asset_type") or ""), "")
+	if not compat.doctype_exists("Asset Category"):
+		return "", (
+			"the tag was registered, and this site has no Asset Category doctype, which ERPNext "
+			"requires before a fixed-asset Item can exist. Nothing was mirrored."
+		)
+	asset_type = str(row.get("asset_type") or "")
+	wanted = CATEGORY_BY_TYPE.get(asset_type, "")
 	if wanted and frappe.db.exists("Asset Category", wanted):
-		return wanted
-	return ""
+		return wanted, ""
+
+	known = [str(name) for name in (frappe.db.get_all("Asset Category", pluck="name", limit=CATEGORY_CAP) or [])]
+	if len(known) == 1:
+		return known[0], ""
+	if not known:
+		return "", (
+			"the tag was registered, and this site has no Asset Category at all. ERPNext will not "
+			"create the fixed-asset Item an Asset hangs off without one, so there is nowhere to "
+			f"file {asset_type or 'this machine'!r}. Create one with create_asset_category"
+			+ (f" — {wanted!r} is the one this type maps to" if wanted else "")
+			+ ". Nothing was mirrored."
+		)
+	return "", (
+		f"the tag was registered, and {asset_type or 'this type'!r} maps to Asset Category "
+		f"{wanted!r}, which this site does not have. It has {len(known)} others "
+		f"({', '.join(sorted(known))}), and picking one of several would name a depreciation "
+		"account nobody chose for this kind of machine. Create the category it wants with "
+		"create_asset_category. Nothing was mirrored."
+		if wanted
+		else (
+			f"the tag was registered, and asset type {asset_type or '<blank>'!r} has no Asset "
+			f"Category mapping, so with {len(known)} on this site "
+			f"({', '.join(sorted(known))}) there is no way to tell which one it belongs in. "
+			"Filing it in the wrong one names the wrong depreciation account. Set the category "
+			"on the Asset in the Desk after creating it there, or add the mapping. Nothing was "
+			"mirrored."
+		)
+	)
 
 
 def _item(row: dict, category: str) -> tuple:
@@ -509,15 +597,25 @@ def _item(row: dict, category: str) -> tuple:
 			)
 		return code, ""
 
+	if not category:
+		# UNREACHABLE FROM `_sync`, WHICH REFUSES FIRST, AND KEPT ANYWAY. This is
+		# the exact line ERPNext throws on, and a caller that reaches it with an
+		# empty category should get the sentence rather than the traceback that
+		# went to the Error Log for two releases.
+		return "", (
+			f"the tag was registered, and Item {code!r} cannot be created without an Asset "
+			"Category — ERPNext refuses a fixed-asset item that has none. Nothing was mirrored."
+		)
 	payload = {
 		"doctype": "Item",
 		"item_code": code,
 		"item_name": f"{asset_type} (farm asset)",
 		"is_fixed_asset": 1,
 		"is_stock_item": 0,
+		# MANDATORY, not conditional. `Item.validate_fixed_asset` throws without
+		# it and that throw is the whole of this release.
+		"asset_category": category,
 	}
-	if category:
-		payload["asset_category"] = category
 	group = _first_existing("Item Group", ("All Item Groups", "Products", "Fixed Asset"))
 	if group:
 		payload["item_group"] = group

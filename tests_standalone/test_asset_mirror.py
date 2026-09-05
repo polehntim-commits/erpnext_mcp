@@ -70,6 +70,23 @@ class MirrorTestCase(V12TestCase):
 		add_field("Asset", "gps_longitude", "Float")
 		add_field("Asset", "boundary_geojson", "Long Text")
 		self.a_location(YARD)
+		# THE CATEGORIES A FARM THAT MIRRORS HAS CREATED. Seeded here from the
+		# mapping itself rather than listed, because a site that switched the
+		# mirror on has configured its asset masters — and because ERPNext will
+		# not create the fixed-asset Item an Asset hangs off without one, so a
+		# fixture with none is a fixture where nothing mirrors at all. Until
+		# v0.155.0 these tests ran without them and passed anyway, which is
+		# exactly the bug: the double did not enforce `Item.validate_fixed_asset`
+		# and the bench did. `TheCategory` clears them and seeds its own.
+		self.categories(*sorted(set(asset_mirror.CATEGORY_BY_TYPE.values())))
+
+	def categories(self, *names):
+		"""Replace the site's Asset Categories with exactly these."""
+		STORE.tables["Asset Category"] = {}
+		STORE.seed(
+			"Asset Category",
+			[{"name": name, "asset_category_name": name} for name in names],
+		)
 
 	def a_location(self, *names):
 		register_doctype("Location", [{"fieldname": "name"}])
@@ -219,37 +236,102 @@ class TheItem(MirrorTestCase):
 
 # ── the Asset Category ──────────────────────────────────────────────────────
 class TheCategory(MirrorTestCase):
+	"""v0.155.0. THE CATEGORY IS NOT OPTIONAL AND NEVER WAS.
+
+	This class used to assert that a site without the mapped category "still gets
+	the asset", on the stated grounds that `asset_category` is `reqd: 0` on
+	ERPNext's Asset. It is — and `Item.validate_fixed_asset` throws "Asset
+	Category is mandatory for Fixed Asset item" one frame earlier, so the Asset
+	was never reached. Those tests passed because the double did not run
+	ERPNext's Item controller. It does now, and what they asserted is impossible.
+
+	Three answers, and only the first two are answers.
+	"""
+
 	def test_it_uses_the_category_for_the_type_when_the_site_has_it(self):
-		STORE.seed("Asset Category", [{"name": "Tractor", "asset_category_name": "Tractor"}])
+		self.categories("Tractor", "Wind Machine")
 		data = self.costed()
 		self.assertEqual(self.asset(data["erpnext_asset"])["asset_category"], "Tractor")
 
-	def test_a_site_without_it_still_gets_the_asset(self):
-		"""`asset_category` is optional on ERPNext's Asset and is only consulted
-		when depreciation is calculated, which for a mirror it never is. Refusing
-		over a master the site can create whenever it likes would be worse."""
-		data = self.costed()
-		self.assertTrue(data["erpnext_asset"])
-		self.assertFalse(self.asset(data["erpnext_asset"]).get("asset_category"))
+	def test_the_sites_only_category_is_used_when_the_mapped_one_is_absent(self):
+		"""ORCHARD MEADOW'S CASE, AND THE WHOLE POINT OF THE RELEASE. The farm has
+		one Asset Category, "Machinery & Equipment", and `Tractor` maps to
+		"Tractor". Before this, every tractor registered with a price died at the
+		Item and left a traceback in the Error Log.
 
-	def test_it_never_files_a_machine_under_a_category_meant_for_something_else(self):
-		"""A wrong category names the wrong depreciation account. The fixture's
-		only category is "Farm Equipment", which is not the one a tractor maps
-		to, so nothing is chosen."""
-		self.assertTrue(frappe.db.exists("Asset Category", "Farm Equipment"))
+		Choosing here is not the guess the old comment refused: with one category
+		there is nothing to choose between, and a farm that made exactly one has
+		said that is where its assets go."""
+		self.categories("Machinery & Equipment")
 		data = self.costed()
-		self.assertNotEqual(self.asset(data["erpnext_asset"]).get("asset_category"), "Farm Equipment")
-
-	def test_a_block_is_not_filed_as_equipment(self):
-		"""A block is planted ground: its establishment cost is capitalised
-		against the planting. `CATEGORY_BY_TYPE` omits it deliberately."""
-		STORE.seed(
-			"Asset Category",
-			[{"name": "Machinery & Equipment", "asset_category_name": "Machinery & Equipment"}],
+		self.assertTrue(data["erpnext_asset"], data.get("erpnext_asset_note"))
+		self.assertEqual(
+			self.asset(data["erpnext_asset"])["asset_category"], "Machinery & Equipment"
 		)
+
+	def test_several_categories_and_no_mapping_is_refused_rather_than_guessed(self):
+		"""THE HALF OF THE OLD ARGUMENT THAT STILL STANDS. A wrong category names
+		the wrong depreciation account, and with two to choose from, choosing is
+		inventing one. The refusal names the category to create."""
+		self.categories("Farm Equipment", "Unconfigured")
+		data = self.costed()
+		self.assertIsNone(data["erpnext_asset"])
+		note = data["erpnext_asset_note"]
+		self.assertIn("'Tractor'", note)
+		self.assertIn("Farm Equipment", note)
+		self.assertIn("create_asset_category", note)
+
+	def test_a_site_with_no_categories_at_all_is_told_to_make_one(self):
+		"""Not "the asset has no category" — there is no asset, because there is
+		no Item either. The reason says so rather than reporting a traceback."""
+		self.categories()
+		data = self.costed()
+		self.assertIsNone(data["erpnext_asset"])
+		self.assertIn("no Asset Category at all", data["erpnext_asset_note"])
+		self.assertIn("create_asset_category", data["erpnext_asset_note"])
+
+	def test_the_registration_survives_every_one_of_those_refusals(self):
+		"""The trade this whole module makes: the tag is the record and the mirror
+		is a second copy of it."""
+		for names in ((), ("Farm Equipment", "Unconfigured")):
+			with self.subTest(categories=names):
+				STORE.tables["Asset Register"] = {}
+				self.categories(*names)
+				data = self.costed()
+				self.assertIsNone(data["erpnext_asset"])
+				self.assertTrue(frappe.db.exists("Asset Register", "MC-Tractor-01"))
+
+	def test_a_block_is_not_filed_as_equipment_when_there_is_a_choice(self):
+		"""A block is planted ground: its establishment cost is capitalised
+		against the planting, not against a machinery category. `CATEGORY_BY_TYPE`
+		omits it deliberately, so with several categories on the site it is
+		refused by name rather than filed under whichever came first."""
+		self.categories("Machinery & Equipment", "Structure")
 		data = self.costed(name="MC-Block-A", asset_type="Block")
-		self.assertTrue(data["erpnext_asset"])
-		self.assertFalse(self.asset(data["erpnext_asset"]).get("asset_category"))
+		self.assertIsNone(data["erpnext_asset"])
+		self.assertIn("no Asset Category mapping", data["erpnext_asset_note"])
+
+	def test_the_asset_is_filed_where_its_item_is_filed(self):
+		"""THE ITEM IS SHARED BY EVERY MACHINE OF ITS TYPE and this module refuses
+		to edit one it did not create — so a tractor registered before the farm
+		made "Tractor" left `FARM-ASSET-TRACTOR` under the category it had then.
+		Reading the category back off the Item is what stops the Asset and its own
+		Item disagreeing about where the machine is filed."""
+		self.categories("Machinery & Equipment")
+		first = self.costed()
+		self.assertEqual(
+			self.asset(first["erpnext_asset"])["asset_category"], "Machinery & Equipment"
+		)
+
+		# The farm creates the proper category afterwards. The Item keeps the old
+		# one, so the next tractor's Asset does too.
+		self.categories("Machinery & Equipment", "Tractor")
+		second = self.costed(name="MC-Tractor-02")
+		self.assertTrue(second["erpnext_asset"], second.get("erpnext_asset_note"))
+		self.assertEqual(
+			self.asset(second["erpnext_asset"])["asset_category"],
+			frappe.db.get_value("Item", "FARM-ASSET-TRACTOR", "asset_category"),
+		)
 
 
 # ── what it refuses, and what survives the refusal ──────────────────────────
@@ -603,9 +685,15 @@ class TheColumnsAgree(unittest.TestCase):
 
 	def test_every_asset_type_maps_to_a_category_or_deliberately_to_none(self):
 		"""`CATEGORY_BY_TYPE` is checked against the register's own Select rather
-		than against a second hand-typed list. A type added to the doctype and not
-		here mirrors with no category, which is the safe direction — but it should
-		be a decision somebody made, and `Block` is the only one so far."""
+		than against a second hand-typed list.
+
+		AN UNMAPPED TYPE NO LONGER "MIRRORS WITH NO CATEGORY, WHICH IS THE SAFE
+		DIRECTION" — that sentence stood here until v0.155.0 and was never true.
+		ERPNext refuses the fixed-asset Item without a category, so an unmapped
+		type mirrors under the site's only category, or is refused by name; there
+		is no third option and there never was. Adding a type to the doctype
+		without adding it here is therefore a decision about a real farm's books,
+		and `Block` is the only one so far."""
 		unmapped = set(asset_tags.ASSET_TYPES) - set(asset_mirror.CATEGORY_BY_TYPE)
 		self.assertEqual(unmapped, {"Block"}, "an asset type gained or lost a category mapping")
 

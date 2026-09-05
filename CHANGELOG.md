@@ -3,6 +3,69 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.155.0 — 2026-09-04 — the category was never optional, and the Item said so
+
+**EVERY MIRROR ON THIS FARM HAD BEEN FAILING SINCE v0.148.0.** A tractor
+registered from the handset with a price and a date — `TC-TRAKHOE-1`, $7,200,
+acquired 2026-06-04 — passed every gate the mirror has and then died one frame
+before the Asset was built:
+
+```
+frappe.exceptions.ValidationError: Asset Category is mandatory for Fixed Asset item
+```
+
+`sync` catches that, logs it and reports "building the ERPNext Asset for it
+failed. The traceback is in the Error Log", so the registration survived and the
+books stayed empty.
+
+**THE MODULE WAS REASONING ABOUT THE WRONG DOCTYPE.** `CATEGORY_BY_TYPE` and
+`_category` both said an unmapped type "mirrors with no category, which ERPNext
+allows — `asset_category` is `reqd: 0` on the Asset". That is true of the
+**Asset**. It is false of the **Item** the Asset has to hang off:
+`erpnext/stock/doctype/item/item.py::validate_fixed_asset` throws on any item
+with `is_fixed_asset` and no category, and `_item` runs first. The category-less
+mirror this module was designed around never existed on any bench.
+
+`_category` now returns a category **or a reason**, in three cases:
+
+1. **The mapped category**, when the site has it. Unchanged.
+2. **The site's only category**, when it has exactly one. This is not the guess
+   the old comment refused — with one category there is nothing to choose
+   between, and a farm that created exactly one has said that is where its assets
+   go. On Orchard Meadow that is "Machinery & Equipment", and it is the
+   difference between the tractor reaching the books and a traceback.
+3. **A refusal naming what to create**, when the site has none, or has several
+   and none of them is this type's. Here the old argument stands exactly: with
+   two to choose from, choosing is inventing a depreciation account, and a wrong
+   one does not stay in the row it was invented in. The reason names the category
+   the type wants and lists what the site actually has.
+
+**THE ASSET IS NOW FILED WHERE ITS ITEM IS FILED.** The Item is created once per
+asset type and reused by every machine of it, and this module refuses to edit an
+Item it did not create — so a tractor registered before the farm made "Tractor"
+leaves `FARM-ASSET-TRACTOR` under the category the site had then. The Asset's
+category is read back off the Item rather than from `_category`, which is the
+direction ERPNext's own `Asset.set_missing_values` copies it, and it is what
+stops an Asset and its own Item disagreeing about where a machine is filed.
+
+**THE DOUBLE NOW ENFORCES `Item.validate_fixed_asset`, AND THAT IS THE HALF THAT
+MATTERS.** An Item was a plain row in `tests_standalone/harness.py` and ERPNext's
+controller never ran, so `test_a_site_without_it_still_gets_the_asset` asserted
+the impossible and passed on every commit. With the rule modelled, **44 of the 69
+mirror tests failed** before a line of `asset_mirror.py` changed — which is the
+true blast radius: not an edge case, but every mirror on any site whose
+categories do not happen to match the table. The non-stock half of the same
+ERPNext function is modelled too, so a regression that dropped `is_stock_item: 0`
+cannot pass here either.
+
+Five of the rewritten tests fail against v0.154.1 with the new harness in place,
+including the one that is Orchard Meadow's exact configuration.
+
+**The tag was never at risk and still is not.** Every refusal here returns a
+verdict; nothing raises at the caller, and nothing about a registration is rolled
+back. A tag that failed to mirror before this release mirrors on its next
+`update_registered_asset`.
+
 ## 0.154.1 — 2026-09-02 — the Python was new and the form script was not
 
 **THE v0.154.0 MAP DID NOT REACH THE FARM, AND THE CODE WAS NEVER THE REASON.**
