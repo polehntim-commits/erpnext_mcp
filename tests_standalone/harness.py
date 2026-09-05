@@ -792,6 +792,40 @@ ERPNEXT_SCHEMA = {
 		"docstatus",
 	],
 	"Leave Type": ["name", "max_leaves_allowed", "is_lwp"],
+	# v0.157.0. Columns read off the DEPLOYED hrms 15.63.4 rather than guessed:
+	# `naming_series`, `employee`, `leave_type`, `from_date`, `to_date`,
+	# `posting_date`, `status` and `company` are all `reqd: 1` there, and
+	# `description` is the field the Desk labels "Reason". A tool that omitted
+	# `company` — which no brief mentions, because the Desk form fills it in —
+	# would pass every test here and be refused by `_get_missing_mandatory_fields`
+	# on every site.
+	#
+	# THE DOUBLE DOES NOT RUN hrms's OWN CONTROLLER, so none of
+	# `validate_balance_leaves`, `validate_leave_overlap` or `validate_max_days`
+	# happens here. That is why `tools/hr.py` makes those refusals ITSELF, one
+	# layer earlier, where each can name the argument and list the site's
+	# candidates — and why the tests are written against that version of the
+	# check rather than against hrms's.
+	"Leave Application": [
+		"name",
+		"naming_series",
+		"employee",
+		"employee_name",
+		"leave_type",
+		"from_date",
+		"to_date",
+		"half_day",
+		"half_day_date",
+		"total_leave_days",
+		"description",
+		"posting_date",
+		"status",
+		"company",
+		"department",
+		"leave_approver",
+		"leave_balance",
+		"docstatus",
+	],
 	"Sales Order": [
 		"name",
 		"customer",

@@ -108,6 +108,10 @@
   "allow_get_employee",
   "allow_get_attendance_summary",
   "allow_get_leave_balance",
+  "allow_create_leave_request",
+  "allow_list_leave_requests",
+  "allow_approve_leave_request",
+  "allow_reject_leave_request",
   "trade_tools_section",
   "allow_list_sales_orders",
   "allow_get_outstanding_invoices",
@@ -1739,6 +1743,34 @@
    "fieldname": "allow_get_leave_balance",
    "fieldtype": "Check",
    "label": "Get Leave Balance"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. File a leave request as a DRAFT Leave Application \u2014 approval is a separate switch. Refuses an overlapping request, an insufficient balance (naming both numbers) and a leave type nobody allocated, which is a different fact from a spent one. Unpaid leave types skip the balance check.",
+   "fieldname": "allow_create_leave_request",
+   "fieldtype": "Check",
+   "label": "Create Leave Request"
+  },
+  {
+   "default": "1",
+   "description": "Leave requests with who asked, for what days, and what was answered. Filter by employee, status, leave type, company or a date window that asks which absences TOUCH those dates.",
+   "fieldname": "allow_list_leave_requests",
+   "fieldtype": "Check",
+   "label": "List Leave Requests"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Approve a draft leave request and submit it. THIS MOVES A BALANCE \u2014 hrms writes the Leave Ledger Entry on submit. Separate from create_leave_request so filing can be on every handset while approving stays in one pair of hands.",
+   "fieldname": "allow_approve_leave_request",
+   "fieldtype": "Check",
+   "label": "Approve Leave Request"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Reject a draft leave request with a mandatory reason, written onto the application so the worker reads the answer on the record. Draws down no balance.",
+   "fieldname": "allow_reject_leave_request",
+   "fieldtype": "Check",
+   "label": "Reject Leave Request"
   },
   {
    "description": "Order books and receivables ageing, from ERPNext's Selling, Buying and Accounts modules.",

@@ -3,6 +3,86 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.157.0 — 2026-09-04 — a number on a screen with no button under it
+
+**`get_leave_balance` HAS SHIPPED SINCE v0.18.1 AND THERE HAS BEEN NO WAY TO ASK
+FOR ONE OF THE DAYS.** Four tools close that: `create_leave_request`,
+`list_leave_requests`, `approve_leave_request`, `reject_leave_request`. **861
+tools now.**
+
+**THE SCHEMA WAS READ OFF THE DEPLOYED hrms 15.63.4, NOT GUESSED.** On that site
+`employee`, `leave_type`, `from_date`, `to_date`, `posting_date`, `status`,
+`company` and `naming_series` are all `reqd: 1` on Leave Application. **`company`
+appears in no brief**, because the Desk form fills it in — and it is exactly the
+kind of column a tool omits, passes every test over, and is refused for by
+`_get_missing_mandatory_fields` on every real site. It is derived from the
+Employee and is deliberately not an argument: a caller who could name a different
+one would file a worker's absence against an entity they do not work for.
+
+### Filing
+
+`create_leave_request` files a **draft** (`docstatus 0`, status `Open`). Asking is
+not approving: a submitted Leave Application writes Leave Ledger Entries and
+moves a balance, so approval is a separate tool with a separate switch — a farm
+can put filing on every handset and keep approving in one pair of hands.
+
+**Every refusal is made here rather than left to hrms, and that is the whole
+shape of it.** `LeaveApplication.validate` does check the balance, the overlap
+and the date order — and throws sentences that name neither the argument that was
+wrong nor what the site actually offers. A worker needs *"you have 8 days of Sick
+Leave and asked for 30"*, not *"Insufficient leave balance"*. It is also the only
+version of each check this repo can run: the double does not carry hrms's
+controller.
+
+**An absent allocation is reported as absent, not as a zero balance** — and that
+distinction is Orchard Meadow's, where there are five Leave Types and **zero
+Leave Allocations**. A balance check alone would tell every worker they had spent
+an entitlement nobody ever gave them. **Unpaid leave needs no allocation**
+(`is_lwp`, hrms's own rule), which is the escape hatch for a farm in exactly that
+state.
+
+`leave_type` may be omitted only where the employee has **exactly one**
+allocation; with several, choosing on their behalf is inventing a decision, so it
+is refused with the list — the three-answer shape v0.155.0 settled on for asset
+categories. Days are counted by HR's own `get_number_of_leave_days`, because
+holiday lists and half days are the whole difficulty and an arithmetic answer
+written here would be confidently wrong on any site with a policy;
+`days_counted_via` says which function ran.
+
+### Reading and answering
+
+`list_leave_requests` defaults to **every status rather than the pending queue**:
+a filter that has to be turned off to see an approved day hides the answer to
+"did that get approved". `pending_count` is the queue. Its date window asks which
+absences **touch** those dates, not which were filed in them — an application
+that started last week and runs into this one is the answer to "who is off on
+Tuesday".
+
+`approve_leave_request` sets the status and submits. **This moves a balance** —
+hrms writes the Leave Ledger Entry on submit. `reject_leave_request` submits too,
+draws nothing down, and **requires a reason where approval does not**: an
+approval explains itself and a refusal does not. The reason is written onto the
+application's own Reason field, so the worker reads the answer on the record
+rather than hearing it second-hand. An already-submitted application is refused
+rather than re-answered — changing an answer that has moved a balance is a
+cancellation and an amendment, and both are Desk work.
+
+### Tests
+
+Thirty-four, and three mutation checks rather than a green tick: dropping the
+balance check, the overlap check or the `company` assignment each fails exactly
+one test and no others. `Leave Application` is new to
+`tests_standalone/harness.py` with the real column list, and the fake hrms module
+gains `get_number_of_leave_days` so the delegation is exercised rather than
+assumed. A `Leave Without Pay` type was added to the fixture because the
+unpaid-leave path is the one Orchard Meadow will actually use.
+
+One hardening the double cannot show: `Document.submit()` takes no
+`ignore_permissions` argument and reads the flag off the document, so
+`flags.ignore_permissions` is set before submitting — without it `_submit` runs
+its own check against `frappe.session.user`, which on this transport is the
+system user rather than the named approver.
+
 ## 0.156.0 — 2026-09-04 — a way back out, and a way to say "that one, already"
 
 Two tools, both about the ERPNext Asset the mirror builds. **857 tools now.**

@@ -2917,6 +2917,118 @@ TOOLS = {
 		available=_app_installed("hrms"),
 		requires="the Frappe HR (hrms) app, which is not installed on this site",
 	),
+	"create_leave_request": _tool(
+		hr.create_leave_request,
+		"MUTATING (default OFF). File a leave request as a DRAFT Leave "
+		"Application. Approval is approve_leave_request, a separate tool with a "
+		"separate switch, so a farm can put filing on every handset and keep "
+		"approving in one pair of hands.\n\n"
+		"IT COMES BACK docstatus 0. A submitted Leave Application writes Leave "
+		"Ledger Entries and moves a balance; asking is not approving.\n\n"
+		"EVERY REFUSAL NAMES BOTH NUMBERS OR BOTH DATES. Insufficient balance "
+		"says what the balance was and what was asked for; an overlap names the "
+		"application already covering those days; a half day over a span longer "
+		"than one day asks which day it is.\n\n"
+		"UNPAID LEAVE NEEDS NO ALLOCATION. A leave type whose `is_lwp` is set "
+		"skips the balance check, which is hrms's own rule and the way a farm "
+		"that has not set up Leave Allocations can file at all. Where an "
+		"allocation is simply absent the refusal SAYS SO rather than reporting a "
+		"zero balance, because those are different facts.\n\n"
+		"`leave_type` MAY BE OMITTED only where the employee has exactly one "
+		"allocation — with several, choosing on their behalf would be inventing a "
+		"decision, so it is refused with the list. `company` is derived from the "
+		"Employee and is deliberately not an argument. Days are counted by HR's "
+		"own get_number_of_leave_days, so holiday lists and half days apply.",
+		{
+			"employee": _field(_STRING, "Employee docname, employee_number, name or user id."),
+			"leave_type": _field(
+				_STRING,
+				"One Leave Type. Omit only where the employee has exactly one allocation.",
+			),
+			"from_date": _field(_STRING, "First day of leave, YYYY-MM-DD."),
+			"to_date": _field(_STRING, "Last day of leave, YYYY-MM-DD. Inclusive."),
+			"reason": _field(_STRING, "Why. Written to the application's Reason field."),
+			"half_day": _field(_BOOLEAN, "One of the days is a half day."),
+			"half_day_date": _field(
+				_STRING,
+				"Which day is the half, YYYY-MM-DD. Required when half_day is set over "
+				"more than one day; defaults to the single day otherwise.",
+			),
+			"posting_date": _field(_STRING, "When it was filed. Defaults to today."),
+			"leave_approver": _field(_STRING, "User who should answer it."),
+		},
+		required=("employee", "from_date", "to_date"),
+		mutating=True,
+		title="File a leave request",
+		available=_app_installed("hrms"),
+		requires="the Frappe HR (hrms) app, which is not installed on this site",
+	),
+	"list_leave_requests": _tool(
+		hr.list_leave_requests,
+		"Leave requests with who asked, for what, over which days, and what was "
+		"answered. Filter by employee, status (Open, Approved, Rejected, "
+		"Cancelled), leave type, company or a date window.\n\n"
+		"THE WINDOW ASKS WHICH ABSENCES TOUCH THESE DATES, not which were filed "
+		"in them — an application that started last week and runs into this one "
+		"is the answer to 'who is off on Tuesday'.\n\n"
+		"Defaults to every status rather than to the pending queue: a filter that "
+		"has to be turned off to see an approved day is one that hides the answer "
+		"to 'did that get approved'. `pending_count` is the queue. Read-only.",
+		{
+			"employee": _field(_STRING, "One employee. Docname, number, name or user id."),
+			"status": _field(_STRING, "Open, Approved, Rejected or Cancelled."),
+			"leave_type": _field(_STRING, "One Leave Type."),
+			"company": _field(_STRING, "One company."),
+			"from_date": _field(_STRING, "Window start, YYYY-MM-DD."),
+			"to_date": _field(_STRING, "Window end, YYYY-MM-DD."),
+			"limit": _field(_NUMBER, "Maximum rows. Default 100, hard maximum 200."),
+		},
+		title="Leave requests",
+		available=_app_installed("hrms"),
+		requires="the Frappe HR (hrms) app, which is not installed on this site",
+	),
+	"approve_leave_request": _tool(
+		hr.approve_leave_request,
+		"MUTATING (default OFF). Approve a DRAFT leave request and submit it. "
+		"**THIS MOVES A BALANCE** — hrms writes the Leave Ledger Entry on submit, "
+		"so this is the call that spends the entitlement create_leave_request "
+		"only asked for.\n\n"
+		"An application that is already submitted is refused rather than "
+		"re-answered: changing an answer that has moved a balance is a "
+		"cancellation and an amendment, and both are Desk work.",
+		{
+			"leave_application": _field(_STRING, "The Leave Application docname."),
+			"reason": _field(_STRING, "Optional note, appended to the application's Reason."),
+			"leave_approver": _field(_STRING, "User recorded as having answered it."),
+		},
+		required=("leave_application",),
+		mutating=True,
+		title="Approve a leave request",
+		available=_app_installed("hrms"),
+		requires="the Frappe HR (hrms) app, which is not installed on this site",
+	),
+	"reject_leave_request": _tool(
+		hr.reject_leave_request,
+		"MUTATING (default OFF). Reject a DRAFT leave request, with a reason, and "
+		"submit the refusal. Draws down no balance.\n\n"
+		"`reason` IS MANDATORY HERE AND OPTIONAL ON APPROVAL, and the asymmetry "
+		"is the point: an approval explains itself and a refusal does not. It is "
+		"written onto the application's own Reason field, so the worker reads the "
+		"answer on the record rather than hearing it second-hand.\n\n"
+		"It is SUBMITTED rather than left a draft — hrms accepts a submitted "
+		"Rejected application and draws nothing down, and leaving it open would "
+		"leave an answered request looking unanswered.",
+		{
+			"leave_application": _field(_STRING, "The Leave Application docname."),
+			"reason": _field(_STRING, "Why it was refused. Written onto the application."),
+			"leave_approver": _field(_STRING, "User recorded as having answered it."),
+		},
+		required=("leave_application", "reason"),
+		mutating=True,
+		title="Reject a leave request",
+		available=_app_installed("hrms"),
+		requires="the Frappe HR (hrms) app, which is not installed on this site",
+	),
 	"get_leave_balance": _tool(
 		hr.get_leave_balance,
 		"Remaining leave for one employee, per leave type, as of a date "

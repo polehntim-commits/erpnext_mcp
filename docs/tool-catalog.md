@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 857 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 861 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 432 read tools are **on** by default and can be switched off individually. A
+All 433 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -966,6 +966,87 @@ Balance report via `run_report` rather than guessing.
 Only leave types with an allocation covering `as_of` are included — a balance for
 a type nobody allocated is always zero and only adds noise. One misconfigured
 type lands in `failed[]` without losing the others.
+
+---
+
+## 23a. `create_leave_request`
+
+**MUTATING.** Off by default. Needs `hrms`.
+
+**Arguments:** `employee` (required), `from_date` (required), `to_date`
+(required), `leave_type`, `reason`, `half_day`, `half_day_date`, `posting_date`,
+`leave_approver`.
+
+Files a **draft** Leave Application (`docstatus 0`, status `Open`). Approval is
+`approve_leave_request` — a separate tool with a separate switch, so a farm can
+put filing on every handset and keep approving in one pair of hands.
+
+```json
+{"name": "create_leave_request",
+ "arguments": {"employee": "HR-EMP-00001", "leave_type": "Sick Leave",
+               "from_date": "2026-09-14", "to_date": "2026-09-15",
+               "reason": "Hospital appointment in The Dalles"}}
+```
+
+**Every refusal names both numbers or both dates.** Insufficient balance says
+what the balance was and what was asked for; an overlap names the application
+already covering those days; `half_day` over a span longer than one day asks
+which day is the half.
+
+**Unpaid leave needs no allocation.** A leave type whose `is_lwp` is set skips
+the balance check — hrms's own rule, and the way a farm that has not set up Leave
+Allocations can file at all. Where an allocation is simply **absent** the refusal
+says so rather than reporting a zero balance, because "nobody allocated you any"
+and "you have spent it all" are different facts and only one of them is fixed by
+a Leave Allocation.
+
+**`leave_type` may be omitted** only where the employee has exactly one
+allocation. With several, choosing on their behalf would be inventing a decision,
+so it is refused with the list.
+
+**`company` is derived from the Employee** and is deliberately not an argument —
+it is `reqd` on hrms's doctype, and a caller who could name a different one would
+file a worker's absence against an entity they do not work for. Days are counted
+by HR's own `get_number_of_leave_days`, so holiday lists and half days apply;
+`days_counted_via` says which function ran.
+
+## 23b. `list_leave_requests`
+
+**Read-only.** On by default. Needs `hrms`.
+
+**Arguments:** `employee`, `status`, `leave_type`, `company`, `from_date`,
+`to_date`, `limit`.
+
+**Returns** `requests[]`, `count`, `by_status`, `pending_count`, `total_days`.
+
+**The window asks which absences TOUCH these dates**, not which were filed in
+them — an application that started last week and runs into this one is the answer
+to "who is off on Tuesday". Defaults to every status rather than to the pending
+queue: a filter that has to be turned off to see an approved day is one that
+hides the answer to "did that get approved". `pending_count` is the queue.
+
+## 23c. `approve_leave_request` / 23d. `reject_leave_request`
+
+**MUTATING.** Both off by default. Need `hrms`.
+
+**Arguments:** `leave_application` (required), `reason` (**required on reject**),
+`leave_approver`.
+
+Both set the status and **submit** the application, `0 → 1`.
+
+**Approval moves a balance** — hrms writes the Leave Ledger Entry on submit, so
+this is the call that spends the entitlement `create_leave_request` only asked
+for. Rejection draws nothing down but is still submitted, because leaving an
+answered request as a draft leaves it looking unanswered.
+
+**`reason` is mandatory on reject and optional on approve**, and the asymmetry is
+the point: an approval explains itself and a refusal does not. It is written onto
+the application's own Reason field, so the worker reads the answer on the record
+rather than hearing it second-hand.
+
+An application that is **already submitted** is refused rather than re-answered:
+changing an answer that has moved a balance is a cancellation and an amendment,
+and both are Desk work.
 
 ---
 

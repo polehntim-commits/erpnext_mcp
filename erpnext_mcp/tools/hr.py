@@ -20,7 +20,7 @@ always "who was out".
 import frappe
 
 from .. import compat, minors
-from ..args import as_date, as_filter, as_limit, as_str
+from ..args import as_bool, as_date, as_filter, as_limit, as_str
 from ..errors import ToolError
 from ..result import ToolResult
 
@@ -319,3 +319,511 @@ def _number(value) -> float:
 		return round(float(value or 0), 3)
 	except (TypeError, ValueError):
 		return 0.0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Leave requests
+#
+# THE READ SHIPPED WITHOUT THE WRITE. `get_leave_balance` has told a worker how
+# many days they have left since v0.18.1, and there has been no way to ask for
+# one of them — the balance was a number on a screen with no button under it.
+#
+# EVERY REFUSAL BELOW IS MADE HERE RATHER THAN LEFT TO hrms, and that is the
+# whole shape of this section. `LeaveApplication.validate` does check the
+# balance, the overlap and the date order — but it throws hrms's sentence, which
+# names neither the argument that was wrong nor what this site actually offers.
+# A worker whose request is refused needs "you have 2 days of Sick Leave and
+# asked for 3", not "Insufficient leave balance". The tests are written against
+# THIS version of each check, because on a bench-less repo it is the only version
+# that can be run at all — the double does not carry hrms's controller.
+#
+# NOTHING HERE COUNTS DAYS OR NETS A BALANCE FOR ITSELF, for the reason
+# `get_leave_balance` gives at length: carry-forward, expiry, holiday lists and
+# half days are the whole difficulty of the question, and an arithmetic answer
+# written here would be confidently wrong on any site with a policy. Both are
+# delegated to hrms and the answer says which function ran.
+# ══════════════════════════════════════════════════════════════════════════════
+
+LEAVE_APPLICATION = "Leave Application"
+
+#: The statuses hrms's own Select offers, read off the deployed site rather than
+#: guessed. `Open` is the default and the one a draft is created in.
+LEAVE_STATUSES = ("Open", "Approved", "Rejected", "Cancelled")
+
+#: Most applications one read returns before it says there are more.
+LEAVE_CAP = 200
+
+
+def _leave_days_api():
+	"""HR's `get_number_of_leave_days`, from wherever this site keeps it."""
+	paths = (
+		"hrms.hr.doctype.leave_application.leave_application",
+		"erpnext.hr.doctype.leave_application.leave_application",
+	)
+	for path in paths:
+		try:
+			module = __import__(path, fromlist=["get_number_of_leave_days"])
+		except Exception:
+			continue
+		function = getattr(module, "get_number_of_leave_days", None)
+		if callable(function):
+			return function
+	return None
+
+
+def _require_leave() -> None:
+	compat.require_doctype(LEAVE_APPLICATION, "It comes with the Frappe HR (hrms) app.")
+
+
+def _leave_type_for(employee: str, requested: str, as_of: str) -> str:
+	"""The Leave Type to file under, or a refusal naming what the site offers.
+
+	THREE ANSWERS AND ONLY TWO ARE ANSWERS, which is the same shape
+	`asset_mirror._category` settled on for the same reason: choosing between
+	several on somebody's behalf is inventing a decision, and choosing when
+	there is exactly one is not.
+	"""
+	allocated = _allocated_leave_types(employee, as_of)
+	if requested:
+		if not frappe.db.exists("Leave Type", requested):
+			known = frappe.db.get_all("Leave Type", pluck="name", limit=LEAVE_CAP) or []
+			raise ToolError(
+				f"no Leave Type named {requested!r} on this site. It has: "
+				f"{', '.join(sorted(str(name) for name in known)) or '<none>'}. Nothing was filed."
+			)
+		return requested
+	if len(allocated) == 1:
+		return allocated[0]
+	if allocated:
+		raise ToolError(
+			f"this employee has allocations for {len(allocated)} leave types "
+			f"({', '.join(allocated)}), so there is no single one to file under. Pass leave_type. "
+			"Nothing was filed."
+		)
+	raise ToolError(
+		"this employee has no leave allocation of any type, so there is nothing to file against "
+		"and no way to guess what was meant. Allocate leave to them first, or pass a leave_type "
+		"whose `is_lwp` is set — unpaid leave is the one kind that needs no allocation. Nothing "
+		"was filed."
+	)
+
+
+def _is_lwp(leave_type: str) -> bool:
+	try:
+		return bool(int(frappe.db.get_value("Leave Type", leave_type, "is_lwp") or 0))
+	except Exception:  # pragma: no cover - a site whose Leave Type lacks the column
+		return False
+
+
+def _overlapping(employee: str, from_date: str, to_date: str, exclude: str = "") -> list:
+	"""Applications already covering any part of this span. Drafts count.
+
+	A draft counts because it is a request somebody has made and not yet had
+	answered; filing a second over the top of it is how one absence becomes two
+	rows and a double deduction the moment both are approved.
+	"""
+	rows = (
+		frappe.db.get_all(
+			LEAVE_APPLICATION,
+			filters={
+				"employee": employee,
+				"docstatus": ("<", 2),
+				"status": ("!=", "Rejected"),
+				"from_date": ("<=", to_date),
+				"to_date": (">=", from_date),
+			},
+			fields=["name", "leave_type", "from_date", "to_date", "status"],
+			limit=LEAVE_CAP,
+		)
+		or []
+	)
+	return [dict(row) for row in rows if str(row.get("name")) != exclude]
+
+
+def _leave_row(name: str) -> dict:
+	fields = compat.existing_fields(
+		LEAVE_APPLICATION,
+		(
+			"name",
+			"employee",
+			"employee_name",
+			"leave_type",
+			"from_date",
+			"to_date",
+			"half_day",
+			"half_day_date",
+			"total_leave_days",
+			"description",
+			"posting_date",
+			"status",
+			"company",
+			"leave_approver",
+			"docstatus",
+		),
+	)
+	row = frappe.db.get_value(LEAVE_APPLICATION, name, fields, as_dict=True)
+	if not row:
+		raise ToolError(f"no Leave Application named {name!r} on this site. Nothing was changed.")
+	return dict(row)
+
+
+def _described(row: dict) -> dict:
+	out = dict(row)
+	out["half_day"] = bool(frappe.utils.cint(row.get("half_day")))
+	out["total_leave_days"] = _number(row.get("total_leave_days"))
+	out["docstatus"] = int(row.get("docstatus") or 0)
+	out["submitted"] = out["docstatus"] == 1
+	return out
+
+
+# ── 30a. create_leave_request ───────────────────────────────────────────────
+def create_leave_request(args: dict) -> ToolResult:
+	"""File a leave request as a DRAFT. Approval is a separate, gated act.
+
+	IT COMES BACK docstatus 0, ON PURPOSE. A submitted Leave Application writes
+	Leave Ledger Entries and moves a balance; that is the approval, and approving
+	is not the same act as asking. `approve_leave_request` is a different tool
+	with a different switch, so a site can let its crew file requests without
+	letting anything approve them — which is the ordinary arrangement and the one
+	that makes this safe to put on a handset.
+
+	THE BALANCE IS CHECKED HERE AND THE REFUSAL SAYS BOTH NUMBERS. hrms checks it
+	too and throws "Insufficient leave balance", which does not say what the
+	balance was, what was asked for, or which of the two to change.
+
+	UNPAID LEAVE IS EXEMPT, because `is_lwp` means there is no balance to draw
+	down — that is hrms's own rule and it is the escape hatch for a farm that has
+	not set up Leave Allocations at all. A site in that state gets a refusal that
+	says so rather than "you have 0 days", which reads as an entitlement spent.
+
+	`company` IS DERIVED FROM THE EMPLOYEE AND IS NOT AN ARGUMENT. It is `reqd`
+	on hrms's doctype, the Desk form fills it in from the same place, and a
+	caller who could name a different one would file a worker's absence against
+	an entity they do not work for.
+	"""
+	_require_leave()
+	employee = _resolve_employee(as_str(args, "employee", required=True))
+	from_date = as_date(args, "from_date", required=True)
+	to_date = as_date(args, "to_date", required=True)
+	if str(to_date) < str(from_date):
+		raise ToolError(
+			f"from_date {from_date} is after to_date {to_date}. Nothing was filed."
+		)
+
+	leave_type = _leave_type_for(employee, as_str(args, "leave_type"), str(from_date))
+
+	half_day = bool(as_bool(args, "half_day", False))
+	half_day_date = as_date(args, "half_day_date")
+	if half_day and not half_day_date:
+		# hrms defaults it the same way when the span is one day; on a longer one
+		# there is no single day it could mean, so it is asked for by name.
+		if str(from_date) == str(to_date):
+			half_day_date = from_date
+		else:
+			raise ToolError(
+				f"half_day is set over {from_date} to {to_date}, which is more than one day, so "
+				"half_day_date has to say which day is the half. Nothing was filed."
+			)
+	if half_day_date and not (str(from_date) <= str(half_day_date) <= str(to_date)):
+		raise ToolError(
+			f"half_day_date {half_day_date} is outside the requested span {from_date} to "
+			f"{to_date}. Nothing was filed."
+		)
+
+	clashes = _overlapping(employee, str(from_date), str(to_date))
+	if clashes:
+		first = clashes[0]
+		raise ToolError(
+			f"this employee already has a leave application covering part of {from_date} to "
+			f"{to_date}: {first['name']} ({first['leave_type']}, {first['from_date']} to "
+			f"{first['to_date']}, {first['status']}). Two rows over one absence deduct twice the "
+			"moment both are approved. Withdraw or amend that one first. Nothing was filed."
+		)
+
+	days_api = _leave_days_api()
+	if days_api is None:
+		raise ToolError(
+			"this site's HR app does not export get_number_of_leave_days, so the length of this "
+			"request cannot be computed correctly — holidays and the employee's own holiday list "
+			"are what make it more than a subtraction. File it in the Desk. Nothing was filed."
+		)
+	total_days = _number(
+		days_api(employee, leave_type, from_date, to_date, half_day, half_day_date)
+	)
+	if total_days <= 0:
+		raise ToolError(
+			f"{from_date} to {to_date} works out at {total_days} leave day(s) for this employee — "
+			"every day in the span is a holiday or a non-working day on their calendar, so there "
+			"is nothing to request. Nothing was filed."
+		)
+
+	balance = None
+	if not _is_lwp(leave_type):
+		balance_on = _leave_balance_api()
+		if balance_on is None:
+			raise ToolError(
+				"this site's HR app does not export get_leave_balance_on, so the balance behind "
+				"this request cannot be checked. Nothing was filed."
+			)
+		if leave_type not in _allocated_leave_types(employee, str(from_date)):
+			raise ToolError(
+				f"nobody has allocated {leave_type!r} to this employee for {from_date}, so there "
+				"is no entitlement to draw this against — which is a different thing from having "
+				"spent it. Create a Leave Allocation for them, or file this against a leave type "
+				"whose `is_lwp` is set. Nothing was filed."
+			)
+		balance = _number(balance_on(employee, leave_type, str(from_date)))
+		if balance < total_days:
+			raise ToolError(
+				f"this employee has {balance} day(s) of {leave_type!r} as of {from_date} and this "
+				f"request is {total_days}. Shorten it, allocate more, or file the remainder "
+				"against an unpaid leave type. Nothing was filed."
+			)
+
+	company = str(frappe.db.get_value("Employee", employee, "company") or "")
+	if not company:
+		raise ToolError(
+			f"Employee {employee} has no company on their record, and Leave Application requires "
+			"one. Set it on the Employee. Nothing was filed."
+		)
+
+	doc = frappe.new_doc(LEAVE_APPLICATION)
+	doc.employee = employee
+	doc.leave_type = leave_type
+	doc.from_date = from_date
+	doc.to_date = to_date
+	doc.half_day = 1 if half_day else 0
+	if half_day_date:
+		doc.half_day_date = half_day_date
+	doc.total_leave_days = total_days
+	doc.description = as_str(args, "reason") or None
+	doc.posting_date = as_date(args, "posting_date") or frappe.utils.today()
+	# `Open` is hrms's own default and the only status a request that nobody has
+	# answered yet can honestly carry.
+	doc.status = "Open"
+	doc.company = company
+	if compat.has_field(LEAVE_APPLICATION, "employee_name"):
+		doc.employee_name = frappe.db.get_value("Employee", employee, "employee_name")
+	if balance is not None and compat.has_field(LEAVE_APPLICATION, "leave_balance"):
+		doc.leave_balance = balance
+	approver = as_str(args, "leave_approver")
+	if approver:
+		if not frappe.db.exists("User", approver):
+			raise ToolError(f"no User named {approver!r} on this site. Nothing was filed.")
+		doc.leave_approver = approver
+	doc.insert(ignore_permissions=True)
+
+	data = {
+		"leave_application": doc.name,
+		"request": _described(_leave_row(doc.name)),
+		"balance_before": balance,
+		"balance_checked": balance is not None,
+		"days_counted_via": "HR get_number_of_leave_days",
+		"note": (
+			f"Filed as a DRAFT ({doc.name}, status Open). Nothing has been deducted and no Leave "
+			"Ledger Entry exists yet — approval is approve_leave_request, which submits it, and "
+			"is a separate switch."
+			+ (
+				f" {leave_type!r} is an unpaid type, so no balance was checked."
+				if balance is None
+				else f" Balance before this request: {balance} day(s)."
+			)
+		),
+	}
+	return ToolResult(
+		data,
+		f"filed {doc.name}: {total_days} day(s) of {leave_type} for "
+		f"{data['request'].get('employee_name') or employee}, {from_date} to {to_date} (draft)",
+		docstatus_delta="0",
+	)
+
+
+# ── 30b. list_leave_requests ────────────────────────────────────────────────
+def list_leave_requests(args: dict) -> ToolResult:
+	"""The leave register: who asked for what, and what was answered.
+
+	DEFAULTS TO EVERYTHING RATHER THAN TO PENDING. A manager opening this wants
+	the week, and a filter that had to be turned off to see an approved day is a
+	filter that hides the answer to "did that get approved". `status` narrows it
+	when the question really is the queue.
+	"""
+	_require_leave()
+	filters: dict = {}
+	employee = as_str(args, "employee")
+	if employee:
+		filters["employee"] = _resolve_employee(employee)
+	status = as_str(args, "status")
+	if status:
+		if status not in LEAVE_STATUSES:
+			raise ToolError(
+				f"{status!r} is not a Leave Application status. This site's are: "
+				f"{', '.join(LEAVE_STATUSES)}."
+			)
+		filters["status"] = status
+	for key, column in (("leave_type", "leave_type"), ("company", "company")):
+		value = as_str(args, key)
+		if value:
+			filters[column] = value
+	from_date = as_date(args, "from_date")
+	to_date = as_date(args, "to_date")
+	# The window asks "which absences touch these dates", not "which were filed
+	# in them" — an application that started last week and runs into this one is
+	# the answer to "who is off on Tuesday".
+	if to_date:
+		filters["from_date"] = ("<=", to_date)
+	if from_date:
+		filters["to_date"] = (">=", from_date)
+
+	fields = compat.existing_fields(
+		LEAVE_APPLICATION,
+		(
+			"name",
+			"employee",
+			"employee_name",
+			"leave_type",
+			"from_date",
+			"to_date",
+			"half_day",
+			"total_leave_days",
+			"description",
+			"status",
+			"company",
+			"leave_approver",
+			"posting_date",
+			"docstatus",
+		),
+	)
+	rows = (
+		frappe.db.get_all(
+			LEAVE_APPLICATION,
+			filters=filters,
+			fields=fields,
+			order_by="from_date desc",
+			limit=min(as_limit(args), LEAVE_CAP),
+		)
+		or []
+	)
+	requests = [_described(dict(row)) for row in rows]
+	by_status: dict = {}
+	for row in requests:
+		key = str(row.get("status") or "Open")
+		by_status[key] = by_status.get(key, 0) + 1
+
+	data = {
+		"requests": requests,
+		"count": len(requests),
+		"by_status": by_status,
+		"pending_count": by_status.get("Open", 0),
+		"total_days": round(sum(row["total_leave_days"] for row in requests), 3),
+		"filters": {
+			"employee": filters.get("employee"),
+			"status": status or None,
+			"leave_type": as_str(args, "leave_type") or None,
+			"company": as_str(args, "company") or None,
+			"from_date": str(from_date) if from_date else None,
+			"to_date": str(to_date) if to_date else None,
+		},
+	}
+	return ToolResult(
+		data,
+		f"{len(requests)} leave request(s), {by_status.get('Open', 0)} awaiting an answer",
+	)
+
+
+def _answer_leave(args: dict, *, status: str, verb: str, reason_required: bool) -> ToolResult:
+	"""The shared body of approve and reject. They differ by one word and a reason.
+
+	SUBMITTING IS THE ANSWER, and it is what makes the two tools worth having
+	separate switches from `create_leave_request`. `on_submit` is where hrms
+	writes the Leave Ledger Entry that actually moves the balance, so this is the
+	call that spends somebody's entitlement.
+	"""
+	_require_leave()
+	name = as_str(args, "leave_application", required=True)
+	row = _leave_row(name)
+	docstatus = int(row.get("docstatus") or 0)
+	if docstatus == 1:
+		raise ToolError(
+			f"Leave Application {name} was already answered — it is submitted with status "
+			f"{row.get('status')!r}. Changing an answer that has moved a balance is a "
+			"cancellation and an amendment, which is done in the Desk. Nothing was changed."
+		)
+	if docstatus == 2:
+		raise ToolError(f"Leave Application {name} is cancelled. Nothing was changed.")
+
+	reason = as_str(args, "reason")
+	if reason_required and len(reason) < 4:
+		raise ToolError(
+			"reason is required and must be a real explanation — a refusal a worker cannot read "
+			"is one they will ask about in person anyway. Nothing was changed."
+		)
+
+	doc = frappe.get_doc(LEAVE_APPLICATION, name)
+	doc.status = status
+	if reason:
+		existing = str(doc.get("description") or "").strip()
+		doc.description = f"{existing}\n\n{verb.title()}: {reason}".strip() if existing else reason
+	approver = as_str(args, "leave_approver")
+	if approver:
+		if not frappe.db.exists("User", approver):
+			raise ToolError(f"no User named {approver!r} on this site. Nothing was changed.")
+		doc.leave_approver = approver
+	doc.save(ignore_permissions=True)
+	# `submit()` TAKES NO `ignore_permissions` ARGUMENT and reads the flag off the
+	# document instead, so setting it here is not belt-and-braces — without it
+	# `_submit` runs its own permission check against `frappe.session.user`, which
+	# on the MCP transport is the system user rather than the named
+	# `leave_approver`. The double has no such check and cannot show this.
+	doc.flags.ignore_permissions = True
+	doc.submit()
+
+	answered = _described(_leave_row(name))
+	data = {
+		"leave_application": name,
+		"status": status,
+		"request": answered,
+		"reason": reason or None,
+		"note": (
+			f"{name} is {status.lower()} and submitted. "
+			+ (
+				"hrms writes the Leave Ledger Entry on submit, so the balance has moved."
+				if status == "Approved"
+				else "A rejected application is submitted so the answer is on the record, and it "
+				"draws down no balance."
+			)
+		),
+	}
+	return ToolResult(
+		data,
+		f"{verb} {name}: {answered['total_leave_days']} day(s) of {answered.get('leave_type')} "
+		f"for {answered.get('employee_name') or answered.get('employee')}",
+		docstatus_delta="0 → 1",
+	)
+
+
+# ── 30c. approve_leave_request ──────────────────────────────────────────────
+def approve_leave_request(args: dict) -> ToolResult:
+	"""Approve a draft leave request and submit it. THIS MOVES A BALANCE.
+
+	`on_submit` is where hrms writes the Leave Ledger Entry, so this is the call
+	that actually spends the entitlement `create_leave_request` only asked for.
+	It is a separate tool with a separate switch for exactly that reason: a farm
+	can put filing on every handset and keep approving in one pair of hands.
+	"""
+	return _answer_leave(args, status="Approved", verb="approved", reason_required=False)
+
+
+# ── 30d. reject_leave_request ───────────────────────────────────────────────
+def reject_leave_request(args: dict) -> ToolResult:
+	"""Reject a draft leave request, with a reason, and submit the refusal.
+
+	`reason` IS MANDATORY HERE AND OPTIONAL ON APPROVAL, and the asymmetry is the
+	point: an approval explains itself and a refusal does not. It is written onto
+	the application's own description, so the worker reads the answer on the
+	record rather than hearing it second-hand.
+
+	IT IS SUBMITTED RATHER THAN LEFT AS A DRAFT. hrms accepts a submitted
+	Rejected application and draws no balance down for it; leaving it open would
+	leave a request that has been answered looking like one that has not.
+	"""
+	return _answer_leave(args, status="Rejected", verb="rejected", reason_required=True)

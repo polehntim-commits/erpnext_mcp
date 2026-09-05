@@ -1197,7 +1197,15 @@ def _hr_data() -> None:
 	STORE.seed("Attendance", attendance)
 	STORE.seed(
 		"Leave Type",
-		[{"name": "Annual Leave"}, {"name": "Sick Leave"}, {"name": "Unpaid Leave"}],
+		[
+			{"name": "Annual Leave"},
+			{"name": "Sick Leave"},
+			{"name": "Unpaid Leave"},
+			# `is_lwp` is the flag hrms itself checks before skipping the balance
+			# test, and it is the ONLY way a farm with no Leave Allocations can
+			# file leave at all — which is the state Orchard Meadow is actually in.
+			{"name": "Leave Without Pay", "is_lwp": 1},
+		],
 	)
 	STORE.seed(
 		"Leave Allocation",
@@ -1249,8 +1257,27 @@ def _install_leave_api() -> None:
 			raise value
 		return value
 
+	def get_number_of_leave_days(
+		employee, leave_type, from_date, to_date, half_day=None, half_day_date=None, **kwargs
+	):
+		"""hrms's own day count, as far as this double models it.
+
+		THE REAL ONE SUBTRACTS HOLIDAYS AND WEEKENDS off the employee's Holiday
+		List and halves a half day. This stand-in does the inclusive span and the
+		half day and nothing else — enough to prove that `create_leave_request`
+		DELEGATES rather than counting for itself, which is the property under
+		test. `days_counted_via` on the answer is what says which ran, so a site
+		where hrms does not export this is visible rather than silently different.
+		"""
+		import frappe as _frappe
+
+		start, end = _frappe.utils.getdate(from_date), _frappe.utils.getdate(to_date)
+		days = float((end - start).days + 1)
+		return days - 0.5 if int(half_day or 0) else days
+
 	leaf = types.ModuleType(module_path)
 	leaf.get_leave_balance_on = get_leave_balance_on
+	leaf.get_number_of_leave_days = get_number_of_leave_days
 	built = []
 	parts = module_path.split(".")
 	for index in range(1, len(parts)):
