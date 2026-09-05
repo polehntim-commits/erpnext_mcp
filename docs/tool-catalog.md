@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 861 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 862 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 433 read tools are **on** by default and can be switched off individually. A
+All 434 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -968,6 +968,22 @@ a type nobody allocated is always zero and only adds noise. One misconfigured
 type lands in `failed[]` without losing the others.
 
 ---
+
+## 23z. `list_leave_types`
+
+**Read-only.** On by default. Needs `hrms`.
+
+**Arguments:** `employee`, `as_of`.
+
+The picker behind a leave form. Without `employee` it is the site's bare list,
+which is a picker where four of five choices refuse the moment somebody taps
+them; with it every row carries `allocated`, `balance` and `requestable`.
+
+**`requestable` is the column to draw on, and it is not `balance > 0`.** An
+unpaid type (`is_lwp`) is requestable with no allocation and no balance at all,
+because there is nothing to draw down — and on a farm that has not set up Leave
+Allocations it is the only kind anybody can file. Sorting on balance would put
+the one usable row last.
 
 ## 23a. `create_leave_request`
 

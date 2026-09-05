@@ -2917,6 +2917,29 @@ TOOLS = {
 		available=_app_installed("hrms"),
 		requires="the Frappe HR (hrms) app, which is not installed on this site",
 	),
+	"list_leave_types": _tool(
+		hr.list_leave_types,
+		"The leave types this site offers and — with `employee` — which of them "
+		"that person may actually draw. The picker behind a leave form.\n\n"
+		"`requestable` IS THE COLUMN TO DRAW ON, and it is not `balance > 0`. An "
+		"unpaid type (`is_lwp`) is requestable with no allocation and no balance "
+		"at all, because there is nothing to draw down — and on a farm that has "
+		"not set up Leave Allocations it is the only kind anybody can file. "
+		"Sorting on balance would put the one usable row last.\n\n"
+		"Without `employee` this is the site's list and nothing more, which is a "
+		"picker where four of five choices refuse the moment somebody taps them. "
+		"Read-only.",
+		{
+			"employee": _field(
+				_STRING,
+				"Whose entitlement to report. Omit for the site's bare list.",
+			),
+			"as_of": _field(_STRING, "Balance date, YYYY-MM-DD. Defaults to today."),
+		},
+		title="Leave types",
+		available=_app_installed("hrms"),
+		requires="the Frappe HR (hrms) app, which is not installed on this site",
+	),
 	"create_leave_request": _tool(
 		hr.create_leave_request,
 		"MUTATING (default OFF). File a leave request as a DRAFT Leave "

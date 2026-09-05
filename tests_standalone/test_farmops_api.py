@@ -460,6 +460,13 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# target against this very table, and calls it through the target's own
 		# guard and argument filter. `submit_wizard` is still absent.
 		"/mobile/submit_wizard_via_mobile",
+		# v0.158.0. Leave from a handset. Three different gates — self-service,
+		# dispatch for another worker, HR to answer — argued in `api/mobile.py`.
+		"/mobile/list_leave_types",
+		"/mobile/create_leave_request",
+		"/mobile/list_leave_requests",
+		"/mobile/approve_leave_request",
+		"/mobile/reject_leave_request",
 		# v0.91.0. The two payroll outputs, and the only routes on this table
 		# that reach wages. Both wrappers gate on `HR_ROLES` in their own bodies
 		# rather than on the field roles this surface is built for — a register
@@ -2848,6 +2855,12 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	HR_GATED: ClassVar[set[str]] = {
+		# v0.158.0. Answering a leave request, both ways. Approving SUBMITS the
+		# application and hrms writes the Leave Ledger Entry on submit, so this is
+		# the call that spends somebody's entitlement — a Foreman may say who is
+		# off, and deciding whether they are entitled to be is not the same act.
+		"approve_leave_request",
+		"reject_leave_request",
 		"create_acquisition_target",
 		"create_competitive_move",
 		"create_market_participant",
@@ -2875,6 +2888,14 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.158.0. Asking for a day off, seeing what you may ask for, and reading
+		# your own requests back. All three DEFAULT TO THE CALLER'S OWN EMPLOYEE
+		# and take the dispatch role the moment a body names somebody else — see
+		# `_leave_subject`. A role gate on self-service would mean a picker had to
+		# find a foreman to ask for a Tuesday.
+		"list_leave_types",
+		"create_leave_request",
+		"list_leave_requests",
 		"get_corrective_action_record",
 		"get_device_readings",
 		"get_food_safety_dashboard",
@@ -2944,7 +2965,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 92, "a method is named in two sets at once")
+		self.assertEqual(len(named), 97, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

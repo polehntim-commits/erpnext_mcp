@@ -476,6 +476,80 @@ def _described(row: dict) -> dict:
 	return out
 
 
+# ── 30e. list_leave_types ───────────────────────────────────────────────────
+def list_leave_types(args: dict) -> ToolResult:
+	"""What this site offers, and which of it this employee may actually draw.
+
+	IT EXISTS SO A PICKER IS NOT A LIST OF TRAPS. Without `employee` this is the
+	site's Leave Types and nothing more, which is a list where four of five
+	choices refuse the moment somebody taps them. With it, every row carries
+	`allocated`, `balance` and `requestable` — so a handset can grey out what
+	cannot be filed instead of finding out at submission.
+
+	`requestable` IS THE COLUMN THE APP SHOULD DRAW ON, and it is not the same as
+	`balance > 0`. An unpaid type is requestable with no allocation and no balance
+	at all, because `is_lwp` means there is nothing to draw down — which on a farm
+	that has not set up Leave Allocations is the only kind of leave anybody can
+	file. Sorting on balance alone would put the one usable row last.
+	"""
+	compat.require_doctype("Leave Type", "It comes with the Frappe HR (hrms) app.")
+	employee = as_str(args, "employee")
+	resolved = _resolve_employee(employee) if employee else ""
+	as_of = as_date(args, "as_of") or frappe.utils.today()
+
+	fields = compat.existing_fields("Leave Type", ("name", "is_lwp", "max_leaves_allowed"))
+	rows = frappe.db.get_all("Leave Type", fields=fields, order_by="name asc", limit=LEAVE_CAP) or []
+
+	allocated = set(_allocated_leave_types(resolved, str(as_of))) if resolved else set()
+	balance_on = _leave_balance_api() if resolved else None
+
+	types = []
+	for row in rows:
+		name = str(row.get("name"))
+		lwp = bool(frappe.utils.cint(row.get("is_lwp")))
+		entry = {
+			"leave_type": name,
+			"is_lwp": lwp,
+			"max_leaves_allowed": _number(row.get("max_leaves_allowed")) or None,
+		}
+		if resolved:
+			has_allocation = name in allocated
+			balance = None
+			if has_allocation and balance_on is not None:
+				try:
+					balance = _number(balance_on(resolved, name, str(as_of)))
+				except Exception:  # pragma: no cover - one bad type must not lose the list
+					balance = None
+			entry.update(
+				allocated=has_allocation,
+				balance=balance,
+				# See the docstring: unpaid leave needs no allocation, so it is
+				# requestable on a site that has never made one.
+				requestable=bool(lwp or (has_allocation and (balance or 0) > 0)),
+			)
+		types.append(entry)
+
+	data = {
+		"leave_types": types,
+		"count": len(types),
+		"employee": resolved or None,
+		"as_of": str(as_of),
+	}
+	if resolved:
+		data["requestable_count"] = sum(1 for row in types if row.get("requestable"))
+		data["employee_name"] = frappe.db.get_value("Employee", resolved, "employee_name")
+	return ToolResult(
+		data,
+		f"{len(types)} leave type(s)"
+		+ (
+			f", {data['requestable_count']} requestable by "
+			f"{data.get('employee_name') or resolved}"
+			if resolved
+			else ""
+		),
+	)
+
+
 # ── 30a. create_leave_request ───────────────────────────────────────────────
 def create_leave_request(args: dict) -> ToolResult:
 	"""File a leave request as a DRAFT. Approval is a separate, gated act.

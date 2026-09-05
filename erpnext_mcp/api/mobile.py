@@ -130,6 +130,7 @@ from ..tools import compintel as compintel_tools
 from ..tools import dimensions as dimension_tools
 from ..tools import discipline as discipline_tools
 from ..tools import employee as personnel
+from ..tools import hr as hr_tools
 from ..tools import evidence as evidence_tools
 from ..tools import expenses as expense_tools
 from ..tools import farm as farm_tools
@@ -19099,3 +19100,196 @@ def get_irrigation_zone(
 	if report.get("unpriced_note"):
 		data["total_runtime"]["unpriced_note"] = report["unpriced_note"]
 	return data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Leave, from a handset
+#
+# WHO MAY DO WHAT, AND WHY THE THREE GATES ARE DIFFERENT. `allow_<tool>` gates
+# `registry.dispatch` and is never read here, so the gate written into each
+# wrapper below IS the whole access decision on this transport.
+#
+#   * FILING FOR YOURSELF is open on enrolment. Asking for a day off is the most
+#     ordinary thing a worker does and it writes a DRAFT that somebody else has
+#     to answer; a role gate on it would mean a picker had to find a foreman to
+#     ask for a Tuesday.
+#   * FILING FOR SOMEBODY ELSE takes the dispatch role. "Ana is off sick
+#     Thursday" is the foreman's job — it is the farmer's-wife work this whole
+#     surface exists to replace — so Foreman and Farm Manager, not HR.
+#   * ANSWERING takes the HR role, which is System Manager, HR Manager, HR User
+#     and Farm Manager. Approving submits the application and hrms writes the
+#     Leave Ledger Entry on submit, so this is the call that spends somebody's
+#     entitlement. A Foreman may say who is off; deciding whether they are
+#     entitled to be is not the same act.
+#
+# READING DEFAULTS TO YOURSELF ON EVERY ONE OF THEM. `employee` omitted means the
+# caller's own Employee, and naming somebody else takes the dispatch role — so a
+# picker cannot read a colleague's sick days by passing their docname, which is
+# the one way this surface could leak PII it has no business carrying.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _leave_subject(user: str, employee, allowed: list, action: str) -> str:
+	"""Whose leave this call is about: the caller's own, or somebody else's.
+
+	THE DEFAULT IS THE CALLER AND THAT IS THE SECURITY PROPERTY. An omitted
+	`employee` can only ever mean the person holding the phone, so the ordinary
+	call cannot reach another person's record at all. A named one is proved to
+	sit inside the caller's own entities by `require_scoped_doc` — an Employee of
+	another farm reads as not found rather than as refused — AND takes the
+	dispatch role on top, because reading or writing another worker's leave is
+	supervision rather than self-service.
+	"""
+	named = str(employee or "").strip()
+	mine = _employee(user)
+	if not named:
+		return mine
+	subject = _employee_argument(named, allowed)
+	if subject != mine:
+		guard.require_dispatch_role(user, action)
+	return subject
+
+
+# ── 114. list_leave_types ────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_leave_types", limit=guard.READ_LIMIT)
+def list_leave_types(user: str, employee=None, as_of=None) -> dict:
+	"""The picker behind the leave form: what this worker may actually draw.
+
+	Every row carries `requestable`, which is what the app should grey out on —
+	an unpaid type is requestable with no allocation and no balance, and on a
+	farm that has not set up Leave Allocations it is the only kind anybody can
+	file.
+	"""
+	allowed = guard.require_scope(user)
+	subject = _leave_subject(user, employee, allowed, "Reading another worker's leave entitlement")
+	inner = {"employee": subject}
+	if as_of:
+		inner["as_of"] = str(as_of).strip()
+	return hr_tools.list_leave_types(inner).data
+
+
+# ── 115. create_leave_request ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_leave_request", mutating=True, limit=guard.WRITE_LIMIT)
+def create_leave_request(
+	user: str,
+	employee=None,
+	leave_type=None,
+	from_date=None,
+	to_date=None,
+	reason=None,
+	half_day=None,
+	half_day_date=None,
+) -> dict:
+	"""Ask for a day off. Files a DRAFT; answering it is a different route.
+
+	`employee` OMITTED IS THE CALLER, which is the ordinary call and needs no
+	role at all. Naming somebody else is the foreman's "Ana is off sick
+	Thursday" and takes the dispatch role.
+
+	`leave_approver` AND `posting_date` ARE NOT DECLARED, so `routes.bind` cannot
+	deliver either. A handset naming its own approver would be choosing who
+	answers it, and one naming its own posting date would be filing a request
+	dated whenever it suited — both are Desk decisions, and the tool's own
+	defaults are the caller and today.
+	"""
+	allowed = guard.require_scope(user)
+	subject = _leave_subject(user, employee, allowed, "Filing leave for another worker")
+
+	inner: dict = {"employee": subject}
+	for key, value in (
+		("leave_type", leave_type),
+		("from_date", from_date),
+		("to_date", to_date),
+		("reason", reason),
+		("half_day_date", half_day_date),
+	):
+		if value not in (None, ""):
+			inner[key] = str(value).strip()
+	if half_day is not None:
+		inner["half_day"] = half_day
+	return hr_tools.create_leave_request(inner).data
+
+
+# ── 116. list_leave_requests ─────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_leave_requests", limit=guard.READ_LIMIT)
+def list_leave_requests(
+	user: str, employee=None, status=None, from_date=None, to_date=None, limit=None
+) -> dict:
+	"""Leave requests: a worker's own by default, a crew's with the dispatch role.
+
+	`company` IS NOT DECLARED and cannot be delivered. The rows are scoped after
+	the read to the caller's own entities, which is the same thing done in one
+	fewer argument — and it means a body naming another farm's company returns
+	that farm's nothing rather than a refusal that confirms it exists.
+	"""
+	allowed = guard.require_scope(user)
+	inner: dict = {}
+	named = str(employee or "").strip()
+	if named or not _is_supervisor(user):
+		# A worker with no dispatch role sees their own and only their own, named
+		# or not: the default is the caller, and naming somebody else is refused
+		# by `_leave_subject` before it reaches the register.
+		inner["employee"] = _leave_subject(
+			user, employee, allowed, "Reading another worker's leave"
+		)
+	for key, value in (("status", status), ("from_date", from_date), ("to_date", to_date)):
+		if value not in (None, ""):
+			inner[key] = str(value).strip()
+	if limit is not None:
+		inner["limit"] = limit
+
+	data = hr_tools.list_leave_requests(inner).data
+	data["requests"] = guard.scoped(data.get("requests") or [], allowed)
+	data["count"] = len(data["requests"])
+	data["pending_count"] = sum(1 for row in data["requests"] if row.get("status") == "Open")
+	return data
+
+
+def _is_supervisor(user: str) -> bool:
+	"""Whether this caller may see past their own record. Never raises."""
+	try:
+		guard.require_dispatch_role(user, "Reading the leave register")
+	except Exception:
+		return False
+	return True
+
+
+def _answer_leave_via_mobile(user: str, leave_application, reason, *, approve: bool) -> dict:
+	"""The shared body of the two answers. HR-gated, and scoped to the entity."""
+	allowed = guard.require_scope(user)
+	# THE GATE, AND IT IS THE WHOLE ACCESS DECISION ON THIS TRANSPORT. Approving
+	# submits the application and hrms writes the Leave Ledger Entry on submit,
+	# so this is the call that spends the entitlement. A Foreman may say who is
+	# off; deciding whether they are entitled to be is not the same act.
+	personnel.require_hr_role()
+	name = guard.require_scoped_doc(
+		"Leave Application", leave_application, "leave_application", allowed
+	)
+	inner: dict = {"leave_application": name}
+	if reason not in (None, ""):
+		inner["reason"] = str(reason).strip()
+	# The answering account is recorded as the approver rather than taken from
+	# the body: a handset naming somebody else as having answered it would put a
+	# decision in another person's name.
+	inner["leave_approver"] = user
+	tool = hr_tools.approve_leave_request if approve else hr_tools.reject_leave_request
+	return tool(inner).data
+
+
+# ── 117. approve_leave_request ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("approve_leave_request", mutating=True, limit=guard.WRITE_LIMIT)
+def approve_leave_request(user: str, leave_application=None, reason=None) -> dict:
+	"""Approve a leave request and submit it. THIS SPENDS AN ENTITLEMENT."""
+	return _answer_leave_via_mobile(user, leave_application, reason, approve=True)
+
+
+# ── 118. reject_leave_request ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("reject_leave_request", mutating=True, limit=guard.WRITE_LIMIT)
+def reject_leave_request(user: str, leave_application=None, reason=None) -> dict:
+	"""Refuse a leave request, with a reason the worker reads on the record."""
+	return _answer_leave_via_mobile(user, leave_application, reason, approve=False)

@@ -74,13 +74,16 @@ from .fixtures import (
 	seed_masters,
 	seed_stock,
 )
-from .harness import ROLES, STORE, set_roles
+from .harness import ROLES, STORE, register_doctype, set_roles
 from .test_dispatch import WALK
 
 WORKER = "ana@example.test"
 WORKER_EMPLOYEE = "EMP-ANA"
 OUTSIDER = "ben@example.test"
 OUTSIDER_EMPLOYEE = "EMP-BEN"
+#: v0.158.0. A colleague inside the CALLER'S OWN entity, so a refusal about them
+#: is the role gate rather than the scope check.
+MATE_EMPLOYEE = "EMP-CAL"
 
 ON = {
 	f"allow_{name}": 1
@@ -653,6 +656,14 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# "answers"}` — and had it dropped at the door by `routes.bind`; what
 		# changed in v0.91.0 is that a method now declares those two names.
 		"submit_wizard_via_mobile",
+		# v0.158.0. The leave surface. `MobileAPI.swift` does not name these yet —
+		# the server half is this release; the picker, the form and the approval
+		# queue are the app's. They move up when it names them.
+		"list_leave_types",
+		"create_leave_request",
+		"list_leave_requests",
+		"approve_leave_request",
+		"reject_leave_request",
 		# v0.91.0. The two payroll outputs. `MobileAPI.swift` does not name
 		# either yet — there is no payroll screen in the app — and they are here
 		# rather than in `PENDING_IOS_INTEGRATION` because they are published on
@@ -5002,3 +5013,241 @@ class TheCertificateRegisterReachesThePhone(MobileAPITestCase):
 		self.as_foreman()
 		found = {row["name"] for row in mobile_api.list_certifications()["certifications"]}
 		self.assertEqual(found, {"Applicator — Sol Herrera 2026"})
+
+
+# ── 11. leave, and the three gates on it ────────────────────────────────────
+class LeaveFromAHandset(MobileAPITestCase):
+	"""v0.158.0. Three routes, three different gates, and why each one differs.
+
+	`allow_<tool>` GATES `registry.dispatch` AND IS NEVER READ HERE, so the line
+	written into each wrapper body is the whole access decision on this
+	transport. These tests drive each route as the least-privileged caller who
+	can reach it at all, which is the only way that line is checked.
+
+	  * FILING FOR YOURSELF is open on enrolment. A role gate on it would mean a
+	    picker had to find a foreman to ask for a Tuesday, and what it writes is
+	    a DRAFT somebody else still has to answer.
+	  * FILING FOR SOMEBODY ELSE takes the dispatch role — "Ana is off sick
+	    Thursday" is the foreman's job.
+	  * ANSWERING takes the HR role, because approving submits the application
+	    and hrms writes the Leave Ledger Entry on submit. A Foreman may say who
+	    is off; deciding whether they are entitled to be is not the same act.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		register_doctype(
+			"Leave Type", [{"fieldname": "name"}, {"fieldname": "is_lwp"}]
+		)
+		STORE.seed(
+			"Leave Type",
+			[{"name": "Sick Leave"}, {"name": "Leave Without Pay", "is_lwp": 1}],
+		)
+		from .fixtures import _install_leave_api
+
+		_install_leave_api()
+		# A COLLEAGUE IN THE CALLER'S OWN ENTITY. `OUTSIDER_EMPLOYEE` is in
+		# `OTHER`, so `require_scoped_doc` answers "not found" for them before any
+		# role gate runs — which is correct and is tested on its own below, but it
+		# is not the refusal these tests are about. A same-company colleague is
+		# what makes the ROLE gate the thing under test.
+		STORE.seed(
+			"Employee",
+			[
+				{
+					"name": MATE_EMPLOYEE,
+					"employee_name": "Cal Wheeler",
+					"user_id": "cal@example.test",
+					"company": MAIN,
+					"status": "Active",
+				}
+			],
+		)
+
+	def file_own(self, user=WORKER, **overrides):
+		self.be(user)
+		payload = {
+			"leave_type": "Leave Without Pay",
+			"from_date": "2026-06-01",
+			"to_date": "2026-06-02",
+		}
+		payload.update(overrides)
+		return mobile_api.create_leave_request(**payload)
+
+	# ── filing for yourself needs no role ───────────────────────────────────
+	def test_a_picker_may_ask_for_a_day_off_without_any_role(self):
+		"""THE ORDINARY CALL. Unpaid leave, because a farm with no Leave
+		Allocations — which is Orchard Meadow — can file nothing else."""
+		set_roles(WORKER, ["Field Worker"])
+		answer = self.file_own()
+		self.assertEqual(answer["request"]["employee"], WORKER_EMPLOYEE)
+		self.assertEqual(answer["request"]["docstatus"], 0)
+		self.assertEqual(answer["request"]["status"], "Open")
+
+	def test_an_omitted_employee_can_only_ever_mean_the_caller(self):
+		"""THE SECURITY PROPERTY OF THE DEFAULT. The ordinary call cannot reach
+		another person's record at all, because there is no argument on it that
+		points anywhere but at the caller."""
+		set_roles(WORKER, ["Field Worker"])
+		self.assertEqual(self.file_own()["request"]["employee"], WORKER_EMPLOYEE)
+
+	def test_a_picker_may_not_file_for_a_colleague(self):
+		"""Naming somebody else is supervision, and a picker is not a supervisor.
+		Without this line a worker could book a colleague's week off."""
+		set_roles(WORKER, ["Field Worker"])
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.create_leave_request(
+				employee=MATE_EMPLOYEE,
+				leave_type="Leave Without Pay",
+				from_date="2026-06-01",
+				to_date="2026-06-02",
+			)
+		self.assertIn("restricted to", str(caught.exception))
+
+	def test_a_foreman_may_file_for_the_crew(self):
+		"""The farmer's-wife job this whole surface exists to replace."""
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.be()
+		answer = mobile_api.create_leave_request(
+			employee=MATE_EMPLOYEE,
+			leave_type="Leave Without Pay",
+			from_date="2026-06-01",
+			to_date="2026-06-02",
+		)
+		self.assertEqual(answer["request"]["employee"], MATE_EMPLOYEE)
+
+	def test_a_colleague_at_another_farm_reads_as_absent_rather_than_refused(self):
+		"""SCOPE BEFORE ROLE, and the order is the point: an Employee of an entity
+		this account cannot see is "not found", not "restricted", so a docname
+		cannot be used to confirm that somebody works somewhere."""
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.create_leave_request(
+				employee=OUTSIDER_EMPLOYEE,
+				leave_type="Leave Without Pay",
+				from_date="2026-06-01",
+				to_date="2026-06-02",
+			)
+		self.assertIn("not found", str(caught.exception))
+
+	def test_the_approver_and_the_posting_date_cannot_be_delivered(self):
+		"""A handset naming its own approver would be choosing who answers it;
+		one naming its own posting date would be filing a request dated whenever
+		it suited. Neither is on the signature, so `routes.bind` drops both."""
+		accepted = farmops_routes.accepted_arguments(mobile_api.create_leave_request)
+		self.assertNotIn("leave_approver", accepted)
+		self.assertNotIn("posting_date", accepted)
+
+	# ── reading defaults to yourself ────────────────────────────────────────
+	def test_a_picker_reads_their_own_requests_and_only_their_own(self):
+		"""THE ONE WAY THIS SURFACE COULD LEAK PII IT HAS NO BUSINESS CARRYING.
+		A colleague's sick days are not a picker's to read, named or not."""
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.file_own()
+		self.be()
+		mobile_api.create_leave_request(
+			employee=MATE_EMPLOYEE,
+			leave_type="Leave Without Pay",
+			from_date="2026-07-01",
+			to_date="2026-07-02",
+		)
+
+		set_roles(WORKER, ["Field Worker"])
+		self.be()
+		mine = mobile_api.list_leave_requests()
+		self.assertEqual({row["employee"] for row in mine["requests"]}, {WORKER_EMPLOYEE})
+
+	def test_a_picker_naming_a_colleague_is_refused_rather_than_answered(self):
+		set_roles(WORKER, ["Field Worker"])
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.list_leave_requests(employee=MATE_EMPLOYEE)
+		self.assertIn("restricted to", str(caught.exception))
+
+	def test_a_foreman_sees_the_crew_and_can_narrow_to_the_queue(self):
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.file_own()
+		self.be()
+		mobile_api.create_leave_request(
+			employee=MATE_EMPLOYEE,
+			leave_type="Leave Without Pay",
+			from_date="2026-07-01",
+			to_date="2026-07-02",
+		)
+		everyone = mobile_api.list_leave_requests()
+		self.assertEqual(len(everyone["requests"]), 2)
+		self.assertEqual(everyone["pending_count"], 2)
+		self.assertEqual(len(mobile_api.list_leave_requests(status="Open")["requests"]), 2)
+
+	def test_the_company_cannot_be_named_in_the_body(self):
+		"""The rows are scoped after the read to the caller's own entities, which
+		is the same thing in one fewer argument — and a body naming another
+		farm's company would otherwise confirm that it exists."""
+		self.assertNotIn(
+			"company", farmops_routes.accepted_arguments(mobile_api.list_leave_requests)
+		)
+
+	# ── the picker ──────────────────────────────────────────────────────────
+	def test_the_type_picker_marks_what_this_worker_may_actually_draw(self):
+		"""`requestable` is not `balance > 0`: unpaid leave is requestable with no
+		allocation at all, which on this farm is the only kind anybody can file."""
+		set_roles(WORKER, ["Field Worker"])
+		self.be()
+		answer = mobile_api.list_leave_types()
+		by_type = {row["leave_type"]: row for row in answer["leave_types"]}
+		self.assertTrue(by_type["Leave Without Pay"]["requestable"])
+		self.assertFalse(by_type["Sick Leave"]["requestable"])
+		self.assertEqual(answer["employee"], WORKER_EMPLOYEE)
+
+	# ── answering takes the HR role ─────────────────────────────────────────
+	def test_a_foreman_may_not_answer_a_request(self):
+		"""THE GATE THAT MATTERS MOST. Approving submits the application and hrms
+		writes the Leave Ledger Entry on submit, so this call spends somebody's
+		entitlement. A Foreman may say who is off; deciding whether they are
+		entitled to be is not the same act."""
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		name = self.file_own()["leave_application"]
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.approve_leave_request(leave_application=name)
+		self.assertIn("personnel register", str(caught.exception))
+
+	def test_a_farm_manager_may_answer_one(self):
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		name = self.file_own()["leave_application"]
+		self.be()
+		answer = mobile_api.approve_leave_request(leave_application=name)
+		self.assertEqual(answer["status"], "Approved")
+		self.assertEqual(answer["request"]["docstatus"], 1)
+
+	def test_the_answering_account_is_recorded_rather_than_taken_from_the_body(self):
+		"""A handset naming somebody else as having answered it would put a
+		decision in another person's name."""
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		name = self.file_own()["leave_application"]
+		self.be()
+		mobile_api.approve_leave_request(leave_application=name)
+		self.assertEqual(
+			frappe.db.get_value("Leave Application", name, "leave_approver"), WORKER
+		)
+
+	def test_rejecting_still_needs_its_reason_on_this_transport_too(self):
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		name = self.file_own()["leave_application"]
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.reject_leave_request(leave_application=name)
+		self.assertIn("reason", str(caught.exception))
+
+	def test_an_application_outside_the_callers_entities_is_not_found(self):
+		"""`require_scoped_doc`, so another farm's application reads as absent
+		rather than as refused — which is the difference between a miss and a
+		confirmation that it exists."""
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		name = self.file_own()["leave_application"]
+		frappe.db.set_value("Leave Application", name, "company", OTHER)
+		self.be()
+		with self.assertRaises(Exception):
+			mobile_api.approve_leave_request(leave_application=name)

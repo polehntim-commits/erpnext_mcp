@@ -108,6 +108,7 @@
   "allow_get_employee",
   "allow_get_attendance_summary",
   "allow_get_leave_balance",
+  "allow_list_leave_types",
   "allow_create_leave_request",
   "allow_list_leave_requests",
   "allow_approve_leave_request",
@@ -1090,6 +1091,13 @@
   "allow_update_supplier_verification"
  ],
  "fields": [
+  {
+   "default": "1",
+   "description": "The leave types this site offers and, with an employee, which of them that person may actually draw. `requestable` is the column a picker should draw on \u2014 an unpaid type is requestable with no allocation and no balance, which on a farm with no Leave Allocations is the only kind anybody can file.",
+   "fieldname": "allow_list_leave_types",
+   "fieldtype": "Check",
+   "label": "List Leave Types"
+  },
   {
    "fieldname": "connection_section",
    "fieldtype": "Section Break",

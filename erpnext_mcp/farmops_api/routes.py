@@ -758,6 +758,18 @@ ROUTES = (
 	# Inspection and a Farm Incident Record are still guarded by their own routes,
 	# because they are still reached through their own routes.
 	Route("/mobile", mobile_api.submit_wizard_via_mobile),
+	# v0.158.0. Leave, from a handset. `get_leave_balance` has been an MCP read
+	# since v0.18.1 and the phone could never reach it or act on it — a number on
+	# a screen somewhere else. THREE DIFFERENT GATES, argued at length above the
+	# wrappers: filing for yourself is open on enrolment, filing for somebody
+	# else takes the dispatch role, and answering takes the HR role because
+	# approving submits the application and hrms writes the Leave Ledger Entry on
+	# submit.
+	Route("/mobile", mobile_api.list_leave_types),
+	Route("/mobile", mobile_api.create_leave_request),
+	Route("/mobile", mobile_api.list_leave_requests),
+	Route("/mobile", mobile_api.approve_leave_request),
+	Route("/mobile", mobile_api.reject_leave_request),
 	# v0.91.0. The two payroll outputs. THE ONLY ROUTES ON THIS TABLE THAT REACH
 	# WAGES, and the only two whose wrappers gate on `HR_ROLES` rather than on
 	# the field roles the surface is built for — a register is what everybody was

@@ -3,6 +3,69 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.158.0 — 2026-09-04 — three gates, because they are three different acts
+
+v0.157.0 put leave on the MCP surface. This puts it on the phone: five mobile
+routes, plus `list_leave_types` as the picker behind the form. **862 tools.**
+
+**`allow_<tool>` GATES `registry.dispatch` AND IS NEVER READ ON THIS TRANSPORT**,
+so the line written into each wrapper body is the whole access decision. There
+are three of them and they are deliberately different:
+
+- **Filing for yourself is open on enrolment.** Asking for a day off is the most
+  ordinary thing a worker does, and it writes a DRAFT somebody else still has to
+  answer. A role gate would mean a picker had to find a foreman to ask for a
+  Tuesday.
+- **Filing for somebody else takes the dispatch role.** "Ana is off sick
+  Thursday" is the foreman's job — the farmer's-wife work this whole surface
+  exists to replace.
+- **Answering takes the HR role.** Approving submits the application and hrms
+  writes the Leave Ledger Entry on submit, so this is the call that spends
+  somebody's entitlement. **A Foreman may say who is off; deciding whether they
+  are entitled to be is not the same act.**
+
+**READING DEFAULTS TO YOURSELF ON EVERY ROUTE.** `employee` omitted can only ever
+mean the caller, so the ordinary call has no argument on it that points anywhere
+but at their own record — and naming somebody else takes the dispatch role. That
+is the one way this surface could leak PII it has no business carrying: a
+colleague's sick days.
+
+**SCOPE RUNS BEFORE ROLE, and the order is the point.** An Employee of an entity
+this account cannot see reads as *not found*, not as *restricted*, so a docname
+cannot be used to confirm that somebody works somewhere. Both refusals are
+tested, because they are different sentences for different reasons.
+
+`leave_approver`, `posting_date` and `company` are **not declared on any
+signature**, so `routes.bind` cannot deliver them. A handset naming its own
+approver would be choosing who answers it; one naming its own posting date would
+be filing a request dated whenever it suited; one naming a company would get a
+refusal that confirms another farm exists. The answering account is recorded as
+the approver instead — a decision put in another person's name is not one this
+surface will write.
+
+### `list_leave_types`
+
+The picker behind the form, on both transports. Without `employee` it is the
+site's bare list — a picker where four of five choices refuse the moment somebody
+taps them. With it, every row carries `allocated`, `balance` and `requestable`.
+
+**`requestable` is the column the app should draw on, and it is not
+`balance > 0`.** An unpaid type is requestable with no allocation and no balance
+at all, because `is_lwp` means there is nothing to draw down — and on a farm that
+has not set up Leave Allocations that is the only kind anybody can file. Sorting
+on balance would put the one usable row last.
+
+### Tests
+
+Sixteen new, each driving a route as the least-privileged caller who can reach
+it, and **three mutation checks**: dropping the on-behalf dispatch gate fails
+two, dropping the HR gate on answering fails one, and letting a worker's read
+skip the default-to-self fails one. None of the three is caught by anything else.
+
+Five registers as usual for a mobile route, and the gate-set register's union
+count moves 92 → 97 — a route mounted and left out of those sets is how a method
+goes quietly ungated, which is the property v0.124.0 added.
+
 ## 0.157.0 — 2026-09-04 — a number on a screen with no button under it
 
 **`get_leave_balance` HAS SHIPPED SINCE v0.18.1 AND THERE HAS BEEN NO WAY TO ASK
