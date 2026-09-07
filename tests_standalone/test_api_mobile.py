@@ -523,6 +523,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"list_cost_centers",
 		"list_suppliers",
 		"list_expense_receipts",
+		# v0.159.0. The detail read behind it — `MobileAPI.swift` does not name
+		# it yet; the receipt screen is the app's half.
+		"get_expense_receipt",
 		"update_expense_receipt",
 		# Sprint 8 (v0.78.0). Field asset registration: register the machine,
 		# get its printable tag back, file the photograph against it. The Swift
@@ -3042,6 +3045,64 @@ class ReceiptCaptureFromAPhone(MobileAPITestCase):
 		for method in ("approve_expense_receipt", "reject_expense_receipt"):
 			with self.subTest(method=method):
 				self.assertFalse(hasattr(mobile_api, method))
+
+	# ── get_expense_receipt, v0.159.0 ───────────────────────────────────────
+	def test_the_receipt_can_be_read_back_in_full(self):
+		"""THE READ AT THE END OF A FLOW THAT HAD NO ROUTE. `create_expense_receipt`
+		has been here since v0.31.0 and `list_expense_receipts` since v0.80.0, so
+		a phone could file a slip and see it in a list and then had nowhere to go
+		when somebody tapped it."""
+		filed = self.receipt()
+		back = mobile_api.get_expense_receipt(receipt=filed["name"])
+		self.assertEqual(back["name"], filed["name"])
+		self.assertEqual(back["merchant"], "Valley Co-op Fuel")
+		self.assertEqual(back["amount"], 184.62)
+
+	def test_the_photograph_comes_back_because_that_is_what_the_read_is_for(self):
+		"""A receipt is checked by LOOKING at it, so `receipt_image` has to be on
+		the answer. It is on the list rows too — both reads share `_read_fields`
+		— and that is not a reason to leave the detail read unrouted: a phone
+		showing one receipt fetches one receipt."""
+		filed = self.receipt(receipt_image="/private/files/slip.jpg")
+		self.assertEqual(
+			mobile_api.get_expense_receipt(receipt=filed["name"])["receipt_image"],
+			"/private/files/slip.jpg",
+		)
+
+	def test_the_lines_and_the_raw_ocr_are_what_the_list_does_not_carry(self):
+		"""WHAT THE DETAIL READ IS ACTUALLY FOR, beyond fetching one row. The
+		list answers the header columns; the items the scanner read off the slip
+		and the text it read them from are only here."""
+		filed = self.receipt(
+			items=[{"description": "DIESEL", "quantity": 40, "unit_price": 4.6}],
+			ocr_raw_text="VALLEY CO-OP FUEL\nDIESEL 40.0 @ 4.60",
+		)
+		back = mobile_api.get_expense_receipt(receipt=filed["name"])
+		self.assertEqual(back["items"][0]["description"], "DIESEL")
+		self.assertIn("DIESEL", back["ocr_raw_text"])
+		listed = mobile_api.list_expense_receipts()["receipts"][0]
+		self.assertNotIn("items", listed)
+		self.assertNotIn("ocr_raw_text", listed)
+
+	def test_name_is_accepted_as_a_second_spelling_of_receipt(self):
+		"""The list answers rows under `name`, and a client passing back what it
+		was given should not have to know the tool calls it `receipt`."""
+		filed = self.receipt()
+		self.assertEqual(mobile_api.get_expense_receipt(name=filed["name"])["name"], filed["name"])
+
+	def test_neither_spelling_is_refused_by_name(self):
+		with self.assertRaises(frappe.ValidationError) as caught:
+			mobile_api.get_expense_receipt()
+		self.assertIn("needs a receipt", str(caught.exception))
+
+	def test_another_entitys_receipt_reads_as_absent_rather_than_refused(self):
+		"""`require_scoped_doc`, so a docname cannot be used to confirm what
+		another farm has filed."""
+		filed = self.receipt()
+		frappe.db.set_value("Expense Receipt", filed["name"], "company", OTHER)
+		with self.assertRaises(Exception) as caught:
+			mobile_api.get_expense_receipt(receipt=filed["name"])
+		self.assertIn("not found", str(caught.exception))
 
 	def test_the_supplier_and_item_links_are_forwarded(self):
 		STORE.seed(

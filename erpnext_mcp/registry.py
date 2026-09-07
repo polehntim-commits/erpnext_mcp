@@ -26395,11 +26395,52 @@ TOOLS = {
 				"One operation. NOT INFERRED on a single-company site — see `without_company` "
 				"in the answer for what a company filter leaves out.",
 			),
+			"status": _field(
+				_STRING,
+				"'Open', 'Resolved' or \"Won't Fix\". DEFAULTS TO EVERYTHING — this "
+				"register is read as a history at least as often as it is read as a "
+				"queue. 'Open' also matches every note filed before v0.159.0, whose "
+				"column `bench migrate` left NULL.",
+			),
 			"limit": _field(_INTEGER, "Maximum rows. Capped at 500."),
 		},
 		title="List app feedback",
 		available=_needs_doctype("App Feedback"),
 		requires="the App Feedback DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"resolve_app_feedback": _tool(
+		app_feedback.resolve_app_feedback,
+		"MUTATING (default OFF). Answer a feedback note: what was done, or why it "
+		"will not be.\n\n"
+		"THE REGISTER WAS WRITE-ONLY UNTIL v0.159.0, and a feed nobody can mark "
+		"off is a feed that is read once. Every note stays at the top of "
+		"list_app_feedback forever, so the twentieth complaint about a screen "
+		"looks exactly like the first and nobody can say 'that was fixed in June' "
+		"except by remembering.\n\n"
+		"\"Won't Fix\" IS A REAL ANSWER AND IS NOT SPELLED \"Closed\". A worker "
+		"told no is told something; one whose note quietly disappears learns not "
+		"to file the next one. `resolution_note` is REQUIRED for a refusal and "
+		"optional for a fix — 'we did this' is usually evident from the release "
+		"that did it, and 'we are not going to' never is.\n\n"
+		"THE ANSWERING ACCOUNT IS WRITTEN FROM THE SESSION. There is no "
+		"`resolved_by` argument and there will not be one.\n\n"
+		"IT DOES NOT REOPEN: `status` takes only the two answers, so a note "
+		"answered wrongly is re-answered and the response names what it replaced. "
+		"The note a worker wrote is never edited.",
+		{
+			"name": _field(_STRING, "The App Feedback docname — AFB-YYYY-NNNNN."),
+			"status": _field(
+				_STRING,
+				"'Resolved' or \"Won't Fix\". Matched on the letters, so 'wont fix' is "
+				"accepted — the apostrophe is not something a caller can reliably retype.",
+			),
+			"resolution_note": _field(
+				_STRING, "What was done, or why it will not be. Required for \"Won't Fix\"."
+			),
+		},
+		required=("name", "status"),
+		mutating=True,
+		title="Answer a feedback note",
 	),
 	"get_app_feedback": _tool(
 		app_feedback.get_app_feedback,

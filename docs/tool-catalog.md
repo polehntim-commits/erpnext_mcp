@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 862 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 863 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -18497,12 +18497,39 @@ whatever comes out of it to the keys the method declares.
 |---|---|
 | `list_app_feedback` | The feed, newest first. Read. |
 | `get_app_feedback` | One note in full, by docname or by `entry_uuid`. Read. |
+| `resolve_app_feedback` | Answer a note — what was done, or why it will not be. **Mutating, off by default.** |
 
 The Desk list is still the right surface for somebody sitting at one. These exist
 because not every reader has one: the farmops sidecar does not forward
 `/api/resource`, so a client reaching this site over MCP had no way to read a
 single note — and the write half had been filing them since v0.105.0 into a table
 only one transport could see.
+
+**A feed nobody can mark off is a feed that is read once** (v0.159.0).
+`resolve_app_feedback` takes `name`, `status` — `"Resolved"` or `"Won't Fix"` —
+and an optional `resolution_note`, and `list_app_feedback` gained a matching
+`status` filter.
+
+**"Won't Fix" is a real answer and is deliberately not spelled "Closed".** A
+worker told no is told something; one whose note quietly disappears learns not to
+file the next one — so `resolution_note` is *required* for a refusal and optional
+for a fix, because "we did this" is usually evident from the release that did it
+and "we are not going to" never is. `status` is matched on its letters, so
+`"wont fix"` is accepted: the apostrophe is the one value here a caller cannot
+reliably retype.
+
+The answering account is written from the session — there is no `resolved_by`
+argument. It does not reopen, and it never edits the note the worker wrote.
+
+**The filter defaults to everything**, because this register is read as a history
+at least as often as a queue. `status="Open"` also matches every note filed
+before v0.159.0: `bench migrate` adds a column and leaves the existing rows NULL,
+so the filter asks for *not answered* rather than for equality with `"Open"`.
+
+```bash
+# what is still outstanding, including everything filed before the column existed
+list_app_feedback(status="Open")
+```
 
 **Recency means when Send was pressed.** The feed sorts and ranges on `timestamp`
 by default, not on `received_at`. A phone in a block with no signal holds a note

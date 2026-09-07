@@ -62,6 +62,7 @@ from unittest import mock
 
 import frappe
 
+from erpnext_mcp import registry
 from erpnext_mcp.api import mobile as mobile_api
 from erpnext_mcp.errors import ToolError
 from erpnext_mcp.farmops_api import routes as farmops_routes
@@ -594,3 +595,165 @@ class AnInstantOffAnIPhone(AppFeedbackTestCase):
 		`AppFeedback.autoname` exists to prevent."""
 		self.file()
 		self.assertIn("2026", self.only()["name"])
+
+
+# ── 8. the feed can be marked off ───────────────────────────────────────────
+class ANoteCanBeAnswered(AppFeedbackTestCase):
+	"""v0.159.0. The register was write-only, and a feed nobody can mark off is
+	a feed that is read once.
+
+	Every note stayed at the top of `list_app_feedback` forever, so the twentieth
+	complaint about a screen looked exactly like the first and nobody could say
+	"that was fixed in June" except by remembering.
+	"""
+
+	ON = {"allow_list_app_feedback": 1, "allow_get_app_feedback": 1, "allow_resolve_app_feedback": 1}
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **self.ON)
+
+	def a_filed_note(self, **overrides) -> str:
+		self.file(overrides or None)
+		return self.only()["name"]
+
+	def answer(self, name, status="Resolved", **extra):
+		payload = {"name": name, "status": status}
+		payload.update(extra)
+		return self.tool_data("resolve_app_feedback", payload)
+
+	# ── answering ───────────────────────────────────────────────────────────
+	def test_a_note_can_be_marked_resolved(self):
+		name = self.a_filed_note()
+		answer = self.answer(name, resolution_note="Fixed in 1.9.1 — the count is persisted now.")
+		self.assertEqual(answer["status"], "Resolved")
+		self.assertEqual(answer["previous_status"], "Open")
+		row = STORE.get_raw(APP_FEEDBACK, name)
+		self.assertEqual(row["status"], "Resolved")
+		self.assertIn("1.9.1", row["resolution_note"])
+
+	def test_the_answering_account_and_the_moment_are_stamped(self):
+		"""Written from the SESSION. There is no `resolved_by` argument and there
+		will not be one — an answer filed in somebody else's name is worse than
+		an unanswered note."""
+		name = self.a_filed_note()
+		self.answer(name)
+		row = STORE.get_raw(APP_FEEDBACK, name)
+		self.assertTrue(row["resolved_by"])
+		self.assertTrue(row["resolved_at"])
+		self.assertNotIn("resolved_by", registry.TOOLS["resolve_app_feedback"]["inputSchema"]["properties"])
+
+	def test_wont_fix_needs_a_reason_and_resolved_does_not(self):
+		"""A worker told no is told something; one whose complaint quietly
+		disappears learns not to file the next one."""
+		name = self.a_filed_note()
+		message = self.tool_error("resolve_app_feedback", {"name": name, "status": "Won't Fix"})
+		self.assertIn("resolution_note", message)
+		self.assertEqual(STORE.get_raw(APP_FEEDBACK, name).get("status"), None)
+
+		self.assertEqual(self.answer(name)["status"], "Resolved")
+
+	def test_the_apostrophe_does_not_have_to_be_retyped(self):
+		"""The only value on this doctype a caller cannot reliably reproduce: a
+		phone keyboard makes it a right single quote and a shell eats it."""
+		name = self.a_filed_note()
+		answer = self.answer(name, status="wont fix", resolution_note="Working as intended.")
+		self.assertEqual(answer["status"], "Won't Fix")
+		self.assertEqual(STORE.get_raw(APP_FEEDBACK, name)["status"], "Won't Fix")
+
+	def test_a_status_it_does_not_offer_is_refused_with_the_list(self):
+		name = self.a_filed_note()
+		message = self.tool_error("resolve_app_feedback", {"name": name, "status": "Closed"})
+		self.assertIn("Resolved", message)
+		self.assertIn("Won't Fix", message)
+
+	def test_it_does_not_reopen(self):
+		"""`status` takes only the two answers. A note answered wrongly is
+		re-answered; it is not returned to a queue with its history dropped."""
+		name = self.a_filed_note()
+		self.assertIn("Open", self.tool_error("resolve_app_feedback", {"name": name, "status": "Open"}))
+
+	def test_re_answering_names_what_it_replaced(self):
+		name = self.a_filed_note()
+		self.answer(name, resolution_note="Fixed.")
+		again = self.answer(name, status="wont fix", resolution_note="Actually it is by design.")
+		self.assertEqual(again["previous_status"], "Resolved")
+		self.assertTrue(again["was_already_answered"])
+		self.assertIn("replaced", again["replaced_note"])
+
+	def test_the_note_the_worker_wrote_is_never_edited(self):
+		name = self.a_filed_note()
+		before = STORE.get_raw(APP_FEEDBACK, name)["feedback_text"]
+		self.answer(name, resolution_note="Fixed.")
+		self.assertEqual(STORE.get_raw(APP_FEEDBACK, name)["feedback_text"], before)
+
+	def test_a_note_that_does_not_exist_is_refused_by_name(self):
+		self.assertIn(
+			"AFB-NOPE", self.tool_error("resolve_app_feedback", {"name": "AFB-NOPE", "status": "Resolved"})
+		)
+
+	def test_it_is_off_until_an_operator_switches_it_on(self):
+		name = self.a_filed_note()
+		self.configure(enabled=1, allow_list_app_feedback=1, allow_resolve_app_feedback=0)
+		self.assertIn(
+			"allow_resolve_app_feedback",
+			self.tool_error("resolve_app_feedback", {"name": name, "status": "Resolved"}),
+		)
+
+	# ── the filter, and the column a migrate left NULL ──────────────────────
+	def test_an_unanswered_note_reads_as_open_even_though_its_column_is_null(self):
+		"""THE TRAP, AND THE ONLY TEST HERE THAT WOULD HAVE CAUGHT IT. The
+		doctype's `default: "Open"` applies to documents Frappe CREATES; `bench
+		migrate` adds the column to the existing table and leaves every row NULL.
+		Every note this farm has already filed is one of those, so reporting the
+		column raw would show the whole register as status `None`."""
+		name = self.a_filed_note()
+		self.assertIsNone(STORE.get_raw(APP_FEEDBACK, name).get("status"), "fixture precondition")
+		note = self.tool_data("get_app_feedback", {"name": name})
+		self.assertEqual(note["status"], "Open")
+		self.assertTrue(note["is_open"])
+
+	def test_filtering_to_open_finds_the_notes_whose_column_is_null(self):
+		"""The same trap on the list side, and the worse half: `filters={"status":
+		"Open"}` matches on equality and would have returned NOTHING on the day
+		this shipped — the entire register, invisible, for the one filter anybody
+		wants."""
+		older = self.a_filed_note()
+		self.assertIsNone(STORE.get_raw(APP_FEEDBACK, older).get("status"), "fixture precondition")
+
+		feed = self.tool_data("list_app_feedback", {"status": "Open"})
+		self.assertEqual([n["name"] for n in feed["app_feedback"]], [older])
+
+		self.answer(older, resolution_note="Fixed.")
+		self.assertEqual(self.tool_data("list_app_feedback", {"status": "Open"})["app_feedback"], [])
+
+	def test_the_default_is_everything_rather_than_the_queue(self):
+		"""A feed that showed only the open ones would make "we answered that in
+		June" unanswerable from here, and this register is read as a history at
+		least as often as it is read as a queue."""
+		name = self.a_filed_note()
+		self.answer(name, resolution_note="Fixed.")
+		feed = self.tool_data("list_app_feedback", {})
+		self.assertEqual([n["name"] for n in feed["app_feedback"]], [name])
+		self.assertEqual(feed["by_status"], {"Resolved": 1})
+		self.assertEqual(feed["open_count"], 0)
+
+	def test_filtering_to_an_answer_finds_only_that_answer(self):
+		name = self.a_filed_note()
+		self.answer(name, status="wont fix", resolution_note="By design.")
+		self.assertEqual(len(self.tool_data("list_app_feedback", {"status": "Won't Fix"})["app_feedback"]), 1)
+		self.assertEqual(self.tool_data("list_app_feedback", {"status": "Resolved"})["app_feedback"], [])
+
+	def test_the_doctype_carries_the_four_columns_read_only(self):
+		"""A feed the reader can rewrite is not evidence of anything, and that
+		applies to the answer as much as to the note."""
+		path = (
+			Path(__file__).resolve().parent.parent
+			/ "erpnext_mcp" / "erpnext_mcp" / "doctype" / "app_feedback" / "app_feedback.json"
+		)
+		fields = {f["fieldname"]: f for f in json.loads(path.read_text())["fields"]}
+		for name in ("status", "resolution_note", "resolved_by", "resolved_at"):
+			with self.subTest(field=name):
+				self.assertEqual(fields[name].get("read_only"), 1)
+		self.assertEqual(fields["status"]["options"].split("\n"), ["Open", "Resolved", "Won't Fix"])
+		self.assertEqual(fields["status"]["default"], "Open")

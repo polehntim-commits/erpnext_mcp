@@ -422,6 +422,11 @@ class TheReadsAreScopedAndFound(AppFeedbackReadTestCase):
 		"device_model": "iPad13,1",
 		"device_id": "E7F1-ZZZZ",
 		"entry_uuid": "no-such-uuid",
+		# v0.159.0. The fixture's three notes are unanswered — their column is
+		# NULL, which `_describe` reads as Open — so "Resolved" matches none of
+		# them. `status="Open"` would match all three and prove nothing, which is
+		# what this table exists to stop.
+		"status": "Resolved",
 		"has_screenshot": False,
 		"was_dictated": False,
 		"from_date": "2027-01-01",
@@ -495,6 +500,14 @@ class TheToolsAreRegistered(unittest.TestCase):
 			set(registry.TOOLS["get_app_feedback"]["inputSchema"]["properties"]),
 			set(app_feedback.GET_ARGUMENTS),
 		)
+		# v0.159.0. The write half of the register is under the same guard, and
+		# the one argument that must NEVER appear on either side is `resolved_by`:
+		# the answering account is written from the session.
+		self.assertEqual(
+			set(registry.TOOLS["resolve_app_feedback"]["inputSchema"]["properties"]),
+			set(app_feedback.RESOLVE_ARGUMENTS),
+		)
+		self.assertNotIn("resolved_by", app_feedback.RESOLVE_ARGUMENTS)
 
 	def test_both_switches_ship_on(self):
 		path = (

@@ -8528,6 +8528,40 @@ def list_expense_receipts(user: str, company=None, status=None, limit=None) -> d
 	}
 
 
+# ── 74a. get_expense_receipt ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_expense_receipt", limit=guard.READ_LIMIT)
+def get_expense_receipt(user: str, receipt=None, name=None) -> dict:
+	"""One receipt in full, with the photograph, the lines and the raw OCR text.
+
+	THE READ AT THE END OF THE FLOW THAT HAD NO ROUTE. `create_expense_receipt`
+	has been on this surface since v0.31.0 and `list_expense_receipts` since
+	v0.80.0, so a phone could file a slip and see it in a list and then had
+	nowhere to go when somebody tapped it. The photograph in particular is the
+	thing a person wants back — a receipt is checked by looking at it — and
+	`receipt_image` is on the detail read and on nothing else.
+
+	`receipt` AND `name` ARE THE SAME ARGUMENT. The tool takes `receipt`, the
+	list answers rows under `name`, and a client that passes back what it was
+	given should not have to know the difference. `_one_spelling` is not used
+	because both spellings mean the docname here rather than two registers.
+
+	SCOPED BY `require_scoped_doc`, so a receipt belonging to another entity
+	reads as not found rather than as refused — the same rule every detail read
+	on this surface follows, and the one that stops a docname being used to
+	confirm what another farm has filed.
+	"""
+	allowed = guard.require_scope(user)
+	wanted = str(receipt or name or "").strip()
+	if not wanted:
+		raise ToolError(
+			"get_expense_receipt needs a receipt — send `receipt` (or `name`) naming the "
+			"Expense Receipt. list_expense_receipts has the register."
+		)
+	docname = guard.require_scoped_doc(EXPENSE_RECEIPT, wanted, "receipt", allowed)
+	return expense_tools.get_expense_receipt({"receipt": docname}).data
+
+
 # ── 75. update_expense_receipt ──────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("update_expense_receipt", mutating=True, limit=guard.WRITE_LIMIT)

@@ -949,6 +949,7 @@
   "allow_list_app_feedback",
   "app_feedback_col",
   "allow_get_app_feedback",
+  "allow_resolve_app_feedback",
   "diagnostics_section",
   "allow_get_server_status",
   "allow_list_error_logs",
@@ -7348,6 +7349,13 @@
    "fieldname": "allow_get_app_feedback",
    "fieldtype": "Check",
    "label": "Get App Feedback"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Answer a feedback note \u2014 what was done, or why it will not be. \"Won't Fix\" is a real answer and needs a resolution_note: a worker told no is told something, and one whose complaint quietly disappears learns not to file the next one. The note itself is never edited and the answering account is written from the session.",
+   "fieldname": "allow_resolve_app_feedback",
+   "fieldtype": "Check",
+   "label": "Resolve App Feedback"
   },
   {
    "fieldname": "diagnostics_section",

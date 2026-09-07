@@ -3,6 +3,79 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.159.0 — 2026-09-05 — a feed nobody could mark off, and a slip nobody could open
+
+Two unrelated gaps at the end of two flows that were otherwise finished. **863
+tools.**
+
+### The feedback register was write-only
+
+`submit_app_feedback` has been filing notes since v0.105.0 and v0.128.0 gave the
+farm two ways to read them, and there has never been a way to say *we answered
+that*. Every note sits at the top of `list_app_feedback` forever, so the
+twentieth complaint about a screen looks exactly like the first and the person
+reading it can only tell them apart by remembering.
+
+`App Feedback` gains `status`, `resolution_note`, `resolved_by` and `resolved_at`
+— all four **read-only on the doctype**, because a feed the reader can rewrite is
+not evidence of anything, and that applies to the answer as much as to the note.
+`resolve_app_feedback` is the tool.
+
+**"Won't Fix" is a real answer and is deliberately not spelled "Closed".** The
+difference between *we did this* and *we are not going to* is the whole of what
+somebody reading the feed a season later needs. A worker told no is told
+something; one whose complaint quietly disappears learns not to file the next
+one — which is why `resolution_note` is **required** for a refusal and optional
+for a fix. "We did this" is usually evident from the release that did it; "we are
+not going to" never is.
+
+`status` is matched on its **letters**, so `"wont fix"` is accepted. It is the one
+value on this doctype a caller cannot reliably retype: a phone keyboard makes the
+apostrophe a right single quote and a shell eats it.
+
+The answering account is **written from the session** — there is no `resolved_by`
+argument and there will not be one. It **does not reopen**: a note answered
+wrongly is re-answered and the response names what it replaced, rather than being
+returned to a queue with its history dropped. The note the worker wrote is never
+edited.
+
+**THE COLUMN IS NULL ON EVERY NOTE THIS FARM HAS ALREADY FILED, AND THAT IS THE
+TRAP.** `default: "Open"` in the doctype JSON applies to documents Frappe
+*creates*; `bench migrate` adds the column to the existing table and leaves every
+row NULL. So `filters={"status": "Open"}` — the obvious implementation — would
+have matched **nothing** on the day this shipped: the entire register, invisible,
+for the one filter anybody wants. The filter asks for *not answered* instead,
+which catches NULL, `""` and `"Open"` together and needs no backfill patch for a
+column whose absence already means what the backfill would write. `_describe`
+reads an empty column as `"Open"` for the same reason. Both halves have a test,
+and both fail against the naive version.
+
+The `status` filter **defaults to everything**, because this register is read as
+a history at least as often as a queue.
+
+### The receipt flow had no detail read
+
+`create_expense_receipt` has been on the mobile surface since v0.31.0 and
+`list_expense_receipts` since v0.80.0, so a phone could file a slip and see it in
+a list and then had **nowhere to go when somebody tapped it**.
+`get_expense_receipt` is now routed. Scoped by `require_scoped_doc`, so another
+entity's receipt reads as not found rather than as refused; `name` is accepted as
+a second spelling of `receipt`, because the list answers rows under `name` and a
+client passing back what it was given should not have to know the difference.
+
+The photograph comes back — a receipt is checked by looking at it — along with
+the line items and the raw OCR text, which are the two things the list does not
+carry. **`receipt_image` is on the list rows too**, contrary to what the first
+draft of the test asserted; the detail read earns its place on the lines and the
+OCR, and on a phone showing one receipt fetching one receipt.
+
+### Tests
+
+Twenty new — fifteen for the feedback answer, five for the receipt read — and two
+mutation checks: filtering on equality fails the NULL test, and reporting the
+column raw fails the other. One test corrected mid-flight when the code
+contradicted it.
+
 ## 0.158.0 — 2026-09-04 — three gates, because they are three different acts
 
 v0.157.0 put leave on the MCP surface. This puts it on the phone: five mobile

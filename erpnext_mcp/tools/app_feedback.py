@@ -69,7 +69,7 @@ sends `screenshot_omitted: "too_large"` rather than holding the note back.
 
 import frappe
 
-from .. import compat, datetimes
+from .. import compat, datetimes, security
 from ..args import as_bool, as_date, as_limit, as_str
 from ..erpnext_mcp.doctype.app_feedback import app_feedback as feedback_doctype
 from ..errors import ToolError
@@ -122,6 +122,10 @@ _FIELDS = (
 	"has_screenshot",
 	"screenshot_omitted",
 	"screenshot",
+	"status",
+	"resolution_note",
+	"resolved_by",
+	"resolved_at",
 )
 
 
@@ -383,6 +387,10 @@ _LIST_FIELDS = (
 	"has_screenshot",
 	"screenshot_omitted",
 	"creation",
+	"status",
+	"resolution_note",
+	"resolved_by",
+	"resolved_at",
 )
 
 #: One note in full. The two `claimed_*` columns are here and not in the list
@@ -424,6 +432,29 @@ _TEXT_FILTERS = (
 #: `has_screenshot=false` is a real question and is not the same as not asking.
 _FLAG_FILTERS = (("has_screenshot", "has_screenshot"), ("was_dictated", "was_dictated"))
 
+#: What a note's `status` may say. v0.159.0.
+#:
+#: "Won't Fix" IS DELIBERATELY NOT SPELLED "Closed". The difference between "we
+#: did this" and "we are not going to" is the whole of what somebody reading the
+#: feed a season later needs, and one word covering both loses it.
+OPEN = "Open"
+RESOLVED = "Resolved"
+WONT_FIX = "Won't Fix"
+ANSWERED = (RESOLVED, WONT_FIX)
+STATUSES = (OPEN, *ANSWERED)
+
+#: THE COLUMN IS NULL ON EVERY NOTE FILED BEFORE v0.159.0, AND `default: "Open"`
+#: IN THE DOCTYPE JSON DOES NOT CHANGE THAT. A Frappe default is applied when a
+#: NEW document is created; `bench migrate` adds the column to the existing table
+#: and leaves every row NULL. So `filters={"status": "Open"}` would match none of
+#: the notes this farm has actually filed — the entire register, on the day this
+#: ships — and the feed would come back empty for the one filter anybody wants.
+#:
+#: Filtering on NOT-ANSWERED instead catches NULL, "" and "Open" together, and
+#: keeps doing so without a patch to backfill a column whose absence already
+#: means exactly what the backfill would write.
+_UNANSWERED = ("not in", list(ANSWERED))
+
 #: EVERY ARGUMENT `list_app_feedback` READS, so a test can check the registry
 #: declares all of them without a hand-copied list going stale beside this one.
 #: `additionalProperties` is advertised on every schema in this app and enforced
@@ -433,6 +464,7 @@ LIST_ARGUMENTS = (
 	"submitted_by",
 	*(key for key, _ in _TEXT_FILTERS),
 	*(key for key, _ in _FLAG_FILTERS),
+	"status",
 	"from_date",
 	"to_date",
 	"date_basis",
@@ -443,6 +475,11 @@ LIST_ARGUMENTS = (
 #: The same for `get_app_feedback`. Neither is `required` in the schema: one of
 #: the two must be given and either will do, which `required` cannot express.
 GET_ARGUMENTS = ("name", "entry_uuid")
+
+#: And for `resolve_app_feedback`. `resolved_by` is NOT here and must never be:
+#: the answering account is written from the session, and an answer filed in
+#: somebody else's name is worse than an unanswered note.
+RESOLVE_ARGUMENTS = ("name", "status", "resolution_note")
 
 
 def _stamp(value) -> str | None:
@@ -517,6 +554,16 @@ def _describe(row: dict) -> dict:
 		},
 		"has_screenshot": compat.checked(row.get("has_screenshot")),
 		"screenshot_omitted": row.get("screenshot_omitted") or None,
+		# AN EMPTY COLUMN IS READ AS OPEN, and that is the same rule the list
+		# filter uses. Every note filed before v0.159.0 has NULL here — the
+		# doctype's `default` applies to new documents, not to rows a migrate
+		# added a column to — and reporting those as status `None` would make a
+		# reader think the register had two kinds of unanswered note.
+		"status": row.get("status") or OPEN,
+		"is_open": (row.get("status") or OPEN) not in ANSWERED,
+		"resolution_note": row.get("resolution_note") or None,
+		"resolved_by": row.get("resolved_by") or None,
+		"resolved_at": _stamp(row.get("resolved_at")),
 	}
 
 
@@ -604,6 +651,17 @@ def list_app_feedback(args: dict) -> ToolResult:
 	if company:
 		filters["company"] = company
 
+	# STATUS DEFAULTS TO EVERYTHING, and the default is the deliberate half. A
+	# feed that showed only the open ones would make "we answered that in June"
+	# unanswerable from here, and the register is read as a history at least as
+	# often as it is read as a queue.
+	status = as_str(args, "status")
+	if status:
+		status = _validated_status(status, "status")
+		# See `_UNANSWERED`: the column is NULL on every note filed before
+		# v0.159.0, so "Open" cannot be matched by equality.
+		filters["status"] = _UNANSWERED if status == OPEN else status
+
 	basis, from_date, to_date = _date_window(args, filters)
 	order_column = _DATE_BASIS[basis]
 	limit = min(as_limit(args), REGISTER_CAP)
@@ -629,6 +687,10 @@ def list_app_feedback(args: dict) -> ToolResult:
 		role = note["role"] or "(no role claimed)"
 		by_role[role] = by_role.get(role, 0) + 1
 
+	by_status: dict = {}
+	for note in notes:
+		by_status[note["status"]] = by_status.get(note["status"], 0) + 1
+
 	data = {
 		"count": len(notes),
 		"limit": limit,
@@ -643,11 +705,14 @@ def list_app_feedback(args: dict) -> ToolResult:
 			"app_version": filters.get("app_version"),
 			"device_model": filters.get("device_model"),
 			"company": company or None,
+			"status": status or None,
 			"from_date": from_date,
 			"to_date": to_date,
 		},
 		"by_screen": dict(sorted(by_screen.items())),
 		"by_role": dict(sorted(by_role.items())),
+		"by_status": dict(sorted(by_status.items())),
+		"open_count": sum(1 for note in notes if note["is_open"]),
 		"dictated_count": sum(1 for note in notes if note["was_dictated"]),
 		"with_screenshot": sum(1 for note in notes if note["has_screenshot"]),
 		"app_feedback": notes,
@@ -687,6 +752,7 @@ def list_app_feedback(args: dict) -> ToolResult:
 		data=data,
 		summary=(
 			f"{len(notes)} app feedback note(s)"
+			+ (f", {data['open_count']} open" if notes and not status else "")
 			+ (f" from {value}" if value else "")
 			+ (f", {data['with_screenshot']} with a screenshot" if notes else "")
 		),
@@ -769,4 +835,121 @@ def get_app_feedback(args: dict) -> ToolResult:
 			f", {data['submitted_at'] or 'undated'}"
 			+ (" (with a screenshot)" if data["has_screenshot"] else "")
 		),
+	)
+
+
+def _validated_status(value: str, label: str, allowed=STATUSES) -> str:
+	"""One of the statuses, matched case-insensitively and refused by name.
+
+	CASE-INSENSITIVE BECAUSE OF THE APOSTROPHE. "Won't Fix" is the only value on
+	this doctype that a caller cannot reliably retype — a phone keyboard makes it
+	a right single quote, a shell eats it, and "wont fix" is what somebody
+	actually types. Matching on the letters and answering with the doctype's own
+	spelling is the difference between a tool that works and one that is correct.
+	"""
+
+	def key(text):
+		return "".join(ch for ch in str(text).lower() if ch.isalnum())
+
+	wanted = key(value)
+	for candidate in allowed:
+		if key(candidate) == wanted:
+			return candidate
+	raise ToolError(
+		f"{label} must be one of {', '.join(repr(s) for s in allowed)}; got {value!r}. "
+		"Nothing was changed."
+	)
+
+
+# ── resolve_app_feedback ────────────────────────────────────────────────────
+def resolve_app_feedback(args: dict) -> ToolResult:
+	"""Answer a note: what was done, or why it will not be. v0.159.0.
+
+	THE REGISTER WAS WRITE-ONLY UNTIL NOW, and a feed nobody can mark off is a
+	feed that is read once. Every note this farm has filed sits at the top of
+	`list_app_feedback` forever, so the twentieth complaint about the same screen
+	looks exactly like the first one and the person reading it has no way to say
+	"that was fixed in June" except by remembering.
+
+	"Won't Fix" IS A REAL ANSWER AND IS NOT SPELLED "Closed". A worker who is
+	told no is told something; a worker whose note quietly disappears learns not
+	to file the next one. That is why `resolution_note` is REQUIRED for a refusal
+	and optional for a fix: "we did this" is usually self-evident from the
+	release that did it, and "we are not going to" never is.
+
+	THE ANSWERING ACCOUNT IS WRITTEN FROM THE SESSION, not from the body. There
+	is no `resolved_by` argument and there will not be one — an answer filed in
+	somebody else's name is worse than an unanswered note, and this is a register
+	whose whole value is that the farm can be held to what it says here.
+
+	IT DOES NOT REOPEN. `status` takes only the two answers, so a note that was
+	answered wrongly is re-answered — the row keeps the latest and the response
+	names what it replaced — rather than being returned to a queue with its
+	history quietly dropped.
+	"""
+	_require()
+	name = as_str(args, "name", required=True)
+	status = _validated_status(as_str(args, "status", required=True), "status", ANSWERED)
+	resolution_note = as_str(args, "resolution_note")
+
+	if status == WONT_FIX and not resolution_note:
+		raise ToolError(
+			f"a note answered {WONT_FIX!r} needs a resolution_note saying why. A worker who is "
+			"told no is told something; one whose complaint quietly disappears learns not to "
+			"file the next one. Nothing was changed."
+		)
+	if not frappe.db.exists(APP_FEEDBACK, name):
+		raise ToolError(
+			f"no App Feedback called {name!r} on this site. list_app_feedback has the register, "
+			"and get_app_feedback takes the handset's own entry_uuid as well as the docname. "
+			"Nothing was changed."
+		)
+
+	before = dict(
+		frappe.db.get_value(
+			APP_FEEDBACK,
+			name,
+			compat.existing_fields(APP_FEEDBACK, ("status", "resolved_by", "resolved_at")),
+			as_dict=True,
+		)
+		or {}
+	)
+	previous = before.get("status") or OPEN
+
+	actor = security.caller_identity() or str(getattr(frappe.session, "user", "") or "")
+	answered_at = frappe.utils.now()
+	doc = frappe.get_doc(APP_FEEDBACK, name)
+	doc.status = status
+	if resolution_note:
+		doc.resolution_note = resolution_note
+	doc.resolved_by = actor
+	doc.resolved_at = answered_at
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+
+	data = {
+		"name": name,
+		"status": status,
+		"previous_status": previous,
+		"was_already_answered": previous in ANSWERED,
+		"resolution_note": resolution_note or (doc.get("resolution_note") or None),
+		"resolved_by": actor,
+		"resolved_at": answered_at,
+		"note": (
+			f"{name} is {status}. The note itself is untouched — what a worker wrote is not "
+            "something this tool edits — and `list_app_feedback` still returns it unless the "
+			"caller filters to Open."
+		),
+	}
+	if previous in ANSWERED:
+		data["replaced_note"] = (
+			f"This note was already {previous!r}, answered by "
+			f"{before.get('resolved_by') or 'somebody'} at "
+			f"{before.get('resolved_at') or 'an unrecorded time'}. That answer has been replaced "
+			"rather than added to; the MCP Action Log carries both calls."
+		)
+	return ToolResult(
+		data=data,
+		summary=f"{name}: {previous} → {status}",
+		docstatus_delta="",
 	)

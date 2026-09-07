@@ -41,7 +41,13 @@
   "screenshot_section",
   "has_screenshot",
   "screenshot_omitted",
-  "screenshot"
+  "screenshot",
+  "resolution_section",
+  "status",
+  "resolution_note",
+  "resolution_col",
+  "resolved_by",
+  "resolved_at"
  ],
  "index_web_pages_for_search": 0,
  "links": [],
@@ -312,6 +318,46 @@
    "fieldname": "screenshot",
    "fieldtype": "Attach Image",
    "label": "Screenshot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolution_section",
+   "fieldtype": "Section Break",
+   "label": "Resolution"
+  },
+  {
+   "default": "Open",
+   "description": "Whether anybody has answered this note. DEFAULTS TO OPEN AND IS NEVER SET BY THE HANDSET \u2014 a worker files a complaint, and whether it was acted on is a statement the farm makes about itself. \"Won't Fix\" is a real answer and is deliberately not spelled \"Closed\": the difference between \"we did this\" and \"we are not going to\" is the whole of what somebody reading the feed a season later needs to know.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nResolved\nWon't Fix",
+   "read_only": 1
+  },
+  {
+   "description": "What was done, or why it will not be. Required by `resolve_app_feedback` for \"Won't Fix\" and optional for \"Resolved\", because a note refused with no reason is the thing that stops people filing the next one.",
+   "fieldname": "resolution_note",
+   "fieldtype": "Small Text",
+   "label": "Resolution Note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolution_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The account that answered it, written from the session rather than from the body \u2014 an answer filed in somebody else's name is worse than an unanswered note.",
+   "fieldname": "resolved_by",
+   "fieldtype": "Data",
+   "label": "Resolved By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_at",
+   "fieldtype": "Datetime",
+   "label": "Resolved At",
    "read_only": 1
   }
  ]

@@ -393,6 +393,11 @@ ROUTES = (
 	Route("/mobile", mobile_api.list_cost_centers),
 	Route("/mobile", mobile_api.list_suppliers),
 	Route("/mobile", mobile_api.list_expense_receipts),
+	# v0.159.0. The detail read at the end of that flow. A phone could file a
+	# slip and see it in a list and then had nowhere to go when somebody tapped
+	# it — and the photograph, which is how a receipt is actually checked, is on
+	# the detail read and on nothing else.
+	Route("/mobile", mobile_api.get_expense_receipt),
 	Route("/mobile", mobile_api.update_expense_receipt),
 	# Sprint 3 (v0.68.0): compliance alert rectification — see api/rectify.py.
 	# Five direct fixes, and the one route every task-shaped fix shares.
