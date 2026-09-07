@@ -542,8 +542,7 @@ def list_leave_types(args: dict) -> ToolResult:
 		data,
 		f"{len(types)} leave type(s)"
 		+ (
-			f", {data['requestable_count']} requestable by "
-			f"{data.get('employee_name') or resolved}"
+			f", {data['requestable_count']} requestable by {data.get('employee_name') or resolved}"
 			if resolved
 			else ""
 		),
@@ -580,9 +579,7 @@ def create_leave_request(args: dict) -> ToolResult:
 	from_date = as_date(args, "from_date", required=True)
 	to_date = as_date(args, "to_date", required=True)
 	if str(to_date) < str(from_date):
-		raise ToolError(
-			f"from_date {from_date} is after to_date {to_date}. Nothing was filed."
-		)
+		raise ToolError(f"from_date {from_date} is after to_date {to_date}. Nothing was filed.")
 
 	leave_type = _leave_type_for(employee, as_str(args, "leave_type"), str(from_date))
 
@@ -621,9 +618,7 @@ def create_leave_request(args: dict) -> ToolResult:
 			"request cannot be computed correctly — holidays and the employee's own holiday list "
 			"are what make it more than a subtraction. File it in the Desk. Nothing was filed."
 		)
-	total_days = _number(
-		days_api(employee, leave_type, from_date, to_date, half_day, half_day_date)
-	)
+	total_days = _number(days_api(employee, leave_type, from_date, to_date, half_day, half_day_date))
 	if total_days <= 0:
 		raise ToolError(
 			f"{from_date} to {to_date} works out at {total_days} leave day(s) for this employee — "
@@ -730,8 +725,7 @@ def list_leave_requests(args: dict) -> ToolResult:
 	if status:
 		if status not in LEAVE_STATUSES:
 			raise ToolError(
-				f"{status!r} is not a Leave Application status. This site's are: "
-				f"{', '.join(LEAVE_STATUSES)}."
+				f"{status!r} is not a Leave Application status. This site's are: {', '.join(LEAVE_STATUSES)}."
 			)
 		filters["status"] = status
 	for key, column in (("leave_type", "leave_type"), ("company", "company")):

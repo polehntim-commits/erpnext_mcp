@@ -856,8 +856,7 @@ def _validated_status(value: str, label: str, allowed=STATUSES) -> str:
 		if key(candidate) == wanted:
 			return candidate
 	raise ToolError(
-		f"{label} must be one of {', '.join(repr(s) for s in allowed)}; got {value!r}. "
-		"Nothing was changed."
+		f"{label} must be one of {', '.join(repr(s) for s in allowed)}; got {value!r}. Nothing was changed."
 	)
 
 
@@ -937,7 +936,7 @@ def resolve_app_feedback(args: dict) -> ToolResult:
 		"resolved_at": answered_at,
 		"note": (
 			f"{name} is {status}. The note itself is untouched — what a worker wrote is not "
-            "something this tool edits — and `list_app_feedback` still returns it unless the "
+			"something this tool edits — and `list_app_feedback` still returns it unless the "
 			"caller filters to Open."
 		),
 	}

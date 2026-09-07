@@ -262,9 +262,14 @@ class Validation(ExpenseTestCase):
 		self.assertTrue(data["name"])
 
 	def test_a_negative_amount_is_refused_and_says_what_to_use_instead(self):
+		"""v0.160.0 CHANGED THE REMEDY, NOT THE REFUSAL. Until this release the
+		message sent the caller to a credit note, which is a document this app
+		does not have — so the advice was correct and unfollowable. It now names
+		`is_return`, which exists."""
 		error = self.tool_error("submit_expense_receipt", {**FUEL_RECEIPT, "amount": -50})
 		self.assertIn("negative", error)
-		self.assertIn("credit note", error)
+		self.assertIn("is_return", error)
+		self.assertNotIn("credit note", error)
 
 	def test_an_unknown_employee_is_refused_by_name(self):
 		error = self.tool_error("submit_expense_receipt", {**FUEL_RECEIPT, "submitted_by": "Nobody"})
@@ -1196,3 +1201,348 @@ class ExpenseReport(EnhancementTestCase):
 	def test_an_unknown_category_is_refused(self):
 		error = self.tool_error("get_expense_report", {"company": MAIN, "category": "Bribes"})
 		self.assertIn("category must be one of", error)
+
+
+# ── v0.160.0: correcting what the scanner read, and money that came back ─────
+
+CORRECTION_TOOLS_ON = {
+	**EXPENSE_TOOLS_ON,
+	"allow_correct_receipt_amount": 1,
+	"allow_correct_receipt_date": 1,
+	"allow_update_expense_receipt": 1,
+	"allow_get_expense_summary": 1,
+	"allow_get_expense_report": 1,
+}
+
+
+class CorrectingWhatTheScannerRead(ExpenseTestCase):
+	"""v0.160.0. An OCR misread was permanent until this release.
+
+	The two receipts these tools were written for are real and are on the
+	Orchard Meadow site: an AutoZone slip dated **2099-01-08** (Vision read the
+	card's `EXP 01/29`) and a NAPA slip totalling **$18.18** when the paper says
+	$13.99. Neither could ever match a bank line, and neither could be fixed —
+	`update_expense_receipt` refuses `amount` and `receipt_date` on purpose.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **CORRECTION_TOOLS_ON)
+
+	def correct(self, name, **arguments):
+		return self.tool_data("correct_receipt_amount", {"name": name, **arguments})
+
+	# ── the correction itself ────────────────────────────────────────────
+	def test_the_amount_is_changed_and_the_original_is_kept(self):
+		name = self.capture(amount=18.18)["name"]
+		data = self.correct(name, amount=13.99, reason="OCR read the store number as the total")
+		self.assertEqual(data["corrected_to"], "13.99")
+		self.assertEqual(data["as_captured"], "18.18")
+		self.assertTrue(data["first_correction"])
+		back = self.tool_data("get_expense_receipt", {"name": name})
+		self.assertEqual(back["amount"], 13.99)
+		self.assertEqual(back["original_amount"], 18.18)
+
+	def test_the_date_is_changed_and_the_original_is_kept(self):
+		"""The 2099 case. A date no matcher will search and no fiscal year holds."""
+		name = self.capture(receipt_date="2099-01-08")["name"]
+		data = self.tool_data(
+			"correct_receipt_date",
+			{"name": name, "receipt_date": "2026-08-30", "reason": "OCR read the card expiry"},
+		)
+		self.assertEqual(data["corrected_to"], "2026-08-30")
+		self.assertEqual(data["as_captured"], "2099-01-08")
+		back = self.tool_data("get_expense_receipt", {"name": name})
+		self.assertEqual(back["receipt_date"], "2026-08-30")
+		self.assertEqual(back["original_date"], "2099-01-08")
+
+	def test_the_reason_and_the_actor_and_the_stamp_are_all_recorded(self):
+		name = self.capture(amount=18.18)["name"]
+		self.correct(name, amount=13.99, reason="transposed digits")
+		back = self.tool_data("get_expense_receipt", {"name": name})
+		self.assertEqual(back["amount_correction_reason"], "transposed digits")
+		self.assertTrue(back["amount_corrected_by"])
+		self.assertTrue(back["amount_corrected_at"])
+		self.assertTrue(back["amount_corrected"])
+
+	def test_correcting_the_amount_leaves_the_date_trail_alone(self):
+		"""Two separate columns for two separate acts. A bookkeeper who fixed a
+		total has not said anything about the date."""
+		name = self.capture(amount=18.18)["name"]
+		self.correct(name, amount=13.99, reason="transposed digits")
+		back = self.tool_data("get_expense_receipt", {"name": name})
+		self.assertFalse(back["date_corrected"])
+		self.assertIsNone(back["date_corrected_at"])
+		self.assertIsNone(back["original_date"])
+
+	def test_the_photograph_and_the_raw_ocr_text_survive_a_correction(self):
+		"""The whole point of keeping them. A corrected number that erased the
+		evidence would make the correction impossible to check."""
+		name = self.capture(amount=18.18)["name"]
+		self.correct(name, amount=13.99, reason="transposed digits")
+		back = self.tool_data("get_expense_receipt", {"name": name})
+		self.assertEqual(back["receipt_image"], "/files/receipt-fuel-2026-06-14.jpg")
+		self.assertIn("TOTAL 184.62", back["ocr_raw_text"])
+
+	# ── the once-only original ───────────────────────────────────────────
+	def test_a_second_correction_does_not_overwrite_the_original(self):
+		"""THE LOAD-BEARING ONE. What anybody asks later is what the SCANNER
+		read, not what the last-but-one person thought it read. A column that
+		tracked the previous value would answer the second question while
+		looking exactly like it answered the first."""
+		name = self.capture(amount=18.18)["name"]
+		self.correct(name, amount=13.99, reason="first go")
+		second = self.correct(name, amount=14.99, reason="no, this one")
+		self.assertFalse(second["first_correction"])
+		self.assertEqual(second["previous_value"], "13.99")
+		self.assertEqual(second["as_captured"], "18.18")
+		self.assertEqual(self.tool_data("get_expense_receipt", {"name": name})["original_amount"], 18.18)
+
+	def test_a_second_correction_says_it_is_not_the_first(self):
+		name = self.capture(amount=18.18)["name"]
+		self.correct(name, amount=13.99, reason="first go")
+		self.assertIn("not the first correction", self.correct(name, amount=14.99, reason="again")["note"])
+
+	# ── the zero the database manufactures ───────────────────────────────
+	def test_an_uncorrected_receipt_reports_no_original_rather_than_a_zero(self):
+		"""`original_amount` IS A CURRENCY COLUMN, which on a real site is
+		`NOT NULL DEFAULT 0` — so every receipt nobody has corrected reads back
+		0.00, and "original amount: $0.00" beside "amount: $184.62" is a zero
+		the DATABASE manufactured, not a fact about the slip.
+
+		The row is handed to the reader the way MariaDB would hand it over — a
+		literal 0.0, not a seeded None — because a None here would make this
+		test pass for a reason that does not exist on a bench. See
+		`the-standalone-double-nests-what-mariadb-flattens`.
+		"""
+		rendered = expenses._row_out(
+			{
+				"name": "EXR-2026-0001",
+				"amount": 184.62,
+				"original_amount": 0.0,
+				"amount_correction_reason": "",
+				"amount_corrected_by": "",
+				"amount_corrected_at": None,
+			}
+		)
+		self.assertFalse(rendered["amount_corrected"])
+		self.assertIsNone(rendered["original_amount"])
+		self.assertIsNone(rendered["amount_corrected_by"])
+
+	def test_a_corrected_receipt_still_reports_an_original_of_zero(self):
+		"""And the other direction, which is why the timestamp is the flag: a
+		receipt whose scanner read NOTHING and was corrected to $13.99 has a
+		genuine original of 0.00, and suppressing that would be the same bug
+		with the sign flipped."""
+		rendered = expenses._row_out(
+			{
+				"amount": 13.99,
+				"original_amount": 0.0,
+				"amount_corrected_at": "2026-09-07 10:00:00",
+				"amount_corrected_by": "book@fafo.farm",
+			}
+		)
+		self.assertTrue(rendered["amount_corrected"])
+		self.assertEqual(rendered["original_amount"], 0.0)
+
+	# ── refusals ─────────────────────────────────────────────────────────
+	def test_a_correction_with_no_reason_is_refused(self):
+		name = self.capture(amount=18.18)["name"]
+		error = self.tool_error("correct_receipt_amount", {"name": name, "amount": 13.99})
+		self.assertIn("reason is required", error)
+		self.assertEqual(self.tool_data("get_expense_receipt", {"name": name})["amount"], 18.18)
+
+	def test_a_date_correction_with_no_reason_is_refused(self):
+		name = self.capture()["name"]
+		error = self.tool_error("correct_receipt_date", {"name": name, "receipt_date": "2026-08-30"})
+		self.assertIn("reason is required", error)
+
+	def test_correcting_to_the_value_it_already_has_is_refused(self):
+		name = self.capture(amount=18.18)["name"]
+		error = self.tool_error(
+			"correct_receipt_amount", {"name": name, "amount": 18.18, "reason": "no change"}
+		)
+		self.assertIn("already reads", error)
+		self.assertIn("nothing was changed", error.lower())
+
+	def test_a_negative_amount_is_refused_and_names_the_return_flag(self):
+		name = self.capture()["name"]
+		error = self.tool_error(
+			"correct_receipt_amount", {"name": name, "amount": -13.99, "reason": "it was a refund"}
+		)
+		self.assertIn("is_return", error)
+
+	def test_an_unknown_receipt_is_refused_by_name(self):
+		error = self.tool_error("correct_receipt_amount", {"name": "EXR-NOPE", "amount": 1, "reason": "why"})
+		self.assertIn("EXR-NOPE", error)
+
+	def test_a_correction_needs_a_value_to_correct_to(self):
+		name = self.capture()["name"]
+		self.assertIn(
+			"amount is required",
+			self.tool_error("correct_receipt_amount", {"name": name, "reason": "why"}),
+		)
+		self.assertIn(
+			"receipt_date is required",
+			self.tool_error("correct_receipt_date", {"name": name, "reason": "why"}),
+		)
+
+	# ── what a correction deliberately does NOT do ───────────────────────
+	def test_the_status_is_not_touched(self):
+		name = self.capture(amount=18.18)["name"]
+		self.assertEqual(self.correct(name, amount=13.99, reason="fix")["status"], "Submitted")
+		self.assertEqual(self.tool_data("get_expense_receipt", {"name": name})["status"], "Submitted")
+
+	def test_an_approved_receipt_is_corrected_and_the_decision_is_flagged(self):
+		"""NOT REFUSED. The receipt these tools exist for is exactly the one that
+		got approved at the wrong total and then would not reconcile. But an
+		approval is a statement about an amount, and the amount just changed
+		underneath it — so the response says so and leaves the call to a person.
+		"""
+		name = self.capture(amount=18.18)["name"]
+		self.tool_data("approve_expense_receipt", {"name": name, "approved_by": "HR-EMP-00002"})
+		data = self.correct(name, amount=13.99, reason="OCR misread")
+		self.assertEqual(data["status"], "Approved")
+		self.assertIn("18.18", data["decided_on_the_old_value"])
+		self.assertEqual(self.tool_data("get_expense_receipt", {"name": name})["status"], "Approved")
+
+	def test_an_unapproved_receipt_carries_no_decision_warning(self):
+		"""The negative control for the test above — otherwise it would pass on
+		a key that was always present."""
+		name = self.capture(amount=18.18)["name"]
+		self.assertNotIn("decided_on_the_old_value", self.correct(name, amount=13.99, reason="fix"))
+
+	def test_correcting_does_not_reach_the_other_receipts(self):
+		other = self.capture(amount=50.00)["name"]
+		name = self.capture(amount=18.18)["name"]
+		self.correct(name, amount=13.99, reason="fix")
+		self.assertEqual(self.tool_data("get_expense_receipt", {"name": other})["amount"], 50.0)
+
+	# ── the switches ─────────────────────────────────────────────────────
+	def test_each_correction_tool_has_its_own_switch(self):
+		"""Separate from `allow_update_expense_receipt` on purpose: an operator
+		who wants a bookkeeper able to recode a receipt does not necessarily
+		want the same surface able to change what it says was spent."""
+		for tool, arguments in (
+			("correct_receipt_amount", {"name": "EXR-2026-0001", "amount": 1, "reason": "x"}),
+			("correct_receipt_date", {"name": "EXR-2026-0001", "receipt_date": "2026-01-01", "reason": "x"}),
+		):
+			with self.subTest(tool=tool):
+				self.configure(enabled=1, **{**CORRECTION_TOOLS_ON, f"allow_{tool}": 0})
+				error = self.tool_error(tool, arguments)
+				self.assertIn(f"allow_{tool}", error)
+
+	def test_both_correction_tools_default_off(self):
+		"""A mutating tool ships OFF, and neither of these is on the short
+		default-on list. 326 of 327 mutating tools work this way by design."""
+		for tool in ("correct_receipt_amount", "correct_receipt_date"):
+			with self.subTest(tool=tool):
+				self.assertTrue(registry.TOOLS[tool]["mutating"])
+				self.assertIn(tool, registry.MUTATING_TOOLS)
+				self.assertNotIn(tool, registry.DEFAULT_ON_MUTATING_TOOLS)
+
+	def test_update_expense_receipt_still_refuses_the_two_corrected_fields(self):
+		"""The separation is the point. If this ever passes, the audit trail can
+		no longer tell a recode from a change to what was spent."""
+		name = self.capture()["name"]
+		for field, value in (("amount", 1.0), ("receipt_date", "2026-01-01"), ("merchant", "Nope")):
+			with self.subTest(field=field):
+				self.assertNotIn(field, expenses.UPDATABLE_FIELDS)
+				error = self.tool_error("update_expense_receipt", {"name": name, field: value})
+				self.assertIn("nothing to update", error)
+
+
+class MoneyThatCameBack(ExpenseTestCase):
+	"""v0.160.0. `is_return` — which side of the statement a slip belongs on."""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **CORRECTION_TOOLS_ON)
+
+	def test_a_return_can_be_captured_from_the_phone(self):
+		data = self.capture(amount=13.99, is_return=True)
+		self.assertTrue(data["is_return"])
+		self.assertEqual(data["amount"], 13.99)
+
+	def test_an_ordinary_capture_is_not_a_return(self):
+		self.assertFalse(self.capture()["is_return"])
+
+	def test_the_amount_stays_positive(self):
+		"""The magnitude the paper printed. The flag says the direction; a minus
+		sign in the amount would net against the wrong side of the statement."""
+		name = self.capture(amount=13.99, is_return=True)["name"]
+		self.assertEqual(self.tool_data("get_expense_receipt", {"name": name})["amount"], 13.99)
+
+	def test_a_desk_can_flag_a_return_after_capture(self):
+		"""Nobody at a returns counter remembers to tick a box, so the flag has
+		to be settable later — which is why it is on `update_expense_receipt`."""
+		name = self.capture(amount=13.99)["name"]
+		data = self.tool_data("update_expense_receipt", {"name": name, "is_return": True})
+		self.assertEqual(data["after"]["is_return"], 1)
+		self.assertTrue(self.tool_data("get_expense_receipt", {"name": name})["is_return"])
+
+	def test_a_return_ticked_in_error_can_be_unticked(self):
+		"""THE ZERO-DROP CASE. `after[key] = value or None` would refuse to write
+		the 0 that says the money went OUT — the update would report the change
+		and not make it. See `a-change-guard-that-drops-zero`."""
+		name = self.capture(amount=13.99, is_return=True)["name"]
+		data = self.tool_data("update_expense_receipt", {"name": name, "is_return": False})
+		self.assertEqual(data["after"]["is_return"], 0)
+		self.assertFalse(self.tool_data("get_expense_receipt", {"name": name})["is_return"])
+
+	def test_setting_a_flag_it_already_has_is_refused_like_any_other_no_op(self):
+		name = self.capture(amount=13.99, is_return=True)["name"]
+		self.assertIn(
+			"already reads",
+			self.tool_error("update_expense_receipt", {"name": name, "is_return": True}),
+		)
+
+	# ── the totals ───────────────────────────────────────────────────────
+	def test_a_return_subtracts_from_the_expense_summary(self):
+		"""The part is already in the bucket at what it cost. Adding the refund
+		would overstate the category by TWICE the money."""
+		self.capture(amount=100.00, category="Equipment Parts")
+		self.capture(amount=13.99, category="Equipment Parts", is_return=True)
+		data = self.tool_data("get_expense_summary", {"company": MAIN})
+		self.assertEqual(data["total_amount"], 86.01)
+		self.assertEqual(data["by_category"]["Equipment Parts"]["total"], 86.01)
+
+	def test_a_return_is_still_counted_as_a_receipt(self):
+		"""A bucket showing eleven receipts and ten rows would be the next bug."""
+		self.capture(amount=100.00, category="Equipment Parts")
+		self.capture(amount=13.99, category="Equipment Parts", is_return=True)
+		data = self.tool_data("get_expense_summary", {"company": MAIN})
+		self.assertEqual(data["count"], 2)
+		self.assertEqual(data["by_category"]["Equipment Parts"]["count"], 2)
+
+	def test_the_netting_is_reported_rather_than_silent(self):
+		self.capture(amount=100.00, category="Equipment Parts")
+		self.capture(amount=13.99, category="Equipment Parts", is_return=True)
+		data = self.tool_data("get_expense_summary", {"company": MAIN})
+		self.assertEqual(data["returns_count"], 1)
+		self.assertEqual(data["returns_amount"], 13.99)
+		self.assertIn("SUBTRACTED", data["note"])
+
+	def test_a_farm_with_no_returns_reads_exactly_as_it_did_before(self):
+		"""The negative control. If the netting fired on an ordinary receipt,
+		every total on every farm would have flipped sign."""
+		self.capture(amount=100.00, category="Equipment Parts")
+		data = self.tool_data("get_expense_summary", {"company": MAIN})
+		self.assertEqual(data["total_amount"], 100.0)
+		self.assertEqual(data["returns_count"], 0)
+		self.assertNotIn("SUBTRACTED", data["note"])
+
+	def test_a_return_subtracts_from_the_expense_report_total_too(self):
+		self.capture(amount=100.00, category="Equipment Parts")
+		self.capture(amount=13.99, category="Equipment Parts", is_return=True)
+		data = self.tool_data("get_expense_report", {"company": MAIN})
+		self.assertEqual(data["total_amount"], 86.01)
+		self.assertEqual(data["returns_count"], 1)
+		self.assertEqual(data["count"], 2)
+
+	def test_the_report_says_which_way_each_row_went(self):
+		"""One row per receipt and no totals to net — a bookkeeper reading a
+		$13.99 line needs to see the direction on the line itself."""
+		self.capture(amount=13.99, is_return=True)
+		row = self.tool_data("get_expense_report", {"company": MAIN})["receipts"][0]
+		self.assertTrue(row["is_return"])

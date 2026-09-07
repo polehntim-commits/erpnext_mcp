@@ -44,7 +44,7 @@ import datetime
 
 import frappe
 
-from .. import compat, kpi
+from .. import asset_mirror, compat, kpi
 from ..args import (
 	as_bool,
 	as_date,
@@ -57,7 +57,6 @@ from ..args import (
 )
 from ..errors import ToolError
 from ..result import ToolResult
-from .. import asset_mirror
 from . import mutate
 
 #: ERPNext's own fixed-asset doctype. Spelled once here because the two v0.156.0
@@ -1182,14 +1181,11 @@ def link_tag_to_erpnext_asset(args: dict) -> ToolResult:
 	previous = [
 		str(name)
 		for name in (
-			frappe.db.get_all(ASSET, filters={asset_mirror.LINK_FIELD: tag}, pluck="name", limit=20)
-			or []
+			frappe.db.get_all(ASSET, filters={asset_mirror.LINK_FIELD: tag}, pluck="name", limit=20) or []
 		)
 		if str(name) != asset
 	]
-	already = str(
-		frappe.db.get_value(ASSET, asset, asset_mirror.LINK_FIELD) or ""
-	)
+	already = str(frappe.db.get_value(ASSET, asset, asset_mirror.LINK_FIELD) or "")
 	if already and already != tag:
 		raise ToolError(
 			f"Asset {asset} already carries tag {already!r}. One Asset is one machine and so is "

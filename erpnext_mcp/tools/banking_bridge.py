@@ -27,8 +27,9 @@ them together. A dashboard that reported one number for "reconciled" would be
 wrong in whichever of the three senses the reader had in mind.
 
 MATCHING IS PROPOSED, NEVER COMMITTED IN BULK. `auto_match_receipts` is a READ
-tool. It scores every unmatched receipt against every unmatched withdrawal and
-hands back a ranked list with the exact call that would commit each one — and it
+tool. It scores every unmatched receipt against the unmatched statement lines it
+could be — withdrawals for a purchase, credits for a receipt flagged as a return
+(v0.160.0) — and hands back a ranked list with the exact call that would commit each one — and it
 writes nothing. That is not timidity about a hard problem; it is the whole design
 of this app applied to the one place it matters most. A wrong receipt-to-bank
 link is invisible: both documents exist, both amounts are right, and the only
@@ -253,6 +254,11 @@ _RECEIPT_FIELDS = (
 	# rest of this tuple, so a site without the receipt-intelligence columns
 	# simply scores the way it always did.
 	"card_last_four",
+	# v0.160.0. Which side of the statement this slip belongs on. Same compat
+	# filtering and the same consequence when it is absent: `.get` answers None,
+	# which is falsy, which is Withdrawal — exactly what every site did before
+	# this column existed.
+	"is_return",
 )
 
 #: Rule fields, in the order the evaluator wants them.
@@ -558,6 +564,8 @@ def _receipt_out(row: dict) -> dict:
 		"supplier": row.get("supplier") or None,
 		"cost_center": row.get("cost_center") or None,
 		"bank_transaction": row.get(RECEIPT_LINK_FIELD) or None,
+		"is_return": bool(row.get("is_return")),
+		"expected_direction": expected_direction(row),
 	}
 
 
@@ -584,6 +592,32 @@ def _as_date(value):
 
 
 # ── scoring: how alike a receipt and a statement line are ────────────────────
+
+
+def expected_direction(receipt: dict) -> str:
+	"""Which side of the statement this slip belongs on.
+
+	v0.160.0. Until this release the answer was the constant "Withdrawal" in
+	three places, and it was right about almost every receipt: a receipt is a
+	purchase and a purchase is money out. It was wrong about the ones that come
+	back. A hydraulic hose bought on Tuesday and returned on Thursday leaves a
+	credit on the statement and a slip in the truck, and the slip could not be
+	filed against it — `match_receipt_to_bank_transaction` refused the deposit by
+	name and told the bookkeeper to raise a credit note, which is a document this
+	app does not have and a farm office does not want.
+
+	SO THE DIRECTION IS NOW READ OFF THE RECEIPT, AND IT IS STILL NOT A
+	JUDGEMENT. A receipt that says it is a return may only match money in; one
+	that does not may only match money out. What changed is which constant
+	applies, not whether the rule can be overruled — filing an ordinary fuel slip
+	against a deposit still nets a cost against a payment received, and is still
+	refused.
+
+	A SITE WITHOUT THE COLUMN ANSWERS "Withdrawal" FOR EVERYTHING, which is what
+	it did before, so a bench that has pulled the code and not yet migrated
+	scores exactly as it always has rather than failing on a missing key.
+	"""
+	return "Deposit" if receipt.get("is_return") else "Withdrawal"
 
 
 def score_match(receipt: dict, transaction: dict, *, tolerance: float, window: int) -> dict:
@@ -626,8 +660,14 @@ def score_match(receipt: dict, transaction: dict, *, tolerance: float, window: i
 	)
 
 	reasons = []
-	if transaction.get("direction") != "Withdrawal":
-		reasons.append("the transaction is money IN, and an expense receipt is money out")
+	wanted = expected_direction(receipt)
+	if transaction.get("direction") != wanted:
+		reasons.append(
+			"the transaction is money IN, and an expense receipt is money out"
+			if wanted == "Withdrawal"
+			else "the transaction is money OUT, and this receipt is flagged as a return — "
+			"a refund lands as a credit"
+		)
 	if amount_gap > tolerance:
 		reasons.append(
 			f"amounts differ by {amount_gap} (receipt {receipt_amount}, transaction {gross}), "
@@ -680,6 +720,9 @@ def score_match(receipt: dict, transaction: dict, *, tolerance: float, window: i
 			"card_last_four": card or None,
 			"card_fingerprint": fingerprint,
 			"card_fingerprint_bonus": CARD_FINGERPRINT_BONUS if fingerprint else 0.0,
+			"is_return": bool(receipt.get("is_return")),
+			"expected_direction": wanted,
+			"transaction_direction": transaction.get("direction"),
 		},
 	}
 
@@ -811,14 +854,27 @@ def match_receipt_to_bank_transaction(args: dict) -> ToolResult:
 
 	# THE DIRECTION IS A HARD REFUSAL AND THE SCORE IS NOT. An amount two cents
 	# out or a date eight days late is a judgement a person is allowed to
-	# overrule; money arriving is not an expense under any judgement, and a
-	# receipt filed against a deposit would net a cost against a payment.
-	if transaction.get("direction") != "Withdrawal":
+	# overrule; a slip filed against the wrong side of the statement nets a cost
+	# against a payment, which is not a judgement anybody gets to make.
+	#
+	# v0.160.0: WHICH side is right is now the receipt's own `is_return`, not a
+	# constant. The refusal is exactly as hard as it was — what changed is that
+	# a return has a side to be filed on at all.
+	wanted = expected_direction(receipt)
+	if transaction.get("direction") != wanted:
+		if wanted == "Withdrawal":
+			raise ToolError(
+				f"transaction {transaction['name']} is money IN ({transaction['amount_signed']}), "
+				f"and receipt {receipt['name']} is money out. A receipt filed against a deposit "
+				"would net a cost against a payment received. If this slip is actually a return, "
+				"set is_return on it (update_expense_receipt) and try again — a return matches "
+				"credits. Nothing was written."
+			)
 		raise ToolError(
-			f"transaction {transaction['name']} is money IN ({transaction['amount_signed']}), and "
-			"an Expense Receipt is money out. A receipt filed against a deposit would net a cost "
-			"against a payment received. If the receipt is actually a refund, it is a credit note "
-			"rather than an expense receipt. Nothing was written."
+			f"receipt {receipt['name']} is flagged as a return, so it belongs against money "
+			f"coming BACK — and transaction {transaction['name']} is money out "
+			f"({transaction['amount_signed']}). If the flag is wrong, clear is_return; if the "
+			"transaction is wrong, the refund is a different line. Nothing was written."
 		)
 	if str(transaction.get("company") or "") != str(receipt.get("company") or ""):
 		raise ToolError(
@@ -926,9 +982,17 @@ def _match_candidates(receipt: dict, args: dict, *, tolerance: float, window: in
 			"Call this tool again with bank_transaction set to the one you picked. Nothing has been written."
 			if eligible
 			else (
-				"No transaction on this site is within the amount tolerance and the date window. "
-				"Widen date_window_days or amount_tolerance, check the receipt's own amount and "
-				"date, or accept that the charge has not landed on a statement yet."
+				f"No {expected_direction(receipt).lower()} on this site is within the amount "
+				"tolerance and the date window. Widen date_window_days or amount_tolerance, "
+				"check the receipt's own amount and date — correct_receipt_amount and "
+				"correct_receipt_date exist for exactly the OCR misreads that put a slip "
+				"outside every window — or accept that it has not landed on a statement yet."
+				+ (
+					""
+					if receipt.get("is_return")
+					else " If the money came BACK, this slip needs is_return set: without it "
+					"only withdrawals were looked at."
+				)
 			)
 		),
 	}
@@ -1013,7 +1077,7 @@ def _other_receipts_on(transaction: str, this_receipt: str) -> list:
 
 
 def auto_match_receipts(args: dict) -> ToolResult:
-	"""Score every unmatched receipt against every unmatched withdrawal. Writes NOTHING.
+	"""Score every unmatched receipt against the statement lines it could be. Writes NOTHING.
 
 	This is the batch half of the matching pair and it is a READ tool, which is
 	the most important sentence in this module. See the module docstring for why:
@@ -1035,6 +1099,21 @@ def auto_match_receipts(args: dict) -> ToolResult:
 	rather than sent to a person, with `card_fingerprint: true` on the proposal
 	saying exactly why. Where NEITHER receipt has a card, or both cards match,
 	nothing has changed: it is contested, and it goes to a person.
+
+	v0.160.0. A RECEIPT FLAGGED `is_return` IS SCORED AGAINST CREDITS, and only
+	against credits. Until this release this tool looked at withdrawals and
+	nothing else, so a hose taken back to the counter had a credit on the
+	statement, a slip in the truck, and no way to put the two together — the
+	refund sat in `list_unmatched_bank_transactions` and the slip sat in
+	`list_unmatched_receipts`, each of them evidence for the other. Nothing else
+	about the scoring changed: the amount is still the magnitude the paper
+	printed, the date window is the same window, and a return proposed against a
+	credit is still a proposal a person accepts.
+
+	THE SIDES DO NOT MIX. A return is never offered a withdrawal and an ordinary
+	slip is never offered a credit, so a farm with no returns gets exactly the
+	answer it got before — `scanned_by_direction` says which sides were looked
+	at, and on such a farm the Deposit count is 0 because nothing asked for one.
 	"""
 	_require_bank_transaction()
 	_require_receipts()
@@ -1045,14 +1124,30 @@ def auto_match_receipts(args: dict) -> ToolResult:
 	limit = as_limit(args)
 
 	receipt_rows = _unmatched_receipt_rows(args)
-	transaction_rows = _unmatched_transaction_rows(args, direction="Withdrawal")
+
+	# v0.160.0. ONE QUERY, PARTITIONED, rather than the withdrawals-only fetch
+	# this had until now. A return has to be scored against credits, and reading
+	# the statement twice to get them would double the work on every site that
+	# has never captured one.
+	#
+	# A SIDE NOBODY IS LOOKING FOR IS NOT SCANNED, and that is what keeps the
+	# reported counts honest: on a farm with no returns, `deposits` is not
+	# scored against anything, `unmatched_transactions_scanned` is the number of
+	# withdrawals exactly as it has always been, and the answer is byte-for-byte
+	# what this tool returned before the flag existed.
+	all_rows = _unmatched_transaction_rows(args)
+	sides = {"Withdrawal": [], "Deposit": []}
+	for row in all_rows:
+		sides.setdefault(row["direction"], []).append(row)
+	wanted_sides = {expected_direction(receipt) for receipt in receipt_rows}
+	transaction_rows = [row for side in sorted(wanted_sides) for row in sides.get(side, [])]
 	by_name = {row["name"]: row for row in transaction_rows}
 
 	proposals, contested = [], []
 	best_by_transaction = {}
 	for receipt in receipt_rows:
 		best = None
-		for transaction in transaction_rows:
+		for transaction in sides.get(expected_direction(receipt), []):
 			score = score_match(receipt, transaction, tolerance=tolerance, window=window)
 			if not score["eligible"] or score["confidence"] < threshold:
 				continue
@@ -1087,6 +1182,11 @@ def auto_match_receipts(args: dict) -> ToolResult:
 		"contested": [_proposal(score, by_name, contested=True) for score in contested],
 		"unmatched_receipts_scanned": len(receipt_rows),
 		"unmatched_transactions_scanned": len(transaction_rows),
+		"scanned_by_direction": {
+			side: len(sides.get(side, [])) if side in wanted_sides else 0
+			for side in ("Withdrawal", "Deposit")
+		},
+		"returns_scanned": sum(1 for row in receipt_rows if row.get("is_return")),
 		"receipts_with_no_candidate": sorted(
 			set(row["name"] for row in receipt_rows)
 			- set(score["expense_receipt"] for score in best_by_transaction.values())
@@ -1099,6 +1199,7 @@ def auto_match_receipts(args: dict) -> ToolResult:
 			"card_fingerprint_day_window": CARD_FINGERPRINT_DAY_WINDOW,
 			"card_fingerprint_bonus": CARD_FINGERPRINT_BONUS,
 			"card_last_four_available": compat.has_field(EXPENSE_RECEIPT, "card_last_four"),
+			"is_return_available": compat.has_field(EXPENSE_RECEIPT, "is_return"),
 		},
 		"committed": False,
 		"note": (
@@ -1109,7 +1210,11 @@ def auto_match_receipts(args: dict) -> ToolResult:
 			"`card_fingerprint: true` means the bank's own memo line names the same card last four "
 			"the slip does, within a day. That is the bank identifying the physical card that was "
 			"swiped, which is the only signal here that can tell two identical receipts apart — "
-			"and it is still a proposal, because a card says which truck, not which purchase."
+			"and it is still a proposal, because a card says which truck, not which purchase.\n\n"
+			"`signals.expected_direction` says which side of the statement each receipt was "
+			"scored against: Withdrawal for a purchase, Deposit for a receipt flagged "
+			"is_return. A slip whose refund is on the statement and which nothing here "
+			"proposed is usually a return nobody ticked."
 		),
 	}
 	if contested:
@@ -2361,14 +2466,25 @@ def _receipt_block(company: str, from_date, to_date) -> dict:
 		return {"available": False, "why": f"this site has no {EXPENSE_RECEIPT} doctype"}
 	filters = {"company": company, "status": ("!=", expenses.REJECTED)}
 	_apply_date_range(filters, "receipt_date", from_date, to_date)
-	fields = compat.existing_fields(EXPENSE_RECEIPT, ("name", "amount", "category"))
+	fields = compat.existing_fields(EXPENSE_RECEIPT, ("name", "amount", "category", "is_return"))
 	rows = frappe.db.get_all(EXPENSE_RECEIPT, filters=filters, fields=fields, limit=MAX_SCAN)
+	returns = [row for row in rows if row.get("is_return")]
 	return {
 		"available": True,
 		"doctype": EXPENSE_RECEIPT,
 		"basis": "evidence (a slip, whatever it was paid with)",
 		"count": len(rows),
-		"amount": round(sum(_money(row.get("amount")) for row in rows), 2),
+		# v0.160.0. Signed: a return is money back, and adding it to an outflow
+		# figure would overstate it by twice the refund.
+		"amount": round(
+			sum(
+				-_money(row.get("amount")) if row.get("is_return") else _money(row.get("amount"))
+				for row in rows
+			),
+			2,
+		),
+		"returns_count": len(returns),
+		"returns_amount": round(sum(_money(row.get("amount")) for row in returns), 2),
 	}
 
 
@@ -2399,6 +2515,13 @@ def _category_block(company: str, from_date, to_date, args: dict) -> dict:
 	and the receipt kept, because a receipt carries the category somebody chose
 	from the paper and a bank line carries the one a pattern guessed from a memo
 	field.
+
+	v0.160.0. A RECEIPT FLAGGED `is_return` SUBTRACTS FROM ITS CATEGORY. This
+	block is outflow, and a refund is negative outflow — the part is in the
+	bucket at what it cost and the credit takes it back out. The matching credit
+	on the statement is not dropped here the way a matched withdrawal is: only
+	withdrawals are read into these totals at all, so there is nothing to
+	double-count.
 	"""
 	buckets = {}
 	matched_transactions = set()
@@ -2406,11 +2529,19 @@ def _category_block(company: str, from_date, to_date, args: dict) -> dict:
 	if compat.doctype_exists(EXPENSE_RECEIPT):
 		filters = {"company": company, "status": ("!=", expenses.REJECTED)}
 		_apply_date_range(filters, "receipt_date", from_date, to_date)
-		fields = compat.existing_fields(EXPENSE_RECEIPT, ("name", "amount", "category", RECEIPT_LINK_FIELD))
+		fields = compat.existing_fields(
+			EXPENSE_RECEIPT, ("name", "amount", "category", "is_return", RECEIPT_LINK_FIELD)
+		)
 		for row in frappe.db.get_all(EXPENSE_RECEIPT, filters=filters, fields=fields, limit=MAX_SCAN):
 			key = row.get("category") or "Uncategorised"
 			bucket = buckets.setdefault(key, {"amount": 0.0, "count": 0, "sources": []})
-			bucket["amount"] = round(bucket["amount"] + _money(row.get("amount")), 2)
+			# v0.160.0. See `_receipt_block`: a return subtracts from the bucket
+			# it was bought out of. This block is headed "outflow by category",
+			# and a refund is negative outflow.
+			signed = _money(row.get("amount"))
+			if row.get("is_return"):
+				signed = -signed
+			bucket["amount"] = round(bucket["amount"] + signed, 2)
 			bucket["count"] += 1
 			if "expense receipts" not in bucket["sources"]:
 				bucket["sources"].append("expense receipts")

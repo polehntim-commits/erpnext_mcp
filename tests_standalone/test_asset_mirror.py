@@ -265,9 +265,7 @@ class TheCategory(MirrorTestCase):
 		self.categories("Machinery & Equipment")
 		data = self.costed()
 		self.assertTrue(data["erpnext_asset"], data.get("erpnext_asset_note"))
-		self.assertEqual(
-			self.asset(data["erpnext_asset"])["asset_category"], "Machinery & Equipment"
-		)
+		self.assertEqual(self.asset(data["erpnext_asset"])["asset_category"], "Machinery & Equipment")
 
 	def test_several_categories_and_no_mapping_is_refused_rather_than_guessed(self):
 		"""THE HALF OF THE OLD ARGUMENT THAT STILL STANDS. A wrong category names
@@ -319,9 +317,7 @@ class TheCategory(MirrorTestCase):
 		Item disagreeing about where the machine is filed."""
 		self.categories("Machinery & Equipment")
 		first = self.costed()
-		self.assertEqual(
-			self.asset(first["erpnext_asset"])["asset_category"], "Machinery & Equipment"
-		)
+		self.assertEqual(self.asset(first["erpnext_asset"])["asset_category"], "Machinery & Equipment")
 
 		# The farm creates the proper category afterwards. The Item keeps the old
 		# one, so the next tractor's Asset does too.

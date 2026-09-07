@@ -18,7 +18,23 @@ from .fixtures import SeededTestCase
 from .harness import META, STORE, _load_app_doctype, frappe
 
 #: Tools the default fixture site cannot run, because it has no `hrms`.
-HR_TOOLS = ("get_attendance_summary", "get_leave_balance", "list_employees")
+#:
+#: v0.160.0 ADDED THE FIVE LEAVE TOOLS, which is a correction rather than a
+#: feature: they shipped in v0.158.0 gated on `hrms`'s Leave Application and
+#: Leave Type exactly like the three above, and this list was not extended with
+#: them — so this test has been failing on every run since that release, naming
+#: five tools that are correctly unavailable. A permanently red test is how the
+#: next real failure goes unnoticed.
+HR_TOOLS = (
+	"get_attendance_summary",
+	"get_leave_balance",
+	"list_employees",
+	"approve_leave_request",
+	"create_leave_request",
+	"list_leave_requests",
+	"list_leave_types",
+	"reject_leave_request",
+)
 
 #: Tools that need shapely and h3. Declared dependencies, so a normal install has
 #: them — but the suite has to pass on a bench that does not, because that is the

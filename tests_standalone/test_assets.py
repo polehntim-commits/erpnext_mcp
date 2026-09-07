@@ -864,9 +864,7 @@ class DeleteDraftAsset(AssetTestCase):
 		a year later."""
 		asset = self.an_asset()["asset"]
 		self.assertIn("reason", self.tool_error("delete_draft_asset", {"asset": asset}))
-		self.assertIn(
-			"placeholder", self.tool_error("delete_draft_asset", {"asset": asset, "reason": "x"})
-		)
+		self.assertIn("placeholder", self.tool_error("delete_draft_asset", {"asset": asset, "reason": "x"}))
 		self.assertTrue(frappe.db.exists("Asset", asset))
 
 	def test_the_tag_survives_and_the_answer_says_so(self):
@@ -913,9 +911,7 @@ class LinkTagToErpnextAsset(AssetTestCase):
 		)
 
 	def link(self, asset, tag=None):
-		return self.tool_data(
-			"link_tag_to_erpnext_asset", {"tag": tag or self.TAG, "asset": asset}
-		)
+		return self.tool_data("link_tag_to_erpnext_asset", {"tag": tag or self.TAG, "asset": asset})
 
 	def test_it_points_the_tag_at_an_asset_that_already_exists(self):
 		asset = self.an_asset()["asset"]
@@ -975,9 +971,7 @@ class LinkTagToErpnextAsset(AssetTestCase):
 		STORE.seed("Asset Register", [{"name": "TC-OTHER", "asset_type": "Tractor", "company": MAIN}])
 		asset = self.an_asset()["asset"]
 		frappe.db.set_value("Asset", asset, "asset_register", "TC-OTHER")
-		message = self.tool_error(
-			"link_tag_to_erpnext_asset", {"tag": self.TAG, "asset": asset}
-		)
+		message = self.tool_error("link_tag_to_erpnext_asset", {"tag": self.TAG, "asset": asset})
 		self.assertIn("TC-OTHER", message)
 		# NOT `assertEqual(get_value(...), "TC-OTHER")`. A refused tool call rolls
 		# the transaction back, taking the `set_value` above with it — so the
@@ -997,9 +991,7 @@ class LinkTagToErpnextAsset(AssetTestCase):
 
 	def test_a_tag_that_does_not_exist_is_refused_by_name(self):
 		asset = self.an_asset()["asset"]
-		message = self.tool_error(
-			"link_tag_to_erpnext_asset", {"tag": "TC-NOPE", "asset": asset}
-		)
+		message = self.tool_error("link_tag_to_erpnext_asset", {"tag": "TC-NOPE", "asset": asset})
 		self.assertIn("TC-NOPE", message)
 		self.assertIsNone(frappe.db.get_value("Asset", asset, "asset_register"))
 
@@ -1016,7 +1008,5 @@ class LinkTagToErpnextAsset(AssetTestCase):
 	def test_it_is_off_until_an_operator_switches_it_on(self):
 		asset = self.an_asset()["asset"]
 		self.configure(enabled=1, allow_create_asset=1, allow_link_tag_to_erpnext_asset=0)
-		message = self.tool_error(
-			"link_tag_to_erpnext_asset", {"tag": self.TAG, "asset": asset}
-		)
+		message = self.tool_error("link_tag_to_erpnext_asset", {"tag": self.TAG, "asset": asset})
 		self.assertIn("allow_link_tag_to_erpnext_asset", message)

@@ -130,13 +130,13 @@ from ..tools import compintel as compintel_tools
 from ..tools import dimensions as dimension_tools
 from ..tools import discipline as discipline_tools
 from ..tools import employee as personnel
-from ..tools import hr as hr_tools
 from ..tools import evidence as evidence_tools
 from ..tools import expenses as expense_tools
 from ..tools import farm as farm_tools
 from ..tools import files as file_tools
 from ..tools import haccp as haccp_tools
 from ..tools import housing as housing_tools
+from ..tools import hr as hr_tools
 from ..tools import iot as iot_tools
 from ..tools import irrigation as irrigation_tools
 from ..tools import locations as location_tools
@@ -19266,9 +19266,7 @@ def list_leave_requests(
 		# A worker with no dispatch role sees their own and only their own, named
 		# or not: the default is the caller, and naming somebody else is refused
 		# by `_leave_subject` before it reaches the register.
-		inner["employee"] = _leave_subject(
-			user, employee, allowed, "Reading another worker's leave"
-		)
+		inner["employee"] = _leave_subject(user, employee, allowed, "Reading another worker's leave")
 	for key, value in (("status", status), ("from_date", from_date), ("to_date", to_date)):
 		if value not in (None, ""):
 			inner[key] = str(value).strip()
@@ -19299,9 +19297,7 @@ def _answer_leave_via_mobile(user: str, leave_application, reason, *, approve: b
 	# so this is the call that spends the entitlement. A Foreman may say who is
 	# off; deciding whether they are entitled to be is not the same act.
 	personnel.require_hr_role()
-	name = guard.require_scoped_doc(
-		"Leave Application", leave_application, "leave_application", allowed
-	)
+	name = guard.require_scoped_doc("Leave Application", leave_application, "leave_application", allowed)
 	inner: dict = {"leave_application": name}
 	if reason not in (None, ""):
 		inner["reason"] = str(reason).strip()

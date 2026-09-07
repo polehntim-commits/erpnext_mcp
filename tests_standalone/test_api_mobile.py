@@ -5097,9 +5097,7 @@ class LeaveFromAHandset(MobileAPITestCase):
 
 	def setUp(self):
 		super().setUp()
-		register_doctype(
-			"Leave Type", [{"fieldname": "name"}, {"fieldname": "is_lwp"}]
-		)
+		register_doctype("Leave Type", [{"fieldname": "name"}, {"fieldname": "is_lwp"}])
 		STORE.seed(
 			"Leave Type",
 			[{"name": "Sick Leave"}, {"name": "Leave Without Pay", "is_lwp": 1}],
@@ -5246,9 +5244,7 @@ class LeaveFromAHandset(MobileAPITestCase):
 		"""The rows are scoped after the read to the caller's own entities, which
 		is the same thing in one fewer argument — and a body naming another
 		farm's company would otherwise confirm that it exists."""
-		self.assertNotIn(
-			"company", farmops_routes.accepted_arguments(mobile_api.list_leave_requests)
-		)
+		self.assertNotIn("company", farmops_routes.accepted_arguments(mobile_api.list_leave_requests))
 
 	# ── the picker ──────────────────────────────────────────────────────────
 	def test_the_type_picker_marks_what_this_worker_may_actually_draw(self):
@@ -5290,9 +5286,7 @@ class LeaveFromAHandset(MobileAPITestCase):
 		name = self.file_own()["leave_application"]
 		self.be()
 		mobile_api.approve_leave_request(leave_application=name)
-		self.assertEqual(
-			frappe.db.get_value("Leave Application", name, "leave_approver"), WORKER
-		)
+		self.assertEqual(frappe.db.get_value("Leave Application", name, "leave_approver"), WORKER)
 
 	def test_rejecting_still_needs_its_reason_on_this_transport_too(self):
 		set_roles(WORKER, ["Field Worker", "Farm Manager"])

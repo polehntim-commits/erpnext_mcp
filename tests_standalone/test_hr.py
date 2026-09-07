@@ -3,10 +3,8 @@
 
 from erpnext_mcp import registry
 
-from .harness import frappe
-
 from .fixtures import LEAVE_BALANCES, HRTestCase, V2TestCase
-from .harness import STORE
+from .harness import STORE, frappe
 
 HR_TOOL_NAMES = ("list_employees", "get_attendance_summary", "get_leave_balance")
 
@@ -435,16 +433,12 @@ class ReadingTheQueue(LeaveRequestTestCase):
 		# Annual Leave, because ten days is more Sick Leave than this fixture
 		# allocates and the balance check refuses it — correctly.
 		self.file(leave_type="Annual Leave", from_date="2026-06-01", to_date="2026-06-10")
-		found = self.tool_data(
-			"list_leave_requests", {"from_date": "2026-06-08", "to_date": "2026-06-09"}
-		)
+		found = self.tool_data("list_leave_requests", {"from_date": "2026-06-08", "to_date": "2026-06-09"})
 		self.assertEqual(found["count"], 1)
 
 	def test_a_window_that_misses_it_returns_nothing(self):
 		self.file(from_date="2026-06-01", to_date="2026-06-02")
-		self.assertEqual(
-			self.tool_data("list_leave_requests", {"from_date": "2026-08-01"})["count"], 0
-		)
+		self.assertEqual(self.tool_data("list_leave_requests", {"from_date": "2026-08-01"})["count"], 0)
 
 	def test_an_unknown_status_is_refused_with_the_real_ones(self):
 		message = self.tool_error("list_leave_requests", {"status": "Pending"})

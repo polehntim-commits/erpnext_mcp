@@ -488,6 +488,8 @@
   "allow_approve_expense_receipt",
   "allow_reject_expense_receipt",
   "allow_update_expense_receipt",
+  "allow_correct_receipt_amount",
+  "allow_correct_receipt_date",
   "receipts_section",
   "allow_list_scale_tickets",
   "allow_get_scale_ticket",
@@ -4253,10 +4255,24 @@
   },
   {
    "default": "0",
-   "description": "MUTATING. Correct cost_center, supplier, category or notes on a receipt already captured, in any status. Never touches merchant, amount, receipt_date or the review trail.",
+   "description": "MUTATING. Correct cost_center, supplier, category, notes or the is_return flag on a receipt already captured, in any status. Never touches merchant, amount, receipt_date or the review trail.",
    "fieldname": "allow_update_expense_receipt",
    "fieldtype": "Check",
    "label": "Update Expense Receipt"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Correct the AMOUNT on a receipt already captured, keeping what the scanner read in original_amount and recording who changed it, when and why. A reason is required. This is a bookkeeper fixing an OCR misread \u2014 a slip whose total came back $18.18 instead of $13.99 can never match its bank line \u2014 and it is a separate switch from Update Expense Receipt because changing what was spent is a different act from changing what it was spent on.",
+   "fieldname": "allow_correct_receipt_amount",
+   "fieldtype": "Check",
+   "label": "Correct Receipt Amount"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Correct the RECEIPT DATE the same way, with the same trail. OCR reads a card expiry as the date and returns something like 2099-01-08, which no matcher will ever search and no fiscal year contains.",
+   "fieldname": "allow_correct_receipt_date",
+   "fieldtype": "Check",
+   "label": "Correct Receipt Date"
   },
   {
    "fieldname": "receipts_section",

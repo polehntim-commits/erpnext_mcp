@@ -673,10 +673,7 @@ class TheAssetRegisterIsReadableFromTheDesk(RolesTestCase):
 	def perms(self) -> dict:
 		return {
 			str(row["role"]): row
-			for row in frappe.db.get_all(
-				"DocPerm", filters={"parent": "Asset Register"}, fields="*"
-			)
-			or []
+			for row in frappe.db.get_all("DocPerm", filters={"parent": "Asset Register"}, fields="*") or []
 		}
 
 	def test_the_farm_manager_may_read_write_and_create(self):

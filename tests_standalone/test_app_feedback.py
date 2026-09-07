@@ -58,6 +58,7 @@ import base64
 import json
 import unittest
 from pathlib import Path
+from typing import ClassVar
 from unittest import mock
 
 import frappe
@@ -607,7 +608,11 @@ class ANoteCanBeAnswered(AppFeedbackTestCase):
 	"that was fixed in June" except by remembering.
 	"""
 
-	ON = {"allow_list_app_feedback": 1, "allow_get_app_feedback": 1, "allow_resolve_app_feedback": 1}
+	ON: ClassVar[dict] = {
+		"allow_list_app_feedback": 1,
+		"allow_get_app_feedback": 1,
+		"allow_resolve_app_feedback": 1,
+	}
 
 	def setUp(self):
 		super().setUp()
@@ -749,7 +754,11 @@ class ANoteCanBeAnswered(AppFeedbackTestCase):
 		applies to the answer as much as to the note."""
 		path = (
 			Path(__file__).resolve().parent.parent
-			/ "erpnext_mcp" / "erpnext_mcp" / "doctype" / "app_feedback" / "app_feedback.json"
+			/ "erpnext_mcp"
+			/ "erpnext_mcp"
+			/ "doctype"
+			/ "app_feedback"
+			/ "app_feedback.json"
 		)
 		fields = {f["fieldname"]: f for f in json.loads(path.read_text())["fields"]}
 		for name in ("status", "resolution_note", "resolved_by", "resolved_at"):

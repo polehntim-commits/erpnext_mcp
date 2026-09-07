@@ -535,7 +535,9 @@ def _category(row: dict) -> tuple:
 	if wanted and frappe.db.exists("Asset Category", wanted):
 		return wanted, ""
 
-	known = [str(name) for name in (frappe.db.get_all("Asset Category", pluck="name", limit=CATEGORY_CAP) or [])]
+	known = [
+		str(name) for name in (frappe.db.get_all("Asset Category", pluck="name", limit=CATEGORY_CAP) or [])
+	]
 	if len(known) == 1:
 		return known[0], ""
 	if not known:

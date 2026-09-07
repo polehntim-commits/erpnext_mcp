@@ -35,7 +35,6 @@ node; a bench does not need it, because this tests a file the browser runs.
 """
 
 import json
-import os
 import shutil
 import subprocess
 import tempfile
@@ -44,6 +43,7 @@ from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent.parent / "erpnext_mcp"
 SCRIPT = APP_DIR / "public" / "js" / "asset_register_map.js"
+
 
 #: Every value `Asset Register.asset_type` offers, read off the doctype rather
 #: than listed here — so a fourteenth type added later is covered by these tests
@@ -231,9 +231,7 @@ class ThePinIsDraggableOnEveryAsset(unittest.TestCase):
 		for asset_type in asset_types():
 			with self.subTest(asset_type=asset_type):
 				written = dict(drive(asset_type)["set_value"])
-				self.assertEqual(
-					sorted(written), ["gps_latitude", "gps_longitude"], "both fields, not one"
-				)
+				self.assertEqual(sorted(written), ["gps_latitude", "gps_longitude"], "both fields, not one")
 				self.assertAlmostEqual(written["gps_latitude"], 46.1234568, places=7)
 				self.assertAlmostEqual(written["gps_longitude"], -119.9876543, places=7)
 

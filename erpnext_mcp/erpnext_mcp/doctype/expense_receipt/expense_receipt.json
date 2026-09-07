@@ -12,6 +12,7 @@
   "amount",
   "receipt_date",
   "category",
+  "is_return",
   "col_break_header",
   "company",
   "submitted_by",
@@ -42,6 +43,16 @@
   "bank_col",
   "bank_match_confidence",
   "bank_matched_on",
+  "corrections_section",
+  "original_amount",
+  "amount_correction_reason",
+  "amount_corrected_by",
+  "amount_corrected_at",
+  "corrections_col",
+  "original_date",
+  "date_correction_reason",
+  "date_corrected_by",
+  "date_corrected_at",
   "notes_section",
   "notes"
  ],
@@ -89,6 +100,14 @@
    "in_standard_filter": 1,
    "label": "Category",
    "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nOther"
+  },
+  {
+   "default": "0",
+   "description": "Money coming BACK — a part returned to the counter, a core charge refunded. The amount stays POSITIVE (it is the magnitude the slip prints); this box is what says which way it went. It is what makes the bank matcher look at credits instead of withdrawals, so a return left unticked will never find its deposit.",
+   "fieldname": "is_return",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Return / Refund"
   },
   {
    "fieldname": "col_break_header",
@@ -293,6 +312,69 @@
    "fieldname": "bank_matched_on",
    "fieldtype": "Date",
    "label": "Matched On",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "description": "What the scanner read, before somebody corrected it. Empty on a receipt nobody has had to correct \u2014 read the two timestamps, not the two originals: a Currency column is NOT NULL DEFAULT 0 on a real site, so an untouched original_amount reads 0.00 and not blank.",
+   "fieldname": "corrections_section",
+   "fieldtype": "Section Break",
+   "label": "Corrections"
+  },
+  {
+   "description": "The amount as first captured. Written ONCE, by the first correction; a second correction does not overwrite it.",
+   "fieldname": "original_amount",
+   "fieldtype": "Currency",
+   "label": "Original Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount_correction_reason",
+   "fieldtype": "Small Text",
+   "label": "Amount Correction Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount_corrected_by",
+   "fieldtype": "Data",
+   "label": "Amount Corrected By",
+   "read_only": 1
+  },
+  {
+   "description": "Set means the amount has been corrected. THIS is the column to test, not original_amount.",
+   "fieldname": "amount_corrected_at",
+   "fieldtype": "Datetime",
+   "label": "Amount Corrected At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "corrections_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The receipt date as first captured. Written ONCE, by the first correction.",
+   "fieldname": "original_date",
+   "fieldtype": "Date",
+   "label": "Original Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_correction_reason",
+   "fieldtype": "Small Text",
+   "label": "Date Correction Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_corrected_by",
+   "fieldtype": "Data",
+   "label": "Date Corrected By",
+   "read_only": 1
+  },
+  {
+   "description": "Set means the receipt date has been corrected. THIS is the column to test.",
+   "fieldname": "date_corrected_at",
+   "fieldtype": "Datetime",
+   "label": "Date Corrected At",
    "read_only": 1
   },
   {

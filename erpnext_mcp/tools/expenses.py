@@ -64,7 +64,7 @@ import io
 import frappe
 from frappe.utils import getdate, today
 
-from .. import compat
+from .. import compat, security
 from ..args import as_bool, as_date, as_float, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -119,13 +119,19 @@ CATEGORIES = (
 OWNER_DRAW_CATEGORY = "Owner Draw"
 
 #: Fields `update_expense_receipt` may change. Deliberately NOT `merchant`,
-#: `amount` or `receipt_date` — those are the machine's reading of the paper and
-#: correcting them is `submit_expense_receipt` capturing a fresh photograph, not
-#: an edit to this one. What IS here is exactly what a bookkeeper adds once the
-#: paper is off a truck seat and onto a desk: which vendor it really was, which
-#: bucket it is coded to, and a note. None of the four affects `amount`, so
-#: nothing here can turn one receipt into a different expense.
-UPDATABLE_FIELDS = ("cost_center", "supplier", "category", "notes")
+#: `amount` or `receipt_date` — those are the machine's reading of the paper, and
+#: rewriting one through the same door as a recode would let a correction that
+#: changes what was spent pass as a correction that changes which bucket it came
+#: out of. What IS here is what a bookkeeper adds once the paper is off a truck
+#: seat and onto a desk: which vendor it really was, which bucket it is coded to,
+#: whether the money went out or came back, and a note.
+#:
+#: v0.160.0 ADDS `is_return` AND NOT THE OTHER TWO. A tick saying which direction
+#: the money went is a fact about the slip that nobody had to read off it — the
+#: OCR never claimed it, so changing it corrects nothing and there is nothing to
+#: keep an original of. `amount` and `receipt_date` get their own tools, with an
+#: audit trail each: see `correct_receipt_amount`.
+UPDATABLE_FIELDS = ("cost_center", "supplier", "category", "notes", "is_return")
 
 #: What every read tool returns for a receipt, minus the raw OCR text and the
 #: line items — both of which are large and only `get_expense_receipt` returns.
@@ -169,13 +175,36 @@ _INTELLIGENCE_FIELDS = (
 	"resolution_confidence",
 )
 
+#: v0.160.0. The return flag and the correction trail, read back when the site
+#: has them. Filtered through `compat` for the same reason as the intelligence
+#: block above and one more: these nine columns arrive with THIS release, so a
+#: bench that has pulled the code and not yet run `bench migrate` would otherwise
+#: have every receipt read fail on a column that is not there. They are NOT in
+#: `_LIST_FIELDS`, which stays unconditional on purpose — a missing column there
+#: is a missing migration and should say so rather than be quietly dropped.
+_CORRECTION_FIELDS = (
+	"is_return",
+	"original_amount",
+	"amount_correction_reason",
+	"amount_corrected_by",
+	"amount_corrected_at",
+	"original_date",
+	"date_correction_reason",
+	"date_corrected_by",
+	"date_corrected_at",
+)
+
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
 
 def _read_fields() -> list[str]:
 	"""The receipt columns to read: the shipped ones, plus whichever extras exist."""
-	return [*_LIST_FIELDS, *compat.existing_fields(EXPENSE_RECEIPT, _INTELLIGENCE_FIELDS)]
+	return [
+		*_LIST_FIELDS,
+		*compat.existing_fields(EXPENSE_RECEIPT, _INTELLIGENCE_FIELDS),
+		*compat.existing_fields(EXPENSE_RECEIPT, _CORRECTION_FIELDS),
+	]
 
 
 def _resolve_employee(value: str, label: str) -> str:
@@ -205,17 +234,53 @@ def _require_receipt(args: dict) -> str:
 
 
 def _row_out(row: dict) -> dict:
-	"""One receipt as JSON: dates as ISO strings, numbers as numbers."""
+	"""One receipt as JSON: dates as ISO strings, numbers as numbers.
+
+	v0.160.0. `original_amount` IS SUPPRESSED UNLESS A CORRECTION ACTUALLY
+	HAPPENED, and that is not tidiness. `original_amount` is a Currency column,
+	which on a real site is `NOT NULL DEFAULT 0` — so every receipt nobody has
+	ever corrected reads back 0.00, and a reader shown "original amount: $0.00"
+	beside "amount: $13.99" would reasonably conclude the scanner read nothing
+	and somebody typed the total in. The database manufactured that zero; the
+	timestamp is the only column here that can tell "corrected from nothing"
+	apart from "never corrected", because a Datetime is genuinely nullable.
+
+	The same suppression is applied to the reason and the actor for symmetry, so
+	the four amount columns are either all present or all absent, and never a
+	half-filled trail that has to be interpreted.
+	"""
 	out = {}
 	for key, value in dict(row).items():
 		if value is None:
 			out[key] = None
-		elif key in ("amount", "ocr_confidence", "resolution_confidence"):
+		elif key in ("amount", "original_amount", "ocr_confidence", "resolution_confidence"):
 			out[key] = float(value or 0)
-		elif key in ("receipt_date", "approved_date", "rejected_date", "modified"):
+		elif key in (
+			"receipt_date",
+			"original_date",
+			"approved_date",
+			"rejected_date",
+			"amount_corrected_at",
+			"date_corrected_at",
+			"modified",
+		):
 			out[key] = str(value)
+		elif key == "is_return":
+			out[key] = bool(value)
 		else:
 			out[key] = value
+
+	for stamp, columns in (
+		("amount_corrected_at", ("original_amount", "amount_correction_reason", "amount_corrected_by")),
+		("date_corrected_at", ("original_date", "date_correction_reason", "date_corrected_by")),
+	):
+		if stamp in out:
+			out[stamp.replace("_at", "")] = bool(out[stamp])
+			if not out[stamp]:
+				out[stamp] = None
+				for column in columns:
+					if column in out:
+						out[column] = None
 	return out
 
 
@@ -406,7 +471,17 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	if args.get("amount") in (None, ""):
 		raise ToolError("amount is required.")
 	if amount < 0:
-		raise ToolError("amount cannot be negative. A refund is a credit note, not an expense receipt.")
+		raise ToolError(
+			"amount cannot be negative. A slip whose money came BACK — a part returned to the "
+			"counter, a core charge refunded — is captured at its POSITIVE amount with "
+			"is_return: true, which is what makes the bank matcher look at credits instead of "
+			"withdrawals. A minus sign here would net against the wrong side of the statement."
+		)
+
+	# v0.160.0. `compat`-guarded because the column ships with this release: a
+	# bench running the new code before `bench migrate` captures the receipt
+	# rather than refusing it, and the flag can be set later from a desk.
+	is_return = 1 if as_bool(args, "is_return", False) else 0
 
 	receipt_date = as_date(args, "receipt_date", required=True)
 	company = resolve_company(as_str(args, "company"), required=True)
@@ -476,6 +551,8 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 		"ocr_confidence": _confidence(args),
 		"notes": as_str(args, "notes") or None,
 	}
+	if compat.has_field(EXPENSE_RECEIPT, "is_return"):
+		payload["is_return"] = is_return
 	payload.update(intelligence["columns"])
 
 	doc = frappe.get_doc(payload)
@@ -504,11 +581,12 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 			"farm_task": farm_task or None,
 			"ocr_confidence": doc.get("ocr_confidence"),
 			"receipt_image": doc.get("receipt_image"),
+			"is_return": bool(is_return),
 			"items": _items_out(doc),
 			**intelligence["reported"],
 		},
 		summary=f"Expense receipt {doc.name} captured: {merchant} {amount} on {receipt_date} "
-		f"({category}) by {submitted_by}"
+		f"({category}{', RETURN — money back' if is_return else ''}) by {submitted_by}"
 		+ (
 			f" — resolved to {resolution['resolved_merchant']} by {resolution['method']} "
 			f"(confidence {resolution['confidence']})"
@@ -754,15 +832,30 @@ def update_expense_receipt(args: dict) -> ToolResult:
 			value = as_str(args, "category")
 			if not value or value not in CATEGORIES:
 				raise ToolError(f"category must be one of: {', '.join(CATEGORIES)}.")
+		elif key == "is_return":
+			if not compat.has_field(EXPENSE_RECEIPT, "is_return"):
+				raise ToolError(
+					"this site has no is_return column on Expense Receipt yet. Run `bench migrate` "
+					"after installing v0.160.0. Nothing was changed."
+				)
+			# 0 and 1 rather than False and True: the column is a Frappe Check,
+			# which is an Int, and the comparison below is on the string form.
+			value = 1 if as_bool(args, "is_return", False) else 0
 		else:  # notes
 			value = as_str(args, "notes")
 
 		current = doc.get(key)
+		if key == "is_return":
+			current = 1 if current else 0
 		current = "" if current is None else current
 		if str(value) == str(current):
 			continue
-		before[key] = current or None
-		after[key] = value or None
+		# NOT `value or None`. `is_return` is a Check, and 0 is the value that
+		# says the money went out — a guard that dropped it would refuse to
+		# untick a box that had been ticked in error, and would say the field
+		# was missing while reporting the tick it was asked to remove.
+		before[key] = current if key == "is_return" else (current or None)
+		after[key] = value if key == "is_return" else (value or None)
 
 	if not before:
 		raise ToolError(
@@ -827,6 +920,261 @@ def update_expense_receipt(args: dict) -> ToolResult:
 		),
 		docstatus_delta="",
 	)
+
+
+# ── correct_receipt_amount / correct_receipt_date ────────────────────────────
+
+#: The two columns a correction may rewrite, and the trail each one leaves.
+#: A dict rather than two hand-written functions because the ONLY thing that
+#: differs between correcting a number and correcting a date is how the new
+#: value is read and rendered — every rule around it (the reason, the once-only
+#: original, the actor from the session, the no-op refusal) is the same rule,
+#: and two copies of it would drift the first time one of them was fixed.
+CORRECTIONS = {
+	"amount": {
+		"original": "original_amount",
+		"reason": "amount_correction_reason",
+		"actor": "amount_corrected_by",
+		"stamp": "amount_corrected_at",
+		"noun": "amount",
+	},
+	"receipt_date": {
+		"original": "original_date",
+		"reason": "date_correction_reason",
+		"actor": "date_corrected_by",
+		"stamp": "date_corrected_at",
+		"noun": "receipt date",
+	},
+}
+
+#: Arguments both correction tools accept, in the order the schema declares
+#: them. Named here so `test_expense_reads` can hold the registry entry and the
+#: handler to the same list.
+CORRECTION_ARGUMENTS = ("name", "expense_receipt", "receipt", "reason", "correction_reason")
+
+
+def _correction_reason(args: dict, noun: str) -> str:
+	"""The sentence that has to come with a correction, or a refusal saying why.
+
+	Required, on the same reasoning as `reject_expense_receipt`'s. A number
+	quietly different from the one on the photograph still stapled beside it is
+	the state that generates the next three messages asking which is right, and
+	by then the person who changed it has forgotten. "OCR read the expiry date"
+	takes four seconds to type and answers the question forever.
+	"""
+	reason = as_str(args, "reason") or as_str(args, "correction_reason")
+	if not reason:
+		raise ToolError(
+			f"reason is required to correct the {noun}. The photograph stays on the record and "
+			f"will not agree with the corrected value; without a sentence saying why, the next "
+			f"person to open this receipt cannot tell a fixed OCR error from a typo. "
+			f"Nothing was changed."
+		)
+	return reason
+
+
+def _correction_trail_installed() -> bool:
+	"""Whether this site has been migrated far enough to record a correction."""
+	return all(compat.has_field(EXPENSE_RECEIPT, column) for column in _CORRECTION_FIELDS)
+
+
+def _correct(args: dict, *, field: str, value, rendered: str) -> ToolResult:
+	"""Rewrite one captured field, keeping what it said before. Shared by both tools.
+
+	THE ORIGINAL IS WRITTEN ONCE, BY THE FIRST CORRECTION. A second correction
+	leaves it alone. This is the whole reason the trail is worth having: the
+	question anybody asks later is "what did the scanner read off the paper",
+	not "what did the last-but-one person think it read", and a column that
+	tracked the previous value would answer the second question while looking
+	like it answered the first.
+
+	THE ACTOR COMES FROM THE SESSION AND IS NOT AN ARGUMENT, exactly as
+	`resolve_app_feedback`'s does. An audit trail whose "who" is supplied by the
+	caller records a claim, not a fact.
+
+	THE STATUS IS NOT TOUCHED. A correction is a bookkeeper fixing what the
+	machine read, not a re-review — but where a decision has ALREADY been taken
+	on the old number, the response says so, because an approval is a statement
+	about an amount and the amount has just changed underneath it. It is
+	reported rather than refused: the receipt this exists for is precisely the
+	one that got approved at the wrong total and then would not reconcile.
+	"""
+	spec = CORRECTIONS[field]
+	name = _require_receipt(args)
+	reason = _correction_reason(args, spec["noun"])
+
+	if not _correction_trail_installed():
+		raise ToolError(
+			f"this site has no correction columns on {EXPENSE_RECEIPT} yet, so the {spec['noun']} "
+			f"cannot be corrected with a record of what it said before — and correcting it "
+			f"without one is the thing this tool exists to prevent. Run `bench migrate` after "
+			f"installing v0.160.0. Nothing was changed."
+		)
+
+	row = dict(
+		frappe.db.get_value(
+			EXPENSE_RECEIPT,
+			name,
+			[
+				"merchant",
+				"amount",
+				"receipt_date",
+				"status",
+				spec["original"],
+				spec["stamp"],
+				*compat.existing_fields(EXPENSE_RECEIPT, ("bank_transaction",)),
+			],
+			as_dict=True,
+		)
+		or {}
+	)
+
+	current = row.get(field)
+	if str(current or "") == str(value or ""):
+		raise ToolError(
+			f"expense receipt {name} already reads {rendered} for its {spec['noun']}. Nothing to "
+			f"correct, and nothing was changed."
+		)
+
+	already = bool(row.get(spec["stamp"]))
+	actor = security.caller_identity() or str(getattr(frappe.session, "user", "") or "")
+	stamped = frappe.utils.now()
+
+	payload = {
+		field: value,
+		spec["reason"]: reason,
+		spec["actor"]: actor,
+		spec["stamp"]: stamped,
+	}
+	# ONLY ON THE FIRST CORRECTION. See the docstring: the column holds what the
+	# scanner read, not what the previous corrector thought.
+	if not already:
+		payload[spec["original"]] = current
+	frappe.db.set_value(EXPENSE_RECEIPT, name, payload)
+
+	was = _rendered(field, row.get(spec["original"]) if already else current)
+	diff = f"{spec['noun']}: {_rendered(field, current)} → {rendered}"
+	try:
+		frappe.get_doc(EXPENSE_RECEIPT, name).add_comment(
+			"Comment", f"Corrected via MCP (erpnext_mcp): {diff}. Reason: {reason}"
+		)
+	except Exception:
+		# The correction itself already succeeded and is what the caller asked
+		# for; a failed comment must not report it as a failure. Same shape and
+		# same reason as `update_expense_receipt`'s.
+		frappe.log_error(
+			title="erpnext_mcp: could not attach correction comment to Expense Receipt",
+			message=compat.traceback_text(),
+		)
+
+	data = {
+		"name": name,
+		"merchant": row.get("merchant"),
+		"field": field,
+		"previous_value": _rendered(field, current),
+		"corrected_to": rendered,
+		"as_captured": was,
+		"first_correction": not already,
+		"correction_reason": reason,
+		"corrected_by": actor,
+		"corrected_at": stamped,
+		"status": row.get("status"),
+		"note": (
+			f"The status is unchanged — {name} is still {row.get('status')!r}. A correction is "
+			f"what the machine read being fixed, not a decision being retaken, and the "
+			f"photograph and the raw OCR text are both untouched so the paper can still be "
+			f"checked against the number."
+		),
+	}
+	if already:
+		data["note"] += (
+			f" This is not the first correction to this {spec['noun']}: `as_captured` is still "
+			f"what was originally captured, which is the question anybody asks later."
+		)
+	if row.get("status") in (APPROVED, REJECTED):
+		data["decided_on_the_old_value"] = (
+			f"{name} was already {row.get('status')} when the {spec['noun']} said "
+			f"{_rendered(field, current)}. That decision was about the old value and has not "
+			f"been reopened. If the difference matters to it, that is a person's call."
+		)
+	if row.get("bank_transaction"):
+		data["match_is_now_stale"] = (
+			f"{name} is matched to bank transaction {row['bank_transaction']}, and the stored "
+			f"match confidence was scored against the old {spec['noun']}. The link was not "
+			f"broken — a person made it and a person unmakes it — but it is worth re-checking "
+			f"with match_receipt_to_bank_transaction."
+		)
+
+	return ToolResult(
+		data=data,
+		summary=f"Expense receipt {name} ({row.get('merchant')}) corrected: {diff} — {reason}",
+		docstatus_delta="",
+	)
+
+
+def _rendered(field: str, value) -> str:
+	"""One correctable value as the string a person reads in a message."""
+	if value in (None, ""):
+		return "(empty)"
+	return f"{float(value):.2f}" if field == "amount" else str(value)
+
+
+def correct_receipt_amount(args: dict) -> ToolResult:
+	"""Correct the amount on a captured receipt, keeping what the scanner read.
+
+	WHY THIS IS NOT `update_expense_receipt`. That tool recodes a receipt — which
+	bucket, which vendor, which cost center — and deliberately refuses to touch
+	the money, because a correction that changes what was spent is a different
+	act from one that changes what it was spent on, and one door for both means
+	no audit trail can tell them apart afterwards. This tool changes the money
+	and leaves a trail; that one changes the coding and leaves a comment.
+
+	WHY IT EXISTS AT ALL. On-device OCR reads a NAPA slip's `$13.99` as `$18.18`
+	and there is no way back: the amount is fixed at capture, the receipt never
+	matches its bank line, and it sits in `list_unmatched_receipts` forever with
+	a photograph beside it that plainly shows the right number. Re-capturing is
+	the wrong remedy — it makes a second document for one purchase, and the
+	first one still has to be dealt with.
+
+	A REASON IS REQUIRED. The photograph stays on the record and will not agree
+	with the corrected number; without a sentence, the next person cannot tell a
+	fixed OCR error from a typo.
+
+	NEGATIVE IS STILL REFUSED. A refund is not an expense with a minus sign in
+	front of it — it is a slip whose money went the other way, which is what
+	`is_return` on the receipt says. The amount stays the magnitude the paper
+	printed.
+	"""
+	raw = args.get("amount")
+	if raw in (None, ""):
+		raise ToolError("amount is required — what should this receipt say instead?")
+	value = as_float(raw, "amount")
+	if value < 0:
+		raise ToolError(
+			"amount cannot be negative. A receipt for money coming BACK is captured at its "
+			"positive amount with is_return set, which is what makes the bank matcher look at "
+			"credits instead of withdrawals. Nothing was changed."
+		)
+	return _correct(args, field="amount", value=value, rendered=f"{value:.2f}")
+
+
+def correct_receipt_date(args: dict) -> ToolResult:
+	"""Correct the receipt date on a captured receipt, keeping what the scanner read.
+
+	THE SAME ACT AS `correct_receipt_amount`, on the other column the matcher
+	depends on, and the one OCR gets wrong in the most spectacular way: a slip
+	printed `08/30/26` next to a card's `EXP 01/29` comes back dated 2099-01-08,
+	which is outside every date window any matcher would search and inside no
+	fiscal year anybody has open.
+
+	`receipt_date` IS THE DOCTYPE'S OWN COLUMN and stays a date. There is no
+	partial correction — a receipt whose date the scanner could not read at all
+	is a receipt somebody types a date onto, and that is this call.
+	"""
+	value = as_date(args, "receipt_date") or as_date(args, "date")
+	if not value:
+		raise ToolError("receipt_date is required — what date should this receipt say instead? YYYY-MM-DD.")
+	return _correct(args, field="receipt_date", value=value, rendered=str(value))
 
 
 # ── get_expense_summary / get_expense_report ─────────────────────────────────
@@ -920,7 +1268,14 @@ def get_expense_summary(args: dict) -> ToolResult:
 	rows = frappe.db.get_all(
 		EXPENSE_RECEIPT,
 		filters=filters,
-		fields=["merchant", "amount", "receipt_date", "category", "supplier"],
+		fields=[
+			"merchant",
+			"amount",
+			"receipt_date",
+			"category",
+			"supplier",
+			*compat.existing_fields(EXPENSE_RECEIPT, ("is_return",)),
+		],
 		order_by="receipt_date asc",
 		limit_page_length=_SCAN_CAP,
 	)
@@ -930,8 +1285,20 @@ def get_expense_summary(args: dict) -> ToolResult:
 	by_group: dict = {}
 	buckets: dict = {}
 	total = 0.0
+	returns_count = 0
+	returns_amount = 0.0
 	for row in rows:
+		# v0.160.0. A RETURN SUBTRACTS. `is_return` says the money came back, and
+		# the amount is stored as the magnitude the paper printed — so adding it
+		# to a spend total would overstate the category by twice the refund: once
+		# for the purchase that is also in here, once for getting it back. The
+		# count still counts it, because a return IS a receipt somebody captured
+		# and a bucket showing 11 receipts and 10 rows would be the next bug.
 		amount = float(row.get("amount") or 0)
+		if row.get("is_return"):
+			returns_count += 1
+			returns_amount = round(returns_amount + amount, 2)
+			amount = -amount
 		total += amount
 
 		category = row.get("category") or "Other"
@@ -958,6 +1325,8 @@ def get_expense_summary(args: dict) -> ToolResult:
 	data = {
 		"count": len(rows),
 		"total_amount": round(total, 2),
+		"returns_count": returns_count,
+		"returns_amount": returns_amount,
 		"by_category": by_category,
 		"trend": trend,
 		"period": period,
@@ -973,6 +1342,12 @@ def get_expense_summary(args: dict) -> ToolResult:
 			f"{rejected_excluded} Rejected receipt(s) excluded from these totals; pass "
 			"status='Rejected' explicitly to see them on their own. "
 			if not explicit_status
+			else ""
+		)
+		+ (
+			f"{returns_count} receipt(s) totalling {returns_amount} are RETURNS and were "
+			"SUBTRACTED, not added — the money came back. `total_amount` is net spend. "
+			if returns_count
 			else ""
 		)
 		+ (
@@ -1002,6 +1377,11 @@ _REPORT_FIELDS = (
 	"cost_center",
 	"status",
 	"company",
+	# v0.160.0. On the export rather than netted into a total, because this tool
+	# has no category totals to net — it is one row per receipt, and a bookkeeper
+	# reading a $13.99 line needs to see which way it went. Filtered through
+	# `compat` at the query, so a pre-migrate bench exports the columns it has.
+	"is_return",
 )
 
 
@@ -1040,17 +1420,21 @@ def get_expense_report(args: dict) -> ToolResult:
 	rows = frappe.db.get_all(
 		EXPENSE_RECEIPT,
 		filters=filters,
-		fields=list(_REPORT_FIELDS),
+		fields=compat.existing_fields(EXPENSE_RECEIPT, _REPORT_FIELDS),
 		order_by="receipt_date asc, name asc",
 		limit_page_length=limit,
 	)
 	receipts = [_row_out(row) for row in rows]
-	total = round(sum(r["amount"] for r in receipts), 2)
+	# Signed for the same reason `get_expense_summary`'s is: a return is money
+	# back, and a total that added it would be wrong by twice the refund.
+	total = round(sum(-r["amount"] if r.get("is_return") else r["amount"] for r in receipts), 2)
+	returns_count = sum(1 for r in receipts if r.get("is_return"))
 
 	data = {
 		"receipts": receipts,
 		"count": len(receipts),
 		"total_amount": total,
+		"returns_count": returns_count,
 		"limit": limit,
 		"truncated": len(receipts) == limit,
 		"filters": {
@@ -1068,7 +1452,10 @@ def get_expense_report(args: dict) -> ToolResult:
 
 def _csv_export(receipts: list[dict]) -> str:
 	buffer = io.StringIO()
-	writer = csv.DictWriter(buffer, fieldnames=list(_REPORT_FIELDS), extrasaction="ignore")
+	# `restval` because `_REPORT_FIELDS` is now compat-filtered at the query: a
+	# bench that has not migrated has no `is_return` key on the row, and
+	# DictWriter raises on a missing field rather than leaving the cell empty.
+	writer = csv.DictWriter(buffer, fieldnames=list(_REPORT_FIELDS), extrasaction="ignore", restval="")
 	writer.writeheader()
 	for row in receipts:
 		writer.writerow(row)

@@ -15,6 +15,7 @@ are a plain textbook chart of accounts.
 import json
 import sys
 import types
+import zlib
 
 from .harness import (
 	STORE,
@@ -1668,7 +1669,27 @@ def _party_gl(account, posting_date, party, debit=0, credit=0, cost_center_name=
 			"party_type": "Supplier",
 			"party": party,
 			"cost_center": cost_center(cost_center_name),
-			"voucher_no": f"ACC-JV-{posting_date[:4]}-{abs(hash((party, posting_date, debit, credit))) % 100000:05d}",
+			# `zlib.crc32` AND NOT `hash()`, AND THIS IS A FLAKE FIX. Python salts
+			# `hash()` on str and tuple with a per-process `PYTHONHASHSEED`, so
+			# this voucher number was a DIFFERENT number on every run — and
+			# `voucher_count` in `generate_1099_prefill` counts DISTINCT voucher
+			# numbers (tools/tax.py, `figures["vouchers"]` is a set). Sorren has
+			# four postings in the tax year, so six pairs each collide modulo
+			# 100,000 with probability 1e-5: about one run in 16,600, and when it
+			# fires `test_first_and_last_payment_dates_bound_the_activity` fails
+			# `3 != 4` on a commit that touched nothing near it.
+			#
+			# OBSERVED ONCE, on 2026-09-07, in one full-suite run of three. The
+			# mechanism is proven rather than brute-forced: at a small modulus
+			# the same four vouchers collide at the rate the arithmetic predicts
+			# (seeds 205 and 365 of the first 400, modulo 400). Forcing it at the
+			# real modulus would take some 16,000 interpreter launches, so what
+			# is verified here is the mechanism and the removal of it — not a
+			# reproduction. crc32 is stable across processes and keeps the shape.
+			"voucher_no": (
+				f"ACC-JV-{posting_date[:4]}-"
+				f"{zlib.crc32(repr((party, posting_date, debit, credit)).encode()) % 100000:05d}"
+			),
 			"is_opening": "No",
 		}
 	)

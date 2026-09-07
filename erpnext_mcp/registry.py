@@ -14887,6 +14887,14 @@ TOOLS = {
 				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw or Other.",
 			),
 			"notes": _field(_STRING, "Free text, or '' to clear it."),
+			"is_return": _field(
+				_BOOLEAN,
+				"v0.160.0. True if the money came BACK — a part returned to the "
+				"counter, a core charge refunded. The amount stays positive; this "
+				"is what makes auto_match_receipts look at credits instead of "
+				"withdrawals, and what makes the expense totals subtract it "
+				"rather than add it. Pass false to untick one set in error.",
+			),
 		},
 		required=("name",),
 		mutating=True,
@@ -14894,6 +14902,82 @@ TOOLS = {
 		title="Update expense receipt",
 		available=_needs_doctype("Expense Receipt"),
 		requires="the Expense Receipt doctype (run bench migrate after installing v0.31.0)",
+	),
+	"correct_receipt_amount": _tool(
+		expenses.correct_receipt_amount,
+		"MUTATING (default OFF). Correct the AMOUNT on a receipt already "
+		"captured, keeping what the scanner read.\n\n"
+		"WHY THIS IS NOT update_expense_receipt. That tool recodes a receipt — "
+		"which bucket, which vendor, which cost center — and refuses to touch "
+		"the money on purpose, because changing what was spent is a different "
+		"act from changing what it was spent ON, and one door for both means no "
+		"audit trail can tell them apart afterwards.\n\n"
+		"WHY IT EXISTS. On-device OCR reads a NAPA slip's $13.99 as $18.18 and "
+		"until v0.160.0 there was no way back: the amount was fixed at capture, "
+		"the receipt never matched its bank line, and it sat in "
+		"list_unmatched_receipts forever with a photograph beside it plainly "
+		"showing the right number. Re-capturing is the wrong remedy — it makes a "
+		"second document for one purchase and the first still has to be dealt "
+		"with.\n\n"
+		"A REASON IS REQUIRED. The photograph stays on the record and will not "
+		"agree with the corrected number; without a sentence the next person "
+		"cannot tell a fixed OCR error from a typo.\n\n"
+		"THE ORIGINAL IS KEPT ONCE, BY THE FIRST CORRECTION. A second correction "
+		"does not overwrite it — the question anybody asks later is what the "
+		"scanner read off the paper, not what the last-but-one person thought it "
+		"read. `amount_corrected_at` is what says a correction happened; "
+		"original_amount is a Currency column and reads 0.00 on a receipt nobody "
+		"has touched.\n\n"
+		"THE CORRECTING ACCOUNT COMES FROM THE SESSION. There is no "
+		"`corrected_by` argument. THE STATUS IS NOT TOUCHED — but where the "
+		"receipt was already Approved or Rejected on the old number, the "
+		"response says so, and where it is already matched to a bank line, it "
+		"says the stored confidence is now stale.\n\n"
+		"NEGATIVE IS REFUSED. A refund is not an expense with a minus sign; it "
+		"is a slip whose money went the other way, which is `is_return`.",
+		{
+			"name": _field(_STRING, "The Expense Receipt docname."),
+			"expense_receipt": _field(_STRING, "Alias for name."),
+			"receipt": _field(_STRING, "Alias for name."),
+			"amount": _field(_NUMBER, "What the receipt should say instead. Never negative."),
+			"reason": _field(
+				_STRING,
+				"Why — 'OCR read the card expiry as the total', 'transposed digits'. Required.",
+			),
+			"correction_reason": _field(_STRING, "Alias for reason."),
+		},
+		required=("name", "amount", "reason"),
+		mutating=True,
+		title="Correct receipt amount",
+		available=_needs_doctype("Expense Receipt"),
+		requires="the Expense Receipt doctype with v0.160.0's correction columns (run bench migrate)",
+	),
+	"correct_receipt_date": _tool(
+		expenses.correct_receipt_date,
+		"MUTATING (default OFF). Correct the RECEIPT DATE on a receipt already "
+		"captured, keeping what the scanner read.\n\n"
+		"THE SAME ACT AS correct_receipt_amount, on the other column the bank "
+		"matcher depends on — and the one OCR gets wrong most spectacularly. A "
+		"slip printed 08/30/26 next to a card's EXP 01/29 comes back dated "
+		"2099-01-08, which is outside every date window any matcher would search "
+		"and inside no fiscal year anybody has open.\n\n"
+		"A REASON IS REQUIRED, the original date is kept by the FIRST correction "
+		"only, the correcting account comes from the session, and the status is "
+		"not touched. `date_corrected_at` is what says a correction happened.",
+		{
+			"name": _field(_STRING, "The Expense Receipt docname."),
+			"expense_receipt": _field(_STRING, "Alias for name."),
+			"receipt": _field(_STRING, "Alias for name."),
+			"receipt_date": _field(_STRING, "What the receipt should say instead, as YYYY-MM-DD."),
+			"date": _field(_STRING, "Alias for receipt_date."),
+			"reason": _field(_STRING, "Why the date was wrong. Required."),
+			"correction_reason": _field(_STRING, "Alias for reason."),
+		},
+		required=("name", "receipt_date", "reason"),
+		mutating=True,
+		title="Correct receipt date",
+		available=_needs_doctype("Expense Receipt"),
+		requires="the Expense Receipt doctype with v0.160.0's correction columns (run bench migrate)",
 	),
 	"get_expense_summary": _tool(
 		expenses.get_expense_summary,
@@ -23380,8 +23464,9 @@ TOOLS = {
 	),
 	"auto_match_receipts": _tool(
 		banking_bridge.auto_match_receipts,
-		"Score every unmatched Expense Receipt against every unmatched bank "
-		"WITHDRAWAL and return ranked proposals. WRITES NOTHING — it is a read "
+		"Score every unmatched Expense Receipt against the unmatched bank lines "
+		"it could be — WITHDRAWALS for a purchase, CREDITS for a receipt flagged "
+		"is_return — and return ranked proposals. WRITES NOTHING — it is a read "
 		"tool, deliberately.\n\n"
 		"Each proposal carries the confidence, the three signals behind it "
 		"(amount gap, days between, merchant against the bank's memo line) and "
@@ -23402,8 +23487,16 @@ TOOLS = {
 		"margin in a similarity number. A bare four-digit run in a memo line is "
 		"never read as a card (memo lines are full of terminal ids and "
 		"authorisation codes); it must be masked or introduced by a word that "
-		"means card. Receipts with no card score exactly as they did before. "
-		"Read-only.",
+		"means card. Receipts with no card score exactly as they did before.\n\n"
+		"v0.160.0: A RETURN IS SCORED AGAINST CREDITS, AND ONLY CREDITS. Until "
+		"this release this tool looked at withdrawals and nothing else, so a "
+		"hose taken back to the counter had a refund on the statement, a slip in "
+		"the truck, and no way to put the two together — each one sitting in a "
+		"different unmatched register as evidence for the other. The sides never "
+		"mix: a return is never offered a withdrawal and an ordinary slip is "
+		"never offered a credit, so a farm that has captured no returns gets "
+		"exactly the answer it got before. `scanned_by_direction` says which "
+		"sides were actually looked at. Read-only.",
 		{
 			"company": _field(_STRING, "Scope to one company. Defaults to the site's default."),
 			"bank_account": _field(_STRING, "Scope to one Bank Account."),
@@ -26417,7 +26510,7 @@ TOOLS = {
 		"list_app_feedback forever, so the twentieth complaint about a screen "
 		"looks exactly like the first and nobody can say 'that was fixed in June' "
 		"except by remembering.\n\n"
-		"\"Won't Fix\" IS A REAL ANSWER AND IS NOT SPELLED \"Closed\". A worker "
+		'"Won\'t Fix" IS A REAL ANSWER AND IS NOT SPELLED "Closed". A worker '
 		"told no is told something; one whose note quietly disappears learns not "
 		"to file the next one. `resolution_note` is REQUIRED for a refusal and "
 		"optional for a fix — 'we did this' is usually evident from the release "
@@ -26435,7 +26528,7 @@ TOOLS = {
 				"accepted — the apostrophe is not something a caller can reliably retype.",
 			),
 			"resolution_note": _field(
-				_STRING, "What was done, or why it will not be. Required for \"Won't Fix\"."
+				_STRING, 'What was done, or why it will not be. Required for "Won\'t Fix".'
 			),
 		},
 		required=("name", "status"),

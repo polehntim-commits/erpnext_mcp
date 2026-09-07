@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 863 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 865 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -1864,8 +1864,14 @@ captured, in ANY status (Approved included). Never touches `merchant`,
 reading or the record of a decision, and neither is this tool's business.
 
 **Arguments:** `name` (required; `expense_receipt`/`receipt` aliases),
-`cost_center`, `supplier`, `category`, `notes` — at least one required, and
-each may be set to `""` to clear it except `category`.
+`cost_center`, `supplier`, `category`, `notes`, `is_return` — at least one
+required, and each may be set to `""` to clear it except `category` and
+`is_return`.
+
+**v0.160.0 added `is_return`** and deliberately not `amount` or `receipt_date`.
+A tick saying which direction the money went is a fact about the slip nobody
+had to read off it — the OCR never claimed it, so changing it corrects nothing
+and there is no original to keep. The other two get their own tools, below.
 
 **Returns** `name`, `merchant`, `amount`, `fields_changed[]`, `before{}`,
 `after{}`, `alias_learned`.
@@ -1896,6 +1902,79 @@ not this app being certain, but this app recording that it was not asked.
 **Learning never fails the update:** it is a side effect of a write that has
 already succeeded, and an alias register that refuses a row must not turn a
 completed supplier correction into an error.
+
+### `correct_receipt_amount` — MUTATING, default off
+
+### `correct_receipt_date` — MUTATING, default off
+
+**v0.160.0.** Correct the `amount` or the `receipt_date` on a receipt already
+captured, keeping what the scanner read.
+
+**Why these are not `update_expense_receipt`.** That tool recodes a receipt —
+which bucket, which vendor, which cost center — and refuses to touch the money
+on purpose. Changing what was spent is a different act from changing what it
+was spent *on*, and one door for both means no audit trail can tell them apart
+afterwards.
+
+**Why they exist.** On-device OCR reads a NAPA slip's `$13.99` as `$18.18`, or
+takes a card's `EXP 01/29` for the date and files an AutoZone receipt under
+2099-01-08. Until v0.160.0 there was no way back: both fields were fixed at
+capture, the receipt never matched its bank line, and it sat in
+`list_unmatched_receipts` forever with a photograph beside it plainly showing
+the right number. Re-capturing is the wrong remedy — it makes a second document
+for one purchase, and the first still has to be dealt with.
+
+**Arguments:** `name` (required; `expense_receipt`/`receipt` aliases), plus
+`amount` **or** `receipt_date` (`date` alias), plus `reason`
+(`correction_reason` alias). All three required.
+
+**A reason is required.** The photograph stays on the record and will not agree
+with the corrected value; without a sentence, the next person to open the
+receipt cannot tell a fixed OCR error from a typo.
+
+**The original is kept once, by the FIRST correction.** A second correction does
+not overwrite it. The question anybody asks later is what the scanner read off
+the paper, not what the last-but-one person thought it read.
+
+**Read `amount_corrected_at`, not `original_amount`.** `original_amount` is a
+Currency column, which on a real site is `NOT NULL DEFAULT 0` — so every receipt
+nobody has corrected reads back `0.00`, and "original amount: $0.00" beside
+"amount: $13.99" is a zero the database manufactured. The timestamp is genuinely
+nullable and is the only column here that can tell *corrected from nothing*
+apart from *never corrected*. The reads suppress the whole trail to `null` when
+the stamp is unset, and report `amount_corrected` / `date_corrected` booleans.
+
+**The correcting account comes from the session.** There is no `corrected_by`
+argument and there will not be one; an audit trail whose "who" is supplied by
+the caller records a claim, not a fact.
+
+**The status is not touched** — a correction is what the machine read being
+fixed, not a decision being retaken, and the photograph and raw OCR text are
+both left alone so the paper can still be checked. But where a decision was
+already taken on the old value, `decided_on_the_old_value` says so, and where
+the receipt is already matched to a bank line,
+`match_is_now_stale` names the transaction whose confidence was scored against
+the old figure. Both are reported rather than refused: the receipt these tools
+exist for is precisely the one that got approved at the wrong total and then
+would not reconcile.
+
+**Returns** `name`, `merchant`, `field`, `previous_value`, `corrected_to`,
+`as_captured`, `first_correction`, `correction_reason`, `corrected_by`,
+`corrected_at`, `status`.
+
+**Refused:** no reason; a value the receipt already reads; a negative `amount`
+(a refund is not an expense with a minus sign — see `is_return`); a site whose
+`bench migrate` has not yet added the correction columns, because correcting a
+number *without* recording what it said before is the thing these tools exist
+to prevent.
+
+**Example**
+
+```json
+{"name": "correct_receipt_amount",
+ "arguments": {"receipt": "EXR-2026-0003", "amount": 13.99,
+               "reason": "OCR read the store number as the total"}}
+```
 
 ### `get_expense_summary`
 

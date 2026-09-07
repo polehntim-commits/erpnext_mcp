@@ -3,6 +3,116 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.160.0 — 2026-09-07 — the number the scanner got wrong, and the money that came back
+
+Two ways an Expense Receipt could be permanently unmatchable against the bank,
+and both of them ended with a slip sitting in `list_unmatched_receipts` beside a
+statement line it plainly belonged to. **865 tools.**
+
+### An OCR misread was permanent
+
+`amount` and `receipt_date` were fixed at capture. That was deliberate — they are
+the machine's reading of the paper, and `update_expense_receipt` refuses to touch
+them so that recoding a receipt can never quietly become changing what was spent.
+What it missed is that the machine is sometimes wrong: on-device Vision reads a
+NAPA slip's `$13.99` as `$18.18`, or takes a card's `EXP 01/29` for the date and
+files an AutoZone receipt under **2099-01-08** — outside every date window any
+matcher would search, and inside no fiscal year anybody has open. Both receipts
+are real; both are on the Orchard Meadow site now.
+
+Re-capturing is the wrong remedy. It makes a second document for one purchase,
+and the first one still has to be dealt with.
+
+`correct_receipt_amount` and `correct_receipt_date` change one field each and
+leave a trail: `original_amount` / `original_date`, a required reason, the
+correcting account and a timestamp. **They are separate tools with separate
+switches from `update_expense_receipt`,** because changing what was spent is a
+different act from changing what it was spent *on*, and one door for both means
+no audit trail can tell them apart afterwards.
+
+**The original is kept once, by the first correction.** A second correction does
+not overwrite it. The question anybody asks later is what the scanner read off
+the paper, not what the last-but-one person thought it read.
+
+**Read the timestamp, not the original.** `original_amount` is a Currency column,
+and on a real site every Currency column is `NOT NULL DEFAULT 0` — so a receipt
+nobody has ever corrected reads back `0.00`, and "original amount: $0.00" beside
+"amount: $13.99" is a zero the database manufactured, not a fact about the slip.
+`amount_corrected_at` is a Datetime, is genuinely nullable, and is the only
+column here that can tell *corrected from nothing* apart from *never corrected*.
+The reads suppress the whole trail to `null` when the stamp is unset and report
+`amount_corrected` / `date_corrected` booleans, so nobody has to know this.
+
+A reason is **required**, on the same reasoning as a rejection's: the photograph
+stays on the record and will not agree with the corrected value, and without a
+sentence the next person cannot tell a fixed OCR error from a typo. The
+correcting account comes from the session — there is no `corrected_by` argument.
+The status is not touched, but where a receipt was already Approved on the old
+number, or already matched to a bank line scored against it, the response says
+so. Reported, not refused: the receipt these tools exist for is exactly the one
+that got approved at the wrong total and then would not reconcile.
+
+### A return had nowhere to go
+
+`auto_match_receipts` scored every unmatched receipt against every unmatched
+**withdrawal**, and `match_receipt_to_bank_transaction` refused a deposit by name
+— correctly, because a receipt filed against money coming in nets a cost against
+a payment received. The advice in that refusal was to raise a credit note, which
+is a document this app does not have and a farm office does not want. So a
+hydraulic hose bought on Tuesday and returned on Thursday left a credit on the
+statement and a slip in the truck, each sitting in a different unmatched register
+as evidence for the other.
+
+Expense Receipt gains **`is_return`**. The amount stays positive — it is the
+magnitude the paper printed — and the tick is what says which way the money went.
+A receipt flagged as a return is scored against **credits, and only credits**.
+
+**The sides never mix.** A return is never offered a withdrawal and an ordinary
+slip is never offered a credit, so the direction check is exactly as hard as it
+was: what changed is which constant applies, not whether it can be overruled. A
+farm that has captured no returns gets byte-for-byte the answer it got before —
+`scanned_by_direction` reports which sides were actually looked at, and on such a
+farm the Deposit count is `0` because nothing asked for one.
+
+**A return subtracts from the expense totals**, in `get_expense_summary`,
+`get_expense_report` and both receipt blocks of
+`get_bank_reconciliation_status`. It is not in the brief and it is not optional:
+the part is already in the bucket at what it cost, so adding the refund would
+overstate the category by twice the money. The counts still count it — a bucket
+showing eleven receipts and ten rows would be the next bug — and `returns_count`
+/ `returns_amount` make the netting visible rather than silent.
+
+`is_return` is set at capture (`submit_expense_receipt`, and the phone's
+`create_expense_receipt` route) or later from a desk (`update_expense_receipt`).
+It is the one field v0.160.0 added to that tool and not the other two: a tick
+saying which direction the money went is a fact nobody had to read off the slip,
+so changing it corrects nothing and there is no original to keep.
+
+### Also
+
+* The negative-amount refusal on `submit_expense_receipt` now names `is_return`
+  instead of a credit note. The refusal is unchanged; the advice was correct and
+  unfollowable.
+* **`ruff` is clean again.** The lint job on `main` has been red since v0.155.0:
+  15 files unformatted and 5 `ruff check` errors, all of them from v0.155.0 to
+  v0.159.0. Fixed here rather than left, because a permanently red CI job is one
+  nobody reads. The formatting changes are 4-8 lines a file and touch no logic.
+* **A flaky test fixture is fixed.** `fixtures._party_gl` built its `voucher_no`
+  from Python's `hash()`, which is salted per process — so the number differed on
+  every run, and `generate_1099_prefill` counts *distinct* voucher numbers. Six
+  pairs of Sorren postings collide modulo 100,000 with probability 1e-5, about
+  one run in 16,600, and `test_first_and_last_payment_dates_bound_the_activity`
+  then fails `3 != 4` on a commit that touched nothing near it. It fired once
+  here, in one full-suite run of three. Now `zlib.crc32`, which is stable across
+  processes. The mechanism is proven at a small modulus rather than reproduced at
+  the real one — forcing that would take ~16,000 interpreter launches.
+* **`test_settings.SelfTest` has been failing since v0.158.0** and is fixed here.
+  The five leave tools ship gated on `hrms`'s Leave Application and Leave Type,
+  exactly like the three HR tools already in that fixture's expected-unavailable
+  list, and were not added to it. Nothing was wrong with the tools; the test was
+  naming five correct absences as a failure, and a permanently red test is how
+  the next real one goes unnoticed.
+
 ## 0.159.0 — 2026-09-05 — a feed nobody could mark off, and a slip nobody could open
 
 Two unrelated gaps at the end of two flows that were otherwise finished. **863

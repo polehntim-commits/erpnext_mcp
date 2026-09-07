@@ -371,7 +371,11 @@ class MatchRefusals(BankBridgeTestCase):
 		)
 		self.assertIn("BT-DEPOSIT", error)
 		self.assertIn("money IN", error)
-		self.assertIn("credit note", error)
+		# v0.160.0 replaced the remedy. The refusal is exactly as hard; what
+		# changed is that the sentence now names something a bookkeeper can
+		# actually do, instead of a credit note this app cannot raise.
+		self.assertIn("is_return", error)
+		self.assertNotIn("credit note", error)
 		self.assertIsNone(self.receipt(receipt).get(LINK))
 
 		self.assertIn(
@@ -1348,3 +1352,246 @@ class CashFlowAndSwitches(BankBridgeTestCase):
 		self.assertEqual(
 			frappe.db.count("Custom Field", {"dt": BANK_TRANSACTION, "fieldname": CATEGORY_FIELD}), 1
 		)
+
+
+# ── 13. v0.160.0: the money that came back ──────────────────────────────────
+class ReturnsMatchAgainstCredits(BankBridgeTestCase):
+	"""A hose bought on Tuesday and taken back on Thursday.
+
+	Until v0.160.0 this app could hold both halves of that and never join them:
+	`auto_match_receipts` scored against WITHDRAWALS and nothing else, and
+	`match_receipt_to_bank_transaction` refused a deposit by name — correctly,
+	because a receipt filed against money coming in nets a cost against a
+	payment received. The advice in that refusal was to raise a credit note,
+	which is a document this app does not have. So the refund sat in
+	`list_unmatched_bank_transactions` and the slip sat in
+	`list_unmatched_receipts`, each of them evidence for the other.
+
+	WHAT DID NOT CHANGE IS THE HARDNESS OF THE CHECK. A return may match only
+	credits and an ordinary slip may match only withdrawals. The sides never
+	mix; what v0.160.0 added is which constant applies, not an escape from it.
+	"""
+
+	#: A credit the size of a returned part, so it can be told apart from the
+	#: $5,000 packer settlement the base fixture already carries. Seeded here
+	#: rather than added to `STATEMENT`, because half the module counts that.
+	REFUND = ("BT-REFUND", "2026-06-19", "NAPA AUTO PARTS #4471 RETURN", 62.15, 0)
+
+	def setUp(self):
+		super().setUp()
+		STORE.seed(
+			BANK_TRANSACTION,
+			[
+				{
+					"name": self.REFUND[0],
+					"date": self.REFUND[1],
+					"bank_account": BANK_ACCOUNT,
+					"company": MAIN,
+					"description": self.REFUND[2],
+					"status": "Unreconciled",
+					"deposit": self.REFUND[3],
+					"withdrawal": self.REFUND[4],
+					"allocated_amount": 0,
+					"unallocated_amount": self.REFUND[3],
+					"currency": "USD",
+					"docstatus": 1,
+					"payment_entries": [],
+				}
+			],
+		)
+
+	def returned_part(self, **overrides):
+		return self.capture(
+			**{
+				**PARTS_RECEIPT,
+				"receipt_date": "2026-06-18",
+				"is_return": True,
+				**overrides,
+			}
+		)
+
+	# ── the direction a receipt wants ────────────────────────────────────
+	def test_an_ordinary_receipt_wants_a_withdrawal(self):
+		self.assertEqual(banking_bridge.expected_direction({"is_return": 0}), "Withdrawal")
+
+	def test_a_return_wants_a_deposit(self):
+		self.assertEqual(banking_bridge.expected_direction({"is_return": 1}), "Deposit")
+
+	def test_a_site_without_the_column_wants_a_withdrawal(self):
+		"""A bench that has pulled the code and not yet migrated has no
+		`is_return` key on the row at all. It must score the way it always did
+		rather than fail on a missing key."""
+		self.assertEqual(banking_bridge.expected_direction({}), "Withdrawal")
+
+	# ── scoring ──────────────────────────────────────────────────────────
+	def test_a_return_is_eligible_against_a_credit(self):
+		score = banking_bridge.score_match(
+			{"name": "R", "amount": 62.15, "receipt_date": "2026-06-18", "is_return": 1},
+			{
+				"name": "BT-REFUND",
+				"date": "2026-06-19",
+				"description": "NAPA AUTO PARTS #4471 RETURN",
+				"gross_amount": 62.15,
+				"direction": "Deposit",
+			},
+			tolerance=0.02,
+			window=7,
+		)
+		self.assertTrue(score["eligible"])
+		self.assertEqual(score["signals"]["expected_direction"], "Deposit")
+
+	def test_a_return_is_blocked_against_a_withdrawal(self):
+		"""The other half of the same rule. Without this, "returns match
+		credits" would be indistinguishable from "returns match anything"."""
+		score = banking_bridge.score_match(
+			{"name": "R", "amount": 62.15, "receipt_date": "2026-06-17", "is_return": 1},
+			{
+				"name": "BT-NAPA",
+				"date": "2026-06-18",
+				"description": "NAPA AUTO PARTS #4471 YAKIMA",
+				"gross_amount": 62.15,
+				"direction": "Withdrawal",
+			},
+			tolerance=0.02,
+			window=7,
+		)
+		self.assertFalse(score["eligible"])
+		self.assertIn("money OUT", " ".join(score["blockers"]))
+		self.assertEqual(score["confidence"], 0.0)
+
+	def test_an_ordinary_receipt_is_still_blocked_against_a_credit(self):
+		score = banking_bridge.score_match(
+			{"name": "R", "amount": 62.15, "receipt_date": "2026-06-18"},
+			{
+				"name": "BT-REFUND",
+				"date": "2026-06-19",
+				"description": "NAPA RETURN",
+				"gross_amount": 62.15,
+				"direction": "Deposit",
+			},
+			tolerance=0.02,
+			window=7,
+		)
+		self.assertFalse(score["eligible"])
+		self.assertIn("money IN", " ".join(score["blockers"]))
+
+	# ── committing one ───────────────────────────────────────────────────
+	def test_a_return_can_be_filed_against_its_credit(self):
+		"""THE WHOLE POINT. This call raised a ToolError in every release before
+		v0.160.0."""
+		receipt = self.returned_part()
+		data = self.tool_data(
+			"match_receipt_to_bank_transaction",
+			{"expense_receipt": receipt, "bank_transaction": "BT-REFUND"},
+		)
+		self.assertTrue(data["linked"])
+		self.assertEqual(self.receipt(receipt)[LINK], "BT-REFUND")
+
+	def test_a_return_filed_against_a_withdrawal_is_refused(self):
+		receipt = self.returned_part()
+		error = self.tool_error(
+			"match_receipt_to_bank_transaction",
+			{"expense_receipt": receipt, "bank_transaction": "BT-NAPA"},
+		)
+		self.assertIn("flagged as a return", error)
+		self.assertIn("money out", error)
+		self.assertIsNone(self.receipt(receipt).get(LINK))
+
+	def test_the_refusal_on_an_ordinary_receipt_now_names_the_remedy(self):
+		"""It used to send the caller to a credit note, which this app cannot
+		raise. The refusal is unchanged; the advice was unfollowable."""
+		error = self.tool_error(
+			"match_receipt_to_bank_transaction",
+			{"expense_receipt": self.capture(), "bank_transaction": "BT-DEPOSIT"},
+		)
+		self.assertIn("is_return", error)
+		self.assertIn("update_expense_receipt", error)
+
+	# ── the batch ────────────────────────────────────────────────────────
+	def proposals(self, **arguments):
+		data = self.tool_data("auto_match_receipts", {"company": MAIN, **arguments})
+		return {row["expense_receipt"]: row for row in data["proposals"]}, data
+
+	def test_a_return_is_proposed_against_its_credit(self):
+		receipt = self.returned_part()
+		found, _ = self.proposals()
+		self.assertIn(receipt, found)
+		self.assertEqual(found[receipt]["bank_transaction"], "BT-REFUND")
+
+	def test_the_proposal_carries_a_commit_call_that_actually_works(self):
+		"""A proposal the commit tool would refuse is worse than no proposal.
+		Until v0.160.0 this pair could not both be true for a return."""
+		receipt = self.returned_part()
+		found, _ = self.proposals()
+		commit = found[receipt]["commit_with"]
+		self.assertTrue(self.tool_data(commit["tool"], commit["arguments"])["linked"])
+
+	def test_a_return_is_never_offered_a_withdrawal(self):
+		"""BT-NAPA is the same vendor, the same amount and one day away — the
+		single best-looking withdrawal on the statement. It must not be
+		proposed, and the fact that it looks perfect is why."""
+		receipt = self.returned_part()
+		found, _ = self.proposals()
+		self.assertNotEqual(found[receipt]["bank_transaction"], "BT-NAPA")
+
+	def test_an_ordinary_receipt_is_never_offered_a_credit(self):
+		receipt = self.capture(**{**PARTS_RECEIPT, "receipt_date": "2026-06-18"})
+		found, _ = self.proposals()
+		self.assertNotEqual(found.get(receipt, {}).get("bank_transaction"), "BT-REFUND")
+
+	def test_both_kinds_are_matched_in_one_pass(self):
+		"""A statement has both on it, and a bookkeeper runs this once."""
+		purchase = self.capture(**{**PARTS_RECEIPT, "receipt_date": "2026-06-17"})
+		refund = self.returned_part(merchant="NAPA Auto Parts")
+		found, _ = self.proposals()
+		self.assertEqual(found[purchase]["bank_transaction"], "BT-NAPA")
+		self.assertEqual(found[refund]["bank_transaction"], "BT-REFUND")
+
+	# ── what the batch says it looked at ─────────────────────────────────
+	def test_a_farm_with_no_returns_never_scans_the_credits(self):
+		"""THE NEGATIVE CONTROL, and the claim the release notes make. If the
+		deposit side were scanned unconditionally, this count would be non-zero
+		and every farm's answer would have quietly changed."""
+		self.capture()
+		_, data = self.proposals()
+		self.assertEqual(data["scanned_by_direction"]["Deposit"], 0)
+		self.assertEqual(data["returns_scanned"], 0)
+		self.assertGreater(data["scanned_by_direction"]["Withdrawal"], 0)
+
+	def test_a_farm_with_only_returns_never_scans_the_withdrawals(self):
+		self.returned_part()
+		_, data = self.proposals()
+		self.assertEqual(data["scanned_by_direction"]["Withdrawal"], 0)
+		self.assertGreater(data["scanned_by_direction"]["Deposit"], 0)
+		self.assertEqual(data["returns_scanned"], 1)
+
+	def test_the_settings_block_says_whether_the_column_is_there(self):
+		self.capture()
+		_, data = self.proposals()
+		self.assertTrue(data["settings"]["is_return_available"])
+
+	# ── the totals ───────────────────────────────────────────────────────
+	def test_a_return_subtracts_from_the_category_outflow(self):
+		"""`_category_block` is headed "outflow by category", and a refund is
+		negative outflow: the part is already in the bucket at what it cost."""
+		self.capture(**{**PARTS_RECEIPT, "amount": 100.00})
+		self.returned_part(amount=62.15)
+		data = self.tool_data("get_cash_flow_summary", {"company": MAIN})["by_category"]
+		self.assertEqual(data["categories"]["Equipment Parts"]["amount"], 37.85)
+		self.assertEqual(data["categories"]["Equipment Parts"]["count"], 2)
+		self.assertEqual(data["total"], 37.85)
+
+	def test_a_return_subtracts_from_the_receipt_evidence_total(self):
+		self.capture(**{**PARTS_RECEIPT, "amount": 100.00})
+		self.returned_part(amount=62.15)
+		block = self.tool_data("get_cash_flow_summary", {"company": MAIN})["outflows"]["expense_receipts"]
+		self.assertEqual(block["amount"], 37.85)
+		self.assertEqual(block["count"], 2)
+		self.assertEqual(block["returns_count"], 1)
+		self.assertEqual(block["returns_amount"], 62.15)
+
+	def test_a_statement_with_no_returns_totals_exactly_as_it_did(self):
+		self.capture(**{**PARTS_RECEIPT, "amount": 100.00})
+		block = self.tool_data("get_cash_flow_summary", {"company": MAIN})["outflows"]["expense_receipts"]
+		self.assertEqual(block["amount"], 100.0)
+		self.assertEqual(block["returns_count"], 0)
