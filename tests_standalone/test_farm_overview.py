@@ -43,7 +43,7 @@ import unittest
 
 import frappe
 
-from erpnext_mcp import farm_overview
+from erpnext_mcp import farm_overview, farm_task_map_action
 
 from .fixtures import MAIN, OTHER, V12TestCase
 from .harness import INSTALLED_DOCTYPES, STORE
@@ -649,3 +649,436 @@ class ThePageOnDisk(unittest.TestCase):
 		broken map rather than a layout problem — the oldest bug in embedding
 		this library and the reason it is asserted rather than assumed."""
 		self.assertRegex(self.template(), r"\.fo-map\s*\{[^}]*height:\s*\d+px")
+
+
+# ── 7: v0.161.0 — the machines, the jobs, and the door from the board ────────
+
+#: A tagged wind machine standing in the middle of the mapped block, and a
+#: tractor nobody has stood at with a phone. The pair is the whole positioning
+#: claim: one pin and one number.
+ASSETS = [
+	{
+		"name": "40-5-MPH",
+		"asset_type": "Wind Machine",
+		"description": "Orchard-Rite 5-blade",
+		"gps_latitude": 45.6015,
+		"gps_longitude": -121.1780,
+		# A JSON COLUMN AND NOT A BARE WORD, which is what the doctype declares
+		# and what `_current_state_value` reads. A fixture storing "Running" here
+		# would make the popup's state line come back empty for a reason that has
+		# nothing to do with this page.
+		"current_state": '{"state": "Running"}',
+		"last_scan_at": "2026-09-01 08:00:00",
+		"last_scan_by": "HR-EMP-00001",
+	},
+	{
+		"name": "TRAC-01",
+		"asset_type": "Tractor",
+		"description": "Kubota M7",
+		# THE VALUE A BENCH ACTUALLY RETURNS for a machine nobody has located.
+		# Every Frappe Float column is NOT NULL DEFAULT 0, so this is 0.0 and not
+		# None on a real site — seeding None here would make the null-island
+		# refusal below pass for a reason that does not exist off this harness.
+		# See `the-standalone-double-nests-what-mariadb-flattens`.
+		"gps_latitude": 0.0,
+		"gps_longitude": 0.0,
+	},
+]
+
+
+class TheMachinesAndTheJobs(OverviewTestCase):
+	"""v0.161.0. Two registers that are ON the ground without being shaped.
+
+	The map has drawn boundaries since v0.110.0 and buildings with them. What it
+	could not show is the two things that MOVE: the machines somebody has to walk
+	to, and the work that is outstanding on the ground underneath. A dispatch
+	Kanban answers "what is open and who has it" and cannot answer "where" — six
+	Critical cards in one block is an afternoon, six across four parcels is a day
+	and a truck, and nothing on that screen tells them apart.
+	"""
+
+	def a_machine_and_a_job(self, farm, **task):
+		STORE.seed("Asset Register", [{**row, "company": MAIN} for row in ASSETS])
+		payload = {
+			"name": "TASK-MAP-1",
+			"task_name": "Repair the line",
+			"task_type": "Repair",
+			"state": "Available",
+			"urgency": "Critical",
+			"company": MAIN,
+			"location_doctype": "Field",
+			"location": farm["mapped"],
+		}
+		payload.update(task)
+		STORE.seed("Farm Task", [payload])
+		return payload["name"]
+
+	# ── assets ──────────────────────────────────────────────────────────
+	def test_a_tagged_asset_with_gps_is_a_pin(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		answer = farm_overview.farm_overview(company=MAIN)
+		pins = {entry["name"]: entry for entry in answer["assets"]}
+		self.assertEqual(sorted(pins), ["40-5-MPH"])
+		self.assertEqual(pins["40-5-MPH"]["point"], [45.6015, -121.178])
+
+	def test_an_asset_at_null_island_is_a_number_and_not_a_pin(self):
+		"""THE COUNT, which is the half of this that is worth printing: "ninety
+		tags, sixty of them nowhere" is a morning's work with a phone.
+
+		It is NOT the test of the pair check — a fully unset asset is already
+		`None, None` by the time this module sees it, because `_describe_asset`
+		nulls the zeros. See `test_half_a_coordinate_is_not_a_pin_either` for the
+		case that actually reaches `_on_earth`.
+		"""
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		summary = farm_overview.farm_overview(company=MAIN)["asset_summary"]
+		self.assertEqual(summary["total"], 2)
+		self.assertEqual(summary["drawn"], 1)
+		self.assertEqual(summary["without_position"], 1)
+
+	def test_half_a_coordinate_is_not_a_pin_either(self):
+		"""THE CASE `_on_earth` ACTUALLY DECIDES HERE, and the reason the guard is
+		not redundant with the one inside `list_assets`.
+
+		`_describe_asset` turns a stored `0.0` into `None` before this module sees
+		it, so a FULLY unpositioned asset is already gone by the time
+		`_asset_markers` runs — which means a test seeding `0.0, 0.0` passes with
+		or without the pair check and proves nothing about it. What reaches this
+		guard is a HALF-set pair: a latitude that is really unset beside a
+		longitude somebody typed. Drawn, that is a pin in the Atlantic off Africa
+		with a farm's name on it.
+		"""
+		self.a_farm()
+		STORE.seed(
+			"Asset Register",
+			[
+				{
+					"name": "HALF-1",
+					"asset_type": "Storage",
+					"company": MAIN,
+					"gps_latitude": 0.0,
+					"gps_longitude": -121.1780,
+				}
+			],
+		)
+		answer = farm_overview.farm_overview(company=MAIN)
+		self.assertEqual(answer["assets"], [])
+		self.assertEqual(answer["asset_summary"]["without_position"], 1)
+
+	def test_a_coordinate_off_earth_is_not_a_pin(self):
+		"""A longitude typed with a digit too many. Drawn, it would stretch the
+		bounding box across a hemisphere and render the farm as a speck."""
+		self.a_farm()
+		STORE.seed(
+			"Asset Register",
+			[
+				{
+					"name": "TYPO-1",
+					"asset_type": "Tractor",
+					"company": MAIN,
+					"gps_latitude": 45.6015,
+					"gps_longitude": -1211.780,
+				}
+			],
+		)
+		self.assertEqual(farm_overview.farm_overview(company=MAIN)["assets"], [])
+
+	def test_the_pin_carries_what_the_popup_prints(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		pin = farm_overview.farm_overview(company=MAIN)["assets"][0]
+		self.assertEqual(pin["description"], "Orchard-Rite 5-blade")
+		self.assertEqual(pin["last_scan_at"], "2026-09-01 08:00:00")
+		self.assertEqual(pin["route"], "/app/asset-register/40-5-MPH")
+
+	def test_the_state_is_the_word_and_not_the_blob(self):
+		"""`current_state` is a JSON column — a valve's open/closed, a sprayer's
+		full/empty — and the word a person wants is under its `state` key. Read
+		through the function `scan_asset` already uses, rather than a third
+		implementation of one extraction."""
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		pin = farm_overview.farm_overview(company=MAIN)["assets"][0]
+		self.assertEqual(pin["current_state"], "Running")
+
+	def test_each_asset_type_gets_its_own_glyph(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		pin = farm_overview.farm_overview(company=MAIN)["assets"][0]
+		self.assertEqual(pin["icon"], "W")
+		self.assertEqual(pin["icon_label"], "Wind machine")
+
+	def test_an_asset_type_the_table_does_not_know_still_gets_a_pin(self):
+		"""`asset_type` is a Select an operator may extend, and a type silently
+		missing from the map is the failure the fallback entry exists to stop."""
+		self.a_farm()
+		STORE.seed(
+			"Asset Register",
+			[
+				{
+					"name": "WEIRD-1",
+					"asset_type": "Cider Press",
+					"company": MAIN,
+					"gps_latitude": 45.6015,
+					"gps_longitude": -121.1780,
+				}
+			],
+		)
+		pin = farm_overview.farm_overview(company=MAIN)["assets"][0]
+		self.assertEqual(pin["icon"], "A")
+		self.assertEqual(pin["icon_label"], "General")
+
+	# ── tasks ───────────────────────────────────────────────────────────
+	def test_an_open_task_is_a_pin_at_the_centre_of_its_ground(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		answer = farm_overview.farm_overview(company=MAIN)
+		task = answer["tasks"][0]
+		block = self.layer(answer, "Field")["shapes"][0]
+		self.assertEqual(task["name"], "TASK-MAP-1")
+		self.assertEqual(task["point"], block["centre"])
+
+	def test_placing_a_task_costs_no_extra_register_read(self):
+		"""THE DESIGN CLAIM. A task's location is a Dynamic Link over four
+		registers this answer has just finished computing a centre for, so the
+		pin comes off `_placements` rather than a fifth query — which would also
+		be a SECOND answer to "where is this block" that could disagree with the
+		polygon drawn underneath it."""
+		farm = self.a_farm()
+		places = farm_overview._placements(
+			[
+				{
+					"doctype": "Field",
+					"shapes": [{"name": farm["mapped"], "centre": [45.6015, -121.178]}],
+				}
+			],
+			[{"doctype": "Housing Unit", "name": farm["located"], "point": [45.6, -121.1]}],
+		)
+		self.assertEqual(places[("Field", farm["mapped"])], [45.6015, -121.178])
+		self.assertEqual(places[("Housing Unit", farm["located"])], [45.6, -121.1])
+
+	def test_a_task_naming_no_location_is_counted_apart(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		STORE.seed(
+			"Farm Task",
+			[
+				{
+					"name": "TASK-NOWHERE",
+					"task_name": "Order parts",
+					"state": "Available",
+					"urgency": "Normal",
+					"company": MAIN,
+				}
+			],
+		)
+		summary = farm_overview.farm_overview(company=MAIN)["task_summary"]
+		self.assertEqual(summary["drawn"], 1)
+		self.assertEqual(summary["without_location"], 1)
+		self.assertEqual(summary["without_a_drawn_place"], 0)
+
+	def test_a_task_on_ground_nobody_has_traced_is_a_different_count(self):
+		"""THE THREE WAYS A TASK HAS NOWHERE TO GO ARE THREE JOBS OF WORK. No
+		location is a dispatch gap; ground that was never traced is a BOUNDARY
+		somebody owes and the task is fine. Merging them into one "not shown"
+		would answer neither."""
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		STORE.seed(
+			"Farm Task",
+			[
+				{
+					"name": "TASK-UNTRACED",
+					"task_name": "Scout the ridge",
+					"state": "Available",
+					"urgency": "Normal",
+					"company": MAIN,
+					"location_doctype": "Field",
+					"location": farm["untraced"],
+				}
+			],
+		)
+		summary = farm_overview.farm_overview(company=MAIN)["task_summary"]
+		self.assertEqual(summary["without_location"], 0)
+		self.assertEqual(summary["without_a_drawn_place"], 1)
+		self.assertEqual(summary["unplaceable"][0]["location"], farm["untraced"])
+		self.assertEqual(summary["unplaceable"][0]["route"], "/app/farm-task/TASK-UNTRACED")
+
+	def test_urgency_decides_the_colour(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		self.assertEqual(farm_overview.farm_overview(company=MAIN)["tasks"][0]["colour"], "#cf222e")
+
+	def test_an_urgency_the_table_does_not_know_takes_normals_colour(self):
+		"""NOT THE TOP OF THE LIST. `.get(key, first)` on an ordering table is how
+		a typo in a Select becomes the most urgent thing on the farm — see
+		`an-unknown-select-option-ranks-first`."""
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm, name="TASK-ODD", urgency="Blocker")
+		task = farm_overview.farm_overview(company=MAIN)["tasks"][0]
+		self.assertEqual(task["urgency"], "Blocker")
+		self.assertEqual(task["colour"], farm_overview.URGENCY_DEFAULT)
+
+	def test_an_unknown_urgency_sorts_last_and_not_first(self):
+		"""The other half of the same trap: an unrecognised value must not be
+		drawn on top of every Critical pin at the same block."""
+		self.assertEqual(farm_overview._urgency_rank("Blocker"), -1)
+		self.assertLess(farm_overview._urgency_rank("Blocker"), farm_overview._urgency_rank("Low"))
+
+	def test_the_worst_job_is_first_in_the_list(self):
+		"""WORST FIRST IS THE READING ORDER. The fallback table prints this list
+		straight through, so the Critical jobs are at the top of the one surface
+		that exists when there is no map at all. The script walks it BACKWARDS
+		for the markers, because Leaflet draws later ones on top."""
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		STORE.seed(
+			"Farm Task",
+			[
+				{
+					"name": "TASK-CALM",
+					"task_name": "Tidy",
+					"state": "Available",
+					"urgency": "Low",
+					"company": MAIN,
+					"location_doctype": "Field",
+					"location": farm["mapped"],
+				}
+			],
+		)
+		order = [task["urgency"] for task in farm_overview.farm_overview(company=MAIN)["tasks"]]
+		self.assertEqual(order, ["Critical", "Low"])
+
+	def test_a_task_pin_never_stretches_the_bounding_box(self):
+		"""It sits at a centre already inside the box by construction, so the
+		frame is the same with the tasks as without them."""
+		farm = self.a_farm()
+		before = farm_overview.farm_overview(company=MAIN)["bounds"]
+		self.a_machine_and_a_job(farm)
+		self.assertEqual(farm_overview.farm_overview(company=MAIN)["bounds"], before)
+
+	# ── the block ticker ────────────────────────────────────────────────
+	def test_the_block_ticker_rides_on_the_field_shape(self):
+		"""What is painted on the bin, said on the radio and written on the tally
+		sheet — which is not what the block is called in the database."""
+		farm = self.a_farm()
+		frappe.db.set_value("Field", farm["mapped"], "block_ticker", "YC3")
+		shape = self.layer(farm_overview.farm_overview(company=MAIN), "Field")["shapes"][0]
+		self.assertEqual(shape["block_ticker"], "YC3")
+		self.assertEqual(shape["crop"], "Cherry")
+		self.assertEqual(shape["variety"], "Skeena")
+
+	def test_only_a_field_carries_a_ticker(self):
+		"""`None` rather than "" so the script can tell "this register has no
+		ticker" from "this block has not been given one"."""
+		self.a_farm()
+		answer = farm_overview.farm_overview(company=MAIN)
+		for doctype in ("Parcel", "Irrigation Zone"):
+			with self.subTest(doctype=doctype):
+				for shape in self.layer(answer, doctype)["shapes"]:
+					self.assertIsNone(shape["block_ticker"])
+
+	# ── the gate ────────────────────────────────────────────────────────
+	def test_a_register_this_login_may_not_read_is_named_and_left_out(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		self.deny("Asset Register")
+		answer = farm_overview.farm_overview(company=MAIN)
+		self.assertIn("Asset Register", answer["refused"])
+		self.assertEqual(answer["assets"], [])
+		# AND THE REST OF THE MAP IS STILL THERE. A farm whose office manager may
+		# not read the tag register should get the boundaries and the jobs.
+		self.assertTrue(answer["tasks"])
+		self.assertTrue(self.layer(answer, "Field")["shapes"])
+
+	def test_denying_the_task_register_leaves_the_machines(self):
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		self.deny("Farm Task")
+		answer = farm_overview.farm_overview(company=MAIN)
+		self.assertIn("Farm Task", answer["refused"])
+		self.assertEqual(answer["tasks"], [])
+		self.assertTrue(answer["assets"])
+
+
+class TheDoorFromTheBoard(V12TestCase):
+	"""v0.161.0. The Map View entry on the Farm Task list and its Kanban."""
+
+	def setUp(self):
+		super().setUp()
+		STORE.rows("Client Script").clear()
+
+	def test_it_creates_the_entry(self):
+		report = farm_task_map_action.seed_farm_task_map_action()
+		self.assertTrue(report["created"])
+		self.assertTrue(farm_task_map_action._existing())
+
+	def test_it_is_bound_to_the_farm_task_list(self):
+		farm_task_map_action.seed_farm_task_map_action()
+		row = STORE.rows("Client Script")[0]
+		self.assertEqual(row["dt"], "Farm Task")
+		self.assertEqual(row["view"], "List")
+
+	def test_a_second_migrate_creates_nothing(self):
+		farm_task_map_action.seed_farm_task_map_action()
+		second = farm_task_map_action.seed_farm_task_map_action()
+		self.assertFalse(second["created"])
+		self.assertEqual(second["reason"], "already present")
+		self.assertEqual(len(STORE.rows("Client Script")), 1)
+
+	def test_it_does_not_overwrite_the_list_settings_object(self):
+		source = farm_task_map_action.SCRIPT_SOURCE
+		self.assertIn('frappe.listview_settings["Farm Task"] || {}', source)
+		self.assertIn("previous_onload", source)
+
+	def test_it_is_a_menu_item_and_not_an_actions_entry(self):
+		"""A KANBAN HAS NO CHECKBOXES. `add_actions_menu_item` puts an entry in
+		the menu that appears once rows are ticked, which on the one view this
+		exists for is a door that never opens."""
+		source = farm_task_map_action.SCRIPT_SOURCE
+		self.assertIn("add_menu_item", source)
+		self.assertNotIn("add_actions_menu_item", source)
+
+	def test_it_does_not_stack_up_when_the_view_is_switched(self):
+		"""`onload` runs again every time somebody moves between List, Report and
+		Kanban, and Frappe's menu does not de-duplicate."""
+		self.assertIn("__erpnext_mcp_map_view", farm_task_map_action.SCRIPT_SOURCE)
+
+	def test_it_opens_the_page_this_app_actually_ships(self):
+		"""A button pointing at a route that does not exist is a 404 an operator
+		reads as a broken app."""
+		self.assertEqual(farm_task_map_action.MAP_ROUTE, farm_overview.PAGE_ROUTE)
+		self.assertIn(f'frappe.set_route("{farm_overview.PAGE_ROUTE}")', farm_task_map_action.SCRIPT_SOURCE)
+
+	def test_it_carries_no_board_filter(self):
+		"""A Kanban filtered to one crew does not mean the map should hide the
+		other crew's work. The question the map is opened to answer is "where is
+		all of this"."""
+		self.assertNotIn("get_filters", farm_task_map_action.SCRIPT_SOURCE)
+		self.assertNotIn("current_view", farm_task_map_action.SCRIPT_SOURCE)
+
+	def test_an_operators_edit_survives_every_future_migrate(self):
+		farm_task_map_action.seed_farm_task_map_action()
+		name = farm_task_map_action._existing()
+		edited = farm_task_map_action.SCRIPT_SOURCE + "\n// mine\n"
+		frappe.db.set_value("Client Script", name, "script", edited)
+
+		farm_task_map_action.seed_farm_task_map_action()
+		self.assertEqual(frappe.db.get_value("Client Script", name, "script"), edited)
+
+	def test_uninstall_takes_it_away(self):
+		farm_task_map_action.seed_farm_task_map_action()
+		self.assertTrue(farm_task_map_action.remove_farm_task_map_action()["removed"])
+		self.assertEqual(farm_task_map_action._existing(), "")
+
+	def test_it_does_not_collide_with_the_asset_register_rows(self):
+		"""Three Client Scripts from one app on three doctypes; each seeder has to
+		find its OWN by marker."""
+		from erpnext_mcp import asset_tag_list_action
+
+		asset_tag_list_action.seed_asset_tag_list_action()
+		farm_task_map_action.seed_farm_task_map_action()
+		self.assertEqual(len(STORE.rows("Client Script")), 2)
+		self.assertNotEqual(asset_tag_list_action._existing(), farm_task_map_action._existing())

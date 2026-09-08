@@ -3,6 +3,91 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.161.0 — 2026-09-07 — the machines, the jobs, and a door from the board
+
+`/app/farm-overview` has drawn the farm's ground since v0.110.0. This release
+puts the two things that MOVE on it, and connects the dispatch Kanban to it.
+**No new MCP tools: 865.**
+
+### What was asked for, and what was already there
+
+The brief was a new page at `/app/farm-map` with parcels, blocks, assets, tasks
+and operational overlays. Four of those five were shipped: `/app/farm-overview`
+already draws Parcels, Fields, Irrigation Zones and Housing Units, all five
+`overlays.py` layers, an auto-fitted bounding box, a legend, per-register
+permission gates and a full no-Leaflet fallback — through the one Leaflet
+bootstrap in `geo_map_widget.js`. **Building a second map page would have meant
+two answers to "which entity am I scoped to", two places the tile attributions
+live, and two maps to keep in step.** So the missing layers went onto the map
+that exists. The route is `/app/farm-overview`.
+
+### Assets and open tasks
+
+`Asset Register` joins as typed pins — a lettered badge per `asset_type`, with
+the description, the state and **the last scan** in the popup. That last line is
+why the layer is worth having: a tag last scanned in March is either a machine
+nobody has touched since March or a tag nobody can find, and both are answered by
+walking to the pin. A tag nobody has ever scanned says *Never scanned* rather
+than leaving a blank, which reads as a popup that failed to load.
+
+`Farm Task` joins as diamonds coloured by urgency, at the centre of the ground
+each job is about. **Placing them costs no extra query.** A task's location is a
+Dynamic Link over four registers this response has just finished computing a
+centre for, so the pin comes off what is already drawn — a fifth query would also
+have been a second answer to "where is this block" that could disagree with the
+polygon underneath it.
+
+**A job that is not on the map fails in three different ways and they are counted
+apart.** No location named is a dispatch gap; ground that has never been traced
+is a boundary somebody owes and the task is fine; a register this login may not
+read is a permission. One "6 tasks not shown" would answer none of them.
+
+`block_ticker` now rides on the Field shape and is painted **on** the polygon —
+it is what is on the bin, said on the radio and written on the tally sheet, and
+`field_name` is what is in the database.
+
+### Layers you can switch off
+
+Every register gets its own Leaflet layer group and the existing base-layer
+control now carries them, so the control is still one box rather than two. The
+count is in each label (`Fields (2)`), which answers "did this draw nothing, or
+is it switched off" without unticking anything. A layer that drew nothing is not
+offered — a switch that does nothing is a switch nobody trusts.
+
+`geo_map_widget.add_base_layers` grew an optional third argument for this. The
+seven form callers pass nothing and get exactly the control they have had since
+v0.32.0, collapsed as before.
+
+### A Map View entry on the dispatch board
+
+A Kanban answers *what is open and who has it* and cannot answer *where* — six
+Critical cards in one block is an afternoon, six across four parcels is a day and
+a truck. `farm_task_map_action.py` is the Client Script that connects them, on
+the same three-state contract as the asset-tag actions: created when absent,
+updated when it is still this app's own text, and **left exactly alone once
+somebody has edited it**.
+
+It is a `...` menu item and not an Actions entry, because **a Kanban has no
+checkboxes** — an Actions entry would be a door that never opens on the one view
+this exists for. It carries no board filter: the question the map is opened to
+answer is "where is all of this", and a map that silently inherited a crew filter
+would answer a narrower one while looking like it answered the whole.
+
+### The page is now executed by a test, not just grepped
+
+`test_farm_overview_page.py` runs the real page script under `node:vm` with a
+stubbed Desk and reports what it drew. It exists because **a substring assertion
+on a Desk script matches the whole file** — `grep layerGroup` is true of a build
+that creates the groups and never adds a shape to one.
+
+It earned its place immediately: it caught a layer control offering
+`Irrigation zones (0)` as a toggle, on a farm with no zones, from a build whose
+comment said empty layers were not offered. Reading found a second one first —
+task pins were being added worst-first, which on a block with three jobs buries
+the Critical pin under the tidying job, silently, on a map that photographs
+perfectly. The server still answers worst-first because the fallback *table*
+wants that order; the script walks the list backwards for the markers alone.
+
 ## 0.160.0 — 2026-09-07 — the number the scanner got wrong, and the money that came back
 
 Two ways an Expense Receipt could be permanently unmatchable against the bank,

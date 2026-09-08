@@ -73,6 +73,31 @@
 		.fo-popup-detail { color: #57606a; margin-bottom: 4px; }
 		.fo-popup-figures { font-size: 11px; color: #57606a; margin-bottom: 6px; }
 		.fo-empty { padding: 30px; text-align: center; color: var(--text-muted, #8d99a6); }
+		/* v0.161.0. THREE PIN SHAPES, DRAWN IN CSS AND NOT FETCHED. See
+		   farm_overview.js: colour on this map already means the register a
+		   polygon belongs to and the urgency of a job, so telling a cabin from a
+		   valve from a task is left to SHAPE. Nothing here loads an image —
+		   Leaflet&#39;s default marker resolves a sprite against the CDN, which is
+		   one more request that can fail on a page whose whole posture is that a
+		   missing library must not look like a missing farm. */
+		.fo-asset-icon span, .fo-asset-swatch { display: flex; align-items: center;
+			justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+			color: #fff; font-size: 11px; font-weight: 700; line-height: 1;
+			box-shadow: 0 0 0 2px rgba(255,255,255,.9); }
+		.fo-task-icon span { display: block; width: 16px; height: 16px;
+			transform: rotate(45deg); border: 2px solid #fff;
+			box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+		.fo-task-swatch { display: inline-block; width: 12px; height: 12px;
+			transform: rotate(45deg); border: 1px solid #fff;
+			box-shadow: 0 0 0 1px rgba(0,0,0,.25); margin: 0 3px; }
+		/* THE TICKER IS TEXT ON THE GROUND, so it carries no bubble, no border
+		   and no pointer events — a label that swallowed a click would stop the
+		   block underneath it opening its own popup. */
+		.leaflet-tooltip.fo-ticker { background: transparent; border: 0; box-shadow: none;
+			color: #fff; font-weight: 700; font-size: 12px; padding: 0;
+			text-shadow: 0 0 3px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.7);
+			pointer-events: none; }
+		.leaflet-tooltip.fo-ticker::before { display: none; }
 	</style>
 
 	<div class="fo-bar">

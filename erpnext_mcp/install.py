@@ -109,6 +109,7 @@ from . import (
 	badge_print_format,
 	compliance_fields,
 	dashboard,
+	farm_task_map_action,
 	i9_documents,
 	i9_print_format,
 	irrigation_workspace,
@@ -150,6 +151,7 @@ def after_install() -> None:
 	_badge_form_action()
 	_asset_tag_list_action()
 	_asset_tag_form_action()
+	_farm_task_map_action()
 	_onboard_worker()
 	_irrigation_workspace()
 	_settlement_invoice_link()
@@ -194,6 +196,7 @@ def after_migrate() -> None:
 	_badge_form_action()
 	_asset_tag_list_action()
 	_asset_tag_form_action()
+	_farm_task_map_action()
 	_onboard_worker()
 	_irrigation_workspace()
 	_settlement_invoice_link()
@@ -1152,6 +1155,39 @@ def _asset_tag_list_action() -> None:
 		print(f"erpnext_mcp: the asset QR-sheet action was not seeded — {report['reason']}")
 
 
+def _farm_task_map_action() -> None:
+	"""Put "Map View" in the Farm Task list's ... menu. v0.161.0.
+
+	THE DOOR FROM THE DISPATCH KANBAN TO THE MAP. A board answers what is
+	outstanding and who has it; it cannot answer where, and six Critical cards in
+	one block is an afternoon while six across four parcels is a day and a truck.
+	`farm_task_map_action.py` argues why it is a menu item and not an Actions
+	entry — a Kanban has no checkboxes, so an Actions entry would be a door that
+	never opens on the one view this exists for.
+	"""
+	report = farm_task_map_action.seed_farm_task_map_action()
+	if report.get("created"):
+		print(
+			f"erpnext_mcp: seeded the {report['name']!r} Client Script — the Farm Task list and "
+			f"its dispatch Kanban now have a Map View entry that opens /app/farm-overview, where "
+			f"the open jobs are drawn on the ground they are about. It is a row in the Desk: "
+			f"untick `enabled` or delete it and this app will not put it back."
+		)
+	elif report.get("updated"):
+		print(
+			f"erpnext_mcp: {report['reason']} — the {report['name']!r} Client Script was this "
+			f"app's own unedited copy, so it has been brought up to date."
+		)
+	elif report.get("reason", "").startswith("left alone"):
+		print(
+			f"erpnext_mcp: the {report['name']!r} Client Script has been edited on this site, so "
+			f"it was left exactly as it is — {report['reason']}. Delete the row and run "
+			f"`bench migrate` to take this app's current copy, or paste the change in by hand."
+		)
+	elif report.get("reason") not in ("already present", ""):
+		print(f"erpnext_mcp: the Farm Task map action was not seeded — {report['reason']}")
+
+
 def _asset_tag_form_action() -> None:
 	"""Put "QR Tag" on the Asset Register form. v0.83.0.
 
@@ -1837,6 +1873,7 @@ def before_uninstall() -> None:
 	_remove_badge_form_action()
 	_remove_asset_tag_list_action()
 	_remove_asset_tag_form_action()
+	_remove_farm_task_map_action()
 	_remove_onboard_worker()
 	_remove_irrigation_workspace()
 
@@ -1942,6 +1979,23 @@ def _remove_asset_tag_list_action() -> None:
 	elif report.get("reason") not in ("not present", ""):
 		print(
 			"\nerpnext_mcp: could not remove this app's Client Script from the Asset Register list "
+			f"— {report['reason']}.\nDelete it by hand in the Desk under Client Script.\n"
+		)
+
+
+def _remove_farm_task_map_action() -> None:
+	"""Take this app's Map View entry off the Farm Task list. v0.161.0.
+
+	Farm Task goes with the app, so the row would be pointing at a doctype that
+	no longer exists — and a Client Script naming one is a row somebody has to
+	work out the provenance of later. Same call as the asset tag action.
+	"""
+	report = farm_task_map_action.remove_farm_task_map_action()
+	if report.get("removed"):
+		print(f"erpnext_mcp: removed the {report['name']!r} Client Script from the Farm Task list.")
+	elif report.get("reason") not in ("not present", ""):
+		print(
+			"\nerpnext_mcp: could not remove this app's Client Script from the Farm Task list "
 			f"— {report['reason']}.\nDelete it by hand in the Desk under Client Script.\n"
 		)
 

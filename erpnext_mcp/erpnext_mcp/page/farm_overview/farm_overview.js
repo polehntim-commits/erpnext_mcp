@@ -85,6 +85,24 @@ function erpnext_mcp_farm_overview(page) {
 		weight: 2,
 	};
 
+	//: v0.161.0. THREE KINDS OF PIN AND THREE SHAPES, not three colours of the
+	//: same shape. Colour is already spoken for twice on this map — the register
+	//: a polygon belongs to, and the urgency of a job — so a reader who has to
+	//: tell a cabin from a valve from a task by hue alone is being asked to hold
+	//: three colour keys at once. Shape is the axis that was free:
+	//:
+	//:   structures  a plain circle          (unchanged since v0.110.0)
+	//:   assets      a round badge, lettered by type
+	//:   tasks       a diamond, coloured by urgency
+	//:
+	//: EVERY ONE OF THEM IS DRAWN BY LEAFLET OR BY CSS AND NONE IS AN IMAGE.
+	//: `L.marker` with no icon reaches for a sprite at a path relative to the
+	//: stylesheet, which resolves against the CDN — one more request that can
+	//: fail on its own, on a page whose whole posture is that a missing library
+	//: must not look like a missing farm.
+	const ASSET_ICON_SIZE = 22;
+	const TASK_ICON_SIZE = 16;
+
 	let map = null;
 	let loading_widget = null;
 	let answer = null;
@@ -283,6 +301,14 @@ function erpnext_mcp_farm_overview(page) {
 		if (housing.drawn) {
 			parts.push(`${esc(housing.label)} ${housing.drawn}`);
 		}
+		const assets = answer.asset_summary || {};
+		if (assets.drawn) {
+			parts.push(`${esc(assets.label)} ${assets.drawn}`);
+		}
+		const tasks = answer.task_summary || {};
+		if (tasks.drawn) {
+			parts.push(`${esc(tasks.label)} ${tasks.drawn}`);
+		}
 		// THE OVERLAY'S COUNTS COME FIRST WHEN THERE IS ONE, because they are the
 		// numbers somebody opened this page for. "Three restricted, two ready to
 		// pick" is a morning; "Fields 40" is a map.
@@ -338,6 +364,42 @@ function erpnext_mcp_farm_overview(page) {
 					<span>${esc(housing.label)} — ${housing.drawn}</span>${missing}
 				</div>`);
 		}
+		// v0.161.0. THE TWO NEW LAYERS, EACH KEYED BY THE THING THAT VARIES.
+		// An asset's marker varies by TYPE and a task's by URGENCY, so the two
+		// legends are built differently on purpose — one swatch per asset type
+		// that is actually on this map, and one per urgency that actually has a
+		// job in it. A key listing colours nothing on screen is using is a key
+		// somebody has to check against the map rather than read.
+		const assets = answer.asset_summary || {};
+		const icons = assets.icons || {};
+		Object.keys(assets.by_asset_type || {}).forEach((kind) => {
+			const icon = icons[kind] || icons[""] || {};
+			entries.push(`<div class="fo-legend-entry">
+					<span class="fo-asset-swatch" style="background:${esc(icon.colour)}">${esc(
+						icon.glyph || "A"
+					)}</span>
+					<span>${esc(icon.label || kind)} — ${assets.by_asset_type[kind]}</span>
+				</div>`);
+		});
+		if (assets.without_position) {
+			entries.push(`<div class="fo-legend-entry"><span class="fo-legend-count">${esc(
+				__("{0} asset(s) without a position", [assets.without_position])
+			)}</span></div>`);
+		}
+
+		const tasks = answer.task_summary || {};
+		const colours = tasks.colours || {};
+		(tasks.urgency_order || []).forEach((urgency) => {
+			const count = (tasks.by_urgency || {})[urgency];
+			if (!count) {
+				return;
+			}
+			entries.push(`<div class="fo-legend-entry">
+					<span class="fo-task-swatch" style="background:${esc(colours[urgency])}"></span>
+					<span>${esc(urgency)} — ${count}</span>
+				</div>`);
+		});
+
 		$legend.html(entries.join(""));
 		render_overlay_legend();
 	}
@@ -399,6 +461,43 @@ function erpnext_mcp_farm_overview(page) {
 						refused.join(", "),
 					])
 				)}</p></div>`
+			);
+		}
+
+		// v0.161.0. A JOB THAT IS NOT ON THE MAP IS A FOURTH KIND OF WRONG, and
+		// it is two different jobs of work depending on which way it failed.
+		// A task naming no location is a dispatch gap — somebody raised it
+		// without saying where. A task whose ground has never been traced is a
+		// BOUNDARY somebody owes, and the task is fine. Merging them into "6
+		// tasks not shown" would leave whoever reads it unable to act on either.
+		const task_summary = answer.task_summary || {};
+		if (task_summary.without_location) {
+			notes.push(
+				`<div class="fo-note fo-note-warn"><p>${esc(
+					__(
+						"{0} open task(s) name no location, so they are not on the map. They are on the dispatch board.",
+						[task_summary.without_location]
+					)
+				)}</p></div>`
+			);
+		}
+		const unplaceable = task_summary.unplaceable || [];
+		if (unplaceable.length) {
+			const rows = unplaceable
+				.map(
+					(entry) =>
+						`<li><a href="${esc(entry.route)}">${esc(
+							entry.task_name || entry.name
+						)}</a> — ${esc(entry.location_doctype)} ${esc(entry.location)}</li>`
+				)
+				.join("");
+			notes.push(
+				`<div class="fo-note fo-note-warn"><p>${esc(
+					__(
+						"{0} open task(s) are about ground that has never been traced or stood at, so there is nowhere to put the pin:",
+						[unplaceable.length]
+					)
+				)}</p><ul>${rows}</ul></div>`
 			);
 		}
 
@@ -607,6 +706,93 @@ function erpnext_mcp_farm_overview(page) {
 			</div>`;
 	}
 
+	/** One asset's popup: what it is, what it is doing, when it was last seen.
+	 *
+	 * THE SCAN LINE IS THE ONE WORTH READING and it is the reason the asset layer
+	 * is on this map at all. A tag whose last scan is in March is either a
+	 * machine nobody has touched since March or a tag nobody can find, and both
+	 * are answered by walking to the pin.
+	 */
+	function asset_popup(entry) {
+		const lines = [];
+		if (entry.current_state) {
+			lines.push(__("State: {0}", [entry.current_state]));
+		}
+		lines.push(
+			entry.last_scan_at
+				? __("Last scanned {0}", [entry.last_scan_at]) +
+						(entry.last_scan_by ? " · " + entry.last_scan_by : "")
+				: // NOT AN EMPTY LINE. "Never scanned" is a fact about the tag and
+					// is the single most actionable thing this popup can say; a blank
+					// where it should be reads as a popup that failed to load.
+					__("Never scanned")
+		);
+		if (entry.last_service_date) {
+			lines.push(__("Serviced {0}", [entry.last_service_date]));
+		}
+		if (entry.parent_asset) {
+			lines.push(__("Under {0}", [entry.parent_asset]));
+		}
+		return `<div>
+				<div class="fo-popup-title">${esc(entry.label)}</div>
+				<div class="fo-popup-detail">${esc(entry.icon_label)}${
+					entry.description ? " · " + esc(entry.description) : ""
+				}</div>
+				<div class="fo-popup-figures">${lines.map(esc).join("<br>")}</div>
+				<a href="${esc(entry.route)}">${esc(__("Open {0}", [entry.name]))}</a>
+			</div>`;
+	}
+
+	/** One task's popup, with a link to the job AND to the ground it is about.
+	 *
+	 * BOTH LINKS, because they answer different questions. Somebody looking at a
+	 * red diamond wants either "what is this job" or "which block is this" — and
+	 * the second is the one a map is uniquely bad at answering, since the pin
+	 * sits at a centroid with nothing written on it.
+	 */
+	function task_popup(entry) {
+		const lines = [];
+		lines.push(__("{0} · {1}", [entry.task_type || __("Task"), entry.state || ""]));
+		lines.push(
+			entry.assigned_to
+				? __("Assigned to {0}", [entry.assigned_to_name || entry.assigned_to])
+				: // The pool is a state somebody acts on, so it is said rather than
+					// left as an absent line.
+					__("Nobody has claimed it")
+		);
+		if (entry.skill_required) {
+			lines.push(__("Needs {0}", [entry.skill_required]));
+		}
+		return `<div>
+				<div class="fo-popup-title">${esc(entry.label)}</div>
+				<div class="fo-popup-detail">${esc(entry.urgency)}</div>
+				<div class="fo-popup-figures">${lines.map(esc).join("<br>")}</div>
+				<a href="${esc(entry.route)}">${esc(__("Open {0}", [entry.name]))}</a>
+				&nbsp;·&nbsp;
+				<a href="${esc(entry.location_route)}">${esc(entry.location)}</a>
+			</div>`;
+	}
+
+	/** A round lettered badge for an asset, drawn in CSS. See ASSET_ICON_SIZE. */
+	function asset_icon(L, entry) {
+		return L.divIcon({
+			className: "fo-asset-icon",
+			html: `<span style="background:${esc(entry.colour)}">${esc(entry.icon)}</span>`,
+			iconSize: [ASSET_ICON_SIZE, ASSET_ICON_SIZE],
+			iconAnchor: [ASSET_ICON_SIZE / 2, ASSET_ICON_SIZE / 2],
+		});
+	}
+
+	/** A diamond for a task, coloured by urgency. */
+	function task_icon(L, entry) {
+		return L.divIcon({
+			className: "fo-task-icon",
+			html: `<span style="background:${esc(entry.colour)}"></span>`,
+			iconSize: [TASK_ICON_SIZE, TASK_ICON_SIZE],
+			iconAnchor: [TASK_ICON_SIZE / 2, TASK_ICON_SIZE / 2],
+		});
+	}
+
 	/** Re-measure and re-fit the map until the browser has actually laid it out.
 	 *
 	 * LEAFLET MEASURES ITS CONTAINER ONCE, when the map is created, and on the
@@ -673,7 +859,57 @@ function erpnext_mcp_farm_overview(page) {
 				$canvas.show().empty();
 
 				map = L.map($canvas[0], { scrollWheelZoom: true });
-				widget.add_base_layers(L, map);
+
+				// v0.161.0. ONE GROUP PER REGISTER, SO EACH CAN BE SWITCHED OFF.
+				// A farm with forty blocks, ninety tags and thirty open jobs on
+				// one map is unreadable at the zoom where you can see all of it,
+				// and the answer is not to draw less — it is to let whoever is
+				// looking say what they came for. Every group is ON by default:
+				// a map that opened with layers hidden would look like a farm
+				// with nothing on it.
+				const groups = {};
+				(answer.layers || []).forEach((layer) => {
+					groups[layer.doctype] = L.layerGroup().addTo(map);
+				});
+				groups.__markers = L.layerGroup().addTo(map);
+				groups.__assets = L.layerGroup().addTo(map);
+				groups.__tasks = L.layerGroup().addTo(map);
+
+				const toggles = {};
+				(answer.layers || []).forEach((layer) => {
+					// A LAYER WITH NOTHING IN IT IS NOT OFFERED. An entry that
+					// toggles an empty group is a control that does nothing, and
+					// a farm with no irrigation zones registered would get one
+					// permanently. The count is still in the legend, where "0" is
+					// a fact rather than a dead switch.
+					if (!layer.drawn) {
+						return;
+					}
+					toggles[`${layer.label} (${layer.drawn})`] = groups[layer.doctype];
+				});
+				const housing = answer.housing || {};
+				if (housing.drawn) {
+					toggles[`${housing.label} (${housing.drawn})`] = groups.__markers;
+				}
+				const asset_summary = answer.asset_summary || {};
+				if (asset_summary.drawn) {
+					toggles[`${asset_summary.label} (${asset_summary.drawn})`] = groups.__assets;
+				}
+				const task_summary = answer.task_summary || {};
+				if (task_summary.drawn) {
+					toggles[`${task_summary.label} (${task_summary.drawn})`] = groups.__tasks;
+				}
+
+				// THE COUNT IS IN THE LABEL, and that is the whole reason this
+				// control beats a row of checkboxes of our own. "Fields (31)"
+				// answers "did the layer draw nothing, or is it switched off"
+				// without unticking anything — which is the question somebody
+				// asks the moment a layer looks empty.
+				//
+				// A LAYER WITH NOTHING IN IT IS NOT OFFERED. An entry that
+				// toggles an empty group is a control that does nothing, and
+				// three of them is a control nobody trusts.
+				widget.add_base_layers(L, map, toggles);
 
 				// THE VIEW IS SET BEFORE A SINGLE SHAPE IS ADDED, AND THE ORDER IS
 				// LOAD-BEARING RATHER THAN TIDY. A Leaflet map has no pixel origin
@@ -730,7 +966,7 @@ function erpnext_mcp_farm_overview(page) {
 						// and three red ones. The FILL carries the status and
 						// the STROKE stays the register's, which is what lets
 						// somebody see both facts about one polygon at once.
-						L.geoJSON(entry.geometry, {
+						const shape = L.geoJSON(entry.geometry, {
 							style: {
 								color: state ? state.colour : layer.colour,
 								weight: state ? layer.weight + 1 : layer.weight,
@@ -739,7 +975,7 @@ function erpnext_mcp_farm_overview(page) {
 								dashArray: layer.dash_array || undefined,
 							},
 						})
-							.addTo(map)
+							.addTo(groups[layer.doctype])
 							.bindPopup(popup(entry, layer, state))
 							.bindTooltip(
 								state
@@ -747,15 +983,63 @@ function erpnext_mcp_farm_overview(page) {
 									: esc(entry.label),
 								{ sticky: true }
 							);
+
+						// v0.161.0. THE TICKER, PAINTED ON THE BLOCK. `block_ticker`
+						// is what is on the bin, said on the radio and written on
+						// the tally sheet — `field_name` is what is in the
+						// database — so it is the label a picker recognises a
+						// polygon by without clicking it. A permanent tooltip is
+						// Leaflet drawing text at the shape's centre; only Fields
+						// have a ticker and only ones that have been given one get
+						// a label, so nothing else on the map gains clutter.
+						if (entry.block_ticker && entry.centre) {
+							L.tooltip({
+								permanent: true,
+								direction: "center",
+								className: "fo-ticker",
+							})
+								.setContent(esc(entry.block_ticker))
+								.setLatLng(entry.centre)
+								.addTo(groups[layer.doctype]);
+						}
+						return shape;
 					});
 				});
 
 				(answer.markers || []).forEach((entry) => {
 					L.circleMarker(entry.point, MARKER_STYLE)
-						.addTo(map)
+						.addTo(groups.__markers)
 						.bindPopup(popup(entry, null, null))
 						.bindTooltip(esc(entry.label), { sticky: true });
 				});
+
+				(answer.assets || []).forEach((entry) => {
+					L.marker(entry.point, { icon: asset_icon(L, entry) })
+						.addTo(groups.__assets)
+						.bindPopup(asset_popup(entry))
+						.bindTooltip(esc(entry.label), { sticky: true });
+				});
+
+				// ADDED IN REVERSE, AND THAT IS THE POINT RATHER THAN AN
+				// ODDITY. The server sorts `tasks` WORST FIRST, which is the
+				// order a list wants — the fallback table below prints it
+				// straight through, and so does the legend. A MAP wants the
+				// opposite: several jobs on one block share a centroid exactly,
+				// Leaflet draws later markers over earlier ones, and the pin that
+				// has to be on top and clickable at a block with four jobs on it
+				// is the Critical one. So the payload keeps the reading order and
+				// this one loop walks it backwards.
+				(answer.tasks || [])
+					.slice()
+					.reverse()
+					.forEach((entry) => {
+						L.marker(entry.point, { icon: task_icon(L, entry) })
+							.addTo(groups.__tasks)
+							.bindPopup(task_popup(entry))
+							.bindTooltip(esc(entry.label + " — " + entry.urgency), {
+								sticky: true,
+							});
+					});
 
 				watch_size(map, apply_view);
 				page.set_indicator(__("Loaded"), "green");
@@ -810,6 +1094,29 @@ function erpnext_mcp_farm_overview(page) {
 				`<tr><td><a href="${esc(entry.route)}">${esc(entry.label)}</a></td><td>${esc(
 					entry.doctype
 				)}</td><td>${esc(entry.point[0] + ", " + entry.point[1])}</td><td></td></tr>`
+			);
+		});
+		// v0.161.0. THE MACHINES AND THE JOBS BELONG IN THE FALLBACK TOO. With no
+		// Leaflet this table IS the map, and a fallback that listed the ground
+		// and dropped the open work would leave somebody unable to find out what
+		// is outstanding by any means at all — which is the same argument the
+		// overlay column already makes two blocks above.
+		(answer.assets || []).forEach((entry) => {
+			rows.push(
+				`<tr><td><a href="${esc(entry.route)}">${esc(entry.label)}</a></td><td>${esc(
+					entry.icon_label
+				)}</td><td>${esc(entry.point[0] + ", " + entry.point[1])}</td><td>${esc(
+					entry.current_state || (entry.last_scan_at ? "" : __("never scanned"))
+				)}</td></tr>`
+			);
+		});
+		(answer.tasks || []).forEach((entry) => {
+			rows.push(
+				`<tr><td><a href="${esc(entry.route)}">${esc(entry.label)}</a></td><td>${esc(
+					__("Open task")
+				)}</td><td>${esc(entry.point[0] + ", " + entry.point[1])}</td><td>${esc(
+					entry.urgency + " · " + (entry.state || "")
+				)}</td></tr>`
 			);
 		});
 

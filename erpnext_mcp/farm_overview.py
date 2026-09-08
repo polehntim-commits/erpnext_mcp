@@ -111,6 +111,8 @@ import frappe
 
 from . import compat, overlays
 from .errors import ToolError
+from .tools import asset_tags as asset_tools
+from .tools import dispatch as dispatch_tools
 from .tools import farm as farm_tools
 from .tools import housing as housing_tools
 from .tools import realestate as realestate_tools
@@ -128,6 +130,8 @@ IRRIGATION_ZONE = "Irrigation Zone"
 PARCEL = "Parcel"
 HOUSING_UNIT = "Housing Unit"
 COMPANY = "Company"
+ASSET_REGISTER = "Asset Register"
+FARM_TASK = "Farm Task"
 
 #: The three registers that carry a polygon, in the order they are DRAWN — which
 #: is largest first, because a Leaflet layer added later sits on top of one added
@@ -201,7 +205,66 @@ REGISTER_SPECS = {
 		"label": "unit_name",
 		"acreage": None,
 	},
+	# v0.161.0. Two more registers, read the same way and for the same reason.
+	# `Asset Register` autonames from the tag a person reads off the machine, so
+	# the docname IS the label — there is no separate name column to point at.
+	ASSET_REGISTER: {
+		"module": asset_tools,
+		"tool": "list_assets",
+		"key": "assets",
+		"label": "name",
+		"acreage": None,
+	},
+	FARM_TASK: {
+		"module": dispatch_tools,
+		"tool": "list_dispatch_board",
+		"key": "columns",
+		"label": "task_name",
+		"acreage": None,
+	},
 }
+
+#: v0.161.0. The glyph a marker carries, by `asset_type`. LETTERS AND NOT AN
+#: ICON FONT, and a `L.divIcon` rather than `L.marker`: the same reasoning
+#: `farm_overview.js` gives for drawing structures as circles is that Leaflet's
+#: default marker reaches for a sprite at a path relative to its stylesheet,
+#: which resolves against the CDN and is one more request that can fail on its
+#: own. A glyph this app draws itself cannot 404.
+#:
+#: THE FIVE THE BRIEF NAMED, AND EVERY OTHER TYPE FALLS TO `General`. A farm that
+#: invents an asset type gets a pin rather than nothing — an unmapped type
+#: silently missing from the map is the failure this table exists to avoid, and
+#: `asset_type` is a free Select an operator may extend.
+ASSET_ICONS = {
+	"Irrigation Valve": {"glyph": "V", "colour": "#0969da", "label": "Irrigation valve"},
+	"Tractor": {"glyph": "T", "colour": "#9a6700", "label": "Tractor"},
+	"Storage": {"glyph": "S", "colour": "#6639ba", "label": "Storage"},
+	"Wind Machine": {"glyph": "W", "colour": "#1a7f37", "label": "Wind machine"},
+}
+
+#: What an asset type this table does not name is drawn as.
+ASSET_ICON_DEFAULT = {"glyph": "A", "colour": "#57606a", "label": "General"}
+
+#: v0.161.0. A task marker's colour, by urgency. THE FOUR THE DOCTYPE DECLARES —
+#: `Farm Task.urgency` is a Select of Low/Normal/High/Critical — and the order
+#: matters on the map as well as in the legend: a Critical job has to be the one
+#: colour that reads at a glance across forty blocks.
+#:
+#: AN UNKNOWN URGENCY TAKES `Normal`'s COLOUR AND IS NOT PROMOTED. `.get(key, 0)`
+#: on an ordering table is the bug `an-unknown-select-option-ranks-first` names:
+#: a value the table does not know must never sort ABOVE the ones it does, or a
+#: typo in a Select becomes the most urgent thing on the farm.
+URGENCY_COLOURS = {
+	"Critical": "#cf222e",
+	"High": "#bc4c00",
+	"Normal": "#0969da",
+	"Low": "#6e7781",
+}
+URGENCY_DEFAULT = "#0969da"
+
+#: Worst first, which is the order the legend prints and the order the markers
+#: are added in — a Critical pin sits on top of a Normal one at the same block.
+URGENCY_ORDER = ("Critical", "High", "Normal", "Low")
 
 #: How many rows of one register the page will draw. `farm_tools.REGISTER_CAP` is
 #: the app's standard ceiling and the same one the location picker uses; a farm
@@ -306,7 +369,18 @@ def _rows(doctype: str, company: str) -> list:
 		# populated layer and two empty ones is a worse answer than a page that
 		# says which entity to pick.
 		return []
-	return list(result.data.get(spec["key"]) or [])
+	payload = result.data.get(spec["key"])
+	if isinstance(payload, dict):
+		# v0.161.0. `list_dispatch_board` answers the Kanban's own shape — a dict
+		# of state to the tasks in it — because that is what a board is. This
+		# page wants the tasks, so the columns are flattened HERE rather than by
+		# giving the board a second return shape: the board's grouping is the
+		# thing every other caller of it reads.
+		out = []
+		for entries in payload.values():
+			out.extend(entries or [])
+		return out
+	return list(payload or [])
 
 
 def _parcel_shapes(names: list) -> dict:
@@ -516,6 +590,18 @@ def _shape(doctype: str, row: dict, raw) -> dict:
 		"parcel": row.get("parcel") or None,
 		"acres": _acres(row, spec["acreage"]),
 		"computed_acres": row.get("area_computed_acres"),
+		# v0.161.0. WHAT THE BLOCK IS CALLED ON THE FARM, which is not what it is
+		# called in the database. `field_name` is "Yellow Camp Block 3"; the
+		# ticker is "YC3" and is what is painted on the bin, said on the radio
+		# and written on the tally sheet. It is the label a picker recognises
+		# from a map, so it is drawn ON the polygon rather than only in a popup.
+		# Absent on every other register, and `None` rather than "" so the script
+		# can tell "this register has no ticker" from "this block has not been
+		# given one".
+		"block_ticker": (str(row.get("block_ticker") or "") or None) if doctype == FIELD else None,
+		"crop": (row.get("crop") or None) if doctype == FIELD else None,
+		"variety": (row.get("variety") or None) if doctype == FIELD else None,
+		"condition": (row.get("condition") or None) if doctype == FIELD else None,
 		"geometry": geometry,
 		"centroid": stored,
 		# WHERE TO PRINT WHEN THERE IS NO MAP TO DRAW ON, which is not the same
@@ -568,6 +654,18 @@ def _detail(doctype: str, row: dict) -> str:
 		county = str(row.get("county") or "")
 		state = str(row.get("state") or "")
 		return ", ".join(part for part in (county, state) if part)
+	if doctype == ASSET_REGISTER:
+		# What it is, then what it is doing. A tag reads `40-5-MPH` and the
+		# description is the only line that says which machine that is.
+		kind = str(row.get("asset_type") or "")
+		description = str(row.get("description") or "")
+		return " · ".join(part for part in (kind, description) if part)
+	if doctype == FARM_TASK:
+		# What kind of job and how it stands. NOT the urgency, which is the
+		# marker's own colour and would be one fact said twice.
+		kind = str(row.get("task_type") or "")
+		state = str(row.get("state") or "")
+		return " · ".join(part for part in (kind, state) if part)
 	unit_type = str(row.get("unit_type") or "")
 	capacity = row.get("capacity")
 	sleeps = frappe._("sleeps {0}").format(capacity) if capacity else ""
@@ -602,6 +700,184 @@ def _markers(rows: list) -> list:
 			}
 		)
 	return out
+
+
+def _asset_markers(rows: list) -> list:
+	"""Every tagged asset somebody has stood at with a phone, as a typed pin.
+
+	THE PAIR IS CHECKED AND NOT EACH AXIS, exactly as `_markers` does for a
+	cabin. `_describe_asset` already turns a stored 0.0 into None — every Frappe
+	Float column is `NOT NULL DEFAULT 0`, so an asset nobody has located reads
+	back 0.0 and would otherwise be a pin in the Gulf of Guinea — and
+	`_on_earth` refuses null island a second time for the rows that arrive from
+	somewhere else. An asset with no position is COUNTED, not dropped: "ninety
+	tags, sixty of them nowhere" is a morning's work with a phone.
+
+	A RETIRED ASSET IS NOT HERE AT ALL, and that is `list_assets`' doing rather
+	than this function's — its default filter is `retired_at is not set`. A map
+	of what is on the farm should not carry the tractor that was sold.
+	"""
+	out = []
+	for row in rows:
+		latitude = row.get("gps_latitude")
+		longitude = row.get("gps_longitude")
+		if not _on_earth(latitude, longitude):
+			continue
+		name = str(row.get("name") or "")
+		asset_type = str(row.get("asset_type") or "")
+		icon = ASSET_ICONS.get(asset_type, ASSET_ICON_DEFAULT)
+		out.append(
+			{
+				"doctype": ASSET_REGISTER,
+				"name": name,
+				"label": name,
+				"route": _route(ASSET_REGISTER, name),
+				"company": row.get("company") or None,
+				"asset_type": asset_type or None,
+				"icon": icon["glyph"],
+				"colour": icon["colour"],
+				"icon_label": icon["label"],
+				"point": [round(float(latitude), 7), round(float(longitude), 7)],
+				"description": row.get("description") or None,
+				# THE READABLE HALF OF A JSON COLUMN, THROUGH THE FUNCTION THAT
+				# ALREADY OWNS THAT READING. `current_state` is a JSON blob — a
+				# valve's open/closed, a sprayer's full/empty — and the word a
+				# person wants is under its `state` key.
+				# `asset_tags._current_state_value` is what `scan_asset` and the
+				# action menu both read it with, and pulling `.get("state")` out
+				# here instead would be a third implementation of one extraction,
+				# in the module whose whole docstring is about not becoming a
+				# second reader of somebody else's register.
+				"current_state": asset_tools._current_state_value(row.get("current_state")) or None,
+				# The blob as well, because a valve carries more than the word —
+				# a popup prints the word and a client that wants the rest has it
+				# without a second call.
+				"state_detail": row.get("current_state") or None,
+				"last_scan_at": row.get("last_scan_at") or None,
+				"last_scan_by": row.get("last_scan_by") or None,
+				"last_service_date": row.get("last_service_date") or None,
+				"service_interval_days": row.get("service_interval_days"),
+				"service_interval_hours": row.get("service_interval_hours"),
+				"current_hours": row.get("current_hours"),
+				"parent_asset": row.get("parent_asset") or None,
+				"detail": _detail(ASSET_REGISTER, row),
+			}
+		)
+	return out
+
+
+def _placements(layers: list, markers: list) -> dict:
+	"""`{(doctype, docname): [lat, lon]}` for everything this answer already drew.
+
+	WHERE A TASK'S PIN COMES FROM, AND WHY IT COSTS NO QUERY. `Farm Task.location`
+	is a Dynamic Link over `location_doctype`, so a task points at a Field, a
+	Parcel, an Irrigation Zone or a Housing Unit — and this response has just
+	finished computing a centre for every one of those that the caller may read.
+	Reading the registers again to place the tasks would be four more queries for
+	coordinates already in hand, and worse, it would be a SECOND answer to "where
+	is this block" that could disagree with the polygon drawn underneath it.
+
+	`centre` AND NOT `centroid`, deliberately. `_shape` keeps the two apart: the
+	first is the stored centroid where there is one and the middle of the
+	bounding box where there is not. A task pin is a "go here" and the bounding
+	box middle is honest for that; nothing computes acreage or containment from
+	it.
+	"""
+	places = {}
+	for layer in layers:
+		for shape in layer["shapes"]:
+			if shape.get("centre"):
+				places[(layer["doctype"], shape["name"])] = shape["centre"]
+	for marker in markers:
+		places[(marker["doctype"], marker["name"])] = marker["point"]
+	return places
+
+
+def _task_markers(rows: list, places: dict) -> tuple:
+	"""Open tasks as pins on the ground they are about, and a count of the rest.
+
+	THREE WAYS A TASK HAS NOWHERE TO GO, AND THEY ARE DIFFERENT FACTS. It names
+	no location at all; it names one in a register this login may not read or
+	this site has not installed; or it names one that has never been traced or
+	stood at. The first is a dispatch gap, the second is a permission, the third
+	is a boundary somebody owes — so they are counted apart rather than summed
+	into one "not shown" that answers none of the three.
+
+	WORST FIRST, WHICH IS THE READING ORDER AND NOT THE DRAWING ORDER. The list
+	comes back sorted by `URGENCY_ORDER` because that is what a list wants: the
+	fallback table prints it straight through and the Critical jobs are at the
+	top of it. A MAP wants the reverse — several jobs on one block share a
+	centroid exactly, Leaflet draws later markers over earlier ones, and the pin
+	that has to be on top is the urgent one — so `farm_overview.js` walks this
+	list backwards for the markers alone. Sorting it the other way here would
+	have fixed the map and quietly buried every Critical job at the bottom of the
+	table somebody reads when there is no map at all.
+	"""
+	placed = []
+	unlocated = 0
+	unplaceable = []
+	for row in rows:
+		doctype = str(row.get("location_doctype") or "")
+		name = str(row.get("location") or "")
+		if not doctype or not name:
+			unlocated += 1
+			continue
+		point = places.get((doctype, name))
+		if not point:
+			unplaceable.append(
+				{
+					"name": str(row.get("name") or ""),
+					"task_name": row.get("task_name") or None,
+					"location_doctype": doctype,
+					"location": name,
+					"route": _route(FARM_TASK, str(row.get("name") or "")),
+				}
+			)
+			continue
+		urgency = str(row.get("urgency") or "Normal")
+		placed.append(
+			{
+				"doctype": FARM_TASK,
+				"name": str(row.get("name") or ""),
+				"label": str(row.get("task_name") or "") or str(row.get("name") or ""),
+				"route": _route(FARM_TASK, str(row.get("name") or "")),
+				"company": row.get("company") or None,
+				"point": point,
+				"urgency": urgency,
+				# NOT `.get(urgency, first)`. An urgency this table does not know
+				# takes Normal's colour rather than the top of the list — a typo
+				# in a Select must not become the most urgent thing on the farm.
+				"colour": URGENCY_COLOURS.get(urgency, URGENCY_DEFAULT),
+				"state": row.get("state") or None,
+				"task_type": row.get("task_type") or None,
+				"assigned_to": row.get("assigned_to") or None,
+				"assigned_to_name": row.get("assigned_to_name") or None,
+				"skill_required": row.get("skill_required") or None,
+				"location_doctype": doctype,
+				"location": name,
+				"location_route": _route(doctype, name),
+				"detail": _detail(FARM_TASK, row),
+			}
+		)
+	placed.sort(
+		key=lambda task: (
+			-_urgency_rank(task["urgency"]),
+			str(task["name"]),
+		)
+	)
+	return placed, unlocated, unplaceable
+
+
+def _urgency_rank(urgency) -> int:
+	"""How far up the list one urgency sits. An unknown one ranks LAST.
+
+	`URGENCY_ORDER.index` would raise on a value the table does not know, and a
+	`.get(key, 0)` style default would rank it FIRST — which is
+	`an-unknown-select-option-ranks-first`, and on this page it would put an
+	unrecognised urgency on top of every Critical pin at the same block.
+	"""
+	order = list(reversed(URGENCY_ORDER))
+	return order.index(urgency) if urgency in order else -1
 
 
 # ── the one whitelisted method ──────────────────────────────────────────────
@@ -715,6 +991,41 @@ def farm_overview(company=None, overlay=None) -> dict:
 	counts[HOUSING_UNIT] = len(units)
 	points.extend((marker["point"][0], marker["point"][1]) for marker in markers)
 
+	# v0.161.0. THE TWO REGISTERS THAT ARE ON THE GROUND WITHOUT BEING SHAPED.
+	# Both are pins rather than polygons and both are gated per register exactly
+	# as the four above are: a login that may not read the asset register gets
+	# the map without the machines and a line saying so, not a page that will
+	# not open.
+	assets_readable = _may_read(ASSET_REGISTER)
+	if not assets_readable:
+		refused.append(ASSET_REGISTER)
+	asset_rows = _rows(ASSET_REGISTER, entity) if assets_readable else []
+	assets = _asset_markers(asset_rows)
+	counts[ASSET_REGISTER] = len(asset_rows)
+	points.extend((marker["point"][0], marker["point"][1]) for marker in assets)
+
+	# TASKS ARE PLACED ON WHAT IS ALREADY DRAWN AND ADD NO POINT OF THEIR OWN.
+	# A task sits at the centre of the block it is about, so its pin is inside
+	# the bounding box by construction — extending the box with it would be
+	# arithmetic that cannot change the answer, and `_placements` is built from
+	# `layers` and `markers` after both are final for exactly that reason.
+	tasks_readable = _may_read(FARM_TASK)
+	if not tasks_readable:
+		refused.append(FARM_TASK)
+	task_rows = _rows(FARM_TASK, entity) if tasks_readable else []
+	tasks, tasks_unlocated, tasks_unplaceable = _task_markers(
+		task_rows, _placements(layers, markers + assets)
+	)
+	counts[FARM_TASK] = len(task_rows)
+
+	by_urgency = {}
+	for task in tasks:
+		by_urgency[task["urgency"]] = by_urgency.get(task["urgency"], 0) + 1
+	by_type = {}
+	for marker in assets:
+		key = marker["asset_type"] or frappe._("(unrecorded)")
+		by_type[key] = by_type.get(key, 0) + 1
+
 	return {
 		"company": entity or None,
 		"companies": allowed,
@@ -725,6 +1036,32 @@ def farm_overview(company=None, overlay=None) -> dict:
 			"total": len(units),
 			"drawn": len(markers),
 			"without_position": len(units) - len(markers),
+		},
+		"assets": assets,
+		"asset_summary": {
+			"label": frappe._("Assets"),
+			"total": len(asset_rows),
+			"drawn": len(assets),
+			"without_position": len(asset_rows) - len(assets),
+			"by_asset_type": dict(sorted(by_type.items())),
+			"icons": {**ASSET_ICONS, "": ASSET_ICON_DEFAULT},
+		},
+		"tasks": tasks,
+		"task_summary": {
+			"label": frappe._("Open tasks"),
+			"total": len(task_rows),
+			"drawn": len(tasks),
+			# THE THREE REASONS A TASK IS NOT ON THE MAP, KEPT APART. See
+			# `_task_markers`: no location named, a location whose ground has
+			# never been traced, and — implicitly — a register this login cannot
+			# read, which is already in `refused`. Summing them would answer none
+			# of the three.
+			"without_location": tasks_unlocated,
+			"without_a_drawn_place": len(tasks_unplaceable),
+			"unplaceable": tasks_unplaceable[:DRAW_CAP],
+			"by_urgency": by_urgency,
+			"urgency_order": list(URGENCY_ORDER),
+			"colours": dict(URGENCY_COLOURS),
 		},
 		"bounds": bounds_of(points),
 		"counts": counts,

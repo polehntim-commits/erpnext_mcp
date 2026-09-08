@@ -469,18 +469,41 @@ frappe.provide("erpnext_mcp.geo_map");
 	 * Satellite is added to the map and is therefore the one that shows; both are
 	 * named in the control. See the module docstring for why imagery and not
 	 * streets is the default.
+	 *
+	 * v0.161.0. `overlays` IS OPTIONAL AND EXISTS SO THERE IS STILL ONE CONTROL.
+	 * `/app/farm-overview` draws five things somebody wants to switch off
+	 * independently — parcels, blocks, zones, machines, jobs — and Leaflet's own
+	 * layer control is the widget for that. Building a SECOND `L.control.layers`
+	 * on the page would stack two boxes in the same corner, each holding half the
+	 * answer to "what is on this map", so the groups are handed to the one that
+	 * is already being made.
+	 *
+	 * The seven form callers pass nothing and get exactly the control they always
+	 * had: `{}` is what the third argument was hard-coded to before this release.
 	 */
-	function add_base_layers(L, map) {
+	function add_base_layers(L, map, overlays) {
 		const satellite = L.tileLayer(SATELLITE_URL, {
 			attribution: SATELLITE_ATTRIBUTION,
 			maxZoom: 19,
 		});
 		const streets = L.tileLayer(STREET_URL, { attribution: STREET_ATTRIBUTION, maxZoom: 19 });
 		satellite.addTo(map);
-		L.control
-			.layers({ [__("Satellite")]: satellite, [__("Streets")]: streets }, {}, { position: "topright" })
+		const groups = overlays || {};
+		const control = L.control
+			.layers(
+				{ [__("Satellite")]: satellite, [__("Streets")]: streets },
+				groups,
+				// EXPANDED ONLY WHERE THERE IS SOMETHING TO TOGGLE. A control that
+				// holds two base layers is a thing somebody opens when they want
+				// imagery; one that also holds five registers is the map's own
+				// index and has to be readable without a hover. The seven forms
+				// pass no groups and keep the collapsed control they have had
+				// since v0.32.0 — this must not become a visible change to
+				// screens this release did not touch.
+				{ position: "topright", collapsed: !Object.keys(groups).length }
+			)
 			.addTo(map);
-		return { satellite: satellite, streets: streets };
+		return { satellite: satellite, streets: streets, control: control };
 	}
 
 	/**
