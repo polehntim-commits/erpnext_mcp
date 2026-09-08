@@ -20388,6 +20388,136 @@ TOOLS = {
 		requires="the Inspection Template DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── v0.24.0: Universal Asset Tags ──────────────────────────────────────
+	"create_asset_type": _tool(
+		asset_tags.create_asset_type,
+		"MUTATING (default OFF). Add one kind of asset to the register "
+		"register_asset refuses against — a fuel tank, a generator, a bin "
+		"trailer.\n\n"
+		"THE WHOLE POINT OF v0.162.0, REACHABLE WITHOUT THE DESK. Until that "
+		"release the list was a Select on the doctype and a tuple in three "
+		"Python modules; a farm that bought a generator waited for a release. "
+		"Now it adds `Generator` here and registers one the same minute.\n\n"
+		"A DUPLICATE UNDER ANOTHER SPELLING IS REFUSED AND NAMED. Because the "
+		"docname IS the type name, 'Tractor' and 'tractor' would be two "
+		"different Link targets, splitting one kind of machine across two "
+		"masters that no report adds back together.\n\n"
+		"NOTHING BUT THE NAME IS GUESSED. `icon`, `description` and "
+		"`display_order` stay empty until somebody sets them — the map already "
+		"falls back to the type's own initial, which is an honest default rather "
+		"than a stored guess.",
+		{
+			"type_name": _field(
+				_STRING,
+				"What this kind of asset is called — 'Fuel Tank'. IT BECOMES THE "
+				"DOCNAME, and every asset of this type stores that string.",
+			),
+			"icon": _field(
+				_STRING,
+				"An icon identifier. The map draws a lettered badge and takes the "
+				"FIRST character; iOS may read the whole string as a symbol name. "
+				"Left empty, the map uses the type's own initial.",
+			),
+			"description": _field(_STRING, "What belongs under this type, for whoever is choosing one."),
+			"display_order": _field(
+				_NUMBER, "Where it sits in a picker. Lower first; ties fall back to the name."
+			),
+			"enabled": _field(
+				_BOOLEAN,
+				"Defaults to true. Pass false to stage a type before it is in use.",
+			),
+		},
+		required=("type_name",),
+		mutating=True,
+		title="Create asset type",
+		available=_needs_doctype("Farm Asset Type"),
+		requires="the Farm Asset Type doctype (run bench migrate after installing v0.162.0)",
+	),
+	"get_asset_type": _tool(
+		asset_tags.get_asset_type,
+		"One asset type in full — its icon, order, description and whether it is "
+		"offered — plus `asset_count`, HOW MANY ASSETS CARRY IT, and `deletable`. "
+		"Read-only.\n\n"
+		"THOSE LAST TWO ARE WHY THIS IS NOT A FILTER ON list_asset_types. The "
+		"question anybody has before touching a type is whether anything depends "
+		"on it, and finding that out by attempting a delete and being refused is "
+		"finding it out the expensive way.",
+		{
+			"name": _field(_STRING, "The type's name — which is its docname."),
+			"type_name": _field(_STRING, "Alias for name."),
+		},
+		required=("name",),
+		title="Get asset type",
+		available=_needs_doctype("Farm Asset Type"),
+		requires="the Farm Asset Type doctype (run bench migrate after installing v0.162.0)",
+	),
+	"update_asset_type": _tool(
+		asset_tags.update_asset_type,
+		"MUTATING (default OFF). Correct one asset type: its icon, display "
+		"order, description, enablement — or its NAME.\n\n"
+		"CHANGING THE NAME IS A RENAME AND NOT A FIELD EDIT. The docname IS the "
+		"type name and every asset stores that docname, so writing the column "
+		"alone would leave the record calling itself 'Fuel Tank' under a docname "
+		"of 'Storage' with every asset still pointing at the old one. It goes "
+		"through frappe.rename_doc, which moves the key AND repoints every Link "
+		"that named it — `assets_repointed` says how many followed.\n\n"
+		"A RENAME ONTO AN EXISTING TYPE IS REFUSED. Frappe's merge flag would "
+		"fold two kinds of asset into one and repoint every machine on both at "
+		"the survivor, which is a decision about what those machines ARE rather "
+		"than a spelling fix.\n\n"
+		"`enabled: false` IS HOW A TYPE IS RETIRED, and it is almost always what "
+		"'we do not use that any more' means: it takes the type off every picker "
+		"and out of list_asset_types while leaving every asset carrying it "
+		"exactly as it is. delete_asset_type is the other, irreversible half and "
+		"is refused while anything carries it.\n\n"
+		"AT LEAST ONE REAL CHANGE. A call naming no field, or naming only values "
+		"the record already holds, is refused rather than accepted as a no-op.",
+		{
+			"name": _field(_STRING, "The type to change, by its current name."),
+			"type_name": _field(
+				_STRING,
+				"The new name. Setting this to anything but the current one is a "
+				"RENAME and repoints every asset carrying the type.",
+			),
+			"new_name": _field(_STRING, "Alias for type_name, for callers that prefer it explicit."),
+			"icon": _field(_STRING, "An icon identifier, or '' to clear it."),
+			"description": _field(_STRING, "Free text, or '' to clear it."),
+			"display_order": _field(_NUMBER, "Where it sits in a picker. Lower first."),
+			"enabled": _field(
+				_BOOLEAN,
+				"false RETIRES the type — off every picker, assets untouched. true puts it back.",
+			),
+		},
+		required=("name",),
+		mutating=True,
+		title="Update asset type",
+		available=_needs_doctype("Farm Asset Type"),
+		requires="the Farm Asset Type doctype (run bench migrate after installing v0.162.0)",
+	),
+	"delete_asset_type": _tool(
+		asset_tags.delete_asset_type,
+		"MUTATING (default OFF). Remove one asset type — REFUSED while any asset "
+		"still carries it.\n\n"
+		"THE REFUSAL IS THE FEATURE. `Asset Register.asset_type` is a required "
+		"Link, so deleting a type forty valves point at would leave forty "
+		"records that cannot be opened or saved in the Desk — a failure that "
+		"surfaces later, to somebody else, on the one screen they need. The "
+		"refusal names the count and the alternative.\n\n"
+		"RETIRING IS ALMOST ALWAYS THE RIGHT ACT. A type nothing carries is a row "
+		"somebody created by mistake; a type something carries is history. "
+		"update_asset_type(enabled=false) is the reversible half.\n\n"
+		"A DELETED TYPE THIS APP SHIPS COMES BACK on the next bench migrate, "
+		"because the seeder creates what is absent. Untick enabled instead when "
+		"you want one of the fifteen gone for good.",
+		{
+			"name": _field(_STRING, "The type to delete, by its name."),
+			"type_name": _field(_STRING, "Alias for name."),
+		},
+		required=("name",),
+		mutating=True,
+		title="Delete asset type",
+		available=_needs_doctype("Farm Asset Type"),
+		requires="the Farm Asset Type doctype (run bench migrate after installing v0.162.0)",
+	),
 	"list_asset_types": _tool(
 		asset_tags.list_asset_types,
 		"What kinds of asset this farm keeps — the register a picker is built "

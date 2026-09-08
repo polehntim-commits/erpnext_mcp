@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 866 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 870 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 435 read tools are **on** by default and can be switched off individually. A
+All 436 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -14291,6 +14291,62 @@ empty wheel and the worker would conclude the app was broken.
 for every value in use. The migration seeds the fifteen shipped types **and every
 distinct value already in the register**, so a site carrying a type this app does
 not ship keeps working.
+
+### `create_asset_type` / `get_asset_type` / `update_asset_type` / `delete_asset_type`
+
+**v0.162.0.** Full CRUD on the register, so asset types are managed entirely
+through MCP without opening the Desk.
+
+**Four tools and not one `manage_asset_type` with a verb**, for the reason
+`approve_expense_receipt` and `reject_expense_receipt` are two: an operator who
+wants a client able to **add** a type does not necessarily want the same client
+able to **delete** one, and a single switch cannot express that. The two reads
+default **on**; the three writes default **off**.
+
+| Tool | Arguments |
+| --- | --- |
+| `create_asset_type` | `type_name` (required), `icon`, `description`, `display_order`, `enabled` |
+| `get_asset_type` | `name` (`type_name` alias) |
+| `update_asset_type` | `name` (required), `type_name`/`new_name`, `icon`, `description`, `display_order`, `enabled` |
+| `delete_asset_type` | `name` (`type_name` alias) |
+
+**Changing `type_name` is a RENAME, not a field edit.** The docname *is* the type
+name and `Asset Register.asset_type` on every asset stores that docname — so
+writing the column alone would leave the record calling itself `Fuel Tank` under
+a docname of `Storage`, with every asset still pointing at the old one. It goes
+through `frappe.rename_doc`, which moves the key **and** repoints every Link that
+named it; `assets_repointed` says how many followed.
+
+**A rename onto an existing type is refused.** Frappe's `merge` flag folds one
+record into another and repoints everything at the survivor — a decision about
+what forty machines actually *are*, not a spelling fix.
+
+**`get_asset_type` carries `asset_count` and `deletable`,** which is why it is
+not just a filter on `list_asset_types`: the question anybody has before touching
+a type is whether anything depends on it, and finding that out by attempting a
+delete and being refused is finding it out the expensive way.
+
+**Deleting is refused while any asset carries the type,** with the count and the
+remedy. `asset_type` is a required Link, so deleting a type forty valves point at
+would leave forty records that cannot be opened or saved — a failure that
+surfaces later, to somebody else, on the one screen they need.
+`update_asset_type(enabled=false)` is the reversible half, and is almost always
+what "we do not use that any more" means. A deleted type this app *ships* comes
+back on the next `bench migrate`; untick `enabled` when you want one gone for
+good.
+
+**Refused:** a duplicate under another spelling (named, because two spellings are
+two Link targets); a rename onto an existing type; an update naming no field or
+only values the record already has; a negative `display_order`; a delete of a
+type in use; any of them on a bench that has not migrated.
+
+**Example**
+
+```json
+{"name": "create_asset_type",
+ "arguments": {"type_name": "Generator", "icon": "N",
+               "description": "Standby power.", "display_order": 95}}
+```
 
 ### `register_asset` takes the whole registration
 

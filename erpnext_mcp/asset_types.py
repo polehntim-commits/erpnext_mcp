@@ -95,6 +95,21 @@ def available() -> bool:
 	return compat.doctype_exists(DOCTYPE)
 
 
+def require_register() -> None:
+	"""Refuse by name on a bench that has not migrated far enough to have it.
+
+	THE READS DEGRADE AND THE WRITES DO NOT, and the asymmetry is deliberate.
+	`rows` answers from `SEEDED` when the doctype is absent, because a handset
+	with an empty type wheel looks like a broken app and the fallback is honest
+	about being a fallback. A CREATE has nowhere to put a row, and pretending
+	otherwise would report a type as created that no site has.
+	"""
+	compat.require_doctype(
+		DOCTYPE,
+		"It ships with erpnext_mcp v0.162.0 — run `bench --site <site> migrate` after upgrading.",
+	)
+
+
 def rows(*, enabled_only: bool = True) -> list[dict]:
 	"""Every asset type, in picker order, as plain dicts.
 
@@ -319,3 +334,37 @@ def require(asset_type, label: str = "asset_type", *, creating: bool = False) ->
 		f"{', '.join(names()) or 'nothing yet — run bench migrate'}. A new kind of asset is a "
 		f"{DOCTYPE} record somebody creates in the Desk, not a typo this accepts."
 	)
+
+
+def assets_using(asset_type) -> int:
+	"""How many assets carry this type. The number a delete refusal needs.
+
+	Counted rather than listed, and counted on the RAW column rather than through
+	`list_assets` — that tool excludes retired assets by default, and a retired
+	asset's type still has to have a master or the row cannot be opened.
+	"""
+	wanted = str(asset_type or "").strip()
+	if not wanted or not compat.doctype_exists(ASSET_REGISTER):
+		return 0
+	return int(frappe.db.count(ASSET_REGISTER, {"asset_type": wanted}) or 0)
+
+
+def find(asset_type) -> str:
+	"""The existing docname matching this text case-insensitively, or "".
+
+	SEPARATE FROM `exists` AND USED ONLY BY `create_asset_type`. `exists` answers
+	"is this exactly a type", which is what a validator wants; this answers "is
+	there already one of these under another spelling", which is what a CREATE
+	wants — because `Tractor` and `tractor` as two records would split one kind
+	of machine across two masters and no report would add them back together.
+	"""
+	wanted = " ".join(str(asset_type or "").split()).strip()
+	if not wanted:
+		return ""
+	if exists(wanted):
+		return wanted
+	folded = wanted.casefold()
+	for name in names(enabled_only=False):
+		if name.casefold() == folded:
+			return name
+	return ""

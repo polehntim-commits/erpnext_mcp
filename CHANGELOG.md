@@ -3,6 +3,74 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.163.0 — 2026-09-07 — the register, managed without the Desk
+
+v0.162.0 made the asset types a register and gave it one read. This is the rest
+of the CRUD, so a farm never has to open the Desk to manage them. **870 tools.**
+
+`create_asset_type`, `get_asset_type`, `update_asset_type` and
+`delete_asset_type` join `list_asset_types`. **Four tools rather than one with a
+verb argument**, for the reason approve and reject are two: an operator who wants
+a client able to *add* a type does not necessarily want the same client able to
+*delete* one, and a single switch cannot express that. The two reads default
+**on**; the three writes default **off**, like every other mutating tool here.
+
+### Changing `type_name` is a rename, not a field edit
+
+This is the whole of why `update_asset_type` is longer than it looks. The docname
+IS the type name — that is what let v0.162.0 turn a Select into a Link without
+rewriting one asset — and `Asset Register.asset_type` on every asset stores that
+docname. Writing the column alone would leave the record calling itself
+`Fuel Tank` under a docname of `Storage`, with every asset still pointing at the
+old one, and a required Link resolving to nothing is an asset that cannot be
+opened or saved in the Desk.
+
+So it goes through `frappe.rename_doc`, which moves the key **and** repoints
+every Link that named it. `assets_repointed` says how many followed.
+
+**A rename onto an existing type is refused.** Frappe's `merge` flag folds one
+record into another and repoints everything at the survivor — that is a decision
+about what forty machines actually *are*, not a spelling fix, and this tool must
+not make it by accident. The clash is checked **before** anything is written, so
+an icon named in the same call is not saved against a rename that did not happen.
+
+### `get_asset_type` carries `asset_count` and `deletable`
+
+Which is why it is not a filter on `list_asset_types`. The question anybody has
+before touching a type is whether anything depends on it, and finding that out by
+attempting a delete and being refused is finding it out the expensive way.
+
+### Deleting is refused while anything carries the type
+
+With the count and the remedy. `asset_type` is a required Link, so deleting a
+type forty valves point at would leave forty records that cannot be opened — a
+failure that surfaces later, to somebody else, on the one screen they need.
+`update_asset_type(enabled=false)` is the reversible half and is almost always
+what "we do not use that any more" means: off every picker, assets untouched.
+
+Two layers, on purpose. The tool names the count, the register and the
+alternative; the controller's `on_trash` catches every other door — the Desk, a
+script, a bulk delete — and raises Frappe's own error there.
+
+A deleted type this app *ships* comes back on the next `bench migrate`, because
+the seeder creates what is absent. Untick `enabled` when you want one of the
+fifteen gone for good.
+
+### Verification
+
+30 new tests, 7 mutations run and all caught.
+
+**One test of mine was vacuous and the mutation run found it.** A refused tool
+call is rolled back by the dispatcher, so post-refusal document state is
+unobservable through `tool_error` — the half-update test passed with the clash
+check deliberately moved *after* the write, which is exactly the bug it claimed
+to catch. It calls the handler directly now.
+
+**And the double needed teaching.** `harness.rename_doc` repoints only the Links
+named in `RENAME_LINK_FIELDS`; without a `Farm Asset Type` entry it would have
+reported a rename that orphaned every asset as one that worked. Confirmed by
+removing the entry and watching the test go red.
+
 ## 0.162.0 — 2026-09-07 — one list, and it is a register
 
 `Asset Register.asset_type` was a Select, and the same list was written out in
@@ -82,13 +150,51 @@ five overlay layers and three register colours, which is a property of the map
 rather than of a type. A type with no icon takes its own initial: `Cider Press`
 reads as **C**, which is at least the right thing.
 
+### Full CRUD on the register
+
+`create_asset_type`, `get_asset_type`, `update_asset_type` and
+`delete_asset_type` beside `list_asset_types`, so types are managed entirely
+through MCP without opening the Desk. **Four tools rather than one with a verb
+argument**, for the reason approve and reject are two: an operator who wants a
+client able to *add* a type does not necessarily want it able to *delete* one.
+Reads default on; writes default off.
+
+**Changing `type_name` is a RENAME.** The docname is the type name and every
+asset stores that docname, so writing the column alone would leave the record
+calling itself one thing under a docname of another with every asset pointing at
+the old one. It goes through `frappe.rename_doc`, which moves the key *and*
+repoints every Link — `assets_repointed` says how many followed. A rename onto an
+existing type is refused: Frappe's `merge` flag would fold two kinds of asset
+into one and repoint every machine on both at the survivor, which is a decision
+about what those machines *are*.
+
+**`get_asset_type` carries `asset_count` and `deletable`.** The question anybody
+has before touching a type is whether anything depends on it, and attempting a
+delete to find out is the expensive way.
+
+**Deleting is refused while anything carries the type**, with the count and the
+remedy. Two layers: the tool names the count and points at `enabled=false`, and
+the controller's `on_trash` catches every other door — the Desk, a script, a bulk
+delete.
+
 ### Verification
 
-43 new tests, 10 mutations run and all caught — including the seven-type seed,
+73 new tests, 17 mutations run and all caught — including the seven-type seed,
 which breaks 20 tests across three files and is the failure this release exists
 to avoid. Five existing registers caught work in progress: the mirror's category
 map, the skill map, the permissions doctype list, the read-tool snapshot and the
 catalogue counts.
+
+**One test of mine was vacuous and the mutation run found it.** A refused tool
+call is rolled back by the dispatcher, so post-refusal document state is
+unobservable through `tool_error` — the half-update test passed with the clash
+check deliberately moved *after* the write, which is exactly the bug it claimed
+to catch. It calls the handler directly now.
+
+**And the double needed teaching.** `harness.rename_doc` repoints only the Links
+named in `RENAME_LINK_FIELDS`; without a `Farm Asset Type` entry it would have
+reported a rename that orphaned every asset as one that worked. Confirmed by
+removing the entry and watching the test go red.
 
 ## 0.161.0 — 2026-09-07 — the machines, the jobs, and a door from the board
 

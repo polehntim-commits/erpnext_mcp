@@ -328,6 +328,318 @@ def list_asset_types(args: dict) -> ToolResult:
 	)
 
 
+# ── the asset-type register: create, get, update, delete ───────────────────
+#
+# THE DOCNAME IS THE TYPE NAME, and every one of the four below is shaped by
+# that. `Farm Asset Type` autonames `field:type_name`, which is what let
+# v0.162.0 turn a Select into a Link without rewriting one asset — and it means
+# changing `type_name` is a RENAME rather than a field edit. See
+# `update_asset_type`.
+#
+# WHY THESE ARE FOUR TOOLS AND NOT ONE `manage_asset_type` WITH A VERB. The same
+# reason `approve_expense_receipt` and `reject_expense_receipt` are two: an
+# operator who wants a client able to ADD a type does not necessarily want the
+# same client able to DELETE one, and a single switch cannot express that. Each
+# has its own `allow_` flag.
+
+
+def _type_out(row: dict, *, with_usage: bool = False) -> dict:
+	"""One `Farm Asset Type` as JSON, optionally with how many assets carry it."""
+	name = str(row.get("name") or "")
+	out = {
+		"name": name,
+		"type_name": row.get("type_name") or name,
+		"icon": str(row.get("icon") or ""),
+		"display_order": int(row.get("display_order") or 0),
+		"description": row.get("description") or None,
+		"enabled": bool(row.get("enabled")),
+	}
+	if with_usage:
+		# THE NUMBER THAT DECIDES WHETHER A DELETE CAN HAPPEN, on the read that
+		# somebody makes before trying one. A caller who has to attempt the
+		# delete to find out is a caller who finds out by being refused.
+		out["asset_count"] = asset_types.assets_using(name)
+		out["deletable"] = out["asset_count"] == 0
+	return out
+
+
+def _type_row(args: dict, *, label: str = "name") -> dict:
+	"""The `Farm Asset Type` this call is about, or a refusal naming the register."""
+	wanted = as_str(args, label) or as_str(args, "type_name") or as_str(args, "asset_type")
+	wanted = " ".join(str(wanted or "").split()).strip()
+	if not wanted:
+		raise ToolError(f"{label} is required — which asset type is this about?")
+	asset_types.require_register()
+	row = frappe.db.get_value(
+		asset_types.DOCTYPE,
+		wanted,
+		["name", "type_name", "icon", "display_order", "description", "enabled"],
+		as_dict=True,
+	)
+	if not row:
+		near = asset_types.find(wanted)
+		raise ToolError(
+			f"no asset type called {wanted!r} on this site."
+			+ (f" Did you mean {near!r}?" if near else "")
+			+ f" list_asset_types has the register: {', '.join(asset_types.names()) or 'it is empty'}."
+		)
+	return dict(row)
+
+
+def create_asset_type(args: dict) -> ToolResult:
+	"""Add one kind of asset to the register `register_asset` refuses against.
+
+	THE WHOLE POINT OF v0.162.0, REACHABLE WITHOUT THE DESK. A farm that buys a
+	generator adds `Generator` here and registers one the same minute — no
+	release, no migration and no App Store review.
+
+	A DUPLICATE UNDER ANOTHER SPELLING IS REFUSED AND NAMED. `Tractor` and
+	`tractor` as two records would split one kind of machine across two masters
+	and no report would add them back together — and since the docname is the
+	type name, the two would be genuinely different Link targets on the assets
+	carrying them. The refusal points at the one that exists.
+
+	IT DOES NOT GUESS AN ICON, a display order or a description. Everything but
+	the name is optional and stays empty until somebody says otherwise: an icon
+	invented here would be a letter on a map that nobody chose, and
+	`asset_types.icon_for` already falls back to the type's own initial, which is
+	an honest default rather than a stored guess.
+	"""
+	asset_types.require_register()
+	name = as_str(args, "type_name", required=True) or as_str(args, "name")
+	name = " ".join(str(name or "").split()).strip()
+	if not name:
+		raise ToolError("type_name is required. Nothing was created.")
+
+	already = asset_types.find(name)
+	if already:
+		raise ToolError(
+			f"there is already an asset type called {already!r} on this site. Two records for one "
+			f"kind of thing would split the assets carrying it across both — and because the "
+			f"docname IS the type name, they would be two different Link targets that no report "
+			f"adds back together. Use update_asset_type to correct {already!r}, or "
+			f"list_asset_types to see the register. Nothing was created."
+		)
+
+	doc = frappe.new_doc(asset_types.DOCTYPE)
+	doc.type_name = name
+	doc.icon = as_str(args, "icon")
+	doc.description = as_str(args, "description")
+	doc.display_order = as_int(args, "display_order", 0)
+	# DEFAULTS TO ENABLED, because a type created and then not offered is a type
+	# somebody has to notice a second field about. Passing false explicitly is
+	# how you stage one before it is in use.
+	doc.enabled = 1 if as_bool(args, "enabled", True) else 0
+	doc.flags.ignore_permissions = True
+	doc.insert(ignore_permissions=True)
+
+	row = _type_out(dict(doc.as_dict()), with_usage=True)
+	return ToolResult(
+		data={
+			**row,
+			"note": (
+				f"{doc.name!r} is now on the register and register_asset will accept it. It is "
+				"offered by list_asset_types unless enabled is unticked, and the map draws its "
+				f"icon — {asset_types.icon_for(doc.name)} — on every asset of this type."
+			),
+		},
+		summary=f"created asset type {doc.name}",
+		docstatus_delta="none → 0",
+	)
+
+
+def get_asset_type(args: dict) -> ToolResult:
+	"""One asset type in full, with how many assets carry it. Read-only.
+
+	`asset_count` AND `deletable` ARE THE REASON THIS IS NOT JUST A FILTER ON
+	`list_asset_types`. The question somebody has before touching a type is
+	whether anything depends on it, and finding that out by attempting a delete
+	and being refused is finding it out the expensive way.
+	"""
+	row = _type_row(args)
+	out = _type_out(row, with_usage=True)
+	return ToolResult(
+		data={
+			**out,
+			"note": (
+				f"{out['asset_count']} asset(s) carry this type. It cannot be deleted while any "
+				"do — untick enabled instead, which takes it off every picker and leaves those "
+				"assets exactly as they are."
+				if out["asset_count"]
+				else "Nothing carries this type, so it can be deleted as well as retired."
+			),
+		},
+		summary=f"{out['name']}: {out['asset_count']} asset(s)",
+	)
+
+
+#: What `update_asset_type` may change, apart from the name. Deliberately every
+#: column the doctype has that is not the identity — there is nothing on this
+#: record an operator should have to open the Desk for.
+UPDATABLE_TYPE_FIELDS = ("icon", "description", "display_order", "enabled")
+
+
+def update_asset_type(args: dict) -> ToolResult:
+	"""Correct one asset type — its icon, order, description, enablement or NAME.
+
+	CHANGING `type_name` IS A RENAME AND NOT A FIELD EDIT, and this is the whole
+	reason this tool is longer than it looks. The docname IS the type name, and
+	`Asset Register.asset_type` on every asset stores that docname — so writing
+	the column alone would leave the record calling itself `Fuel Tank` under a
+	docname of `Storage`, with every asset still pointing at the old one. It goes
+	through `frappe.rename_doc`, which moves the key AND repoints every Link on
+	the site that named it, so all of them follow in one act.
+
+	A RENAME ONTO AN EXISTING TYPE IS REFUSED. Frappe's `rename_doc` takes a
+	`merge` flag that folds one record into another and repoints everything at
+	the survivor — that is a decision about which of two kinds forty machines
+	actually are, not a spelling fix, and this tool must not make it by accident.
+
+	RETIRING IS HERE AND DELETING IS A SEPARATE TOOL, on purpose. `enabled: false`
+	is the reversible half — it takes a type off every picker and leaves the
+	assets carrying it untouched — and it is what almost every "we do not use
+	that any more" actually means.
+
+	AT LEAST ONE REAL CHANGE. A call naming no field, or naming only values the
+	record already holds, is refused rather than accepted as a silent no-op.
+	"""
+	row = _type_row(args)
+	name = row["name"]
+
+	before: dict = {}
+	after: dict = {}
+	for key in UPDATABLE_TYPE_FIELDS:
+		if key not in args:
+			continue
+		if key == "display_order":
+			value = as_int(args, "display_order", 0)
+			if value < 0:
+				raise ToolError("display_order cannot be negative. Nothing was changed.")
+		elif key == "enabled":
+			# 1 and 0 rather than True and False: the column is a Frappe Check,
+			# which is an Int, and 0 is the value that RETIRES a type — a guard
+			# that dropped it would refuse to retire anything while reporting
+			# that it had.
+			value = 1 if as_bool(args, "enabled", True) else 0
+		else:
+			value = as_str(args, key)
+
+		current = row.get(key)
+		if key == "enabled":
+			current = 1 if current else 0
+		elif key == "display_order":
+			current = int(current or 0)
+		else:
+			current = str(current or "")
+		if str(value) == str(current):
+			continue
+		before[key] = current
+		after[key] = value
+
+	# THE RENAME IS COMPUTED BEFORE ANYTHING IS WRITTEN and applied after, so a
+	# refused rename does not leave half an update behind.
+	wanted_name = as_str(args, "new_name") or as_str(args, "type_name")
+	wanted_name = " ".join(str(wanted_name or "").split()).strip()
+	renaming = bool(wanted_name) and wanted_name != name
+	if renaming:
+		clash = asset_types.find(wanted_name)
+		if clash:
+			raise ToolError(
+				f"an asset type called {clash!r} already exists. Renaming {name!r} onto it would "
+				"MERGE two kinds of asset into one and repoint every machine on both at the "
+				"survivor — which is a decision about what those machines actually are, not a "
+				"spelling correction. Nothing was renamed and nothing else was changed."
+			)
+
+	if not before and not renaming:
+		raise ToolError(
+			f"nothing to update — pass a new type_name, or at least one of: "
+			f"{', '.join(UPDATABLE_TYPE_FIELDS)}, with a value {name!r} does not already have. "
+			"Nothing was changed."
+		)
+
+	if after:
+		frappe.db.set_value(asset_types.DOCTYPE, name, after)
+
+	final = name
+	carried = 0
+	if renaming:
+		carried = asset_types.assets_using(name)
+		final = str(frappe.rename_doc(asset_types.DOCTYPE, name, wanted_name, force=True) or wanted_name)
+
+	data = {
+		**_type_out(_type_row({"name": final}), with_usage=True),
+		"renamed_from": name if renaming else None,
+		"fields_changed": sorted(before),
+		"before": before,
+		"after": after,
+	}
+	if renaming:
+		data["assets_repointed"] = carried
+		data["note"] = (
+			f"{carried} asset(s) carried {name!r} and now carry {final!r}. The rename went "
+			"through frappe.rename_doc, which moves the docname AND repoints every Link that "
+			"named it — so nothing is left pointing at a type that no longer exists."
+		)
+	return ToolResult(
+		data=data,
+		summary=f"updated asset type {final}"
+		+ (f" (renamed from {name})" if renaming else "")
+		+ (f": {', '.join(sorted(before))}" if before else ""),
+		docstatus_delta="",
+	)
+
+
+def delete_asset_type(args: dict) -> ToolResult:
+	"""Remove one asset type, refusing while any asset still carries it.
+
+	THE REFUSAL IS THE FEATURE. `Asset Register.asset_type` is a `reqd` Link, so
+	deleting a type forty valves point at would leave forty records that cannot
+	be opened or saved in the Desk — a failure that shows up later, to somebody
+	else, on the one screen they need. The count is named, and so is the thing to
+	do instead.
+
+	RETIRING IS ALMOST ALWAYS THE RIGHT ACT and deleting almost never is. A type
+	nothing carries is a row somebody created by mistake or seeded and never
+	used; a type something carries is history. `update_asset_type(enabled=false)`
+	is the reversible half and is what "we do not use that any more" means.
+
+	THE CHECK IS MADE HERE AS WELL AS IN THE CONTROLLER, and that is not
+	belt-and-braces for its own sake: `FarmAssetType.on_trash` raises Frappe's
+	own ValidationError, which reaches a caller as a wall of text with a
+	traceback in it. This one names the count, the register and the alternative
+	before Frappe is ever asked.
+	"""
+	row = _type_row(args)
+	name = row["name"]
+	carried = asset_types.assets_using(name)
+	if carried:
+		raise ToolError(
+			f"{carried} asset(s) are registered as {name!r}, and asset_type is required on every "
+			f"one of them — deleting the type would leave {carried} record(s) pointing at nothing, "
+			"which in the Desk is an asset that cannot be opened or saved. Retire it instead: "
+			f"update_asset_type(name={name!r}, enabled=false) takes it off every picker and "
+			"leaves those assets exactly as they are. Nothing was deleted."
+		)
+
+	frappe.delete_doc(asset_types.DOCTYPE, name, ignore_permissions=True)
+	return ToolResult(
+		data={
+			"name": name,
+			"deleted": True,
+			"was": _type_out(row),
+			"remaining": asset_types.names(enabled_only=False),
+			"note": (
+				"Nothing carried this type, so nothing was orphaned. If it was one this app "
+				"ships, the next `bench migrate` will seed it again — untick enabled instead of "
+				"deleting when you want it gone for good."
+			),
+		},
+		summary=f"deleted asset type {name}",
+		docstatus_delta="0 → deleted",
+	)
+
+
 # ── list_assets ────────────────────────────────────────────────────────────
 def list_assets(args: dict) -> ToolResult:
 	"""The asset register: every tagged asset with its type, location and scan status."""

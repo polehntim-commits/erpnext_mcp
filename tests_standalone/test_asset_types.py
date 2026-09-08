@@ -39,8 +39,9 @@ import unittest
 
 import frappe
 
-from erpnext_mcp import asset_types, farm_overview
+from erpnext_mcp import asset_types, farm_overview, registry
 from erpnext_mcp.api import mobile as mobile_api
+from erpnext_mcp.errors import ToolError
 from erpnext_mcp.patches import migrate_asset_types
 from erpnext_mcp.tools import asset_tags
 
@@ -409,3 +410,280 @@ class TheSeedIsWellFormed(unittest.TestCase):
 		"""It is what somebody picks when none of the others fit."""
 		orders = {name: order for name, _icon, order, _detail in asset_types.SEEDED}
 		self.assertEqual(max(orders, key=orders.get), "General")
+
+
+# ── 7: full CRUD through MCP, without the Desk ───────────────────────────────
+
+CRUD_ON = {
+	**ON,
+	"allow_create_asset_type": 1,
+	"allow_get_asset_type": 1,
+	"allow_update_asset_type": 1,
+	"allow_delete_asset_type": 1,
+}
+
+
+class TheRegisterIsManagedThroughMCP(V12TestCase):
+	"""v0.162.0. Create, read, update and delete, so a farm never needs the Desk.
+
+	THE ONE THAT IS NOT LIKE THE OTHER THREE IS UPDATE, and it is the reason this
+	class is long. `Farm Asset Type` autonames `field:type_name`, so the docname
+	IS the type name and `Asset Register.asset_type` on every asset stores that
+	docname. Changing the name is therefore a RENAME — `frappe.rename_doc`, which
+	moves the key and repoints every Link — and writing the column alone would
+	leave the record calling itself one thing under a docname of another, with
+	every asset still pointing at the old one.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **CRUD_ON)
+
+	def an_asset(self, name="MC-Valve-05", asset_type="Irrigation Valve"):
+		return self.tool_data("register_asset", {"name": name, "asset_type": asset_type, "company": MAIN})
+
+	# ── create ──────────────────────────────────────────────────────────
+	def test_it_creates_a_type_and_register_asset_accepts_it_at_once(self):
+		"""THE WHOLE CLAIM. No release, no migration, no App Store review."""
+		created = self.tool_data(
+			"create_asset_type",
+			{"type_name": "Generator", "icon": "N", "description": "Standby power."},
+		)
+		self.assertEqual(created["name"], "Generator")
+		self.assertTrue(created["enabled"])
+		self.assertEqual(self.an_asset(name="GEN-1", asset_type="Generator")["asset_type"], "Generator")
+
+	def test_a_new_type_is_on_the_picker_immediately(self):
+		self.tool_data("create_asset_type", {"type_name": "Generator"})
+		names = [row["name"] for row in self.tool_data("list_asset_types")["asset_types"]]
+		self.assertIn("Generator", names)
+
+	def test_a_duplicate_under_another_spelling_is_refused_and_named(self):
+		"""'Tractor' and 'tractor' as two records would be two different Link
+		targets, splitting one kind of machine across two masters."""
+		error = self.tool_error("create_asset_type", {"type_name": "tractor"})
+		self.assertIn("'Tractor'", error)
+		self.assertIn("Nothing was created", error)
+		self.assertEqual(len(asset_types.names(enabled_only=False)), len(asset_types.SEEDED))
+
+	def test_a_type_can_be_staged_disabled(self):
+		created = self.tool_data("create_asset_type", {"type_name": "Drone", "enabled": False})
+		self.assertFalse(created["enabled"])
+		self.assertNotIn("Drone", [r["name"] for r in self.tool_data("list_asset_types")["asset_types"]])
+
+	def test_nothing_but_the_name_is_guessed(self):
+		"""An icon invented here would be a letter on a map nobody chose. The
+		map's own fallback — the type's initial — is honest about being one."""
+		created = self.tool_data("create_asset_type", {"type_name": "Drone"})
+		self.assertEqual(created["icon"], "")
+		self.assertIsNone(created["description"])
+		self.assertEqual(created["display_order"], 0)
+		self.assertEqual(farm_overview.asset_icon("Drone")["glyph"], "D")
+
+	def test_a_nameless_create_is_refused(self):
+		self.assertIn("type_name is required", self.tool_error("create_asset_type", {"icon": "X"}))
+
+	# ── get ─────────────────────────────────────────────────────────────
+	def test_get_carries_the_usage_count_and_whether_it_can_be_deleted(self):
+		"""The question anybody has before touching a type. Attempting a delete
+		to find out is finding out the expensive way."""
+		data = self.tool_data("get_asset_type", {"name": "Irrigation Valve"})
+		self.assertEqual(data["asset_count"], 0)
+		self.assertTrue(data["deletable"])
+		self.an_asset()
+		data = self.tool_data("get_asset_type", {"name": "Irrigation Valve"})
+		self.assertEqual(data["asset_count"], 1)
+		self.assertFalse(data["deletable"])
+		self.assertIn("cannot be deleted", data["note"])
+
+	def test_get_returns_everything_a_picker_draws(self):
+		data = self.tool_data("get_asset_type", {"name": "Tractor"})
+		self.assertEqual(data["icon"], "T")
+		self.assertTrue(data["description"])
+		self.assertEqual(data["display_order"], 40)
+
+	def test_an_unknown_type_is_refused_and_a_near_miss_is_named(self):
+		error = self.tool_error("get_asset_type", {"name": "tractor"})
+		self.assertIn("Did you mean 'Tractor'?", error)
+
+	# ── update ──────────────────────────────────────────────────────────
+	def test_it_changes_the_ordinary_fields(self):
+		data = self.tool_data(
+			"update_asset_type",
+			{"name": "Tractor", "icon": "K", "display_order": 5, "description": "Big ones."},
+		)
+		self.assertEqual(sorted(data["fields_changed"]), ["description", "display_order", "icon"])
+		self.assertEqual(data["icon"], "K")
+		self.assertEqual(farm_overview.asset_icon("Tractor")["glyph"], "K")
+
+	def test_retiring_is_an_update_and_leaves_the_assets_alone(self):
+		self.an_asset()
+		self.tool_data("update_asset_type", {"name": "Irrigation Valve", "enabled": False})
+		self.assertFalse(asset_types.is_enabled("Irrigation Valve"))
+		self.assertEqual(
+			frappe.db.get_value("Asset Register", "MC-Valve-05", "asset_type"), "Irrigation Valve"
+		)
+
+	def test_a_retired_type_can_be_put_back(self):
+		"""THE ZERO-DROP CASE ON A CHECK COLUMN. `1 if as_bool(...) else 0` is
+		what keeps a `false` writable — a guard that dropped the 0 would refuse
+		to retire anything while reporting that it had."""
+		self.tool_data("update_asset_type", {"name": "Sprayer", "enabled": False})
+		data = self.tool_data("update_asset_type", {"name": "Sprayer", "enabled": True})
+		self.assertTrue(data["enabled"])
+		self.assertTrue(asset_types.is_enabled("Sprayer"))
+
+	def test_retiring_a_type_that_is_already_retired_is_a_no_op_and_says_so(self):
+		self.tool_data("update_asset_type", {"name": "Sprayer", "enabled": False})
+		self.assertIn(
+			"nothing to update",
+			self.tool_error("update_asset_type", {"name": "Sprayer", "enabled": False}),
+		)
+
+	def test_an_update_naming_no_field_is_refused(self):
+		self.assertIn("nothing to update", self.tool_error("update_asset_type", {"name": "Tractor"}))
+
+	def test_a_negative_display_order_is_refused(self):
+		self.assertIn(
+			"cannot be negative",
+			self.tool_error("update_asset_type", {"name": "Tractor", "display_order": -1}),
+		)
+
+	# ── update: the rename ──────────────────────────────────────────────
+	def test_renaming_a_type_repoints_every_asset_carrying_it(self):
+		"""THE ONE THAT MATTERS. The docname IS the value every asset stores, so
+		a rename that moved the key alone would leave forty valves pointing at a
+		type that no longer exists — which is a `reqd` Link resolving to nothing,
+		and in the Desk an asset that cannot be opened."""
+		self.an_asset(name="V-1")
+		self.an_asset(name="V-2")
+		data = self.tool_data("update_asset_type", {"name": "Irrigation Valve", "type_name": "Water Valve"})
+		self.assertEqual(data["name"], "Water Valve")
+		self.assertEqual(data["renamed_from"], "Irrigation Valve")
+		self.assertEqual(data["assets_repointed"], 2)
+		for asset in ("V-1", "V-2"):
+			with self.subTest(asset=asset):
+				self.assertEqual(frappe.db.get_value("Asset Register", asset, "asset_type"), "Water Valve")
+
+	def test_the_old_name_is_gone_after_a_rename(self):
+		self.tool_data("update_asset_type", {"name": "Tractor", "type_name": "Tractor Unit"})
+		self.assertFalse(asset_types.exists("Tractor"))
+		self.assertTrue(asset_types.exists("Tractor Unit"))
+
+	def test_the_name_column_moves_with_the_docname(self):
+		"""`field:` autoname means the two are one string by construction. A
+		rename that moved only the key would leave `type_name` reading the old
+		one, and every read here goes through that column."""
+		self.tool_data("update_asset_type", {"name": "Tractor", "type_name": "Tractor Unit"})
+		self.assertEqual(
+			frappe.db.get_value(asset_types.DOCTYPE, "Tractor Unit", "type_name"), "Tractor Unit"
+		)
+
+	def test_a_rename_onto_an_existing_type_is_refused(self):
+		"""Frappe's merge flag would fold two kinds of asset into one and repoint
+		every machine on both at the survivor — a decision about what those
+		machines ARE, not a spelling fix."""
+		error = self.tool_error("update_asset_type", {"name": "Tractor", "type_name": "Sprayer"})
+		self.assertIn("MERGE", error)
+		self.assertTrue(asset_types.exists("Tractor"))
+		self.assertTrue(asset_types.exists("Sprayer"))
+
+	def test_a_refused_rename_leaves_no_half_update_behind(self):
+		"""The clash is checked BEFORE anything is written, so an icon named in
+		the same call is not saved against a rename that did not happen.
+
+		CALLED DIRECTLY AND NOT THROUGH `tool_error`, and that is the whole
+		reason this test is written the long way. A refused tool call is rolled
+		back by the dispatcher, so post-refusal document state is UNOBSERVABLE
+		through `tool_error` — the first version of this test passed with the
+		clash check moved after the write, which is precisely the bug it claims
+		to catch. Proven by moving it: `tool_error` saw nothing, this does. See
+		`a-refused-mobile-call-rolls-back-the-whole-test`.
+		"""
+		with self.assertRaises(ToolError):
+			asset_tags.update_asset_type({"name": "Tractor", "type_name": "Sprayer", "icon": "ZZ"})
+		self.assertEqual(frappe.db.get_value(asset_types.DOCTYPE, "Tractor", "icon"), "T")
+
+	def test_renaming_to_the_same_name_is_not_a_rename(self):
+		self.assertIn(
+			"nothing to update",
+			self.tool_error("update_asset_type", {"name": "Tractor", "type_name": "Tractor"}),
+		)
+
+	def test_a_rename_and_a_field_change_land_together(self):
+		data = self.tool_data(
+			"update_asset_type", {"name": "Tractor", "new_name": "Tractor Unit", "icon": "K"}
+		)
+		self.assertEqual(data["name"], "Tractor Unit")
+		self.assertEqual(data["icon"], "K")
+
+	# ── delete ──────────────────────────────────────────────────────────
+	def test_it_deletes_a_type_nothing_carries(self):
+		data = self.tool_data("delete_asset_type", {"name": "Gas Tank"})
+		self.assertTrue(data["deleted"])
+		self.assertFalse(asset_types.exists("Gas Tank"))
+		self.assertNotIn("Gas Tank", data["remaining"])
+
+	def test_deleting_a_type_in_use_is_refused_with_the_count_and_the_remedy(self):
+		"""THE REFUSAL IS THE FEATURE. asset_type is a required Link, so deleting
+		a type forty valves point at leaves forty records that cannot be opened
+		— a failure that surfaces later, to somebody else."""
+		self.an_asset(name="V-1")
+		self.an_asset(name="V-2")
+		error = self.tool_error("delete_asset_type", {"name": "Irrigation Valve"})
+		self.assertIn("2 asset(s)", error)
+		self.assertIn("enabled=false", error)
+		self.assertIn("Nothing was deleted", error)
+		self.assertTrue(asset_types.exists("Irrigation Valve"))
+
+	def test_a_refused_delete_leaves_the_assets_readable(self):
+		"""The negative control for the refusal: if the delete had gone through,
+		this read is what would break."""
+		self.an_asset()
+		self.tool_error("delete_asset_type", {"name": "Irrigation Valve"})
+		self.assertEqual(
+			self.tool_data("get_asset_detail", {"asset_name": "MC-Valve-05"})["asset_type"],
+			"Irrigation Valve",
+		)
+
+	def test_deleting_an_unknown_type_is_refused_by_name(self):
+		self.assertIn("no asset type called", self.tool_error("delete_asset_type", {"name": "Nope"}))
+
+	def test_the_controller_refuses_too_and_not_only_the_tool(self):
+		"""Two layers on purpose: the tool's refusal names the count and the
+		remedy, and the controller's catches every other door into the doctype —
+		the Desk, a script, a bulk delete."""
+		self.an_asset()
+		with self.assertRaises(frappe.ValidationError):
+			frappe.delete_doc(asset_types.DOCTYPE, "Irrigation Valve")
+
+	# ── the switches ────────────────────────────────────────────────────
+	def test_each_tool_is_refused_by_the_name_of_its_own_switch(self):
+		calls = {
+			"create_asset_type": {"type_name": "Drone"},
+			"get_asset_type": {"name": "Tractor"},
+			"list_asset_types": {},
+			"update_asset_type": {"name": "Tractor", "icon": "K"},
+			"delete_asset_type": {"name": "Gas Tank"},
+		}
+		for name, arguments in calls.items():
+			with self.subTest(tool=name):
+				self.configure(enabled=1, **{**CRUD_ON, f"allow_{name}": 0})
+				error = self.tool_error(name, arguments)
+				self.assertIn(f"allow_{name}", error)
+
+	def test_the_three_writes_default_off_and_the_two_reads_default_on(self):
+		"""326 of 327 mutating tools ship off by design, and a read that had to
+		be switched on would make a picker that cannot draw."""
+		for name in ("create_asset_type", "update_asset_type", "delete_asset_type"):
+			with self.subTest(tool=name):
+				self.assertTrue(registry.TOOLS[name]["mutating"])
+				self.assertNotIn(name, registry.DEFAULT_ON_MUTATING_TOOLS)
+		for name in ("get_asset_type", "list_asset_types"):
+			with self.subTest(tool=name):
+				self.assertFalse(registry.TOOLS[name]["mutating"])
+
+	def test_every_write_says_mutating_in_its_description(self):
+		for name in ("create_asset_type", "update_asset_type", "delete_asset_type"):
+			with self.subTest(tool=name):
+				self.assertIn("MUTATING", registry.TOOLS[name]["description"])

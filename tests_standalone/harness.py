@@ -3316,6 +3316,13 @@ RENAME_LINK_FIELDS = {
 		("Company", "cost_center"),
 		("Company", "round_off_cost_center"),
 	),
+	# v0.162.0. The asset-type register. `update_asset_type` renames a type, and
+	# `Asset Register.asset_type` is the Link that has to follow — a rename that
+	# moved the key alone would leave every asset pointing at a type that no
+	# longer exists, which is the exact failure the rename path exists to avoid.
+	# Real Frappe repoints it; without this entry the double would not, and the
+	# test would report a broken rename as a working one.
+	"Farm Asset Type": (("Asset Register", "asset_type"),),
 	# v0.68.1. The five org masters `tools/org.py` renames. Every entry here is a
 	# Link a real bench would repoint, and the Employee columns are the point:
 	# correcting "Mill Creak" to "Mill Creek" has to carry the forty people
