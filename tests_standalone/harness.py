@@ -1856,6 +1856,10 @@ APP_DOCTYPES = {
 	# because the handset drains a backlog in one pass and drains it again from
 	# the start if that pass is interrupted; see `tools/app_feedback.py`.
 	"App Feedback": "app_feedback",
+	# v0.162.0. The asset-type register. `Asset Register.asset_type` is a Link to
+	# it from this release, so a double without it makes every asset tool refuse
+	# with "run bench migrate" — which reads as a registry bug and is not one.
+	"Farm Asset Type": "farm_asset_type",
 	# v0.118.0, Farm App Retirement Cycle 1. The five registers the Flask
 	# sidecar held and this app did not. `IoT Reading` denormalises its field
 	# and company off the device AT WRITE TIME rather than linking through —
@@ -5712,6 +5716,30 @@ def seed_compliance_regimes() -> None:
 		pass
 
 
+def seed_asset_types() -> None:
+	"""Put the fifteen `Farm Asset Type` rows on the fake site, as a migrate does.
+
+	v0.162.0. THE SAME ARGUMENT AS `seed_compliance_regimes` AND THE SAME
+	NECESSITY. `Asset Register.asset_type` became a `reqd` Link this release, the
+	double validates Links faithfully (see `_validate_links`), and
+	`install.after_migrate` seeds this register on every migrate — so a bench that
+	can register an asset has already got it.
+
+	A SUITE THAT SKIPPED THE SEED WOULD BE EASIER THAN A SITE IN THE ONE DIRECTION
+	THAT MATTERS. It was tried, on the way to shipping this: every one of the 32
+	asset tests failed with `Could not find Asset Type: Irrigation Valve`, which
+	is exactly what a bench does to a farm whose migration has not seeded the
+	masters. That failure is the reason `patches/migrate_asset_types.py` exists
+	and seeds the DISTINCT values off the register as well as the shipped list.
+	"""
+	from erpnext_mcp import asset_types
+
+	try:
+		asset_types.seed()
+	except Exception:  # pragma: no cover - a test that deliberately dropped the DocType
+		pass
+
+
 class MCPTestCase(unittest.TestCase):
 	"""Resets the fake site, and gives every test a configured-but-off server."""
 
@@ -5729,6 +5757,7 @@ class MCPTestCase(unittest.TestCase):
 		frappe.local.request = None
 		frappe.local.session = FrappeDict(user="Administrator", data=FrappeDict())
 		seed_compliance_regimes()
+		seed_asset_types()
 		self.configure()
 
 	def configure(self, **overrides):

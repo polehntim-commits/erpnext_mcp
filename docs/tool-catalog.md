@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 865 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 866 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 434 read tools are **on** by default and can be switched off individually. A
+All 435 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -14259,6 +14259,38 @@ and Sprayer — a valve is a fitting and a block is land.
 **Replacement value falls back to purchase value** and says so per row. A 2011
 price presented as today's cover understates the loss on exactly the machines
 most likely to be old.
+
+### `list_asset_types` — the register the picker is built from
+
+**v0.162.0.** What kinds of asset this farm keeps, in picker order. Read-only.
+
+**Until this release the list was hard-coded in four places and three of them
+disagreed.** `Asset Register.asset_type`'s Select named thirteen types;
+`tools/asset_tags.ASSET_TYPES` named twelve — never Wind Machine, which
+`register_asset` accepted anyway because the gate read the field's own options;
+the Asset Register controller named ten; and the map knew four. `asset_type` is
+now a Link to a **`Farm Asset Type`** register, so a new kind of asset — a fuel
+tank, a generator — is a **record somebody creates in the Desk**, with no
+release and no App Store review.
+
+**Arguments:** `include_disabled` (default false).
+
+**Returns** `asset_types[]` — each `name`, `type_name`, `icon`, `display_order`,
+`description`, `enabled` — plus `count`, `available` and `doctype`.
+
+**Retiring a type never disturbs the assets that carry it.** Untick `enabled`
+and it leaves every picker while last season's records keep resolving; deleting
+the record instead is refused while any asset still points at it, and the refusal
+says how many.
+
+**It answers on a bench that has not migrated**, from the shipped fifteen, with
+`available: false` beside them. A phone that got an empty list would draw an
+empty wheel and the worker would conclude the app was broken.
+
+`Asset Register.asset_type` is `reqd`, so a `Farm Asset Type` record must exist
+for every value in use. The migration seeds the fifteen shipped types **and every
+distinct value already in the register**, so a site carrying a type this app does
+not ship keeps working.
 
 ### `register_asset` takes the whole registration
 

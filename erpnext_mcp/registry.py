@@ -20388,6 +20388,33 @@ TOOLS = {
 		requires="the Inspection Template DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── v0.24.0: Universal Asset Tags ──────────────────────────────────────
+	"list_asset_types": _tool(
+		asset_tags.list_asset_types,
+		"What kinds of asset this farm keeps — the register a picker is built "
+		"from, in picker order. Read-only.\n\n"
+		"UNTIL v0.162.0 THIS LIST WAS HARD-CODED IN FOUR PLACES AND THREE OF THEM "
+		"DISAGREED: the doctype's Select named thirteen types, tools/asset_tags "
+		"named twelve (never Wind Machine, which register_asset accepted anyway), "
+		"the Asset Register controller named ten, and the map knew four. It is a "
+		"`Farm Asset Type` register now, `Asset Register.asset_type` is a Link to "
+		"it, and a new kind of asset — a fuel tank, a generator — is a RECORD "
+		"somebody creates in the Desk rather than a release and an App Store "
+		"review.\n\n"
+		"ENABLED ONLY BY DEFAULT. `include_disabled: true` also returns retired "
+		"types, flagged — a client showing an EXISTING asset still has to render "
+		"the type it actually carries, and retiring a type never disturbs the "
+		"assets that carry it.\n\n"
+		"IT ANSWERS ON A BENCH THAT HAS NOT MIGRATED, from the shipped list, with "
+		"`available: false` beside it. An empty wheel on a handset reads as a "
+		"broken app; fifteen types and a flag for the operator does not.",
+		{
+			"include_disabled": _field(
+				_BOOLEAN,
+				"Also return retired types, each flagged with enabled: false. Defaults to false.",
+			),
+		},
+		title="List asset types",
+	),
 	"list_assets": _tool(
 		asset_tags.list_assets,
 		"The asset register: every tagged asset with its type, location, company "

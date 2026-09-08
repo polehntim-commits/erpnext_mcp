@@ -104,6 +104,7 @@ import frappe
 from . import (
 	asset_tag_form_action,
 	asset_tag_list_action,
+	asset_types,
 	badge_form_action,
 	badge_list_action,
 	badge_print_format,
@@ -152,6 +153,7 @@ def after_install() -> None:
 	_asset_tag_list_action()
 	_asset_tag_form_action()
 	_farm_task_map_action()
+	_farm_asset_types()
 	_onboard_worker()
 	_irrigation_workspace()
 	_settlement_invoice_link()
@@ -197,6 +199,7 @@ def after_migrate() -> None:
 	_asset_tag_list_action()
 	_asset_tag_form_action()
 	_farm_task_map_action()
+	_farm_asset_types()
 	_onboard_worker()
 	_irrigation_workspace()
 	_settlement_invoice_link()
@@ -1153,6 +1156,39 @@ def _asset_tag_list_action() -> None:
 		)
 	elif report.get("reason") not in ("already present", ""):
 		print(f"erpnext_mcp: the asset QR-sheet action was not seeded — {report['reason']}")
+
+
+def _farm_asset_types() -> None:
+	"""Seed the asset-type register, so `Asset Register.asset_type` can name one. v0.162.0.
+
+	THE COLUMN IS A LINK NOW, AND A LINK IS ONLY AS GOOD AS ITS MASTER — the same
+	sentence `_employment_types` opens with, and here it is sharper: `asset_type`
+	is `reqd`, so a site whose register is empty cannot register an asset at all
+	and cannot open the ones it has. This runs on install AND on every migrate for
+	that reason, and `patches/migrate_asset_types.py` runs too, seeding whatever
+	distinct values the register already holds on top of these.
+
+	IT ONLY EVER CREATES WHAT IS ABSENT, by docname. An operator who retired a
+	type, renamed one, reordered the picker or rewrote a description keeps all of
+	it through every later migrate. See `asset_types.seed`.
+	"""
+	try:
+		report = asset_types.seed()
+		created = report.get("created") or []
+		if created:
+			print(
+				f"erpnext_mcp: seeded {len(created)} Farm Asset Type record(s) — "
+				f"{', '.join(created)}. From v0.162.0 the asset types are a REGISTER rather "
+				"than a hard-coded Select, so a new kind of asset — a fuel tank, a generator "
+				"— is a record you create in the Desk. Untick Enabled to retire one without "
+				"disturbing the assets that carry it."
+			)
+		for failure in report.get("failed") or ():
+			print(
+				f"erpnext_mcp: the {failure['type_name']!r} asset type was not seeded — {failure['reason']}"
+			)
+	except Exception as exc:  # pragma: no cover - a site mid-migrate
+		print(f"erpnext_mcp: the asset types were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _farm_task_map_action() -> None:

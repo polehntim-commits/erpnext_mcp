@@ -22,7 +22,7 @@ import json
 
 import frappe
 
-from .. import asset_mirror, compat, geo, timezones
+from .. import asset_mirror, asset_types, compat, geo, timezones
 from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..render import qr
@@ -71,20 +71,16 @@ _ASSET_FIELDS = (
 	"owner",
 )
 
-ASSET_TYPES = (
-	"Housing Unit",
-	"Irrigation Zone",
-	"Irrigation Valve",
-	"Sprayer",
-	"Tractor",
-	"Implement",
-	"Vehicle",
-	"Block",
-	"Water Source",
-	"Storage",
-	"Cold Storage",
-	"General",
-)
+#: v0.162.0. THE SHIPPED LIST, AND NO LONGER THE GATE. `Farm Asset Type` is the
+#: register `register_asset` checks against; this is what `asset_types` seeds and
+#: what a bench with no register yet falls back to. It is named here because
+#: `ASSET_TYPE_SKILL_MAP` and the state definitions below are keyed on these
+#: exact strings and a reader wants them side by side — but it is DERIVED rather
+#: than typed out, because this tuple having its own copy is the bug this release
+#: fixes: it never named Wind Machine, which the doctype's Select did and
+#: `register_asset` therefore accepted, and the controller's third copy named
+#: neither that nor Implement nor Vehicle.
+ASSET_TYPES = asset_types.SEEDED_NAMES
 
 _HISTORY_DOCTYPES = (
 	("Farm Task", "asset_register", "name,task_type,status,priority,assigned_to,creation"),
@@ -109,6 +105,18 @@ ASSET_TYPE_SKILL_MAP: dict[str, str] = {
 	"Storage": "facility_maintenance",
 	"Cold Storage": "facility_maintenance",
 	"Block": "field_operations",
+	# v0.162.0. WIND MACHINE WAS MISSING AND HAD BEEN SINCE v0.25.0. It is a
+	# Select option on the doctype and `register_asset` accepted it — the gate
+	# read the field's own options — but this table was built from `ASSET_TYPES`,
+	# which never named it. So every task raised against a frost fan came back
+	# with no suggested skill and nothing said why. Making the two lists one is
+	# what surfaced it: the test that walks `ASSET_TYPES` went red immediately.
+	"Wind Machine": "equipment_maintenance",
+	# The two this release adds. Bulk fuel and bottled gas are a yard's
+	# infrastructure rather than a machine — the person who checks a tank level
+	# and the one who services a tractor are not the same job.
+	"Fuel Tank": "facility_maintenance",
+	"Gas Tank": "facility_maintenance",
 	"General": "general_maintenance",
 }
 
@@ -258,6 +266,66 @@ def _asset_history(asset_name: str, limit: int = 50) -> list:
 
 	events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
 	return events[:limit]
+
+
+# ── list_asset_types ───────────────────────────────────────────────────────
+def list_asset_types(args: dict) -> ToolResult:
+	"""The asset-type register: what a picker should offer, in picker order.
+
+	WHAT THIS IS FOR. A handset registering an asset in an orchard needs the list
+	of types before it can show a wheel, and until v0.162.0 that list was
+	hard-coded in three Python modules and a Swift enum — so a farm that added a
+	type waited for a release AND an App Store review. It is a register now, and
+	this is the read.
+
+	ENABLED ONLY BY DEFAULT, which is what `enabled` is for: a type nobody
+	registers new assets as should not be on the wheel. `include_disabled: true`
+	returns the retired ones as well, flagged, because a client showing an
+	EXISTING asset still has to render the type it actually carries.
+
+	IT ANSWERS ON A BENCH THAT HAS NOT MIGRATED, from the shipped list, with
+	`available: false` beside it. A phone that got an empty list would draw an
+	empty wheel and the worker would conclude the app was broken; a phone that
+	gets the fifteen types this release ships can register an asset, and the
+	person who has to run `bench migrate` is the operator reading the flag.
+	"""
+	include_disabled = as_bool(args, "include_disabled", False)
+	rows = asset_types.rows(enabled_only=not include_disabled)
+	available = asset_types.available()
+	return ToolResult(
+		data={
+			"count": len(rows),
+			"asset_types": [
+				{
+					"name": row["name"],
+					"type_name": row.get("type_name") or row["name"],
+					"icon": row.get("icon") or "",
+					"display_order": row.get("display_order") or 0,
+					"description": row.get("description") or None,
+					"enabled": bool(row.get("enabled")),
+				}
+				for row in rows
+			],
+			"include_disabled": bool(include_disabled),
+			# WHETHER THIS SITE HAS THE REGISTER AT ALL. False means the list
+			# above is what erpnext_mcp v0.162.0 ships rather than what this farm
+			# has decided, and the remedy is one command.
+			"available": available,
+			"doctype": asset_types.DOCTYPE,
+			"note": (
+				f"{len(rows)} type(s), in picker order. A new kind of asset is a "
+				f"{asset_types.DOCTYPE} record created in the Desk — no release and no app "
+				"update. Untick Enabled to retire one; the assets already carrying it keep it."
+				if available
+				else (
+					f"This site has no {asset_types.DOCTYPE} doctype yet, so these are the types "
+					"erpnext_mcp v0.162.0 SHIPS rather than the ones this farm has chosen. Run "
+					"`bench --site <site> migrate` and read this again."
+				)
+			),
+		},
+		summary=f"{len(rows)} asset type(s)" + ("" if available else " — shipped defaults, not this site's"),
+	)
 
 
 # ── list_assets ────────────────────────────────────────────────────────────
@@ -712,11 +780,15 @@ def register_asset(args: dict) -> ToolResult:
 			"to the same record. Nothing was created."
 		)
 
+	# v0.162.0. THE REGISTER DECIDES, NOT A TUPLE IN THIS MODULE. `as_choice`
+	# read the field's Select options, and the field is a Link now — its
+	# `options` is the target doctype's name, so the old call refused every type
+	# with "must be one of: Farm Asset Type".
 	asset_type = as_str(args, "asset_type", required=True)
-	if asset_type not in ASSET_TYPES:
-		from ..args import as_choice
-
-		asset_type = as_choice(ASSET_REGISTER, "asset_type", asset_type, "asset_type")
+	try:
+		asset_type = asset_types.require(asset_type, "asset_type", creating=True)
+	except ValueError as exc:
+		raise ToolError(str(exc)) from exc
 
 	location = _parent(args, "created")
 
@@ -797,9 +869,13 @@ def update_registered_asset(args: dict) -> ToolResult:
 	if "asset_type" in args:
 		value = as_str(args, "asset_type")
 		if value:
-			from ..args import as_choice
-
-			value = as_choice(ASSET_REGISTER, "asset_type", value, "asset_type")
+			# NOT `creating=True`. Retyping an asset that already exists into a
+			# retired type is a correction — "this was always a Sprayer" — and a
+			# register that refused it would leave the record wrong on purpose.
+			try:
+				value = asset_types.require(value, "asset_type")
+			except ValueError as exc:
+				raise ToolError(str(exc)) from exc
 		_stage(changes, doc, "asset_type", value)
 	if "location" in args or "parent_asset" in args:
 		location = _parent(args, "changed")

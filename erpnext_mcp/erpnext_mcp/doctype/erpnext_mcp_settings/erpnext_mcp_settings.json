@@ -726,6 +726,7 @@
   "allow_check_regulation_feed",
   "allow_check_all_regulation_feeds",
   "asset_tag_section",
+  "allow_list_asset_types",
   "allow_list_assets",
   "allow_get_asset_detail",
   "allow_get_asset_history",
@@ -5821,6 +5822,13 @@
    "fieldname": "asset_tag_section",
    "fieldtype": "Section Break",
    "label": "Universal Asset Tags"
+  },
+  {
+   "default": "1",
+   "description": "READ. What kinds of asset this farm keeps \u2014 the register a picker is built from. From v0.162.0 the asset types are Farm Asset Type records rather than a hard-coded Select, so a new kind of asset is something you create in the Desk. iOS reads this to build its type wheel.",
+   "fieldname": "allow_list_asset_types",
+   "fieldtype": "Check",
+   "label": "List Asset Types"
   },
   {
    "default": "1",

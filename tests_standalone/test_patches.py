@@ -34,6 +34,7 @@ from erpnext_mcp.patches import (
 	backfill_planting_rootstock,
 	backfill_valve_rank,
 	fix_literal_newlines_in_instructions,
+	migrate_asset_types,
 	migrate_declarative_rules,
 	migrate_incident_tool_switches,
 	migrate_training_types,
@@ -74,6 +75,7 @@ PATCHES = (
 	("erpnext_mcp.patches.widen_i9_attestation_filters", widen_i9_attestation_filters),
 	("erpnext_mcp.patches.backfill_field_varieties", backfill_field_varieties),
 	("erpnext_mcp.patches.backfill_valve_rank", backfill_valve_rank),
+	("erpnext_mcp.patches.migrate_asset_types", migrate_asset_types),
 )
 
 

@@ -22,3 +22,4 @@ erpnext_mcp.patches.backfill_observation_type
 erpnext_mcp.patches.widen_i9_attestation_filters
 erpnext_mcp.patches.backfill_field_varieties
 erpnext_mcp.patches.backfill_valve_rank
+erpnext_mcp.patches.migrate_asset_types

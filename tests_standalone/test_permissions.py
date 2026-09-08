@@ -267,6 +267,22 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 		# by Frappe, so one entity really can be made to ask for a document
 		# another does not — without two spellings of the certificate itself.
 		#
+		# THE v0.162.0 ADDITION IS `Farm Asset Type`, and it is the same argument
+		# about a WORD. The record says that "Irrigation Valve" is a kind of thing
+		# this farm keeps; it names no valve, no company and no yard. The rows
+		# that carry those are the ASSETS, every one of which links to Company and
+		# is scoped by Frappe exactly as before.
+		#
+		# Scoping it would be wrong for the docname reason as well as the shape
+		# one, and here that reason is sharper than anywhere else on this list:
+		# the docname IS the value stored in `Asset Register.asset_type` on every
+		# asset on the site. A per-company type would mean either the same name
+		# existing several times — which the unique constraint refuses — or a
+		# name prefixed per entity, which would put the entity into the type of
+		# every asset and break the one property the whole Select-to-Link
+		# migration rests on: that the string an asset already stored is the
+		# docname of its master.
+		#
 		# THE v0.85.0 ADDITION IS `Farm Translation`, and it is the same argument
 		# about a WORD. The Spanish for "bucket" belongs to no company; two
 		# entities on one site read the same language, and a per-company string
@@ -371,6 +387,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Compliance Regime",
 				"Compliance Rule",
 				"Crop",
+				"Farm Asset Type",
 				"Farm Translation",
 				"Federal Tax Table",
 				"I-9 Audit Log",

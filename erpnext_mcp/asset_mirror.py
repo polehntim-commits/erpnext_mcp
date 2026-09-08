@@ -159,6 +159,11 @@ CATEGORY_BY_TYPE = {
 	"Sprayer": "Machinery & Equipment",
 	"Implement": "Machinery & Equipment",
 	"Vehicle": "Machinery & Equipment",
+	# v0.162.0. A tank is a structure in a yard, not a machine — it depreciates
+	# on a building's schedule and an insurer reads it as one. Same category as
+	# the sheds it stands beside.
+	"Fuel Tank": "Structure",
+	"Gas Tank": "Structure",
 	"General": "Machinery & Equipment",
 }
 

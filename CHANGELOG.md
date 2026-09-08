@@ -3,6 +3,93 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.162.0 — 2026-09-07 — one list, and it is a register
+
+`Asset Register.asset_type` was a Select, and the same list was written out in
+three more places that had drifted apart from it and from each other. It is a
+`Farm Asset Type` register now, so a new kind of asset is a record somebody
+creates in the Desk. **866 tools.**
+
+### Four lists, three of them wrong
+
+| Where | How many | Missing |
+|---|---|---|
+| `Asset Register.asset_type`'s Select | 13 | — |
+| `tools/asset_tags.ASSET_TYPES` | 12 | Wind Machine |
+| `AssetRegister.ASSET_TYPES` (controller) | 10 | Wind Machine, Implement, Vehicle |
+| `farm_overview.ASSET_ICONS` | 4 | nine share one grey badge |
+
+`register_asset` accepted a Wind Machine — its gate read the FIELD's options,
+not the tuple beside it — while `ASSET_TYPE_SKILL_MAP`, built from that tuple,
+had no entry for one. **So every task raised against a frost fan has come back
+with no suggested skill since v0.25.0, and nothing said why.** Deriving the
+tuple from the register is what surfaced it; the entry is added here.
+
+The controller's ten-item copy was consulted by nothing at all. It is gone.
+
+### The migration rewrites no asset, and that is a naming decision
+
+`Farm Asset Type` autonames `field:type_name`, so the docname IS the string every
+asset already stores: a Select holding `Irrigation Valve` becomes a Link holding
+`Irrigation Valve`. A `FAT-00007` series would have meant a migration that
+rewrote `asset_type` on every asset on the site — and these docnames are printed
+on zip-tied tags in an orchard. Same call `Training Type` made in v0.19.2.
+
+**The brief named seven types to seed and eight of the thirteen were not among
+them.** A `reqd` Link whose target does not exist is, in the Desk, an asset that
+cannot be opened or saved — so seeding only the seven would have taken every
+Sprayer, Implement, Vehicle, Block, Water Source, Cold Storage, Housing Unit and
+Irrigation Zone on every site out of service. All thirteen are seeded, plus Fuel
+Tank and Gas Tank, which were the two actually asked for.
+
+**And the patch seeds what the register HOLDS as well as what this app ships.**
+A value that got there some other way — an operator widened the Select by hand, a
+site is upgrading across releases whose option lists differed — gets a master
+under its own name. The register is authoritative about what a site *has*; a
+list in this app can only be authoritative about what it *ships*.
+
+Verified against the live site first: 41 assets, four types in use. Nothing there
+needed inheriting, which is exactly the case where the code path would otherwise
+have gone untested.
+
+### Retiring, not deleting
+
+`enabled` takes a type off every picker and out of `list_asset_types` while
+leaving the assets carrying it untouched — a farm that sold its sprayers still
+has last season's spray records pointing at one. So enablement gates **creating**
+a new asset of that type and nothing else: reading, saving and re-typing an
+existing one all still work. Deleting a type any asset still carries is refused
+with the count, and the refusal names the flag to use instead.
+
+### `list_asset_types`
+
+The read, and a mobile route for it — the type wheel `register_asset`'s own
+screen has needed since v0.78.0, which until now lived in the app as a Swift
+enum. It carries no company scope, and that is worth saying out loud on a
+surface where everything else does: the register is a VOCABULARY, holds no
+company column and names no asset. Every route that returns actual assets is
+scoped.
+
+It answers on a bench that has not migrated, from the shipped fifteen, with
+`available: false` beside them. An empty wheel reads as a broken app.
+
+### The map reads the register
+
+`ASSET_ICONS` knew four types; the glyph comes off the `Farm Asset Type` record
+now, so a farm that adds a Fuel Tank gives it an icon in the Desk and the map
+draws it. Colours stay in code — a palette has to stay distinguishable from the
+five overlay layers and three register colours, which is a property of the map
+rather than of a type. A type with no icon takes its own initial: `Cider Press`
+reads as **C**, which is at least the right thing.
+
+### Verification
+
+43 new tests, 10 mutations run and all caught — including the seven-type seed,
+which breaks 20 tests across three files and is the failure this release exists
+to avoid. Five existing registers caught work in progress: the mirror's category
+map, the skill map, the permissions doctype list, the read-tool snapshot and the
+catalogue counts.
+
 ## 0.161.0 — 2026-09-07 — the machines, the jobs, and a door from the board
 
 `/app/farm-overview` has drawn the farm's ground since v0.110.0. This release

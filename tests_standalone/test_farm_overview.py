@@ -43,7 +43,7 @@ import unittest
 
 import frappe
 
-from erpnext_mcp import farm_overview, farm_task_map_action
+from erpnext_mcp import asset_types, farm_overview, farm_task_map_action
 
 from .fixtures import MAIN, OTHER, V12TestCase
 from .harness import INSTALLED_DOCTYPES, STORE
@@ -803,16 +803,37 @@ class TheMachinesAndTheJobs(OverviewTestCase):
 		pin = farm_overview.farm_overview(company=MAIN)["assets"][0]
 		self.assertEqual(pin["current_state"], "Running")
 
-	def test_each_asset_type_gets_its_own_glyph(self):
+	def test_the_glyph_comes_off_the_type_record(self):
+		"""v0.162.0 MOVED THE GLYPH INTO THE REGISTER. It was a four-entry table
+		in this module — the shortest of the four asset-type lists that existed —
+		so nine of the thirteen types shared one grey badge. An operator changes
+		it in the Desk now, which is the whole point of the register."""
 		farm = self.a_farm()
 		self.a_machine_and_a_job(farm)
 		pin = farm_overview.farm_overview(company=MAIN)["assets"][0]
-		self.assertEqual(pin["icon"], "W")
-		self.assertEqual(pin["icon_label"], "Wind machine")
+		self.assertEqual(pin["icon"], asset_types.icon_for("Wind Machine"))
+		self.assertEqual(pin["icon_label"], "Wind Machine")
 
-	def test_an_asset_type_the_table_does_not_know_still_gets_a_pin(self):
-		"""`asset_type` is a Select an operator may extend, and a type silently
-		missing from the map is the failure the fallback entry exists to stop."""
+	def test_editing_the_type_record_changes_the_badge(self):
+		"""The claim the register exists to make. No release, no redeploy."""
+		farm = self.a_farm()
+		self.a_machine_and_a_job(farm)
+		frappe.db.set_value("Farm Asset Type", "Wind Machine", "icon", "F")
+		self.assertEqual(farm_overview.farm_overview(company=MAIN)["assets"][0]["icon"], "F")
+
+	def test_every_shipped_type_has_a_glyph_of_its_own(self):
+		"""Fifteen types, fifteen distinct badges. Two identical letters on one
+		map is worse than an unmemorable one — and the colours differ as well,
+		so a collision would have to be read off the legend."""
+		glyphs = [icon for _name, icon, _order, _detail in asset_types.SEEDED]
+		self.assertEqual(len(glyphs), len(set(glyphs)))
+
+	def test_an_asset_type_the_map_does_not_colour_still_gets_a_pin(self):
+		"""A type an operator invented and gave no icon. It takes its OWN initial
+		rather than a generic badge — 'Cider Press' reads as C, which is at least
+		the right thing — and the default colour. A type silently missing from
+		the map is the failure this fallback exists to stop, and from v0.162.0 an
+		operator can add one without touching this app at all."""
 		self.a_farm()
 		STORE.seed(
 			"Asset Register",
@@ -827,8 +848,9 @@ class TheMachinesAndTheJobs(OverviewTestCase):
 			],
 		)
 		pin = farm_overview.farm_overview(company=MAIN)["assets"][0]
-		self.assertEqual(pin["icon"], "A")
-		self.assertEqual(pin["icon_label"], "General")
+		self.assertEqual(pin["icon"], "C")
+		self.assertEqual(pin["icon_label"], "Cider Press")
+		self.assertEqual(pin["colour"], farm_overview.ASSET_ICON_DEFAULT["colour"])
 
 	# ── tasks ───────────────────────────────────────────────────────────
 	def test_an_open_task_is_a_pin_at_the_centre_of_its_ground(self):

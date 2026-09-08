@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import frappe
 
-from .. import compat, timezones
+from .. import asset_types, compat, timezones
 from ..args import as_bool, as_date, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -111,12 +111,19 @@ def _types(args: dict) -> list[str]:
 		return list(CAPITAL_TYPES)
 	wanted = [str(item).strip() for item in (raw if isinstance(raw, (list, tuple)) else str(raw).split(","))]
 	wanted = [item for item in wanted if item]
-	unknown = [item for item in wanted if item not in asset_tags.ASSET_TYPES]
+	# v0.162.0. THE SITE'S OWN REGISTER, NOT THE SHIPPED TUPLE. A farm that adds
+	# a `Generator` type and insures three of them must be able to schedule them;
+	# checking against what this app shipped would have refused the type the
+	# operator had just created in the Desk. Retired types are accepted — an
+	# insurance schedule is a historical document and a sold sprayer was on last
+	# year's.
+	known = asset_types.names(enabled_only=False)
+	unknown = [item for item in wanted if item not in known]
 	if unknown:
 		raise ToolError(
 			f"asset_types names {', '.join(repr(item) for item in unknown)}, which "
-			f"{'are' if len(unknown) > 1 else 'is'} not in the Asset Register's own list: "
-			f"{', '.join(asset_tags.ASSET_TYPES)}. Nothing was exported."
+			f"{'are' if len(unknown) > 1 else 'is'} not in this site's Farm Asset Type "
+			f"register: {', '.join(known)}. Nothing was exported."
 		)
 	return wanted
 

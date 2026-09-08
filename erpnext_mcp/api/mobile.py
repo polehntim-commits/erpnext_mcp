@@ -8721,6 +8721,31 @@ ATTACHABLE_DOCTYPES = (
 ATTACH_INLINE_LIMIT = 8 * 1024 * 1024
 
 
+# ── 71a. list_asset_types ────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_asset_types", limit=guard.READ_LIMIT)
+def list_asset_types(user: str, include_disabled=None) -> dict:
+	"""The type wheel `register_asset`'s screen needs before it can draw.
+
+	THE PICKER THAT WAS A SWIFT ENUM. `register_asset` has been on this surface
+	since v0.78.0 and the handset has had to know the type list to offer one —
+	which meant the list lived in the app, and a farm adding a `Fuel Tank`
+	waited for a release AND an App Store review. From v0.162.0 the types are a
+	`Farm Asset Type` register, and this is where the phone reads them.
+
+	NO COMPANY SCOPE, DELIBERATELY, and it is the one read on this surface where
+	that is worth saying out loud. The register is a VOCABULARY, not the farm's
+	records: it says what kinds of thing exist, holds no company column and
+	names no asset. Every route that returns actual assets is scoped;
+	`guard.require_scope` still runs, so an unenrolled handset gets nothing.
+	"""
+	guard.require_scope(user)
+	inner = {}
+	if include_disabled is not None:
+		inner["include_disabled"] = include_disabled
+	return asset_tags.list_asset_types(inner).data
+
+
 # ── 71. register_asset ───────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("register_asset", mutating=True, limit=guard.WRITE_LIMIT)

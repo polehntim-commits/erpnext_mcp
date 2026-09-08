@@ -109,7 +109,7 @@ from urllib.parse import quote
 
 import frappe
 
-from . import compat, overlays
+from . import asset_types, compat, overlays
 from .errors import ToolError
 from .tools import asset_tags as asset_tools
 from .tools import dispatch as dispatch_tools
@@ -224,26 +224,64 @@ REGISTER_SPECS = {
 	},
 }
 
-#: v0.161.0. The glyph a marker carries, by `asset_type`. LETTERS AND NOT AN
-#: ICON FONT, and a `L.divIcon` rather than `L.marker`: the same reasoning
-#: `farm_overview.js` gives for drawing structures as circles is that Leaflet's
-#: default marker reaches for a sprite at a path relative to its stylesheet,
-#: which resolves against the CDN and is one more request that can fail on its
-#: own. A glyph this app draws itself cannot 404.
+#: v0.161.0. The glyph a marker carries. LETTERS AND NOT AN ICON FONT, and a
+#: `L.divIcon` rather than `L.marker`: the same reasoning `farm_overview.js`
+#: gives for drawing structures as circles is that Leaflet's default marker
+#: reaches for a sprite at a path relative to its stylesheet, which resolves
+#: against the CDN and is one more request that can fail on its own. A glyph this
+#: app draws itself cannot 404.
 #:
-#: THE FIVE THE BRIEF NAMED, AND EVERY OTHER TYPE FALLS TO `General`. A farm that
-#: invents an asset type gets a pin rather than nothing — an unmapped type
-#: silently missing from the map is the failure this table exists to avoid, and
-#: `asset_type` is a free Select an operator may extend.
-ASSET_ICONS = {
-	"Irrigation Valve": {"glyph": "V", "colour": "#0969da", "label": "Irrigation valve"},
-	"Tractor": {"glyph": "T", "colour": "#9a6700", "label": "Tractor"},
-	"Storage": {"glyph": "S", "colour": "#6639ba", "label": "Storage"},
-	"Wind Machine": {"glyph": "W", "colour": "#1a7f37", "label": "Wind machine"},
+#: v0.162.0. THE GLYPH NOW COMES OFF THE `Farm Asset Type` RECORD and this table
+#: holds only the COLOURS. That is the whole point of the register: a farm that
+#: adds a Fuel Tank gives it an icon in the Desk and the map draws it, with no
+#: release. This table was the fourth of the four disagreeing asset-type lists
+#: and it was the shortest — it knew four types out of thirteen, so nine of them
+#: shared one grey badge.
+#:
+#: COLOURS STAY IN CODE AND ARE NOT A COLUMN, deliberately. A palette is a
+#: property of the MAP — the five overlay layers and three register colours all
+#: have to stay distinguishable from each other and from these — and an operator
+#: picking a hex value per type would be choosing one half of a scheme they
+#: cannot see the rest of. A type with no colour here takes the default, which is
+#: readable against every base layer.
+ASSET_COLOURS = {
+	"Irrigation Valve": "#0969da",
+	"Irrigation Zone": "#218bff",
+	"Water Source": "#0a6c74",
+	"Tractor": "#9a6700",
+	"Implement": "#7d4e00",
+	"Sprayer": "#8250df",
+	"Vehicle": "#953800",
+	"Wind Machine": "#1a7f37",
+	"Fuel Tank": "#cf222e",
+	"Gas Tank": "#a40e26",
+	"Storage": "#6639ba",
+	"Cold Storage": "#3192aa",
+	"Block": "#4c8c2b",
+	"Housing Unit": "#bc4c00",
+	"General": "#57606a",
 }
 
-#: What an asset type this table does not name is drawn as.
+#: What an asset type this table does not colour is drawn as.
 ASSET_ICON_DEFAULT = {"glyph": "A", "colour": "#57606a", "label": "General"}
+
+
+def asset_icon(asset_type) -> dict:
+	"""The badge one asset type is drawn with: glyph from the register, colour from here.
+
+	A TYPE THIS APP HAS NEVER HEARD OF STILL GETS A PIN, which is the failure
+	this function exists to avoid: an operator adds `Cider Press`, registers
+	three, and they are silently missing from the map. It gets its own initial
+	and the default colour, and `list_asset_types` is where somebody gives it a
+	better one.
+	"""
+	label = str(asset_type or "").strip()
+	return {
+		"glyph": asset_types.icon_for(label),
+		"colour": ASSET_COLOURS.get(label, ASSET_ICON_DEFAULT["colour"]),
+		"label": label or ASSET_ICON_DEFAULT["label"],
+	}
+
 
 #: v0.161.0. A task marker's colour, by urgency. THE FOUR THE DOCTYPE DECLARES —
 #: `Farm Task.urgency` is a Select of Low/Normal/High/Critical — and the order
@@ -725,7 +763,7 @@ def _asset_markers(rows: list) -> list:
 			continue
 		name = str(row.get("name") or "")
 		asset_type = str(row.get("asset_type") or "")
-		icon = ASSET_ICONS.get(asset_type, ASSET_ICON_DEFAULT)
+		icon = asset_icon(asset_type)
 		out.append(
 			{
 				"doctype": ASSET_REGISTER,
@@ -1044,7 +1082,11 @@ def farm_overview(company=None, overlay=None) -> dict:
 			"drawn": len(assets),
 			"without_position": len(asset_rows) - len(assets),
 			"by_asset_type": dict(sorted(by_type.items())),
-			"icons": {**ASSET_ICONS, "": ASSET_ICON_DEFAULT},
+			# THE ICONS FOR THE TYPES ACTUALLY ON THIS MAP, plus the fallback.
+			# Sending the whole register would be fifteen entries for a legend
+			# that keys three, and it would go stale the moment somebody added a
+			# type — this is derived from what was drawn.
+			"icons": {**{kind: asset_icon(kind) for kind in by_type}, "": ASSET_ICON_DEFAULT},
 		},
 		"tasks": tasks,
 		"task_summary": {

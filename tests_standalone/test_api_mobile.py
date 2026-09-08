@@ -537,6 +537,14 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"register_asset",
 		"generate_asset_qr",
 		"attach_file_to_document",
+		# v0.162.0. The type wheel that screen has to draw before it can offer a
+		# type. Until this release the list WAS in the app — a Swift enum — so a
+		# farm adding a Fuel Tank waited for a release and an App Store review;
+		# the types are a `Farm Asset Type` register now and this is where the
+		# phone reads them. Listed here because `MobileAPI.swift` does not name
+		# the path yet: the screen still has its enum, and swapping it for this
+		# call is the iOS half.
+		"list_asset_types",
 		# v0.80.0. Trade documentation: four reads a driver or a desk on a tablet
 		# wants — what is going out, one load in full, what is still missing, and
 		# the paperwork on it — plus the one write, which is a driver confirming a

@@ -567,6 +567,10 @@ ROUTES = (
 	# tool's own refusal of a cancelled parent stands whatever a body says.
 	# Personnel evidence keeps its own door: `attach_onboarding_document` above
 	# checks the HR role, and `Employee` is deliberately off the allowlist.
+	# v0.162.0. The type wheel `register_asset`'s own screen needs before it can
+	# draw one. A vocabulary rather than a register of the farm's records, so it
+	# carries no company scope — see the wrapper.
+	Route("/mobile", mobile_api.list_asset_types),
 	Route("/mobile", mobile_api.register_asset),
 	Route("/mobile", mobile_api.generate_asset_qr),
 	Route("/mobile", mobile_api.attach_file_to_document),

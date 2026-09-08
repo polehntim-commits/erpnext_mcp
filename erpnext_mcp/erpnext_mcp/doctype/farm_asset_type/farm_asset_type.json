@@ -1,0 +1,105 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:type_name",
+ "creation": "2026-09-07 12:00:00.000000",
+ "description": "What kinds of thing this farm keeps in its asset register. Until v0.162.0 this was a Select field on Asset Register and a tuple in three Python modules that had already drifted apart from each other; it is a register now, so adding 'Fuel Tank' is a record an operator creates rather than a release. THE DOCNAME IS THE TYPE NAME, which is what let every asset already on the site keep pointing at the same string when the column became a Link.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "type_name",
+  "enabled",
+  "identity_col",
+  "icon",
+  "display_order",
+  "detail_section",
+  "description"
+ ],
+ "fields": [
+  {
+   "description": "What this kind of asset is called, exactly as it should read in a picker. IT IS ALSO THE DOCNAME — every Asset Register row points at this string — so renaming one here renames it on every asset that carries it.",
+   "fieldname": "type_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Type Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "1",
+   "description": "Untick to retire a type without deleting it. A retired type is kept off every picker and out of list_asset_types, and the assets already carrying it are untouched — which is the whole reason this is a flag and not a delete: removing the record would leave those assets pointing at nothing.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "An icon identifier for the map and the handset. The whole-farm map draws a lettered badge and uses the FIRST CHARACTER of this; iOS may read it as a symbol name. Left empty, the map falls back to the first letter of the type name, so a type nobody has given an icon still gets a pin.",
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "Icon"
+  },
+  {
+   "description": "Where this type sits in a picker. Lower first; ties fall back to the type name, so a register where nobody has set one is in alphabetical order rather than in whatever order the rows were created.",
+   "fieldname": "display_order",
+   "fieldtype": "Int",
+   "label": "Display Order"
+  },
+  {
+   "fieldname": "detail_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "What belongs under this type, for whoever is choosing one.",
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Asset Type",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Employee"
+  }
+ ],
+ "sort_field": "display_order",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

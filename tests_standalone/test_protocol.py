@@ -1145,8 +1145,8 @@ class Catalogue(SeededTestCase):
 		already here and sets their boundaries. The pair is one read and one write
 		on purpose — the file is looked at before it is believed.
 		"""
-		self.assertEqual(len(registry.TOOLS), 865)
-		self.assertEqual(len(registry.READ_TOOLS), 434)
+		self.assertEqual(len(registry.TOOLS), 866)
+		self.assertEqual(len(registry.READ_TOOLS), 435)
 		self.assertEqual(len(registry.MUTATING_TOOLS), 431)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):

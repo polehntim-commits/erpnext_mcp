@@ -27,18 +27,13 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-ASSET_TYPES = (
-	"Housing Unit",
-	"Irrigation Zone",
-	"Irrigation Valve",
-	"Sprayer",
-	"Tractor",
-	"Block",
-	"Water Source",
-	"Storage",
-	"Cold Storage",
-	"General",
-)
+#: v0.162.0. REMOVED, AND ITS ABSENCE IS THE POINT. This tuple was the third of
+#: four disagreeing answers to "what asset types are there" — it named ten, the
+#: doctype's own Select named thirteen, and `tools/asset_tags` named twelve. It
+#: was never consulted by anything: `validate` below checks only that
+#: `asset_type` is set, so the list sat here looking authoritative and gating
+#: nothing. `Farm Asset Type` is the register now, `asset_type` is a Link to it,
+#: and Frappe's own link validation is what refuses a type this site has not got.
 
 
 class AssetRegister(Document):

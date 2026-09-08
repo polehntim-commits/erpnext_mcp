@@ -380,6 +380,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# register writes off this table is true of the register and is not true
 		# of `irrigation_zone`, which is a fact about the ground that only
 		# somebody standing at the valve reliably knows.
+		"/mobile/list_asset_types",
 		"/mobile/register_asset",
 		"/mobile/generate_asset_qr",
 		"/mobile/attach_file_to_document",
@@ -2896,6 +2897,14 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# A receipt is checked by LOOKING at it, and the photograph is on the
 		# detail read and on nothing else.
 		"get_expense_receipt",
+		# v0.162.0. The type wheel `register_asset`'s own screen draws from. It is
+		# a VOCABULARY and not a register of the farm's records — no company
+		# column, no asset named, nothing about who owns what — so there is
+		# nothing here for a scope to narrow. Every route that returns actual
+		# assets is gated; this one says what KINDS of thing exist, and a worker
+		# who may register an asset has to be able to see the list of types to
+		# register it as.
+		"list_asset_types",
 		# v0.158.0. Asking for a day off, seeing what you may ask for, and reading
 		# your own requests back. All three DEFAULT TO THE CALLER'S OWN EMPLOYEE
 		# and take the dispatch role the moment a body names somebody else — see
@@ -2973,7 +2982,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 98, "a method is named in two sets at once")
+		self.assertEqual(len(named), 99, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

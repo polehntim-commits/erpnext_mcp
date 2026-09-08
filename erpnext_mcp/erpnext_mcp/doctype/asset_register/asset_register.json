@@ -59,13 +59,13 @@
  ],
  "fields": [
   {
-   "description": "What kind of asset this is. The type determines what state fields make sense (a valve is open or closed, a sprayer is full or empty) and which inspection templates apply.",
+   "description": "What kind of asset this is. The type determines what state fields make sense (a valve is open or closed, a sprayer is full or empty) and which inspection templates apply. A LINK SINCE v0.162.0, not a Select: the list is the Farm Asset Type register, so adding 'Fuel Tank' is a record an operator creates rather than a release. Every value that was on the Select is a record with the same name, so nothing already registered changed type.",
    "fieldname": "asset_type",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Asset Type",
-   "options": "\nHousing Unit\nIrrigation Zone\nIrrigation Valve\nSprayer\nTractor\nImplement\nVehicle\nWind Machine\nBlock\nWater Source\nStorage\nCold Storage\nGeneral",
+   "options": "Farm Asset Type",
    "reqd": 1,
    "search_index": 1
   },
