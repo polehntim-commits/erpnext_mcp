@@ -14275,8 +14275,20 @@ release and no App Store review.
 
 **Arguments:** `include_disabled` (default false).
 
-**Returns** `asset_types[]` — each `name`, `type_name`, `icon`, `display_order`,
-`description`, `enabled` — plus `count`, `available` and `doctype`.
+**Returns** `asset_types[]` — each `name`, `type_name`, **`wire_value`**, `icon`,
+`display_order`, `description`, `enabled` — plus `count`, `available` and
+`doctype`.
+
+**`wire_value` is the string to send back** when registering an asset, and it is
+on every row even though it usually equals `type_name`. The two are one string by
+construction *at insert* — the doctype autonames `field:type_name` — but a
+`field:` autoname names a document at **insert and nowhere else**, so editing
+`type_name` afterwards moves the column and leaves the docname alone: the row
+reads `Fuel Depot` while its docname, and `asset_type` on every asset carrying
+it, is still `Storage`. v0.163.1 refuses that edit, so the two should never
+diverge on a current site — `wire_value` makes the contract explicit anyway,
+because a client should not have to know which of two fields is the identity, nor
+break silently on a row written by an older build.
 
 **Retiring a type never disturbs the assets that carry it.** Untick `enabled`
 and it leaves every picker while last season's records keep resolving; deleting

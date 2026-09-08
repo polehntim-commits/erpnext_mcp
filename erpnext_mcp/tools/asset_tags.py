@@ -299,6 +299,11 @@ def list_asset_types(args: dict) -> ToolResult:
 				{
 					"name": row["name"],
 					"type_name": row.get("type_name") or row["name"],
+					# v0.163.1. WHAT TO SEND BACK, SAID OUT LOUD. Asked for by
+					# the iOS team, and it is not redundant with either field
+					# beside it even though it usually equals both. See
+					# `_wire_value`.
+					"wire_value": _wire_value(row),
 					"icon": row.get("icon") or "",
 					"display_order": row.get("display_order") or 0,
 					"description": row.get("description") or None,
@@ -343,12 +348,38 @@ def list_asset_types(args: dict) -> ToolResult:
 # has its own `allow_` flag.
 
 
+def _wire_value(row: dict) -> str:
+	"""The string the server stores and accepts for this type — its DOCNAME.
+
+	v0.163.1, asked for by the iOS team: "tell us explicitly which of these
+	fields we send back, even when it equals type_name." It usually does equal
+	it — `Farm Asset Type` autonames `field:type_name`, so the two are one string
+	by construction at insert.
+
+	THEY CAN COME APART, WHICH IS WHY THIS IS NOT A REDUNDANT KEY. `field:`
+	autoname names a document at INSERT and nowhere else, so editing `type_name`
+	on an existing record moves the column and leaves the docname alone: the row
+	reads 'Fuel Depot' while its docname — and `Asset Register.asset_type` on
+	every asset carrying it — is still 'Storage'. A picker built from `type_name`
+	would then offer a value `register_asset` refuses, and the worker who picked
+	it would get a link error naming a type they can see on screen.
+
+	v0.163.1 also refuses that edit in `FarmAssetType.validate`, so the two
+	should never diverge on a site running this release. This key is what makes
+	the contract explicit anyway — a client should not have to know which of two
+	fields is the identity, and should not silently break on a row written by an
+	older build or by a script that set the column directly.
+	"""
+	return str(row.get("name") or "")
+
+
 def _type_out(row: dict, *, with_usage: bool = False) -> dict:
 	"""One `Farm Asset Type` as JSON, optionally with how many assets carry it."""
 	name = str(row.get("name") or "")
 	out = {
 		"name": name,
 		"type_name": row.get("type_name") or name,
+		"wire_value": _wire_value(row),
 		"icon": str(row.get("icon") or ""),
 		"display_order": int(row.get("display_order") or 0),
 		"description": row.get("description") or None,

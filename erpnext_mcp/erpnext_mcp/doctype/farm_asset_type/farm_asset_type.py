@@ -51,6 +51,36 @@ class FarmAssetType(Document):
 		if not self.type_name:
 			frappe.throw(_("Type Name is required — it is what a picker shows and what every asset stores."))
 
+		# v0.163.1. EDITING `type_name` ON AN EXISTING RECORD IS REFUSED, because
+		# `field:` autoname only names a document at INSERT. A later edit moves
+		# the column and leaves the docname alone — so the record reads
+		# 'Fuel Depot' while its docname, and `asset_type` on every asset
+		# carrying it, is still 'Storage'. A picker built from `type_name` then
+		# offers a value the server will not accept, and the worker who picks it
+		# gets a link error naming a type they can see on screen.
+		#
+		# PROVEN, NOT ASSUMED: `doc.type_name = "Fuel Depot"; doc.save()` on this
+		# doctype leaves `name` as 'Storage'. Frappe does not put `set_only_once`
+		# on an autoname field for you.
+		#
+		# REFUSED RATHER THAN AUTO-RENAMED. A rename inside `validate` is a save
+		# inside a save, and `update_asset_type` already does it properly —
+		# through `frappe.rename_doc`, which repoints every asset.
+		if not self.is_new() and self.type_name != self.name:
+			frappe.throw(
+				_(
+					"Changing the name of an asset type is a RENAME, not a field edit: the docname "
+					"is what every asset stores, and editing this column alone would leave {0} "
+					"assets pointing at {1!r} while this record calls itself {2!r}. Use "
+					"update_asset_type(name={1!r}, type_name={2!r}), or the Desk's own Rename — "
+					"both move the docname and repoint every asset."
+				).format(
+					frappe.db.count("Asset Register", {"asset_type": self.name}),
+					self.name,
+					self.type_name,
+				)
+			)
+
 		# THE ICON IS ONE CHARACTER ON THE MAP AND MAY BE MORE ON A HANDSET.
 		# `farm_overview` draws a lettered badge and takes the first character;
 		# iOS may read the whole string as a symbol name. Nothing is truncated

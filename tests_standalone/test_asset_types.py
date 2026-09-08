@@ -687,3 +687,165 @@ class TheRegisterIsManagedThroughMCP(V12TestCase):
 		for name in ("create_asset_type", "update_asset_type", "delete_asset_type"):
 			with self.subTest(tool=name):
 				self.assertIn("MUTATING", registry.TOOLS[name]["description"])
+
+
+# ── 8: `wire_value`, and the divergence it exists for ────────────────────────
+
+
+class TheWireValueIsExplicit(V12TestCase):
+	"""v0.163.1. Asked for by the iOS team: "tell us which field to send back."
+
+	IT USUALLY EQUALS `type_name` AND IS STILL NOT REDUNDANT. `Farm Asset Type`
+	autonames `field:type_name`, so the two are one string by construction — AT
+	INSERT. A `field:` autoname names a document at insert and nowhere else, so
+	editing the column afterwards moves it and leaves the docname alone: the row
+	reads 'Fuel Depot' while its docname, and `asset_type` on every asset
+	carrying it, is still 'Storage'.
+
+	That is not a hypothetical. It was reproduced before this was written —
+	`doc.type_name = "Fuel Depot"; doc.save()` left `name` as 'Storage', because
+	Frappe does not put `set_only_once` on an autoname field for you. A picker
+	built from `type_name` would then offer a value `register_asset` refuses, and
+	the worker who picked it would get a link error naming a type they can see on
+	their own screen.
+
+	v0.163.1 closes it at both ends: the column edit is refused, and the wire
+	value is stated.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **CRUD_ON)
+
+	def rows(self, **args):
+		return {row["name"]: row for row in self.tool_data("list_asset_types", args)["asset_types"]}
+
+	def test_every_row_carries_a_wire_value(self):
+		for name, row in self.rows().items():
+			with self.subTest(asset_type=name):
+				self.assertIn("wire_value", row)
+				self.assertTrue(row["wire_value"])
+
+	def test_it_is_present_even_when_it_equals_the_type_name(self):
+		"""The whole of the iOS team's request. On a healthy register the two ARE
+		equal on every row, and the key still has to be there — a client that
+		only saw it on the odd row would have to guess on all the others."""
+		for name, row in self.rows().items():
+			with self.subTest(asset_type=name):
+				self.assertEqual(row["wire_value"], row["type_name"])
+				self.assertEqual(row["wire_value"], name)
+
+	def test_it_is_the_docname_and_not_the_column(self):
+		"""THE CASE IT EXISTS FOR. Written through `db.set_value` because the
+		controller now refuses this edit through a save — which is the other half
+		of the fix, and is tested below. A row in this state can still arrive
+		from an older build or a script."""
+		frappe.db.set_value(asset_types.DOCTYPE, "Storage", "type_name", "Fuel Depot")
+		row = self.rows()["Storage"]
+		self.assertEqual(row["type_name"], "Fuel Depot")
+		self.assertEqual(row["wire_value"], "Storage")
+
+	def test_the_wire_value_is_what_register_asset_actually_takes(self):
+		"""The claim the field makes, proved rather than asserted: send back what
+		`wire_value` says and the registration succeeds."""
+		frappe.db.set_value(asset_types.DOCTYPE, "Storage", "type_name", "Fuel Depot")
+		wire = self.rows()["Storage"]["wire_value"]
+		data = self.tool_data("register_asset", {"name": "SH-1", "asset_type": wire, "company": MAIN})
+		self.assertEqual(data["asset_type"], "Storage")
+
+	def test_the_type_name_is_what_register_asset_refuses(self):
+		"""The negative control. Without this, "wire_value is the docname" would
+		pass on a register where the two never differ, which is every healthy
+		one — and the key would look redundant to whoever read the test next."""
+		frappe.db.set_value(asset_types.DOCTYPE, "Storage", "type_name", "Fuel Depot")
+		error = self.tool_error(
+			"register_asset", {"name": "SH-2", "asset_type": "Fuel Depot", "company": MAIN}
+		)
+		self.assertIn("not an asset type on this site", error)
+
+	def test_get_asset_type_carries_it_too(self):
+		"""One client reads the list to build a wheel and the detail to show a
+		chosen type. Both have to say the same thing."""
+		self.assertEqual(self.tool_data("get_asset_type", {"name": "Tractor"})["wire_value"], "Tractor")
+
+	def test_a_created_type_reports_the_wire_value_at_once(self):
+		created = self.tool_data("create_asset_type", {"type_name": "Generator"})
+		self.assertEqual(created["wire_value"], "Generator")
+		self.assertEqual(
+			self.tool_data(
+				"register_asset",
+				{"name": "GEN-9", "asset_type": created["wire_value"], "company": MAIN},
+			)["asset_type"],
+			"Generator",
+		)
+
+	def test_a_rename_moves_the_wire_value_with_it(self):
+		self.tool_data("update_asset_type", {"name": "Tractor", "type_name": "Tractor Unit"})
+		self.assertEqual(self.rows()["Tractor Unit"]["wire_value"], "Tractor Unit")
+
+	def test_the_handset_gets_it_as_well(self):
+		"""It is the client that asked for it."""
+		self.assertTrue(
+			all(row.get("wire_value") for row in self.tool_data("list_asset_types")["asset_types"])
+		)
+
+
+class EditingTheNameColumnIsRefused(V12TestCase):
+	"""v0.163.1. The server half of the same fix.
+
+	`field:` autoname names a document at INSERT and nowhere else, so a
+	`type_name` edit that is not a rename silently splits the identity in two.
+	The controller refuses it and names the tool that does it properly.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **CRUD_ON)
+
+	def test_editing_the_column_through_a_save_is_refused(self):
+		doc = frappe.get_doc(asset_types.DOCTYPE, "Storage")
+		doc.type_name = "Fuel Depot"
+		doc.flags.ignore_permissions = True
+		with self.assertRaises(frappe.ValidationError) as caught:
+			doc.save(ignore_permissions=True)
+		self.assertIn("RENAME", str(caught.exception))
+		self.assertIn("update_asset_type", str(caught.exception))
+
+	def test_the_refusal_names_how_many_assets_would_be_stranded(self):
+		self.tool_data("register_asset", {"name": "SH-1", "asset_type": "Storage", "company": MAIN})
+		doc = frappe.get_doc(asset_types.DOCTYPE, "Storage")
+		doc.type_name = "Fuel Depot"
+		doc.flags.ignore_permissions = True
+		with self.assertRaises(frappe.ValidationError) as caught:
+			doc.save(ignore_permissions=True)
+		self.assertIn("1 assets", str(caught.exception))
+
+	def test_the_column_is_unchanged_after_the_refusal(self):
+		doc = frappe.get_doc(asset_types.DOCTYPE, "Storage")
+		doc.type_name = "Fuel Depot"
+		doc.flags.ignore_permissions = True
+		with self.assertRaises(frappe.ValidationError):
+			doc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value(asset_types.DOCTYPE, "Storage", "type_name"), "Storage")
+
+	def test_saving_any_other_field_still_works(self):
+		"""THE NEGATIVE CONTROL. A guard that refused every save on this doctype
+		would pass the three tests above and make the register uneditable."""
+		doc = frappe.get_doc(asset_types.DOCTYPE, "Storage")
+		doc.icon = "B"
+		doc.description = "Barns and sheds."
+		doc.flags.ignore_permissions = True
+		doc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value(asset_types.DOCTYPE, "Storage", "icon"), "B")
+
+	def test_creating_a_type_is_not_caught_by_the_guard(self):
+		"""`is_new()` — on an insert the docname does not exist yet, and the
+		whole point of `field:` autoname is that it is about to be this column."""
+		self.assertEqual(self.tool_data("create_asset_type", {"type_name": "Generator"})["name"], "Generator")
+
+	def test_the_rename_tool_is_the_way_through(self):
+		"""The refusal points at it, so it had better work."""
+		self.tool_data("register_asset", {"name": "SH-1", "asset_type": "Storage", "company": MAIN})
+		self.tool_data("update_asset_type", {"name": "Storage", "type_name": "Fuel Depot"})
+		self.assertEqual(frappe.db.get_value("Asset Register", "SH-1", "asset_type"), "Fuel Depot")
+		self.assertEqual(frappe.db.get_value(asset_types.DOCTYPE, "Fuel Depot", "type_name"), "Fuel Depot")

@@ -20536,7 +20536,14 @@ TOOLS = {
 		"assets that carry it.\n\n"
 		"IT ANSWERS ON A BENCH THAT HAS NOT MIGRATED, from the shipped list, with "
 		"`available: false` beside it. An empty wheel on a handset reads as a "
-		"broken app; fifteen types and a flag for the operator does not.",
+		"broken app; fifteen types and a flag for the operator does not.\n\n"
+		"`wire_value` IS THE STRING TO SEND BACK when registering an asset, and "
+		"it is on every row even though it usually equals `type_name`. The two "
+		"are one string by construction at insert — the doctype autonames "
+		"`field:type_name` — but a `field:` autoname names a document at INSERT "
+		"and nowhere else, so a row whose `type_name` was edited directly by an "
+		"older build or a script reads one thing and stores another. A client "
+		"should not have to know which of two fields is the identity.",
 		{
 			"include_disabled": _field(
 				_BOOLEAN,

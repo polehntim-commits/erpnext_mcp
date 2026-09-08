@@ -3,6 +3,65 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.163.1 — 2026-09-07 — which field to send back
+
+**The Select-to-Link change this was briefed as had already shipped**, in
+v0.162.0. `Asset Register.asset_type` is a Link to `Farm Asset Type`,
+`register_asset` validates against the register rather than a Select's options,
+the `as_choice` calls are gone, the migration seeds every value in use, and the
+map reads the register for its icons. Verified clause by clause against HEAD
+before starting: a type created through `create_asset_type` registers on an
+asset the same minute, which is the behaviour the brief asked for.
+
+What was genuinely outstanding is the iOS team's request, and it turned out to
+have a server-side half nobody had noticed. **870 tools, unchanged.**
+
+### `wire_value`
+
+Every `list_asset_types` row — and every `get_asset_type` reply — now carries
+`wire_value`: the string the server stores and accepts. It is there **even when
+it equals `type_name`**, which on a healthy register is always, because that is
+what makes it usable as a contract rather than a hint.
+
+### It is not a redundant key, and the reason is a real bug
+
+`Farm Asset Type` autonames `field:type_name`, so the docname and the column are
+one string by construction — **at insert**. A `field:` autoname names a document
+at insert and **nowhere else**, so editing `type_name` afterwards moves the
+column and leaves the docname alone: the record reads `Fuel Depot` while its
+docname, and `asset_type` on every asset carrying it, is still `Storage`.
+
+Reproduced before any of this was written — `doc.type_name = "Fuel Depot";
+doc.save()` left `name` as `Storage`. Frappe does not add `set_only_once` to an
+autoname field for you.
+
+A picker built from `type_name` would then offer a value `register_asset`
+refuses, and the worker who picked it would get a link error naming a type they
+can see on their own screen. So `wire_value` is the **docname**, and a test
+proves both halves: send back `wire_value` and the registration succeeds; send
+back `type_name` and it is refused.
+
+### And the divergence is now refused at the source
+
+`FarmAssetType.validate` refuses a `type_name` edit on an existing record,
+naming how many assets would be stranded and pointing at `update_asset_type`,
+which does it properly through `frappe.rename_doc` and repoints every one of
+them. Refused rather than auto-renamed: a rename inside `validate` is a save
+inside a save, and the tool already exists.
+
+So the two should never diverge on a site running this release. `wire_value` is
+still explicit, because a client should not have to know which of two fields is
+the identity, and should not break silently on a row written by an older build or
+by a script that set the column directly.
+
+### Verification
+
+15 new tests, 5 mutations run and all caught — including an over-broad guard
+(`if not self.is_new()` instead of the name comparison), which refuses every save
+on the doctype and reddens 60 tests. The negative control that catches it —
+"saving any other field still works" — is the one a guard like this needs and the
+one easiest to leave out.
+
 ## 0.163.0 — 2026-09-07 — the register, managed without the Desk
 
 v0.162.0 made the asset types a register and gave it one read. This is the rest
