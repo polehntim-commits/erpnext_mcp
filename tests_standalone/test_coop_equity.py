@@ -10,9 +10,9 @@ EIGHT CLAIMS.
    where they do not belong; a recategorisation carries the flag with it.
 3. `NotAnExpense` — the expense summary leaves both out, and a Purchase Invoice is
    refused by name.
-4. `TheAccountsFollowTheChart` — created under 1800 and 4100 at 1830 and 4150,
-   moved to the next free number when one is taken, idempotent, dry-runnable, and
-   answered company by company.
+4. `TheAccountsFollowTheChart` — equity created under 1800 at 1830, moved to the
+   next free number when one is taken, idempotent, dry-runnable, and answered
+   company by company; Dividend Income found by name and never created.
 5. `PostingAReceipt` — the draft Journal Entry's lines for equity, a retirement and
    a patronage split, and every refusal before anything is written.
 6. `TheSummary` — positions by company and co-op, retained patronage read off the
@@ -55,45 +55,42 @@ ON = {
 }
 
 EQUITY = f"1830 - Co-op Equity Investments - {MAIN_ABBR}"
-PATRONAGE = f"4150 - Patronage Dividends - {MAIN_ABBR}"
+PATRONAGE = f"4230 - Dividend Income - {MAIN_ABBR}"
 
 
-def seed_groups(company=MAIN, abbr=MAIN_ABBR):
-	"""A `1800` investments group and a `4100` farm income group, as the real charts have.
+def seed_groups(company=MAIN, abbr=MAIN_ABBR, dividend_number="4230"):
+	"""A `1800 - Investments` group and a `Dividend Income` ledger, as the design doc's chart has.
 
-	The fixture chart's `4100` is a LEAF ("Sales"), which is exactly the chart shape
-	that must be refused; renumbering it is what makes room for the group.
+	`dividend_number` is there because the Umbrel site files Dividend Income as 4220 and
+	uses 4230 for Realized Capital Gains; the account is found by name either way.
 	"""
-	STORE.tables["Account"][f"4100 - Sales - {abbr}"]["account_number"] = "4110"
-	STORE.seed(
-		"Account",
-		[
-			{
-				"name": f"1800 - Investments - {abbr}",
-				"account_name": "Investments",
-				"account_number": "1800",
-				"parent_account": f"Application of Funds (Assets) - {abbr}",
-				"is_group": 1,
-				"root_type": "Asset",
-				"account_type": "",
-				"account_currency": "USD",
-				"disabled": 0,
-				"company": company,
-			},
-			{
-				"name": f"4100 - Farm Operations - {abbr}",
-				"account_name": "Farm Operations",
-				"account_number": "4100",
-				"parent_account": f"Income - {abbr}",
-				"is_group": 1,
-				"root_type": "Income",
-				"account_type": "",
-				"account_currency": "USD",
-				"disabled": 0,
-				"company": company,
-			},
-		],
-	)
+	rows = [
+		{
+			"name": f"1800 - Investments - {abbr}",
+			"account_name": "Investments",
+			"account_number": "1800",
+			"parent_account": f"Application of Funds (Assets) - {abbr}",
+			"is_group": 1,
+			"root_type": "Asset",
+			"account_type": "",
+			"account_currency": "USD",
+			"disabled": 0,
+			"company": company,
+		},
+		{
+			"name": f"{dividend_number} - Dividend Income - {abbr}",
+			"account_name": "Dividend Income",
+			"account_number": dividend_number,
+			"parent_account": f"Income - {abbr}",
+			"is_group": 0,
+			"root_type": "Income",
+			"account_type": "Income Account",
+			"account_currency": "USD",
+			"disabled": 0,
+			"company": company,
+		},
+	]
+	STORE.seed("Account", rows)
 
 
 class CoopTestCase(V12TestCase):
@@ -279,8 +276,8 @@ class TheAccountsFollowTheChart(CoopTestCase):
 		self.assertEqual(row["equity"]["parent_account"], f"1800 - Investments - {MAIN_ABBR}")
 		self.assertEqual(row["patronage"]["account"], PATRONAGE)
 		self.assertEqual(frappe.db.get_value("Account", EQUITY, "root_type"), "Asset")
-		self.assertEqual(frappe.db.get_value("Account", PATRONAGE, "root_type"), "Income")
-		self.assertEqual(data["created_count"], 2)
+		self.assertEqual(row["patronage"]["action"], "existing")
+		self.assertEqual(data["created_count"], 1)
 
 	def test_running_it_again_creates_nothing(self):
 		self.ready()
@@ -322,7 +319,11 @@ class TheAccountsFollowTheChart(CoopTestCase):
 		self.assertEqual(rows[MAIN]["equity"]["action"], "created")
 		self.assertEqual(rows[OTHER]["equity"]["action"], "refused")
 		self.assertIn("equity_parent", rows[OTHER]["equity"]["reason"])
-		self.assertEqual(rows[OTHER]["patronage"]["action"], "refused")
+		self.assertEqual(rows[OTHER]["patronage"]["action"], "missing")
+		self.assertEqual(data["dividend_income_missing_count"], 1)
+		self.assertFalse(
+			frappe.db.get_all("Account", filters={"company": OTHER, "account_name": "Dividend Income"})
+		)
 
 	def test_a_named_parent_puts_it_somewhere_else(self):
 		data = self.tool_data(
@@ -330,12 +331,11 @@ class TheAccountsFollowTheChart(CoopTestCase):
 			{
 				"company": OTHER,
 				"equity_parent": f"Application of Funds (Assets) - {OTHER_ABBR}",
-				"patronage_parent": f"Income - {OTHER_ABBR}",
 			},
 		)
 		row = data["companies"][0]
 		self.assertEqual(row["equity"]["account"], f"1830 - Co-op Equity Investments - {OTHER_ABBR}")
-		self.assertEqual(row["patronage"]["account"], f"4150 - Patronage Dividends - {OTHER_ABBR}")
+		self.assertEqual(row["patronage"]["action"], "missing")
 
 
 # ── 5. ───────────────────────────────────────────────────────────────────────
@@ -388,6 +388,115 @@ class PostingAReceipt(CoopTestCase):
 		self.assertEqual(len(STORE.rows("Journal Entry")), entries_before)
 		self.tool_data("post_coop_receipt", {"receipt": equity})
 		self.assertIn("already linked", self.tool_error("post_coop_receipt", {"receipt": equity}))
+
+	def test_a_site_names_its_own_accounts(self):
+		"""The MCP pathway: nothing in the module has to know this chart's names."""
+		STORE.seed(
+			"Account",
+			[
+				{
+					"name": f"1850 - Member Capital - {MAIN_ABBR}",
+					"account_name": "Member Capital",
+					"account_number": "1850",
+					"parent_account": f"Application of Funds (Assets) - {MAIN_ABBR}",
+					"is_group": 0,
+					"root_type": "Asset",
+					"company": MAIN,
+				},
+				{
+					"name": f"4260 - Co-op Refunds - {MAIN_ABBR}",
+					"account_name": "Co-op Refunds",
+					"account_number": "4260",
+					"parent_account": f"Income - {MAIN_ABBR}",
+					"is_group": 0,
+					"root_type": "Income",
+					"company": MAIN,
+				},
+			],
+		)
+		member_capital = f"1850 - Member Capital - {MAIN_ABBR}"
+		name = self.approved(category="Patronage Dividend", amount=1000)
+		data = self.tool_data(
+			"post_coop_receipt",
+			{
+				"receipt": name,
+				"retained_amount": 600,
+				"equity_account": member_capital,
+				"income_account": "Co-op Refunds",
+			},
+		)
+		self.assertEqual(data["equity_account_resolved_by"], "argument")
+		self.assertEqual(data["income_account"], f"4260 - Co-op Refunds - {MAIN_ABBR}")
+		self.assertEqual(
+			self.lines(data["journal_entry"]),
+			sorted([(BANK, 400.0, 0.0), (member_capital, 600.0, 0.0), (data["income_account"], 0.0, 1000.0)]),
+		)
+		summary = self.tool_data("list_coop_equity_summary", {"company": MAIN})
+		self.assertEqual(summary["positions"][0]["patronage_retained"], 600.0)
+
+	def test_a_named_account_of_the_wrong_kind_is_refused(self):
+		self.ready()
+		name = self.approved(category="Patronage Dividend", amount=1000)
+		for args, words in (
+			({"equity_account": PATRONAGE}, "equity_account"),
+			({"income_account": BANK}, "income_account"),
+		):
+			with self.subTest(args=args):
+				error = self.tool_error("post_coop_receipt", {"receipt": name, **args})
+				self.assertIn(words, error)
+				self.assertIn("root type", error)
+		self.assertFalse(frappe.db.get_value("Expense Receipt", name, "linked_document"))
+
+	def test_income_account_is_refused_on_equity(self):
+		self.ready()
+		name = self.approved()
+		error = self.tool_error("post_coop_receipt", {"receipt": name, "income_account": PATRONAGE})
+		self.assertIn("income_account applies to a patronage dividend", error)
+
+	def test_dividend_income_is_found_by_name_not_by_4230(self):
+		"""The Umbrel site: Dividend Income is 4220 and 4230 is Realized Capital Gains."""
+		seed_groups(dividend_number="4220")
+		STORE.seed(
+			"Account",
+			[
+				{
+					"name": f"4230 - Realized Capital Gains - {MAIN_ABBR}",
+					"account_name": "Realized Capital Gains",
+					"account_number": "4230",
+					"parent_account": f"Income - {MAIN_ABBR}",
+					"is_group": 0,
+					"root_type": "Income",
+					"company": MAIN,
+				}
+			],
+		)
+		self.tool_data("ensure_coop_accounts", {"company": MAIN})
+		name = self.approved(category="Patronage Dividend", amount=400)
+		data = self.tool_data("post_coop_receipt", {"receipt": name})
+		self.assertEqual(data["income_account"], f"4220 - Dividend Income - {MAIN_ABBR}")
+
+	def test_patronage_without_dividend_income_is_refused_by_name(self):
+		STORE.seed(
+			"Account",
+			[
+				{
+					"name": f"1800 - Investments - {MAIN_ABBR}",
+					"account_name": "Investments",
+					"account_number": "1800",
+					"parent_account": f"Application of Funds (Assets) - {MAIN_ABBR}",
+					"is_group": 1,
+					"root_type": "Asset",
+					"company": MAIN,
+				}
+			],
+		)
+		self.tool_data("ensure_coop_accounts", {"company": MAIN})
+		name = self.approved(category="Patronage Dividend", amount=400)
+		error = self.tool_error("post_coop_receipt", {"receipt": name})
+		self.assertIn("which a patronage dividend posts to", error)
+		# ensure_coop_accounts never creates Dividend Income, so it must not be the advice.
+		self.assertNotIn("ensure_coop_accounts", error)
+		self.assertFalse(frappe.db.get_value("Expense Receipt", name, "linked_document"))
 
 	def test_a_company_without_the_accounts_is_told_to_create_them(self):
 		name = self.approved()

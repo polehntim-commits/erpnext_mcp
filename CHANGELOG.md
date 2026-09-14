@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.166.1 — 2026-09-13 — patronage to Dividend Income, per the design doc
+
+v0.166.0 built a separate `Patronage Dividends` account on answers given in
+session. The design doc's decisions now replace those answers. **873 tools,
+unchanged.**
+
+- **Patronage Dividend posts to the existing `Dividend Income` ledger.** No
+  patronage account is created, and `4250 - Patronage Dividends` is deferred.
+  `post_coop_receipt` credits Dividend Income, and refuses by name in a company
+  that has no Dividend Income ledger.
+- **Dividend Income is found by name, not as 4230.** The design doc's chart
+  numbers it 4230. On the Umbrel site Orchard Meadow's Dividend Income is 4220,
+  and 4230 there is Realized Capital Gains. Looking it up by number would have
+  booked patronage as capital gains on that site.
+- **`ensure_coop_accounts` creates only `Co-op Equity Investments`.** Its
+  `patronage` row now reports `existing` or `missing`, and
+  `dividend_income_missing_count` totals the companies that cannot post patronage.
+  `patronage_parent` is gone.
+- **Created by hand on the second ERPNext connection**, the site whose chart
+  matches the design doc: `1830 - Co-op Equity Investments - OML` and
+  `1830 - Co-op Equity Investments - PFI`, both under `1800 - Investments`.
+  Nothing was created on the Umbrel site. There, OML's 1800 group is "Investments
+  & Trading" and 1830 is taken, so `ensure_coop_accounts` would file the account
+  at the next free number.
+- **Polehn Farms has no Dividend Income ledger,** so a patronage dividend cannot
+  be posted for PFI until one exists. None was created, because the brief said to
+  skip creating a patronage account.
+
+- **Accounts can be named per site, through MCP.** `post_coop_receipt` takes
+  `equity_account` and `income_account`, the same pattern as
+  `create_owner_draw`'s `draw_account`. Each is checked to be a postable,
+  enabled Asset or Income ledger, and `*_resolved_by` says whether it came from
+  the argument or the name lookup. The two names this module ships are only the
+  default, so a site whose chart calls these accounts something else needs no code
+  change. The summary counts retained patronage by the line's own remark, so an
+  equity account named by argument is still counted.
+
+35 tests in `test_coop_equity.py` (five new). Two mutations were run and both
+were caught, after tightening an assertion that had matched both refusal
+messages.
+
 ## 0.166.0 — 2026-09-13 — the stake in the co-op
 
 A co-op equity purchase and a patronage dividend are captured as receipts and

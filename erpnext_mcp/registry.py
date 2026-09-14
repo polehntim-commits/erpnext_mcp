@@ -15041,23 +15041,21 @@ TOOLS = {
 	),
 	"ensure_coop_accounts": _tool(
 		coop_equity.ensure_coop_accounts,
-		"MUTATING (default OFF). Create the two accounts co-op money posts to, in "
-		"every company or one: `Co-op Equity Investments` (Asset) under the "
-		"company's 1800 group and `Patronage Dividends` (Income) under its 4100 "
-		"group. IDEMPOTENT: an account already there is found by name and "
-		"reported as `existing`.\n\n"
-		"THE NUMBERS FOLLOW THE CHART. 1830 and 4150 when free, otherwise the next "
-		"free number in the group's hundred, and the row's `note` says so. A "
-		"company whose chart has no such group is refused IN ITS OWN ROW and the "
-		"others still proceed; name the group with equity_parent / "
-		"patronage_parent (with `company`). `dry_run` creates nothing.",
+		"MUTATING (default OFF). Create `Co-op Equity Investments` (Asset) under "
+		"the company's 1800 group, in every company or one, and report whether "
+		"each company has the `Dividend Income` ledger patronage posts to. "
+		"IDEMPOTENT: an account already there is found by name and reported as "
+		"`existing`. Dividend Income is never created: a company without it is "
+		"reported `missing`.\n\n"
+		"THE NUMBER FOLLOWS THE CHART. 1830 when free, otherwise the next free "
+		"number in the 1800s, and the row's `note` says so. A company whose chart "
+		"has no 1800 group is refused IN ITS OWN ROW and the others still proceed; "
+		"name the group with equity_parent (with `company`). `dry_run` creates "
+		"nothing.",
 		{
 			"company": _field(_STRING, "One company. Omit for every company on the site."),
 			"equity_parent": _field(
 				_STRING, "With `company`: the Asset group for Co-op Equity Investments, instead of 1800."
-			),
-			"patronage_parent": _field(
-				_STRING, "With `company`: the Income group for Patronage Dividends, instead of 4100."
 			),
 			"dry_run": _field(_BOOLEAN, "Report what would be created and create nothing."),
 		},
@@ -15071,12 +15069,14 @@ TOOLS = {
 		"receipt. Never an expense account.\n\n"
 		"CO-OP EQUITY: Dr Co-op Equity Investments, Cr bank; reversed when the "
 		"receipt is `is_return` (equity the co-op retired and paid out). "
-		"PATRONAGE DIVIDEND: Cr Patronage Dividends for the whole amount, Dr bank "
+		"PATRONAGE DIVIDEND: Cr Dividend Income (the company's existing ledger, "
+		"found by name) for the whole amount, Dr bank "
 		"for the cash, and Dr Co-op Equity Investments for `retained_amount`, the "
 		"share the co-op kept as equity. The income line takes the company's "
 		"default cost center (ERPNext refuses a P&L line without one).\n\n"
 		"REFUSES: a receipt in any other category, not Approved, or already "
-		"linked; a company without the accounts (run ensure_coop_accounts). "
+		"linked; a company without Co-op Equity Investments (run "
+		"ensure_coop_accounts) or, for patronage, without Dividend Income. "
 		"ALWAYS A DRAFT — submit_journal_entry posts it.",
 		{
 			"receipt": _field(_STRING, "The Expense Receipt docname."),
@@ -15087,6 +15087,16 @@ TOOLS = {
 			"posting_date": _field(_STRING, "YYYY-MM-DD. Defaults to the receipt date."),
 			"retained_amount": _field(
 				_NUMBER, "Patronage only: the part kept as equity, between 0 and the receipt amount."
+			),
+			"equity_account": _field(
+				_STRING,
+				"v0.166.1. The Asset account for the stake, instead of the company's "
+				"'Co-op Equity Investments' found by name.",
+			),
+			"income_account": _field(
+				_STRING,
+				"v0.166.1. Patronage only: the Income account to credit, instead of the "
+				"company's 'Dividend Income' found by name.",
 			),
 			"cost_center": _field(
 				_STRING,

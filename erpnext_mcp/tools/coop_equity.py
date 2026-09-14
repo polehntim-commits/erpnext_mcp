@@ -10,7 +10,7 @@ Invoice, and neither counts in the expense totals.
 
 THREE TOOLS.
 
-`ensure_coop_accounts` creates the two accounts a company needs, idempotently.
+`ensure_coop_accounts` creates the equity account a company needs, idempotently.
 `post_coop_receipt` books an Approved co-op receipt as a DRAFT Journal Entry.
 `list_coop_equity_summary` totals the positions by company and co-op.
 
@@ -18,15 +18,17 @@ THE ACCOUNT NUMBERS ARE NOT FIXED, BECAUSE THE CHARTS ARE NOT. Written against a
 site where Orchard Meadow's `1830` was free and `4230` was Dividend Income; on the
 deployed site the same company's `1830` is Accumulated Depreciation - Machinery and
 `4230` is Realized Capital Gains, and Polehn Farms has no dividend account at all.
-So an account is found BY NAME first. When it has to be created it goes under the
-company's `1800` group (or `4100` for patronage), at the preferred number if that is
-free and at the next free number in the group's hundred if it is not, and the
-answer says which. A company whose chart has no such group is refused with the
-argument that names a parent instead.
+So an account is found BY NAME first. When the equity account has to be created it
+goes under the company's `1800` group, at 1830 if that is free and at the next free
+number in the group's hundred if it is not, and the answer says which. A company
+whose chart has no such group is refused with the argument that names a parent.
 
-PATRONAGE IS FARM INCOME, NOT A DIVIDEND. It is reported on Form 1099-PATR and on
-Schedule F, so it gets its own `Patronage Dividends` account under farm/direct
-income, and never lands in Dividend Income or the trading segment beside it.
+v0.166.1: PATRONAGE POSTS TO THE EXISTING `Dividend Income` ACCOUNT, per the design
+doc, and no patronage account is created. It is found by NAME rather than as 4230,
+because 4230 is Dividend Income on one site and Realized Capital Gains on the other.
+A company without a `Dividend Income` ledger (Polehn Farms, today) refuses a
+patronage posting by name. v0.166.0 created a separate `Patronage Dividends`
+account under 4100; that was reversed before any site ran it.
 
 NOTHING HERE IS SUBMITTED. The Journal Entry is a draft, exactly as
 `create_owner_draw`'s is, and posting it is `submit_journal_entry`'s separate switch.
@@ -35,7 +37,7 @@ NOTHING HERE IS SUBMITTED. The Journal Entry is a draft, exactly as
 import frappe
 
 from .. import compat
-from ..args import as_bool, as_date, as_float, as_str, resolve_company
+from ..args import as_bool, as_date, as_float, as_str, resolve_account, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
 from . import accounts, expenses, governance, mutate
@@ -45,7 +47,7 @@ COOP_EQUITY_CATEGORY = expenses.COOP_EQUITY_CATEGORY
 PATRONAGE_CATEGORY = expenses.PATRONAGE_CATEGORY
 COOP_CATEGORIES = expenses.COOP_CATEGORIES
 
-#: The two accounts, and where each goes when a company does not have it yet.
+#: The equity account, and where it goes when a company does not have it yet.
 #: `parent_arg` is the argument that names a parent on a chart without the group.
 EQUITY_ACCOUNT = {
 	"key": "equity",
@@ -56,16 +58,18 @@ EQUITY_ACCOUNT = {
 	"preferred_number": "1830",
 	"parent_arg": "equity_parent",
 }
+#: Where patronage posts: the company's existing Dividend Income ledger, found by
+#: name. NEVER CREATED by this module — see the module docstring.
 PATRONAGE_ACCOUNT = {
 	"key": "patronage",
-	"account_name": "Patronage Dividends",
+	"account_name": "Dividend Income",
 	"root_type": "Income",
-	"account_type": "Income Account",
-	"parent_number": "4100",
-	"preferred_number": "4150",
-	"parent_arg": "patronage_parent",
+	"design_number": "4230",
 }
-ACCOUNT_SPECS = (EQUITY_ACCOUNT, PATRONAGE_ACCOUNT)
+
+#: The remark on the line that books retained patronage as equity. The summary reads
+#: retained patronage off this marker, so it holds whatever account a site named.
+RETAINED_REMARK = "retained as equity"
 
 #: How many co-op receipts one summary reads before saying it stopped.
 _SUMMARY_CAP = 5000
@@ -76,7 +80,12 @@ def find_account(company: str, spec: dict) -> dict | None:
 	"""The company's existing account for `spec`, matched by name, or None."""
 	rows = frappe.db.get_all(
 		"Account",
-		filters={"company": company, "account_name": spec["account_name"], "is_group": 0},
+		filters={
+			"company": company,
+			"account_name": spec["account_name"],
+			"is_group": 0,
+			"root_type": spec["root_type"],
+		},
 		fields=["name", "account_number", "parent_account", "disabled", "root_type"],
 		order_by="name asc",
 		limit=5,
@@ -166,9 +175,40 @@ def ensure_account(company: str, spec: dict, *, parent: str = "", dry_run: bool 
 	}
 
 
+def _named_account(args: dict, key: str, company: str, spec: dict, tail: str) -> tuple:
+	"""The account a caller named under `key`, checked, or the default found by name.
+
+	v0.166.1. NAMING THE ACCOUNT IS THE MCP PATHWAY, and the names this module ships
+	are only the default. A site whose chart calls its co-op stake something else,
+	or books patronage somewhere other than Dividend Income, passes the account and
+	nothing in this module has to know its name. Returns `(account, resolved_by)`.
+	"""
+	named = as_str(args, key)
+	if not named:
+		return require_account(company, spec), "name match"
+	account = resolve_account(named, company)
+	row = frappe.db.get_value("Account", account, ["root_type", "is_group", "disabled"], as_dict=True) or {}
+	if row.get("root_type") != spec["root_type"]:
+		raise ToolError(
+			f"{key} {account!r} has root type {row.get('root_type') or 'none'}, and this line needs "
+			f"root type {spec['root_type']}. {tail}"
+		)
+	if int(row.get("is_group") or 0):
+		raise ToolError(f"{key} {account!r} is a group, and a group cannot be posted to. {tail}")
+	if int(row.get("disabled") or 0):
+		raise ToolError(f"{key} {account!r} is disabled. {tail}")
+	return account, "argument"
+
+
 def require_account(company: str, spec: dict) -> str:
 	"""The account a posting needs, or a refusal pointing at `ensure_coop_accounts`."""
 	existing = find_account(company, spec)
+	if not existing and spec is PATRONAGE_ACCOUNT:
+		raise ToolError(
+			f"{company} has no Dividend Income account, which a patronage dividend posts to. Create "
+			f"one ({spec['design_number']} under the company's income accounts) and post again. "
+			"Nothing was created."
+		)
 	if not existing:
 		raise ToolError(
 			f"{company} has no {spec['account_name']} account yet. Run ensure_coop_accounts for "
@@ -181,11 +221,15 @@ def require_account(company: str, spec: dict) -> str:
 
 # ── ensure_coop_accounts ────────────────────────────────────────────────────
 def ensure_coop_accounts(args: dict) -> ToolResult:
-	"""Create Co-op Equity Investments and Patronage Dividends where a company lacks them.
+	"""Create Co-op Equity Investments where a company lacks it, and report Dividend Income.
 
 	EVERY COMPANY WHEN NONE IS NAMED. Each company is answered on its own: one whose
 	chart has no `1800` group is refused in its own row, and the others still get
-	their accounts. `dry_run` reports what would be created and creates nothing.
+	their account. `dry_run` reports what would be created and creates nothing.
+
+	THE PATRONAGE ROW IS A CHECK, NOT A CREATE. It says whether the company has the
+	Dividend Income ledger patronage posts to (`existing`) or not (`missing`), so a
+	company that cannot book patronage is visible before a receipt fails to post.
 	"""
 	dry_run = bool(as_bool(args, "dry_run", False))
 	named = as_str(args, "company")
@@ -197,17 +241,37 @@ def ensure_coop_accounts(args: dict) -> ToolResult:
 	results = []
 	created = 0
 	refused = 0
+	missing_income = 0
 	for company in companies:
 		row = {"company": company}
-		for spec in ACCOUNT_SPECS:
-			try:
-				row[spec["key"]] = ensure_account(
-					company, spec, parent=as_str(args, spec["parent_arg"]) if named else "", dry_run=dry_run
-				)
-				created += row[spec["key"]]["action"] == "created"
-			except ToolError as exc:
-				row[spec["key"]] = {"account": None, "action": "refused", "reason": str(exc)}
-				refused += 1
+		try:
+			row["equity"] = ensure_account(
+				company,
+				EQUITY_ACCOUNT,
+				parent=as_str(args, "equity_parent") if named else "",
+				dry_run=dry_run,
+			)
+			created += row["equity"]["action"] == "created"
+		except ToolError as exc:
+			row["equity"] = {"account": None, "action": "refused", "reason": str(exc)}
+			refused += 1
+		income = find_account(company, PATRONAGE_ACCOUNT)
+		row["patronage"] = (
+			{
+				"account": income["name"],
+				"action": "existing",
+				"account_number": income.get("account_number") or None,
+				"disabled": bool(income.get("disabled")),
+			}
+			if income
+			else {
+				"account": None,
+				"action": "missing",
+				"note": "No Dividend Income ledger, so a patronage dividend cannot be posted here. "
+				"Not created: create it in the chart if this company receives patronage.",
+			}
+		)
+		missing_income += 0 if income else 1
 		results.append(row)
 
 	return ToolResult(
@@ -216,9 +280,10 @@ def ensure_coop_accounts(args: dict) -> ToolResult:
 			"companies": results,
 			"created_count": created,
 			"refused_count": refused,
+			"dividend_income_missing_count": missing_income,
 			"note": (
-				"equity_parent and patronage_parent apply only when one company is named. "
-				if (as_str(args, "equity_parent") or as_str(args, "patronage_parent")) and not named
+				"equity_parent applies only when one company is named. "
+				if as_str(args, "equity_parent") and not named
 				else ""
 			)
 			+ ("Nothing was created: dry_run." if dry_run else ""),
@@ -236,7 +301,7 @@ def post_coop_receipt(args: dict) -> ToolResult:
 	CO-OP EQUITY: Dr Co-op Equity Investments, Cr bank. A receipt marked `is_return`
 	is equity the co-op retired and paid out, and posts the other way round.
 
-	PATRONAGE DIVIDEND: Cr Patronage Dividends for the whole amount; Dr bank for the
+	PATRONAGE DIVIDEND: Cr Dividend Income for the whole amount; Dr bank for the
 	cash, and Dr Co-op Equity Investments for `retained_amount`, the part the co-op
 	kept as equity. The income line carries the company's default cost center,
 	because ERPNext refuses a Profit and Loss line without one at submit.
@@ -285,7 +350,7 @@ def post_coop_receipt(args: dict) -> ToolResult:
 	company = row["company"]
 	is_return = bool(row.get("is_return"))
 	coop_name = row.get("coop_name") or row.get("merchant")
-	equity = require_account(company, EQUITY_ACCOUNT)
+	equity, equity_resolved_by = _named_account(args, "equity_account", company, EQUITY_ACCOUNT, tail)
 	counter = governance._counter_account(args, company)
 	posting_date = as_date(args, "posting_date") or str(row.get("receipt_date"))
 
@@ -296,6 +361,9 @@ def post_coop_receipt(args: dict) -> ToolResult:
 	if category == COOP_EQUITY_CATEGORY:
 		if retained_given:
 			raise ToolError(f"retained_amount applies to a patronage dividend, not to {category}. {tail}")
+		if as_str(args, "income_account"):
+			raise ToolError(f"income_account applies to a patronage dividend, not to {category}. {tail}")
+		income_resolved_by = None
 		money_in, money_out = (counter, equity) if is_return else (equity, counter)
 		raw = [
 			{"account": money_in, "debit": amount, "user_remark": remark_head},
@@ -311,7 +379,9 @@ def post_coop_receipt(args: dict) -> ToolResult:
 			)
 		if retained < 0 or retained > amount:
 			raise ToolError(f"retained_amount must be between 0 and {amount} — got {retained}. {tail}")
-		income_account = require_account(company, PATRONAGE_ACCOUNT)
+		income_account, income_resolved_by = _named_account(
+			args, "income_account", company, PATRONAGE_ACCOUNT, tail
+		)
 		cost_center = as_str(args, "cost_center") or frappe.db.get_value("Company", company, "cost_center")
 		if not cost_center:
 			raise ToolError(
@@ -324,7 +394,7 @@ def post_coop_receipt(args: dict) -> ToolResult:
 			raw.append({"account": counter, "debit": cash, "user_remark": f"{remark_head}: cash"})
 		if retained > 0:
 			raw.append(
-				{"account": equity, "debit": retained, "user_remark": f"{remark_head}: retained as equity"}
+				{"account": equity, "debit": retained, "user_remark": f"{remark_head}: {RETAINED_REMARK}"}
 			)
 		raw.append(
 			{
@@ -353,7 +423,9 @@ def post_coop_receipt(args: dict) -> ToolResult:
 			"is_return": is_return,
 			"posting_date": posting_date,
 			"equity_account": equity,
+			"equity_account_resolved_by": equity_resolved_by,
 			"income_account": income_account,
+			"income_account_resolved_by": income_resolved_by,
 			"counter_account": counter,
 			"cost_center": cost_center,
 			"retained_amount": retained if category == PATRONAGE_CATEGORY else None,
@@ -518,13 +590,18 @@ def list_coop_equity_summary(args: dict) -> ToolResult:
 
 
 def _retained(row: dict, equity_accounts: dict) -> float:
-	"""The patronage a co-op kept as equity, read off the Journal Entry that booked it."""
+	"""The patronage a co-op kept as equity, read off the Journal Entry that booked it.
+
+	A line counts when it carries `post_coop_receipt`'s own retained-equity remark, so
+	an equity account the caller named is counted, or when it debits the company's
+	default Co-op Equity Investments account, for an entry whose remark was edited.
+	"""
 	company = row["company"]
 	if company not in equity_accounts:
 		existing = find_account(company, EQUITY_ACCOUNT)
 		equity_accounts[company] = existing["name"] if existing else ""
 	account = equity_accounts[company]
-	if not account or not frappe.db.exists("Journal Entry", row["linked_document"]):
+	if not frappe.db.exists("Journal Entry", row["linked_document"]):
 		return 0.0
 	entry = frappe.get_doc("Journal Entry", row["linked_document"])
 	if int(entry.get("docstatus") or 0) == 2:
@@ -532,6 +609,7 @@ def _retained(row: dict, equity_accounts: dict) -> float:
 	total = 0.0
 	for line in entry.get("accounts") or []:
 		get = line.get if isinstance(line, dict) else (lambda key, line=line: getattr(line, key, None))
-		if get("account") == account:
+		marked = str(get("user_remark") or "").endswith(RETAINED_REMARK)
+		if marked or (account and get("account") == account):
 			total += float(get("debit_in_account_currency") or get("debit") or 0)
 	return total

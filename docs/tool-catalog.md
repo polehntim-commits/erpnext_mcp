@@ -2135,23 +2135,25 @@ leaves them out of its totals and reports `coop_excluded`.
 
 ### `ensure_coop_accounts` — MUTATING, default off
 
-Creates `Co-op Equity Investments` (Asset) under the company's `1800` group and
-`Patronage Dividends` (Income) under its `4100` group, in one company or all of
-them. It is idempotent: an account that already exists is found by name and
-reported as `existing`.
+Creates `Co-op Equity Investments` (Asset) under the company's `1800` group, in
+one company or all of them. It also reports whether each company has the
+`Dividend Income` ledger that patronage posts to; it never creates that account.
+It is idempotent: an account that already exists is found by name and reported
+as `existing`.
 
-Numbers are 1830 and 4150 where free. Otherwise each account takes the next
-free number in its group's hundred, and the row's `note` says which number was
-taken. A company with no such group is refused in its own row, while the other
-companies still get their accounts.
+The equity account is 1830 where free. Otherwise it takes the next free number
+in the 1800s, and the row's `note` says which number was taken. A company with
+no `1800` group is refused in its own row, while the other companies still get
+their account.
 
-**Arguments:** `company` (omit for all), `equity_parent` and
-`patronage_parent` (with `company`: the group to use instead), `dry_run`.
+**Arguments:** `company` (omit for all), `equity_parent` (with `company`: the
+group to use instead), `dry_run`.
 
-**Returns** `companies[]`, each with an `equity` and a `patronage` row:
-`account`, `action` (`existing` / `created` / `would_create` / `refused`),
-`account_number`, `parent_account`, `note` or `reason`. Also `created_count`
-and `refused_count`.
+**Returns** `companies[]`, each with an `equity` row (`account`, `action`:
+`existing` / `created` / `would_create` / `refused`, `account_number`,
+`parent_account`, `note` or `reason`) and a `patronage` row (`existing` or
+`missing`). Also `created_count`, `refused_count` and
+`dividend_income_missing_count`.
 
 ### `post_coop_receipt` — MUTATING, default off
 
@@ -2160,20 +2162,23 @@ entry back to the receipt through `linked_doctype`/`linked_document`.
 
 - **Co-op Equity:** Dr Co-op Equity Investments, Cr bank. A receipt marked
   `is_return` (equity the co-op retired and paid out) posts the reverse.
-- **Patronage Dividend:** Cr Patronage Dividends for the full amount. Dr bank
+- **Patronage Dividend:** Cr Dividend Income (the company's existing ledger,
+  found by name) for the full amount. Dr bank
   for the cash, and Dr Co-op Equity Investments for `retained_amount`. The
   income line takes the company's default cost center.
 
 **Arguments:** `receipt` (required; `expense_receipt` alias),
 `counter_account`, `posting_date`, `retained_amount` (patronage only),
-`cost_center` (patronage only).
+`cost_center` (patronage only), `equity_account` and `income_account` (each site
+names its own; without them the accounts are found by the default names).
 
 **Returns** `journal_entry`, `docstatus` (0), `equity_account`,
-`income_account`, `counter_account`, `cost_center`, `retained_amount`,
+`equity_account_resolved_by`, `income_account`, `income_account_resolved_by`, `counter_account`, `cost_center`, `retained_amount`,
 `lines[]`.
 
 **Refused:** another category; not Approved; already linked; a company without
-the accounts (run `ensure_coop_accounts`); `retained_amount` on Co-op Equity or
+Co-op Equity Investments (run `ensure_coop_accounts`) or, for patronage, without
+Dividend Income; `retained_amount` on Co-op Equity or
 outside 0 to the amount; a patronage receipt marked `is_return`.
 
 ### `list_coop_equity_summary` — read, default on
