@@ -272,6 +272,8 @@
   "allow_create_soil_compaction_profile",
   "allow_update_soil_compaction_profile",
   "allow_assign_soil_profile",
+  "allow_get_slope_aspect_layer",
+  "allow_build_slope_aspect_layer",
   "housing_tools_section",
   "allow_list_housing_units",
   "allow_get_housing_unit",
@@ -2851,6 +2853,20 @@
    "fieldname": "allow_assign_soil_profile",
    "fieldtype": "Check",
    "label": "Assign Soil Profile"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. Which way every block faces, from USGS 1/3 arc-second elevation: the slope aspect map layer's descriptor and every block ranked by how much it faces the sun, for variety placement and harvest sequencing. Flat ground has no aspect and is counted as flat.",
+   "fieldname": "allow_get_slope_aspect_layer",
+   "fieldtype": "Check",
+   "label": "Get Slope Aspect Layer"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Fetches USGS 3DEP elevation for the box around the farm's boundaries from The National Map (public, no account), computes slope aspect and caches the map tiles under the site's private folder. Writes files, not records. OFF by default.",
+   "fieldname": "allow_build_slope_aspect_layer",
+   "fieldtype": "Check",
+   "label": "Build Slope Aspect Layer"
   },
   {
    "fieldname": "housing_tools_section",

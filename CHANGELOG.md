@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.167.0 — 2026-09-13 — which way the ground faces
+
+A slope aspect layer for the operational map, from USGS 3DEP 1/3 arc-second
+(~10 m) elevation. South-facing slopes warm first in spring and ripen first;
+north-facing run late. **875 tools** (+2: one read, one write).
+
+- **`build_slope_aspect_layer`** (MUTATING, off by default). Fetches elevation for
+  the box around every Parcel and Field boundary from The National Map's 3DEP
+  service — public, no account — pinned to the seamless 1/3 arc-second rasters
+  so a farm partly under lidar does not change resolution at a fence. Computes
+  aspect and slope by Horn's method (the `gdaldem` algorithm), colours them, and
+  caches 256 px tiles for zooms 11–16 under `private/slope_aspect/`; zoom 17
+  renders on first request. Provenance comes from the TNM Access API. Writes
+  files, not records. A failed fetch leaves the previous build standing;
+  boundaries more than 30 km apart are refused.
+- **`get_slope_aspect_layer`** (read). The layer descriptor, and every block
+  ranked by `southness_index` — sin(slope) × −cos(aspect), averaged — with mean
+  slope, dominant aspect, and the south-facing, north-facing and flat shares.
+  `latitude`/`longitude` reads one cell.
+- **The palette is a compass.** North blue, east green, south red, west yellow,
+  interpolated through eight anchors. Saturation is steepness from 2° to 20°.
+  Under 2° the ground faces nowhere and is grey, not a guessed colour.
+- **Aspect is exact in Web Mercator; slope is corrected.** Mercator is conformal,
+  so directions need no correction. Steepness uses each row's true ground cell
+  size. Otherwise a slope at 47° N would read as about two-thirds of its real
+  steepness.
+- **Phone:** `GET /farmops/api/tiles/slope_aspect/{z}/{x}/{y}.png` with
+  `X-FarmOps-Token` returns the tile for an `MKTileOverlay`. It runs the same
+  gates as every enrolled read: kill switch 503, credential 401, a Farm Ops role
+  and an Active grant 403. The rate limit is 1,200 tiles a minute. It writes no
+  audit row per tile, so MCP Action Log does not fill with map pans. A tile off
+  the farm is a transparent PNG with 200. The route returns 404 JSON only when
+  the layer was never built. `POST /farmops/api/mobile/get_slope_aspect_layer` is
+  the toggle's descriptor. It is open on enrolment and pending iOS integration.
+- **numpy is now a declared dependency.** It is already present wherever shapely
+  is, including the shipped image. rasterio reads the GeoTIFF when installed. The
+  image does not have rasterio, and Pillow reads the same uncompressed float32
+  file there.
+- `list_sidecar_routes` lists the tile route beside `login_qr_image`, read from
+  `farmops_api.app.DESCRIBED_ROUTES`.
+
 ## 0.166.1 — 2026-09-13 — patronage to Dividend Income, per the design doc
 
 v0.166.0 built a separate `Patronage Dividends` account on answers given in

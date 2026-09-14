@@ -702,15 +702,19 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 			}
 		)
 
-	# `login_qr_image` is not in `sidecar_routes.ROUTES` — it is GET, answers a
-	# PNG, and its handler wears none of `guard.endpoint`'s attributes, so it
-	# cannot be read off the table the loop above walks. Merged in by hand so
-	# this diagnostic does not go quiet about the one route that mints a login
-	# credential — see `farmops_api.app.DESCRIBED_ROUTE`.
-	extra = sidecar_app.DESCRIBED_ROUTE
-	total_routes = len(sidecar_routes.ROUTES) + 1
-	by_group[extra["group"]] = by_group.get(extra["group"], 0) + 1
-	if (not group or extra["group"] == group) and (not contains or contains in extra["path"].lower()):
+	# `login_qr_image` and the slope-aspect tiles are not in
+	# `sidecar_routes.ROUTES` — both are GET, answer a PNG, and wear none of
+	# `guard.endpoint`'s attributes, so they cannot be read off the table the
+	# loop above walks. Merged in by hand so this diagnostic does not go quiet
+	# about the one route that mints a login credential — see
+	# `farmops_api.app.DESCRIBED_ROUTES`.
+	total_routes = len(sidecar_routes.ROUTES) + len(sidecar_app.DESCRIBED_ROUTES)
+	for extra in sidecar_app.DESCRIBED_ROUTES:
+		by_group[extra["group"]] = by_group.get(extra["group"], 0) + 1
+		if group and extra["group"] != group:
+			continue
+		if contains and contains not in extra["path"].lower():
+			continue
 		if only_mutating is None or only_mutating == "" or compat.checked(only_mutating) == extra["mutating"]:
 			described.append(dict(extra))
 
@@ -737,9 +741,9 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 			"A tool being in the MCP catalogue does not put it on this table and vice versa. "
 			"The two surfaces are separate on purpose: create_journal_entry and convey_parcel "
 			"are tools here and are reachable from no handset at any path.",
-			"`login_qr_image` is GET and answers a PNG, not JSON — the one route on this "
-			"surface built that way, listed here by hand because it carries no `farm_ops_method` "
-			"attribute for this tool to read off a table.",
+			"`login_qr_image` and the slope-aspect tiles are GET and answer a PNG, not JSON — "
+			"the two routes on this surface built that way, listed here by hand because they "
+			"carry no `farm_ops_method` attribute for this tool to read off a table.",
 		],
 	}
 	if not described:

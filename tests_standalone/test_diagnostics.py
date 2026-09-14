@@ -510,7 +510,8 @@ class TheRouteTableIsHonest(DiagnosticsTestCase):
 	#: `login_qr_image` is GET, answers a PNG, and its handler carries none of
 	#: `guard.endpoint`'s attributes, so `list_sidecar_routes` merges it in by
 	#: hand rather than reading it off the table. See `sidecar_app.DESCRIBED_ROUTE`.
-	TOTAL_ROUTES = len(sidecar_routes.ROUTES) + 1
+	#: v0.167.0 adds the slope-aspect tiles, the second such route.
+	TOTAL_ROUTES = len(sidecar_routes.ROUTES) + len(sidecar_app.DESCRIBED_ROUTES)
 
 	def test_every_mounted_route_is_reported(self):
 		result = self.routes()

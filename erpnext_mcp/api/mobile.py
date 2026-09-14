@@ -98,7 +98,7 @@ import json
 
 import frappe
 
-from .. import bucket_bridge, compat, datetimes, locations, overlays, pay_stub_pdf, timezones
+from .. import bucket_bridge, compat, datetimes, locations, overlays, pay_stub_pdf, slope_aspect, timezones
 from .. import roles as role_lib
 from .. import shifts as shift_records
 from .. import training as training_register
@@ -14858,6 +14858,37 @@ def _asset_map_rows(company: str, allowed) -> tuple:
 			}
 		)
 	return placed, len(rows) - len(placed)
+
+
+# ── 263. get_slope_aspect_layer ──────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_slope_aspect_layer", limit=guard.READ_LIMIT)
+def get_slope_aspect_layer(user: str, company=None, include_blocks=None) -> dict:
+	"""Which way the ground faces: what the map's slope-aspect toggle needs. v0.167.0.
+
+	The tiles themselves are `GET /farmops/api/tiles/slope_aspect/{z}/{x}/{y}.png`
+	(see `farmops_api.app`); this answers whether there are any, their zoom range
+	and bounds, and the legend — so a handset can grey the toggle out on a site
+	that has never built the layer instead of drawing an empty overlay.
+
+	OPEN ON ENROLMENT, like `get_map_overlays`. Terrain is USGS public data and
+	every role on a hillside is helped by knowing which way it faces.
+
+	`include_blocks` (default false — the toggle does not need it) adds each
+	block's aspect summary ranked by `southness_index`, SCOPED to the caller's
+	entities on the way out like every other block list on this surface.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed)
+	meta = slope_aspect.read_meta()
+	answer = slope_aspect.describe(meta)
+	if meta is not None and _as_flag(include_blocks, False):
+		if not slope_aspect.available():
+			frappe.throw(f"Per-block slope aspect needs {slope_aspect.REQUIRES}.", frappe.ValidationError)
+		blocks, warnings = slope_aspect.block_summaries(entity, meta)
+		answer["blocks"] = guard.scoped(blocks, allowed)
+		answer["warnings"] = warnings
+	return answer
 
 
 # ════════════════════════════════════════════════════════════════════════════

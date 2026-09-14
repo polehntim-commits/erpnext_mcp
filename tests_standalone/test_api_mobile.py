@@ -960,6 +960,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# published first and the Today tab's `MapPolygon` mirror is a client
 		# change rather than a release of both.
 		"list_field_boundaries",
+		# v0.167.0. The slope-aspect toggle's descriptor. `MobileAPI.swift` DOES
+		# name it (`getSlopeAspectLayer`, fafo_ios 4d15fbd, landed alongside this
+		# release), so it belongs in `MOBILE` — it waits here only for its Codable
+		# mirror in `test_ios_contract`, which is transcribed from the landed Swift
+		# rather than written ahead of it.
+		"get_slope_aspect_layer",
 		# v0.130.0. The strategy register's eight, HERE FOR THIS SET'S ORDINARY
 		# REASON — `MobileAPI.swift` names none of them, so there is no Swift
 		# Codable to mirror and `test_ios_contract` would be asserting against an

@@ -523,6 +523,11 @@ ROUTES = (
 	# no blocks drawn on it is not a map, and every enrolled worker's handset
 	# needs one, not only a foreman's.
 	Route("/mobile", mobile_api.list_field_boundaries),
+	# v0.167.0. WHICH WAY THE GROUND FACES. The descriptor the map's slope-aspect
+	# toggle reads — built or not, zoom range, bounds, legend. The tiles are NOT a
+	# route in this table: they are GET and answer PNG, like `login_qr_image`, and
+	# are dispatched in `app.py` by path. Open on enrolment with the rest of the map.
+	Route("/mobile", mobile_api.get_slope_aspect_layer),
 	Route("/mobile", mobile_api.create_farm_location),
 	Route("/mobile", mobile_api.create_field),
 	Route("/mobile", mobile_api.create_irrigation_zone),

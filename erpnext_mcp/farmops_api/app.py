@@ -29,6 +29,10 @@ give still leaves as `_failure`'s JSON, and it is the only route on this
 surface that is GET, unauthenticated-by-header-only (no body to carry `_auth`
 in), and restricted to an admin role rather than a scoped worker.
 
+v0.167.0 ADDS A SECOND: `GET /tiles/slope_aspect/{z}/{x}/{y}.png`, the slope
+aspect map tiles, which answer `image/png` because `MKTileOverlay` asks for an
+image per tile and nothing else. Same rule: every refusal is still JSON.
+
 ────────────────────────────────────────────────────────────────────────────
 THE ERROR ENVELOPE IS FRAPPE'S, BECAUSE THE APP ALREADY READS FRAPPE'S
 ────────────────────────────────────────────────────────────────────────────
@@ -71,12 +75,13 @@ import base64
 import json
 import logging
 import os
+import re
 import traceback
 
 import frappe
 from werkzeug.wrappers import Request, Response
 
-from .. import __version__, audit, security
+from .. import __version__, audit, security, slope_aspect
 from ..api import guard
 from ..errors import ToolError
 from ..tools import employee as personnel
@@ -123,6 +128,26 @@ UNAUTHORIZED = (
 	"`X-FarmOps-Token: <api_key>:<api_secret>` from the login QR. Nothing was read "
 	"and nothing was changed."
 )
+
+#: `GET /tiles/slope_aspect/{z}/{x}/{y}.png` — see `_slope_aspect_tile`.
+TILE_PREFIX = f"{PREFIX}/tiles/slope_aspect/"
+_TILE_TAIL = re.compile(r"^(\d{1,2})/(\d{1,9})/(\d{1,9})\.png$")
+
+#: Tiles a minute per caller. A map screen asks for twenty to sixty tiles at
+#: once and as many again on every pan, so `guard.READ_LIMIT` (60) would blank
+#: the layer on the second swipe. This still stops a scraper.
+TILE_LIMIT = 1200
+
+TILE_DESCRIBED_ROUTE = {
+	"path": f"{TILE_PREFIX}{{z}}/{{x}}/{{y}}.png",
+	"method": "slope_aspect_tile",
+	"group": "tiles",
+	"mutating": False,
+	"arguments": ["z", "x", "y"],
+}
+
+#: Every route `routes.ROUTES` cannot describe, for `list_sidecar_routes`.
+DESCRIBED_ROUTES = (DESCRIBED_ROUTE, TILE_DESCRIBED_ROUTE)
 
 _MAX_BODY = auth.MAX_BODY_BYTES
 
@@ -409,6 +434,82 @@ def _login_qr_image(request: Request) -> Response:
 		)
 
 
+def _png(data: bytes, cache: str) -> Response:
+	return Response(
+		data,
+		status=200,
+		content_type="image/png",
+		headers={"X-Content-Type-Options": "nosniff", "Cache-Control": cache},
+	)
+
+
+def _slope_aspect_tile(request: Request, path: str) -> Response:
+	"""`GET /tiles/slope_aspect/{z}/{x}/{y}.png` — one slope-aspect map tile.
+
+	THE GATES ARE `guard.endpoint`'s, RUN BY HAND, AND ONE IS LEFT OUT ON
+	PURPOSE. Kill switch (503), credential (401), rate limit (429), a Farm Ops
+	role and an Active Mobile Access Grant (403) — exactly what every enrolled
+	read on this surface requires. What is NOT done is the audit row: the
+	decorator writes one per call, and a phone panning a map asks for dozens of
+	tiles a second. MCP Action Log would become a tile log, and the rows that
+	matter in it would be the ones nobody could find. Terrain from a public
+	survey is not a record anybody needs an access trail for; the gunicorn log
+	line below is kept.
+
+	A tile outside the layer or the zoom range answers the transparent PNG with
+	200, so `MKTileOverlay` draws nothing rather than logging a failure per tile.
+	A site that has never built the layer answers 404 JSON, which says so.
+	"""
+	if request.method not in ("GET", "HEAD"):
+		return _failure(405, f"{TILE_PREFIX}{{z}}/{{x}}/{{y}}.png is GET only.")
+	match = _TILE_TAIL.match(path[len(TILE_PREFIX) :])
+	if not match or not slope_aspect.valid_tile(*match.groups()):
+		return _failure(404, f"{path} is not a slope aspect tile. The pattern is {{z}}/{{x}}/{{y}}.png.")
+	z, x, y = (int(part) for part in match.groups())
+
+	with session.request_session(request=request, body={}):
+		if not guard.mobile_enabled():
+			return _failure(503, "The Farm Ops mobile API is switched off on this site.")
+
+		caller, _source = auth.resolve(request.headers, {})
+		if not caller:
+			logger.info("farmops-api 401 %s from %s", path, request.remote_addr)
+			return _failure(401, UNAUTHORIZED)
+
+		try:
+			guard.throttle(caller, "slope_aspect_tile", TILE_LIMIT)
+		except guard.RateLimited as exc:
+			return _failure(429, str(exc))
+
+		session.become(caller)
+		try:
+			guard._require_farm_ops_role()
+			guard._require_mobile_grant(caller)
+		except frappe.PermissionError as exc:
+			session.rollback()
+			return _failure(403, str(exc), type(exc).__name__)
+
+		try:
+			png = slope_aspect.tile_png(z, x, y)
+		except ToolError as exc:
+			session.rollback()
+			return _failure(503, str(exc))
+		except Exception:
+			session.rollback()
+			logger.error("farmops-api 500 %s caller=%s\n%s", path, caller, traceback.format_exc())
+			return _failure(500, INTERNAL)
+
+		# The grant gate stamps `last_seen_on` at most once a day.
+		session.commit()
+		if png is None:
+			return _failure(
+				404,
+				"The slope aspect layer has not been built on this site. An operator runs "
+				"build_slope_aspect_layer once to fetch the elevation and cache the tiles.",
+			)
+		return _png(png, "private, max-age=86400")
+
+
 def dispatch(request: Request) -> Response:
 	"""One request, start to finish. Returns a JSON response for every outcome."""
 	path = (request.path or "").rstrip("/") or "/"
@@ -420,6 +521,9 @@ def dispatch(request: Request) -> Response:
 
 	if path == QR_IMAGE_PATH:
 		return _login_qr_image(request)
+
+	if path.startswith(TILE_PREFIX):
+		return _slope_aspect_tile(request, path)
 
 	if not path.startswith(f"{PREFIX}/"):
 		return _failure(404, f"{path} is not a Farm Ops API path.")

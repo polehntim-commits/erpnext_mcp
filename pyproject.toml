@@ -83,6 +83,9 @@ dependencies = [
   "reportlab>=4.0",
   "pypdf>=4.0",
   "Pillow>=9.0",
+  # v0.167.0. The slope aspect layer's arithmetic. Already installed wherever
+  # shapely is — shapely depends on it — and imported defensively the same way.
+  "numpy>=1.23",
 ]
 
 [project.urls]

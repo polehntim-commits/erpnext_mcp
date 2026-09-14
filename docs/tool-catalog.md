@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 873 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 875 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 437 read tools are **on** by default and can be switched off individually. A
+All 438 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -18995,6 +18995,64 @@ stays on every shape the layer does not paint, so the map still reads as a map.
 enrolment alone — gating it on the dispatch role would have withheld a safety
 warning from the only people it is about. `blocks` is how a scan becomes a map
 answer: one docname is one register read rather than five hundred.
+
+### Slope aspect (v0.167.0) — which way the ground faces
+
+South-facing ground warms first in spring, breaks dormancy first and ripens
+first; north-facing runs late. Computed from USGS 3DEP **1/3 arc-second** (~10 m)
+elevation — pinned to that product in the 3DEP mosaic, so a farm half on lidar
+does not change resolution at a fence — by Horn's method, the `gdaldem aspect`
+algorithm. Aspect needs no correction in Web Mercator (it is conformal); slope
+does, and uses each row's true ground cell size.
+
+### `get_slope_aspect_layer` — read-only, default ON
+
+| Argument | Meaning |
+| --- | --- |
+| `company` | rank only this entity's blocks |
+| `include_blocks` | rank the blocks (default true) |
+| `latitude`, `longitude` | together: the aspect and slope of the one cell under a point |
+
+| On the answer | Meaning |
+| --- | --- |
+| `available` | false until `build_slope_aspect_layer` has run; `reason` says so |
+| `tile_url_template` | `/farmops/api/tiles/slope_aspect/{z}/{x}/{y}.png` |
+| `min_zoom`, `max_zoom`, `bounds` | 11–17, and the lon/lat box the tiles cover |
+| `legend` | eight compass points and their colours |
+| `products` | the USGS product(s) the pixels came from, from the TNM Access API |
+| `blocks` | every block, **ranked by `southness_index`** |
+
+| Per block | Meaning |
+| --- | --- |
+| `southness_index` | sin(slope) × −cos(aspect), averaged: +1 a cliff facing due south, −1 due north, 0 flat or east/west |
+| `earliness_rank` | 1 is the most sun-facing block on terrain alone |
+| `mean_slope_degrees`, `max_slope_degrees` | steepness |
+| `mean_aspect_degrees`, `mean_aspect`, `dominant_aspect` | which way it faces |
+| `south_facing_share`, `north_facing_share`, `flat_share` | SE–SW, NW–NE, and under 2° |
+
+**Flat ground faces nowhere.** Under 2° a cell's aspect is None and it counts as
+flat, rather than taking whichever direction survey noise tilts it.
+
+### `build_slope_aspect_layer` — MUTATING, default off, idempotent
+
+| Argument | Meaning |
+| --- | --- |
+| `company` | build over this entity's boundaries only |
+| `buffer_metres` | ground past the outermost boundary, default 300, max 2000 |
+| `dry_run` | report the box, grid and tile count; fetch and write nothing |
+
+Fetches elevation for the box around every Parcel and Field boundary from
+`elevation.nationalmap.gov` (public, no account), computes aspect and slope,
+and caches colour-coded 256 px tiles for zooms 11–16 under the site's
+`private/slope_aspect/`; zoom 17 renders on first request and is kept. North
+blue, east green, south red, west yellow; saturation is steepness, flat is grey.
+**Files, not records** — nothing in the database changes. A failed fetch leaves
+the previous build standing. **Refuses** boundaries spanning more than 30 km.
+
+**On the handset:** `POST /farmops/api/mobile/get_slope_aspect_layer` is the
+descriptor (open on enrolment; `include_blocks` opt in), and
+`GET /farmops/api/tiles/slope_aspect/{z}/{x}/{y}.png` with `X-FarmOps-Token` is the
+tile — 256 px RGBA, transparent off the farm, 404 JSON only when never built.
 
 ---
 

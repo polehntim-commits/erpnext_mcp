@@ -145,6 +145,7 @@ from .tools import (
 	signed_documents,
 	signers,
 	signing_evidence,
+	slope_aspect,
 	spray,
 	spray_rei,
 	state_tax,
@@ -288,6 +289,17 @@ _BADGE_QR_REQUIRES = (
 	"the Bucket Log Badge Map DocType, which ships with erpnext_mcp — run `bench migrate` — "
 	"AND " + qr.REQUIRES
 )
+
+
+def _slope_aspect_available() -> bool:
+	"""Predicate: can this bench compute slope aspect? v0.167.0. numpy only —
+	rasterio is optional and Pillow reads the file where it is absent."""
+	try:
+		from . import slope_aspect as slope_aspect_engine
+
+		return slope_aspect_engine.available()
+	except Exception:  # pragma: no cover - an import that explodes
+		return False
 
 
 #: What a geospatial tool needs beyond a DocType: the two libraries that do the
@@ -7924,6 +7936,68 @@ TOOLS = {
 			"the Field and Soil Compaction Profile DocTypes, which ship with erpnext_mcp — "
 			"run `bench migrate`"
 		),
+	),
+	# ── slope aspect: which way the ground faces ────────────────────────────
+	"get_slope_aspect_layer": _tool(
+		slope_aspect.get_slope_aspect_layer,
+		"WHICH WAY EVERY BLOCK FACES, from USGS 3DEP 1/3 arc-second (~10 m) elevation. "
+		"South-facing ground warms first in spring, breaks dormancy first and ripens "
+		"first; north-facing runs late. Read-only.\n\n"
+		"Returns the map layer descriptor (built or not, bounds, zoom range, legend, the "
+		"USGS product the pixels came from, and the z/x/y tile URL a phone draws) and "
+		"EVERY BLOCK RANKED BY `southness_index` — sin(slope) × −cos(aspect) averaged over "
+		"the block's cells, +1 a cliff facing due south, −1 due north, 0 flat or east/west "
+		"— with mean slope, mean and dominant aspect, and the share of the block facing "
+		"south (SE–SW), north (NW–NE) and flat. `earliness_rank` 1 is the block most "
+		"likely to bloom and pick first on terrain alone; use it for variety placement "
+		"and harvest sequencing, remembering elevation, cold-air drainage and rootstock "
+		"move the calendar too.\n\n"
+		"FLAT GROUND HAS NO ASPECT. Under 2° a cell faces nowhere and counts as flat "
+		"rather than being given the direction survey noise tilts it.\n\n"
+		"Pass latitude and longitude for the aspect and slope of the one cell under a "
+		"point. Nothing is fetched here: an operator builds the layer once with "
+		"build_slope_aspect_layer, and `available` false says it has not been.",
+		{
+			"company": _field(
+				_STRING, "Only blocks of this entity in the ranking. Omit for every block on the layer."
+			),
+			"include_blocks": _field(_BOOLEAN, "Rank the blocks. Default true."),
+			"latitude": _field(_NUMBER, "With longitude: the aspect of the cell under this point."),
+			"longitude": _field(_NUMBER, "With latitude."),
+		},
+		title="Get the slope aspect layer and block ranking",
+		available=_slope_aspect_available,
+		requires="the numpy Python package — `./env/bin/pip install numpy` in the bench and restart",
+	),
+	"build_slope_aspect_layer": _tool(
+		slope_aspect.build_slope_aspect_layer,
+		"MUTATING (default OFF). Build the slope aspect map layer: fetch USGS 3DEP 1/3 "
+		"arc-second elevation for the box around every Parcel and Field boundary (plus a "
+		"buffer), compute aspect and slope by Horn's method — the `gdaldem` algorithm — "
+		"and cache colour-coded 256 px tiles under the site's private folder for zooms "
+		"11–16 (17 renders on first request). North blue, east green, south red, west "
+		"yellow; saturation is steepness and flat ground is grey. Replaces any previous "
+		"build.\n\n"
+		"CALLS OUT TO A PUBLIC SERVICE — elevation.nationalmap.gov and the TNM Access API "
+		"— with no account and no key, and sends it only the farm's bounding box. Writes "
+		"files, not records: nothing in the database changes. Terrain does not move, so "
+		"this is run once, and again only when boundaries are added far from the old "
+		"ones.\n\n"
+		"REFUSES a site whose boundaries span more than 30 km — parcels in two counties "
+		"are two layers; pass `company` to build one entity's ground. `dry_run` reports "
+		"the box, grid and tile count without fetching anything.",
+		{
+			"company": _field(_STRING, "Build over this entity's boundaries only. Omit for the whole site."),
+			"buffer_metres": _field(
+				_NUMBER, "Ground past the outermost boundary to include. Default 300, maximum 2000."
+			),
+			"dry_run": _field(_BOOLEAN, "Plan without fetching or writing. Default false."),
+		},
+		mutating=True,
+		idempotent=True,
+		title="Build the slope aspect map layer",
+		available=_slope_aspect_available,
+		requires="the numpy Python package — `./env/bin/pip install numpy` in the bench and restart",
 	),
 	# ── labor camp housing ──────────────────────────────────────────────────
 	"list_housing_units": _tool(

@@ -684,6 +684,9 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# v0.125.0. The polygon `get_map_overlays` does not carry — see
 		# `routes.py` for why fields, parcels and the overlay layers are one call.
 		"/mobile/list_field_boundaries",
+		# v0.167.0. The slope-aspect toggle's descriptor. The tiles are GET and
+		# not in `ROUTES` — see `farmops_app.TILE_PREFIX`.
+		"/mobile/get_slope_aspect_layer",
 		# v0.123.0. THE FOOD-SAFETY, TRACEABILITY, SENSOR AND MARKET REGISTERS.
 		# Seventy-two methods, HERE FOR THIS SET'S ORDINARY REASON: `MobileAPI.swift`
 		# names none of them yet, so the server half ships first and the iOS half is a
@@ -2983,6 +2986,10 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# own entity is checked by the tool, which is why it is
 		# `update_irrigation_valve` and not `update_registered_asset`.
 		"update_irrigation_valve",
+		# v0.167.0. Which way the ground faces. Public USGS terrain, the same
+		# open-on-enrolment reason `get_map_overlays` gives: it is read on the
+		# hillside, by whoever is standing on it.
+		"get_slope_aspect_layer",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -2992,7 +2999,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 101, "a method is named in two sets at once")
+		self.assertEqual(len(named), 102, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
