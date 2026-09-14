@@ -1021,6 +1021,97 @@ CLASSIFIER_TARGETS = {
 	"expense": "Expense Receipt (submit_expense_receipt)",
 }
 
+#: v0.166.0. CO-OP SIGNALS, and they choose a CATEGORY rather than a register: a
+#: co-op equity purchase and a patronage dividend are both captured as an Expense
+#: Receipt. `(keyword, weight)` as above. A co-op's NAME is deliberately not here —
+#: "VALLEY CO-OP FUEL" is a fuel slip — and only names the co-op in
+#: `COOP_NAME_SIGNALS`. Patronage is checked first because a patronage notice
+#: routinely mentions the equity its retained portion was allocated to.
+COOP_CATEGORY_SIGNALS = {
+	"Patronage Dividend": (
+		("patronage dividend", 2),
+		("patronage refund", 2),
+		("patronage allocation", 2),
+		("patronage distribution", 2),
+		("1099-patr", 2),
+		("qualified written notice", 2),
+		("per-unit retain", 2),
+		("patronage", 1),
+	),
+	"Co-op Equity": (
+		("equity retirement", 2),
+		("equity redemption", 2),
+		("equity purchase", 2),
+		("member equity", 2),
+		("allocated equity", 2),
+		("membership stock", 2),
+		("member stock", 2),
+		("capital stock", 2),
+		("preferred stock", 1),
+		("common stock", 1),
+		("capital retain", 2),
+		("stock certificate", 1),
+	),
+}
+
+#: Words on a co-op notice that mean the money came BACK — a retirement or
+#: redemption of equity — so the capture should tick `is_return`.
+COOP_RETURN_SIGNALS = ("equity retirement", "equity redemption", "retirement of equity")
+
+#: Cooperatives this farm's documents name, matched to put a `coop_name` on the
+#: suggestion. Never enough to choose a category on its own. `(text, name)`.
+COOP_NAME_SIGNALS = (
+	("farm credit", "Farm Credit"),
+	("agwest", "AgWest Farm Credit"),
+	("northwest farm credit", "Northwest Farm Credit Services"),
+	("cobank", "CoBank"),
+	("chs inc", "CHS Inc."),
+	("land o'lakes", "Land O'Lakes"),
+	("growmark", "GROWMARK"),
+	("tree top", "Tree Top"),
+	("ocean spray", "Ocean Spray"),
+	("blue diamond", "Blue Diamond Growers"),
+	("sunkist", "Sunkist Growers"),
+	("cooperative", None),
+	("co-operative", None),
+)
+
+#: The least co-op evidence that moves a classification. One weak word is a lean.
+COOP_CATEGORY_THRESHOLD = 2
+
+
+def _coop_suggestion(haystack: str) -> dict:
+	"""The co-op category a text points at, with its evidence, or an empty answer.
+
+	v0.166.0. Returns `suggested_category`, `matched_signals`, `coop_name` (a
+	named cooperative, or None) and `is_return`.
+	"""
+	scores = {}
+	matched = {}
+	for category, signals in COOP_CATEGORY_SIGNALS.items():
+		hits = [(keyword, weight) for keyword, weight in signals if keyword in haystack]
+		scores[category] = sum(weight for _, weight in hits)
+		matched[category] = [keyword for keyword, _ in hits]
+	winner = max(COOP_CATEGORY_SIGNALS, key=lambda category: scores[category])
+	coop_name = next((name for text, name in COOP_NAME_SIGNALS if name and text in haystack), None)
+	names_a_coop = coop_name is not None or any(text in haystack for text, _ in COOP_NAME_SIGNALS)
+	if scores[winner] < COOP_CATEGORY_THRESHOLD:
+		return {
+			"suggested_category": None,
+			"matched_signals": [],
+			"coop_name": coop_name,
+			"names_a_coop": names_a_coop,
+			"is_return": False,
+		}
+	return {
+		"suggested_category": winner,
+		"matched_signals": matched[winner],
+		"coop_name": coop_name,
+		"names_a_coop": names_a_coop,
+		"is_return": winner == "Co-op Equity" and any(word in haystack for word in COOP_RETURN_SIGNALS),
+	}
+
+
 #: How much evidence counts as enough. Below this, confidence is scaled down in
 #: proportion — one weak keyword out of one is not 100% certainty, it is one
 #: weak keyword.
@@ -1028,6 +1119,11 @@ CLASSIFIER_SATURATION = 4.0
 
 #: A keyword rule is never certain.
 CLASSIFIER_CEILING = 0.95
+
+
+def _coop_score(coop: dict) -> int:
+	weights = dict(COOP_CATEGORY_SIGNALS[coop["suggested_category"]])
+	return sum(weights[keyword] for keyword in coop["matched_signals"])
 
 
 def classify_receipt(args: dict) -> ToolResult:
@@ -1053,6 +1149,38 @@ def classify_receipt(args: dict) -> ToolResult:
 		matched[receipt_type] = [keyword for keyword, _ in hits]
 
 	total = sum(scores.values())
+	coop = _coop_suggestion(haystack)
+	if coop["suggested_category"]:
+		# v0.166.0. A co-op notice is captured as an Expense Receipt in a co-op
+		# category, whatever else its wording leaned towards — a patronage notice
+		# says "statement" and "allocation", and it is still not a bill.
+		return ToolResult(
+			data={
+				"receipt_type": "expense",
+				"confidence": round(
+					min(CLASSIFIER_CEILING, min(1.0, _coop_score(coop) / CLASSIFIER_SATURATION)), 2
+				),
+				"default_applied": False,
+				"matched_signals": coop["matched_signals"],
+				"scores": scores,
+				"alternatives": [
+					{"receipt_type": kind, "score": scores[kind], "matched_signals": matched[kind]}
+					for kind in CLASSIFIER_PRECEDENCE
+					if kind != "expense" and scores[kind]
+				],
+				"suggested_tool": CLASSIFIER_TARGETS["expense"],
+				"amount": float(amount) if amount not in (None, "") else None,
+				"coop": coop,
+				"suggested_category": coop["suggested_category"],
+				"note": (
+					f"the text reads as a {coop['suggested_category']} notice from a cooperative "
+					f"({', '.join(coop['matched_signals'])}). Capture it as an Expense Receipt in that "
+					"category — it is not an expense, and post_coop_receipt books it."
+				),
+			},
+			summary=f"expense / {coop['suggested_category']} on {len(coop['matched_signals'])} co-op signal(s)",
+		)
+
 	if not total:
 		return ToolResult(
 			data={
@@ -1064,6 +1192,8 @@ def classify_receipt(args: dict) -> ToolResult:
 				"alternatives": [],
 				"suggested_tool": CLASSIFIER_TARGETS["expense"],
 				"amount": float(amount) if amount not in (None, "") else None,
+				"coop": coop,
+				"suggested_category": None,
 				"note": (
 					"nothing in the text matched any rule, so this is the FALLBACK rather than "
 					"a classification — expense is where an unrecognised slip does least harm, "
@@ -1096,6 +1226,8 @@ def classify_receipt(args: dict) -> ToolResult:
 		"alternatives": alternatives,
 		"suggested_tool": CLASSIFIER_TARGETS[winner],
 		"amount": float(amount) if amount not in (None, "") else None,
+		"coop": coop,
+		"suggested_category": None,
 		"note": (
 			"confidence is the winner's share of all matched evidence, scaled down when there "
 			f"was little evidence to share (full weight at a score of {int(CLASSIFIER_SATURATION)}), "
@@ -2806,6 +2938,14 @@ def create_purchase_invoice_from_receipt(args: dict) -> ToolResult:
 			f"expense receipt {receipt_name} is categorised {receipt.get('category')!r}, which is a "
 			"vehicle document and not a bill. It posts nothing to the ledger; it is filed on the "
 			"asset with link_title_to_asset. Nothing was created."
+		)
+	if receipt.get("category") in expenses.COOP_CATEGORIES:
+		# v0.166.0. A co-op equity purchase is an asset and a patronage dividend is
+		# income; a bill to an expense account would be wrong on both counts.
+		raise ToolError(
+			f"expense receipt {receipt_name} is categorised {receipt.get('category')!r}, which is "
+			"not an expense. Post it with post_coop_receipt, which books a draft Journal Entry "
+			"to the co-op equity or patronage account. Nothing was created."
 		)
 	if receipt.get("linked_document"):
 		raise ToolError(

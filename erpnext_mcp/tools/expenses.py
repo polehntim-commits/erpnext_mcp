@@ -109,6 +109,8 @@ CATEGORIES = (
 	"Owner Draw",
 	"Title/MCO",
 	"Bill of Sale",
+	"Co-op Equity",
+	"Patronage Dividend",
 	"Other",
 )
 
@@ -128,6 +130,20 @@ OWNER_DRAW_CATEGORY = "Owner Draw"
 TITLE_CATEGORY = "Title/MCO"
 BILL_OF_SALE_CATEGORY = "Bill of Sale"
 DOCUMENT_CATEGORIES = (TITLE_CATEGORY, BILL_OF_SALE_CATEGORY)
+
+#: v0.166.0. Money to or from a cooperative that is not an operating cost. A
+#: `Co-op Equity` purchase buys a stake (an asset: `is_balance_sheet_item`), and a
+#: `Patronage Dividend` is income the co-op pays back. Neither gets a Purchase
+#: Invoice; both post through `post_coop_receipt` as a draft Journal Entry, and
+#: `get_expense_summary` leaves both out of its totals. See `tools/coop_equity.py`.
+COOP_EQUITY_CATEGORY = "Co-op Equity"
+PATRONAGE_CATEGORY = "Patronage Dividend"
+COOP_CATEGORIES = (COOP_EQUITY_CATEGORY, PATRONAGE_CATEGORY)
+
+#: Every category that is not money spent on running the farm, which the expense
+#: totals leave out. One tuple, so the summary and the Purchase Invoice refusal
+#: cannot disagree about which categories those are.
+NON_EXPENSE_CATEGORIES = (*DOCUMENT_CATEGORIES, *COOP_CATEGORIES)
 
 #: Fields `update_expense_receipt` may change. Deliberately NOT `merchant`,
 #: `amount` or `receipt_date` — those are the machine's reading of the paper, and
@@ -209,6 +225,9 @@ _CORRECTION_FIELDS = (
 #: the same pre-migrate reason as the two blocks above.
 _TITLE_FIELDS = ("document_subtype", "vin", "linked_asset")
 
+#: v0.166.0. The co-op columns, read back when the site has them.
+_COOP_FIELDS = ("coop_name", "is_balance_sheet_item")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -220,6 +239,7 @@ def _read_fields() -> list[str]:
 		*compat.existing_fields(EXPENSE_RECEIPT, _INTELLIGENCE_FIELDS),
 		*compat.existing_fields(EXPENSE_RECEIPT, _CORRECTION_FIELDS),
 		*compat.existing_fields(EXPENSE_RECEIPT, _TITLE_FIELDS),
+		*compat.existing_fields(EXPENSE_RECEIPT, _COOP_FIELDS),
 	]
 
 
@@ -267,7 +287,11 @@ def _row_out(row: dict) -> dict:
 	"""
 	out = {}
 	for key, value in dict(row).items():
-		if value is None:
+		if key == "is_balance_sheet_item":
+			# v0.166.0. Always a boolean, because the phone draws the receipt
+			# differently on it and an absent Check means an expense.
+			out[key] = bool(value)
+		elif value is None:
 			out[key] = None
 		elif key in ("amount", "original_amount", "ocr_confidence", "resolution_confidence"):
 			out[key] = float(value or 0)
@@ -512,6 +536,7 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	from . import vehicle_titles  # imports this module; see `receipts` below
 
 	title = _title_arguments(args, category, company)
+	coop = _coop_arguments(args, category, merchant, amount)
 
 	status = as_str(args, "status") or SUBMITTED
 	if status not in CREATABLE_STATUSES:
@@ -527,6 +552,14 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	supplier = _linked(SUPPLIER, as_str(args, "supplier"), "supplier")
 
 	cost_center = as_str(args, "cost_center")
+	if cost_center and category in COOP_CATEGORIES:
+		# v0.166.0. An equity stake and a dividend are not an operating cost, so there
+		# is nothing for a cost center to allocate. Refused rather than dropped, so a
+		# client that always sends one hears about it.
+		raise ToolError(
+			f"cost_center does not apply to a {category} receipt: it is not an operating cost. "
+			"Leave it out. Nothing was created."
+		)
 	if cost_center:
 		_linked(COST_CENTER, cost_center, "cost_center")
 
@@ -577,6 +610,7 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 		payload["is_return"] = is_return
 	payload.update(intelligence["columns"])
 	payload.update(title["columns"])
+	payload.update(coop)
 
 	doc = frappe.get_doc(payload)
 	for row in _read_items(args):
@@ -627,6 +661,14 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 			**intelligence["reported"],
 			**(
 				{
+					"coop_name": coop["coop_name"],
+					"is_balance_sheet_item": bool(coop["is_balance_sheet_item"]),
+				}
+				if coop
+				else {}
+			),
+			**(
+				{
 					"document_subtype": title["columns"].get("document_subtype"),
 					"vin": title["columns"].get("vin"),
 					"title": title_reported,
@@ -645,6 +687,39 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 		),
 		docstatus_delta=f"none → {status}",
 	)
+
+
+def _coop_arguments(args: dict, category: str, merchant: str, amount: float) -> dict:
+	"""`coop_name` and `is_balance_sheet_item`, checked before anything is written.
+
+	v0.166.0. ON THE TWO CO-OP CATEGORIES ONLY. `coop_name` defaults to the
+	merchant line, because that is where the co-op's name is printed and a notice
+	nobody retyped should still total under somebody. `is_balance_sheet_item` is
+	never an argument: it is 1 exactly when the category is `Co-op Equity`.
+
+	THE AMOUNT MUST BE POSITIVE. A co-op receipt is only ever a sum of money moving;
+	a zero one would be a row the equity summary counts as a transaction.
+	"""
+	tail = "Nothing was created."
+	coop_name = as_str(args, "coop_name")
+	if category not in COOP_CATEGORIES:
+		if coop_name:
+			raise ToolError(
+				f"coop_name belongs to a {' or '.join(COOP_CATEGORIES)} receipt, and this receipt is "
+				f"categorised {category!r}. {tail}"
+			)
+		return {}
+	if not all(compat.has_field(EXPENSE_RECEIPT, field) for field in _COOP_FIELDS):
+		raise ToolError(
+			"this site's Expense Receipt does not have the co-op columns yet. Run `bench --site "
+			f"<site> migrate` after installing v0.166.0. {tail}"
+		)
+	if amount <= 0:
+		raise ToolError(f"a {category} receipt needs a positive amount — got {amount}. {tail}")
+	return {
+		"coop_name": coop_name or merchant,
+		"is_balance_sheet_item": 1 if category == COOP_EQUITY_CATEGORY else 0,
+	}
 
 
 def _title_arguments(args: dict, category: str, company: str) -> dict:
@@ -955,6 +1030,9 @@ def update_expense_receipt(args: dict) -> ToolResult:
 			f"({', '.join(present)}). Nothing to change, and nothing was changed."
 		)
 
+	if "category" in after:
+		_follow_category(doc, before, after)
+
 	frappe.db.set_value(EXPENSE_RECEIPT, name, after)
 
 	alias_learned = None
@@ -1012,6 +1090,41 @@ def update_expense_receipt(args: dict) -> ToolResult:
 		),
 		docstatus_delta="",
 	)
+
+
+def _follow_category(doc, before: dict, after: dict) -> None:
+	"""The co-op columns a recategorisation carries with it. Added to the same write.
+
+	v0.166.0. `is_balance_sheet_item` IS DERIVED FROM THE CATEGORY, so moving a
+	receipt into or out of `Co-op Equity` moves the flag; left alone, a receipt
+	recoded to Fuel would still say it bought an asset. Moving INTO a co-op
+	category fills a blank `coop_name` from the merchant, and is refused while the
+	receipt carries a cost center, which those categories do not have.
+	"""
+	category = after["category"]
+	if not all(compat.has_field(EXPENSE_RECEIPT, field) for field in _COOP_FIELDS):
+		if category in COOP_CATEGORIES:
+			raise ToolError(
+				"this site's Expense Receipt does not have the co-op columns yet. Run `bench --site "
+				"<site> migrate` after installing v0.166.0. Nothing was changed."
+			)
+		return
+	if category in COOP_CATEGORIES:
+		cost_center = after.get("cost_center", doc.get("cost_center"))
+		if cost_center:
+			raise ToolError(
+				f"a {category} receipt has no cost center, and this one carries {cost_center!r}. Pass "
+				"cost_center as '' in the same call. Nothing was changed."
+			)
+		if not doc.get("coop_name"):
+			before["coop_name"] = None
+			after["coop_name"] = doc.get("merchant")
+	flag = 1 if category == COOP_EQUITY_CATEGORY else 0
+	if int(doc.get("is_balance_sheet_item") or 0) != flag:
+		# 0 and 1, not None: the column is a Check, and 0 is the value that says
+		# the receipt is an expense again.
+		before["is_balance_sheet_item"] = int(doc.get("is_balance_sheet_item") or 0)
+		after["is_balance_sheet_item"] = flag
 
 
 # ── correct_receipt_amount / correct_receipt_date ────────────────────────────
@@ -1380,12 +1493,18 @@ def get_expense_summary(args: dict) -> ToolResult:
 	returns_count = 0
 	returns_amount = 0.0
 	documents_excluded = 0
+	coop_excluded = 0
 	counted = 0
 	for row in rows:
 		# v0.165.0. A title or a bill of sale is a document, not spend. Counted
 		# separately and reported, never added.
 		if row.get("category") in DOCUMENT_CATEGORIES:
 			documents_excluded += 1
+			continue
+		# v0.166.0. A co-op equity purchase is an asset and a patronage dividend is
+		# income. Neither is spend.
+		if row.get("category") in COOP_CATEGORIES:
+			coop_excluded += 1
 			continue
 		counted += 1
 		# v0.160.0. A RETURN SUBTRACTS. `is_return` says the money came back, and
@@ -1426,6 +1545,7 @@ def get_expense_summary(args: dict) -> ToolResult:
 		"count": counted,
 		"total_amount": round(total, 2),
 		"documents_excluded": documents_excluded,
+		"coop_excluded": coop_excluded,
 		"returns_count": returns_count,
 		"returns_amount": returns_amount,
 		"by_category": by_category,
@@ -1455,6 +1575,12 @@ def get_expense_summary(args: dict) -> ToolResult:
 			f"{documents_excluded} {' / '.join(DOCUMENT_CATEGORIES)} document(s) left out: they "
 			"record a vehicle's paperwork, not money spent. "
 			if documents_excluded
+			else ""
+		)
+		+ (
+			f"{coop_excluded} {' / '.join(COOP_CATEGORIES)} receipt(s) left out: co-op equity is an "
+			"asset and patronage is income — list_coop_equity_summary totals them. "
+			if coop_excluded
 			else ""
 		)
 		+ (

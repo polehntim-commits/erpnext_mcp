@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 870 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 873 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 436 read tools are **on** by default and can be switched off individually. A
+All 437 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -2124,6 +2124,70 @@ neither), `receipt` (`expense_receipt` alias).
 **Refused:** no Member Manager or System Manager role; `amount` not positive;
 `narrative` too short; `receipt` not categorised `Owner Draw`; `receipt`
 already linked to something.
+
+## Co-op Equity & Patronage (v0.166.0)
+
+A co-op equity purchase is a stake the farm owns, and a patronage dividend is
+income the co-op pays back. Both are captured as Expense Receipts, in the
+categories `Co-op Equity` and `Patronage Dividend`. Neither is an expense:
+`create_purchase_invoice_from_receipt` refuses both, and `get_expense_summary`
+leaves them out of its totals and reports `coop_excluded`.
+
+### `ensure_coop_accounts` — MUTATING, default off
+
+Creates `Co-op Equity Investments` (Asset) under the company's `1800` group and
+`Patronage Dividends` (Income) under its `4100` group, in one company or all of
+them. It is idempotent: an account that already exists is found by name and
+reported as `existing`.
+
+Numbers are 1830 and 4150 where free. Otherwise each account takes the next
+free number in its group's hundred, and the row's `note` says which number was
+taken. A company with no such group is refused in its own row, while the other
+companies still get their accounts.
+
+**Arguments:** `company` (omit for all), `equity_parent` and
+`patronage_parent` (with `company`: the group to use instead), `dry_run`.
+
+**Returns** `companies[]`, each with an `equity` and a `patronage` row:
+`account`, `action` (`existing` / `created` / `would_create` / `refused`),
+`account_number`, `parent_account`, `note` or `reason`. Also `created_count`
+and `refused_count`.
+
+### `post_coop_receipt` — MUTATING, default off
+
+Books one **Approved** co-op receipt as a DRAFT Journal Entry, and links the
+entry back to the receipt through `linked_doctype`/`linked_document`.
+
+- **Co-op Equity:** Dr Co-op Equity Investments, Cr bank. A receipt marked
+  `is_return` (equity the co-op retired and paid out) posts the reverse.
+- **Patronage Dividend:** Cr Patronage Dividends for the full amount. Dr bank
+  for the cash, and Dr Co-op Equity Investments for `retained_amount`. The
+  income line takes the company's default cost center.
+
+**Arguments:** `receipt` (required; `expense_receipt` alias),
+`counter_account`, `posting_date`, `retained_amount` (patronage only),
+`cost_center` (patronage only).
+
+**Returns** `journal_entry`, `docstatus` (0), `equity_account`,
+`income_account`, `counter_account`, `cost_center`, `retained_amount`,
+`lines[]`.
+
+**Refused:** another category; not Approved; already linked; a company without
+the accounts (run `ensure_coop_accounts`); `retained_amount` on Co-op Equity or
+outside 0 to the amount; a patronage receipt marked `is_return`.
+
+### `list_coop_equity_summary` — read, default on
+
+Co-op positions by company and cooperative, taken from the receipts. For each
+co-op: `equity_invested`, `equity_redeemed`, `patronage_received`,
+`patronage_retained` (read off the Journal Entry), `net_equity`,
+`equity_transactions`, `patronage_transactions`, `transaction_count`,
+`unposted_count`, `first_date` and `last_date`. It also returns a
+`companies[]` total per company. Rejected receipts are left out unless `status`
+asks for them.
+
+**Arguments:** `company`, `coop_name` (substring), `status`, `from_date`,
+`to_date`.
 
 ---
 

@@ -25,6 +25,10 @@
   "vin",
   "title_col",
   "linked_asset",
+  "coop_section",
+  "coop_name",
+  "coop_col",
+  "is_balance_sheet_item",
   "image_section",
   "receipt_image",
   "items_section",
@@ -104,7 +108,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nTitle/MCO\nBill of Sale\nOther"
+   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nTitle/MCO\nBill of Sale\nCo-op Equity\nPatronage Dividend\nOther"
   },
   {
    "default": "0",
@@ -147,7 +151,8 @@
    "search_index": 1
   },
   {
-   "description": "Where this cost is booked for reporting, if the operation tracks that below Company. OPTIONAL — a receipt with no cost center still totals fine at the company level.",
+   "depends_on": "eval:![\"Co-op Equity\",\"Patronage Dividend\"].includes(doc.category)",
+   "description": "Where this cost is booked for reporting, if the operation tracks that below Company. OPTIONAL — a receipt with no cost center still totals fine at the company level. Hidden on a co-op equity purchase or a patronage dividend, which are not operating costs.",
    "fieldname": "cost_center",
    "fieldtype": "Link",
    "label": "Cost Center",
@@ -209,6 +214,35 @@
    "label": "Linked Asset",
    "options": "Asset Register",
    "search_index": 1
+  },
+  {
+   "depends_on": "eval:[\"Co-op Equity\",\"Patronage Dividend\"].includes(doc.category)",
+   "fieldname": "coop_section",
+   "fieldtype": "Section Break",
+   "label": "Cooperative"
+  },
+  {
+   "depends_on": "eval:[\"Co-op Equity\",\"Patronage Dividend\"].includes(doc.category)",
+   "description": "The cooperative this equity or patronage is with, as it should be totalled. Defaults to the merchant line.",
+   "fieldname": "coop_name",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Co-op Name",
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:[\"Co-op Equity\",\"Patronage Dividend\"].includes(doc.category)",
+   "fieldname": "coop_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:[\"Co-op Equity\",\"Patronage Dividend\"].includes(doc.category)",
+   "description": "Set by the app on a Co-op Equity receipt: the money bought an asset (an equity stake), so it is not an expense and is left out of expense totals.",
+   "fieldname": "is_balance_sheet_item",
+   "fieldtype": "Check",
+   "label": "Balance Sheet Item",
+   "read_only": 1
   },
   {
    "fieldname": "image_section",

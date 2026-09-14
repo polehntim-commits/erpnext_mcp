@@ -67,6 +67,7 @@ from .tools import (
 	compintel,
 	compliance,
 	controls,
+	coop_equity,
 	costing,
 	crew_view,
 	cropprotect,
@@ -14701,7 +14702,11 @@ TOOLS = {
 		"to the one Vehicle or Tractor in the company with that VIN (or serial "
 		"number) unless `linked_asset` names one. The asset's `title_receipt` "
 		"is set, and its VIN filled if blank. The answer's `title` block says "
-		"what was matched, and lists every candidate when a VIN is ambiguous.",
+		"what was matched, and lists every candidate when a VIN is ambiguous.\n\n"
+		"v0.166.0: CO-OP MONEY. Category `Co-op Equity` (a stake bought: "
+		"is_balance_sheet_item is set) or `Patronage Dividend` (income paid back) "
+		"needs a positive amount, takes `coop_name`, and refuses `cost_center`. "
+		"Neither is an expense: post_coop_receipt books them.",
 		{
 			"merchant": _field(_STRING, "The vendor as it reads on the receipt."),
 			"amount": _field(
@@ -14711,7 +14716,13 @@ TOOLS = {
 			"category": _field(
 				_STRING,
 				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, "
-				"Owner Draw, Title/MCO, Bill of Sale or Other. Defaults to Other.",
+				"Owner Draw, Title/MCO, Bill of Sale, Co-op Equity, Patronage Dividend "
+				"or Other. Defaults to Other.",
+			),
+			"coop_name": _field(
+				_STRING,
+				"v0.166.0. On a Co-op Equity or Patronage Dividend receipt only: the "
+				"cooperative, as it should be totalled. Defaults to the merchant line.",
 			),
 			"document_subtype": _field(
 				_STRING,
@@ -14908,7 +14919,7 @@ TOOLS = {
 			"category": _field(
 				_STRING,
 				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw, "
-				"Title/MCO, Bill of Sale or Other.",
+				"Title/MCO, Bill of Sale, Co-op Equity, Patronage Dividend or Other.",
 			),
 			"notes": _field(_STRING, "Free text, or '' to clear it."),
 			"is_return": _field(
@@ -15028,6 +15039,85 @@ TOOLS = {
 		requires="the Expense Receipt doctype (run bench migrate after installing v0.31.0)",
 		title="Expense summary",
 	),
+	"ensure_coop_accounts": _tool(
+		coop_equity.ensure_coop_accounts,
+		"MUTATING (default OFF). Create the two accounts co-op money posts to, in "
+		"every company or one: `Co-op Equity Investments` (Asset) under the "
+		"company's 1800 group and `Patronage Dividends` (Income) under its 4100 "
+		"group. IDEMPOTENT: an account already there is found by name and "
+		"reported as `existing`.\n\n"
+		"THE NUMBERS FOLLOW THE CHART. 1830 and 4150 when free, otherwise the next "
+		"free number in the group's hundred, and the row's `note` says so. A "
+		"company whose chart has no such group is refused IN ITS OWN ROW and the "
+		"others still proceed; name the group with equity_parent / "
+		"patronage_parent (with `company`). `dry_run` creates nothing.",
+		{
+			"company": _field(_STRING, "One company. Omit for every company on the site."),
+			"equity_parent": _field(
+				_STRING, "With `company`: the Asset group for Co-op Equity Investments, instead of 1800."
+			),
+			"patronage_parent": _field(
+				_STRING, "With `company`: the Income group for Patronage Dividends, instead of 4100."
+			),
+			"dry_run": _field(_BOOLEAN, "Report what would be created and create nothing."),
+		},
+		mutating=True,
+		title="Ensure co-op accounts",
+	),
+	"post_coop_receipt": _tool(
+		coop_equity.post_coop_receipt,
+		"MUTATING (default OFF). Book one APPROVED Co-op Equity or Patronage "
+		"Dividend receipt as a DRAFT Journal Entry and link it back to the "
+		"receipt. Never an expense account.\n\n"
+		"CO-OP EQUITY: Dr Co-op Equity Investments, Cr bank; reversed when the "
+		"receipt is `is_return` (equity the co-op retired and paid out). "
+		"PATRONAGE DIVIDEND: Cr Patronage Dividends for the whole amount, Dr bank "
+		"for the cash, and Dr Co-op Equity Investments for `retained_amount`, the "
+		"share the co-op kept as equity. The income line takes the company's "
+		"default cost center (ERPNext refuses a P&L line without one).\n\n"
+		"REFUSES: a receipt in any other category, not Approved, or already "
+		"linked; a company without the accounts (run ensure_coop_accounts). "
+		"ALWAYS A DRAFT — submit_journal_entry posts it.",
+		{
+			"receipt": _field(_STRING, "The Expense Receipt docname."),
+			"expense_receipt": _field(_STRING, "Alias for receipt."),
+			"counter_account": _field(
+				_STRING, "The bank or cash account, instead of the company's default bank/cash account."
+			),
+			"posting_date": _field(_STRING, "YYYY-MM-DD. Defaults to the receipt date."),
+			"retained_amount": _field(
+				_NUMBER, "Patronage only: the part kept as equity, between 0 and the receipt amount."
+			),
+			"cost_center": _field(
+				_STRING,
+				"Patronage only: the cost center for the income line, instead of the company default.",
+			),
+		},
+		required=("receipt",),
+		mutating=True,
+		title="Post a co-op receipt",
+		available=_needs_doctype("Expense Receipt"),
+		requires="the Expense Receipt doctype (run bench migrate after installing v0.166.0)",
+	),
+	"list_coop_equity_summary": _tool(
+		coop_equity.list_coop_equity_summary,
+		"Co-op positions by company and cooperative, from the Co-op Equity and "
+		"Patronage Dividend receipts: equity invested and redeemed, patronage "
+		"received and retained, `net_equity`, transaction counts, unposted "
+		"receipts and the first and last dates, plus a total per company. "
+		"Retained patronage is read off the Journal Entry post_coop_receipt made. "
+		"Rejected receipts are left out unless `status` asks for them. Read-only.",
+		{
+			"company": _COMPANY,
+			"coop_name": _field(_STRING, "Only co-ops whose name contains this."),
+			"status": _field(_STRING, "Draft, Submitted, Approved or Rejected."),
+			"from_date": _field(_STRING, "Earliest receipt_date as YYYY-MM-DD."),
+			"to_date": _field(_STRING, "Latest receipt_date as YYYY-MM-DD."),
+		},
+		title="Co-op equity summary",
+		available=_needs_doctype("Expense Receipt"),
+		requires="the Expense Receipt doctype (run bench migrate after installing v0.166.0)",
+	),
 	"get_expense_report": _tool(
 		expenses.get_expense_report,
 		"Every expense receipt in a window, one row each — category, amount, "
@@ -15045,7 +15135,7 @@ TOOLS = {
 			"category": _field(
 				_STRING,
 				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw, "
-				"Title/MCO, Bill of Sale or Other.",
+				"Title/MCO, Bill of Sale, Co-op Equity, Patronage Dividend or Other.",
 			),
 			"csv": _field(_BOOLEAN, "Also return a `csv` string of the same rows. Defaults to false."),
 			"limit": _LIMIT,
@@ -15312,7 +15402,11 @@ TOOLS = {
 		"`matched_signals`. Nothing matching at all returns `expense` with "
 		"confidence 0 and `default_applied: true` — a fallback, stated as one, "
 		"rather than a guess wearing a number. It never returns a confidence of "
-		"1.0, because a keyword rule is never certain. `bill` currently has no "
+		"1.0, because a keyword rule is never certain. v0.166.0: a co-op notice "
+		"(patronage refund, equity retirement, member stock) answers `expense` "
+		"with `suggested_category` Co-op Equity or Patronage Dividend and a `coop` "
+		"block naming the cooperative where it can; a co-op's name alone never "
+		"chooses the category. `bill` currently has no "
 		"register to land in and says so in `suggested_tool`. Read-only, and it "
 		"touches no doctype at all.",
 		{

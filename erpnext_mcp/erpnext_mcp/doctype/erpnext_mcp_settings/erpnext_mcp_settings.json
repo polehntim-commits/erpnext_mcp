@@ -490,6 +490,9 @@
   "allow_update_expense_receipt",
   "allow_correct_receipt_amount",
   "allow_correct_receipt_date",
+  "allow_ensure_coop_accounts",
+  "allow_post_coop_receipt",
+  "allow_list_coop_equity_summary",
   "receipts_section",
   "allow_list_scale_tickets",
   "allow_get_scale_ticket",
@@ -4278,6 +4281,27 @@
    "fieldname": "allow_correct_receipt_date",
    "fieldtype": "Check",
    "label": "Correct Receipt Date"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Create Co-op Equity Investments (under 1800) and Patronage Dividends (under 4100) in one company or every company, at the next free number where 1830 or 4150 is taken. Idempotent.",
+   "fieldname": "allow_ensure_coop_accounts",
+   "fieldtype": "Check",
+   "label": "Ensure Co-op Accounts"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Book an Approved Co-op Equity or Patronage Dividend receipt as a draft Journal Entry to the co-op equity or patronage account. Never an expense.",
+   "fieldname": "allow_post_coop_receipt",
+   "fieldtype": "Check",
+   "label": "Post Co-op Receipt"
+  },
+  {
+   "default": "1",
+   "description": "READ. Co-op equity positions and patronage by company and cooperative, with dates and counts.",
+   "fieldname": "allow_list_coop_equity_summary",
+   "fieldtype": "Check",
+   "label": "List Co-op Equity Summary"
   },
   {
    "fieldname": "receipts_section",

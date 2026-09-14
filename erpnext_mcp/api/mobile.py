@@ -6429,6 +6429,7 @@ def create_expense_receipt(
 	document_subtype=None,
 	vin=None,
 	linked_asset=None,
+	coop_name=None,
 ) -> dict:
 	"""The fuel slip at the pump, with v0.67.0's Supplier and Item links.
 
@@ -6501,6 +6502,9 @@ def create_expense_receipt(
 		("document_subtype", document_subtype),
 		("vin", vin),
 		("linked_asset", linked_asset),
+		# v0.166.0. A co-op equity purchase or patronage notice; the tool refuses it
+		# on any other category.
+		("coop_name", coop_name),
 	):
 		if value not in (None, ""):
 			inner[key] = value

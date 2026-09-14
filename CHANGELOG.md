@@ -3,6 +3,104 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.166.0 — 2026-09-13 — the stake in the co-op
+
+A co-op equity purchase and a patronage dividend are captured as receipts and
+booked as what they are: an asset and farm income, never an expense. **873
+tools** (three new: `ensure_coop_accounts` and `post_coop_receipt`, both
+mutating and off by default, and `list_coop_equity_summary`, a read that is on).
+
+### The brief's account numbers are not this farm's
+
+The brief named `1830 - Co-op Equity Investments` under `1800 - Investments`,
+and patronage posting to `4230 - Dividend Income`. The live charts differ, and
+were checked read-only before any code was written:
+
+- **Umbrel site, Orchard Meadow:** `1830` is *Accumulated Depreciation -
+  Machinery*, the parent is `1800 - Investments & Trading`, `4230` is *Realized
+  Capital Gains*, and Dividend Income is `4220`.
+- **Second site, Polehn Farms Inc:** `1800 - Investments` exists and `1830` is
+  free, but there is **no dividend income account at all**.
+- **Second site, Orchard Meadow:** matches the brief.
+
+So nothing is hard-coded. An account is found **by name**. When one has to be
+created it goes under the company's `1800` group (patronage under `4100`), at
+1830 / 4150 where those are free and at the next free number in the group
+otherwise; the answer says which. Tim chose each of these:
+
+- **Patronage gets its own `Patronage Dividends` income account under farm
+  income.** It is 1099-PATR / Schedule F income, not a dividend.
+- **Postings are draft Journal Entries** made by a tool that is off by default.
+- **Accounts are matched by name and otherwise take the next free number.**
+- **No accounts were created on either live site.** Enable and run
+  `ensure_coop_accounts` after deploying, with `dry_run` first.
+
+### Expense Receipt
+
+- New categories **`Co-op Equity`** and **`Patronage Dividend`**.
+- **`coop_name`** (Data) defaults to the merchant line.
+- **`is_balance_sheet_item`** (Check, read-only) is 1 exactly when the category is
+  Co-op Equity. It is derived and never an argument. It is always a boolean on
+  `get_expense_receipt` and `list_expense_receipts`, so iOS can draw those rows
+  differently.
+- Both categories need a **positive amount**. `cost_center` is refused on them,
+  and the Desk hides the field. `coop_name` is refused on any other category.
+- `update_expense_receipt` carries the flag when a receipt is recategorised in
+  either direction. It fills a blank `coop_name`, and refuses a move into a co-op
+  category while a cost center is set unless that call clears it.
+
+### Nothing books as an expense
+
+- `get_expense_summary` leaves both categories out and reports `coop_excluded`.
+- `create_purchase_invoice_from_receipt` refuses both and names
+  `post_coop_receipt`.
+
+### `post_coop_receipt`
+
+Books one **Approved** receipt as a **draft** Journal Entry and links it back.
+
+- **Co-op Equity:** Dr Co-op Equity Investments, Cr bank. A receipt marked
+  `is_return` (equity retired and paid out) posts the reverse.
+- **Patronage Dividend:** Cr Patronage Dividends for the whole amount, Dr bank for
+  the cash, and Dr Co-op Equity Investments for `retained_amount`, the part the
+  co-op kept as equity.
+- The income line carries the company's default cost center, because ERPNext's
+  GL Entry refuses a Profit and Loss line without one. This was checked in the
+  built image.
+
+It refuses another category, an unapproved or already-linked receipt, and a
+company without the accounts.
+
+### `ensure_coop_accounts`
+
+It is idempotent, supports `dry_run`, and covers one company or every company.
+Each company is answered in its own row, so a chart without a `1800` or `4100`
+group is refused there while the others proceed. `equity_parent` and
+`patronage_parent` name another group when a single company is given.
+
+### `list_coop_equity_summary`
+
+Returns positions by company and co-op: `equity_invested`, `equity_redeemed`,
+`patronage_received`, `patronage_retained`, `net_equity`, the counts,
+`unposted_count`, `first_date` and `last_date`, plus a per-company total.
+Retained patronage is read off the Journal Entry, so equity the co-op kept is
+counted. Rejected receipts are left out.
+
+### `classify_receipt`
+
+Patronage and equity wording ("patronage refund", "1099-PATR", "equity
+retirement", "member stock") answer `expense` with `suggested_category` and a
+`coop` block that names the cooperative where it recognises one. An equity
+retirement also sets `is_return`. **A co-op's name alone never chooses the
+category**: "VALLEY CO-OP FUEL" is still fuel, and a Tree Top grower statement
+is still a settlement.
+
+### Tests
+
+30 new tests in `tests_standalone/test_coop_equity.py`. The tool counts rose to
+873 / 437 / 436. Fifteen mutations were run, one per rule above, and every one
+was caught.
+
 ## 0.165.0 — 2026-09-13 — the title in the glovebox
 
 A vehicle title, MCO, bill of sale or registration is now captured through the
