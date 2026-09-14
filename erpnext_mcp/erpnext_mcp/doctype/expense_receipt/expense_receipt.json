@@ -20,6 +20,11 @@
   "cost_center",
   "farm_task",
   "status",
+  "title_section",
+  "document_subtype",
+  "vin",
+  "title_col",
+  "linked_asset",
   "image_section",
   "receipt_image",
   "items_section",
@@ -77,7 +82,7 @@
   },
   {
    "default": "0",
-   "description": "The receipt total, including tax.",
+   "description": "The receipt total, including tax. Optional on a Title/MCO or Bill of Sale, which records a document rather than money spent.",
    "fieldname": "amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
@@ -99,7 +104,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nOther"
+   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nTitle/MCO\nBill of Sale\nOther"
   },
   {
    "default": "0",
@@ -167,6 +172,42 @@
    "options": "Draft\nSubmitted\nApproved\nRejected",
    "read_only": 1,
    "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:[\"Title/MCO\",\"Bill of Sale\"].includes(doc.category)",
+   "fieldname": "title_section",
+   "fieldtype": "Section Break",
+   "label": "Vehicle Document"
+  },
+  {
+   "depends_on": "eval:[\"Title/MCO\",\"Bill of Sale\"].includes(doc.category)",
+   "fieldname": "document_subtype",
+   "fieldtype": "Select",
+   "label": "Document Type",
+   "options": "\nVehicle Title\nMCO\nBill of Sale\nRegistration"
+  },
+  {
+   "depends_on": "eval:[\"Title/MCO\",\"Bill of Sale\"].includes(doc.category)",
+   "description": "The VIN (or a tractor's serial number) as printed on the document. Used to find the Vehicle or Tractor this document belongs to when Linked Asset is left empty.",
+   "fieldname": "vin",
+   "fieldtype": "Data",
+   "label": "VIN",
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:[\"Title/MCO\",\"Bill of Sale\"].includes(doc.category)",
+   "fieldname": "title_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:[\"Title/MCO\",\"Bill of Sale\"].includes(doc.category)",
+   "description": "The Vehicle or Tractor this document belongs to. Linking it also sets the asset's Title Document.",
+   "fieldname": "linked_asset",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Linked Asset",
+   "options": "Asset Register",
    "search_index": 1
   },
   {

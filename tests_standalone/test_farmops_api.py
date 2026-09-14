@@ -308,6 +308,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# v0.164.0. The photograph on that receipt, as bytes.
 		"/mobile/get_receipt_image",
 		"/mobile/update_expense_receipt",
+		# v0.165.0. A captured vehicle title, filed on its asset.
+		"/mobile/link_title_to_asset",
 		# Sprint 3 (v0.68.0). Compliance alert rectification — see api/rectify.py.
 		# Five direct fixes, and the one route every task-shaped fix shares.
 		"/mobile/renew_certification",
@@ -2894,6 +2896,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.165.0. Filing a title on a truck, both docnames scoped. Open like
+		# `create_expense_receipt`, which makes the same link by VIN at capture.
+		"link_title_to_asset",
 		# v0.164.0. The photograph on a receipt `get_expense_receipt` already
 		# returns to this account, behind the same `require_scoped_doc` gate.
 		"get_receipt_image",
@@ -2987,7 +2992,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 100, "a method is named in two sets at once")
+		self.assertEqual(len(named), 101, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

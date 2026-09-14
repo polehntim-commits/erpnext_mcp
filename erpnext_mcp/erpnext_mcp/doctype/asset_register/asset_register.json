@@ -21,6 +21,13 @@
   "capital_col",
   "purchase_value",
   "replacement_value",
+  "title_section",
+  "vin",
+  "license_plate",
+  "title_col",
+  "title_holder",
+  "lien_holder",
+  "title_receipt",
   "tag_section",
   "qr_url",
   "tag_col",
@@ -156,6 +163,53 @@
    "fieldname": "replacement_value",
    "fieldtype": "Currency",
    "label": "Replacement Value"
+  },
+  {
+   "depends_on": "eval:[\"Vehicle\",\"Tractor\"].includes(doc.asset_type)",
+   "fieldname": "title_section",
+   "fieldtype": "Section Break",
+   "label": "Title & Registration"
+  },
+  {
+   "depends_on": "eval:[\"Vehicle\",\"Tractor\"].includes(doc.asset_type)",
+   "description": "The Vehicle Identification Number, or a tractor's serial number, exactly as the title prints it. A title or bill of sale captured with this VIN links itself to this asset.",
+   "fieldname": "vin",
+   "fieldtype": "Data",
+   "label": "VIN",
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:[\"Vehicle\",\"Tractor\"].includes(doc.asset_type)",
+   "fieldname": "license_plate",
+   "fieldtype": "Data",
+   "label": "License Plate"
+  },
+  {
+   "depends_on": "eval:[\"Vehicle\",\"Tractor\"].includes(doc.asset_type)",
+   "fieldname": "title_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:[\"Vehicle\",\"Tractor\"].includes(doc.asset_type)",
+   "description": "Who the title names as owner.",
+   "fieldname": "title_holder",
+   "fieldtype": "Data",
+   "label": "Title Holder"
+  },
+  {
+   "depends_on": "eval:[\"Vehicle\",\"Tractor\"].includes(doc.asset_type)",
+   "description": "The lender the title names, if the vehicle is financed. Empty means the title shows no lien.",
+   "fieldname": "lien_holder",
+   "fieldtype": "Data",
+   "label": "Lien Holder"
+  },
+  {
+   "depends_on": "eval:[\"Vehicle\",\"Tractor\"].includes(doc.asset_type)",
+   "description": "The captured title, MCO or bill of sale for this asset.",
+   "fieldname": "title_receipt",
+   "fieldtype": "Link",
+   "label": "Title Document",
+   "options": "Expense Receipt"
   },
   {
    "fieldname": "tag_section",

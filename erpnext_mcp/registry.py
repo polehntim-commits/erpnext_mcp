@@ -14694,15 +14694,38 @@ TOOLS = {
 		"validate_document_extraction follows. When the four deterministic steps "
 		"are silent, the result carries `llm_context`: the signals off the paper "
 		"and the candidate Suppliers, packaged as a question. Answer it and hand "
-		"the answer back as resolved_merchant with resolution_method='LLM'.",
+		"the answer back as resolved_merchant with resolution_method='LLM'.\n\n"
+		"v0.165.0: VEHICLE DOCUMENTS. Category `Title/MCO` or `Bill of Sale` "
+		"captures a title, MCO, bill of sale or registration: `amount` becomes "
+		"optional, nothing ever posts to the ledger from it, and `vin` links it "
+		"to the one Vehicle or Tractor in the company with that VIN (or serial "
+		"number) unless `linked_asset` names one. The asset's `title_receipt` "
+		"is set, and its VIN filled if blank. The answer's `title` block says "
+		"what was matched, and lists every candidate when a VIN is ambiguous.",
 		{
 			"merchant": _field(_STRING, "The vendor as it reads on the receipt."),
-			"amount": _field(_NUMBER, "The receipt total, including tax."),
+			"amount": _field(
+				_NUMBER, "The receipt total, including tax. Optional on a Title/MCO or Bill of Sale."
+			),
 			"receipt_date": _field(_STRING, "The date on the receipt as YYYY-MM-DD."),
 			"category": _field(
 				_STRING,
-				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer "
-				"or Other. Defaults to Other.",
+				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, "
+				"Owner Draw, Title/MCO, Bill of Sale or Other. Defaults to Other.",
+			),
+			"document_subtype": _field(
+				_STRING,
+				"v0.165.0. On a Title/MCO or Bill of Sale only: Vehicle Title, MCO, Bill of Sale or Registration.",
+			),
+			"vin": _field(
+				_STRING,
+				"v0.165.0. On a Title/MCO or Bill of Sale only. The VIN or serial number "
+				"printed on the document; spaces and dashes are ignored.",
+			),
+			"linked_asset": _field(
+				_STRING,
+				"v0.165.0. On a Title/MCO or Bill of Sale only. The Vehicle or Tractor "
+				"(Asset Register docname) this document belongs to, instead of matching by VIN.",
 			),
 			"company": _COMPANY,
 			"submitted_by": _field(_STRING, "The Employee who photographed it — docname or employee_name."),
@@ -14884,7 +14907,8 @@ TOOLS = {
 			),
 			"category": _field(
 				_STRING,
-				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw or Other.",
+				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw, "
+				"Title/MCO, Bill of Sale or Other.",
 			),
 			"notes": _field(_STRING, "Free text, or '' to clear it."),
 			"is_return": _field(
@@ -15020,7 +15044,8 @@ TOOLS = {
 			"status": _field(_STRING, "Draft, Submitted, Approved or Rejected."),
 			"category": _field(
 				_STRING,
-				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw or Other.",
+				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw, "
+				"Title/MCO, Bill of Sale or Other.",
 			),
 			"csv": _field(_BOOLEAN, "Also return a `csv` string of the same rows. Defaults to false."),
 			"limit": _LIMIT,
@@ -20578,7 +20603,11 @@ TOOLS = {
 		"One asset in full: current state, open tasks, history timeline from "
 		"every doctype that references it (Farm Tasks, Inspections, Water Tests, "
 		"Compliance Alerts). Also lists child assets (assets whose location is "
-		"this one). Read-only.",
+		"this one). Read-only.\n\n"
+		"v0.165.0: also vin, license_plate, title_holder, lien_holder, "
+		"title_receipt, `title_document` (the linked title's category, subtype, "
+		"VIN, date and status) and `title_documents` (every title, MCO, bill of "
+		"sale and registration filed on the asset).",
 		{
 			"asset_name": _field(_STRING, "The Asset Register docname, e.g. 'MC-Valve-05'."),
 			"company": _field(_STRING, "Narrow to one company."),
@@ -20652,6 +20681,16 @@ TOOLS = {
 				"An ERPNext Location docname for the mirrored Asset — ERPNext marks one "
 				"required. Defaults to the site's only Location; needed where there is "
 				"more than one.",
+			),
+			"vin": _field(
+				_STRING,
+				"v0.165.0. Vehicle or Tractor only. The VIN (or serial number) as the title "
+				"prints it. Refused if another asset in the company already has it.",
+			),
+			"license_plate": _field(_STRING, "v0.165.0. Vehicle or Tractor only."),
+			"title_holder": _field(_STRING, "v0.165.0. Vehicle or Tractor only. The owner the title names."),
+			"lien_holder": _field(
+				_STRING, "v0.165.0. Vehicle or Tractor only. The lender the title names, if any."
 			),
 		},
 		required=("name", "asset_type", "company"),

@@ -27,6 +27,7 @@ from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve
 from ..errors import ToolError
 from ..render import qr
 from ..result import ToolResult
+from . import vehicle_titles
 
 ASSET_REGISTER = "Asset Register"
 ASSET_STATE_LOG = "Asset State Log"
@@ -791,6 +792,10 @@ def get_asset_detail(args: dict) -> ToolResult:
 	return ToolResult(
 		data={
 			**described,
+			# v0.165.0. vin, license_plate, title_holder, lien_holder, title_receipt,
+			# and the title documents filed on this asset. Absent on a bench that
+			# has not migrated.
+			**vehicle_titles.asset_title(row),
 			"erpnext_asset": asset_mirror.mirror_of(row["name"]) or None,
 			"open_tasks": open_tasks,
 			"open_task_count": len(open_tasks),
@@ -1100,6 +1105,35 @@ def _with_mirror(described: dict, verdict: dict) -> dict:
 	return described
 
 
+def _title_fields(args: dict, asset_type: str, company: str) -> dict:
+	"""`vin`, `license_plate`, `title_holder` and `lien_holder`, checked before the insert.
+
+	v0.165.0. ON A VEHICLE OR A TRACTOR ONLY — `vehicle_titles.TITLED_ASSET_TYPES`,
+	the same tuple the doctype shows the section for — so a valve is never stored
+	with a column its form hides. A VIN already on another asset in this company is
+	refused, because a title captured with it could then link to neither.
+	"""
+	tail = "Nothing was created."
+	values = {key: as_str(args, key) for key in vehicle_titles.REGISTRABLE_ASSET_FIELDS if as_str(args, key)}
+	if not values:
+		return {}
+	if asset_type not in vehicle_titles.TITLED_ASSET_TYPES:
+		raise ToolError(
+			f"{', '.join(values)} are recorded on a {' or a '.join(vehicle_titles.TITLED_ASSET_TYPES)}, "
+			f"and this asset is a {asset_type}. {tail}"
+		)
+	vehicle_titles.require_installed(tail)
+	if "vin" in values:
+		values["vin"] = vehicle_titles.normalize_vin(values["vin"])
+		match = vehicle_titles.match_asset(values["vin"], company)
+		if match["matched_on"] == "vin":
+			raise ToolError(
+				f"VIN {values['vin']} is already on {', '.join(match['candidates'])}. A VIN names one "
+				f"vehicle. {tail}"
+			)
+	return values
+
+
 def register_asset(args: dict) -> ToolResult:
 	"""Register a new asset with its tag ID, type, parent and insurance detail.
 
@@ -1134,6 +1168,7 @@ def register_asset(args: dict) -> ToolResult:
 		raise ToolError(str(exc)) from exc
 
 	location = _parent(args, "created")
+	title_values = _title_fields(args, asset_type, company)
 
 	doc = frappe.new_doc(ASSET_REGISTER)
 	doc.__newname = name
@@ -1144,6 +1179,8 @@ def register_asset(args: dict) -> ToolResult:
 	doc.nfc_uid = as_str(args, "nfc_uid")
 	_capital_fields(doc, args)
 	_service_fields(doc, args)
+	for key, value in title_values.items():
+		doc.set(key, value)
 
 	lat = args.get("gps_latitude")
 	lon = args.get("gps_longitude")
@@ -1161,6 +1198,9 @@ def register_asset(args: dict) -> ToolResult:
 		photo_error = str(exc)
 
 	described = _describe_asset(dict(doc.as_dict()))
+	for key in vehicle_titles.REGISTRABLE_ASSET_FIELDS:
+		if key in title_values:
+			described[key] = title_values[key]
 	described["photo_attached"] = photo or None
 	if photo_error:
 		described["photo_error"] = (

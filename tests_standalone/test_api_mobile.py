@@ -530,6 +530,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# `content` key but calls `get_expense_receipt`, not this path.
 		"get_receipt_image",
 		"update_expense_receipt",
+		# v0.165.0. `MobileAPI.swift` does not name it yet.
+		"link_title_to_asset",
 		# Sprint 8 (v0.78.0). Field asset registration: register the machine,
 		# get its printable tag back, file the photograph against it. The Swift
 		# screens for this ARE built — this is the rare set where the client is

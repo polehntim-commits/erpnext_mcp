@@ -107,6 +107,8 @@ CATEGORIES = (
 	"Seed",
 	"Fertilizer",
 	"Owner Draw",
+	"Title/MCO",
+	"Bill of Sale",
 	"Other",
 )
 
@@ -117,6 +119,15 @@ CATEGORIES = (
 #: scattered across two modules, so the day a second non-expense category is
 #: added, both refusals are one edit.
 OWNER_DRAW_CATEGORY = "Owner Draw"
+
+#: v0.165.0. The two categories that record a DOCUMENT rather than money spent: a
+#: vehicle's title or MCO, and a bill of sale. Captured through the receipt flow
+#: because that is the flow that photographs paper; see `tools/vehicle_titles.py`.
+#: The amount is optional on these, `create_purchase_invoice_from_receipt` refuses
+#: them, and `get_expense_summary` leaves them out of its totals.
+TITLE_CATEGORY = "Title/MCO"
+BILL_OF_SALE_CATEGORY = "Bill of Sale"
+DOCUMENT_CATEGORIES = (TITLE_CATEGORY, BILL_OF_SALE_CATEGORY)
 
 #: Fields `update_expense_receipt` may change. Deliberately NOT `merchant`,
 #: `amount` or `receipt_date` — those are the machine's reading of the paper, and
@@ -194,6 +205,10 @@ _CORRECTION_FIELDS = (
 	"date_corrected_at",
 )
 
+#: v0.165.0. The vehicle-document columns, read back when the site has them, for
+#: the same pre-migrate reason as the two blocks above.
+_TITLE_FIELDS = ("document_subtype", "vin", "linked_asset")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -204,6 +219,7 @@ def _read_fields() -> list[str]:
 		*_LIST_FIELDS,
 		*compat.existing_fields(EXPENSE_RECEIPT, _INTELLIGENCE_FIELDS),
 		*compat.existing_fields(EXPENSE_RECEIPT, _CORRECTION_FIELDS),
+		*compat.existing_fields(EXPENSE_RECEIPT, _TITLE_FIELDS),
 	]
 
 
@@ -467,8 +483,14 @@ def get_expense_receipt(args: dict) -> ToolResult:
 def submit_expense_receipt(args: dict) -> ToolResult:
 	"""Create a receipt from a photograph and what the scanner read off it."""
 	merchant = as_str(args, "merchant", required=True)
+	category = as_str(args, "category") or "Other"
+	if category not in CATEGORIES:
+		raise ToolError(f"category must be one of: {', '.join(CATEGORIES)}.")
 	amount = as_float(args.get("amount"), "amount")
-	if args.get("amount") in (None, ""):
+	# v0.165.0. A title or a bill of sale is a document, not a purchase, so the
+	# amount may be left out and reads 0. An explicit 0 or a printed price is
+	# kept as sent.
+	if args.get("amount") in (None, "") and category not in DOCUMENT_CATEGORIES:
 		raise ToolError("amount is required.")
 	if amount < 0:
 		raise ToolError(
@@ -487,9 +509,9 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	company = resolve_company(as_str(args, "company"), required=True)
 	submitted_by = _resolve_employee(as_str(args, "submitted_by") or as_str(args, "employee"), "submitted_by")
 
-	category = as_str(args, "category") or "Other"
-	if category not in CATEGORIES:
-		raise ToolError(f"category must be one of: {', '.join(CATEGORIES)}.")
+	from . import vehicle_titles  # imports this module; see `receipts` below
+
+	title = _title_arguments(args, category, company)
 
 	status = as_str(args, "status") or SUBMITTED
 	if status not in CREATABLE_STATUSES:
@@ -554,6 +576,7 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	if compat.has_field(EXPENSE_RECEIPT, "is_return"):
 		payload["is_return"] = is_return
 	payload.update(intelligence["columns"])
+	payload.update(title["columns"])
 
 	doc = frappe.get_doc(payload)
 	for row in _read_items(args):
@@ -564,6 +587,24 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 
 	if resolution.get("method") == "Alias" and (resolution.get("alias") or {}).get("name"):
 		receipts.record_alias_use(resolution["alias"]["name"])
+
+	# v0.165.0. After the insert, because the asset's back-link names this docname.
+	# Every refusal a link can raise was raised in `_title_arguments`, before it.
+	title_reported = None
+	if category in DOCUMENT_CATEGORIES:
+		title_reported = {"linked_asset": None, "matched_by": None, "candidates": []}
+		asset = title["linked_asset"]
+		if asset:
+			title_reported.update(vehicle_titles.link(doc.name, asset, replace=True))
+			title_reported["matched_by"] = "argument"
+		elif title["columns"].get("vin"):
+			match = vehicle_titles.match_asset(title["columns"]["vin"], company)
+			title_reported["candidates"] = match["candidates"]
+			if match["asset"]:
+				title_reported.update(vehicle_titles.link(doc.name, match["asset"], replace=False))
+				title_reported["matched_by"] = match["matched_on"]
+		title_reported["linked_asset"] = title_reported.pop("asset", None)
+		title_reported.pop("receipt", None)
 
 	return ToolResult(
 		data={
@@ -584,6 +625,15 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 			"is_return": bool(is_return),
 			"items": _items_out(doc),
 			**intelligence["reported"],
+			**(
+				{
+					"document_subtype": title["columns"].get("document_subtype"),
+					"vin": title["columns"].get("vin"),
+					"title": title_reported,
+				}
+				if title_reported is not None
+				else {}
+			),
 		},
 		summary=f"Expense receipt {doc.name} captured: {merchant} {amount} on {receipt_date} "
 		f"({category}{', RETURN — money back' if is_return else ''}) by {submitted_by}"
@@ -595,6 +645,48 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 		),
 		docstatus_delta=f"none → {status}",
 	)
+
+
+def _title_arguments(args: dict, category: str, company: str) -> dict:
+	"""`document_subtype`, `vin` and `linked_asset`, checked before anything is written.
+
+	v0.165.0. THEY BELONG TO THE TWO DOCUMENT CATEGORIES AND ARE REFUSED ON ANY
+	OTHER. A fuel slip carrying a VIN would link itself to a truck's title slot
+	on the strength of a number nobody meant as one.
+
+	`linked_asset` IS PROVED LINKABLE HERE — it exists, it is a Vehicle or a
+	Tractor, it is this company's — so the receipt is never inserted and then
+	left unlinked by a refusal that could have come first.
+	"""
+	from . import vehicle_titles
+
+	tail = "Nothing was created."
+	subtype = as_str(args, "document_subtype")
+	vin = vehicle_titles.normalize_vin(as_str(args, "vin"))
+	asset = as_str(args, "linked_asset")
+	if category not in DOCUMENT_CATEGORIES:
+		sent = [
+			key
+			for key, value in (("document_subtype", subtype), ("vin", vin), ("linked_asset", asset))
+			if value
+		]
+		if sent:
+			raise ToolError(
+				f"{', '.join(sent)} belong to a {' or '.join(DOCUMENT_CATEGORIES)} document, and this "
+				f"receipt is categorised {category!r}. {tail}"
+			)
+		return {"columns": {}, "linked_asset": ""}
+
+	vehicle_titles.require_installed(tail)
+	vehicle_titles.require_subtype(subtype, tail)
+	if asset:
+		vehicle_titles.require_titled_asset(asset, company, tail)
+	columns = {
+		key: value
+		for key, value in (("document_subtype", subtype), ("vin", vin), ("linked_asset", asset))
+		if value
+	}
+	return {"columns": columns, "linked_asset": asset}
 
 
 def _receipt_intelligence(args: dict, merchant: str, ocr_raw_text: str) -> dict:
@@ -1287,7 +1379,15 @@ def get_expense_summary(args: dict) -> ToolResult:
 	total = 0.0
 	returns_count = 0
 	returns_amount = 0.0
+	documents_excluded = 0
+	counted = 0
 	for row in rows:
+		# v0.165.0. A title or a bill of sale is a document, not spend. Counted
+		# separately and reported, never added.
+		if row.get("category") in DOCUMENT_CATEGORIES:
+			documents_excluded += 1
+			continue
+		counted += 1
 		# v0.160.0. A RETURN SUBTRACTS. `is_return` says the money came back, and
 		# the amount is stored as the magnitude the paper printed — so adding it
 		# to a spend total would overstate the category by twice the refund: once
@@ -1323,8 +1423,9 @@ def get_expense_summary(args: dict) -> ToolResult:
 	trend = [buckets[key] for key in sorted(buckets)]
 
 	data = {
-		"count": len(rows),
+		"count": counted,
 		"total_amount": round(total, 2),
+		"documents_excluded": documents_excluded,
 		"returns_count": returns_count,
 		"returns_amount": returns_amount,
 		"by_category": by_category,
@@ -1351,6 +1452,12 @@ def get_expense_summary(args: dict) -> ToolResult:
 			else ""
 		)
 		+ (
+			f"{documents_excluded} {' / '.join(DOCUMENT_CATEGORIES)} document(s) left out: they "
+			"record a vehicle's paperwork, not money spent. "
+			if documents_excluded
+			else ""
+		)
+		+ (
 			f"Scanned the {_SCAN_CAP} most recent matching receipts and stopped; these totals "
 			"are a PARTIAL figure. Narrow from_date/to_date to see everything in a window."
 			if truncated
@@ -1361,7 +1468,7 @@ def get_expense_summary(args: dict) -> ToolResult:
 		data[f"by_{group_by}"] = by_group
 	return ToolResult(
 		data,
-		f"{len(rows)} expense receipt(s) totalling {round(total, 2)} across "
+		f"{counted} expense receipt(s) totalling {round(total, 2)} across "
 		f"{len(by_category)} categor{'y' if len(by_category) == 1 else 'ies'}",
 	)
 

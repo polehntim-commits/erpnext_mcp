@@ -3,6 +3,104 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.165.0 — 2026-09-13 — the title in the glovebox
+
+A vehicle title, MCO, bill of sale or registration is now captured through the
+receipt flow and filed on the Vehicle or Tractor it belongs to. **870 tools,
+unchanged**; one new sidecar route, `link_title_to_asset`.
+
+### Expense Receipt
+
+- `category` gains **`Title/MCO`** and **`Bill of Sale`**, the two *document
+  categories*.
+- New columns, shown only for those two categories: `document_subtype` (Vehicle
+  Title, MCO, Bill of Sale, Registration), `vin` and `linked_asset` (a Link to
+  Asset Register).
+- `submit_expense_receipt` / `create_expense_receipt` accept all three. The
+  amount is optional on a document and reads 0; a price printed on a bill of
+  sale is kept as sent. The three arguments are refused on any other category.
+- The VIN is stored upper case with spaces and dashes removed. It is **not**
+  checked for 17 characters: pre-1981 vehicles and tractor titles print
+  shorter numbers.
+
+### Nothing posts to the ledger
+
+No GL entry was ever written at capture. Receipts reach the ledger through
+`create_purchase_invoice_from_receipt`, which now refuses a document category
+by name, as it already refused Owner Draw. `get_expense_summary` leaves
+documents out of its totals and reports `documents_excluded`, so a
+$24,500 bill of sale does not appear as spend.
+`get_expense_report` is unchanged, because it lists every receipt by design.
+
+### Matching the VIN to a truck
+
+When `linked_asset` is not sent, the VIN is matched against the company's
+Vehicles and Tractors: first on `vin`, then on `serial_number`, since
+`register_asset` has always described `serial_number` as "the serial or VIN".
+
+- **Exactly one match links both ways.** The receipt's `linked_asset` is set,
+  the asset's `title_receipt` is set, and a VIN missing from the asset is
+  copied onto it.
+- **Two or more matches link nothing.** The candidates are listed in the
+  answer's `title` block.
+- **Scope of the match:** only the receipt's own company, and only Vehicles and
+  Tractors. A sprayer carrying the same serial number is not matched.
+- **An automatic match never replaces an asset's existing `title_receipt`.** It
+  reports `title_receipt_kept` instead. Naming the asset with `linked_asset`
+  does replace it and reports `title_receipt_replaced`.
+- **A VIN that disagrees with the asset's is reported** as `vin_mismatch` and
+  never overwritten.
+- **A named asset is checked before anything is written.** It must exist, be a
+  Vehicle or Tractor, and belong to the receipt's company; otherwise the whole
+  capture is refused.
+
+### `link_title_to_asset`
+
+Sidecar route: `POST /farmops/api/mobile/link_title_to_asset` with `receipt` and
+`asset`. It is the fix-up after a capture that matched nothing or matched the
+wrong truck. It sets both sides and copies a VIN the asset lacks. Moving a
+document to another truck clears the first truck's `title_receipt`.
+
+It accepts **Bill of Sale as well as Title/MCO**, although the brief named only
+Title/MCO: capture already auto-links a bill of sale, so refusing one here would
+leave a wrongly linked bill of sale with no way to correct it. Both docnames are
+scoped. The route is open on enrolment, like `create_expense_receipt`, which can
+make the same link by VIN at capture. It is not an MCP tool.
+
+### Asset Register
+
+- New columns, shown for `Vehicle` and `Tractor` only: `vin`, `license_plate`,
+  `title_holder`, `lien_holder` and `title_receipt` (a Link to Expense Receipt).
+- `register_asset` accepts the first four. They are refused on other asset
+  types, and a VIN already on another asset in the company is refused.
+- `get_asset_detail` answers all five, plus `title_document` (the linked
+  receipt's category, subtype, VIN, merchant, date and status) and
+  `title_documents` (every document filed on the asset).
+
+**`vehicle_titles.TITLED_ASSET_TYPES` is the one list** of titled types. Tests
+check both doctypes' `depends_on` and the subtype options against the code's
+tuples. Renaming the `Vehicle` or `Tractor` Farm Asset Type would hide the
+section and refuse the arguments.
+
+### The phone's `get_asset_detail` is now scoped by company
+
+It had checked enrolment only, and it now returns a lien holder. The tool
+resolves partial tag names, so the company is checked on the record it actually
+found, and another entity's asset reads as not found. `scan_asset` has the same
+gap and is unchanged here, because its answer carries no title fields.
+
+### Not done
+
+- `update_registered_asset` cannot edit the four title columns yet; use the Desk.
+- `MobileAPI.swift` names none of this, so `link_title_to_asset` is registered
+  in `PENDING_IOS_INTEGRATION`.
+
+### Tests
+
+38 new tests in `tests_standalone/test_vehicle_titles.py`. Seventeen mutations were
+run, one per rule above, including the three company-scope checks on the phone
+routes; every one was caught.
+
 ## 0.164.0 — 2026-09-13 — the photograph on the receipt
 
 Workers photograph a receipt, file it from the phone, and could not see the

@@ -402,6 +402,9 @@ ROUTES = (
 	# `/private/files/…` link, and this door cannot follow one.
 	Route("/mobile", mobile_api.get_receipt_image),
 	Route("/mobile", mobile_api.update_expense_receipt),
+	# v0.165.0. Filing a captured vehicle title on the Vehicle or Tractor it
+	# belongs to, when capture matched no VIN or matched the wrong one.
+	Route("/mobile", mobile_api.link_title_to_asset),
 	# Sprint 3 (v0.68.0): compliance alert rectification — see api/rectify.py.
 	# Five direct fixes, and the one route every task-shaped fix shares.
 	Route("/mobile", mobile_api.renew_certification),

@@ -167,6 +167,7 @@ from ..tools import training as training_tools
 from ..tools import training_sessions as training_session_tools
 from ..tools import universal_scan as universal_scan_tool
 from ..tools import valves as valve_tools
+from ..tools import vehicle_titles as title_tools
 from ..tools import wallet as wallet_tools
 from ..tools import wizards as wizard_tools
 from . import fallback_auth, guard, rectify, shape
@@ -1655,13 +1656,23 @@ def scan_asset(user: str, asset_name=None, gps_lat=None, gps_lon=None) -> dict:
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("get_asset_detail", limit=guard.READ_LIMIT)
 def get_asset_detail(user: str, asset_name=None) -> dict:
-	"""Asset detail screen data: current state, open tasks, history."""
-	guard.require_scope(user)
+	"""Asset detail screen data: current state, open tasks, history.
+
+	v0.165.0: SCOPED ON THE WAY OUT. The answer now carries a vehicle's lien holder
+	and title documents, and this read had checked enrolment only. The tool
+	resolves a partial tag name, which `require_scoped_doc` would refuse, so the
+	company is checked on the record the tool actually found — and another
+	entity's asset reads as not found, the rule every detail read here follows.
+	"""
+	allowed = guard.require_scope(user)
 	asset_name = str(asset_name or "").strip()
 	if not asset_name:
 		frappe.throw("asset_name is required.", frappe.ValidationError)
 
 	result = asset_tags.get_asset_detail({"asset_name": asset_name})
+	owner = result.data.get("company")
+	if owner and owner not in set(allowed):
+		frappe.throw(f"asset_name {asset_name} was not found.", frappe.DoesNotExistError)
 	return result.data
 
 
@@ -6415,6 +6426,9 @@ def create_expense_receipt(
 	merchant_url=None,
 	store_number=None,
 	cost_center=None,
+	document_subtype=None,
+	vin=None,
+	linked_asset=None,
 ) -> dict:
 	"""The fuel slip at the pump, with v0.67.0's Supplier and Item links.
 
@@ -6450,8 +6464,18 @@ def create_expense_receipt(
 	one for a phone in a truck, where the same field would let a bad on-device
 	guess overrule a mapping a bookkeeper taught by hand. The phone reports what
 	it READ; deciding what that means stays on this side.
+
+	v0.165.0: A VEHICLE TITLE, MCO OR BILL OF SALE IS CAPTURED HERE TOO, as
+	category `Title/MCO` or `Bill of Sale` with `document_subtype`, `vin` and
+	`linked_asset`. `linked_asset` is scoped like every docname a body names; a VIN
+	match the tool makes on its own is confined to the receipt's company, which
+	`_company` has already proved this caller may reach.
 	"""
 	allowed = guard.require_scope(user)
+	if str(linked_asset or "").strip():
+		linked_asset = guard.require_scoped_doc(
+			asset_tags.ASSET_REGISTER, linked_asset, "linked_asset", allowed
+		)
 
 	inner = {
 		"merchant": merchant,
@@ -6474,6 +6498,9 @@ def create_expense_receipt(
 		("merchant_phone", merchant_phone),
 		("merchant_url", merchant_url),
 		("store_number", store_number),
+		("document_subtype", document_subtype),
+		("vin", vin),
+		("linked_asset", linked_asset),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -8741,6 +8768,30 @@ def update_expense_receipt(
 	return expense_tools.update_expense_receipt(inner).data
 
 
+# ── 75a. link_title_to_asset ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("link_title_to_asset", mutating=True, limit=guard.WRITE_LIMIT)
+def link_title_to_asset(user: str, receipt=None, asset=None) -> dict:
+	"""File a captured title, MCO or bill of sale on the Vehicle or Tractor it belongs to.
+
+	v0.165.0. The correction after a capture that linked nothing — no VIN, a VIN
+	two assets answer to — or linked the wrong truck. The tool sets both sides,
+	copies the VIN onto an asset that has none, and says what it replaced.
+
+	BOTH DOCNAMES ARE SCOPED, and the tool refuses an asset in a different company
+	from the document, so a caller cannot file one entity's title on another's
+	truck even inside the set of companies they reach.
+
+	OPEN ON ENROLMENT, like `create_expense_receipt`, which can already make this
+	link by VIN at capture. A tighter gate on the explicit route would protect
+	nothing that route does not already do.
+	"""
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(EXPENSE_RECEIPT, receipt, "receipt", allowed)
+	target = guard.require_scoped_doc(asset_tags.ASSET_REGISTER, asset, "asset", allowed)
+	return title_tools.link_title_to_asset({"receipt": name, "asset": target}).data
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Sprint 8 (v0.78.0) — field asset registration
 #
@@ -8908,6 +8959,10 @@ def register_asset(
 	last_service_date=None,
 	last_service_hours=None,
 	photo_file_token=None,
+	vin=None,
+	license_plate=None,
+	title_holder=None,
+	lien_holder=None,
 ) -> dict:
 	"""Register a new asset from the field. The docname IS the printed tag ID.
 
@@ -8954,6 +9009,11 @@ def register_asset(
 		("irrigation_zone", irrigation_zone),
 		("last_service_date", last_service_date),
 		("photo_file_token", photo_file_token),
+		# v0.165.0. On a Vehicle or a Tractor only; the tool refuses them elsewhere.
+		("vin", vin),
+		("license_plate", license_plate),
+		("title_holder", title_holder),
+		("lien_holder", lien_holder),
 	):
 		if value not in (None, ""):
 			inner[key] = str(value).strip()

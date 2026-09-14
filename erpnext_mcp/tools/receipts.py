@@ -2799,6 +2799,14 @@ def create_purchase_invoice_from_receipt(args: dict) -> ToolResult:
 			"is equity leaving the company, not a bill from a vendor. Use create_owner_draw instead. "
 			"Nothing was created."
 		)
+	if receipt.get("category") in expenses.DOCUMENT_CATEGORIES:
+		# v0.165.0. A title or a bill of sale records a vehicle's paperwork. It has
+		# no ledger side: whatever the vehicle cost is capitalised on the asset.
+		raise ToolError(
+			f"expense receipt {receipt_name} is categorised {receipt.get('category')!r}, which is a "
+			"vehicle document and not a bill. It posts nothing to the ledger; it is filed on the "
+			"asset with link_title_to_asset. Nothing was created."
+		)
 	if receipt.get("linked_document"):
 		raise ToolError(
 			f"expense receipt {receipt_name} is already linked to "
