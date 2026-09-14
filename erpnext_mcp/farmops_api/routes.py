@@ -398,6 +398,9 @@ ROUTES = (
 	# it — and the photograph, which is how a receipt is actually checked, is on
 	# the detail read and on nothing else.
 	Route("/mobile", mobile_api.get_expense_receipt),
+	# v0.164.0. The photograph itself. `get_expense_receipt` answers a private
+	# `/private/files/…` link, and this door cannot follow one.
+	Route("/mobile", mobile_api.get_receipt_image),
 	Route("/mobile", mobile_api.update_expense_receipt),
 	# Sprint 3 (v0.68.0): compliance alert rectification — see api/rectify.py.
 	# Five direct fixes, and the one route every task-shaped fix shares.

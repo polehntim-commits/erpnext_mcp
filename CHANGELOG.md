@@ -3,6 +3,79 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.164.0 — 2026-09-13 — the photograph on the receipt
+
+Workers photograph a receipt, file it from the phone, and could not see the
+photograph again. App feedback reported this four times. **870 tools,
+unchanged.** This is a sidecar route, not an MCP tool.
+
+### `get_receipt_image`
+
+`POST|GET /farmops/api/mobile/get_receipt_image`, with `receipt` (or `name`) set
+to the Expense Receipt docname. The answer carries the image as base64 in
+`content`, with `content_type`, using the key names `get_attachment_content`
+already uses (`content_base64` and `mime_type` are included as well). The
+`receipt` and `name` keys are the receipt's docname, and `file` is the File's.
+
+**Why `get_expense_receipt` was not enough.** It returns `receipt_image`, which
+is a `/private/files/…` link. The handset authenticates to the sidecar with
+`X-FarmOps-Token`, not to Frappe, so following the link returns a login page.
+`get_attachment_content` has the bytes, but it cannot open files on
+`Expense Receipt`: that doctype is not on `ATTACHMENT_PARENTS`.
+
+**How it finds the file.** On every save, Frappe's `attach_files_to_document`
+(checked in the built image) attaches the File behind an Attach Image value to
+the document. The route therefore searches only the receipt's own attachments.
+It takes the first match from this list:
+
+1. the attachment whose `file_url` is the current `receipt_image`
+2. an attachment filed through that field
+3. the newest image attached by `attach_file_to_document`
+
+Only `jpg`, `jpeg`, `png`, `heic` and `heif` files count, so a PDF attached next
+to the photograph is never returned as the image. JPEG and PNG are identified
+from their first bytes, so a PNG saved with a `.jpg` name is reported as a PNG.
+
+**A receipt without a photograph is not an error.** The route returns
+`has_image: false` with `content: null`. An error means something actually
+failed.
+
+### The `receipt_image` URL is never looked up
+
+`create_expense_receipt` stores `receipt_image` exactly as the phone sends it.
+Looking that URL up across the whole File table would let anyone who can file a
+receipt read any private image on the site. The route instead requires the File
+to be attached to this receipt. `attachment_content_on_authorized_parent` then
+checks that again before reading the bytes. A test files a receipt pointing at
+an Employee's licence photograph and asserts that nothing is returned.
+
+### The gate is `get_expense_receipt`'s
+
+The route checks enrolment scope and then `require_scoped_doc`, so a receipt
+belonging to another entity reads as not found. It is in `OPEN_ON_ENROLMENT`
+because `get_expense_receipt` is too. The bytes are read through the brokered
+reader. `get_expense_receipt`'s tool never checks Frappe's DocPerm, so a
+DocPerm-checked read here would let a worker open the receipt but not its
+photograph. A negative control proves the harness denial actually refuses on
+the unbrokered path.
+
+### Size limit
+
+The limit defaults to `files.ABSOLUTE_MAX_BYTES` (8 MiB), not the 2 MiB
+`DEFAULT_MAX_BYTES`. The 2 MiB default was sized for a model's context window,
+and a receipt photographed on a phone camera can be larger. `max_bytes` can
+lower the limit. The rate limit is `UPLOAD_LIMIT`, the same as
+`get_attachment_content`.
+
+### Tests
+
+19 new tests in `tests_standalone/test_receipt_image.py`. Six mutations were
+run and all were caught: an unbrokered read, a URL lookup across the File
+table, no image-extension filter, no byte sniffing, no preference for the
+current URL, and the 2 MiB default limit. The route is registered in
+`TheSurfaceIsClosed.EXPECTED`, in `PENDING_IOS_INTEGRATION` (`MobileAPI.swift`
+does not name it yet) and in `OPEN_ON_ENROLMENT` (100 methods).
+
 ## 0.163.1 — 2026-09-07 — which field to send back
 
 **The Select-to-Link change this was briefed as had already shipped**, in

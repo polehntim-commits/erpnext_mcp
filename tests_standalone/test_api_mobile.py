@@ -526,6 +526,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# v0.159.0. The detail read behind it — `MobileAPI.swift` does not name
 		# it yet; the receipt screen is the app's half.
 		"get_expense_receipt",
+		# v0.164.0. The photograph's bytes. `ReceiptPhotoAPI.swift` decodes the
+		# `content` key but calls `get_expense_receipt`, not this path.
+		"get_receipt_image",
 		"update_expense_receipt",
 		# Sprint 8 (v0.78.0). Field asset registration: register the machine,
 		# get its printable tag back, file the photograph against it. The Swift

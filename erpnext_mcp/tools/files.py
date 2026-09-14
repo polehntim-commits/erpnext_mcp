@@ -183,12 +183,17 @@ def attachment_content_on_authorized_parent(
 	this skips is the parent's, and the parent is an argument rather than
 	something read off the file.
 
-	`api/mobile.get_attachment_content` IS THE ONLY CALLER and it derives the
-	parent from the File FIRST, then runs `_attachment_parent` on that derived
-	pair, then passes both here. So the agreement check below is a second reading
-	of a fact that route has already established — belt and braces, deliberately,
-	because the day a second caller appears it will not necessarily have done it
-	in that order.
+	`api/mobile.get_attachment_content` derives the parent from the File FIRST,
+	then runs `_attachment_parent` on that derived pair, then passes both here. So
+	the agreement check below is a second reading of a fact that route has already
+	established — belt and braces, deliberately, because a second caller will not
+	necessarily have done it in that order.
+
+	v0.164.0: `api/mobile.get_receipt_image` IS THAT SECOND CALLER. It proves the
+	Expense Receipt with `require_scoped_doc` and picks the File from
+	`list_attachments_on_authorized_parent` on the same receipt, so the agreement
+	check holds there too — and it is still the check that refuses if that
+	selection is ever wrong.
 	"""
 	max_bytes = _resolve_max_bytes(as_int({"max_bytes": max_bytes}, "max_bytes", DEFAULT_MAX_BYTES))
 	doc = _open_attachment(file_docname)

@@ -8562,6 +8562,143 @@ def get_expense_receipt(user: str, receipt=None, name=None) -> dict:
 	return expense_tools.get_expense_receipt({"receipt": docname}).data
 
 
+# ── 74b. get_receipt_image ──────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_receipt_image", limit=guard.UPLOAD_LIMIT)
+def get_receipt_image(user: str, receipt=None, name=None, max_bytes=None) -> dict:
+	"""The photograph on one receipt, as bytes. `get_expense_receipt` hands back a link.
+
+	v0.164.0, AND IT WAS FLAGGED FOUR TIMES IN APP FEEDBACK. A worker files a slip
+	and cannot see it again. `get_expense_receipt` answers `receipt_image`, which is
+	a `/private/files/…` URL, and this door authenticates with `X-FarmOps-Token`
+	rather than to Frappe, so following it gets a login page. `get_attachment_content`
+	has the bytes and cannot serve these: `Expense Receipt` is not on
+	`ATTACHMENT_PARENTS`. This route takes the receipt's docname and returns the
+	image, in the key names `get_attachment_content` already uses.
+
+	WHICH FILE. Frappe's `attach_files_to_document` runs on every save and attaches
+	the File behind an Attach Image value to the document, with `attached_to_field`
+	set. So the photograph is found AMONG THE RECEIPT'S OWN ATTACHMENTS, never by
+	looking its URL up across the File table. It prefers the attachment whose
+	`file_url` is the current `receipt_image`, then the one attached through that
+	field, then the newest image filed against the receipt by
+	`attach_file_to_document`. Only image extensions (`files.CAMERA_EXTENSIONS`)
+	count, so a PDF someone attached beside the slip is never sent as the picture.
+
+	WHY ONLY THE RECEIPT'S OWN ATTACHMENTS. `create_expense_receipt` writes
+	`receipt_image` exactly as the phone sends it. Resolving that string with a File
+	lookup by URL would serve any private image on the site to anyone who could file
+	a receipt naming it. Requiring the File to hang off this receipt, and then reading
+	it through `attachment_content_on_authorized_parent`, which checks that again, is
+	the same agreement `get_attachment_content` relies on.
+
+	THE GATE IS `get_expense_receipt`'s, AND THE READ IS BROKERED FOR THAT REASON.
+	Scope, then `require_scoped_doc`, so another entity's receipt reads as not found.
+	The tool behind `get_expense_receipt` reads with `frappe.db.get_all` and never
+	asks Frappe's DocPerm; if this read did ask, a worker could open the record and
+	not the photograph on it, which is the complaint this route exists to fix.
+
+	NO PHOTOGRAPH IS AN ANSWER, NOT AN ERROR. A receipt typed in without a slip is an
+	ordinary record, so `has_image` is false and `content` is null. A throw means
+	something actually went wrong, and the phone shows a different sentence for it.
+
+	THE CEILING DEFAULTS TO THE HARD ONE. `files.DEFAULT_MAX_BYTES` (2 MiB) is sized
+	for a model's context window. A receipt photographed on a 12 MP camera is often
+	larger than that, and the reader here is a phone screen. `max_bytes` may lower it.
+	"""
+	allowed = guard.require_scope(user)
+	wanted = str(receipt or name or "").strip()
+	if not wanted:
+		raise ToolError(
+			"get_receipt_image needs a receipt — send `receipt` (or `name`) naming the "
+			"Expense Receipt. list_expense_receipts has the register. Nothing was read."
+		)
+	docname = guard.require_scoped_doc(EXPENSE_RECEIPT, wanted, "receipt", allowed)
+	field_value = str(frappe.db.get_value(EXPENSE_RECEIPT, docname, "receipt_image") or "")
+
+	answer = {
+		"receipt": docname,
+		"name": docname,
+		"receipt_image": field_value or None,
+		"has_image": False,
+		"file": None,
+		"file_name": None,
+		"file_url": None,
+		"file_size": None,
+		"size_human": None,
+		"content_type": None,
+		"mime_type": None,
+		"encoding": None,
+		"content": None,
+		"content_base64": None,
+	}
+	row = _receipt_image_attachment(docname, field_value)
+	if row is None:
+		return answer
+
+	ceiling = file_tools.ABSOLUTE_MAX_BYTES if max_bytes in (None, "") else max_bytes
+	data = file_tools.attachment_content_on_authorized_parent(
+		EXPENSE_RECEIPT, docname, row["name"], ceiling
+	).data
+	content = data.get("content_base64") or ""
+	content_type = _image_content_type(content) or data.get("mime_type")
+	answer.update(
+		{
+			"has_image": True,
+			"file": data.get("name"),
+			"file_name": data.get("file_name"),
+			"file_url": data.get("file_url"),
+			"file_size": data.get("file_size"),
+			"size_human": data.get("size_human"),
+			# The same pairs `get_attachment_content` answers: the client reads
+			# `content_type` and `content`, the MCP tool's names are `mime_type`
+			# and `content_base64`.
+			"content_type": content_type,
+			"mime_type": content_type,
+			"encoding": data.get("encoding"),
+			"content": content,
+			"content_base64": content,
+		}
+	)
+	return answer
+
+
+def _receipt_image_attachment(docname: str, field_value: str):
+	"""The File on one receipt that is its photograph, or None. See `get_receipt_image`."""
+	rows = file_tools.list_attachments_on_authorized_parent(EXPENSE_RECEIPT, docname).data
+	images = []
+	for row in rows.get("attachments") or []:
+		named = str(row.get("file_name") or row.get("file_url") or "")
+		if "." in named and named.rsplit(".", 1)[-1].lower() in file_tools.CAMERA_EXTENSIONS:
+			images.append(row)
+	# The list is newest first, so each loop below takes the newest match.
+	if field_value:
+		for row in images:
+			if row.get("file_url") == field_value:
+				return row
+	for row in images:
+		if row.get("attached_to_field") == "receipt_image":
+			return row
+	return images[0] if images else None
+
+
+def _image_content_type(content_base64: str):
+	"""JPEG or PNG read off the bytes rather than the filename, or None.
+
+	A camera roll export can be named `.jpg` and hold a PNG, and `mimetypes` goes by
+	the name. The first dozen bytes are enough to tell the two apart, so only that
+	prefix is decoded. Anything else falls back to the extension's guess.
+	"""
+	if not content_base64:
+		return None
+	head = base64.b64decode(content_base64[:16])
+	if head.startswith(b"\xff\xd8\xff"):
+		return "image/jpeg"
+	if head.startswith(b"\x89PNG\r\n\x1a\n"):
+		return "image/png"
+	return None
+
+
 # ── 75. update_expense_receipt ──────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("update_expense_receipt", mutating=True, limit=guard.WRITE_LIMIT)

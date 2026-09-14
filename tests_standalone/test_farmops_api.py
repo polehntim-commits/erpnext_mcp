@@ -305,6 +305,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# v0.159.0. The detail read at the end of the receipt flow — the
 		# photograph is on this read and on nothing else.
 		"/mobile/get_expense_receipt",
+		# v0.164.0. The photograph on that receipt, as bytes.
+		"/mobile/get_receipt_image",
 		"/mobile/update_expense_receipt",
 		# Sprint 3 (v0.68.0). Compliance alert rectification — see api/rectify.py.
 		# Five direct fixes, and the one route every task-shaped fix shares.
@@ -2892,6 +2894,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.164.0. The photograph on a receipt `get_expense_receipt` already
+		# returns to this account, behind the same `require_scoped_doc` gate.
+		"get_receipt_image",
 		# v0.159.0. Reading back a receipt this account can already see in
 		# `list_expense_receipts`, scoped to the entity by `require_scoped_doc`.
 		# A receipt is checked by LOOKING at it, and the photograph is on the
@@ -2982,7 +2987,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 99, "a method is named in two sets at once")
+		self.assertEqual(len(named), 100, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
