@@ -528,6 +528,9 @@ ROUTES = (
 	# route in this table: they are GET and answer PNG, like `login_qr_image`, and
 	# are dispatched in `app.py` by path. Open on enrolment with the rest of the map.
 	Route("/mobile", mobile_api.get_slope_aspect_layer),
+	# v0.168.0. HOW STEEP THE GROUND IS — the slope-grade toggle's descriptor, with an
+	# optional `asset` for one machine's rollover limits. Tiles are GET in `app.py`.
+	Route("/mobile", mobile_api.get_slope_grade_layer),
 	Route("/mobile", mobile_api.create_farm_location),
 	Route("/mobile", mobile_api.create_field),
 	Route("/mobile", mobile_api.create_irrigation_zone),

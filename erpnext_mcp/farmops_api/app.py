@@ -32,6 +32,8 @@ in), and restricted to an admin role rather than a scoped worker.
 v0.167.0 ADDS A SECOND: `GET /tiles/slope_aspect/{z}/{x}/{y}.png`, the slope
 aspect map tiles, which answer `image/png` because `MKTileOverlay` asks for an
 image per tile and nothing else. Same rule: every refusal is still JSON.
+v0.168.0 adds `GET /tiles/slope_grade/{z}/{x}/{y}.png[?asset=<docname>]` beside
+it, through the same gates.
 
 ────────────────────────────────────────────────────────────────────────────
 THE ERROR ENVELOPE IS FRAPPE'S, BECAUSE THE APP ALREADY READS FRAPPE'S
@@ -81,7 +83,7 @@ import traceback
 import frappe
 from werkzeug.wrappers import Request, Response
 
-from .. import __version__, audit, security, slope_aspect
+from .. import __version__, audit, security, slope_aspect, slope_grade
 from ..api import guard
 from ..errors import ToolError
 from ..tools import employee as personnel
@@ -146,8 +148,19 @@ TILE_DESCRIBED_ROUTE = {
 	"arguments": ["z", "x", "y"],
 }
 
+#: `GET /tiles/slope_grade/{z}/{x}/{y}.png[?asset=]` — see `_slope_grade_tile`. v0.168.0.
+GRADE_TILE_PREFIX = f"{PREFIX}/tiles/slope_grade/"
+
+GRADE_TILE_DESCRIBED_ROUTE = {
+	"path": f"{GRADE_TILE_PREFIX}{{z}}/{{x}}/{{y}}.png",
+	"method": "slope_grade_tile",
+	"group": "tiles",
+	"mutating": False,
+	"arguments": ["z", "x", "y", "asset"],
+}
+
 #: Every route `routes.ROUTES` cannot describe, for `list_sidecar_routes`.
-DESCRIBED_ROUTES = (DESCRIBED_ROUTE, TILE_DESCRIBED_ROUTE)
+DESCRIBED_ROUTES = (DESCRIBED_ROUTE, TILE_DESCRIBED_ROUTE, GRADE_TILE_DESCRIBED_ROUTE)
 
 _MAX_BODY = auth.MAX_BODY_BYTES
 
@@ -460,11 +473,53 @@ def _slope_aspect_tile(request: Request, path: str) -> Response:
 	200, so `MKTileOverlay` draws nothing rather than logging a failure per tile.
 	A site that has never built the layer answers 404 JSON, which says so.
 	"""
+	return _terrain_tile(
+		request,
+		path,
+		TILE_PREFIX,
+		"slope aspect",
+		"slope_aspect_tile",
+		lambda caller, z, x, y: slope_aspect.tile_png(z, x, y),
+	)
+
+
+def _slope_grade_tile(request: Request, path: str) -> Response:
+	"""`GET /tiles/slope_grade/{z}/{x}/{y}.png[?asset=<docname>]` — one grade tile. v0.168.0.
+
+	The aspect tile's gates, exactly (see `_slope_aspect_tile`). `asset` shifts
+	the colours to that machine's rollover limit. IT IS SCOPED to the caller's
+	entities — another company's docname is 404, worded as an absent one is —
+	and an asset with no limit and no type figure is 400 by name rather than a
+	tile of standard colours a driver would read as their machine's.
+	"""
+
+	def render(caller, z, x, y):
+		scheme = None
+		asset = str(request.args.get("asset") or "").strip()
+		if asset:
+			allowed = guard.require_scope(caller)
+			name = guard.require_scoped_doc(slope_grade.ASSET_REGISTER, asset, "Asset", allowed)
+			rating = slope_grade.asset_rating(name)
+			scheme = slope_grade.equipment_scheme(rating["max_safe_slope_degrees"])
+		return slope_grade.tile_png(z, x, y, scheme)
+
+	return _terrain_tile(request, path, GRADE_TILE_PREFIX, "slope grade", "slope_grade_tile", render)
+
+
+def _terrain_tile(
+	request: Request, path: str, prefix: str, label: str, throttle_key: str, render
+) -> Response:
+	"""The gates and the answer shared by both terrain tile routes.
+
+	`render(caller, z, x, y)` returns PNG bytes, or None for "never built". It
+	may refuse: DoesNotExistError is 404, `slope_grade.AssetNotRated` 400, any
+	other ToolError 503 (numpy missing), anything else 500.
+	"""
 	if request.method not in ("GET", "HEAD"):
-		return _failure(405, f"{TILE_PREFIX}{{z}}/{{x}}/{{y}}.png is GET only.")
-	match = _TILE_TAIL.match(path[len(TILE_PREFIX) :])
+		return _failure(405, f"{prefix}{{z}}/{{x}}/{{y}}.png is GET only.")
+	match = _TILE_TAIL.match(path[len(prefix) :])
 	if not match or not slope_aspect.valid_tile(*match.groups()):
-		return _failure(404, f"{path} is not a slope aspect tile. The pattern is {{z}}/{{x}}/{{y}}.png.")
+		return _failure(404, f"{path} is not a {label} tile. The pattern is {{z}}/{{x}}/{{y}}.png.")
 	z, x, y = (int(part) for part in match.groups())
 
 	with session.request_session(request=request, body={}):
@@ -477,7 +532,7 @@ def _slope_aspect_tile(request: Request, path: str) -> Response:
 			return _failure(401, UNAUTHORIZED)
 
 		try:
-			guard.throttle(caller, "slope_aspect_tile", TILE_LIMIT)
+			guard.throttle(caller, throttle_key, TILE_LIMIT)
 		except guard.RateLimited as exc:
 			return _failure(429, str(exc))
 
@@ -490,7 +545,19 @@ def _slope_aspect_tile(request: Request, path: str) -> Response:
 			return _failure(403, str(exc), type(exc).__name__)
 
 		try:
-			png = slope_aspect.tile_png(z, x, y)
+			png = render(caller, z, x, y)
+		except frappe.PermissionError as exc:
+			session.rollback()
+			return _failure(403, str(exc), type(exc).__name__)
+		except frappe.DoesNotExistError as exc:
+			session.rollback()
+			return _failure(404, str(exc), type(exc).__name__)
+		except slope_grade.AssetNotRated as exc:
+			session.rollback()
+			return _failure(400, str(exc))
+		except frappe.ValidationError as exc:
+			session.rollback()
+			return _failure(400, str(exc), type(exc).__name__)
 		except ToolError as exc:
 			session.rollback()
 			return _failure(503, str(exc))
@@ -504,7 +571,7 @@ def _slope_aspect_tile(request: Request, path: str) -> Response:
 		if png is None:
 			return _failure(
 				404,
-				"The slope aspect layer has not been built on this site. An operator runs "
+				f"The {label} layer has not been built on this site. An operator runs "
 				"build_slope_aspect_layer once to fetch the elevation and cache the tiles.",
 			)
 		return _png(png, "private, max-age=86400")
@@ -524,6 +591,9 @@ def dispatch(request: Request) -> Response:
 
 	if path.startswith(TILE_PREFIX):
 		return _slope_aspect_tile(request, path)
+
+	if path.startswith(GRADE_TILE_PREFIX):
+		return _slope_grade_tile(request, path)
 
 	if not path.startswith(f"{PREFIX}/"):
 		return _failure(404, f"{path} is not a Farm Ops API path.")

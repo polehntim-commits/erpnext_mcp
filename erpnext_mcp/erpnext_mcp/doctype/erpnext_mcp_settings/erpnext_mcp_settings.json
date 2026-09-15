@@ -274,6 +274,7 @@
   "allow_assign_soil_profile",
   "allow_get_slope_aspect_layer",
   "allow_build_slope_aspect_layer",
+  "allow_get_slope_grade_layer",
   "housing_tools_section",
   "allow_list_housing_units",
   "allow_get_housing_unit",
@@ -2867,6 +2868,13 @@
    "fieldname": "allow_build_slope_aspect_layer",
    "fieldtype": "Check",
    "label": "Build Slope Aspect Layer"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. How steep every block is, from the terrain the slope aspect layer caches: the slope grade map layer's descriptor and every block steepest first, optionally classified against one machine's max safe slope for rollover danger.",
+   "fieldname": "allow_get_slope_grade_layer",
+   "fieldtype": "Check",
+   "label": "Get Slope Grade Layer"
   },
   {
    "fieldname": "housing_tools_section",

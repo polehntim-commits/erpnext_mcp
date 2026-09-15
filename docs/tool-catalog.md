@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 875 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 876 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 438 read tools are **on** by default and can be switched off individually. A
+All 439 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -19053,6 +19053,60 @@ the previous build standing. **Refuses** boundaries spanning more than 30 km.
 descriptor (open on enrolment; `include_blocks` opt in), and
 `GET /farmops/api/tiles/slope_aspect/{z}/{x}/{y}.png` with `X-FarmOps-Token` is the
 tile — 256 px RGBA, transparent off the farm, 404 JSON only when never built.
+
+### Slope grade (v0.168.0) — how steep the ground is
+
+The same USGS 1/3 arc-second slope the aspect layer computes, coloured for
+rollover danger. **Nothing is fetched**: the grade layer reads the slope
+`build_slope_aspect_layer` cached, so that one build makes both layers.
+
+### `get_slope_grade_layer` — read-only, default ON
+
+| Argument | Meaning |
+| --- | --- |
+| `company` | only this entity's blocks |
+| `asset` | an Asset Register docname: colour and classify against that machine's `max_safe_slope_degrees` |
+| `include_blocks` | summarise the blocks (default true) |
+| `latitude`, `longitude` | together: the slope and band of the one cell under a point |
+
+| On the answer | Meaning |
+| --- | --- |
+| `available` | false until `build_slope_aspect_layer` has run |
+| `mode` | `standard` or `equipment` |
+| `tile_url_template` | `/farmops/api/tiles/slope_grade/{z}/{x}/{y}.png`, with `?asset=` when one was passed |
+| `legend` | four bands: `level` 0–3, `band`, `label`, `min_degrees`/`max_degrees`, `min_percent`/`max_percent`, `color` |
+| `breakpoints_degrees` | the three breaks in force |
+| `equipment` | `asset`, `asset_type`, `max_safe_slope_degrees`, `max_safe_slope_source` (`asset` or `type_default`) |
+| `equipment_defaults` | common limits: tractor with ROPS 25°, without 15°, ATV/UTV 20°, sprayer 12°, mower 15° |
+| `blocks` | every block, **steepest first** (`steepness_rank`) |
+
+| Scheme | Green | Yellow | Orange | Red |
+| --- | --- | --- | --- | --- |
+| standard | under 8° | 8–15° | 15–25° | 25° and over |
+| equipment | under 60% of the limit | 60–80% | 80–100% | the limit and over |
+
+A cell exactly on a break takes the steeper band.
+
+| Per block | Meaning |
+| --- | --- |
+| `level`, `band` | the band of the block's **steepest** 10 m cell. A 10 m survey smooths banks, so one cell over a limit is real ground. |
+| `band_shares` | how much of the block each band covers |
+| `mean_slope_degrees`, `max_slope_degrees`, `p90_slope_degrees` | steepness |
+| `share_at_or_above_degrees` | shares at or above 8°, 15° and 25° |
+| `cells_over_limit`, `share_over_limit` | equipment mode only |
+
+**The limit lives on the Asset Register** as `max_safe_slope_degrees` (1–45),
+set with `register_asset` or `update_registered_asset` on a Tractor, Vehicle,
+Sprayer or Implement. Unset (a Float reads 0), the type's cautious figure
+applies: Tractor 15° (no ROPS assumed), Vehicle 20°, Sprayer 12°, Implement 15°.
+Any other type is refused by name. `get_asset_detail` answers the stored limit
+and `slope_rating`, the one in effect.
+
+**On the handset:** `POST /farmops/api/mobile/get_slope_grade_layer` (`company`,
+`include_blocks`, `asset`; open on enrolment, `asset` scoped) and
+`GET /farmops/api/tiles/slope_grade/{z}/{x}/{y}.png[?asset=<docname>]` with
+`X-FarmOps-Token`. Another entity's machine is 404, an unrated one 400, and a
+never-built layer 404 JSON.
 
 ---
 

@@ -22,7 +22,7 @@ import json
 
 import frappe
 
-from .. import asset_mirror, asset_types, compat, geo, timezones
+from .. import asset_mirror, asset_types, compat, geo, slope_grade, timezones
 from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..render import qr
@@ -796,6 +796,10 @@ def get_asset_detail(args: dict) -> ToolResult:
 			# and the title documents filed on this asset. Absent on a bench that
 			# has not migrated.
 			**vehicle_titles.asset_title(row),
+			# v0.168.0. max_safe_slope_degrees as stored, and `slope_rating` — the
+			# limit get_slope_grade_layer actually colours against, and whether it
+			# is this machine's own or its type's fallback.
+			**slope_grade.asset_slope_rating(row),
 			"erpnext_asset": asset_mirror.mirror_of(row["name"]) or None,
 			"open_tasks": open_tasks,
 			"open_task_count": len(open_tasks),
@@ -1134,6 +1138,31 @@ def _title_fields(args: dict, asset_type: str, company: str) -> dict:
 	return values
 
 
+def _slope_rating(args: dict, asset_type: str, tail: str):
+	"""`max_safe_slope_degrees` from the arguments: `(sent, degrees_or_None)`.
+
+	v0.168.0. ON A SLOPE-RATED TYPE ONLY — `slope_grade.SLOPE_RATED_ASSET_TYPES`,
+	the tuple the form shows the field for. A null is "clear it", which the
+	slope grade layer reads as "use the type's cautious figure"; a zero is
+	refused rather than stored, because a Float column cannot tell a stored 0
+	from an unset one and a limit of 0° would mean no ground is safe.
+	"""
+	if slope_grade.RATING_FIELD not in args:
+		return False, None
+	value = slope_grade.validate_rating(args.get(slope_grade.RATING_FIELD), tail)
+	if value is not None and asset_type not in slope_grade.SLOPE_RATED_ASSET_TYPES:
+		raise ToolError(
+			f"max_safe_slope_degrees is recorded on a {', '.join(slope_grade.SLOPE_RATED_ASSET_TYPES)}, "
+			f"and this asset is a {asset_type}. {tail}"
+		)
+	if not compat.has_field(ASSET_REGISTER, slope_grade.RATING_FIELD):
+		raise ToolError(
+			"Asset Register has no max_safe_slope_degrees column on this site yet — it ships with "
+			f"erpnext_mcp v0.168.0; run `bench migrate`. {tail}"
+		)
+	return True, value
+
+
 def register_asset(args: dict) -> ToolResult:
 	"""Register a new asset with its tag ID, type, parent and insurance detail.
 
@@ -1169,6 +1198,7 @@ def register_asset(args: dict) -> ToolResult:
 
 	location = _parent(args, "created")
 	title_values = _title_fields(args, asset_type, company)
+	rating_sent, rating = _slope_rating(args, asset_type, "Nothing was created.")
 
 	doc = frappe.new_doc(ASSET_REGISTER)
 	doc.__newname = name
@@ -1181,6 +1211,8 @@ def register_asset(args: dict) -> ToolResult:
 	_service_fields(doc, args)
 	for key, value in title_values.items():
 		doc.set(key, value)
+	if rating_sent and rating is not None:
+		doc.set(slope_grade.RATING_FIELD, rating)
 
 	lat = args.get("gps_latitude")
 	lon = args.get("gps_longitude")
@@ -1201,6 +1233,8 @@ def register_asset(args: dict) -> ToolResult:
 	for key in vehicle_titles.REGISTRABLE_ASSET_FIELDS:
 		if key in title_values:
 			described[key] = title_values[key]
+	if rating_sent:
+		described[slope_grade.RATING_FIELD] = rating
 	described["photo_attached"] = photo or None
 	if photo_error:
 		described["photo_error"] = (
@@ -1307,6 +1341,11 @@ def update_registered_asset(args: dict) -> ToolResult:
 		elif state and isinstance(state, dict):
 			state = json.dumps(state)
 		_stage(changes, doc, "current_state", state or None)
+	# v0.168.0. Checked against the type the asset will HAVE, so retyping a
+	# General row into a Tractor and rating it is one call.
+	rating_sent, rating = _slope_rating(args, doc.get("asset_type"), "Nothing was changed.")
+	if rating_sent and (rating is not None or float(doc.get(slope_grade.RATING_FIELD) or 0) > 0):
+		_stage(changes, doc, slope_grade.RATING_FIELD, rating)
 
 	# v0.148.0. `asset_location` changes NOTHING on the register — it names the
 	# ERPNext Location the mirrored Asset is filed under — so it is not staged as
@@ -1319,7 +1358,8 @@ def update_registered_asset(args: dict) -> ToolResult:
 		raise ToolError(
 			"nothing to change. Pass at least one of: asset_type, parent_asset (or location), "
 			"description, nfc_uid, serial_number, model, acquired_on, purchase_value, "
-			"replacement_value, gps_latitude, gps_longitude, current_state — or "
+			"replacement_value, gps_latitude, gps_longitude, current_state, "
+			"max_safe_slope_degrees — or "
 			"asset_location, which files this asset's ERPNext Asset under an ERPNext "
 			"Location and leaves the register row alone."
 		)

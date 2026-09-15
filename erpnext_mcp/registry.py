@@ -146,6 +146,7 @@ from .tools import (
 	signers,
 	signing_evidence,
 	slope_aspect,
+	slope_grade,
 	spray,
 	spray_rei,
 	state_tax,
@@ -7996,6 +7997,43 @@ TOOLS = {
 		mutating=True,
 		idempotent=True,
 		title="Build the slope aspect map layer",
+		available=_slope_aspect_available,
+		requires="the numpy Python package — `./env/bin/pip install numpy` in the bench and restart",
+	),
+	# ── slope grade: how steep the ground is, and whether a machine can work it ──
+	"get_slope_grade_layer": _tool(
+		slope_grade.get_slope_grade_layer,
+		"HOW STEEP EVERY BLOCK IS, coloured by rollover danger, from the same USGS 3DEP "
+		"1/3 arc-second (~10 m) slope the slope aspect layer computes. Read-only; nothing "
+		"is fetched — build_slope_aspect_layer builds both layers, and `available` false "
+		"says it has not run.\n\n"
+		"STANDARD BANDS: under 8° green (gentle), 8–15° yellow, 15–25° orange, 25° and "
+		"over red. A cell exactly on a break takes the steeper band.\n\n"
+		"PASS `asset` (an Asset Register docname — a tractor, vehicle, sprayer or "
+		"implement) FOR THAT MACHINE'S LIMITS: the breaks move to 60%, 80% and 100% of its "
+		"`max_safe_slope_degrees`, and every block is classified against it (`band` "
+		"within / approaching / at_limit / over_limit, `cells_over_limit`, "
+		"`share_over_limit`). An asset with no limit set uses its type's cautious figure — "
+		"Tractor 15° (no ROPS), Vehicle 20°, Sprayer 12°, Implement 15° — and "
+		"`equipment.max_safe_slope_source` says which it was; a type with no figure is "
+		"refused.\n\n"
+		"Blocks come STEEPEST FIRST (`steepness_rank` 1). A block's `level` (0–3) is its "
+		"steepest 10 m cell's — a 10 m survey smooths banks, so one cell over a limit is "
+		"real ground — with mean, max and 90th-percentile slope, the share at or above 8°, "
+		"15° and 25°, and the share in each band. `latitude`/`longitude` reads one cell. "
+		"The descriptor carries the tile URL (with `?asset=` when one was passed), the "
+		"legend in degrees and percent grade, and common equipment limits.",
+		{
+			"company": _field(_STRING, "Only blocks of this entity. Omit for every block on the layer."),
+			"asset": _field(
+				_STRING,
+				"An Asset Register docname. Colours and classifies against that machine's max_safe_slope_degrees.",
+			),
+			"include_blocks": _field(_BOOLEAN, "Summarise the blocks. Default true."),
+			"latitude": _field(_NUMBER, "With longitude: the slope and band of the cell under this point."),
+			"longitude": _field(_NUMBER, "With latitude."),
+		},
+		title="Get the slope grade layer and block steepness",
 		available=_slope_aspect_available,
 		requires="the numpy Python package — `./env/bin/pip install numpy` in the bench and restart",
 	),
@@ -20870,6 +20908,13 @@ TOOLS = {
 			"lien_holder": _field(
 				_STRING, "v0.165.0. Vehicle or Tractor only. The lender the title names, if any."
 			),
+			"max_safe_slope_degrees": _field(
+				_NUMBER,
+				"v0.168.0. Tractor, Vehicle, Sprayer or Implement only. The steepest slope in degrees "
+				"the machine can safely work, 1–45 — e.g. 25 for a tractor with ROPS, 15 without, "
+				"20 for an ATV/UTV. get_slope_grade_layer colours the ground against it. Omitted, the "
+				"type's cautious figure applies.",
+			),
 		},
 		required=("name", "asset_type", "company"),
 		mutating=True,
@@ -20907,6 +20952,13 @@ TOOLS = {
 				"An ERPNext Location docname for the mirrored Asset. Changes nothing on the "
 				"register, so it may be passed on its own to retry a mirror that was refused "
 				"because the site has more than one Location.",
+			),
+			"max_safe_slope_degrees": _field(
+				_NUMBER,
+				"v0.168.0. Tractor, Vehicle, Sprayer or Implement only. The steepest slope in degrees "
+				"the machine can safely work, 1–45 — e.g. 25 for a tractor with ROPS, 15 without, "
+				"20 for an ATV/UTV. get_slope_grade_layer colours the ground against it. null clears it "
+				"and the type's cautious figure applies again.",
 			),
 		},
 		required=("asset_name",),

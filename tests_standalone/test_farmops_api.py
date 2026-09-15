@@ -687,6 +687,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# v0.167.0. The slope-aspect toggle's descriptor. The tiles are GET and
 		# not in `ROUTES` — see `farmops_app.TILE_PREFIX`.
 		"/mobile/get_slope_aspect_layer",
+		# v0.168.0. The slope-grade toggle's descriptor; tiles are GET in `app.py`.
+		"/mobile/get_slope_grade_layer",
 		# v0.123.0. THE FOOD-SAFETY, TRACEABILITY, SENSOR AND MARKET REGISTERS.
 		# Seventy-two methods, HERE FOR THIS SET'S ORDINARY REASON: `MobileAPI.swift`
 		# names none of them yet, so the server half ships first and the iOS half is a
@@ -2990,6 +2992,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# open-on-enrolment reason `get_map_overlays` gives: it is read on the
 		# hillside, by whoever is standing on it.
 		"get_slope_aspect_layer",
+		# v0.168.0. How steep the ground is. The same public terrain, and the driver
+		# is who a rollover warning is for; `asset` is scoped by the wrapper.
+		"get_slope_grade_layer",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -2999,7 +3004,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 102, "a method is named in two sets at once")
+		self.assertEqual(len(named), 103, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

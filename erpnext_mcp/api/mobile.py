@@ -98,7 +98,17 @@ import json
 
 import frappe
 
-from .. import bucket_bridge, compat, datetimes, locations, overlays, pay_stub_pdf, slope_aspect, timezones
+from .. import (
+	bucket_bridge,
+	compat,
+	datetimes,
+	locations,
+	overlays,
+	pay_stub_pdf,
+	slope_aspect,
+	slope_grade,
+	timezones,
+)
 from .. import roles as role_lib
 from .. import shifts as shift_records
 from .. import training as training_register
@@ -14886,6 +14896,49 @@ def get_slope_aspect_layer(user: str, company=None, include_blocks=None) -> dict
 		if not slope_aspect.available():
 			frappe.throw(f"Per-block slope aspect needs {slope_aspect.REQUIRES}.", frappe.ValidationError)
 		blocks, warnings = slope_aspect.block_summaries(entity, meta)
+		answer["blocks"] = guard.scoped(blocks, allowed)
+		answer["warnings"] = warnings
+	return answer
+
+
+# ── 264. get_slope_grade_layer ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_slope_grade_layer", limit=guard.READ_LIMIT)
+def get_slope_grade_layer(user: str, company=None, include_blocks=None, asset=None) -> dict:
+	"""How steep the ground is: what the map's slope-grade toggle needs. v0.168.0.
+
+	The tiles are `GET /farmops/api/tiles/slope_grade/{z}/{x}/{y}.png`, with
+	`?asset=<docname>` for one machine's limits (see `farmops_api.app`). This
+	answers whether there are any, the legend, and — given `asset` — the limit
+	the colours were shifted to and whether it is the machine's own or its
+	type's fallback, so the handset can say "rated 25°" beside the toggle.
+
+	OPEN ON ENROLMENT, like `get_slope_aspect_layer`: public terrain, and the
+	person on the tractor is who a rollover warning is for. `asset` IS SCOPED —
+	a docname outside the caller's entities is "not found", the same sentence an
+	absent one gets. An asset with no limit and no type figure is a 400 by
+	name, never a generic legend presented as that machine's.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed)
+	equipment = None
+	if str(asset or "").strip():
+		name = guard.require_scoped_doc(slope_grade.ASSET_REGISTER, asset, "Asset", allowed)
+		try:
+			equipment = slope_grade.asset_rating(name)
+		except slope_grade.AssetNotRated as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
+	meta = slope_aspect.read_meta()
+	answer = slope_grade.describe(meta, equipment)
+	if meta is not None and _as_flag(include_blocks, False):
+		if not slope_grade.available():
+			frappe.throw(f"Per-block slope grade needs {slope_aspect.REQUIRES}.", frappe.ValidationError)
+		scheme = (
+			slope_grade.equipment_scheme(equipment["max_safe_slope_degrees"])
+			if equipment
+			else slope_grade.standard_scheme()
+		)
+		blocks, warnings = slope_grade.block_summaries(entity, meta, scheme)
 		answer["blocks"] = guard.scoped(blocks, allowed)
 		answer["warnings"] = warnings
 	return answer

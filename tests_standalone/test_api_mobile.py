@@ -966,6 +966,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# mirror in `test_ios_contract`, which is transcribed from the landed Swift
 		# rather than written ahead of it.
 		"get_slope_aspect_layer",
+		# v0.168.0. The slope-grade toggle's descriptor. fafo_ios 458e789 names it
+		# (built to the contract this release ships); it waits here for its
+		# Codable mirror in `test_ios_contract`, transcribed from the landed Swift.
+		"get_slope_grade_layer",
 		# v0.130.0. The strategy register's eight, HERE FOR THIS SET'S ORDINARY
 		# REASON — `MobileAPI.swift` names none of them, so there is no Swift
 		# Codable to mirror and `test_ios_contract` would be asserting against an

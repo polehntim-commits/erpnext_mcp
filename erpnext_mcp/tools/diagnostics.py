@@ -702,8 +702,8 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 			}
 		)
 
-	# `login_qr_image` and the slope-aspect tiles are not in
-	# `sidecar_routes.ROUTES` — both are GET, answer a PNG, and wear none of
+	# `login_qr_image` and the terrain tiles (slope aspect, and slope grade since
+	# v0.168.0) are not in `sidecar_routes.ROUTES` — all are GET, answer a PNG, and wear none of
 	# `guard.endpoint`'s attributes, so they cannot be read off the table the
 	# loop above walks. Merged in by hand so this diagnostic does not go quiet
 	# about the one route that mints a login credential — see
@@ -741,8 +741,8 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 			"A tool being in the MCP catalogue does not put it on this table and vice versa. "
 			"The two surfaces are separate on purpose: create_journal_entry and convey_parcel "
 			"are tools here and are reachable from no handset at any path.",
-			"`login_qr_image` and the slope-aspect tiles are GET and answer a PNG, not JSON — "
-			"the two routes on this surface built that way, listed here by hand because they "
+			"`login_qr_image` and the slope-aspect and slope-grade tiles are GET and answer a PNG, "
+			"not JSON — the routes on this surface built that way, listed here by hand because they "
 			"carry no `farm_ops_method` attribute for this tool to read off a table.",
 		],
 	}

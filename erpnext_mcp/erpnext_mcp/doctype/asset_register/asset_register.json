@@ -28,6 +28,8 @@
   "title_holder",
   "lien_holder",
   "title_receipt",
+  "slope_section",
+  "max_safe_slope_degrees",
   "tag_section",
   "qr_url",
   "tag_col",
@@ -210,6 +212,20 @@
    "fieldtype": "Link",
    "label": "Title Document",
    "options": "Expense Receipt"
+  },
+  {
+   "depends_on": "eval:[\"Tractor\",\"Vehicle\",\"Sprayer\",\"Implement\"].includes(doc.asset_type)",
+   "fieldname": "slope_section",
+   "fieldtype": "Section Break",
+   "label": "Slope Safety"
+  },
+  {
+   "depends_on": "eval:[\"Tractor\",\"Vehicle\",\"Sprayer\",\"Implement\"].includes(doc.asset_type)",
+   "description": "The steepest slope, in degrees, this machine can safely work. Common figures: tractor with ROPS 25, tractor without ROPS 15, ATV/UTV 20, sprayer 12, mower 15 — use the manufacturer's figure where there is one. Left empty, the slope grade map uses the cautious figure for the asset type (a Tractor is treated as having no ROPS).",
+   "fieldname": "max_safe_slope_degrees",
+   "fieldtype": "Float",
+   "label": "Max Safe Slope (degrees)",
+   "precision": "1"
   },
   {
    "fieldname": "tag_section",

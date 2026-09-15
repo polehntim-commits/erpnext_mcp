@@ -3,6 +3,60 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.168.0 — 2026-09-15 — how steep the ground is
+
+A slope grade layer for the operational map, beside v0.167.0's slope aspect. It
+colours steepness for rollover danger, either in general or against one
+machine's safe limit. **876 tools** (+1 read). One new mobile route and one new
+tile route.
+
+- **`get_slope_grade_layer`** (read). Returns the layer descriptor and every block,
+  steepest first. Each block has mean, max and 90th-percentile slope, the share
+  at or above 8°, 15° and 25°, and the share in each band. `latitude`/`longitude`
+  reads one cell.
+- **Nothing is fetched.** The grade layer reads the slope array the aspect build
+  already caches in `private/slope_aspect/grid.npz`. `build_slope_aspect_layer`
+  builds both layers, and rebuilding it retires the kept grade tiles with the
+  rest of the folder. Tiles render on first request and are kept per scheme
+  under `grade/`. A test serves tiles, blocks and points with the USGS fetch
+  replaced by one that fails.
+- **Standard bands:** under 8° green, 8–15° yellow, 15–25° orange, 25° and over
+  red. A cell exactly on a break takes the steeper band.
+- **Equipment bands.** Pass `asset` (an Asset Register docname) and the breaks
+  move to 60%, 80% and 100% of that machine's `max_safe_slope_degrees`: within,
+  approaching, at_limit, over_limit. The colours are the same, so a map keys on
+  `level` 0–3. Each block also reports `cells_over_limit` and `share_over_limit`.
+- **A block is as dangerous as its steepest cell.** A 10 m survey smooths banks
+  and ditch edges, so one cell over a limit is real ground, not noise.
+  `band_shares` tells one bank apart from a whole block.
+- **Asset Register gains `max_safe_slope_degrees`** (Float, 1–45) in a *Slope
+  Safety* section, shown for Tractor, Vehicle, Sprayer and Implement
+  (`slope_grade.SLOPE_RATED_ASSET_TYPES`; a test holds the form's `depends_on`
+  to it). `register_asset` and `update_registered_asset` accept it on those
+  types and refuse it on others. A zero is refused; `null` clears it.
+  `get_asset_detail` answers the stored limit and `slope_rating`, the limit in
+  effect and where it came from. `bench migrate` adds the column.
+- **An unset limit is the type's cautious figure.** A Float column reads 0 when
+  unset, and 0 is treated as unset rather than as "nothing is safe". Tractor
+  15° (the register does not record a ROPS, so the no-ROPS figure applies;
+  set 25 on a ROPS tractor), Vehicle 20° (ATV/UTV), Sprayer 12°, Implement 15°
+  (mower). The descriptor publishes the common figures, and
+  `max_safe_slope_source` says whether a limit is the machine's own or the
+  type's. An asset of any other type is refused by name and never drawn in
+  standard colours under that machine's name.
+- **Phone:** `GET /farmops/api/tiles/slope_grade/{z}/{x}/{y}.png[?asset=<docname>]`
+  runs the aspect tiles' gates (503/401/429/403, no per-tile audit row). The
+  aspect and grade routes now share one gate function, `_terrain_tile`.
+  `asset` is scoped: another entity's machine is 404, worded like an absent
+  one. An unrated machine is 400. The route is 404 JSON when never built.
+  `POST /farmops/api/mobile/get_slope_grade_layer` (`company`, `include_blocks`,
+  `asset`) is the toggle's descriptor, with the shifted legend, `equipment` and
+  a tile template carrying `?asset=`. It is open on enrolment and pending iOS
+  integration; fafo_ios 458e789 is built to it.
+- `slope_aspect.block_cells` is split out of `block_summaries`, so both layers
+  read the same cells for a block. `list_sidecar_routes` lists the grade tile
+  route.
+
 ## 0.167.0 — 2026-09-13 — which way the ground faces
 
 A slope aspect layer for the operational map, from USGS 3DEP 1/3 arc-second

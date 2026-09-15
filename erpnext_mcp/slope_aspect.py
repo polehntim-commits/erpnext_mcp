@@ -863,8 +863,15 @@ def summarise(aspect, slope) -> dict | None:
 	}
 
 
-def block_summaries(company: str = "", meta: dict | None = None) -> tuple[list, list]:
-	"""Every Field inside the coverage, with its aspect summary. `(rows, warnings)`."""
+def block_cells(company: str = "", meta: dict | None = None) -> tuple[list, list]:
+	"""Every Field's cells on the built layer. `([(row, aspect, slope)], warnings)`.
+
+	v0.168.0, split out of `block_summaries` so the slope GRADE layer reads the
+	same cells for a block that the aspect ranking does — two answers about one
+	block's ground must not disagree about which ground it is. `aspect` and
+	`slope` are 1-D and EMPTY for a block outside the layer; a boundary that
+	cannot be read is a warning and no entry.
+	"""
 	meta = meta if meta is not None else read_meta()
 	if meta is None:
 		return [], []
@@ -875,6 +882,7 @@ def block_summaries(company: str = "", meta: dict | None = None) -> tuple[list, 
 		return [], ["Per-block summaries need the shapely package; the tiles do not."]
 	grid = meta["grid"]
 	loaded = load_grid(meta)
+	empty = np.zeros(0, dtype="float32")
 	out, warnings = [], []
 	for row in boundary_rows(FIELD, company):
 		try:
@@ -889,7 +897,7 @@ def block_summaries(company: str = "", meta: dict | None = None) -> tuple[list, 
 		c1 = min(grid["width"] - 1, int((x1 - grid["xmin"]) // grid["cell"]))
 		r0 = max(0, int((grid["ymax"] - y1) // grid["cell"]))
 		r1 = min(grid["height"] - 1, int((grid["ymax"] - y0) // grid["cell"]))
-		stats = None
+		aspect, slope = empty, empty
 		if c0 <= c1 and r0 <= r1:
 			cols = np.arange(c0, c1 + 1)
 			rows = np.arange(r0, r1 + 1)
@@ -906,14 +914,21 @@ def block_summaries(company: str = "", meta: dict | None = None) -> tuple[list, 
 				col = int((px - grid["xmin"]) // grid["cell"])
 				rw = int((grid["ymax"] - py) // grid["cell"])
 				if 0 <= col < grid["width"] and 0 <= rw < grid["height"]:
-					stats = summarise(
-						loaded["aspect"][rw : rw + 1, col : col + 1],
-						loaded["slope"][rw : rw + 1, col : col + 1],
-					)
+					aspect = loaded["aspect"][rw : rw + 1, col : col + 1].reshape(-1)
+					slope = loaded["slope"][rw : rw + 1, col : col + 1].reshape(-1)
 			else:
-				window_aspect = loaded["aspect"][r0 : r1 + 1, c0 : c1 + 1]
-				window_slope = loaded["slope"][r0 : r1 + 1, c0 : c1 + 1]
-				stats = summarise(window_aspect[inside], window_slope[inside])
+				aspect = loaded["aspect"][r0 : r1 + 1, c0 : c1 + 1][inside]
+				slope = loaded["slope"][r0 : r1 + 1, c0 : c1 + 1][inside]
+		out.append((row, aspect, slope))
+	return out, warnings
+
+
+def block_summaries(company: str = "", meta: dict | None = None) -> tuple[list, list]:
+	"""Every Field inside the coverage, with its aspect summary. `(rows, warnings)`."""
+	cells, warnings = block_cells(company, meta)
+	out = []
+	for row, aspect, slope in cells:
+		stats = summarise(aspect, slope) if slope.size else None
 		if stats is None:
 			warnings.append(
 				f"{row['name']} lies outside the built layer or over no data; rebuild to include it."
