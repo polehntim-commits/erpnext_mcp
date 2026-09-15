@@ -104,6 +104,7 @@ from .tools import (
 	itgc,
 	kpi,
 	kpidefs,
+	land,
 	locations,
 	lots,
 	maintenance,
@@ -6227,6 +6228,288 @@ TOOLS = {
 		title="Update a lease",
 		available=_needs_doctype("Lease"),
 		requires="the Lease DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	# ── county tax lots and lot line adjustments (v0.169.0) ─────────────────
+	"taxlot_lookup": _tool(
+		land.taxlot_lookup,
+		"MUTATING (default OFF) — writes only the County Tax Lot reference cache. Look up "
+		"county assessor tax lots and cache them, or seed one by hand.\n\n"
+		"ONE WAY TO ASK PER CALL: `map_taxlot` (Wasco's spaced spelling '2N 13E 12 C 100' or "
+		"the deed's compact '2N13E12C00100'), `longitude`+`latitude` for the lot under a point, "
+		"or `bbox` [west, south, east, north] (at most 0.05° a side) for the lots in a box. "
+		"Every lot the county returns (up to 20) is upserted: owner of record, account, situs, "
+		"GIS acres, polygon, and every raw attribute.\n\n"
+		"THE COUNTY SERVER CAN BE DOWN (it was answering 503 when this shipped). Seed a lot by "
+		"hand with `map_taxlot` plus `manual` {owner_of_record, account, situs, acres_gis, "
+		"geometry, raw_attributes, source_url} off a tax statement; it is marked source Manual "
+		"and taxlot_refresh replaces it from the county later.\n\n"
+		"County Tax Lot links to nothing and nothing on the operating books reads it. Needs the "
+		"Land Reference, Land Agreements or System Manager role.",
+		{
+			"county": _field(_STRING, "Which county. Default wasco, the only one configured."),
+			"map_taxlot": _field(
+				_STRING, "The tax lot number, in any spelling the county's grammar accepts."
+			),
+			"longitude": _field(_NUMBER, "With latitude: the lot under this point."),
+			"latitude": _field(_NUMBER, "With longitude."),
+			"bbox": {
+				"type": "array",
+				"items": {"type": "number"},
+				"description": "[west, south, east, north] in degrees, at most 0.05° a side.",
+			},
+			"manual": _field(
+				_OBJECT,
+				"Seed by hand instead of asking the county: owner_of_record, account, situs, acres_gis, "
+				"geometry (GeoJSON Polygon), raw_attributes, source_url. Needs map_taxlot.",
+			),
+		},
+		mutating=True,
+		idempotent=True,
+		title="Look up a county tax lot",
+		available=_needs_doctype("County Tax Lot"),
+		requires="the County Tax Lot DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"taxlot_refresh": _tool(
+		land.taxlot_refresh,
+		"MUTATING (default OFF) — writes only the County Tax Lot reference cache. Re-read one "
+		"cached tax lot from the county and overwrite the cached row, including a row seeded by "
+		"hand. A county that is down or no longer returns the lot leaves the row exactly as it "
+		"was, and the answer says so. Reports which fields changed. Needs the Land Reference, "
+		"Land Agreements or System Manager role.",
+		{"map_taxlot": _field(_STRING, "The cached lot to refresh.")},
+		required=("map_taxlot",),
+		mutating=True,
+		idempotent=True,
+		title="Refresh a county tax lot",
+		available=_needs_doctype("County Tax Lot"),
+		requires="the County Tax Lot DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_list": _tool(
+		land.lla_list,
+		"Lot line adjustments on this site: title, status, parties, lots, target close, piece "
+		"count and how many open items are still open. Read-only. Needs the Land Agreements or "
+		"System Manager role.",
+		{
+			"status": _field(
+				_STRING, "Draft, Under review, Submitted to county, Approved, Recorded or Withdrawn."
+			),
+			"party": _field(_STRING, "Only adjustments naming this party (either side)."),
+			"county": _field(_STRING, "Only this county."),
+			"limit": _LIMIT,
+		},
+		title="List lot line adjustments",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_get": _tool(
+		land.lla_get,
+		"One lot line adjustment in full: header, both cached tax lots, pieces with geometry, "
+		"easements, open items, which statuses it can move to next, what it is missing before "
+		"it can go to the county, which fields stay editable after submission, and whether "
+		"Record Survey can run (with the reasons if not). Read-only.",
+		{"name": _field(_STRING, "The Lot Line Adjustment docname, e.g. LLA-2026-0001.")},
+		required=("name",),
+		title="Get a lot line adjustment",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_create": _tool(
+		land.lla_create,
+		"MUTATING (default OFF). Create a lot line adjustment as a Draft (or Under review). "
+		"Everything may be given at once — header, `pieces`, `open_items`, `easements` — or added "
+		"later. Lots must already be cached (taxlot_lookup) and may be left blank until the tax "
+		"lot numbers are known. Parties are a Company, Customer or Supplier "
+		"(`party_1_type`/`party_1`). A piece's from_party/to_party take Party 1, Party 2 or the "
+		"party's name. REFUSES the same party twice, the same lot twice, a piece that moves to "
+		"its own party, a non-polygon geometry, and cash on an Even swap. Needs the Land "
+		"Agreements or System Manager role.",
+		{
+			"title": _field(_STRING, "What the deal is called."),
+			"status": _field(_STRING, "Draft (default) or Under review."),
+			"county": _field(_STRING, "Default Wasco."),
+			"state": _field(_STRING, "Default OR."),
+			"lot_1": _field(_STRING, "Party 1's County Tax Lot."),
+			"lot_2": _field(_STRING, "Party 2's County Tax Lot."),
+			"party_1_type": _field(_STRING, "Company (default), Customer or Supplier."),
+			"party_1": _field(_STRING, "Party 1's docname."),
+			"signer_1": _field(_STRING, "Who signs for Party 1."),
+			"signer_1_title": _field(_STRING, "Their title, e.g. President."),
+			"party_2_type": _field(_STRING, "Company (default), Customer or Supplier."),
+			"party_2": _field(_STRING, "Party 2's docname."),
+			"signer_2": _field(_STRING, "Who signs for Party 2."),
+			"signer_2_title": _field(_STRING, "Their title, e.g. Member."),
+			"consideration": _field(_STRING, "Even swap (default), Cash true-up or Netted."),
+			"true_up_amount": _field(_NUMBER, "Cash one party pays the other. Zero on an Even swap."),
+			"true_up_payer": _field(_STRING, "Party 1 or Party 2."),
+			"lender": _field(_STRING, "A lender whose consent the adjustment needs."),
+			"lender_conditions": _field(_STRING, "What the lender requires."),
+			"target_close": _field(_STRING, "YYYY-MM-DD."),
+			"lot_1_acres_surveyed": _field(_NUMBER, "Lot 1's acreage after, off the recorded survey."),
+			"lot_2_acres_surveyed": _field(_NUMBER, "Lot 2's acreage after, off the recorded survey."),
+			"recording_number": _field(_STRING, "The county clerk's instrument number."),
+			"recorded_on": _field(_STRING, "YYYY-MM-DD."),
+			"survey_reference": _field(_STRING, "The surveyor's job or filed survey number."),
+			"notes": _field(_STRING, "Free text."),
+			"pieces": {
+				"type": "array",
+				"items": {"type": "object"},
+				"description": "Each: piece_name, from_party, to_party, acres_gis, acres_surveyed, gis_sketch_ref, line_notes, improvements, geometry.",
+			},
+			"open_items": {
+				"type": "array",
+				"items": {"type": "object"},
+				"description": "Each: item, question, owner, status (Open, In progress, Resolved, Dropped), due.",
+			},
+			"easements": {
+				"type": "array",
+				"items": {"type": "object"},
+				"description": "Each: type (access, utility, irrigation), burdened, benefited, notes.",
+			},
+		},
+		required=("title",),
+		mutating=True,
+		title="Create a lot line adjustment",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_update": _tool(
+		land.lla_update,
+		"MUTATING (default OFF). Change a lot line adjustment's header fields and its status. "
+		"`fields` is an object of what to change.\n\n"
+		"STATUS IS THE WORKFLOW. Draft ↔ Under review edit freely. Submitted to county SUBMITS "
+		"the document — it needs both lots, both parties, both signers and at least one piece — "
+		"and fixes the terms. Then Approved, then Recorded, in order. Withdrawn is allowed until "
+		"a survey has been recorded, and cancels a submitted document.\n\n"
+		"AFTER SUBMISSION only the status, the recording number and date, the survey reference, "
+		"each lot's surveyed acreage and the notes change here; `lla_get` lists them. Pieces, "
+		"open items and easements have their own tools. Needs the Land Agreements or System "
+		"Manager role.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"fields": _field(_OBJECT, "The header fields to change, and/or status."),
+		},
+		required=("name", "fields"),
+		mutating=True,
+		title="Update a lot line adjustment",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_add_piece": _tool(
+		land.lla_add_piece,
+		"MUTATING (default OFF). Add a piece of ground that moves between the parties, or update "
+		"the piece of that name. On a submitted adjustment no piece can be added and only "
+		"acres_surveyed and geometry change on an existing one — the survey comes after the "
+		"county approves. Needs the Land Agreements or System Manager role.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"piece_name": _field(_STRING, "What the parties call the piece, e.g. Parcel A."),
+			"from_party": _field(_STRING, "Party 1, Party 2, or the party's name."),
+			"to_party": _field(_STRING, "Party 1, Party 2, or the party's name."),
+			"acres_gis": _field(_NUMBER, "Acreage off the GIS sketch."),
+			"acres_surveyed": _field(_NUMBER, "Acreage off the recorded survey."),
+			"gis_sketch_ref": _field(_STRING, "Which sketch it came from."),
+			"line_notes": _field(_STRING, "Where the new line runs, in words."),
+			"improvements": _field(_STRING, "What stands on it."),
+			"geometry": _field(_OBJECT, "The piece's GeoJSON Polygon, WGS84."),
+		},
+		required=("name", "piece_name"),
+		mutating=True,
+		title="Add or update a lot line adjustment piece",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_set_geometry": _tool(
+		land.lla_set_geometry,
+		"MUTATING (default OFF). Set one piece's polygon — the GIS sketch before the survey, the "
+		"surveyed shape after it (allowed on a submitted adjustment for that reason). Refuses "
+		"anything but a Polygon or MultiPolygon, and warns when the shape's area disagrees with "
+		"the piece's acreage, because Record Survey hands the result to set_parcel_boundary. "
+		"Needs the Land Agreements or System Manager role.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"piece": _field(_STRING, "The piece's name."),
+			"geojson": _field(_OBJECT, "A GeoJSON Polygon or MultiPolygon (or a Feature of one), WGS84."),
+		},
+		required=("name", "piece", "geojson"),
+		mutating=True,
+		idempotent=True,
+		title="Set a lot line adjustment piece's geometry",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_add_open_item": _tool(
+		land.lla_add_open_item,
+		"MUTATING (default OFF). Add an open item — a question the deal cannot close without "
+		"answering — or update the one with that `item`. Allowed after submission: open items are "
+		"resolved after signing. Printed as Exhibit C of the MOU. Needs the Land Agreements or "
+		"System Manager role.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"item": _field(_STRING, "Short name, e.g. Bank written consent."),
+			"question": _field(_STRING, "What has to be answered."),
+			"owner": _field(_STRING, "Who is chasing it."),
+			"status": _field(_STRING, "Open (default), In progress, Resolved or Dropped."),
+			"due": _field(_STRING, "YYYY-MM-DD."),
+		},
+		required=("name", "item"),
+		mutating=True,
+		title="Add or update a lot line adjustment open item",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_add_easement": _tool(
+		land.lla_add_easement,
+		"MUTATING (default OFF). Add an access, utility or irrigation easement between the two "
+		"parties' ground. Drafts only: an easement is part of the terms submission fixes. Needs "
+		"the Land Agreements or System Manager role.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"type": _field(_STRING, "access, utility or irrigation."),
+			"burdened": _field(_STRING, "Whose ground carries it: Party 1, Party 2 or the party's name."),
+			"benefited": _field(_STRING, "Whose ground it serves."),
+			"notes": _field(_STRING, "Where it runs and what it allows."),
+		},
+		required=("name", "type"),
+		mutating=True,
+		title="Add a lot line adjustment easement",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_render_mou": _tool(
+		land.lla_render_mou,
+		"The Memorandum of Understanding for a lot line adjustment, as a PDF (base64): parties, "
+		"lots, consideration, pieces with acreages, easements, lender, closing, signature "
+		"blocks, and exhibits A (pieces), B (GeoJSON) and C (open items). Rendered through the "
+		"site's 'Memorandum of Understanding' Print Format where the bench can, otherwise by "
+		"this app's own PDF writer from the same content; `renderer` says which. Read-only: "
+		"nothing is attached. Not a deed, and says so.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"include_html": _field(_BOOLEAN, "Also return the HTML. Default false."),
+		},
+		required=("name",),
+		title="Render a lot line adjustment MOU",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	"lla_record_survey": _tool(
+		land.lla_record_survey,
+		"MUTATING (default OFF). THE ONE PATH FROM AN ADJUSTMENT INTO THE OPERATING BOOKS. On a "
+		"submitted adjustment at status Recorded, with every piece's acres_surveyed and final "
+		"geometry set, write the adjusted Parcel for each party that is a Company on this site: "
+		"acreage from the lot's surveyed figure (or county GIS acres less pieces given plus "
+		"pieces received, surveyed), boundary from the lot's polygon less and plus the pieces. "
+		"Updates the Parcel carrying that tax lot number, or creates `Tax Lot <number>`, through "
+		"create_parcel, update_parcel and set_parcel_boundary with all their checks. A Customer "
+		"or Supplier party is reported, not written. Stamps the adjustment with the Parcels and "
+		"who recorded it; running it again writes the same answer. SYSTEM MANAGER ONLY.",
+		{"name": _field(_STRING, "The Lot Line Adjustment docname.")},
+		required=("name",),
+		mutating=True,
+		idempotent=True,
+		title="Record a lot line adjustment's survey onto Parcels",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
 	),
 	# ── related parties ─────────────────────────────────────────────────────
 	"list_related_parties": _tool(

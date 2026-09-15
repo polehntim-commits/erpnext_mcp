@@ -1,0 +1,405 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:LLA-{YYYY}-{####}",
+ "creation": "2026-09-15 09:00:00.000000",
+ "description": "A lot line adjustment between two parties: the lots it changes, the pieces that move, the easements, the lender's consent and the questions still open. FULLY EDITABLE AS A DRAFT and submitted when it goes to the county. NOTHING HERE TOUCHES THE OPERATING BOOKS until the survey is recorded and a System Manager presses Record Survey, which writes the adjusted Parcel records.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "status",
+  "target_close",
+  "header_col",
+  "county",
+  "state",
+  "lots_section",
+  "lot_1",
+  "lot_1_acres_surveyed",
+  "lots_col",
+  "lot_2",
+  "lot_2_acres_surveyed",
+  "parties_section",
+  "party_1_type",
+  "party_1",
+  "signer_1",
+  "signer_1_title",
+  "parties_col",
+  "party_2_type",
+  "party_2",
+  "signer_2",
+  "signer_2_title",
+  "terms_section",
+  "consideration",
+  "true_up_amount",
+  "true_up_payer",
+  "terms_col",
+  "lender",
+  "lender_conditions",
+  "pieces_section",
+  "pieces",
+  "easements_section",
+  "easements",
+  "open_items_section",
+  "open_items",
+  "survey_section",
+  "recording_number",
+  "recorded_on",
+  "survey_reference",
+  "survey_col",
+  "parcel_1",
+  "parcel_2",
+  "survey_recorded_on",
+  "survey_recorded_by",
+  "notes_section",
+  "notes",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "bold": 1,
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "default": "Draft",
+   "description": "Draft and Under review are editable drafts. Submitted to county submits the document. Approved and Recorded follow the county. Record Survey is only offered at Recorded.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nUnder review\nSubmitted to county\nApproved\nRecorded\nWithdrawn"
+  },
+  {
+   "fieldname": "target_close",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Target Close"
+  },
+  {
+   "fieldname": "header_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Wasco",
+   "fieldname": "county",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "County"
+  },
+  {
+   "default": "OR",
+   "fieldname": "state",
+   "fieldtype": "Data",
+   "label": "State"
+  },
+  {
+   "fieldname": "lots_section",
+   "fieldtype": "Section Break",
+   "label": "Lots"
+  },
+  {
+   "description": "Party 1's tax lot before the adjustment. Required to submit.",
+   "fieldname": "lot_1",
+   "fieldtype": "Link",
+   "label": "Lot 1",
+   "options": "County Tax Lot"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "Lot 1's acreage as the recorded survey states it. Optional: left blank, Record Survey computes it from the county acreage and the surveyed pieces, and says so.",
+   "fieldname": "lot_1_acres_surveyed",
+   "fieldtype": "Float",
+   "label": "Lot 1 Acres After (surveyed)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "lots_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Party 2's tax lot before the adjustment. Required to submit.",
+   "fieldname": "lot_2",
+   "fieldtype": "Link",
+   "label": "Lot 2",
+   "options": "County Tax Lot"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "lot_2_acres_surveyed",
+   "fieldtype": "Float",
+   "label": "Lot 2 Acres After (surveyed)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "parties_section",
+   "fieldtype": "Section Break",
+   "label": "Parties"
+  },
+  {
+   "default": "Company",
+   "fieldname": "party_1_type",
+   "fieldtype": "Select",
+   "label": "Party 1 Type",
+   "options": "Company\nCustomer\nSupplier"
+  },
+  {
+   "fieldname": "party_1",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Party 1",
+   "options": "party_1_type"
+  },
+  {
+   "fieldname": "signer_1",
+   "fieldtype": "Data",
+   "label": "Party 1 Signer"
+  },
+  {
+   "fieldname": "signer_1_title",
+   "fieldtype": "Data",
+   "label": "Party 1 Signer Title"
+  },
+  {
+   "fieldname": "parties_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Company",
+   "fieldname": "party_2_type",
+   "fieldtype": "Select",
+   "label": "Party 2 Type",
+   "options": "Company\nCustomer\nSupplier"
+  },
+  {
+   "fieldname": "party_2",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Party 2",
+   "options": "party_2_type"
+  },
+  {
+   "fieldname": "signer_2",
+   "fieldtype": "Data",
+   "label": "Party 2 Signer"
+  },
+  {
+   "fieldname": "signer_2_title",
+   "fieldtype": "Data",
+   "label": "Party 2 Signer Title"
+  },
+  {
+   "fieldname": "terms_section",
+   "fieldtype": "Section Break",
+   "label": "Consideration and Lender"
+  },
+  {
+   "default": "Even swap",
+   "fieldname": "consideration",
+   "fieldtype": "Select",
+   "label": "Consideration",
+   "options": "Even swap\nCash true-up\nNetted"
+  },
+  {
+   "depends_on": "eval:doc.consideration!=\"Even swap\"",
+   "description": "Cash one party pays the other. Must be zero on an Even swap.",
+   "fieldname": "true_up_amount",
+   "fieldtype": "Currency",
+   "label": "True-up Amount"
+  },
+  {
+   "depends_on": "eval:doc.consideration!=\"Even swap\"",
+   "fieldname": "true_up_payer",
+   "fieldtype": "Select",
+   "label": "True-up Paid By",
+   "options": "\nParty 1\nParty 2"
+  },
+  {
+   "fieldname": "terms_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "A lender with a lien on either lot, whose consent the adjustment needs.",
+   "fieldname": "lender",
+   "fieldtype": "Data",
+   "label": "Lender"
+  },
+  {
+   "fieldname": "lender_conditions",
+   "fieldtype": "Small Text",
+   "label": "Lender Conditions"
+  },
+  {
+   "fieldname": "pieces_section",
+   "fieldtype": "Section Break",
+   "label": "Pieces"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "Rows cannot be added or removed after submission; acres_surveyed and geometry on each row can.",
+   "fieldname": "pieces",
+   "fieldtype": "Table",
+   "label": "Pieces",
+   "options": "Lot Line Adjustment Piece"
+  },
+  {
+   "fieldname": "easements_section",
+   "fieldtype": "Section Break",
+   "label": "Easements"
+  },
+  {
+   "fieldname": "easements",
+   "fieldtype": "Table",
+   "label": "Easements",
+   "options": "Lot Line Adjustment Easement"
+  },
+  {
+   "fieldname": "open_items_section",
+   "fieldtype": "Section Break",
+   "label": "Open Items (Exhibit C)"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "open_items",
+   "fieldtype": "Table",
+   "label": "Open Items",
+   "options": "Lot Line Adjustment Open Item"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "survey_section",
+   "fieldtype": "Section Break",
+   "label": "Recording and Survey"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "The county clerk's instrument number for the recorded adjustment.",
+   "fieldname": "recording_number",
+   "fieldtype": "Data",
+   "label": "Recording Number"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "recorded_on",
+   "fieldtype": "Date",
+   "label": "Recorded On"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "The surveyor's job or filed survey number.",
+   "fieldname": "survey_reference",
+   "fieldtype": "Data",
+   "label": "Survey Reference"
+  },
+  {
+   "fieldname": "survey_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "The Parcel Record Survey wrote for Party 1. Set by the action, never typed.",
+   "fieldname": "parcel_1",
+   "fieldtype": "Link",
+   "label": "Parcel 1 (after)",
+   "options": "Parcel",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "parcel_2",
+   "fieldtype": "Link",
+   "label": "Parcel 2 (after)",
+   "options": "Parcel",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "survey_recorded_on",
+   "fieldtype": "Datetime",
+   "label": "Survey Recorded On",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "survey_recorded_by",
+   "fieldtype": "Link",
+   "label": "Survey Recorded By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Lot Line Adjustment",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-09-15 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Lot Line Adjustment",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "submit": 1,
+   "write": 1,
+   "role": "System Manager"
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "submit": 1,
+   "write": 1,
+   "role": "Land Agreements"
+  }
+ ],
+ "search_fields": "title,party_1,party_2,status",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

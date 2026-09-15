@@ -378,6 +378,23 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 		# prefixed name every block would have to carry. The entity narrowing
 		# already exists where it belongs — the FIELD names both the profile and
 		# its owning entity, and Frappe scopes the Field exactly as before.
+		# THE v0.169.0 ADDITIONS ARE A COUNTY'S RECORD AND AN AGREEMENT BETWEEN
+		# TWO OWNERS. A County Tax Lot is the assessor's public statement about a
+		# piece of ground — the Crop and Soil argument again: the county does not
+		# consult which entity is reading, `map_taxlot` is the docname, and a
+		# per-company copy would be the same public fact stored twice.
+		#
+		# A Lot Line Adjustment has NO SINGLE OWNING ENTITY TO SCOPE BY, which is
+		# the harder half and the decision this test asked for. It is a contract
+		# between two parties, and either party may be a Customer or Supplier
+		# rather than a Company on this site, so a Link to Company would have to
+		# pick one side of a two-sided agreement. Access is instead its own role,
+		# `Land Agreements`, granted to the people doing land deals; Record Survey
+		# is System Manager only; and what it writes — the Parcels — link to
+		# Company and are scoped by Frappe exactly as before. If a site ever needs
+		# per-entity visibility of adjustments, the route is a
+		# `permission_query_conditions` hook on the two party columns, like the
+		# two scoped above, not a company column.
 		self.assertEqual(
 			sorted(unscoped),
 			[
@@ -386,6 +403,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Asset State Log",
 				"Compliance Regime",
 				"Compliance Rule",
+				"County Tax Lot",
 				"Crop",
 				"Farm Asset Type",
 				"Farm Translation",
@@ -394,6 +412,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"I-9 Document Type",
 				"Inspection Template",
 				"Labor Break Policy",
+				"Lot Line Adjustment",
 				"MCP Action Log",
 				"Market",
 				"Merchant Alias",

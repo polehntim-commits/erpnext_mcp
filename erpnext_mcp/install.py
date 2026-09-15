@@ -148,6 +148,7 @@ def after_install() -> None:
 	_farm_task_templates()
 	_badge_logo_field()
 	_badge_print_format()
+	_mou_print_format()
 	_badge_list_action()
 	_badge_form_action()
 	_asset_tag_list_action()
@@ -194,6 +195,7 @@ def after_migrate() -> None:
 	_farm_task_templates()
 	_badge_logo_field()
 	_badge_print_format()
+	_mou_print_format()
 	_badge_list_action()
 	_badge_form_action()
 	_asset_tag_list_action()
@@ -1042,6 +1044,24 @@ def _badge_print_format() -> None:
 		)
 	elif report.get("reason") not in ("already present", ""):
 		print(f"erpnext_mcp: the badge Print Format was not seeded — {report['reason']}")
+
+
+def _mou_print_format() -> None:
+	"""Give a Lot Line Adjustment's Print button its Memorandum of Understanding. v0.169.0.
+
+	Creates the format only where it is missing, like `_badge_print_format`, so an
+	operator's edits to the memorandum survive every future migrate.
+	"""
+	from . import mou_print_format
+
+	report = mou_print_format.seed_mou_print_format()
+	if report.get("created"):
+		print(
+			f"erpnext_mcp: seeded the {report['name']!r} Print Format for Lot Line Adjustment. It is a "
+			"CUSTOM format, so anything you change about it survives the next migrate."
+		)
+	elif report.get("reason") not in ("already present", ""):
+		print(f"erpnext_mcp: the MOU Print Format was not seeded — {report['reason']}")
 
 
 def _badge_form_action() -> None:

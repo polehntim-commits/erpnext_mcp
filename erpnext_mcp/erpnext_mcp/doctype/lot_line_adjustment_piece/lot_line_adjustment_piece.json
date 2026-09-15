@@ -1,0 +1,113 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "",
+ "creation": "2026-09-15 09:00:00.000000",
+ "description": "One piece of ground that moves between the two parties in a Lot Line Adjustment.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "piece_name",
+  "from_party",
+  "to_party",
+  "acres_gis",
+  "acres_surveyed",
+  "gis_sketch_ref",
+  "piece_col",
+  "improvements",
+  "line_notes",
+  "geometry"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "description": "What the parties call this piece — 'Parcel A', 'Dry Hollow wedge'.",
+   "fieldname": "piece_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "description": "Which party gives this piece up.",
+   "fieldname": "from_party",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "From",
+   "options": "Party 1\nParty 2",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "description": "Which party receives it.",
+   "fieldname": "to_party",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "To",
+   "options": "Party 1\nParty 2",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "description": "The acreage off a GIS sketch. What the parties agreed on before a survey.",
+   "fieldname": "acres_gis",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Acres (GIS)",
+   "precision": "2"
+  },
+  {
+   "allow_on_submit": 1,
+   "columns": 1,
+   "description": "The acreage off the recorded survey. Editable after submission, because the survey comes after the county approves. Record Survey requires it.",
+   "fieldname": "acres_surveyed",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Acres (surveyed)",
+   "precision": "3"
+  },
+  {
+   "description": "Which sketch or exhibit drawing this piece was taken from.",
+   "fieldname": "gis_sketch_ref",
+   "fieldtype": "Data",
+   "label": "GIS Sketch Ref"
+  },
+  {
+   "fieldname": "piece_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "What stands on the piece — trees, a barn, a well, a fence.",
+   "fieldname": "improvements",
+   "fieldtype": "Small Text",
+   "label": "Improvements"
+  },
+  {
+   "description": "Where the new line runs, in words: 'along the south edge of Dry Hollow Rd to the packing house fence'.",
+   "fieldname": "line_notes",
+   "fieldtype": "Small Text",
+   "label": "Line Notes"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "The piece's polygon, WGS84. Sketch geometry before the survey, final geometry after it; editable after submission for that reason.",
+   "fieldname": "geometry",
+   "fieldtype": "JSON",
+   "label": "Geometry (GeoJSON)"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-15 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Lot Line Adjustment Piece",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

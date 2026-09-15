@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 876 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 888 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 439 read tools are **on** by default and can be switched off individually. A
+All 442 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -19107,6 +19107,87 @@ and `slope_rating`, the one in effect.
 `GET /farmops/api/tiles/slope_grade/{z}/{x}/{y}.png[?asset=<docname>]` with
 `X-FarmOps-Token`. Another entity's machine is 404, an unrated one 400, and a
 never-built layer 404 JSON.
+
+### County tax lots and lot line adjustments (v0.169.0)
+
+The county's record is a **read-only reference**. The adjustment and its
+agreements are **editable**. **Nothing reaches the operating books** until the
+survey is recorded and a System Manager runs `lla_record_survey`. Built for the
+PFI / Highland LLC adjustment in Wasco County, OR.
+
+### `taxlot_lookup` — MUTATING (reference cache only), default off
+
+| Argument | Meaning |
+| --- | --- |
+| `map_taxlot` | a tax lot number, in the county's spaced spelling or a deed's compact one |
+| `longitude`, `latitude` | together: the lot under a point |
+| `bbox` | `[west, south, east, north]`, at most 0.05° a side |
+| `manual` | seed by hand instead of asking the county: `owner_of_record`, `account`, `situs`, `acres_gis`, `geometry`, `raw_attributes`, `source_url` (needs `map_taxlot`) |
+| `county` | default `wasco`, the only one configured |
+
+Exactly one way to ask per call. Every lot returned (up to 20) is upserted into
+**County Tax Lot**. All its fields are read-only, it links to nothing, and the
+Desk cannot save it. A county failure (it was 503 when this shipped) writes
+nothing and says how to seed by hand.
+
+### `taxlot_refresh` — MUTATING (reference cache only), default off
+
+`map_taxlot`: re-read one cached lot; `changed` lists what moved. A failed read
+leaves the row untouched.
+
+### `lla_list`, `lla_get` — read-only, default ON
+
+`lla_list` filters by `status`, `party` or `county`, and returns piece and
+open-item counts. `lla_get` returns the whole adjustment: both cached lots,
+pieces with geometry, easements, open items, `next_statuses`,
+`missing_for_submission`, `editable_after_submit`, and `record_survey`
+(`available`, `refusals`).
+
+### `lla_create`, `lla_update`, `lla_add_piece`, `lla_set_geometry`, `lla_add_open_item`, `lla_add_easement` — MUTATING, default off
+
+| Status | docstatus | What it means |
+| --- | --- | --- |
+| Draft, Under review | 0 | everything editable |
+| Submitted to county | 1 | `lla_update` submits: needs both lots, parties, signers and a piece |
+| Approved → Recorded | 1 | in order; Recorded is final |
+| Withdrawn | 0 or 2 | cancels a submitted adjustment |
+
+After submission, only the `allow_on_submit` fields change. The header keeps
+`status`, recording number and date, survey reference, `lot_N_acres_surveyed`
+and `notes`. A piece keeps `acres_surveyed` and `geometry`. Open items stay
+editable. No pieces or easements can be added.
+
+A piece's `from_party`/`to_party`, and an easement's `burdened`/`benefited`,
+take Party 1, Party 2 or the party's own name. `lla_add_piece` and
+`lla_add_open_item` update the row of the same name. Refused: the same party
+or lot twice, a piece moving to its own party, non-polygon geometry, and cash
+on an Even swap.
+
+### `lla_render_mou` — read-only, default ON
+
+`name`, optional `include_html`. Returns the **Memorandum of Understanding** as
+a base64 PDF: parties and lots, consideration, pieces with acreages, easements,
+lender, closing, signature blocks, and Exhibits A (pieces), B (GeoJSON) and C
+(open items). It uses the site's "Memorandum of Understanding" Print Format
+where wkhtmltopdf works, otherwise this app's own PDF writer; `renderer` says
+which.
+
+### `lla_record_survey` — MUTATING, default off, System Manager only
+
+Runs on a submitted adjustment at Recorded, with every piece's
+`acres_surveyed` and geometry set. For each party that is a Company on this
+site it writes the adjusted **Parcel**:
+
+- **Acreage:** the lot's surveyed figure, or county GIS acres less the pieces
+  given plus the pieces received. `acreage_basis` says which.
+- **Boundary:** the lot's polygon less and plus the pieces.
+- **Parcel:** the one carrying that tax lot number is updated; otherwise
+  `Tax Lot <number>` is created. This goes through `create_parcel`,
+  `update_parcel` and `set_parcel_boundary`.
+
+A Customer or Supplier party is reported, not written. A polygon more than 25%
+off the acreage is refused before anything is written. Idempotent. The same
+action is the **Record Survey** button on the form.
 
 ---
 

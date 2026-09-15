@@ -892,9 +892,9 @@ class ToolRegistration(unittest.TestCase):
 		# blocks already registered and sets their boundaries. The seven `fsa_`
 		# columns on Field are new columns on an existing register and carry no
 		# tools of their own — no existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 876)
-		self.assertEqual(len(self.registry.READ_TOOLS), 439)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 437)
+		self.assertEqual(len(self.registry.TOOLS), 888)
+		self.assertEqual(len(self.registry.READ_TOOLS), 442)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 446)
 
 
 if __name__ == "__main__":

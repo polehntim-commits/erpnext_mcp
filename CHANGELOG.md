@@ -3,6 +3,105 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.169.0 — 2026-09-15 — the line between two lots
+
+County tax lots and lot line adjustments. Built for a real deal: a lot line
+adjustment between PFI and Highland LLC in Wasco County, Oregon. **888 tools**
+(+12: three read, nine write). Five new DocTypes. **One rule shapes all of it:**
+county data is a read-only reference, the adjustment is editable, and nothing
+reaches the operating books until the survey is recorded and a System Manager
+presses Record Survey.
+
+### County Tax Lot — a read-only reference cache
+
+- Fields: `map_taxlot` (unique, and the docname), `county`, `account`,
+  `owner_of_record`, `situs`, `acres_gis`, `source` (County GIS or Manual),
+  `geometry`, `source_url`, `fetched_on` and `raw_attributes`. Every field is
+  read-only. It links to nothing: no Item, Asset, Location or Parcel. The
+  controller refuses any save that did not come from the two lookup tools.
+- **`taxlot_lookup`** asks Wasco County's GIS layer by tax lot number, by point
+  (`longitude`/`latitude`) or by `bbox` (at most 0.05° a side), and caches up to
+  20 lots. It reuses `api/gis.py`'s client: the tax lot spelling rules, the
+  capped download, and the check for an ArcGIS error returned as HTTP 200.
+  **The county server was answering 503**, so `manual` seeds a lot by hand from
+  a tax statement (source Manual). A county failure writes nothing and says how
+  to seed instead.
+- **`taxlot_refresh`** re-reads one cached lot and reports what changed. If the
+  county fails or no longer returns the lot, the cached row is left exactly as
+  it was.
+
+### Lot Line Adjustment — submittable
+
+- Header: title, county, state, status, `lot_1`/`lot_2` (links to County Tax
+  Lot), `party_1`/`party_2` (a Company, Customer or Supplier, through
+  `party_N_type`), signers with titles, consideration (Even swap, Cash true-up or
+  Netted, with `true_up_amount`/`true_up_payer`), lender, lender conditions and
+  target close. After the survey: recording number and date, survey reference,
+  each lot's surveyed acreage, and the Parcels and stamps Record Survey writes.
+- Child tables: **pieces** (name, from, to, GIS acres, surveyed acres, sketch
+  ref, line notes, geometry, improvements), **open items** (item, question,
+  owner, status, due) and **easements** (access, utility or irrigation; burdened,
+  benefited, notes). `name`, `owner` and `type` are names Frappe reserves, so
+  they are stored as `piece_name`, `responsible` and `easement_type`. The tools
+  accept the short names too.
+- **The status is the workflow.** Draft and Under review are editable. Setting
+  Submitted to county submits the document, and needs both lots, both parties,
+  both signers and at least one piece. Then Approved, then Recorded, in that
+  order; Recorded is final. Withdrawn cancels a submitted adjustment.
+- **What stays editable after submission is read off `allow_on_submit` in the
+  JSON:** status, recording details, surveyed acreages, each piece's
+  `acres_surveyed` and `geometry`, open items, and notes. A bench enforces these
+  flags and the test double does not, so the tools enforce them too.
+- Refused: the same party or lot twice, a piece moving to its own party, a
+  geometry that is not a polygon, and cash on an Even swap.
+- Tools: `lla_list`, `lla_get` (which also reports the next statuses, what is
+  missing for submission, and whether Record Survey can run),
+  `lla_create`, `lla_update`, `lla_add_piece` (adds, or updates the piece of that
+  name), `lla_set_geometry`, `lla_add_open_item`, `lla_add_easement`. A party can
+  be named as Party 1, Party 2 or by the party's own name.
+
+### The Memorandum of Understanding
+
+- A **"Memorandum of Understanding" Print Format** is seeded on migrate if it is
+  missing and never overwritten. It covers the parties and lots,
+  consideration, pieces with acreages, easements, lender, closing and signature
+  blocks, plus Exhibit A (pieces), Exhibit B (GeoJSON) and Exhibit C (open
+  items). It states that it is not a deed. It uses no external resources, and
+  every value is escaped.
+- **`lla_render_mou`** (read) returns the PDF as base64. It uses the site's
+  Print Format through wkhtmltopdf where that works; otherwise this app's own
+  PDF writer produces the same content. `renderer` says which.
+
+### Record Survey — the one path into the books
+
+- A System Manager only, on a submitted adjustment at Recorded, with every
+  piece's surveyed acres and final geometry set. Offered both as the form's
+  **Record Survey** button and as **`lla_record_survey`**.
+- For each party that is a Company on this site:
+  - **Acreage:** the lot's surveyed figure, or county GIS acres less the pieces
+    given plus the pieces received (surveyed acres).
+  - **Boundary:** the lot's polygon less and plus the same pieces.
+  - **Parcel:** the one already carrying that tax lot number (in any spelling)
+    is updated; otherwise `Tax Lot <number>` is created. This goes through
+    `create_parcel`, `update_parcel` and `set_parcel_boundary` with all their
+    checks.
+- A Customer or Supplier party is reported, not written. A polygon that
+  disagrees with the acreage by more than a quarter is refused before anything
+  is written. Running it twice writes the same answer.
+- `Lot Line Adjustment.parcel_1`/`parcel_2` are Parcel links, declared in
+  `realestate.PARCEL_REFERRERS` and `locations.STATIC_REFERRERS`, so a
+  conveyance carries them and a delete sees them.
+
+### Roles and deploying
+
+- **Roles:** Land Reference reads County Tax Lot. Land Agreements has full
+  rights on Lot Line Adjustment. System Manager alone may record a survey. The
+  roles are standard DocPerms, which Frappe creates on migrate, and the tools
+  check them too, because a DocPerm alone does not bind on the MCP transport.
+- All nine write tools ship **off** by default. `bench migrate` is needed
+  for the DocTypes and the Print Format. The form script is served from a cache
+  that only migrate clears.
+
 ## 0.168.0 — 2026-09-15 — how steep the ground is
 
 A slope grade layer for the operational map, beside v0.167.0's slope aspect. It

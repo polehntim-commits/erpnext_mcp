@@ -1,0 +1,163 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:map_taxlot",
+ "creation": "2026-09-15 09:00:00.000000",
+ "description": "A county assessor's tax lot, cached as a READ-ONLY REFERENCE. Nothing on this site links out from it — not an Item, an Asset, a Location or a Parcel — and nothing on the operating books reads it: it is the county's statement about a piece of ground, kept so a Lot Line Adjustment can name the lots it changes. Only taxlot_lookup and taxlot_refresh write it; the Desk cannot.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "map_taxlot",
+  "county",
+  "account",
+  "owner_of_record",
+  "identity_col",
+  "situs",
+  "acres_gis",
+  "source",
+  "geometry_section",
+  "geometry",
+  "provenance_section",
+  "source_url",
+  "fetched_on",
+  "raw_attributes"
+ ],
+ "fields": [
+  {
+   "bold": 1,
+   "description": "The assessor's map and tax lot number in the county's own spelling ('2N 13E 12 C 100'). IT IS ALSO THE DOCNAME. Written only by taxlot_lookup and taxlot_refresh.",
+   "fieldname": "map_taxlot",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Map / Tax Lot",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Which county GIS service this lot came from, as erpnext_mcp.api.gis.COUNTIES names it ('wasco').",
+   "fieldname": "county",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "County",
+   "read_only": 1
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Assessor Account",
+   "read_only": 1
+  },
+  {
+   "description": "The taxpayer the county names. A reference, not a title search — the deed decides who owns the ground.",
+   "fieldname": "owner_of_record",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Owner of Record",
+   "read_only": 1
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "situs",
+   "fieldtype": "Small Text",
+   "label": "Situs Address",
+   "read_only": 1
+  },
+  {
+   "description": "The county's own calculated acreage off its GIS layer. Not a surveyed figure.",
+   "fieldname": "acres_gis",
+   "fieldtype": "Float",
+   "label": "Acres (county GIS)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "description": "County GIS: fetched from the county's parcel layer. Manual: seeded by hand from a tax statement or a county printout while the county server was unavailable — refresh it once the server answers.",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "County GIS\nManual",
+   "read_only": 1
+  },
+  {
+   "fieldname": "geometry_section",
+   "fieldtype": "Section Break",
+   "label": "Geometry"
+  },
+  {
+   "description": "The lot's polygon as GeoJSON in WGS84 degrees, as the county published it.",
+   "fieldname": "geometry",
+   "fieldtype": "JSON",
+   "label": "Geometry (GeoJSON)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "provenance_section",
+   "fieldtype": "Section Break",
+   "label": "Provenance"
+  },
+  {
+   "fieldname": "source_url",
+   "fieldtype": "Small Text",
+   "label": "Source URL",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fetched_on",
+   "fieldtype": "Datetime",
+   "label": "Fetched On",
+   "read_only": 1
+  },
+  {
+   "description": "Every attribute the county returned for this lot, untranslated — the columns this form does not name are still here.",
+   "fieldname": "raw_attributes",
+   "fieldtype": "JSON",
+   "label": "Raw County Attributes",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-15 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "County Tax Lot",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Land Reference"
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Land Agreements"
+  }
+ ],
+ "search_fields": "owner_of_record,account,situs",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "map_taxlot"
+}

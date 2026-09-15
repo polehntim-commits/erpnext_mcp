@@ -105,6 +105,11 @@ PARCEL_REFERRERS = (
 	# land transfer nobody said included it. So the link follows and the
 	# accounting does not, and whoever conveyed the parcel is left to decide.
 	("Biological Asset", "parcel"),
+	# v0.169.0. The Parcels a recorded lot line adjustment wrote. They follow the
+	# ground for the reason a Field does: the adjustment is the record of how the
+	# parcel got its present line, and a conveyance does not unmake that history.
+	("Lot Line Adjustment", "parcel_1"),
+	("Lot Line Adjustment", "parcel_2"),
 )
 
 #: Referring registers that also carry their own `owning_entity`, which has to

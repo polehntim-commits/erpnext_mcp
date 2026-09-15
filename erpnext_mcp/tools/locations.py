@@ -172,6 +172,9 @@ STATIC_REFERRERS = {
 		("Biological Asset", "parcel"),
 		("Housing Assignment", "parcel"),
 		("Lease", "parcel"),
+		# v0.169.0. A recorded lot line adjustment names the Parcels it wrote.
+		("Lot Line Adjustment", "parcel_1"),
+		("Lot Line Adjustment", "parcel_2"),
 	),
 	HOUSING_UNIT: (
 		("Detector Test", "unit"),

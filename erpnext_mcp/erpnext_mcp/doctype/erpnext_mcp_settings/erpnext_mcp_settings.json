@@ -234,6 +234,18 @@
   "allow_get_lease",
   "allow_create_lease",
   "allow_update_lease",
+  "allow_taxlot_lookup",
+  "allow_taxlot_refresh",
+  "allow_lla_list",
+  "allow_lla_get",
+  "allow_lla_create",
+  "allow_lla_update",
+  "allow_lla_add_piece",
+  "allow_lla_set_geometry",
+  "allow_lla_add_open_item",
+  "allow_lla_add_easement",
+  "allow_lla_render_mou",
+  "allow_lla_record_survey",
   "party_tools_section",
   "allow_list_related_parties",
   "allow_get_related_party",
@@ -2607,6 +2619,90 @@
    "fieldname": "allow_update_lease",
    "fieldtype": "Check",
    "label": "Update Lease"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (writes only the County Tax Lot reference cache). Looks up county tax lots by number, point or box from the county's public GIS layer — or seeds one by hand while the server is down — and caches them. OFF by default.",
+   "fieldname": "allow_taxlot_lookup",
+   "fieldtype": "Check",
+   "label": "Taxlot Lookup"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (writes only the County Tax Lot reference cache). Re-reads one cached tax lot from the county. OFF by default.",
+   "fieldname": "allow_taxlot_refresh",
+   "fieldtype": "Check",
+   "label": "Taxlot Refresh"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. Lists lot line adjustments with their status, parties, lots and open items.",
+   "fieldname": "allow_lla_list",
+   "fieldtype": "Check",
+   "label": "LLA List"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. One lot line adjustment in full, with what it needs next.",
+   "fieldname": "allow_lla_get",
+   "fieldtype": "Check",
+   "label": "LLA Get"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Creates a draft lot line adjustment. OFF by default.",
+   "fieldname": "allow_lla_create",
+   "fieldtype": "Check",
+   "label": "LLA Create"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Changes a lot line adjustment's header and status — moving it to Submitted to county submits it. OFF by default.",
+   "fieldname": "allow_lla_update",
+   "fieldtype": "Check",
+   "label": "LLA Update"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Adds or updates a piece of ground in a lot line adjustment. OFF by default.",
+   "fieldname": "allow_lla_add_piece",
+   "fieldtype": "Check",
+   "label": "LLA Add Piece"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Sets a lot line adjustment piece's polygon. OFF by default.",
+   "fieldname": "allow_lla_set_geometry",
+   "fieldtype": "Check",
+   "label": "LLA Set Geometry"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Adds or updates a lot line adjustment open item. OFF by default.",
+   "fieldname": "allow_lla_add_open_item",
+   "fieldtype": "Check",
+   "label": "LLA Add Open Item"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Adds an easement to a draft lot line adjustment. OFF by default.",
+   "fieldname": "allow_lla_add_easement",
+   "fieldtype": "Check",
+   "label": "LLA Add Easement"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. Renders a lot line adjustment's Memorandum of Understanding as a PDF. Attaches nothing.",
+   "fieldname": "allow_lla_render_mou",
+   "fieldtype": "Check",
+   "label": "LLA Render MOU"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Writes the adjusted Parcel records from a recorded lot line adjustment survey — the one path from an adjustment into the operating books. System Manager only. OFF by default.",
+   "fieldname": "allow_lla_record_survey",
+   "fieldtype": "Check",
+   "label": "LLA Record Survey"
   },
   {
    "description": "The governance register of who is related to the company and how. Separate from the Party field on a Journal Entry, which is unaffected by anything here.",

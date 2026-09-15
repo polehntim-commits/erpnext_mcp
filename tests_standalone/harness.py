@@ -1913,6 +1913,14 @@ APP_DOCTYPES = {
 	"Verification Record": "verification_record",
 	"Recall Plan": "recall_plan",
 	"Supplier Verification": "supplier_verification",
+	# v0.169.0. County tax lots and lot line adjustments. The tax lot is a
+	# read-only reference cache; the adjustment is submittable with three child
+	# tables, and its Record Survey action is the only thing that writes Parcel.
+	"County Tax Lot": "county_tax_lot",
+	"Lot Line Adjustment": "lot_line_adjustment",
+	"Lot Line Adjustment Piece": "lot_line_adjustment_piece",
+	"Lot Line Adjustment Open Item": "lot_line_adjustment_open_item",
+	"Lot Line Adjustment Easement": "lot_line_adjustment_easement",
 }
 
 #: The standard reports this app ships, by folder name under `REPORT_DIR`. Rows
@@ -2469,6 +2477,9 @@ CHILD_TABLES = {
 	("Statement Anchor", "statement_lines"): "Statement Anchor Line",
 	("Note Payable", "payment_events"): "Note Payable Event",
 	("Parcel", "conveyance_events"): "Parcel Conveyance Event",
+	("Lot Line Adjustment", "pieces"): "Lot Line Adjustment Piece",
+	("Lot Line Adjustment", "open_items"): "Lot Line Adjustment Open Item",
+	("Lot Line Adjustment", "easements"): "Lot Line Adjustment Easement",
 	("Payment Entry", "references"): "Payment Entry Reference",
 	# v0.68.0. The purchasing pipeline's three item tables. Purchase Invoice
 	# Item is mapped here even though the Purchase Invoice DOCTYPE stays absent
