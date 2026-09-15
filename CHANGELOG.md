@@ -3,6 +3,40 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.169.1 — 2026-09-16 — the county answers after all
+
+The Wasco County lookup is the **primary** path for `taxlot_lookup`. Manual
+seeding is the fallback, not the expected route. The county's server answered
+503 on 2026-09-15 and 200 the next day, and the Mill Creek and 40-Acre
+boundaries were imported through it before either. **888 tools, unchanged.**
+
+- **One lookup for the Parcel form and the tax lot cache.** The core of the
+  Desk method `query_county_parcels` is now `api/gis.county_lookup`, and
+  `taxlot_lookup`/`taxlot_refresh` call it rather than building their own
+  query. The Desk method answers exactly what it did before. The shared lookup
+  gains the bounding box, and each feature now carries `raw_attributes`.
+- **`taxlot_lookup` takes `account`**, the assessor account number the form
+  already searched by.
+- **A transient failure is retried.** `gis._fetch` retries a 502, 503 or 504,
+  or a failed connection, twice (after 1 s, then 2 s). A 400 or 404 is an
+  answer and is not retried. When it gives up, the message says the county has
+  been intermittent and to try again. This helps the Parcel form's lookup too.
+- **Wasco publishes no situs address.** The live layer's fields are account,
+  map tax lot, taxpayer, the taxpayer's mailing address and calculated acres.
+  v0.169.0 looked for situs fields that do not exist. `situs` is now left empty
+  on a county lookup rather than filled with a mailing address, which is not
+  where the ground is. The test fixture is now the live schema.
+- **Record Survey recognises this site's parcel ids.** The live parcels are
+  keyed `1N-13E-07 TL 200 (Acct #7503)`, which the strict tax lot parser
+  refused, so v0.169.0's Record Survey would have created a second Mill Creek
+  rather than updating it. `land_adjustment.parcel_id_keys` reads the lot and
+  the assessor account out of that spelling, and a Parcel is matched on either.
+- Checked against the live endpoint through the new path: Mill Creek (account
+  7503, `1N 13E 7 200`) returns 131.43 ac, matching the Parcel's recorded
+  acreage; 40-Acre (7599) returns 40.05 ac against a recorded 40.02. The lot
+  number, account, a point at Mill Creek's centroid and a bounding box each
+  return the expected lots.
+
 ## 0.169.0 — 2026-09-15 — the line between two lots
 
 County tax lots and lot line adjustments. Built for a real deal: a lot line

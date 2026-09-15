@@ -6233,16 +6233,21 @@ TOOLS = {
 	"taxlot_lookup": _tool(
 		land.taxlot_lookup,
 		"MUTATING (default OFF) — writes only the County Tax Lot reference cache. Look up "
-		"county assessor tax lots and cache them, or seed one by hand.\n\n"
-		"ONE WAY TO ASK PER CALL: `map_taxlot` (Wasco's spaced spelling '2N 13E 12 C 100' or "
-		"the deed's compact '2N13E12C00100'), `longitude`+`latitude` for the lot under a point, "
-		"or `bbox` [west, south, east, north] (at most 0.05° a side) for the lots in a box. "
-		"Every lot the county returns (up to 20) is upserted: owner of record, account, situs, "
-		"GIS acres, polygon, and every raw attribute.\n\n"
-		"THE COUNTY SERVER CAN BE DOWN (it was answering 503 when this shipped). Seed a lot by "
-		"hand with `map_taxlot` plus `manual` {owner_of_record, account, situs, acres_gis, "
-		"geometry, raw_attributes, source_url} off a tax statement; it is marked source Manual "
-		"and taxlot_refresh replaces it from the county later.\n\n"
+		"county assessor tax lots from Wasco County's live GIS layer and cache them — the same "
+		"lookup the Parcel form's county search runs, which imported the Mill Creek and 40-Acre "
+		"boundaries.\n\n"
+		"ONE WAY TO ASK PER CALL: `map_taxlot` (Wasco's spaced spelling '1N 13E 7 200', the deed's "
+		"compact '1N13E0700200', or this site's '1N-13E-07 TL 200'), `account` (the assessor "
+		"account off a tax statement, e.g. 7503), `longitude`+`latitude` for the lot under a "
+		"point, or `bbox` [west, south, east, north] (at most 0.05° a side) for the lots in a "
+		"box. Every lot the county returns (up to 20) is upserted: owner of record, account, GIS "
+		"acres, polygon, and every raw attribute. Wasco publishes no situs address — only the "
+		"taxpayer's mailing address, which stays in raw_attributes.\n\n"
+		"THE COUNTY IS THE PRIMARY SOURCE, AND IT IS INTERMITTENT. A 502, 503 or 504 is retried "
+		"twice before the lookup gives up, and the refusal says to try again. Only when it stays "
+		"unavailable, seed a lot by hand with `map_taxlot` plus `manual` {owner_of_record, "
+		"account, situs, acres_gis, geometry, raw_attributes, source_url} off a tax statement; it "
+		"is marked source Manual and taxlot_refresh replaces it from the county.\n\n"
 		"County Tax Lot links to nothing and nothing on the operating books reads it. Needs the "
 		"Land Reference, Land Agreements or System Manager role.",
 		{
@@ -6250,6 +6255,7 @@ TOOLS = {
 			"map_taxlot": _field(
 				_STRING, "The tax lot number, in any spelling the county's grammar accepts."
 			),
+			"account": _field(_STRING, "The assessor account number, e.g. 7503."),
 			"longitude": _field(_NUMBER, "With latitude: the lot under this point."),
 			"latitude": _field(_NUMBER, "With longitude."),
 			"bbox": {
@@ -6259,8 +6265,9 @@ TOOLS = {
 			},
 			"manual": _field(
 				_OBJECT,
-				"Seed by hand instead of asking the county: owner_of_record, account, situs, acres_gis, "
-				"geometry (GeoJSON Polygon), raw_attributes, source_url. Needs map_taxlot.",
+				"The fallback when the county stays unavailable: seed by hand with owner_of_record, "
+				"account, situs, acres_gis, geometry (GeoJSON Polygon), raw_attributes, source_url. "
+				"Needs map_taxlot.",
 			),
 		},
 		mutating=True,

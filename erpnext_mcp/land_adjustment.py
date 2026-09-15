@@ -18,15 +18,26 @@ an Item, an Asset, a Location or a Parcel. The controller refuses every write
 that does not carry `flags.county_refresh`, which only `upsert_tax_lot` sets: the
 Desk can read a lot and cannot change one.
 
-THE COUNTY CLIENT IS `api/gis.py`'s, NOT A SECOND ONE. That module already knows
-Wasco's FeatureServer, the tax lot grammar the layer actually stores
-(`canonical_tax_lot`), the bounded fetch, and the ArcGIS error that arrives as an
-HTTP 200. This module adds the two query shapes it lacked — an envelope, and the
-attributes `parse_features` does not keep — and nothing else.
+THE COUNTY LOOKUP IS THE ONE THE PARCEL FORM ALREADY USES. `api/gis.county_lookup`
+is the code that pulled the Mill Creek and 40-Acre boundaries: Wasco's
+FeatureServer, the tax lot grammar the layer actually stores, account-number
+search, the bounded fetch, and the ArcGIS error that arrives as an HTTP 200.
+v0.169.1 extracted it from the Desk method so that `taxlot_lookup` asks the
+county through exactly the same path, and gave it the bounding box and the raw
+attributes this cache keeps. This module only maps its answer onto the cache.
 
-THE COUNTY SERVER WAS ANSWERING 503 WHEN THIS WAS WRITTEN, so a lot can be SEEDED
-BY HAND from a tax statement (`source` = Manual) and refreshed from the county
-later. A failed refresh leaves the cached row exactly as it was.
+THE COUNTY IS THE PRIMARY SOURCE AND IT IS INTERMITTENT, NOT DOWN. It answered
+503 on 2026-09-15 and 200 the next day. `gis._fetch` retries a 502/503/504 before
+giving up; when it does give up, a lot can be SEEDED BY HAND from a tax statement
+(`source` = Manual) and refreshed from the county once it answers. A failed
+refresh leaves the cached row exactly as it was.
+
+WASCO PUBLISHES NO SITUS ADDRESS. The live layer's fields (read 2026-09-16) are
+the account, the map tax lot, the taxpayer, the taxpayer's MAILING address and
+the calculated acres. A mailing address is where the tax bill goes, not where
+the ground is, so `situs` is left empty on a county lookup rather than filled
+with it; the mailing address stays in `raw_attributes`, and a manual seed may set
+`situs`.
 
 ────────────────────────────────────────────────────────────────────────────
 THE AGREEMENT: `Lot Line Adjustment`
@@ -74,6 +85,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from urllib.parse import urlencode
 
 import frappe
@@ -121,13 +133,13 @@ CONSIDERATIONS = ("Even swap", "Cash true-up", "Netted")
 EASEMENT_TYPES = ("Access", "Utility", "Irrigation")
 OPEN_ITEM_STATUSES = ("Open", "In progress", "Resolved", "Dropped")
 
-#: The attributes a county might publish a situs address under. Read the way
-#: `gis._property` reads everything else: in order, case-insensitively.
-SITUS_FIELDS = ("SitusAddress", "SITUSADDRESS", "Situs", "SiteAddress", "SITEADDR", "PropertyAddress")
-
-#: How big a bounding box may be, in degrees on a side. About three miles at
-#: Wasco's latitude: a neighbourhood of lots, not the county.
-MAX_BBOX_DEGREES = 0.05
+#: How a parcel id on this site names an assessor account: `(Acct #7503)`,
+#: `Account 7503`, `acct. no. 7503`.
+_ACCOUNT_IN_TEXT = re.compile(r"\bacc(?:oun)?t\.?\s*(?:no\.?|num(?:ber)?)?\s*#?\s*(\d{1,9})\b", re.IGNORECASE)
+#: What a person writes around a tax lot number that is not part of it:
+#: a parenthetical, and `TL` / `Tax Lot` before the lot.
+_PARENTHETICAL = re.compile(r"\([^)]*\)")
+_TAX_LOT_WORD = re.compile(r"\b(?:TL|TAX\s*LOT)\b", re.IGNORECASE)
 
 _DOCTYPE_DIR = os.path.join(os.path.dirname(__file__), "erpnext_mcp", "doctype")
 
@@ -324,110 +336,58 @@ def polygon(value, label: str) -> dict:
 	return geometry
 
 
-def query_params(map_taxlot=None, point=None, bbox=None) -> tuple[dict, dict]:
-	"""`(params, asked)` for exactly one of the three questions a county can answer."""
+def fetch_tax_lots(
+	county=None, map_taxlot=None, account=None, point=None, bbox=None
+) -> tuple[list, list, dict]:
+	"""`(values_per_lot, warnings, asked)` from the county's live layer. Writes nothing.
+
+	`api/gis.county_lookup` does the asking — the same code the Parcel form's
+	county lookup runs — and this maps each feature onto the cache's columns.
+	"""
 	from .api import gis
 
-	asked = [
-		label for label, given in (("map_taxlot", map_taxlot), ("point", point), ("bbox", bbox)) if given
-	]
-	if len(asked) != 1:
-		raise ToolError(
-			"pass exactly one of map_taxlot, point (longitude and latitude) or bbox "
-			f"([west, south, east, north]); got {len(asked) or 'none'}."
-		)
-	params = {"outFields": "*", "outSR": 4326, "returnGeometry": "true", "f": "geojson"}
-	if map_taxlot:
-		canonical = canonical_lot(map_taxlot)
-		return {**params, "where": f"{{field}}='{canonical}'"}, {"map_taxlot": canonical}
-	if point:
-		longitude = gis._degrees(point[0], "longitude", 180.0)
-		latitude = gis._degrees(point[1], "latitude", 90.0)
-		return {
-			**params,
-			"geometry": json.dumps({"x": longitude, "y": latitude}),
-			"geometryType": "esriGeometryPoint",
-			"inSR": 4326,
-			"spatialRel": "esriSpatialRelIntersects",
-		}, {"point": [longitude, latitude]}
-	if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-		raise ToolError("bbox must be four numbers: [west, south, east, north].")
-	west = gis._degrees(bbox[0], "bbox west", 180.0)
-	south = gis._degrees(bbox[1], "bbox south", 90.0)
-	east = gis._degrees(bbox[2], "bbox east", 180.0)
-	north = gis._degrees(bbox[3], "bbox north", 90.0)
-	if west >= east or south >= north:
-		raise ToolError("bbox must be [west, south, east, north] with west < east and south < north.")
-	if east - west > MAX_BBOX_DEGREES or north - south > MAX_BBOX_DEGREES:
-		raise ToolError(
-			f"bbox is {east - west:.3f}° by {north - south:.3f}°; the most is {MAX_BBOX_DEGREES}° a side, "
-			"about three miles. A county's lots are looked up a neighbourhood at a time."
-		)
-	return {
-		**params,
-		"geometry": json.dumps({"xmin": west, "ymin": south, "xmax": east, "ymax": north}),
-		"geometryType": "esriGeometryEnvelope",
-		"inSR": 4326,
-		"spatialRel": "esriSpatialRelIntersects",
-	}, {"bbox": [west, south, east, north]}
-
-
-def fetch_tax_lots(county=None, map_taxlot=None, point=None, bbox=None) -> tuple[list, list, dict]:
-	"""`(values_per_lot, warnings, asked)` from the county's live layer. Writes nothing."""
-	from .api import gis
-
-	key, config = county_config(county)
-	params, asked = query_params(map_taxlot, point, bbox)
-	if "where" in params:
-		params["where"] = params["where"].replace("{field}", config["tax_lot_field"])
+	lat, lon = (point[1], point[0]) if point else (None, None)
 	try:
-		payload = gis._fetch(config["url"], params)
+		answer = gis.county_lookup(
+			county=county, tax_lot=map_taxlot, account=account, lat=lat, lon=lon, bbox=bbox
+		)
 	except ToolError as exc:
+		if "HTTP" not in str(exc) and "could not be reached" not in str(exc):
+			raise
 		raise ToolError(
-			f"{exc} {config['label']}'s GIS server is the county's, not this site's. While it is "
-			"down, seed the lot by hand: taxlot_lookup with map_taxlot and manual={owner_of_record, "
-			"account, situs, acres_gis, geometry} from the tax statement, then taxlot_refresh once "
-			"the server answers."
+			f"{exc} If it stays unavailable, seed the lot by hand: taxlot_lookup with map_taxlot and "
+			"manual={owner_of_record, account, situs, acres_gis, geometry} from the tax statement, then "
+			"taxlot_refresh once the county answers."
 		) from None
-	_features, warnings = gis.parse_features(payload, config)
-	names = config.get("properties") or {}
-	source_url = f"{config['url']}?{urlencode(params)}"
+	source_url = f"{answer['url']}?{urlencode(answer['params'])}"
 	now = str(frappe.utils.now())
+	warnings = list(answer["warnings"])
 	out = []
-	for entry in payload.get("features") or []:
-		if not isinstance(entry, dict):
-			continue
-		geometry = entry.get("geometry")
-		if not isinstance(geometry, dict) or geometry.get("type") not in ("Polygon", "MultiPolygon"):
-			continue
-		properties = entry.get("properties") or entry.get("attributes") or {}
-		number = gis._text(gis._property(properties, names.get("tax_lot", ())))
+	for feature in answer["features"]:
 		try:
-			canonical = canonical_lot(number)
+			canonical = canonical_lot(feature.get("tax_lot"))
 		except ToolError:
 			warnings.append(
-				f"The county returned a lot numbered {number!r}, which is not a tax lot; skipped."
+				f"The county returned a lot numbered {feature.get('tax_lot')!r}, which is not a tax lot; skipped."
 			)
 			continue
-		account = gis._property(properties, names.get("account", ()))
 		out.append(
 			{
 				"map_taxlot": canonical,
-				"county": key,
-				"account": gis._text(account),
-				"owner_of_record": gis._text(gis._property(properties, names.get("taxpayer", ()))),
-				"situs": gis._text(gis._property(properties, SITUS_FIELDS)),
-				"acres_gis": gis._acres(gis._property(properties, names.get("acres", ()))),
+				"county": answer["county"],
+				"account": feature.get("account"),
+				"owner_of_record": feature.get("taxpayer"),
+				# Wasco publishes no situs address; see the module docstring.
+				"situs": None,
+				"acres_gis": feature.get("county_acres"),
 				"source": "County GIS",
-				"geometry": geometry,
+				"geometry": feature.get("geometry"),
 				"source_url": source_url,
 				"fetched_on": now,
-				"raw_attributes": properties if isinstance(properties, dict) else None,
+				"raw_attributes": feature.get("raw_attributes"),
 			}
 		)
-		if len(out) >= gis._MAX_FEATURES:
-			break
-	return out, warnings, {"county": key, **asked}
+	return out, warnings, {"county": answer["county"], **answer["query"]}
 
 
 # ── Lot Line Adjustment ─────────────────────────────────────────────────────
@@ -618,8 +578,27 @@ def side_plan(doc, which: str) -> dict:
 	return plan
 
 
-def matching_parcel(company: str, map_taxlot: str) -> str | None:
-	"""The Parcel on `company` whose parcel_id is this lot, however it was spelled."""
+def parcel_id_keys(text) -> tuple[str | None, str | None]:
+	"""`(canonical_tax_lot, account)` read out of a Parcel's free-text `parcel_id`.
+
+	The parcels on the live site are keyed `1N-13E-07 TL 200 (Acct #7503)` —
+	a tax lot, the word TL, and the assessor account in brackets — which no
+	strict tax lot parser reads. Either half is enough to recognise the lot.
+	"""
+	raw = str(text or "")
+	found = _ACCOUNT_IN_TEXT.search(raw)
+	account = str(int(found.group(1))) if found else None
+	stripped = _TAX_LOT_WORD.sub(" ", _PARENTHETICAL.sub(" ", raw)).strip()
+	try:
+		lot = canonical_lot(stripped) if stripped else None
+	except ToolError:
+		lot = None
+	return lot, account
+
+
+def matching_parcel(company: str, map_taxlot: str, account=None) -> str | None:
+	"""The Parcel on `company` carrying this lot, by its number or its assessor account."""
+	account = str(account or "").strip() or None
 	rows = (
 		frappe.db.get_all(
 			PARCEL, filters={"owning_entity": company}, fields=["name", "parcel_id"], limit=5000
@@ -627,12 +606,7 @@ def matching_parcel(company: str, map_taxlot: str) -> str | None:
 		or []
 	)
 	for row in rows:
-		number = str(row.get("parcel_id") or "").strip()
-		if not number:
-			continue
-		try:
-			if canonical_lot(number) == map_taxlot:
-				return row["name"]
-		except ToolError:
-			continue
+		lot, parcel_account = parcel_id_keys(row.get("parcel_id"))
+		if (lot and lot == map_taxlot) or (account and parcel_account == account):
+			return row["name"]
 	return None

@@ -176,16 +176,23 @@ def the_deal(**overrides):
 
 
 def county_feature(number=LOT_1, geometry=LOT_1_GEOMETRY, taxpayer="PFI", acres=20.01, account=7503):
+	"""A feature in the LIVE layer's schema, read off the Wasco FeatureServer on
+	2026-09-16: no situs field at all, only the taxpayer's mailing address."""
 	return {
 		"type": "Feature",
 		"geometry": geometry,
 		"properties": {
+			"OBJECTID": 6592046,
+			"AccountNum": account,
 			"MapTaxlot": number,
 			"Taxpayer": taxpayer,
+			"MailingAddress1": "PO BOX 1",
+			"MailingAddress2": None,
+			"MailingAddress3": None,
+			"MailingCity": "THE DALLES",
+			"MailingState": "Oregon",
+			"MailingZIP": "97058",
 			"CalculatedAcres": acres,
-			"AccountNum": account,
-			"SitusAddress": "2535 Dry Hollow Rd",
-			"MaintArea": "07",
 		},
 	}
 
@@ -273,6 +280,7 @@ class LandTestCase(V12TestCase):
 						"acres_gis": round(acres, 2),
 						"geometry": geometry,
 						"situs": "Dry Hollow Rd",
+						"account": "7503" if number == LOT_1 else "7512",
 					},
 				},
 			)
@@ -316,12 +324,34 @@ class TheCountyIsAReference(LandTestCase):
 		lot = data["lots"][0]
 		self.assertEqual(lot["owner_of_record"], "PFI")
 		self.assertEqual(lot["account"], "7503")
-		self.assertEqual(lot["situs"], "2535 Dry Hollow Rd")
+		# Wasco publishes no situs, and a mailing address is not where the ground is.
+		self.assertIsNone(lot["situs"])
 		self.assertEqual(lot["acres_gis"], 20.01)
 		self.assertEqual(lot["source"], "County GIS")
 		self.assertEqual(lot["geometry"], LOT_1_GEOMETRY)
-		self.assertEqual(lot["raw_attributes"]["MaintArea"], "07")
+		self.assertEqual(lot["raw_attributes"]["MailingCity"], "THE DALLES")
 		self.assertIn("public.co.wasco.or.us", lot["source_url"])
+
+	def test_an_assessor_account_is_a_lookup_too(self):
+		data = self.tool_data("taxlot_lookup", {"account": "7503"})
+		self.assertEqual(self.requests[0]["where"], "AccountNum=7503")
+		self.assertEqual(data["created"], [LOT_1])
+
+	def test_the_county_is_asked_through_the_parcel_form_s_own_lookup(self):
+		"""One path for both: the refactor's claim, checked by spying on the shared
+		function rather than the fetch under it."""
+		calls = []
+		original = gis.county_lookup
+
+		def spy(**kwargs):
+			calls.append(kwargs)
+			return original(**kwargs)
+
+		gis.county_lookup = spy
+		self.addCleanup(setattr, gis, "county_lookup", original)
+		self.tool_data("taxlot_lookup", {"map_taxlot": LOT_1})
+		self.tool_data("taxlot_refresh", {"map_taxlot": LOT_1})
+		self.assertEqual([call["tax_lot"] for call in calls], [LOT_1, LOT_1])
 
 	def test_a_point_asks_x_longitude_and_y_latitude(self):
 		self.tool_data("taxlot_lookup", {"longitude": -121.162, "latitude": 45.581})
@@ -342,7 +372,7 @@ class TheCountyIsAReference(LandTestCase):
 		error = self.tool_error(
 			"taxlot_lookup", {"map_taxlot": LOT_1, "longitude": -121.16, "latitude": 45.58}
 		)
-		self.assertIn("exactly one", error)
+		self.assertIn("pass one of these, not 2", error)
 
 	def test_while_the_county_is_down_a_lot_is_seeded_by_hand(self):
 		self.county_down()
@@ -825,6 +855,37 @@ class RecordSurvey(LandTestCase):
 		self.assertEqual(data["parcel_1"], existing)
 		self.assertEqual(len([row for row in self.parcels() if row["owning_entity"] == PFI]), 1)
 		self.assertEqual(next(e for e in data["survey"] if e["side"] == "Party 1")["action"], "updated")
+
+	def test_the_live_site_s_parcel_id_spelling_is_recognised_by_lot_or_account(self):
+		"""The parcels on the Umbrel site are keyed `1N-13E-07 TL 200 (Acct #7503)`,
+		which no strict tax lot parser reads. A Record Survey that missed them would
+		create a second Mill Creek."""
+		self.assertEqual(land.parcel_id_keys("1N-13E-07 TL 200 (Acct #7503)"), ("1N 13E 7 200", "7503"))
+		self.assertEqual(land.parcel_id_keys("1N-13E-10 TL 1000 (Acct #7599)"), ("1N 13E 10 1000", "7599"))
+		self.assertEqual(land.parcel_id_keys("Packing house, account no. 7503"), (None, "7503"))
+		self.assertEqual(land.parcel_id_keys("Hill Place"), (None, None))
+		by_lot = self.tool_data(
+			"create_parcel",
+			{
+				"company": PFI,
+				"parcel_name": "Packing House",
+				"parcel_id": "1N-13E-03 TL 1000 (Acct #9)",
+				"acreage": 19.5,
+			},
+		)["name"]
+		by_account = self.tool_data(
+			"create_parcel",
+			{
+				"company": HIGHLAND,
+				"parcel_name": "Hill Place",
+				"parcel_id": "Hill Place (Acct #7512)",
+				"acreage": 20.5,
+			},
+		)["name"]
+		name = self.recorded()
+		data = self.tool_data("lla_record_survey", {"name": name})
+		self.assertEqual((data["parcel_1"], data["parcel_2"]), (by_lot, by_account))
+		self.assertEqual(len(self.parcels()), 2)
 
 	def test_the_survey_s_own_lot_acreage_wins_when_it_is_stated(self):
 		name = self.recorded()

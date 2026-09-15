@@ -133,6 +133,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 import frappe
 
@@ -260,6 +261,27 @@ _TIMEOUT_SECONDS = 15
 #: because an unbounded read of a remote body is a way to fill a worker's memory
 #: from outside.
 _MAX_BYTES = 4 * 1024 * 1024
+
+#: How big a bounding box may be, in degrees on a side. v0.169.1. About three
+#: miles at Wasco's latitude: a neighbourhood of lots, not the county.
+_MAX_BBOX_DEGREES = 0.05
+
+#: v0.169.1. THE COUNTY SERVER IS INTERMITTENT, NOT DOWN. It answered 503 on
+#: 2026-09-15 and 200 the next day for the same query, and the Mill Creek and
+#: 40-Acre boundaries were imported through it before either. So a 502, 503 or
+#: 504 — the three statuses a gateway in front of a busy ArcGIS server returns —
+#: and a connection that failed outright are tried again after these pauses
+#: before the lookup gives up. Anything else (a 400, a 404) is an answer and is
+#: not retried. Two retries and three seconds is short enough that a form does
+#: not look hung.
+_RETRY_STATUSES = (502, 503, 504)
+_RETRY_DELAYS = (1.0, 2.0)
+
+
+def _sleep(seconds: float) -> None:
+	"""`time.sleep`, named so the suite can replace it."""
+	time.sleep(seconds)
+
 
 #: The most features to hand back to a form. A point lands in one tax lot;
 #: overlapping lots and a point on a shared line make two or three. Twenty is far
@@ -476,23 +498,48 @@ def _fetch(url: str, params: dict) -> dict:
 	SEPARATED OUT SO IT CAN BE REPLACED, which is what the tests do — every other
 	function here is pure and testable without a network, and this one is the
 	only thing between them and a county server that is nobody's dependency.
+
+	v0.169.1: A TRANSIENT FAILURE IS TRIED AGAIN. See `_RETRY_STATUSES`.
 	"""
 	if not HAVE_REQUESTS:
 		raise ToolError(requests_sentence())
+	attempts = len(_RETRY_DELAYS) + 1
+	for attempt in range(1, attempts + 1):
+		try:
+			response = requests.get(url, params=params, timeout=_TIMEOUT_SECONDS, stream=True)
+		except Exception as error:
+			if attempt < attempts:
+				_sleep(_RETRY_DELAYS[attempt - 1])
+				continue
+			raise ToolError(
+				f"the county GIS server could not be reached after {attempts} attempts "
+				f"({type(error).__name__}: {error}). Nothing was changed. It has been intermittent "
+				"rather than down — try again in a few minutes. A boundary can still be drawn by hand "
+				"on the map, which needs no network."
+			) from None
+		if response.status_code in _RETRY_STATUSES and attempt < attempts:
+			_close(response)
+			_sleep(_RETRY_DELAYS[attempt - 1])
+			continue
+		return _read(response, attempts if response.status_code in _RETRY_STATUSES else attempt)
+	raise AssertionError("unreachable")  # pragma: no cover
+
+
+def _close(response) -> None:
 	try:
-		response = requests.get(url, params=params, timeout=_TIMEOUT_SECONDS, stream=True)
-	except Exception as error:  # pragma: no cover - exercised by a bench with no route out
-		raise ToolError(
-			f"the county GIS server could not be reached ({type(error).__name__}: {error}). "
-			"Nothing was changed. A boundary can still be drawn by hand on the map, which "
-			"needs no network."
-		) from None
+		response.close()
+	except Exception:  # pragma: no cover
+		pass
+
+
+def _read(response, attempts: int) -> dict:
 	try:
 		if response.status_code != 200:
+			tried = f" on each of {attempts} attempts" if attempts > 1 else ""
 			raise ToolError(
-				f"the county GIS server answered HTTP {response.status_code}. Nothing was "
-				"changed. That is the county's server rather than this site — try again, or "
-				"draw the boundary by hand."
+				f"the county GIS server answered HTTP {response.status_code}{tried}. Nothing was "
+				"changed. That is the county's server rather than this site, and it has been "
+				"intermittent — try again in a few minutes, or draw the boundary by hand."
 			)
 		body = b""
 		for chunk in response.iter_content(chunk_size=65536):
@@ -503,10 +550,7 @@ def _fetch(url: str, params: dict) -> dict:
 					"one query. That is not one parcel — narrow the search to a tax lot number."
 				)
 	finally:
-		try:
-			response.close()
-		except Exception:  # pragma: no cover
-			pass
+		_close(response)
 
 	try:
 		return json.loads(body.decode("utf-8", "replace") or "{}")
@@ -591,6 +635,10 @@ def parse_features(payload: dict, config: dict) -> tuple:
 			"account": _text(_property(properties, names.get("account", ()))),
 			"geometry": geometry,
 			"area_computed_acres": _computed_acres(geometry),
+			# v0.169.1. Every attribute the county sent, untranslated — the
+			# taxpayer's mailing address among them — for `taxlot_lookup`'s
+			# reference cache. The form ignores it.
+			"raw_attributes": dict(properties) if isinstance(properties, dict) else None,
 		}
 		out.append(feature)
 		if len(out) >= _MAX_FEATURES:
@@ -767,24 +815,49 @@ def _import_fsa_clu(content=None, filename=None, parcel=None, create_missing=0, 
 def _query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon=None):
 	"""Ask a county's parcel layer for a shape, by tax lot, by account, or by a point.
 
-	THREE WAYS TO ASK, AND EXACTLY ONE PER CALL. The account number is the one an
-	operator can actually read off a tax statement without transcribing five
-	fields, and it is the layer's own integer key — so it is the search that
-	cannot be spelled wrong. See `_account_clause` and `_tax_lot_parts`.
-
 	WRITE PERMISSION ON Parcel IS THE GATE, and it is deliberately stricter than
 	the read this method performs. The only thing an imported polygon is for is
 	setting a parcel's boundary; gating on `read` would leave the site hosting an
 	outbound HTTP fetch that any signed-in account — a Family Member, an Advisor
 	— could drive. That is a small thing to hand out and there is no reason to.
+
+	The lookup itself is `county_lookup`, which `taxlot_lookup` calls too.
 	"""
 	_named_user()
 	_may_write("Parcel")
 
+	answer = county_lookup(county=county, tax_lot=tax_lot, account=account, lat=lat, lon=lon)
+	audit.record(
+		tool_name="desk:query_county_parcels",
+		arguments={"county": answer["county"], **answer["query"]},
+		summary=f"{answer['label']}: {answer['count']} parcel(s) matched",
+		caller_ip=_caller_ip(),
+	)
+	return {key: answer[key] for key in ("county", "label", "query", "count", "features", "warnings")}
+
+
+def county_lookup(county=None, tax_lot=None, account=None, lat=None, lon=None, bbox=None) -> dict:
+	"""The county lookup itself: validate, ask, parse. No gate and no audit row.
+
+	v0.169.1, extracted from `_query_county_parcels` so that the Parcel form and
+	`taxlot_lookup` ask the county through one path. Each caller applies its own
+	gate — Frappe's write permission on the Desk, a land role on MCP.
+
+	FOUR WAYS TO ASK, AND EXACTLY ONE PER CALL. The account number is the one an
+	operator can actually read off a tax statement without transcribing five
+	fields, and it is the layer's own integer key — so it is the search that
+	cannot be spelled wrong. See `_account_clause` and `_tax_lot_parts`. A
+	bounding box (`[west, south, east, north]`, at most `_MAX_BBOX_DEGREES` a
+	side) finds every lot in a neighbourhood.
+
+	Returns the answer plus `url` and `params`, the exact request, which a
+	cached copy records as its provenance.
+	"""
 	key, config = _county(county)
 	tax_lot = str(tax_lot if tax_lot is not None else "").strip()
 	account = str(account if account is not None else "").strip()
 	has_point = lat not in (None, "") and lon not in (None, "")
+	has_box = bbox not in (None, "", [], ())
 
 	asked_for = [
 		label
@@ -792,6 +865,7 @@ def _query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon
 			("tax lot number", bool(tax_lot)),
 			("account number", bool(account)),
 			("point", has_point),
+			("bounding box", has_box),
 		)
 		if given
 	]
@@ -829,6 +903,25 @@ def _query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon
 		params["geometryType"] = "esriGeometryPoint"
 		params["inSR"] = 4326
 		params["spatialRel"] = "esriSpatialRelIntersects"
+	elif has_box:
+		if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+			raise ToolError("bbox must be four numbers: [west, south, east, north].")
+		west = _degrees(bbox[0], "bbox west", 180.0)
+		south = _degrees(bbox[1], "bbox south", 90.0)
+		east = _degrees(bbox[2], "bbox east", 180.0)
+		north = _degrees(bbox[3], "bbox north", 90.0)
+		if west >= east or south >= north:
+			raise ToolError("bbox must be [west, south, east, north] with west < east and south < north.")
+		if east - west > _MAX_BBOX_DEGREES or north - south > _MAX_BBOX_DEGREES:
+			raise ToolError(
+				f"bbox is {east - west:.3f}° by {north - south:.3f}°; the most is {_MAX_BBOX_DEGREES}° a "
+				"side, about three miles. A county's lots are looked up a neighbourhood at a time."
+			)
+		asked = {"bbox": [west, south, east, north]}
+		params["geometry"] = json.dumps({"xmin": west, "ymin": south, "xmax": east, "ymax": north})
+		params["geometryType"] = "esriGeometryEnvelope"
+		params["inSR"] = 4326
+		params["spatialRel"] = "esriSpatialRelIntersects"
 	else:
 		raise ToolError(
 			"pass a tax lot number, an assessor's account number, or a lat and lon to look under "
@@ -839,15 +932,8 @@ def _query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon
 	features, warnings = parse_features(payload, config)
 
 	if not features:
-		matched_on = "tax lot number" if tax_lot else ("account number" if account else "point")
+		matched_on = asked_for[0] if asked_for else "query"
 		warnings.append(f"{config['label']} has no parcel matching that {matched_on}. Nothing was changed.")
-
-	audit.record(
-		tool_name="desk:query_county_parcels",
-		arguments={"county": key, **asked},
-		summary=f"{config['label']}: {len(features)} parcel(s) matched",
-		caller_ip=_caller_ip(),
-	)
 
 	return {
 		"county": key,
@@ -856,6 +942,8 @@ def _query_county_parcels(county=None, tax_lot=None, account=None, lat=None, lon
 		"count": len(features),
 		"features": features,
 		"warnings": warnings,
+		"url": config["url"],
+		"params": params,
 	}
 
 

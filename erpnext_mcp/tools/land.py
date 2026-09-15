@@ -4,7 +4,9 @@
 `erpnext_mcp/land_adjustment.py` is the engine and argues the design; this file
 is the twelve doors onto it.
 
-  taxlot_lookup        find a lot at the county (by number, point or box), or seed one by hand
+  taxlot_lookup        find a lot at the county (by number, account, point or box) — the Parcel
+                       form's own lookup, `api/gis.county_lookup` — or seed one by hand when
+                       the county stays unavailable
   taxlot_refresh       re-read one cached lot from the county
   lla_list / lla_get   read adjustments
   lla_create           a new draft
@@ -179,6 +181,7 @@ def taxlot_lookup(args: dict) -> ToolResult:
 	land.require_roles(land.TAX_LOT_ROLES, "look up county tax lots", "Nothing was written.")
 	county_key, _config = land.county_config(as_str(args, "county"))
 	map_taxlot = as_str(args, "map_taxlot")
+	account = as_str(args, "account")
 	longitude, latitude = args.get("longitude"), args.get("latitude")
 	point = None
 	if longitude not in (None, "") or latitude not in (None, ""):
@@ -189,7 +192,7 @@ def taxlot_lookup(args: dict) -> ToolResult:
 	manual = args.get("manual")
 
 	if manual not in (None, "", {}):
-		if not map_taxlot or point or bbox:
+		if not map_taxlot or account or point or bbox:
 			raise ToolError(
 				"manual seeding needs map_taxlot and nothing else to search by. Nothing was written."
 			)
@@ -211,7 +214,7 @@ def taxlot_lookup(args: dict) -> ToolResult:
 			docstatus_delta="none → 0 (created)" if created else "0 → 0 (updated)",
 		)
 
-	found, warnings, asked = land.fetch_tax_lots(county_key, map_taxlot or None, point, bbox)
+	found, warnings, asked = land.fetch_tax_lots(county_key, map_taxlot or None, account or None, point, bbox)
 	created, updated = [], []
 	for values in found:
 		name, was_created = land.upsert_tax_lot(values)
@@ -807,7 +810,7 @@ def lla_record_survey(args: dict) -> ToolResult:
 		parcel = doc.get(f"parcel_{index}")
 		if parcel and not frappe.db.exists(land.PARCEL, parcel):
 			parcel = None
-		parcel = parcel or land.matching_parcel(company, plan["lot"])
+		parcel = parcel or land.matching_parcel(company, plan["lot"], lot.get("account"))
 		action = "updated"
 		if not parcel:
 			created = realestate.create_parcel(

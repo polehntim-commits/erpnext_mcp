@@ -1065,3 +1065,101 @@ class TheMcpSwitchesAreNotTheDeskGate(GISTestCase):
 		)
 		result = gis.save_boundary("Parcel", PARCEL_DOCNAME, json.dumps(PARCEL_OUTLINE))
 		self.assertTrue(result["changed"])
+
+
+# ── v0.169.1: an intermittent county, and one lookup for two callers ────────
+class FakeResponse:
+	def __init__(self, status_code, body=b'{"type": "FeatureCollection", "features": []}'):
+		self.status_code = status_code
+		self.body = body
+		self.closed = False
+
+	def iter_content(self, chunk_size=65536):
+		yield self.body
+
+	def close(self):
+		self.closed = True
+
+
+class FakeRequests:
+	"""Stands in for the `requests` module: answers from a script, records every call."""
+
+	def __init__(self, *script):
+		self.script = list(script)
+		self.calls = 0
+
+	def get(self, url, params=None, timeout=None, stream=None):
+		self.calls += 1
+		step = self.script.pop(0)
+		if isinstance(step, Exception):
+			raise step
+		return step
+
+
+class TheCountyIsIntermittentNotDown(unittest.TestCase):
+	"""THE COUNTY ANSWERED 503 ON 2026-09-15 AND 200 THE NEXT DAY. A lookup tries a
+	gateway failure again before it gives up, and says it was intermittent when
+	it does."""
+
+	def use(self, fake):
+		for name, value in (("requests", fake), ("HAVE_REQUESTS", True), ("_sleep", self.slept.append)):
+			self.addCleanup(setattr, gis, name, getattr(gis, name))
+			setattr(gis, name, value)
+
+	def setUp(self):
+		self.slept = []
+
+	def test_a_503_then_a_200_is_an_answer(self):
+		fake = FakeRequests(FakeResponse(503), FakeResponse(200))
+		self.use(fake)
+		self.assertEqual(gis._fetch("https://example.test/query", {})["type"], "FeatureCollection")
+		self.assertEqual(fake.calls, 2)
+		self.assertEqual(self.slept, [gis._RETRY_DELAYS[0]])
+
+	def test_a_dropped_connection_is_tried_again_too(self):
+		fake = FakeRequests(ConnectionError("reset"), FakeResponse(504), FakeResponse(200))
+		self.use(fake)
+		gis._fetch("https://example.test/query", {})
+		self.assertEqual(fake.calls, 3)
+
+	def test_three_503s_give_up_and_say_it_is_intermittent(self):
+		fake = FakeRequests(FakeResponse(503), FakeResponse(503), FakeResponse(503))
+		self.use(fake)
+		with self.assertRaises(ToolError) as caught:
+			gis._fetch("https://example.test/query", {})
+		self.assertIn("HTTP 503 on each of 3 attempts", str(caught.exception))
+		self.assertIn("intermittent", str(caught.exception))
+		self.assertEqual(fake.calls, 3)
+
+	def test_a_400_is_an_answer_and_is_not_retried(self):
+		fake = FakeRequests(FakeResponse(400))
+		self.use(fake)
+		with self.assertRaises(ToolError) as caught:
+			gis._fetch("https://example.test/query", {})
+		self.assertIn("HTTP 400.", str(caught.exception))
+		self.assertEqual((fake.calls, self.slept), (1, []))
+
+
+class OneLookupForTheFormAndTheCache(GISTestCase):
+	def test_the_desk_method_answers_exactly_what_it_did_before(self):
+		self.answer_with(COUNTY_ANSWER)
+		answer = gis._query_county_parcels(tax_lot=COMPACT_SPELLING)
+		self.assertEqual(set(answer), {"county", "label", "query", "count", "features", "warnings"})
+		self.assertEqual(answer["features"][0]["tax_lot"], "1N 13E 7 200")
+
+	def test_the_shared_lookup_carries_the_request_and_the_raw_attributes(self):
+		self.answer_with(COUNTY_ANSWER)
+		answer = gis.county_lookup(account="7503")
+		self.assertEqual(answer["params"]["where"], "AccountNum=7503")
+		self.assertIn("public.co.wasco.or.us", answer["url"])
+		self.assertEqual(answer["features"][0]["raw_attributes"]["AccountNum"], 7503)
+
+	def test_a_box_is_an_envelope_and_a_county_sized_one_is_refused_unasked(self):
+		self.answer_with(COUNTY_ANSWER)
+		gis.county_lookup(bbox=[-121.19, 45.578, -121.182, 45.586])
+		sent = json.loads(self.fetched[0]["params"]["geometry"])
+		self.assertEqual((sent["xmin"], sent["ymax"]), (-121.19, 45.586))
+		self.assertEqual(self.fetched[0]["params"]["geometryType"], "esriGeometryEnvelope")
+		with self.assertRaises(ToolError):
+			gis.county_lookup(bbox=[-121.5, 45.3, -120.9, 45.8])
+		self.assertEqual(len(self.fetched), 1)

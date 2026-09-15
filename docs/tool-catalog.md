@@ -19119,16 +19119,24 @@ PFI / Highland LLC adjustment in Wasco County, OR.
 
 | Argument | Meaning |
 | --- | --- |
-| `map_taxlot` | a tax lot number, in the county's spaced spelling or a deed's compact one |
+| `map_taxlot` | a tax lot number: the county's spaced spelling, a deed's compact one, or this site's `1N-13E-07 TL 200` |
+| `account` | the assessor account off a tax statement, e.g. `7503` |
 | `longitude`, `latitude` | together: the lot under a point |
 | `bbox` | `[west, south, east, north]`, at most 0.05° a side |
-| `manual` | seed by hand instead of asking the county: `owner_of_record`, `account`, `situs`, `acres_gis`, `geometry`, `raw_attributes`, `source_url` (needs `map_taxlot`) |
+| `manual` | the fallback when the county stays unavailable — seed by hand: `owner_of_record`, `account`, `situs`, `acres_gis`, `geometry`, `raw_attributes`, `source_url` (needs `map_taxlot`) |
 | `county` | default `wasco`, the only one configured |
 
-Exactly one way to ask per call. Every lot returned (up to 20) is upserted into
-**County Tax Lot**. All its fields are read-only, it links to nothing, and the
-Desk cannot save it. A county failure (it was 503 when this shipped) writes
-nothing and says how to seed by hand.
+Exactly one way to ask per call. **The county's live layer is the primary
+source.** Since v0.169.1 this tool runs `api/gis.county_lookup`, the same lookup
+as the Parcel form's county search. Every lot returned (up to 20) is upserted
+into **County Tax Lot**. All its fields are read-only, it links to nothing, and
+the Desk cannot save it. Wasco publishes no situs address, only the taxpayer's
+mailing address, which is kept in `raw_attributes`.
+
+The server is intermittent: it answered 503 on 2026-09-15 and 200 the next
+day. A 502, 503 or 504 is retried twice, one second and then two seconds apart.
+A lookup that still fails writes nothing, says to try again, and names manual
+seeding as the fallback.
 
 ### `taxlot_refresh` — MUTATING (reference cache only), default off
 
