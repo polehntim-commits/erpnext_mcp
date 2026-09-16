@@ -1,0 +1,115 @@
+{
+ "name": "Crop Protection",
+ "icon": "healthcare",
+ "sequence_id": 26.0,
+ "summary": "Spraying, re-entry and residue. An REI in force keeps workers out of a block until it expires.",
+ "shortcuts": [
+  {
+   "label": "Spray Applications",
+   "type": "DocType",
+   "link_to": "Spray Application",
+   "doc_view": "List"
+  },
+  {
+   "label": "REIs in Force",
+   "type": "DocType",
+   "link_to": "Spray REI",
+   "doc_view": "List",
+   "stats_filter": {
+    "status": "Active"
+   },
+   "format": "{} in force",
+   "color": "Red"
+  },
+  {
+   "label": "Pest Pressures",
+   "type": "DocType",
+   "link_to": "Pest Pressure",
+   "doc_view": "List"
+  },
+  {
+   "label": "MRL Records",
+   "type": "DocType",
+   "link_to": "MRL Record",
+   "doc_view": "List"
+  },
+  {
+   "label": "Tank Mixes",
+   "type": "DocType",
+   "link_to": "Spray Tank Mix",
+   "doc_view": "List"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "REIs in Force",
+   "document_type": "Spray REI",
+   "filters": {
+    "status": "Active"
+   },
+   "color": "#e24c4c"
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "Application",
+   "links": [
+    {
+     "label": "Spray Applications",
+     "link_to": "Spray Application"
+    },
+    {
+     "label": "Tank Mixes",
+     "link_to": "Spray Tank Mix"
+    },
+    {
+     "label": "Nozzle Configs",
+     "link_to": "Spray Nozzle Config"
+    },
+    {
+     "label": "Re-entry Intervals",
+     "link_to": "Spray REI"
+    }
+   ]
+  },
+  {
+   "label": "Residue",
+   "links": [
+    {
+     "label": "MRL Records",
+     "link_to": "MRL Record"
+    }
+   ]
+  },
+  {
+   "label": "IPM",
+   "links": [
+    {
+     "label": "IPM Recommendations",
+     "link_to": "IPM Recommendation"
+    },
+    {
+     "label": "Pest Pressures",
+     "link_to": "Pest Pressure"
+    },
+    {
+     "label": "Pest Action Thresholds",
+     "link_to": "Pest Action Threshold"
+    }
+   ]
+  },
+  {
+   "label": "Crops",
+   "links": [
+    {
+     "label": "Crops",
+     "link_to": "Crop"
+    },
+    {
+     "label": "Crop Observations",
+     "link_to": "Crop Observation"
+    }
+   ]
+  }
+ ]
+}

@@ -3,6 +3,35 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.170.0 — 2026-09-16 — a sidebar grouped the way a farm works
+
+Nine new Desk workspaces put this app's registers where a farm would look for
+them: **Farm Operations, Crew & Labor, Compliance, Crop Protection, Assets &
+Equipment, Land & Parcels, Financial, Market & Sales** and **Map & Terrain**.
+Each has an icon, shortcut cards, number cards and grouped link cards. The
+default ERPNext and HRMS workspaces are untouched. **888 tools, unchanged.**
+
+- **Described in JSON, built in code.** Each page is a file in
+  `erpnext_mcp/workspace_specs/`, and `farm_workspaces.py` builds it on
+  `after_install` and `after_migrate`. They are not Frappe fixtures or module
+  `workspace/*.json` files, because `bench migrate` re-imports those and would
+  overwrite an operator's own layout on every upgrade. A page with anything on
+  it is left alone. A blank one is filled in.
+- **Every link is checked against the site.** A DocType, Page or Dashboard the
+  site does not have is left off the page and named in the migrate output. A
+  site without HRMS gets Crew & Labor without the leave links.
+- **Farm words that are not DocTypes.** Blocks and Irrigation Valves are Asset
+  Register shortcuts filtered by `asset_type`. Owner Draws are Expense Receipts
+  filtered to that category. There is no Crew record: a crew is the people on a
+  Farm Shift. Leave Requests are HRMS's Leave Application.
+- **Number cards.** Active Shifts, Open Compliance Alerts, REIs in Force,
+  Expense Receipts Awaiting Approval, Leave Requests Awaiting Approval, I-9s
+  Awaiting Verification, Active Leases, Lot Line Adjustments Open, Draft Journal
+  Entries, Active Revenue Contracts, two shipment cards, and Fields and Parcels
+  Without a Boundary. The Compliance and Farm Operations pages reuse the Command
+  Center's and dispatch board's existing cards rather than defining them again.
+- **Uninstall removes the nine pages**, except any moved to another module.
+
 ## 0.169.1 — 2026-09-16 — the county answers after all
 
 The Wasco County lookup is the **primary** path for `taxlot_lookup`. Manual

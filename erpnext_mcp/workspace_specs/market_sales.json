@@ -1,0 +1,145 @@
+{
+ "name": "Market & Sales",
+ "icon": "income",
+ "sequence_id": 30.0,
+ "summary": "From the contract to the scale to the truck, and who else is in the market.",
+ "shortcuts": [
+  {
+   "label": "Revenue Contracts",
+   "type": "DocType",
+   "link_to": "Revenue Contract",
+   "doc_view": "List",
+   "stats_filter": {
+    "status": "Active"
+   },
+   "format": "{} active",
+   "color": "Green"
+  },
+  {
+   "label": "Scale Tickets",
+   "type": "DocType",
+   "link_to": "Scale Ticket",
+   "doc_view": "List"
+  },
+  {
+   "label": "Shipments",
+   "type": "DocType",
+   "link_to": "Trade Shipment",
+   "doc_view": "List"
+  },
+  {
+   "label": "Traceability Lots",
+   "type": "DocType",
+   "link_to": "Traceability Lot Code",
+   "doc_view": "List"
+  },
+  {
+   "label": "Customers",
+   "type": "DocType",
+   "link_to": "Customer",
+   "doc_view": "List"
+  },
+  {
+   "label": "Markets",
+   "type": "DocType",
+   "link_to": "Market",
+   "doc_view": "List"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "Active Revenue Contracts",
+   "document_type": "Revenue Contract",
+   "filters": {
+    "status": "Active"
+   },
+   "color": "#98d85b"
+  },
+  {
+   "label": "Shipments Awaiting Documents",
+   "document_type": "Trade Shipment",
+   "filters": {
+    "status": "Documents Pending"
+   },
+   "color": "#f5a623"
+  },
+  {
+   "label": "Shipments In Transit",
+   "document_type": "Trade Shipment",
+   "filters": {
+    "status": "In Transit"
+   },
+   "color": "#449cf0"
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "Selling",
+   "links": [
+    {
+     "label": "Customers",
+     "link_to": "Customer"
+    },
+    {
+     "label": "Revenue Contracts",
+     "link_to": "Revenue Contract"
+    },
+    {
+     "label": "Settlement Statements",
+     "link_to": "Settlement Statement"
+    }
+   ]
+  },
+  {
+   "label": "Moving the Crop",
+   "links": [
+    {
+     "label": "Scale Tickets",
+     "link_to": "Scale Ticket"
+    },
+    {
+     "label": "Shipments",
+     "link_to": "Trade Shipment"
+    },
+    {
+     "label": "Traceability Lots",
+     "link_to": "Traceability Lot Code"
+    },
+    {
+     "label": "Trade Documents",
+     "link_to": "Trade Document"
+    }
+   ]
+  },
+  {
+   "label": "Markets",
+   "links": [
+    {
+     "label": "Markets",
+     "link_to": "Market"
+    },
+    {
+     "label": "Market Participants",
+     "link_to": "Market Participant"
+    },
+    {
+     "label": "Competitive Moves",
+     "link_to": "Competitive Move"
+    },
+    {
+     "label": "Acquisition Targets",
+     "link_to": "Acquisition Target"
+    }
+   ]
+  },
+  {
+   "label": "Buying",
+   "links": [
+    {
+     "label": "Suppliers",
+     "link_to": "Supplier"
+    }
+   ]
+  }
+ ]
+}

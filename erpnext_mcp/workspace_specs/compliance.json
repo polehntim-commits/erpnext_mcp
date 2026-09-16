@@ -1,0 +1,140 @@
+{
+ "name": "Compliance",
+ "icon": "quality",
+ "sequence_id": 25.0,
+ "summary": "Audit readiness. Alerts are raised by the nightly sweep; the Command Center has the charts.",
+ "shortcuts": [
+  {
+   "label": "Open Alerts",
+   "type": "DocType",
+   "link_to": "Compliance Alert",
+   "doc_view": "List",
+   "stats_filter": {
+    "dismissed": 0
+   },
+   "format": "{} open",
+   "color": "Red"
+  },
+  {
+   "label": "Command Center",
+   "type": "Dashboard",
+   "link_to": "Compliance Command Center"
+  },
+  {
+   "label": "Inspection Sessions",
+   "type": "DocType",
+   "link_to": "Inspection Session",
+   "doc_view": "List"
+  },
+  {
+   "label": "Certifications",
+   "type": "DocType",
+   "link_to": "Certification",
+   "doc_view": "List"
+  },
+  {
+   "label": "Regulatory Filings",
+   "type": "DocType",
+   "link_to": "Regulatory Filing",
+   "doc_view": "List"
+  },
+  {
+   "label": "Audit Events",
+   "type": "DocType",
+   "link_to": "Audit Event",
+   "doc_view": "List"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "Open Compliance Alerts",
+   "document_type": "Compliance Alert",
+   "filters": {
+    "dismissed": 0
+   },
+   "color": "#e24c4c"
+  },
+  {
+   "label": "Critical Compliance Alerts",
+   "shared": true
+  },
+  {
+   "label": "Certificates Expiring",
+   "shared": true
+  },
+  {
+   "label": "Open Audit Events",
+   "shared": true
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "Rules and Policies",
+   "links": [
+    {
+     "label": "Compliance Rules",
+     "link_to": "Compliance Rule"
+    },
+    {
+     "label": "Compliance Policies",
+     "link_to": "Compliance Policy"
+    }
+   ]
+  },
+  {
+   "label": "Inspections",
+   "links": [
+    {
+     "label": "Inspection Templates",
+     "link_to": "Inspection Template"
+    },
+    {
+     "label": "Inspection Sessions",
+     "link_to": "Inspection Session"
+    }
+   ]
+  },
+  {
+   "label": "Evidence",
+   "links": [
+    {
+     "label": "Certifications",
+     "link_to": "Certification"
+    },
+    {
+     "label": "Governance Documents",
+     "link_to": "Governance Document"
+    },
+    {
+     "label": "Regulatory Filings",
+     "link_to": "Regulatory Filing"
+    },
+    {
+     "label": "Disclosure Checklists",
+     "link_to": "Disclosure Checklist"
+    }
+   ]
+  },
+  {
+   "label": "Watch",
+   "links": [
+    {
+     "label": "Compliance Alerts",
+     "link_to": "Compliance Alert"
+    },
+    {
+     "label": "Regulation Feeds",
+     "link_to": "Regulation Feed"
+    },
+    {
+     "label": "Audit Events",
+     "link_to": "Audit Event"
+    },
+    {
+     "label": "Corrective Actions",
+     "link_to": "Corrective Action Record"
+    }
+   ]
+  }
+ ]
+}

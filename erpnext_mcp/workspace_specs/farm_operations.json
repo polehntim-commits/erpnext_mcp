@@ -1,0 +1,125 @@
+{
+ "name": "Farm Operations",
+ "icon": "agriculture",
+ "sequence_id": 23.0,
+ "summary": "The day's fieldwork. A block is an Asset Register record of type Block, so the Blocks card opens the register already filtered to them.",
+ "shortcuts": [
+  {
+   "label": "Fields",
+   "type": "DocType",
+   "link_to": "Field",
+   "doc_view": "List"
+  },
+  {
+   "label": "Blocks",
+   "type": "DocType",
+   "link_to": "Asset Register",
+   "doc_view": "List",
+   "stats_filter": {
+    "asset_type": "Block"
+   },
+   "format": "{} blocks",
+   "color": "Green"
+  },
+  {
+   "label": "Farm Tasks",
+   "type": "DocType",
+   "link_to": "Farm Task",
+   "doc_view": "List"
+  },
+  {
+   "label": "Active Shifts",
+   "type": "DocType",
+   "link_to": "Farm Shift",
+   "doc_view": "List",
+   "stats_filter": {
+    "status": "Active"
+   },
+   "format": "{} active",
+   "color": "Blue"
+  },
+  {
+   "label": "Crop Observations",
+   "type": "DocType",
+   "link_to": "Crop Observation",
+   "doc_view": "List"
+  },
+  {
+   "label": "Planting Seasons",
+   "type": "DocType",
+   "link_to": "Planting Season",
+   "doc_view": "List"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "Active Shifts",
+   "document_type": "Farm Shift",
+   "filters": {
+    "status": "Active"
+   },
+   "color": "#449cf0"
+  },
+  {
+   "label": "Tasks in the Pool",
+   "shared": true
+  },
+  {
+   "label": "Tasks Awaiting Review",
+   "shared": true
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "Ground",
+   "links": [
+    {
+     "label": "Fields",
+     "link_to": "Field"
+    },
+    {
+     "label": "Blocks and Assets",
+     "link_to": "Asset Register"
+    },
+    {
+     "label": "Planting Seasons",
+     "link_to": "Planting Season"
+    }
+   ]
+  },
+  {
+   "label": "Work",
+   "links": [
+    {
+     "label": "Farm Tasks",
+     "link_to": "Farm Task"
+    },
+    {
+     "label": "Farm Task Templates",
+     "link_to": "Farm Task Template"
+    },
+    {
+     "label": "Task Assignments",
+     "link_to": "Farm Task Assignment"
+    },
+    {
+     "label": "Shifts",
+     "link_to": "Farm Shift"
+    }
+   ]
+  },
+  {
+   "label": "Observations",
+   "links": [
+    {
+     "label": "Crop Observations",
+     "link_to": "Crop Observation"
+    },
+    {
+     "label": "Weather Settings",
+     "link_to": "Weather Settings"
+    }
+   ]
+  }
+ ]
+}

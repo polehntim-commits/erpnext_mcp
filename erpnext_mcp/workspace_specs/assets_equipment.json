@@ -1,0 +1,97 @@
+{
+ "name": "Assets & Equipment",
+ "icon": "assets",
+ "sequence_id": 27.0,
+ "summary": "Equipment, valves, trees and sensors. Valves are Asset Register records; the Irrigation Valves card opens the register filtered to them.",
+ "shortcuts": [
+  {
+   "label": "Asset Register",
+   "type": "DocType",
+   "link_to": "Asset Register",
+   "doc_view": "List"
+  },
+  {
+   "label": "Irrigation Valves",
+   "type": "DocType",
+   "link_to": "Asset Register",
+   "doc_view": "List",
+   "stats_filter": {
+    "asset_type": "Irrigation Valve"
+   },
+   "format": "{} tagged",
+   "color": "Blue"
+  },
+  {
+   "label": "Asset Types",
+   "type": "DocType",
+   "link_to": "Farm Asset Type",
+   "doc_view": "List"
+  },
+  {
+   "label": "Biological Assets",
+   "type": "DocType",
+   "link_to": "Biological Asset",
+   "doc_view": "List"
+  },
+  {
+   "label": "IoT Devices",
+   "type": "DocType",
+   "link_to": "IoT Device",
+   "doc_view": "List"
+  }
+ ],
+ "number_cards": [],
+ "link_cards": [
+  {
+   "label": "Register",
+   "links": [
+    {
+     "label": "Asset Register",
+     "link_to": "Asset Register"
+    },
+    {
+     "label": "Asset Types",
+     "link_to": "Farm Asset Type"
+    },
+    {
+     "label": "Asset Categories",
+     "link_to": "Asset Category"
+    },
+    {
+     "label": "ERPNext Assets",
+     "link_to": "Asset"
+    }
+   ]
+  },
+  {
+   "label": "Irrigation",
+   "links": [
+    {
+     "label": "Irrigation Zones",
+     "link_to": "Irrigation Zone"
+    },
+    {
+     "label": "Valve State Log",
+     "link_to": "Asset State Log"
+    }
+   ]
+  },
+  {
+   "label": "Living and Sensing",
+   "links": [
+    {
+     "label": "Biological Assets",
+     "link_to": "Biological Asset"
+    },
+    {
+     "label": "IoT Devices",
+     "link_to": "IoT Device"
+    },
+    {
+     "label": "IoT Readings",
+     "link_to": "IoT Reading"
+    }
+   ]
+  }
+ ]
+}

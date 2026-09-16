@@ -1,0 +1,107 @@
+{
+ "name": "Map & Terrain",
+ "icon": "map",
+ "sequence_id": 31.0,
+ "summary": "Farm Overview is the whole-farm map. Slope aspect and slope grade are built from one terrain grid with build_slope_aspect_layer and are drawn on the phone map. A field or parcel without a boundary is not on either.",
+ "shortcuts": [
+  {
+   "label": "Farm Overview",
+   "type": "Page",
+   "link_to": "farm-overview"
+  },
+  {
+   "label": "Fields",
+   "type": "DocType",
+   "link_to": "Field",
+   "doc_view": "List"
+  },
+  {
+   "label": "Parcels",
+   "type": "DocType",
+   "link_to": "Parcel",
+   "doc_view": "List"
+  },
+  {
+   "label": "Irrigation Zones",
+   "type": "DocType",
+   "link_to": "Irrigation Zone",
+   "doc_view": "List"
+  },
+  {
+   "label": "County Tax Lots",
+   "type": "DocType",
+   "link_to": "County Tax Lot",
+   "doc_view": "List"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "Fields Without a Boundary",
+   "document_type": "Field",
+   "filters": {
+    "boundary_geojson": [
+     "is",
+     "not set"
+    ]
+   },
+   "color": "#f5a623"
+  },
+  {
+   "label": "Parcels Without a Boundary",
+   "document_type": "Parcel",
+   "filters": {
+    "boundary_geojson": [
+     "is",
+     "not set"
+    ]
+   },
+   "color": "#f5a623"
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "The Map",
+   "links": [
+    {
+     "label": "Farm Overview",
+     "link_to": "farm-overview",
+     "link_type": "Page"
+    }
+   ]
+  },
+  {
+   "label": "Boundaries",
+   "links": [
+    {
+     "label": "Fields",
+     "link_to": "Field"
+    },
+    {
+     "label": "Parcels",
+     "link_to": "Parcel"
+    },
+    {
+     "label": "Irrigation Zones",
+     "link_to": "Irrigation Zone"
+    },
+    {
+     "label": "County Tax Lots",
+     "link_to": "County Tax Lot"
+    }
+   ]
+  },
+  {
+   "label": "Ground Truth",
+   "links": [
+    {
+     "label": "Satellite Metrics",
+     "link_to": "Satellite Metric"
+    },
+    {
+     "label": "Soil Compaction Profiles",
+     "link_to": "Soil Compaction Profile"
+    }
+   ]
+  }
+ ]
+}

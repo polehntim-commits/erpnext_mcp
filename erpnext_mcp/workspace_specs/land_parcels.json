@@ -1,0 +1,99 @@
+{
+ "name": "Land & Parcels",
+ "icon": "organization",
+ "sequence_id": 28.0,
+ "summary": "The real property: what is owned, what is leased, and what the county has on record.",
+ "shortcuts": [
+  {
+   "label": "Parcels",
+   "type": "DocType",
+   "link_to": "Parcel",
+   "doc_view": "List"
+  },
+  {
+   "label": "Fields",
+   "type": "DocType",
+   "link_to": "Field",
+   "doc_view": "List"
+  },
+  {
+   "label": "County Tax Lots",
+   "type": "DocType",
+   "link_to": "County Tax Lot",
+   "doc_view": "List"
+  },
+  {
+   "label": "Lot Line Adjustments",
+   "type": "DocType",
+   "link_to": "Lot Line Adjustment",
+   "doc_view": "List"
+  },
+  {
+   "label": "Active Leases",
+   "type": "DocType",
+   "link_to": "Lease",
+   "doc_view": "List",
+   "stats_filter": {
+    "status": "Active"
+   },
+   "format": "{} active",
+   "color": "Green"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "Active Leases",
+   "document_type": "Lease",
+   "filters": {
+    "status": "Active"
+   },
+   "color": "#98d85b"
+  },
+  {
+   "label": "Lot Line Adjustments Open",
+   "document_type": "Lot Line Adjustment",
+   "filters": {
+    "status": [
+     "not in",
+     [
+      "Recorded",
+      "Withdrawn"
+     ]
+    ]
+   },
+   "color": "#f5a623"
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "Ownership",
+   "links": [
+    {
+     "label": "Parcels",
+     "link_to": "Parcel"
+    },
+    {
+     "label": "County Tax Lots",
+     "link_to": "County Tax Lot"
+    },
+    {
+     "label": "Lot Line Adjustments",
+     "link_to": "Lot Line Adjustment"
+    }
+   ]
+  },
+  {
+   "label": "Use",
+   "links": [
+    {
+     "label": "Leases",
+     "link_to": "Lease"
+    },
+    {
+     "label": "Fields",
+     "link_to": "Field"
+    }
+   ]
+  }
+ ]
+}

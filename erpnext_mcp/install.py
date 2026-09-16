@@ -111,6 +111,7 @@ from . import (
 	compliance_fields,
 	dashboard,
 	farm_task_map_action,
+	farm_workspaces,
 	i9_documents,
 	i9_print_format,
 	irrigation_workspace,
@@ -157,6 +158,7 @@ def after_install() -> None:
 	_farm_asset_types()
 	_onboard_worker()
 	_irrigation_workspace()
+	_farm_workspaces()
 	_settlement_invoice_link()
 	_bank_categorization_fields()
 	_bank_pairing_fields()
@@ -204,6 +206,7 @@ def after_migrate() -> None:
 	_farm_asset_types()
 	_onboard_worker()
 	_irrigation_workspace()
+	_farm_workspaces()
 	_settlement_invoice_link()
 	_bank_categorization_fields()
 	_bank_pairing_fields()
@@ -1335,6 +1338,33 @@ def _irrigation_workspace() -> None:
 		print(f"erpnext_mcp: could not build {failure['name']} — {failure['reason']}")
 
 
+def _farm_workspaces() -> None:
+	"""Build or repair the nine farm workspaces described in `workspace_specs/`.
+
+	After the Command Center and the dispatch board, whose number cards and
+	dashboard these pages link to. One line per page, for `_irrigation_workspace`'s
+	reason: a page somebody arranged is a success and must not read as silence.
+	"""
+	report = farm_workspaces.install_farm_workspaces()
+	if report.get("note"):
+		print(f"erpnext_mcp: the farm workspaces were not built — {report['note']}")
+	for row in report.get("workspaces") or []:
+		dropped = f" Not on this site, so left off: {', '.join(row['dropped'])}." if row["dropped"] else ""
+		if row["created"] or row["filled"]:
+			verb = "built" if row["created"] else "filled in"
+			print(
+				f"erpnext_mcp: {verb} the {row['name']!r} workspace — {row['shortcuts']} shortcut(s), "
+				f"{row['number_cards']} number card(s), {row['links']} link(s).{dropped}"
+			)
+		elif row["existed"]:
+			print(
+				f"erpnext_mcp: the {row['name']!r} workspace has been arranged on this site, so it "
+				f"was left exactly as it is."
+			)
+	for failure in report.get("failed") or []:
+		print(f"erpnext_mcp: could not build {failure['name']} — {failure['reason']}")
+
+
 def _command_center() -> None:
 	"""Build or repair the Compliance Command Center dashboard."""
 	_report_failures("the Compliance Command Center", dashboard.install_command_center)
@@ -1932,6 +1962,7 @@ def before_uninstall() -> None:
 	_remove_farm_task_map_action()
 	_remove_onboard_worker()
 	_remove_irrigation_workspace()
+	_remove_farm_workspaces()
 
 	losses = []
 	for doctype, what in _PRECIOUS_DOCTYPES:
@@ -2109,6 +2140,15 @@ def _remove_irrigation_workspace() -> None:
 			f"\nerpnext_mcp: could not remove the {report['name']!r} workspace — "
 			f"{report['reason']}.\nDelete it by hand in the Desk under Workspace.\n"
 		)
+
+
+def _remove_farm_workspaces() -> None:
+	"""Remove the farm workspaces this app built. A page moved to another module stays."""
+	for row in farm_workspaces.remove_farm_workspaces():
+		if row["removed"]:
+			print(f"erpnext_mcp: removed the {row['name']!r} workspace.")
+		elif row["reason"] != "not present":
+			print(f"erpnext_mcp: the {row['name']!r} workspace was {row['reason']}.")
 
 
 def _report_surviving_roles() -> None:

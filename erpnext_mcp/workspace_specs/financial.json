@@ -1,0 +1,148 @@
+{
+ "name": "Financial",
+ "icon": "money-coins-1",
+ "sequence_id": 29.0,
+ "summary": "The books. Owner draws are Expense Receipts in the Owner Draw category, and the Owner Draws card opens them filtered.",
+ "shortcuts": [
+  {
+   "label": "Chart of Accounts",
+   "type": "DocType",
+   "link_to": "Account",
+   "doc_view": "Tree"
+  },
+  {
+   "label": "Journal Entries",
+   "type": "DocType",
+   "link_to": "Journal Entry",
+   "doc_view": "List"
+  },
+  {
+   "label": "Receipts to Approve",
+   "type": "DocType",
+   "link_to": "Expense Receipt",
+   "doc_view": "List",
+   "stats_filter": {
+    "status": "Submitted"
+   },
+   "format": "{} to approve",
+   "color": "Orange"
+  },
+  {
+   "label": "Purchase Invoices",
+   "type": "DocType",
+   "link_to": "Purchase Invoice",
+   "doc_view": "List"
+  },
+  {
+   "label": "Sales Invoices",
+   "type": "DocType",
+   "link_to": "Sales Invoice",
+   "doc_view": "List"
+  },
+  {
+   "label": "Payment Entries",
+   "type": "DocType",
+   "link_to": "Payment Entry",
+   "doc_view": "List"
+  },
+  {
+   "label": "Owner Draws",
+   "type": "DocType",
+   "link_to": "Expense Receipt",
+   "doc_view": "List",
+   "stats_filter": {
+    "category": "Owner Draw"
+   },
+   "format": "{} draws",
+   "color": "Grey"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "Expense Receipts Awaiting Approval",
+   "document_type": "Expense Receipt",
+   "filters": {
+    "status": "Submitted"
+   },
+   "color": "#f5a623"
+  },
+  {
+   "label": "Draft Journal Entries",
+   "document_type": "Journal Entry",
+   "filters": {
+    "docstatus": 0
+   },
+   "color": "#7575ff"
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "Ledger",
+   "links": [
+    {
+     "label": "Chart of Accounts",
+     "link_to": "Account"
+    },
+    {
+     "label": "Journal Entries",
+     "link_to": "Journal Entry"
+    },
+    {
+     "label": "Payment Entries",
+     "link_to": "Payment Entry"
+    },
+    {
+     "label": "Budgets",
+     "link_to": "Budget"
+    }
+   ]
+  },
+  {
+   "label": "Bills and Invoices",
+   "links": [
+    {
+     "label": "Expense Receipts",
+     "link_to": "Expense Receipt"
+    },
+    {
+     "label": "Purchase Invoices",
+     "link_to": "Purchase Invoice"
+    },
+    {
+     "label": "Sales Invoices",
+     "link_to": "Sales Invoice"
+    },
+    {
+     "label": "Settlement Statements",
+     "link_to": "Settlement Statement"
+    }
+   ]
+  },
+  {
+   "label": "Analysis",
+   "links": [
+    {
+     "label": "Financial KPI Definitions",
+     "link_to": "Financial KPI Definition"
+    },
+    {
+     "label": "Breakeven Analyses",
+     "link_to": "Breakeven Analysis"
+    }
+   ]
+  },
+  {
+   "label": "Capital",
+   "links": [
+    {
+     "label": "Notes Payable",
+     "link_to": "Note Payable"
+    },
+    {
+     "label": "Cap Table",
+     "link_to": "Cap Table Entry"
+    }
+   ]
+  }
+ ]
+}

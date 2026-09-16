@@ -1,0 +1,163 @@
+{
+ "name": "Crew & Labor",
+ "icon": "hr",
+ "sequence_id": 24.0,
+ "summary": "People, time and housing. There is no separate Crew record: a crew is the people on a Farm Shift, so crews are under Shifts.",
+ "shortcuts": [
+  {
+   "label": "Employees",
+   "type": "DocType",
+   "link_to": "Employee",
+   "doc_view": "List"
+  },
+  {
+   "label": "Crews on Shift",
+   "type": "DocType",
+   "link_to": "Farm Shift",
+   "doc_view": "List",
+   "stats_filter": {
+    "status": "Active"
+   },
+   "format": "{} active",
+   "color": "Blue"
+  },
+  {
+   "label": "Housing Units",
+   "type": "DocType",
+   "link_to": "Housing Unit",
+   "doc_view": "List"
+  },
+  {
+   "label": "Leave Requests",
+   "type": "DocType",
+   "link_to": "Leave Application",
+   "doc_view": "List",
+   "stats_filter": {
+    "status": "Open"
+   },
+   "format": "{} open",
+   "color": "Orange"
+  },
+  {
+   "label": "I-9 Forms",
+   "type": "DocType",
+   "link_to": "I-9 Form",
+   "doc_view": "List"
+  },
+  {
+   "label": "Training Sessions",
+   "type": "DocType",
+   "link_to": "Training Session",
+   "doc_view": "List"
+  }
+ ],
+ "number_cards": [
+  {
+   "label": "Active Shifts",
+   "shared": true
+  },
+  {
+   "label": "Leave Requests Awaiting Approval",
+   "document_type": "Leave Application",
+   "filters": {
+    "status": "Open",
+    "docstatus": 0
+   },
+   "color": "#f5a623"
+  },
+  {
+   "label": "I-9s Awaiting Verification",
+   "document_type": "I-9 Form",
+   "filters": {
+    "status": "Awaiting Verification"
+   },
+   "color": "#e24c4c"
+  }
+ ],
+ "link_cards": [
+  {
+   "label": "People",
+   "links": [
+    {
+     "label": "Employees",
+     "link_to": "Employee"
+    },
+    {
+     "label": "Designations",
+     "link_to": "Designation"
+    },
+    {
+     "label": "Departments",
+     "link_to": "Department"
+    },
+    {
+     "label": "Branches",
+     "link_to": "Branch"
+    },
+    {
+     "label": "Employment Types",
+     "link_to": "Employment Type"
+    },
+    {
+     "label": "Employee Grades",
+     "link_to": "Employee Grade"
+    }
+   ]
+  },
+  {
+   "label": "Crews and Time",
+   "links": [
+    {
+     "label": "Shifts",
+     "link_to": "Farm Shift"
+    },
+    {
+     "label": "Break Policies",
+     "link_to": "Labor Break Policy"
+    },
+    {
+     "label": "Piecework Rates",
+     "link_to": "Piecework Rate"
+    },
+    {
+     "label": "Leave Requests",
+     "link_to": "Leave Application"
+    }
+   ]
+  },
+  {
+   "label": "Housing",
+   "links": [
+    {
+     "label": "Housing Units",
+     "link_to": "Housing Unit"
+    },
+    {
+     "label": "Housing Assignments",
+     "link_to": "Housing Assignment"
+    },
+    {
+     "label": "Housing Inspections",
+     "link_to": "Housing Inspection"
+    }
+   ]
+  },
+  {
+   "label": "Hiring and Training",
+   "links": [
+    {
+     "label": "I-9 Forms",
+     "link_to": "I-9 Form"
+    },
+    {
+     "label": "Training Sessions",
+     "link_to": "Training Session"
+    },
+    {
+     "label": "Training Records",
+     "link_to": "Employee Training Record"
+    }
+   ]
+  }
+ ]
+}
