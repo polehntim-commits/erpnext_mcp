@@ -59,6 +59,13 @@ HEADER_FIELDS = (
 	"recording_number",
 	"recorded_on",
 	"survey_reference",
+	# v0.171.0. What /app/land-map draws and generates. Header fields rather than
+	# a second write path: `save_proposal` hands them to `lla_update`, which
+	# applies the role gate, the status machine and the after-submit lock to
+	# them exactly as it does to the terms.
+	"proposed_geometry",
+	"easement_geometry",
+	"generated_legal_description",
 	"notes",
 )
 NUMBER_FIELDS = ("lot_1_acres_surveyed", "lot_2_acres_surveyed", "true_up_amount")
@@ -143,6 +150,11 @@ def describe(doc) -> dict:
 			if key not in ("title", "county", "state", "target_close")
 		},
 		"recorded_on": str(doc.get("recorded_on") or "") or None,
+		# v0.171.0. The two map columns hold GeoJSON, and a caller that has to
+		# parse a string this module already knows is JSON is a caller that will
+		# parse it differently. Same treatment `_piece` gives a piece's geometry.
+		"proposed_geometry": land.json_value(doc.get("proposed_geometry")),
+		"easement_geometry": land.json_value(doc.get("easement_geometry")),
 		"lots": lots,
 		"pieces": [_piece(dict(row)) for row in doc.get("pieces") or []],
 		"open_items": [

@@ -542,6 +542,16 @@ doctype_js = {
 	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js"],
 	"Farm Shift": ["public/js/geo_map_widget.js", "public/js/farm_shift_map.js"],
 	"Farm Task": ["public/js/geo_map_widget.js", "public/js/farm_task_map.js"],
+	#: v0.171.0. The Lot Line Adjustment form draws no map of its own — it carries
+	#: a button to `/app/land-map`, which is where a proposed line is traced. The
+	#: widget is listed anyway, and first, for the reason every other entry lists
+	#: it: it is this app's own asset rather than the CDN, it fetches Leaflet only
+	#: when something asks it to render, and the page the button opens then finds
+	#: it already in the browser's cache.
+	"Lot Line Adjustment": [
+		"public/js/geo_map_widget.js",
+		"public/js/lot_line_adjustment_map.js",
+	],
 }
 
 #: THE ONLY REQUEST-LIFECYCLE HOOK THIS APP INSTALLS. v0.17.2, and it is here

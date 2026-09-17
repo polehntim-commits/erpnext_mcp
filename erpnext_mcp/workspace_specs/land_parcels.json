@@ -2,8 +2,13 @@
  "name": "Land & Parcels",
  "icon": "organization",
  "sequence_id": 28.0,
- "summary": "The real property: what is owned, what is leased, and what the county has on record.",
+ "summary": "The real property: what is owned, what is leased, and what the county has on record. The Land Map draws all three together and is where a proposed lot line is traced.",
  "shortcuts": [
+  {
+   "label": "Land Map",
+   "type": "Page",
+   "link_to": "land-map"
+  },
   {
    "label": "Parcels",
    "type": "DocType",
@@ -65,6 +70,16 @@
   }
  ],
  "link_cards": [
+  {
+   "label": "Planning",
+   "links": [
+    {
+     "label": "Land Map",
+     "link_to": "land-map",
+     "link_type": "Page"
+    }
+   ]
+  },
   {
    "label": "Ownership",
    "links": [

@@ -2120,6 +2120,13 @@ frappe.provide("erpnext_mcp.geo_map");
 	//: the same two functions the seven forms have used since v0.32.0, named on
 	//: the namespace as well as in the closure.
 	erpnext_mcp.geo_map.load_leaflet = load_leaflet;
+	//: v0.171.0. THE DRAW PLUGIN, FOR THE PAGE THAT DRAWS A LINE NOBODY OWNS YET.
+	//: `/app/land-map` traces a PROPOSED lot line — a shape that belongs to no
+	//: record until somebody saves it onto a Lot Line Adjustment — so it needs the
+	//: same plugin the three editable forms use, from the same CDN URL and the
+	//: same stylesheet, loaded on demand rather than hooked onto every Desk page.
+	//: Exporting the loader is what stops a second copy of `DRAW_JS` existing.
+	erpnext_mcp.geo_map.load_draw = load_draw;
 	erpnext_mcp.geo_map.add_base_layers = add_base_layers;
 	erpnext_mcp.geo_map.MAX_FIT_ZOOM = MAX_FIT_ZOOM;
 	erpnext_mcp.geo_map.POINT_ZOOM = POINT_ZOOM;

@@ -43,6 +43,11 @@
   "easements",
   "open_items_section",
   "open_items",
+  "proposal_section",
+  "proposed_geometry",
+  "easement_geometry",
+  "proposal_col",
+  "generated_legal_description",
   "survey_section",
   "recording_number",
   "recorded_on",
@@ -270,6 +275,38 @@
    "fieldtype": "Table",
    "label": "Open Items",
    "options": "Lot Line Adjustment Open Item"
+  },
+  {
+   "collapsible": 1,
+   "description": "Drawn on /app/land-map and generated from it. A draft for a surveyor, not a survey.",
+   "fieldname": "proposal_section",
+   "fieldtype": "Section Break",
+   "label": "Proposal from the Map"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "GeoJSON of the proposed boundary as drawn on the land map.",
+   "fieldname": "proposed_geometry",
+   "fieldtype": "Long Text",
+   "label": "Proposed Geometry"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "GeoJSON FeatureCollection of easement corridors the proposed line is checked against.",
+   "fieldname": "easement_geometry",
+   "fieldtype": "Long Text",
+   "label": "Easement Geometry"
+  },
+  {
+   "fieldname": "proposal_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "Draft metes and bounds generated from the drawn boundary. Carries its own disclaimer.",
+   "fieldname": "generated_legal_description",
+   "fieldtype": "Long Text",
+   "label": "Generated Legal Description"
   },
   {
    "collapsible": 1,

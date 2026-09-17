@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.171.0 — 2026-09-17 — draw the line, and hand a surveyor the numbers
+
+`/app/land-map` is a Desk page where a proposed lot line is traced on satellite
+imagery over the parcels, the fields and the **county tax lots**. Every click
+becomes a course with a bearing and a distance, an acreage, a closure figure and
+a draft metes-and-bounds description a surveyor can price and correct.
+**888 tools, unchanged** — this is a Desk page and three whitelisted methods, not
+a tool release.
+
+- **`surveying.py`: the arithmetic, and it is checked against published figures.**
+  Vincenty's inverse on WGS84 for every bearing and distance, quadrant bearings
+  the way a deed prints them (`N 45°30'15" E`), closure reported as
+  `1 part in 4,300` and never silently fixed, and area through `geo.area_acres`
+  rather than a second implementation. Distances are international feet and the
+  metres come with them.
+- **Every description carries its own disclaimer.** It is part of the returned
+  value, not a decoration the caller may drop: bearings are grid azimuths from
+  true north, the point of beginning is a mapped corner and not a monument, and
+  the whole thing is a draft for a licensed surveyor.
+- **The point of beginning is tied to a real corner** — the nearest vertex of a
+  tax lot, parcel or field, described as "the northwest corner of Tax Lot 200".
+  No PLSS corner is named, because this app ships no PLSS layer and will not
+  invent a section corner.
+- **Easements the line runs through are flagged**, from corridors stored on the
+  adjustment. A corridor somewhere else is not flagged, which is the half that
+  makes the flag worth reading.
+- **Before-and-after acreage is a pair of possibilities, not a verdict.** A
+  polygon drawn across a boundary does not say who is giving ground up, so each
+  affected lot reports what it holds now, the overlap, and what it would hold
+  giving or receiving. Where the adjustment exists, `side_plan` answers properly
+  from its own pieces and parties.
+- **Three new Lot Line Adjustment columns** — `proposed_geometry`,
+  `easement_geometry` and `generated_legal_description` — all editable after
+  submission, like a piece's geometry, because the surveyor's answer
+  arrives after the adjustment has gone to the county. Saving goes through
+  `lla_create`/`lla_update`, so the role gate and the status machine apply.
+- **A Land Map button on the adjustment form**, and a Land Map card on the
+  Land & Parcels workspace. The page degrades to a table of records when the map
+  library cannot be reached, exactly as the form maps do.
+
 ## 0.170.0 — 2026-09-16 — a sidebar grouped the way a farm works
 
 Nine new Desk workspaces put this app's registers where a farm would look for

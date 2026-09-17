@@ -608,6 +608,13 @@ class SubmissionFixesTheTerms(LandTestCase):
 				"survey_recorded_on",
 				"survey_recorded_by",
 				"notes",
+				# v0.171.0. The land map's three columns. They stay editable after
+				# submission for the same reason a piece's `geometry` does: the
+				# surveyor's answer arrives after the adjustment has gone to the
+				# county, and the drawing it corrects is this one.
+				"proposed_geometry",
+				"easement_geometry",
+				"generated_legal_description",
 			},
 		)
 		self.assertEqual(land.after_submit_fields(land.PIECE), {"acres_surveyed", "geometry"})

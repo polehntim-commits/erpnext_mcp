@@ -1,0 +1,85 @@
+<div class="lm-wrap">
+	<!-- SPDX-License-Identifier: MIT
+
+		The shell of /app/land-map. Markup only: every value arrives from
+		erpnext_mcp.api.land_map and land_map.js fills the placeholders in.
+
+		THE COMMENTS AND THE STYLE BLOCK LIVE INSIDE THE ROOT ELEMENT, which is
+		the rule farm_overview.html states: the JS does
+		$(frappe.render_template("land_map")), and jQuery turns a leading comment
+		into a node of its own, so a file opening with one hands back a
+		collection rather than the single wrapper every .find() assumes.
+
+		EVERY APOSTROPHE IN THE VISIBLE TEXT IS &#39; AND NOT ONE. Frappe compiles
+		this file into a SINGLE-quoted JS string, and one straight apostrophe is a
+		syntax error that takes the whole page down.
+	-->
+	<style>
+		.lm-wrap { display: flex; flex-direction: column; gap: 12px; }
+		.lm-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+		.lm-bar .lm-sep { flex: 1 1 auto; }
+		.lm-map { height: 62vh; min-height: 380px; width: 100%; border-radius: 6px; }
+		.lm-fallback { display: none; padding: 12px; border: 1px solid var(--border-color, #d1d8dd); border-radius: 6px; }
+		.lm-panels { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+		.lm-panel { flex: 1 1 320px; min-width: 280px; }
+		.lm-panel h5 { margin: 0 0 6px 0; }
+		.lm-courses { width: 100%; font-variant-numeric: tabular-nums; }
+		.lm-courses th, .lm-courses td { padding: 2px 8px 2px 0; text-align: left; white-space: nowrap; }
+		.lm-courses td.lm-num { text-align: right; }
+		.lm-legal { width: 100%; min-height: 220px; font-family: var(--font-stack-mono, monospace); font-size: 12px; }
+		.lm-flags li { margin-bottom: 4px; }
+		.lm-muted { color: var(--text-muted, #8d99a6); }
+		.lm-warn { color: var(--red-600, #c0392b); }
+		.lm-print { display: none; }
+		@media print {
+			.lm-bar, .lm-map, .lm-panels, .lm-fallback { display: none !important; }
+			.lm-print { display: block !important; }
+			.lm-print pre { white-space: pre-wrap; font-size: 12px; }
+			.lm-print table { width: 100%; border-collapse: collapse; font-size: 12px; }
+			.lm-print th, .lm-print td { border-bottom: 1px solid #999; padding: 3px 6px; text-align: left; }
+		}
+	</style>
+
+	<div class="lm-bar">
+		<select class="form-control lm-company" style="width: auto;"></select>
+		<select class="form-control lm-adjustment" style="width: auto;"></select>
+		<button class="btn btn-default btn-sm lm-draw-line">Draw a line</button>
+		<button class="btn btn-default btn-sm lm-draw-area">Draw an area</button>
+		<button class="btn btn-default btn-sm lm-draw-easement">Draw an easement</button>
+		<button class="btn btn-default btn-sm lm-undo">Clear drawing</button>
+		<button class="btn btn-primary btn-sm lm-compute">Compute</button>
+		<span class="lm-sep"></span>
+		<button class="btn btn-default btn-sm lm-save">Save to adjustment</button>
+		<button class="btn btn-default btn-sm lm-print-button">Surveyor package</button>
+	</div>
+
+	<div class="lm-status lm-muted"></div>
+	<div class="lm-map"></div>
+	<div class="lm-fallback"></div>
+
+	<div class="lm-panels">
+		<div class="lm-panel lm-measures">
+			<h5>Courses</h5>
+			<div class="lm-summary lm-muted">Draw a boundary to measure it.</div>
+			<table class="lm-courses">
+				<thead>
+					<tr><th>#</th><th>Bearing</th><th>Distance (ft)</th><th></th></tr>
+				</thead>
+				<tbody class="lm-course-rows"></tbody>
+			</table>
+		</div>
+		<div class="lm-panel lm-checks">
+			<h5>What the line runs through</h5>
+			<ul class="lm-flags"></ul>
+			<h5>Acreage before and after</h5>
+			<div class="lm-acreage lm-muted">Nothing measured yet.</div>
+		</div>
+		<div class="lm-panel lm-description">
+			<h5>Draft description</h5>
+			<textarea class="form-control lm-legal" spellcheck="false"></textarea>
+			<div class="lm-muted lm-disclaimer" style="margin-top: 6px; font-size: 11px;"></div>
+		</div>
+	</div>
+
+	<div class="lm-print"></div>
+</div>
