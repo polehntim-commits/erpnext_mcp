@@ -246,6 +246,10 @@
   "allow_lla_add_easement",
   "allow_lla_render_mou",
   "allow_lla_record_survey",
+  "allow_export_lla_kml",
+  "allow_export_boundary_geojson",
+  "allow_export_lla_legal_description_pdf",
+  "allow_export_lla_survey_packet_pdf",
   "party_tools_section",
   "allow_list_related_parties",
   "allow_get_related_party",
@@ -2711,6 +2715,34 @@
    "fieldname": "allow_lla_record_survey",
    "fieldtype": "Check",
    "label": "LLA Record Survey"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. The lot line adjustment's proposed boundary, easement corridors and county tax lots as a styled KML for Google Earth or a handheld GPS.",
+   "fieldname": "allow_export_lla_kml",
+   "fieldtype": "Check",
+   "label": "Export LLA KML"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. The stored boundary of a Parcel, Field, County Tax Lot or Lot Line Adjustment as a GeoJSON FeatureCollection for QGIS or ArcGIS.",
+   "fieldname": "allow_export_boundary_geojson",
+   "fieldtype": "Check",
+   "label": "Export Boundary GeoJSON"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. The draft metes-and-bounds description as a page, with the tax lots, the acreage before and after, the date and the surveyor disclaimer.",
+   "fieldname": "allow_export_lla_legal_description_pdf",
+   "fieldtype": "Check",
+   "label": "Export LLA Legal Description PDF"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. The drawn map and the draft description on one sheet \u2014 what you hand a surveyor or attach to a county filing.",
+   "fieldname": "allow_export_lla_survey_packet_pdf",
+   "fieldtype": "Check",
+   "label": "Export LLA Survey Packet PDF"
   },
   {
    "description": "The governance register of who is related to the company and how. Separate from the Party field on a Journal Entry, which is unaffected by anything here.",

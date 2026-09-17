@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 893 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 897 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 444 read tools are **on** by default and can be switched off individually. A
+All 448 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -19196,6 +19196,57 @@ site it writes the adjusted **Parcel**:
 A Customer or Supplier party is reported, not written. A polygon more than 25%
 off the acreage is refused before anything is written. Idempotent. The same
 action is the **Record Survey** button on the form.
+
+### Land document exports (v0.173.0)
+
+What leaves the site once a line has been drawn on `/app/land-map` and saved to
+a Lot Line Adjustment. All four are **read-only**: they attach nothing and
+write nothing. The Land Map page has the same three as buttons, through
+`api/land_map.export_kml`, `export_geojson` and `export_pdf`, which build their
+bytes with the same module — so the file from the button and the file from a
+model are one file.
+
+### `export_lla_kml` — read-only, default ON
+
+`name`: the adjustment. Returns `kml` (the text), `filename`, `content_type`
+(`application/vnd.google-earth.kml+xml`) and the placemark count per layer.
+Three styled folders — proposed boundary, easement corridors, county tax lots —
+with the acreage, tax lot number, assessor account and owner of record on each
+placemark as ExtendedData, and the surveyor disclaimer as its description.
+Refused when the adjustment has nothing drawn and no lots.
+
+### `export_boundary_geojson` — read-only, default ON
+
+| Argument | Meaning |
+| --- | --- |
+| `doctype` | Parcel, Field, County Tax Lot or Lot Line Adjustment |
+| `name` | the docname |
+
+A GeoJSON FeatureCollection in WGS84 degrees, `application/geo+json`. Parcel and
+Field come off `boundary_geojson`, County Tax Lot off `geometry`, and an
+adjustment carries the proposal, the easement corridors and both lots, each
+feature labelled with its layer and its acreage. A record with no boundary
+answers an empty collection and a warning rather than an error.
+
+### `export_lla_legal_description_pdf` — read-only, default ON
+
+`name`, optional `include_html`. The stored `generated_legal_description` as a
+page: the adjustment, county, both tax lots with accounts and parties, status,
+recording number and the date printed; the acreage before and after for each
+side with the basis of the after figure stated; the metes and bounds; and the
+disclaimer that it is a DRAFT for a licensed surveyor. Refused when the
+adjustment carries no description.
+
+### `export_lla_survey_packet_pdf` — read-only, default ON
+
+`name`, optional `include_html`. The page above with a drawn map over it — the
+proposal, the easement corridors and the lots, labelled with acreages, in Web
+Mercator with a north arrow and a scale bar in feet and metres. The map is an
+inline SVG built from the stored geometry: no tiles, no images, nothing fetched.
+
+**The renderer is named on every answer.** `frappe.utils.pdf` (wkhtmltopdf)
+where the bench has it; otherwise this app's own PDF writer sets the same words,
+says in the document that the map is on the HTML, and `renderer` says which ran.
 
 ---
 

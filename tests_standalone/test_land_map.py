@@ -662,6 +662,96 @@ Promise.resolve()
 """
 
 
+def page_fixtures() -> tuple:
+	"""The map answer and the survey preview the page harness is driven with.
+
+	A function rather than a block inside one test class: `test_land_export` runs
+	the same page with the same fixtures to click the export buttons, and two
+	copies of a fixture is two pages being tested.
+	"""
+	answer = {
+		"company": MAIN,
+		"companies": [MAIN],
+		"bounds": [[SOUTH, WEST], [NORTH, EAST]],
+		"disclaimer": surveying.DISCLAIMER,
+		"may_write_adjustment": True,
+		"layers": [
+			{
+				"doctype": "Parcel",
+				"label": "Parcels",
+				"colour": "#2490ef",
+				"shapes": [
+					{
+						"name": "Mill Creek",
+						"label": "Mill Creek",
+						"route": "/app/parcel/Mill%20Creek",
+						"acres": 40.0,
+						"detail": "Wasco",
+						"geometry": box(WEST, SOUTH, EAST, NORTH),
+						"centre": [WEST, SOUTH],
+					}
+				],
+			}
+		],
+		"tax_lots": {
+			"doctype": "County Tax Lot",
+			"label": "County Tax Lots",
+			"colour": "#b8860b",
+			"shapes": [
+				{
+					"name": LOT,
+					"label": LOT,
+					"route": "/app/county-tax-lot/x",
+					"acres": 40.0,
+					"detail": "Account 7503",
+					"geometry": box(WEST, SOUTH, EAST, NORTH),
+					"centre": [WEST, SOUTH],
+				}
+			],
+		},
+		"adjustments": [
+			{
+				"name": "LLA-2026-0001",
+				"title": "Mill Creek",
+				"status": "Draft",
+				"docstatus": 0,
+				"lots": [LOT],
+				"route": "/app/lot-line-adjustment/LLA-2026-0001",
+				"proposed_geometry": None,
+				"has_description": False,
+				"easements": [],
+			}
+		],
+	}
+	description = surveying.legal_description(DRAWN, "Beginning at the southwest corner of " + LOT)
+	preview = {
+		"points": DRAWN,
+		"geometry": surveying.polygon(DRAWN),
+		"courses": description["courses"],
+		"acres": description["acres"],
+		"closure": description["closure"],
+		"tie_in": {"found": True, "description": "Beginning at the southwest corner of " + LOT},
+		"legal_description": description["text"],
+		"disclaimer": surveying.DISCLAIMER,
+		"easement_crossings": [
+			{"label": "Ditch", "note": "the proposed line crosses this easement corridor"}
+		],
+		"easements_considered": 1,
+		"affected": [
+			{
+				"label": LOT,
+				"acres_before": 40.0,
+				"overlap_acres": 2.5,
+				"acres_if_giving": 37.5,
+				"acres_if_receiving": 42.5,
+				"note": "",
+			}
+		],
+		"sides": [],
+	}
+	return answer, preview
+
+
 @unittest.skipUnless(shutil.which("node"), "needs node to execute the page script")
 class ThePageRuns(unittest.TestCase):
 	"""THE PAGE, EXECUTED. A substring assertion matches the whole file; this
@@ -671,86 +761,7 @@ class ThePageRuns(unittest.TestCase):
 
 	@classmethod
 	def setUpClass(cls):
-		answer = {
-			"company": MAIN,
-			"companies": [MAIN],
-			"bounds": [[SOUTH, WEST], [NORTH, EAST]],
-			"disclaimer": surveying.DISCLAIMER,
-			"may_write_adjustment": True,
-			"layers": [
-				{
-					"doctype": "Parcel",
-					"label": "Parcels",
-					"colour": "#2490ef",
-					"shapes": [
-						{
-							"name": "Mill Creek",
-							"label": "Mill Creek",
-							"route": "/app/parcel/Mill%20Creek",
-							"acres": 40.0,
-							"detail": "Wasco",
-							"geometry": box(WEST, SOUTH, EAST, NORTH),
-							"centre": [WEST, SOUTH],
-						}
-					],
-				}
-			],
-			"tax_lots": {
-				"doctype": "County Tax Lot",
-				"label": "County Tax Lots",
-				"colour": "#b8860b",
-				"shapes": [
-					{
-						"name": LOT,
-						"label": LOT,
-						"route": "/app/county-tax-lot/x",
-						"acres": 40.0,
-						"detail": "Account 7503",
-						"geometry": box(WEST, SOUTH, EAST, NORTH),
-						"centre": [WEST, SOUTH],
-					}
-				],
-			},
-			"adjustments": [
-				{
-					"name": "LLA-2026-0001",
-					"title": "Mill Creek",
-					"status": "Draft",
-					"docstatus": 0,
-					"lots": [LOT],
-					"route": "/app/lot-line-adjustment/LLA-2026-0001",
-					"proposed_geometry": None,
-					"has_description": False,
-					"easements": [],
-				}
-			],
-		}
-		description = surveying.legal_description(DRAWN, "Beginning at the southwest corner of " + LOT)
-		preview = {
-			"points": DRAWN,
-			"geometry": surveying.polygon(DRAWN),
-			"courses": description["courses"],
-			"acres": description["acres"],
-			"closure": description["closure"],
-			"tie_in": {"found": True, "description": "Beginning at the southwest corner of " + LOT},
-			"legal_description": description["text"],
-			"disclaimer": surveying.DISCLAIMER,
-			"easement_crossings": [
-				{"label": "Ditch", "note": "the proposed line crosses this easement corridor"}
-			],
-			"easements_considered": 1,
-			"affected": [
-				{
-					"label": LOT,
-					"acres_before": 40.0,
-					"overlap_acres": 2.5,
-					"acres_if_giving": 37.5,
-					"acres_if_receiving": 42.5,
-					"note": "",
-				}
-			],
-			"sides": [],
-		}
+		answer, preview = page_fixtures()
 		with tempfile.TemporaryDirectory() as folder:
 			harness = Path(folder) / "harness.js"
 			harness.write_text(HARNESS)

@@ -105,6 +105,7 @@ from .tools import (
 	kpi,
 	kpidefs,
 	land,
+	land_export,
 	locations,
 	lots,
 	maintenance,
@@ -6518,6 +6519,86 @@ TOOLS = {
 		title="Record a lot line adjustment's survey onto Parcels",
 		available=_needs_doctype("Lot Line Adjustment"),
 		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp v0.169.0 — run `bench migrate`",
+	),
+	# ── land document exports (v0.173.0) ───────────────────────────────────
+	"export_lla_kml": _tool(
+		land_export.export_lla_kml,
+		"THE ADJUSTMENT AS KML, for Google Earth and for a handheld GPS — what a surveyor "
+		"asks for first. Read-only: nothing is written and nothing is attached.\n\n"
+		"Three styled folders: the proposed boundary (blue), the easement corridors (amber, "
+		"dashed where they are lines) and the county's own tax lots underneath (grey). Every "
+		"placemark carries its acreage, the tax lot number, the assessor account and the "
+		"owner of record as ExtendedData, and the draft-for-a-surveyor disclaimer as its "
+		"description.\n\n"
+		"The shapes are `proposed_geometry` and `easement_geometry` as /app/land-map saved "
+		"them, plus the cached County Tax Lot polygons. An adjustment with neither drawn nor "
+		"any lot is refused by name.",
+		{"name": _field(_STRING, "The Lot Line Adjustment docname, e.g. LLA-2026-0001.")},
+		required=("name",),
+		title="Export a lot line adjustment as KML",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"export_boundary_geojson": _tool(
+		land_export.export_boundary_geojson,
+		"THE STORED BOUNDARY OF ANY LAND RECORD as a GeoJSON FeatureCollection, for QGIS or "
+		"ArcGIS. Read-only.\n\n"
+		"`doctype` is Parcel or Field (`boundary_geojson`), County Tax Lot (`geometry`), or "
+		"Lot Line Adjustment (the proposal, the easement corridors and both lots, each "
+		"labelled with its layer). WGS84 degrees, which is what every record here stores. "
+		"Each feature carries the doctype, the docname, a label and the acreage computed by "
+		"geo.area_acres, so the layer is readable once it is open. A record with no boundary "
+		"answers an empty FeatureCollection and says so in `warnings` rather than failing.",
+		{
+			"doctype": _field(_STRING, "Parcel, Field, County Tax Lot or Lot Line Adjustment."),
+			"name": _field(_STRING, "The docname."),
+		},
+		required=("doctype", "name"),
+		title="Export a land record's boundary as GeoJSON",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"export_lla_legal_description_pdf": _tool(
+		land_export.export_lla_legal_description_pdf,
+		"THE DRAFT METES-AND-BOUNDS DESCRIPTION AS A PAGE (PDF, base64). Read-only.\n\n"
+		"Carries the header a county filing wants — the adjustment, the title, the county, "
+		"both tax lots with their assessor accounts and parties, the status, the recording "
+		"number and the date it was printed — then the acreage before and after for each "
+		"side with the basis of the after figure stated, then the description, then the "
+		"disclaimer: IT IS A DRAFT FOR A LICENSED SURVEYOR AND NOT A SURVEY.\n\n"
+		"The description is `generated_legal_description`, written by /app/land-map; an "
+		"adjustment that has none is refused by name. Rendered through frappe.utils.pdf where "
+		"the bench has it, otherwise by this app's own PDF writer; `renderer` says which.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"include_html": _field(_BOOLEAN, "Also return the HTML. Default false."),
+		},
+		required=("name",),
+		title="Export a lot line adjustment's legal description as PDF",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"export_lla_survey_packet_pdf": _tool(
+		land_export.export_lla_survey_packet_pdf,
+		"THE SHEET YOU HAND A SURVEYOR OR ATTACH TO A COUNTY FILING (PDF, base64). Read-only.\n\n"
+		"The legal description page with a DRAWN MAP above it: the proposal, the easement "
+		"corridors and the county's lots, each labelled with its acreage, projected to Web "
+		"Mercator with a north arrow and a scale bar in feet and metres. The map is an inline "
+		"SVG built from the stored geometry — no tile server, no image, nothing fetched — so "
+		"it prints the same on a bench with no route out.\n\n"
+		"Needs both the geometry and the description. Where the bench has no HTML-to-PDF "
+		"renderer the words are set by this app's own writer and the map is on the HTML "
+		"(`include_html`), which the document says in its own text.",
+		{
+			"name": _field(_STRING, "The Lot Line Adjustment docname."),
+			"include_html": _field(
+				_BOOLEAN, "Also return the HTML, which carries the drawn map. Default false."
+			),
+		},
+		required=("name",),
+		title="Export a lot line adjustment survey packet as PDF",
+		available=_needs_doctype("Lot Line Adjustment"),
+		requires="the Lot Line Adjustment DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── related parties ─────────────────────────────────────────────────────
 	"list_related_parties": _tool(

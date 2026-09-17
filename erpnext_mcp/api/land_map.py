@@ -21,6 +21,16 @@ in. Nothing about the farm map is re-implemented here.
 and is tested there; this method's job is to decide WHICH records a drawn line
 should be tied to and measured against, under the caller's own read permissions.
 
+v0.173.0 ADDS THREE MORE, AND THEY ARE DOWNLOADS. `export_kml`,
+`export_geojson` and `export_pdf` answer a FILE rather than JSON — Frappe's own
+`frappe.local.response` download shape, which is how the Land Map page's export
+buttons hand a surveyor a .kml without a second server. The bytes are built by
+`land_export.py`, the same module the four MCP export tools call, so the file
+from the button and the file from a model are one file. The gate is Frappe's
+`read` permission on the record itself, not the MCP switches, for the reason
+`save_boundary` gives about the switches being the AI's leash rather than the
+operator's.
+
 `save_proposal` writes through `tools/land.lla_create` and `lla_update` and not
 through `frappe.get_doc`. Those tools carry the role gate, the status machine,
 the after-submit field lock and the party checks that `land_adjustment.py`
@@ -54,9 +64,10 @@ import json
 
 import frappe
 
-from .. import compat, farm_overview, geo, land_adjustment, surveying
+from .. import compat, farm_overview, geo, land_adjustment, land_export, surveying
 from ..errors import ToolError
 from ..tools import land as land_tools
+from . import gis
 from .gis import speaks_frappe
 
 COUNTY_TAX_LOT = land_adjustment.COUNTY_TAX_LOT
@@ -561,7 +572,73 @@ def _geojson_text(value, label: str) -> str:
 	return json.dumps(value)
 
 
-# ── the whitelisted surface: three methods ──────────────────────────────────
+# ── the exports ─────────────────────────────────────────────────────────────
+def _may_read_doc(doctype: str, name: str) -> None:
+	"""Frappe's own answer to "may this login read THIS record".
+
+	`doc=name` rather than the bare doctype, for the reason `gis._may_write`
+	gives: a User Permission that scopes somebody to one company is enforced per
+	document, and a check against the doctype alone passes for a record they
+	cannot open.
+	"""
+	frappe.has_permission(doctype, "read", doc=name, throw=True)
+
+
+def _download(content, filename: str, content_type: str) -> None:
+	"""Hand the browser a file. Frappe's own download shape, set on the response.
+
+	`frappe.local.response` is the request-local one and `frappe.response` is the
+	proxy onto it; both names are checked because a bench that has only ever had
+	one of them set is a bench where the download silently answers JSON.
+	"""
+	bag = getattr(frappe.local, "response", None)
+	if bag is None:
+		bag = getattr(frappe, "response", None)
+	if bag is None:  # pragma: no cover - a Frappe with neither name
+		bag = frappe.local.response = {}
+	bag["filename"] = filename
+	bag["filecontent"] = content
+	bag["type"] = "download"
+	bag["display_content_as"] = "attachment"
+	bag["content_type"] = content_type
+
+
+def _export_kml(name=None) -> None:
+	gis._named_user()
+	doc = land_export.adjustment(name)
+	_may_read_doc(LOT_LINE_ADJUSTMENT, doc.name)
+	answer = land_export.kml_document(doc)
+	_download(answer["kml"].encode("utf-8"), answer["filename"], answer["content_type"])
+
+
+def _export_geojson(doctype=None, name=None) -> None:
+	gis._named_user()
+	doctype = str(doctype or "").strip()
+	if doctype not in land_export.GEOMETRY_SOURCES:
+		raise ToolError(
+			f"{doctype!r} is not a land record with a boundary. It is one of: "
+			f"{', '.join(sorted(land_export.GEOMETRY_SOURCES))}."
+		)
+	name = str(name or "").strip()
+	if not name or not frappe.db.exists(doctype, name):
+		raise ToolError(f"no {doctype} called {name!r} on this site.")
+	_may_read_doc(doctype, name)
+	answer = land_export.geojson(doctype, name)
+	_download(land_export.geojson_text(answer).encode("utf-8"), answer["filename"], answer["content_type"])
+
+
+def _export_pdf(name=None, kind=None) -> None:
+	gis._named_user()
+	kind = str(kind or "packet").strip().lower()
+	if kind not in ("packet", "legal"):
+		raise ToolError(f"{kind!r} is not a document: pass 'packet' or 'legal'.")
+	doc = land_export.adjustment(name)
+	_may_read_doc(LOT_LINE_ADJUSTMENT, doc.name)
+	answer = land_export.document(doc, kind)
+	_download(answer["pdf"], answer["filename"], answer["content_type"])
+
+
+# ── the whitelisted surface: six methods ────────────────────────────────────
 @frappe.whitelist()
 def land_map(company=None):
 	"""Everything /app/land-map draws: the farm map's layers plus the county tax lots."""
@@ -574,6 +651,24 @@ def survey_preview(points=None, adjustment=None, easements=None, company=None):
 	return speaks_frappe(
 		_survey_preview, points=points, adjustment=adjustment, easements=easements, company=company
 	)
+
+
+@frappe.whitelist()
+def export_kml(name=None):
+	"""Download one adjustment's shapes as KML, for Google Earth or a GPS."""
+	return speaks_frappe(_export_kml, name=name)
+
+
+@frappe.whitelist()
+def export_geojson(doctype=None, name=None):
+	"""Download one land record's stored boundary as GeoJSON, for QGIS or ArcGIS."""
+	return speaks_frappe(_export_geojson, doctype=doctype, name=name)
+
+
+@frappe.whitelist()
+def export_pdf(name=None, kind=None):
+	"""Download the survey packet (`kind=packet`) or the description (`kind=legal`)."""
+	return speaks_frappe(_export_pdf, name=name, kind=kind)
 
 
 @frappe.whitelist()

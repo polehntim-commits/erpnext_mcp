@@ -3,6 +3,54 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.173.0 — 2026-09-17 — the files a surveyor asks for
+
+v0.171.0 put a drawing surface on `/app/land-map` and stored what it produced on
+the Lot Line Adjustment. This is how that record leaves the site. **897 tools**
+(+4, all read). Nothing here writes anything.
+
+- **`export_lla_kml`** — the adjustment as KML for Google Earth or a handheld
+  GPS. Three styled folders: the proposed boundary, the easement corridors and
+  the county's tax lots underneath. Every placemark carries its acreage, the tax
+  lot number, the assessor account and the owner of record as ExtendedData, and
+  the draft-for-a-surveyor disclaimer as its description. Colours are KML's own
+  **aabbggrr** — alpha first, RGB reversed — which is the detail that otherwise
+  ships a map whose red and blue are swapped.
+- **`export_boundary_geojson`** — the stored boundary of a Parcel, a Field, a
+  County Tax Lot or a Lot Line Adjustment, as a FeatureCollection in WGS84 with
+  `application/geo+json`, so a browser hands it to QGIS or ArcGIS rather than to
+  a text editor. Each feature carries the doctype, the docname, its layer and
+  its acreage. A record with no boundary answers an empty collection and a
+  warning rather than an error.
+- **`export_lla_legal_description_pdf`** — the stored metes-and-bounds draft as
+  a page: the adjustment and county, both tax lots with their assessor accounts
+  and parties, the status, the recording number, the date printed, the acreage
+  **before and after** for each side with the basis of the after figure stated,
+  the description, and the disclaimer that it is a draft for a licensed
+  surveyor.
+- **`export_lla_survey_packet_pdf`** — that page with a **drawn map** above it:
+  the proposal, the easement corridors and the lots, each labelled with its
+  acreage, projected to Web Mercator with a north arrow and a scale bar. The map
+  is an inline SVG built from the stored geometry — no tiles, no image, nothing
+  fetched — so it prints the same on a bench with no route out. The scale bar is
+  GROUND feet: a mercator metre at 45° N is 0.71 of one, and a bar drawn off the
+  projected units would be a third short with nothing to say so.
+- **Three buttons on `/app/land-map`** — KML, GeoJSON and Survey packet PDF —
+  through new whitelisted methods `export_kml`, `export_geojson` and
+  `export_pdf` on `api/land_map`, which answer a FILE (Frappe's own download
+  shape). They are gated by Frappe's `read` permission on the record itself, and
+  an export before the drawing is saved says so and downloads nothing. The
+  buttons and the MCP tools build their bytes with the same module.
+- **It exports what is stored and computes nothing.** Acreage is
+  `geo.area_acres`, the description and its disclaimer are `surveying.py`'s, the
+  before/after pair is `land_adjustment.side_plan`'s, and the projection is
+  `slope_aspect.to_mercator` — the one the tile layers already use.
+- **PDFs are `frappe.utils.pdf`'s** where the bench has it. Where it is missing,
+  this app's own PDF writer sets the same words and the document says the map is
+  on the HTML version; `renderer` on every answer says which one ran.
+- The test double now exposes `frappe.local.response` and `frappe.response` as
+  one object, which is what a real Frappe download writes to.
+
 ## 0.172.0 — 2026-09-17 — a sidebar a farm can read
 
 The Desk opened on eighteen modules, most of them irrelevant to tree fruit, with

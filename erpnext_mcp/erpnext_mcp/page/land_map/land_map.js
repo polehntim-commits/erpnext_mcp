@@ -54,6 +54,15 @@ function erpnext_mcp_land_map(page) {
 	const METHOD = "erpnext_mcp.api.land_map.land_map";
 	const PREVIEW_METHOD = "erpnext_mcp.api.land_map.survey_preview";
 	const SAVE_METHOD = "erpnext_mcp.api.land_map.save_proposal";
+	// v0.173.0. The three exports are DOWNLOADS rather than `frappe.call`s: the
+	// server answers a file, so the browser is pointed at the method and the
+	// bytes never pass through this script. Every one of them is built by
+	// erpnext_mcp/land_export.py, which is also what the MCP export tools call —
+	// so the KML a surveyor gets from this page and the one a model hands over
+	// are the same file.
+	const EXPORT_KML = "erpnext_mcp.api.land_map.export_kml";
+	const EXPORT_GEOJSON = "erpnext_mcp.api.land_map.export_geojson";
+	const EXPORT_PDF = "erpnext_mcp.api.land_map.export_pdf";
 	const WIDGET = "/assets/erpnext_mcp/js/geo_map_widget.js";
 	const LOAD_TIMEOUT_MS = 15000;
 
@@ -582,6 +591,23 @@ function erpnext_mcp_land_map(page) {
 		window.print();
 	}
 
+	// v0.173.0. An export names the adjustment it exports, so the buttons say so
+	// rather than downloading an empty file: the shapes and the description live
+	// ON the record, and a drawing that has not been saved yet is not on one.
+	function download(method, extra) {
+		if (!adjustment) {
+			frappe.msgprint(
+				__("Choose a lot line adjustment first, or save this drawing to one — an export reads the saved record.")
+			);
+			return;
+		}
+		const params = Object.assign({ name: adjustment }, extra || {});
+		const query = Object.keys(params)
+			.map((key) => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
+			.join("&");
+		window.open("/api/method/" + method + "?" + query, "_blank");
+	}
+
 	$company.on("change", function () {
 		company = $(this).val() || null;
 		reload();
@@ -615,6 +641,11 @@ function erpnext_mcp_land_map(page) {
 	$body.find(".lm-compute").on("click", compute);
 	$body.find(".lm-save").on("click", save);
 	$body.find(".lm-print-button").on("click", print_package);
+	$body.find(".lm-export-kml").on("click", () => download(EXPORT_KML, {}));
+	$body.find(".lm-export-geojson").on("click", () =>
+		download(EXPORT_GEOJSON, { doctype: "Lot Line Adjustment" })
+	);
+	$body.find(".lm-export-pdf").on("click", () => download(EXPORT_PDF, { kind: "packet" }));
 
 	reload();
 	return { reload: reload, compute: compute, points: () => drawn_points };

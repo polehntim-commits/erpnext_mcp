@@ -113,6 +113,43 @@ the request for a survey.
 
 ---
 
+## Exporting (v0.173.0)
+
+Three buttons sit at the end of the map's toolbar, and each one downloads a
+file for the record the adjustment picker is on. An export reads the SAVED
+record — save the drawing first, or the page says so and downloads nothing.
+
+| Button | File | Opens in |
+| --- | --- | --- |
+| **KML** | `<adjustment>.kml` | Google Earth, and most handheld GPS units |
+| **GeoJSON** | `<adjustment>.geojson` | QGIS, ArcGIS |
+| **Survey packet PDF** | `<adjustment>-survey-packet.pdf` | anything |
+
+The KML carries three styled folders — the proposed boundary, the easement
+corridors and the county's tax lots underneath — and every placemark holds its
+acreage, the tax lot number, the assessor account and the owner of record, with
+the draft-for-a-surveyor disclaimer as its description.
+
+The **survey packet** is the sheet to hand a surveyor or attach to a county
+filing: a drawn map of the proposal, the easement corridors and the lots, each
+labelled with its acreage, with a north arrow and a scale bar in feet and
+metres; then the tax lots and parties; then the acreage before and after for
+each side; then the metes-and-bounds description; then the disclaimer. The map
+is an inline SVG built from the stored geometry — no tiles, no images, nothing
+fetched — so it prints the same on a bench with no route out.
+
+The same four exports are MCP tools, and they read the same record through the
+same code: `export_lla_kml`, `export_boundary_geojson` (which also serves a
+Parcel, a Field or a County Tax Lot), `export_lla_legal_description_pdf` and
+`export_lla_survey_packet_pdf`. All four are read-only and attach nothing.
+
+**The PDF renderer.** On a bench, `frappe.utils.pdf` (wkhtmltopdf) draws the
+page, map and all. Where that binary is missing the same words are set by this
+app's own PDF writer, the document says the map is on the HTML version, and
+`renderer` on the tool's answer says which one produced the file.
+
+---
+
 ## When there is no map
 
 Leaflet and the tiles come from a CDN. On a bench with no outbound internet the

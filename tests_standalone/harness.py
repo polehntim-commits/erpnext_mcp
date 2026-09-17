@@ -5211,6 +5211,11 @@ def _build_frappe() -> types.ModuleType:
 	# What a whitelisted method fills in to serve a file. Frappe's
 	# `frappe.utils.response.as_binary` reads type/filename/filecontent off it.
 	module.response = FrappeDict()
+	# Real Frappe's `frappe.response` IS `frappe.local.response` — the module
+	# attribute is a proxy onto the request-local one — and a download method
+	# writes to whichever name it reached for. One object under both names here,
+	# so a test can read back what the method set.
+	module.local.response = module.response
 
 	def _translate(text, *args, **kwargs):
 		return text
