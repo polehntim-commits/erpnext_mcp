@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 888 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 893 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 442 read tools are **on** by default and can be switched off individually. A
+All 444 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20070,3 +20070,65 @@ one is a dispatch sent to the wrong machine.
 Float is `NOT NULL DEFAULT 0`, so an asset nobody took a fix on reads exactly
 0.0. Plotting those puts the register in the Gulf of Guinea; dropping them
 silently makes a map missing half the valves that does not say so.
+
+## v0.172.0 — who sees which workspace
+
+Five tools over Frappe's own sidebar mechanism. `erpnext_mcp/sidebar.py` argues
+the design; the short version is that `Workspace.roles` (a `Has Role` table)
+decides visibility, `is_hidden` puts a page away, and **anybody holding
+Workspace Manager sees everything regardless** — which is why none of this can
+lock an administrator out.
+
+### `list_workspace_visibility`, `get_user_sidebar` — read-only, default ON
+
+`list_workspace_visibility` is the whole picture: every workspace on the site,
+the roles it is restricted to, whether it is hidden, which ones this app ships,
+and what each of the five farm profiles would see.
+
+`get_user_sidebar` answers for one person, and carries **the reason for every
+page left out** — needs a role they lack, hidden on this site, a blocked module,
+or somebody else's private page. "Why can my mother not see the parcels" is the
+question it exists for, and a list of what she *can* see does not answer it.
+
+| On a row | Meaning |
+| --- | --- |
+| `roles` | the roles that may see it; **empty means everyone with Desk access** |
+| `hidden` | kept out of the sidebar for everyone but a Workspace Manager |
+| `ours` | this app shipped the page |
+| `visible_to` | the same fact as a sentence |
+
+### `configure_workspace_visibility`, `hide_default_workspace`, `set_user_role_profile` — MUTATING, default off, System Manager only
+
+Narrower than the rest of this app on purpose: changing who can see what is an
+administrative act.
+
+`configure_workspace_visibility` writes one page's `roles` table. **An empty
+list means everyone** — Frappe's own rule, not an invention here. A role the
+site does not have is dropped and named rather than created, because a Role
+conjured to satisfy a visibility rule has no permissions behind it.
+
+`hide_default_workspace` sets or clears `is_hidden`. It **deletes nothing**, and
+the choice is stored in `ERPNext MCP Settings.hidden_default_workspaces` so the
+next `bench migrate` re-applies what the operator decided rather than the
+shipped list — a page somebody deliberately put back stays back.
+
+`set_user_role_profile` assigns one of five profiles through Frappe's own
+`Role Profile`: **Owner** (all nine pages), **Manager**, **Bookkeeper**,
+**Field Supervisor**, **Land Owner**. It **adds roles and never removes one**,
+and says which were added and what the person will now see. Taking a role away
+has consequences for the records they created and belongs to whoever is
+watching.
+
+It also **blocks the modules that profile does not need**, through Frappe's own
+`Module Profile` — which is what actually shortens the sidebar. Gating the nine
+pages by role is not enough on its own: every remaining ERPNext and HRMS page
+carries an empty roles table, so Frappe shows them to everybody. On a real bench
+a Land Owner went from twenty-seven entries to seven. It is **never** applied to
+a System Manager or Workspace Manager, the Owner profile blocks nothing, and
+`trim_sidebar: false` turns it off. Clearing Module Profile on the User form
+gives the whole Desk back.
+
+At install, Manufacturing, Quality, Projects, Support, Website and CRM are put
+away. Accounting and HR stay — they are where somebody who has used ERPNext
+before goes looking. Agriculture is left alone because it belongs to another app
+and a farm may be using it; `hide_default_workspace("Agriculture")` is one call.

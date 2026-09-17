@@ -3,6 +3,58 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.172.0 — 2026-09-17 — a sidebar a farm can read
+
+The Desk opened on eighteen modules, most of them irrelevant to tree fruit, with
+v0.170.0's nine farm workspaces underneath them. This puts six default pages
+away and decides who sees the rest. **893 tools** (+5).
+
+- **The mechanism is Frappe's own, read out of v15 first.** `Workspace.roles` (a
+  `Has Role` table) is what `is_permitted()` checks; `is_hidden` keeps a public
+  page out of the sidebar; and **anybody holding Workspace Manager sees
+  everything**, hidden pages included. So nothing here can lock an administrator
+  out — that is a property of the framework, not a promise. `restrict_to_domain`
+  is deliberately NOT used: it asks what kind of business the site is, not who is
+  looking at it.
+- **Five profiles, no new roles.** Owner, Manager, Bookkeeper, Field Supervisor
+  and Land Owner are `Role Profile` records bundling roles this app already
+  ships. The Land Owner — Tim's mother's view — gets Land & Parcels, Financial
+  and Assets & Equipment, and not the task board.
+- **A page's roles are derived by INTERSECTION, and the obvious rule was wrong.**
+  "Every role held by a profile that should see this page" would have put Family
+  Member (the Land Owner's whole bundle, and also in the Owner's) on all nine
+  pages. A role may see a page only when every profile holding it should. The
+  test states the five intended sidebars independently and walks Frappe's own
+  mechanism to them, which is what caught it.
+- **Six default pages put away**: Manufacturing, Quality, Projects, Support,
+  Website, CRM. Accounting and HR stay. Agriculture is left alone — it belongs to
+  another app and a farm may be using it.
+- **Hiding is stored intent, not a constant.** The choice lives in
+  `ERPNext MCP Settings.hidden_default_workspaces` and is re-applied on every
+  migrate, so an ERPNext upgrade that re-syncs a workspace cannot bring a hidden
+  page back — and a page an operator deliberately restored is not re-hidden.
+  `before_uninstall` puts every one of them back.
+- **Role visibility alone is not a short sidebar, and a real bench proved it.**
+  With the nine pages gated and six defaults hidden, a Land Owner still saw
+  **twenty-seven** entries: every remaining ERPNext and HRMS page carries an
+  empty roles table, and Frappe shows those to everyone. So a profile also
+  blocks the modules that person does not need, through Frappe's own
+  `Module Profile`. The same Land Owner now sees **seven**. Never applied to a
+  System Manager or Workspace Manager, the Owner profile blocks nothing, and
+  `trim_sidebar: false` declines it.
+- **This app's three older pages are gated too** — the dispatch board,
+  Irrigation and Onboard Worker shipped before the nine with no roles on them,
+  so a land owner was being shown the task board.
+- **Five tools**, three of them System Manager only:
+  `list_workspace_visibility`, `get_user_sidebar` (read, ON),
+  `configure_workspace_visibility`, `hide_default_workspace`,
+  `set_user_role_profile` (mutating, off).
+- **A Role Profile that is already right is not saved again.** Frappe's
+  controller enqueues `update_all_users` on save and LOCKS the document until
+  that job runs, so a migrate that re-saved five profiles churned every user
+  holding one and left the next call throwing `DocumentLockedError`. Found on a
+  bench, fixed with a no-op guard.
+
 ## 0.171.0 — 2026-09-17 — draw the line, and hand a surveyor the numbers
 
 `/app/land-map` is a Desk page where a proposed lot line is traced on satellite

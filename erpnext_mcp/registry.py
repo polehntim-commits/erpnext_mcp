@@ -142,6 +142,7 @@ from .tools import (
 	shadow_log,
 	shifts,
 	shipments,
+	sidebar,
 	signatures,
 	signed_documents,
 	signers,
@@ -31639,6 +31640,91 @@ TOOLS = {
 		title="Close a runaway shift",
 		available=_needs_doctype("Farm Shift"),
 		requires="the Farm Shift DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	# ── the Desk sidebar ─────────────────────────────────────────────────
+	"list_workspace_visibility": _tool(
+		sidebar.list_workspace_visibility,
+		"Every workspace on this site with who can see it: the roles it is restricted to, "
+		"whether it is hidden from the sidebar, which ones this app ships, and what each of "
+		"the five farm profiles would see. A workspace with no roles is visible to everyone "
+		"with Desk access, which is Frappe's own rule. Read-only.",
+		{},
+		title="List workspace visibility",
+	),
+	"get_user_sidebar": _tool(
+		sidebar.get_user_sidebar,
+		"What one person's Desk sidebar holds, computed the way Frappe computes it — and the "
+		"REASON for every workspace left out (needs a role they lack, hidden on this site, a "
+		"blocked module, or somebody else's private page). Answers 'why can she not see the "
+		"parcels'. Read-only.",
+		{"user": _field(_STRING, "The login email, e.g. mary@example.com.")},
+		required=("user",),
+		title="Get a user's sidebar",
+	),
+	"configure_workspace_visibility": _tool(
+		sidebar.configure_workspace_visibility,
+		"MUTATING (default OFF). Sets which roles may see one workspace, by writing Frappe's "
+		"own `roles` table on it. AN EMPTY LIST MEANS EVERYONE with Desk access. A role this "
+		"site does not have is dropped and named rather than created. Anybody holding "
+		"Workspace Manager still sees every page. System Manager only.",
+		{
+			"workspace": _field(_STRING, "The Workspace docname, e.g. 'Financial'."),
+			"roles": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": (
+					"Role names that may see it. An empty list shows it to everyone with Desk access."
+				),
+			},
+		},
+		required=("workspace", "roles"),
+		mutating=True,
+		idempotent=True,
+		title="Configure workspace visibility",
+	),
+	"hide_default_workspace": _tool(
+		sidebar.hide_default_workspace,
+		"MUTATING (default OFF). Keeps a default workspace out of the sidebar by setting "
+		"Frappe's `is_hidden` on it — Manufacturing, Quality, Projects, Support, Website and "
+		"CRM are put away at install. Pass hidden=false to bring one back. DELETES NOTHING, a "
+		"Workspace Manager still sees it, and the choice is stored so a later `bench migrate` "
+		"re-applies exactly what the operator decided. System Manager only.",
+		{
+			"workspace": _field(_STRING, "The Workspace docname, e.g. 'Manufacturing'."),
+			"hidden": _field(
+				_BOOLEAN,
+				"True to hide it (the default), false to put it back in the sidebar.",
+			),
+		},
+		required=("workspace",),
+		mutating=True,
+		idempotent=True,
+		title="Hide a default workspace",
+	),
+	"set_user_role_profile": _tool(
+		sidebar.set_user_role_profile,
+		"MUTATING (default OFF). Gives a user one of the five farm profiles — Owner, Manager, "
+		"Bookkeeper, Field Supervisor or Land Owner — through Frappe's own Role Profile, which "
+		"bundles roles this app already ships. It ADDS roles and never removes one, and the "
+		"answer says which were added and which workspaces the person will now see. "
+		"System Manager only.",
+		{
+			"user": _field(_STRING, "The login email, e.g. mary@example.com."),
+			"profile": _field(
+				_STRING,
+				"Owner, Manager, Bookkeeper, Field Supervisor or Land Owner.",
+			),
+			"trim_sidebar": _field(
+				_BOOLEAN,
+				"Also block the modules the profile does not need, so the sidebar is short "
+				"(default true). Never applied to a System Manager or Workspace Manager, and "
+				"the Owner profile blocks nothing.",
+			),
+		},
+		required=("user", "profile"),
+		mutating=True,
+		idempotent=True,
+		title="Set a user's role profile",
 	),
 }
 

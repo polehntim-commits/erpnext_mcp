@@ -271,6 +271,12 @@ SECTION_DOMAIN = {
 	"collab_tools_section": "platform",
 	"master_data_tools_section": "platform",
 	"meta_tools_section": "platform",
+	# v0.172.0. The Desk sidebar: who sees which workspace, and which default
+	# pages are put away. It is navigation rather than data, which is what
+	# `platform` collects — the same chip as the workflow, printing and meta
+	# switches, and not `farm`, because hiding Manufacturing is not a farming
+	# decision.
+	"sidebar_section": "platform",
 	"ml_model_read_section": "platform",
 	"ml_model_write_section": "platform",
 	"translation_section": "platform",

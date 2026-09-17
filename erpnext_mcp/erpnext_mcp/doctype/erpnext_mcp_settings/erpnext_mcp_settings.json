@@ -1114,7 +1114,15 @@
   "allow_create_recall_plan",
   "allow_update_recall_plan",
   "allow_create_supplier_verification",
-  "allow_update_supplier_verification"
+  "allow_update_supplier_verification",
+  "sidebar_section",
+  "allow_list_workspace_visibility",
+  "allow_get_user_sidebar",
+  "allow_configure_workspace_visibility",
+  "allow_hide_default_workspace",
+  "allow_set_user_role_profile",
+  "sidebar_col",
+  "hidden_default_workspaces"
  ],
  "fields": [
   {
@@ -8495,6 +8503,56 @@
    "label": "Update Hazard Analysis",
    "default": "0",
    "description": "MUTATING. Revise a hazard row's likelihood, severity or description — what a plan review changes. Ships off."
+  },
+  {
+   "fieldname": "sidebar_section",
+   "fieldtype": "Section Break",
+   "label": "Desk Sidebar"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. Every workspace on this site with who can see it, which are hidden, and which belong to this app.",
+   "fieldname": "allow_list_workspace_visibility",
+   "fieldtype": "Check",
+   "label": "List Workspace Visibility"
+  },
+  {
+   "default": "1",
+   "description": "Read-only. What one person's sidebar holds, and the reason for every page left out of it.",
+   "fieldname": "allow_get_user_sidebar",
+   "fieldtype": "Check",
+   "label": "Get User Sidebar"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Sets which roles may see one workspace. An empty list means everyone. Ships off.",
+   "fieldname": "allow_configure_workspace_visibility",
+   "fieldtype": "Check",
+   "label": "Configure Workspace Visibility"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Hides a default workspace from the sidebar, or puts it back. Deletes nothing. Ships off.",
+   "fieldname": "allow_hide_default_workspace",
+   "fieldtype": "Check",
+   "label": "Hide Default Workspace"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Gives a user one of the five farm role profiles. Adds roles; never removes one. Ships off.",
+   "fieldname": "allow_set_user_role_profile",
+   "fieldtype": "Check",
+   "label": "Set User Role Profile"
+  },
+  {
+   "fieldname": "sidebar_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Which default workspaces are kept out of the sidebar, as a JSON list. Written by hide_default_workspace and re-applied on every migrate, so an upgrade that re-syncs a workspace cannot bring a hidden page back. Empty list means hide none.",
+   "fieldname": "hidden_default_workspaces",
+   "fieldtype": "Small Text",
+   "label": "Hidden Default Workspaces"
   }
  ],
  "index_web_pages_for_search": 0,

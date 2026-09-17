@@ -118,6 +118,7 @@ from . import (
 	onboard_worker,
 	roles,
 	settings,
+	sidebar,
 	state_withholding,
 	training,
 	withholding,
@@ -159,6 +160,7 @@ def after_install() -> None:
 	_onboard_worker()
 	_irrigation_workspace()
 	_farm_workspaces()
+	_sidebar()
 	_settlement_invoice_link()
 	_bank_categorization_fields()
 	_bank_pairing_fields()
@@ -207,6 +209,7 @@ def after_migrate() -> None:
 	_onboard_worker()
 	_irrigation_workspace()
 	_farm_workspaces()
+	_sidebar()
 	_settlement_invoice_link()
 	_bank_categorization_fields()
 	_bank_pairing_fields()
@@ -1365,6 +1368,49 @@ def _farm_workspaces() -> None:
 		print(f"erpnext_mcp: could not build {failure['name']} — {failure['reason']}")
 
 
+def _sidebar() -> None:
+	"""Put the irrelevant default pages away and set who sees this app's nine.
+
+	AFTER the workspaces themselves, because visibility is written onto pages
+	`_farm_workspaces` has just built. Re-applied on every migrate on purpose:
+	a Workspace is force-synced from its own app's JSON, so an ERPNext upgrade
+	can put a hidden page back. `sidebar.hidden_list` is the operator's list
+	rather than the shipped constant, so this cannot fight somebody who
+	deliberately restored one.
+	"""
+	hidden = sidebar.hide_defaults()
+	if hidden.get("note"):
+		print(f"erpnext_mcp: the sidebar was not configured — {hidden['note']}")
+		return
+	if hidden.get("hidden"):
+		print(
+			f"erpnext_mcp: kept {', '.join(hidden['hidden'])} out of the Desk sidebar. Nothing "
+			f"was deleted — a Workspace Manager still sees them, and hide_default_workspace "
+			f"puts any of them back."
+		)
+	for failure in hidden.get("failed") or []:
+		print(f"erpnext_mcp: could not hide {failure['name']} — {failure['reason']}")
+
+	visibility = sidebar.apply_visibility()
+	if visibility.get("configured"):
+		print(
+			f"erpnext_mcp: set who can see {len(visibility['configured'])} workspace(s). "
+			f"An administrator, and anybody holding Workspace Manager, still sees every page."
+		)
+	for failure in visibility.get("failed") or []:
+		print(f"erpnext_mcp: could not set visibility for {failure['name']} — {failure['reason']}")
+
+	profiles = sidebar.ensure_profiles()
+	if profiles.get("profiles"):
+		print(
+			f"erpnext_mcp: {len(profiles['profiles'])} role profile(s) ready — "
+			f"{', '.join(row['role_profile'] for row in profiles['profiles'])}. "
+			f"set_user_role_profile assigns one."
+		)
+	for failure in profiles.get("failed") or []:
+		print(f"erpnext_mcp: could not build the {failure['name']} role profile — {failure['reason']}")
+
+
 def _command_center() -> None:
 	"""Build or repair the Compliance Command Center dashboard."""
 	_report_failures("the Compliance Command Center", dashboard.install_command_center)
@@ -1963,6 +2009,7 @@ def before_uninstall() -> None:
 	_remove_onboard_worker()
 	_remove_irrigation_workspace()
 	_remove_farm_workspaces()
+	_restore_default_workspaces()
 
 	losses = []
 	for doctype, what in _PRECIOUS_DOCTYPES:
@@ -2149,6 +2196,15 @@ def _remove_farm_workspaces() -> None:
 			print(f"erpnext_mcp: removed the {row['name']!r} workspace.")
 		elif row["reason"] != "not present":
 			print(f"erpnext_mcp: the {row['name']!r} workspace was {row['reason']}.")
+
+
+def _restore_default_workspaces() -> None:
+	"""Put every default page this app hid back in the sidebar before it goes."""
+	report = sidebar.restore_defaults()
+	if report.get("restored"):
+		print(f"erpnext_mcp: put {', '.join(report['restored'])} back in the Desk sidebar.")
+	for failure in report.get("failed") or []:
+		print(f"erpnext_mcp: could not restore {failure['name']} — {failure['reason']}")
 
 
 def _report_surviving_roles() -> None:

@@ -498,6 +498,11 @@ ERPNEXT_SCHEMA = {
 		# have made the dormant-login flags untestable.
 		"last_login",
 		"last_active",
+		# v0.172.0. What `set_user_role_profile` writes: the roles bundle and the
+		# blocked-modules bundle.
+		"role_profile_name",
+		"module_profile",
+		"block_modules",
 	],
 	# ── v0.17.0: the permission tables the six mobile roles are written into ──
 	#
@@ -509,6 +514,17 @@ ERPNEXT_SCHEMA = {
 	# copy and a test can assert it copied.
 	"Role": ["name", "role_name", "desk_access", "disabled", "is_custom"],
 	"Has Role": ["name", "role", "parent", "parenttype", "parentfield", "idx"],
+	# v0.172.0. Frappe's own bundle of roles, and the field on User that applies
+	# one. `sidebar.assign_profile` writes `role_profile_name` and Frappe's User
+	# controller reads the bundle back out of it — without this the double answers
+	# "no such doctype" and every profile test would pass vacuously.
+	"Role Profile": ["name", "role_profile", "roles"],
+	# v0.172.0. The other half of the pair: a bundle of BLOCKED modules, which is
+	# how Frappe trims one person's Desk. `sidebar.assign_profile` writes
+	# `User.module_profile`, and the sidebar builder reads the blocked list back
+	# through `User.get_blocked_modules`.
+	"Module Profile": ["name", "module_profile_name", "block_modules"],
+	"Block Module": ["name", "module", "parent", "parenttype", "parentfield", "idx"],
 	"User Permission": [
 		"name",
 		"user",
@@ -1470,6 +1486,8 @@ ERPNEXT_AUTONAME = {
 	# every idempotent installer in this app writes.
 	"User": "field:email",
 	"Role": "field:role_name",
+	"Role Profile": "field:role_profile",
+	"Module Profile": "field:module_profile_name",
 	# ERPNext's Asset Category IS its name (`autoname: field:asset_category_name`),
 	# which is what makes `frappe.db.exists("Asset Category", "Wind Machines")` both
 	# the idempotence check `create_asset_category` writes and the Link check
@@ -2190,6 +2208,9 @@ def purchase_invoice_item_fields() -> list:
 ERPNEXT_FIELD_TYPES = {
 	("User", "api_secret"): ("Password", None),
 	("User", "roles"): ("Table", "Has Role"),
+	("Role Profile", "roles"): ("Table", "Has Role"),
+	("Module Profile", "block_modules"): ("Table", "Block Module"),
+	("User", "block_modules"): ("Table", "Block Module"),
 	("DocType", "permissions"): ("Table", "DocPerm"),
 	("User Permission", "allow"): ("Link", "DocType"),
 	("User Permission", "for_value"): ("Dynamic Link", "allow"),
@@ -2505,6 +2526,9 @@ CHILD_TABLES = {
 	("Kanban Board", "columns"): "Kanban Board Column",
 	("Workspace", "shortcuts"): "Workspace Shortcut",
 	("User", "roles"): "Has Role",
+	("Role Profile", "roles"): "Has Role",
+	("Module Profile", "block_modules"): "Block Module",
+	("User", "block_modules"): "Block Module",
 	("DocType", "permissions"): "DocPerm",
 	("Workspace", "links"): "Workspace Link",
 	("Workspace", "number_cards"): "Workspace Number Card",
@@ -4658,7 +4682,8 @@ CHILD_TABLE_SOURCES = {
 	),
 	# v0.17.0. Both are child tables of core doctypes, and both are queried
 	# through `frappe.db.get_all` by `roles.py` exactly as they are on a site.
-	"Has Role": (("User", "roles"),),
+	"Has Role": (("User", "roles"), ("Role Profile", "roles")),
+	"Block Module": (("User", "block_modules"), ("Module Profile", "block_modules")),
 	"DocPerm": (("DocType", "permissions"),),
 	# v0.19.2. `training.rows_for_parents` queries this child doctype directly,
 	# filtering on `parenttype` — so both parents have to be flattened or the
