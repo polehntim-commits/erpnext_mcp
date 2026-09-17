@@ -61,6 +61,7 @@ is the app's existing answer to that question.
 from __future__ import annotations
 
 import json
+import re
 
 import frappe
 
@@ -210,6 +211,7 @@ def _adjustments() -> list:
 				"proposed_geometry",
 				"easement_geometry",
 				"generated_legal_description",
+				"notes",
 			],
 			limit=DRAW_CAP,
 			order_by="modified desc",
@@ -231,6 +233,12 @@ def _adjustments() -> list:
 				"proposed_unreadable": proposed_reason,
 				"has_description": bool(str(row.get("generated_legal_description") or "").strip()),
 				"easements": _corridors(row.get("name"), row.get("easement_geometry")),
+				#: Fixes typed into this adjustment's own notes. The child
+				#: easement rows are NOT read here: that is a document load per
+				#: adjustment across `DRAW_CAP` of them, for a marker on the one
+				#: the page happens to open. The form asks for that record's own
+				#: map and gets the rows with it.
+				"points": _gps_points(row.get("notes"), str(row.get("title") or row.get("name") or "")),
 			}
 		)
 	return out
@@ -572,6 +580,166 @@ def _geojson_text(value, label: str) -> str:
 	return json.dumps(value)
 
 
+# ── the corridor map one adjustment draws on its own form ───────────────────
+#: A coordinate written the way a person writes one: a number WITH a decimal
+#: fraction, an optional degree sign, and the hemisphere it is in.
+#: `45.577088°N` and `121.1940661 W` both match.
+#:
+#: THE DECIMAL POINT AND THE TWO LOOKAROUNDS ARE ALL THERE TO REFUSE ONE THING:
+#: township and range. `T1N R13E` is how every lot on this site is described —
+#: `1N 13E 9 2700` is the docname of the tax lot this was written for — and it
+#: is a pair of small integers with N and E stuck to them. Read as a fix it is
+#: 1°N 13°E, which is in the Gulf of Guinea, and it would draw without
+#: complaint. A real decimal-degree fix carries a fraction; a range does not.
+_GPS = re.compile(r"(?<![A-Za-z0-9.])(\d{1,3}\.\d+)\s*(?:\u00b0|deg\b)?\s*([NnSsEeWw])(?![A-Za-z])")
+_LATITUDE_LETTERS = "NS"
+
+
+def _gps_points(text, label: str = "") -> list:
+	"""Every GPS fix written into a note, as `{lat, lon, label}`.
+
+	THE HEMISPHERE LETTER AND A DECIMAL FRACTION ARE BOTH REQUIRED. Prose about
+	land is full of number pairs that are not coordinates — this app's own
+	easement notes carry "ORS 105.170-105.185" and "Min 20-ft radius", and every
+	lot on this site is named `1N 13E 9 2700`. A parser loose enough to read
+	those would draw a marker somewhere, confidently, on most of the records it
+	ran against. `45.577088N, 121.1940661W` says what it is;
+	`45.577088, -121.1940661` does not, and gets no marker rather than a wrong
+	one.
+
+	THE LETTER ALSO CARRIES THE SIGN. Wasco County is at longitude 121 WEST,
+	which is NEGATIVE 121 in every GeoJSON this app stores, and a note that says
+	`121.1940661°W` means the same place. Taking the number at face value would
+	land the well in Kazakhstan — the failure is silent, the marker draws
+	happily, and nobody checks a map that rendered.
+	"""
+	found = [(float(number), letter.upper()) for number, letter in _GPS.findall(str(text or ""))]
+	out = []
+	index = 0
+	while index < len(found) - 1:
+		first, second = found[index], found[index + 1]
+		is_lat = [value[1] in _LATITUDE_LETTERS for value in (first, second)]
+		if is_lat[0] == is_lat[1]:
+			# Two latitudes or two longitudes in a row is not a fix. Step over
+			# the first and try again from the second: a stray `40 N` before a
+			# real pair should not eat the pair that follows it.
+			index += 1
+			continue
+		latitude, longitude = (first, second) if is_lat[0] else (second, first)
+		degrees_lat = latitude[0] * (-1 if latitude[1] == "S" else 1)
+		degrees_lon = longitude[0] * (-1 if longitude[1] == "W" else 1)
+		index += 2
+		if abs(degrees_lat) > 90 or abs(degrees_lon) > 180:
+			continue
+		out.append({"lat": degrees_lat, "lon": degrees_lon, "label": label or "GPS"})
+	return out
+
+
+def _row_field(row, key: str):
+	"""One field off a child row, whichever shape the child row arrives in.
+
+	A BENCH HANDS BACK `Document` OBJECTS AND THE STANDALONE DOUBLE HANDS BACK
+	DICTS, and the difference is silent in the direction that matters:
+	`getattr(row, "notes", "")` reads a Document correctly and answers `""`
+	forever against a dict. Nothing raises, no test fails on a shape assertion,
+	and the feature is simply absent — which is how a marker that never appears
+	ships green. Asked both ways, both are right.
+	"""
+	if isinstance(row, dict):
+		return row.get(key)
+	value = getattr(row, key, None)
+	if value is None and hasattr(row, "get"):
+		return row.get(key)
+	return value
+
+
+def _lot_shape(lot: str, side: str) -> dict | None:
+	"""One County Tax Lot as a shape the form's map can draw, or nothing."""
+	if not lot or not compat.doctype_exists(COUNTY_TAX_LOT) or not _may_read(COUNTY_TAX_LOT):
+		return None
+	row = frappe.db.get_value(
+		COUNTY_TAX_LOT,
+		lot,
+		["name", "map_taxlot", "owner_of_record", "acres_gis", "geometry"],
+		as_dict=True,
+	)
+	if not row:
+		return None
+	geometry, reason = farm_overview.parse_geometry(row.get("geometry"))
+	if not geometry:
+		return {"side": side, "name": lot, "label": lot, "geometry": None, "unreadable": reason}
+	return {
+		"side": side,
+		"name": row.get("name"),
+		"label": str(row.get("map_taxlot") or lot),
+		"owner": row.get("owner_of_record") or None,
+		"acres": float(row.get("acres_gis") or 0) or None,
+		"route": farm_overview._route(COUNTY_TAX_LOT, str(row.get("name") or lot)),
+		"geometry": geometry,
+		"unreadable": "",
+	}
+
+
+def _adjustment_map(name=None) -> dict:
+	"""The two lots, the corridors already agreed, and the fixes named in the notes.
+
+	WHAT THE FORM DRAWS AND THE PAGE DRAWS ARE THE SAME SHAPES. This reads the
+	adjustment's own two `County Tax Lot` links rather than the whole farm, so
+	the form's map opens on the ground the agreement is about and costs one row
+	each instead of `DRAW_CAP` of them. Tracing a corridor still happens on
+	`/app/land-map`, which has the measuring, the closure and the exports; a
+	form that drew its own would be a second implementation of all of it.
+
+	THE EASEMENT ROWS ARE READ THROUGH THE PARENT. Filtering the child doctype
+	by `parent` answers on a bench and answers nothing at all in the standalone
+	suite, which is a way to ship a marker that never appears.
+	"""
+	adjustment = str(name or "").strip()
+	if not adjustment:
+		raise ToolError("name is required: which lot line adjustment's map?")
+	_may_read_doc(LOT_LINE_ADJUSTMENT, adjustment)
+
+	row = frappe.db.get_value(
+		LOT_LINE_ADJUSTMENT,
+		adjustment,
+		["name", "title", "lot_1", "lot_2", "proposed_geometry", "easement_geometry", "notes"],
+		as_dict=True,
+	)
+	if not row:
+		raise ToolError(f"no Lot Line Adjustment named {adjustment}.")
+
+	lots = [
+		shape
+		for shape in (
+			_lot_shape(str(row.get("lot_1") or ""), "Lot 1"),
+			_lot_shape(str(row.get("lot_2") or ""), "Lot 2"),
+		)
+		if shape
+	]
+	proposed, proposed_reason = farm_overview.parse_geometry(row.get("proposed_geometry"))
+
+	points = _gps_points(row.get("notes"), "From the adjustment's notes")
+	try:
+		document = frappe.get_doc(LOT_LINE_ADJUSTMENT, adjustment)
+	except Exception:
+		document = None
+	for index, easement in enumerate(getattr(document, "easements", None) or [], start=1):
+		kind = str(_row_field(easement, "easement_type") or "") or f"Easement {index}"
+		points.extend(_gps_points(_row_field(easement, "notes"), kind))
+
+	return {
+		"name": adjustment,
+		"title": row.get("title") or "",
+		"route": f"/app/lot-line-adjustment/{adjustment}",
+		"lots": lots,
+		"easements": _corridors(adjustment, row.get("easement_geometry")),
+		"proposed_geometry": proposed,
+		"proposed_unreadable": proposed_reason,
+		"points": points,
+		"disclaimer": surveying.DISCLAIMER,
+	}
+
+
 # ── the exports ─────────────────────────────────────────────────────────────
 def _may_read_doc(doctype: str, name: str) -> None:
 	"""Frappe's own answer to "may this login read THIS record".
@@ -638,11 +806,17 @@ def _export_pdf(name=None, kind=None) -> None:
 	_download(answer["pdf"], answer["filename"], answer["content_type"])
 
 
-# ── the whitelisted surface: six methods ────────────────────────────────────
+# ── the whitelisted surface: seven methods ──────────────────────────────────
 @frappe.whitelist()
 def land_map(company=None):
 	"""Everything /app/land-map draws: the farm map's layers plus the county tax lots."""
 	return speaks_frappe(_land_map, company=company)
+
+
+@frappe.whitelist()
+def adjustment_map(name=None):
+	"""One adjustment's own map: its two tax lots, its corridors, its GPS fixes."""
+	return speaks_frappe(_adjustment_map, name=name)
 
 
 @frappe.whitelist()

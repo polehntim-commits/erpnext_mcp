@@ -293,6 +293,8 @@ function erpnext_mcp_land_map(page) {
 			say(__("{0} points drawn. Press Compute.", [String(drawn_points.length)]));
 		});
 
+		seed_stored();
+
 		// An adjustment already carrying a proposal opens with it on the map.
 		const chosen = chosen_adjustment();
 		if (chosen && chosen.proposed_geometry) {
@@ -338,6 +340,63 @@ function erpnext_mcp_land_map(page) {
 			return;
 		}
 		coordinates.forEach((item) => walk(item, out));
+	}
+
+	/**
+	 * Put the corridors already ON the record onto the map, and into the list.
+	 *
+	 * v0.174.0, AND IT CLOSES A HOLE THAT DELETED DATA. `save` writes the whole
+	 * `easement_geometry` column from this list. Before this, the list only ever
+	 * held corridors traced in the current visit — so opening an adjustment with
+	 * a ditch and a driveway already agreed, tracing a third, and saving wrote a
+	 * column containing the third alone. The two that were already there were
+	 * gone, with a green "Saved" toast over the top and nothing to say a column
+	 * had just been emptied.
+	 *
+	 * Seeding fixes the save and the sight of it in one move: a corridor on the
+	 * record is now on the map when the page opens, which is the other half of
+	 * what was wrong — a strip of ground somebody agreed to last year was
+	 * invisible to the person drawing the line that crosses it.
+	 */
+	function seed_stored() {
+		easements = [];
+		if (!easement_layer || !leaflet) {
+			return;
+		}
+		easement_layer.clearLayers();
+		const chosen = chosen_adjustment();
+		((chosen && chosen.easements) || []).forEach((corridor) => {
+			if (!corridor.geometry) {
+				return;
+			}
+			const feature = {
+				type: "Feature",
+				geometry: corridor.geometry,
+				properties: {
+					label: corridor.label,
+					easement_type: corridor.easement_type,
+					burdened: corridor.burdened,
+					benefited: corridor.benefited,
+				},
+			};
+			easements.push(feature);
+			easement_layer.addLayer(
+				leaflet.geoJSON(corridor.geometry, {
+					style: { color: "#7575ff", weight: 6, opacity: 0.5 },
+				}).bindPopup(frappe.utils.escape_html(corridor.label || ""))
+			);
+		});
+		// Every fix the server read out of this adjustment's notes. The well an
+		// easement is FOR is the one thing a corridor has to reach.
+		((chosen && chosen.points) || []).forEach((fix) => {
+			easement_layer.addLayer(
+				leaflet.marker([fix.lat, fix.lon]).bindPopup(
+					frappe.utils.escape_html(
+						fix.label ? `${fix.label} — ${fix.lat}, ${fix.lon}` : `${fix.lat}, ${fix.lon}`
+					)
+				)
+			);
+		});
 	}
 
 	function collection() {
@@ -614,6 +673,11 @@ function erpnext_mcp_land_map(page) {
 	});
 	$adjustment.on("change", function () {
 		adjustment = $(this).val() || null;
+		// The picker is the OTHER way in — the page opened from the sidebar
+		// with nothing attached, and a record is chosen now. Its corridors have
+		// to arrive with it: not seeding here would leave them invisible and,
+		// worse, leave Save about to write a column that does not contain them.
+		seed_stored();
 	});
 	$body.find(".lm-draw-line").on("click", () => start_drawing("line"));
 	$body.find(".lm-draw-area").on("click", () => start_drawing("area"));
@@ -626,10 +690,11 @@ function erpnext_mcp_land_map(page) {
 		if (drawn_layer) {
 			drawn_layer.clearLayers();
 		}
-		if (easement_layer) {
-			easement_layer.clearLayers();
-		}
-		easements = [];
+		// Clear throws away THIS visit's tracing. The corridors on the record
+		// come straight back, because a button that clears a drawing must not
+		// quietly stage the deletion of a column — which is what emptying this
+		// list and then pressing Save would do.
+		seed_stored();
 		drawing_easement = false;
 		drawn_points = [];
 		preview = null;

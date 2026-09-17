@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.174.0 — 2026-09-17 — the strip of ground somebody may cross
+
+The Lot Line Adjustment form draws its own map now, and the land map stops
+deleting the corridors it was not shown. **897 tools** (unchanged). One new
+whitelisted Desk method; nothing in the MCP surface moves.
+
+- **A map on the adjustment form.** Both county tax lots, coloured by side and
+  labelled with the owner of record and the GIS acreage; every access corridor
+  already agreed, drawn heavier than the ground it crosses because it is the
+  smallest shape on the map and the reason the map is open; the proposed lot
+  line, if there is one, in red dashes. Read-only on purpose — `/app/land-map`
+  owns the tracing, the bearings, the closure, the draft description and the
+  exports, and a second drawing surface would be a second implementation of all
+  of it. The form carries a button to it and renders through the same
+  `geo_map_widget.js` the other seven map-carrying forms use.
+- **A corridor on the record is no longer deleted by saving.** `save` writes the
+  whole `easement_geometry` column from the page's list, and the list only ever
+  held corridors traced in the current visit. Open an adjustment with a ditch
+  and a driveway already agreed, trace a third, press Save, and the column came
+  back holding the third alone — under a green "Saved" toast, with nothing on
+  screen to say two had just gone. Stored corridors are now seeded onto the map
+  and into that list when the page opens **and** when one is chosen from the
+  picker, which is the commoner door and was the worse half: invisible on the
+  map, and staged for deletion.
+- **The well comes out of the notes.** A GPS fix typed into an easement note or
+  the adjustment's own notes is read and marked. The parser insists on a
+  hemisphere letter *and* a decimal fraction before it will call something a
+  coordinate, because `T1N R13E` is how every lot on this site is described and
+  reading that as 1°N 13°E puts the marker in the Gulf of Guinea. The letter
+  carries the sign, too: `121.1940661°W` is **−121.1940661**, and taking the
+  number at face value draws a well in Kazakhstan without complaining.
+- **`adjustment_map`** — the one new whitelisted method behind the form's map.
+  It reads the adjustment's own two tax-lot links rather than the whole farm, so
+  the map costs a row each instead of the county, and it gates on Frappe's
+  `read` permission for that record.
+- **A lot with no cached boundary is said out loud.** It is the common failure
+  and it is invisible on a map: the other lot draws, the view fits to it, and
+  one side of the agreement is silently missing.
+
 ## 0.173.0 — 2026-09-17 — the files a surveyor asks for
 
 v0.171.0 put a drawing surface on `/app/land-map` and stored what it produced on

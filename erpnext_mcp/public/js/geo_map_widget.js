@@ -513,6 +513,7 @@ frappe.provide("erpnext_mcp.geo_map");
 	 *   geometries: [{ geometry, centroid, label, colour }]  — polygons
 	 *   point:      [lat, lon]                               — a single marker
 	 *   point_label: string
+	 *   points: [{lat, lon, label}]        // several fixes, each with its own label
 	 *   track:      [{ lat, lon, timestamp, label }]         — a crew's breadcrumbs
 	 *   editable:   { doctype, docname, geometry, centroid, county } — v0.33.0
 	 *   home:       { centre: [lat, lon], zoom }             — where an empty map opens
@@ -524,7 +525,10 @@ frappe.provide("erpnext_mcp.geo_map");
 		spec = spec || {};
 		const editable = spec.editable || null;
 		const has_anything =
-			(spec.geometries || []).length || spec.point || (spec.track || []).length;
+			(spec.geometries || []).length ||
+			spec.point ||
+			(spec.points || []).length ||
+			(spec.track || []).length;
 		if (!has_anything && !editable) {
 			return;
 		}
@@ -599,6 +603,22 @@ frappe.provide("erpnext_mcp.geo_map");
 						);
 					bounds.push(spec.point);
 				}
+
+				// v0.174.0. `point` is one fix and stays one fix: eight callers
+				// pass it and none pass this. `points` is the list, for a record
+				// that names several — a well, a pump and a gate in one set of
+				// easement notes — and each keeps its own label.
+				(spec.points || []).forEach((fix) => {
+					const position = [fix.lat, fix.lon];
+					L.marker(position)
+						.addTo(map)
+						.bindPopup(
+							escape_html(
+								fix.label ? `${fix.label} — ${fix.lat}, ${fix.lon}` : `${fix.lat}, ${fix.lon}`
+							)
+						);
+					bounds.push(position);
+				});
 
 				const track = spec.track || [];
 				if (track.length) {

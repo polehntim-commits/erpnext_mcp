@@ -500,8 +500,14 @@ class TheButtonsRun(unittest.TestCase):
 		calls.legal = root.find(".lm-legal").val();""",
 			)
 			.replace(
-				"const calls = { methods: [], args: [], drawn: [], rows: 0, layers: 0, indicators: [] };",
-				"const calls = { methods: [], args: [], drawn: [], rows: 0, layers: 0, indicators: [], opened: [] };",
+				# STRUCTURAL, NOT THE LINE AS IT READS TODAY. This used to name the
+				# whole `const calls = {...}` line verbatim, so v0.174.0 adding one
+				# key to it in `test_land_map` turned this into a silent no-op:
+				# `calls.opened` was never created and all three tests here failed
+				# inside `window.open` with a TypeError that named neither file.
+				# Anchoring on the closing brace survives another key being added.
+				"indicators: []",
+				"indicators: [], opened: []",
 			)
 			.replace(
 				# The harness points `window` at the global object AFTER the stubs are
@@ -521,6 +527,23 @@ class TheButtonsRun(unittest.TestCase):
 				"\t\t}",
 			)
 		)
+		# EVERY PATCH ABOVE IS A STRING REPLACE INTO ANOTHER TEST FILE'S HARNESS,
+		# and `str.replace` that matches nothing returns the string unchanged and
+		# says nothing. That is how v0.174.0 broke this class: one key added to
+		# `calls` in test_land_map, one anchor here quietly matching nothing, and
+		# three failures inside `window.open` naming neither cause. A miss is now
+		# a named failure here rather than a TypeError over there.
+		for fragment in (
+			"calls.opened.push(url)",
+			"opened: []",
+			"calls.opened_before_saving",
+			'answer = { name: "LLA-2026-0001"',
+		):
+			assert fragment in harness, (
+				f"the export harness patch for {fragment!r} matched nothing — "
+				"test_land_map.HARNESS changed under it, so re-anchor the replace above"
+			)
+
 		answer, preview = page_fixtures()
 		with tempfile.TemporaryDirectory() as folder:
 			path = Path(folder) / "harness.js"

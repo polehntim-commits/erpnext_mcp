@@ -40,6 +40,10 @@ PAGE_DIR = REPO / "erpnext_mcp" / "erpnext_mcp" / "page" / "land_map"
 WIDGET = REPO / "erpnext_mcp" / "public" / "js" / "geo_map_widget.js"
 
 LOT = "1N 13E 3 1000"
+STORED_CORRIDOR = "Recorded ditch easement"
+#: The well on LLA-2026-0002, as its own notes write it. Wasco County is at
+#: longitude 121 WEST, so the stored longitude is NEGATIVE.
+WELL = (45.577088, -121.1940661)
 NEIGHBOUR = "Highland LLC"
 
 SOUTH, NORTH = 45.5800, 45.5820
@@ -478,10 +482,245 @@ class ThePageOnDisk(unittest.TestCase):
 		self.assertRegex(self.template(), r"\.lm-map\s*\{[^}]*height:")
 
 	def test_the_form_button_routes_to_this_page(self):
-		button = (REPO / "erpnext_mcp" / "public" / "js" / "lot_line_adjustment_map.js").read_text()
-		self.assertIn('frappe.set_route("land-map")', button)
-		self.assertIn("lot_line_adjustment: frm.doc.name", button)
+		self.assertIn('frappe.set_route("land-map")', self.form_script())
+		self.assertIn("lot_line_adjustment: frm.doc.name", self.form_script())
 		self.assertIn("lot_line_adjustment", self.script())
+
+	# ── v0.174.0: the form draws a map of its own ───────────────────────────
+	@staticmethod
+	def form_script() -> str:
+		return (REPO / "erpnext_mcp" / "public" / "js" / "lot_line_adjustment_map.js").read_text()
+
+	def test_the_form_script_carries_the_licence_header_on_its_first_line(self):
+		self.assertEqual(self.form_script().split("\n", 1)[0], "// SPDX-License-Identifier: MIT")
+
+	def test_the_form_asks_for_the_method_that_exists_and_is_whitelisted(self):
+		self.assertIn('"erpnext_mcp.api.land_map.adjustment_map"', self.form_script())
+		self.assertTrue(getattr(land_map.adjustment_map, "whitelisted", True))
+
+	def test_the_form_draws_through_the_shared_widget(self):
+		"""Not its own Leaflet, not its own tiles — the widget every other
+		map-carrying form in this app renders through."""
+		self.assertIn("erpnext_mcp.geo_map.render", self.form_script())
+		for forbidden in ("arcgisonline", "tile.openstreetmap", "cdnjs.cloudflare", "leaflet.js"):
+			with self.subTest(forbidden=forbidden):
+				self.assertNotIn(forbidden, self.form_script())
+
+	def test_the_form_never_writes_a_corridor_into_the_proposed_column(self):
+		"""AN ACCESS CORRIDOR IS NOT A LOT LINE.
+
+		`proposed_geometry` drives the legal description, the before-and-after
+		acreage and the survey packet. A corridor written there would have the
+		app computing "acres if giving" for a driveway and printing it into a
+		description as somebody's new boundary. The form is read-only, so the
+		only correct number of writes is none at all.
+		"""
+		script = self.form_script()
+		for forbidden in ("proposed_geometry:", "easement_geometry:", "save_proposal", "frm.set_value"):
+			with self.subTest(forbidden=forbidden):
+				self.assertNotIn(forbidden, script)
+
+	def test_the_widget_takes_the_list_of_fixes_the_form_hands_it(self):
+		"""`points` is the plural the form passes; `point` is the singular the
+		other seven forms pass, and it is still there."""
+		widget = WIDGET.read_text()
+		self.assertIn("spec.points || []", widget)
+		self.assertIn("if (spec.point) {", widget)
+		self.assertIn("points: answer.points || []", self.form_script())
+
+
+# ── 6 ───────────────────────────────────────────────────────────────────────
+class TheGPSInTheNotes(unittest.TestCase):
+	"""Reading a coordinate out of prose, and — mostly — refusing to.
+
+	A marker in the wrong place is worse than no marker, because a map that
+	rendered looks like a map that is right. Every refusal here is a shape this
+	app's own notes actually contain.
+	"""
+
+	def test_a_fix_with_a_degree_sign_is_read(self):
+		notes = "Well at GPS 45.577088\u00b0N, 121.1940661\u00b0W (asset HI-BUNN-WELL)."
+		self.assertEqual(
+			land_map._gps_points(notes, "Well"),
+			[{"lat": 45.577088, "lon": -121.1940661, "label": "Well"}],
+		)
+
+	def test_a_fix_without_a_degree_sign_is_read(self):
+		notes = "shared well at GPS 45.577088N, 121.1940661W. Includes access corridor"
+		self.assertEqual(land_map._gps_points(notes)[0]["lat"], 45.577088)
+
+	def test_west_is_negative(self):
+		"""THE ONE THAT PUTS A WELL IN KAZAKHSTAN.
+
+		Wasco County is at longitude 121 WEST. Every geometry this app stores
+		writes that as -121, and a note writes it as 121W. Taking the number at
+		face value draws a marker, cleanly, 5,000 miles away.
+		"""
+		self.assertEqual(land_map._gps_points("45.5N, 121.19W")[0]["lon"], -121.19)
+
+	def test_south_is_negative(self):
+		self.assertEqual(land_map._gps_points("12.5S, 45.25E")[0]["lat"], -12.5)
+
+	def test_a_township_and_range_is_not_a_coordinate(self):
+		"""`1N 13E 9 2700` IS THE DOCNAME OF THE TAX LOT THIS FEATURE IS FOR.
+
+		Read as a fix it is 1\u00b0N 13\u00b0E, in the Gulf of Guinea, and it would
+		draw without complaint on the very records this parser runs against.
+		"""
+		for notes in ("Section 9, T1N R13E", "lot 1N 13E 9 2700", "T2S R14E of the W.M."):
+			with self.subTest(notes=notes):
+				self.assertEqual(land_map._gps_points(notes), [])
+
+	def test_a_statute_citation_is_not_a_coordinate(self):
+		notes = "Formal easement per ORS 105.170-105.185. Min 20-ft radius around well."
+		self.assertEqual(land_map._gps_points(notes), [])
+
+	def test_an_unsigned_pair_gets_no_marker_rather_than_a_guessed_one(self):
+		self.assertEqual(land_map._gps_points("45.577088, -121.1940661"), [])
+
+	def test_either_order_is_read(self):
+		self.assertEqual(
+			land_map._gps_points("121.1940661W, 45.577088N"),
+			land_map._gps_points("45.577088N, 121.1940661W"),
+		)
+
+	def test_an_out_of_range_pair_is_refused(self):
+		self.assertEqual(land_map._gps_points("95.5N, 200.5W"), [])
+
+	def test_a_child_row_reads_the_same_in_both_shapes(self):
+		"""THE SUITE ONLY EVER SEES ONE OF THESE.
+
+		The standalone double hands back dicts; a bench hands back `Document`
+		objects. Only one branch runs here, so the other is asserted directly —
+		otherwise the accessor is correct for the harness and silently empty on
+		the site, which is the one place it matters.
+		"""
+
+		class Bench:  # what a real Frappe child row behaves like
+			def __init__(self, notes):
+				self.notes = notes
+
+			def get(self, key):
+				return getattr(self, key, None)
+
+		notes = "GPS 45.577088N, 121.1940661W"
+		self.assertEqual(land_map._row_field({"notes": notes}, "notes"), notes)
+		self.assertEqual(land_map._row_field(Bench(notes), "notes"), notes)
+		self.assertIsNone(land_map._row_field({}, "notes"))
+		self.assertIsNone(land_map._row_field(Bench(None), "notes"))
+
+	def test_empty_prose_is_no_points_and_no_exception(self):
+		for notes in (None, "", "   ", "no coordinates here at all"):
+			with self.subTest(notes=notes):
+				self.assertEqual(land_map._gps_points(notes), [])
+
+
+# ── 7 ───────────────────────────────────────────────────────────────────────
+class TheAdjustmentsOwnMap(LandMapTestCase):
+	"""What the Lot Line Adjustment form draws, read from the record itself."""
+
+	def test_it_carries_both_lots_with_their_geometry(self):
+		lot = self.a_lot()
+		name = self.an_adjustment(lot_1=lot)
+		answer = land_map._adjustment_map(name)
+		sides = {shape["side"]: shape for shape in answer["lots"]}
+		self.assertEqual(sides["Lot 1"]["label"], LOT)
+		self.assertEqual(sides["Lot 1"]["geometry"]["type"], "Polygon")
+		self.assertEqual(sides["Lot 1"]["acres"], 40.0)
+
+	def test_a_lot_that_is_not_linked_is_simply_absent(self):
+		name = self.an_adjustment(lot_1=self.a_lot())
+		self.assertEqual([shape["side"] for shape in land_map._adjustment_map(name)["lots"]], ["Lot 1"])
+
+	def test_the_stored_corridors_come_back_labelled(self):
+		name = self.an_adjustment(lot_1=self.a_lot())
+		frappe.db.set_value(
+			land.LOT_LINE_ADJUSTMENT,
+			name,
+			"easement_geometry",
+			json.dumps(
+				{
+					"type": "FeatureCollection",
+					"features": [
+						{
+							"type": "Feature",
+							"properties": {"label": "Dry Hollow ditch"},
+							"geometry": {"type": "LineString", "coordinates": [[WEST, SOUTH], [EAST, SOUTH]]},
+						}
+					],
+				}
+			),
+		)
+		corridors = land_map._adjustment_map(name)["easements"]
+		self.assertEqual([corridor["label"] for corridor in corridors], ["Dry Hollow ditch"])
+
+	def test_a_gps_fix_in_the_notes_becomes_a_point(self):
+		name = self.an_adjustment(lot_1=self.a_lot())
+		frappe.db.set_value(
+			land.LOT_LINE_ADJUSTMENT, name, "notes", "Well at GPS 45.577088\u00b0N, 121.1940661\u00b0W."
+		)
+		points = land_map._adjustment_map(name)["points"]
+		self.assertEqual(points[0]["lat"], 45.577088)
+		self.assertEqual(points[0]["lon"], -121.1940661)
+
+	def test_a_gps_fix_on_an_easement_ROW_becomes_a_point(self):
+		"""THE FIX IS USUALLY TYPED ON THE ROW, NOT THE HEADER.
+
+		The easement child rows are read through the parent document. Filtering
+		the child doctype by `parent` answers on a bench and answers nothing at
+		all here, which is how a marker that never appears ships green.
+		"""
+		name = self.an_adjustment(lot_1=self.a_lot())
+		self.configure(enabled=1, allow_lla_add_easement=1, **self.SWITCHES)
+		self.tool_data(
+			"lla_add_easement",
+			{
+				"name": name,
+				"easement_type": "Access",
+				"burdened": "Party 1",
+				"benefited": "Party 2",
+				"notes": "well at GPS 45.577088\u00b0N, 121.1940661\u00b0W, 20-ft radius",
+			},
+		)
+		points = land_map._adjustment_map(name)["points"]
+		self.assertEqual([point["lat"] for point in points], [45.577088])
+		self.assertEqual(points[0]["lon"], -121.1940661)
+		self.assertEqual(points[0]["label"], "Access")
+
+	def test_a_record_with_nothing_mapped_answers_empty_rather_than_raising(self):
+		answer = land_map._adjustment_map(self.an_adjustment())
+		self.assertEqual(answer["easements"], [])
+		self.assertEqual(answer["points"], [])
+		self.assertIsNone(answer["proposed_geometry"])
+
+	def test_it_names_the_record_and_carries_the_disclaimer(self):
+		name = self.an_adjustment()
+		answer = land_map._adjustment_map(name)
+		self.assertEqual(answer["name"], name)
+		self.assertEqual(answer["route"], f"/app/lot-line-adjustment/{name}")
+		self.assertEqual(answer["disclaimer"], surveying.DISCLAIMER)
+
+	def test_asking_for_nothing_is_refused_by_name(self):
+		with self.assertRaises(ToolError) as caught:
+			land_map._adjustment_map("")
+		self.assertIn("name is required", str(caught.exception))
+
+	def test_asking_for_a_record_that_is_not_there_is_refused_by_name(self):
+		"""Past the permission check, a missing row is named rather than
+		answered with an empty map that looks like a record with no ground."""
+		with self.assertRaises(ToolError) as caught:
+			land_map._adjustment_map("LLA-9999-9999")
+		self.assertIn("LLA-9999-9999", str(caught.exception))
+
+	def test_a_login_without_read_permission_is_refused(self):
+		"""The gate is Frappe's own `read` on THIS record, so a User Permission
+		that scopes somebody to one company is enforced per document."""
+		name = self.an_adjustment()
+		# The double allows by default, so a role change alone proves nothing
+		# here: this is the lever that actually makes it say no.
+		STORE.denied_permissions.add((land.LOT_LINE_ADJUSTMENT, name, "read"))
+		with self.assertRaises(Exception):
+			land_map._adjustment_map(name)
 
 
 # ── 5 ───────────────────────────────────────────────────────────────────────
@@ -493,7 +732,7 @@ const SCRIPT = process.argv[2];
 const ANSWER = JSON.parse(process.argv[3]);
 const PREVIEW = JSON.parse(process.argv[4]);
 
-const calls = { methods: [], args: [], drawn: [], rows: 0, layers: 0, indicators: [] };
+const calls = { methods: [], args: [], drawn: [], rows: 0, layers: 0, indicators: [], markers: [] };
 
 function node(selector) {
 	const self = {
@@ -504,7 +743,7 @@ function node(selector) {
 		text_content: "",
 		children: [],
 		find: function (child) { return node(child); },
-		on: function (event, fn) { self.handlers[event] = fn; registry[selector] = self; return self; },
+		on: function (event, fn) { self.handlers[event] = fn.bind(self); registry[selector] = self; return self; },
 		text: function (value) { if (value === undefined) return self.text_content; self.text_content = value; return self; },
 		html: function (value) {
 			if (value === undefined) return self.html_content;
@@ -531,7 +770,10 @@ root.find = function (selector) {
 	return registry[selector];
 };
 
-global.$ = function () { return root; };
+// `$(this)` inside a change handler must answer the element that changed, not
+// the page root — otherwise the adjustment picker reads the wrong value and no
+// harness can drive it.
+global.$ = function (thing) { return thing && thing.selector ? thing : root; };
 global.__ = function (text, args) {
 	let out = String(text);
 	(args || []).forEach((value, index) => { out = out.replace("{" + index + "}", value); });
@@ -567,6 +809,11 @@ const L = {
 	},
 	latLng: latlng,
 	latLngBounds: function (a, b) { return [a, b]; },
+	marker: function (position) {
+		const m = { position: position, bindPopup: function () { return m; }, addTo: function () { return m; } };
+		calls.markers.push(position);
+		return m;
+	},
 	Draw: {
 		Event: { CREATED: "draw:created" },
 		Polyline: function () { this.enable = function () { calls.drawn.push("line"); }; this.disable = function () {}; },
@@ -719,7 +966,23 @@ def page_fixtures() -> tuple:
 				"route": "/app/lot-line-adjustment/LLA-2026-0001",
 				"proposed_geometry": None,
 				"has_description": False,
-				"easements": [],
+				#: A corridor agreed long before this visit, and the well it
+				#: reaches. Both are on the RECORD, which is the case the page
+				#: used to be blind to — and blind in a way that deleted them.
+				"easements": [
+					{
+						"adjustment": "LLA-2026-0001",
+						"label": STORED_CORRIDOR,
+						"easement_type": "Access",
+						"burdened": "Party 1",
+						"benefited": "Party 2",
+						"geometry": {
+							"type": "LineString",
+							"coordinates": [[WEST, SOUTH], [EAST, SOUTH]],
+						},
+					}
+				],
+				"points": [{"lat": WELL[0], "lon": WELL[1], "label": "Well"}],
 			}
 		],
 	}
@@ -752,6 +1015,181 @@ def page_fixtures() -> tuple:
 	return answer, preview
 
 
+# ── 8 ───────────────────────────────────────────────────────────────────────
+FORM_HARNESS = r"""// Run the real Lot Line Adjustment form script under a stubbed Desk.
+const fs = require("fs");
+const vm = require("vm");
+const SCRIPT = process.argv[2];
+const ANSWER = JSON.parse(process.argv[3]);
+
+const out = { handlers: [], spec: null, comments: [], buttons: [], methods: [], error: null };
+
+global.window = global;
+global.__ = function (text, args) {
+	let s = String(text);
+	(args || []).forEach((v, i) => { s = s.replace("{" + i + "}", v); });
+	return s;
+};
+global.erpnext_mcp = { geo_map: { render: (frm, spec) => { out.spec = spec; } } };
+global.frappe = {
+	ui: { form: { on: (doctype, handlers) => { out.handlers.push(doctype); global.__refresh = handlers.refresh; } } },
+	call: (options) => { out.methods.push(options.method); out.args = options.args; return Promise.resolve({ message: ANSWER }); },
+	set_route: () => {},
+	route_options: {},
+	utils: { escape_html: (v) => String(v) },
+};
+
+vm.runInThisContext(fs.readFileSync(SCRIPT, "utf8"), { filename: SCRIPT });
+
+const frm = {
+	doc: { name: "LLA-2026-0002", proposed_geometry: null, generated_legal_description: null },
+	is_new: () => false,
+	add_custom_button: (label) => { out.buttons.push(label); },
+	dashboard: { add_comment: (text, colour) => out.comments.push({ text: text, colour: colour }) },
+};
+
+Promise.resolve()
+	.then(() => global.__refresh(frm))
+	.then(() => new Promise((r) => setTimeout(r, 0)))
+	.then(() => new Promise((r) => setTimeout(r, 0)))
+	.then(() => console.log(JSON.stringify(out)))
+	.catch((e) => { out.error = String((e && e.stack) || e); console.log(JSON.stringify(out)); });
+"""
+
+
+def form_answer() -> dict:
+	"""LLA-2026-0002 as the server describes it: one lot mapped, one not.
+
+	The unmapped second lot is the realistic half. A tax lot is only on the map
+	once somebody has run a county lookup for it, and a form that drew one lot
+	and said nothing would look like a complete picture of one side.
+	"""
+	return {
+		"name": "LLA-2026-0002",
+		"title": "Well Access Easement",
+		"route": "/app/lot-line-adjustment/LLA-2026-0002",
+		"lots": [
+			{
+				"side": "Lot 1",
+				"name": "1N 13E 9 2700",
+				"label": "1N 13E 9 2700",
+				"owner": "HIGHLAND LTD LIABILITY CO",
+				"acres": 65.6,
+				"geometry": box(WEST, SOUTH, EAST, NORTH),
+				"unreadable": "",
+			},
+			{
+				"side": "Lot 2",
+				"name": "1N 13E 9 2500",
+				"label": "1N 13E 9 2500",
+				"owner": "POLEHN DONELLA TRUSTEE",
+				"acres": 39.67,
+				"geometry": None,
+				"unreadable": "",
+			},
+		],
+		"easements": [
+			{
+				"adjustment": "LLA-2026-0002",
+				"label": "Well access",
+				"easement_type": "Access",
+				"burdened": "Party 1",
+				"benefited": "Party 2",
+				"geometry": {"type": "LineString", "coordinates": [[WEST, SOUTH], [EAST, SOUTH]]},
+			}
+		],
+		"proposed_geometry": None,
+		"proposed_unreadable": "",
+		"points": [{"lat": WELL[0], "lon": WELL[1], "label": "Access"}],
+		"disclaimer": surveying.DISCLAIMER,
+	}
+
+
+@unittest.skipUnless(shutil.which("node"), "needs node to execute the form script")
+class TheFormRuns(unittest.TestCase):
+	"""THE FORM SCRIPT, EXECUTED.
+
+	Every other assertion about this file is a substring match, and a substring
+	matches the whole file whether or not the line it is on ever runs. This
+	opens the record and reads what the script actually handed the widget.
+	"""
+
+	report: ClassVar[dict] = {}
+
+	@classmethod
+	def setUpClass(cls):
+		with tempfile.TemporaryDirectory() as folder:
+			harness = Path(folder) / "form_harness.js"
+			harness.write_text(FORM_HARNESS)
+			result = subprocess.run(
+				[
+					"node",
+					str(harness),
+					str(REPO / "erpnext_mcp" / "public" / "js" / "lot_line_adjustment_map.js"),
+					json.dumps(form_answer()),
+				],
+				capture_output=True,
+				text=True,
+				timeout=60,
+			)
+		if result.returncode != 0:
+			raise AssertionError(f"the form script would not run: {result.stderr[-2000:]}")
+		cls.report = json.loads(result.stdout.strip().splitlines()[-1])
+
+	def test_it_ran_at_all(self):
+		self.assertIsNone(self.report["error"])
+		self.assertEqual(self.report["handlers"], ["Lot Line Adjustment"])
+
+	def test_it_asks_the_server_for_this_records_map(self):
+		self.assertEqual(self.report["methods"], ["erpnext_mcp.api.land_map.adjustment_map"])
+		self.assertEqual(self.report["args"]["name"], "LLA-2026-0002")
+
+	def test_the_mapped_lot_is_drawn_and_named(self):
+		labels = [shape["label"] for shape in self.report["spec"]["geometries"]]
+		self.assertTrue(any("1N 13E 9 2700" in label for label in labels))
+		self.assertTrue(any("HIGHLAND" in label for label in labels))
+
+	def test_the_corridor_is_drawn_and_says_who_it_burdens(self):
+		corridor = next(
+			shape for shape in self.report["spec"]["geometries"] if "Well access" in shape["label"]
+		)
+		self.assertEqual(corridor["geometry"]["type"], "LineString")
+		self.assertIn("burdens Party 1", corridor["label"])
+		self.assertIn("benefits Party 2", corridor["label"])
+
+	def test_the_corridor_is_drawn_more_heavily_than_the_ground_it_crosses(self):
+		"""It is the smallest shape on the map and the reason the map is open."""
+		shapes = {shape["label"]: shape for shape in self.report["spec"]["geometries"]}
+		corridor = next(shape for label, shape in shapes.items() if "Well access" in label)
+		lot = next(shape for label, shape in shapes.items() if "1N 13E 9 2700" in label)
+		self.assertGreater(corridor["fill_opacity"], lot["fill_opacity"])
+
+	def test_the_well_is_handed_to_the_widget_as_a_point(self):
+		self.assertEqual(self.report["spec"]["points"], [{"lat": WELL[0], "lon": WELL[1], "label": "Access"}])
+
+	def test_a_lot_with_no_cached_boundary_is_said_out_loud_in_red(self):
+		"""The failure that is invisible on a map: the other lot draws, the view
+		fits to it, and one side of the agreement is silently missing."""
+		red = [comment for comment in self.report["comments"] if comment["colour"] == "red"]
+		self.assertTrue(red, self.report["comments"])
+		self.assertIn("1N 13E 9 2500", red[0]["text"])
+		self.assertIn("no cached boundary", red[0]["text"])
+
+	def test_it_counts_what_it_drew(self):
+		summary = " ".join(comment["text"] for comment in self.report["comments"])
+		self.assertIn("1 access corridor(s) mapped", summary)
+		self.assertIn("1 of 2 lots drawn", summary)
+
+	def test_it_offers_both_doors_to_the_page_that_traces(self):
+		self.assertIn("Land Map", self.report["buttons"])
+		self.assertIn("Draw an access corridor", self.report["buttons"])
+
+	def test_it_hands_the_widget_nothing_it_was_not_given(self):
+		"""A read-only map: no editable block, so no drawing surface and no
+		second save path competing with the land map's."""
+		self.assertNotIn("editable", self.report["spec"])
+
+
 @unittest.skipUnless(shutil.which("node"), "needs node to execute the page script")
 class ThePageRuns(unittest.TestCase):
 	"""THE PAGE, EXECUTED. A substring assertion matches the whole file; this
@@ -762,9 +1200,24 @@ class ThePageRuns(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		answer, preview = page_fixtures()
+		# CHOOSE THE ADJUSTMENT FROM THE PICKER, which is the door this class is
+		# about: the page opened from the sidebar with nothing attached and a
+		# record is selected now. The base harness stays unattached because
+		# `test_land_export` drives it too, and its subject is what an export
+		# does when nothing has been chosen at all.
+		script = HARNESS.replace(
+			'		root.find(".lm-draw-easement").click();',
+			"""		const picker = root.find(".lm-adjustment");
+		picker.value = "LLA-2026-0001";
+		picker.handlers.change();
+		calls.seeded_on_pick = true;
+		root.find(".lm-draw-easement").click();""",
+		)
+		assert "seeded_on_pick" in script, "the picker patch matched nothing — re-anchor it"
+
 		with tempfile.TemporaryDirectory() as folder:
 			harness = Path(folder) / "harness.js"
-			harness.write_text(HARNESS)
+			harness.write_text(script)
 			result = subprocess.run(
 				[
 					"node",
@@ -817,7 +1270,10 @@ class ThePageRuns(unittest.TestCase):
 		index = self.report["methods"].index("erpnext_mcp.api.land_map.survey_preview")
 		corridors = json.loads(self.report["args"][index]["easements"])
 		self.assertEqual(corridors["type"], "FeatureCollection")
-		self.assertEqual(corridors["features"][0]["properties"]["label"], "Dry Hollow ditch")
+		self.assertIn(
+			"Dry Hollow ditch",
+			[feature["properties"]["label"] for feature in corridors["features"]],
+		)
 
 	def test_a_drawn_easement_does_not_become_the_proposal(self):
 		"""The corridor and the proposed line are two different drawings, and a
@@ -825,13 +1281,54 @@ class ThePageRuns(unittest.TestCase):
 		index = self.report["methods"].index("erpnext_mcp.api.land_map.survey_preview")
 		self.assertEqual(json.loads(self.report["args"][index]["points"]), DRAWN)
 
+	# ── v0.174.0: the corridors already on the record ───────────────────────
+	def test_a_corridor_on_the_record_is_drawn_when_the_page_opens(self):
+		"""A strip of ground somebody agreed to last year is the main thing the
+		person drawing this year's line needs to see."""
+		self.assertIn(STORED_CORRIDOR, json.dumps(self.report["args"]))
+
+	def test_a_gps_fix_in_the_notes_becomes_a_marker(self):
+		self.assertIn([WELL[0], WELL[1]], self.report["markers"])
+
+	def test_saving_keeps_the_corridors_that_were_already_there(self):
+		"""THE REGRESSION THIS RELEASE EXISTS FOR.
+
+		`save` writes the whole `easement_geometry` column from the page's list.
+		The list used to hold only what was traced in the current visit, so
+		opening a record with a corridor on it, tracing a second, and pressing
+		Save wrote a column containing the second alone — the first was deleted,
+		under a green toast, with nothing on screen to say so.
+		"""
+		index = self.report["methods"].index("erpnext_mcp.api.land_map.save_proposal")
+		saved = json.loads(self.report["args"][index]["easement_geometry"])
+		labels = [feature["properties"]["label"] for feature in saved["features"]]
+		self.assertIn(STORED_CORRIDOR, labels, "the corridor already on the record was dropped")
+		self.assertIn("Dry Hollow ditch", labels, "the corridor just traced was dropped")
+
+	def test_the_measure_request_carries_both_corridors(self):
+		index = self.report["methods"].index("erpnext_mcp.api.land_map.survey_preview")
+		corridors = json.loads(self.report["args"][index]["easements"])
+		labels = [feature["properties"]["label"] for feature in corridors["features"]]
+		self.assertIn(STORED_CORRIDOR, labels)
+		self.assertIn("Dry Hollow ditch", labels)
+
+	def test_a_stored_corridor_does_not_become_the_proposal(self):
+		"""Seeding puts corridors on the map. It must not put them in the line."""
+		index = self.report["methods"].index("erpnext_mcp.api.land_map.save_proposal")
+		proposed = json.loads(self.report["args"][index]["proposed_geometry"])
+		self.assertEqual(proposed["type"], "Polygon")
+		self.assertNotIn(STORED_CORRIDOR, json.dumps(proposed))
+
 	def test_saving_posts_the_geometry_to_the_save_method(self):
 		index = self.report["methods"].index("erpnext_mcp.api.land_map.save_proposal")
 		arguments = self.report["args"][index]
 		self.assertEqual(arguments["adjustment"], "LLA-2026-0001")
 		self.assertEqual(json.loads(arguments["proposed_geometry"])["type"], "Polygon")
 		self.assertIn("thence", arguments["legal_description"])
-		self.assertEqual(
-			json.loads(arguments["easement_geometry"])["features"][0]["properties"]["label"],
+		self.assertIn(
 			"Dry Hollow ditch",
+			[
+				feature["properties"]["label"]
+				for feature in json.loads(arguments["easement_geometry"])["features"]
+			],
 		)

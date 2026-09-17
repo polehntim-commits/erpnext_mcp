@@ -542,12 +542,16 @@ doctype_js = {
 	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js"],
 	"Farm Shift": ["public/js/geo_map_widget.js", "public/js/farm_shift_map.js"],
 	"Farm Task": ["public/js/geo_map_widget.js", "public/js/farm_task_map.js"],
-	#: v0.171.0. The Lot Line Adjustment form draws no map of its own — it carries
-	#: a button to `/app/land-map`, which is where a proposed line is traced. The
-	#: widget is listed anyway, and first, for the reason every other entry lists
-	#: it: it is this app's own asset rather than the CDN, it fetches Leaflet only
-	#: when something asks it to render, and the page the button opens then finds
-	#: it already in the browser's cache.
+	#: v0.174.0. The Lot Line Adjustment form DOES draw a map now — the two tax
+	#: lots, the access corridors already agreed, and any GPS fix written into
+	#: the notes — so the widget is loaded because this form renders through it,
+	#: the way the other seven map-carrying forms do.
+	#:
+	#: IT DRAWS AND IT DOES NOT TRACE. Drawing a corridor still happens on
+	#: `/app/land-map`, which owns the measuring, the closure, the draft
+	#: description and the exports; the form carries a button to it and renders
+	#: read-only. Two drawing surfaces would be two implementations of all of
+	#: that, and they would disagree the first time one changed.
 	"Lot Line Adjustment": [
 		"public/js/geo_map_widget.js",
 		"public/js/lot_line_adjustment_map.js",
