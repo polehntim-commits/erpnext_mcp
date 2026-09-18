@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.174.3 — 2026-09-17 — a child row is not a dict on a bench
+
+**897 tools** (unchanged). A patch for a server error on the survey packet.
+
+- **`dict(row)` on a Frappe child row raises.** v0.174.2's packet read the
+  easements and open questions with `dict(row)`. A bench hands back `Document`
+  rows, and Frappe's `BaseDocument` has no `keys` and no `__iter__`, so it
+  raised TypeError and the export answered a 500. The standalone double hands
+  back dicts, so every test passed. `land_adjustment.child_rows` now reads a
+  child table either way (`as_dict()` where the row has it), and all four call
+  sites use it: the packet's easements and open questions,
+  `land_adjustment.piece_rows` (the packet's pieces table, `side_plan`, and the
+  adjustment's own piece checks), and `lla_get`'s pieces, which had the same
+  bug.
+- A regression test runs the packet, the plain PDF and `side_plan` over
+  bench-shaped rows that refuse `dict()`. It fails on v0.174.2 with the bench's
+  own TypeError.
+
 ## 0.174.2 — 2026-09-17 — just the outline, and what a surveyor needs
 
 **897 tools** (unchanged). The survey packet (`export_lla_survey_packet_pdf`

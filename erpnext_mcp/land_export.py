@@ -536,7 +536,7 @@ def packet_sections(doc, shapes: list, runs: list) -> list:
 			)
 		)
 
-	recorded_easements = [dict(row) for row in (doc.get("easements") or [])]
+	recorded_easements = land_adjustment.child_rows(doc, "easements")
 	if recorded_easements:
 		sections.append(
 			_section(
@@ -603,9 +603,9 @@ def packet_sections(doc, shapes: list, runs: list) -> list:
 		sections.append(_section("Easements", notes=["No easement is recorded or drawn on this adjustment."]))
 
 	still_open = [
-		dict(row)
-		for row in (doc.get("open_items") or [])
-		if str(dict(row).get("status") or "Open") not in ("Resolved", "Dropped")
+		row
+		for row in land_adjustment.child_rows(doc, "open_items")
+		if str(row.get("status") or "Open") not in ("Resolved", "Dropped")
 	]
 	if still_open:
 		sections.append(

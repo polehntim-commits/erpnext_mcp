@@ -156,7 +156,7 @@ def describe(doc) -> dict:
 		"proposed_geometry": land.json_value(doc.get("proposed_geometry")),
 		"easement_geometry": land.json_value(doc.get("easement_geometry")),
 		"lots": lots,
-		"pieces": [_piece(dict(row)) for row in doc.get("pieces") or []],
+		"pieces": [_piece(row) for row in land.child_rows(doc, "pieces")],
 		"open_items": [
 			{
 				**{key: row.get(key) for key in OPEN_ITEM_FIELDS},

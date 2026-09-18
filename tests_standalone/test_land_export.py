@@ -678,6 +678,60 @@ class ThePacketIsWhatASurveyorWorksFrom(TheSurveyPacket):
 	def packet_of(self, name: str) -> str:
 		return self.tool_data("export_lla_survey_packet_pdf", {"name": name, "include_html": True})["html"]
 
+	def test_a_bench_shaped_child_row_does_not_take_the_packet_down(self):
+		"""v0.174.3. The double hands back dict rows; a bench hands back Documents,
+		and `dict(row)` on one raised TypeError — a 500 on Tim's first export."""
+		doc = BenchDoc(self.doc(self.a_full_adjustment()))
+		with self.assertRaises(TypeError):
+			dict(doc.get("easements")[0])  # the control: this is what the bench does
+		page = land_export.survey_packet_html(doc)
+		for expected in ("Parcel A", "Truck access to the shop.", "Bank written consent"):
+			self.assertIn(expected, page)
+		self.assertTrue(land_export.plain_pdf(doc, "packet").startswith(b"%PDF"))
+		self.assertEqual(land.side_plan(doc, land.PARTY_1)["pieces_given"], ["Parcel A"])
+
+	def test_child_rows_reads_both_shapes_alike(self):
+		doc = self.doc(self.a_full_adjustment())
+		self.assertEqual(
+			[row["piece_name"] for row in land.child_rows(BenchDoc(doc), "pieces")],
+			[row["piece_name"] for row in land.child_rows(doc, "pieces")],
+		)
+		self.assertEqual(land.child_rows(BenchDoc(doc), "no_such_table"), [])
+
+
+class BenchRow:
+	"""A child row the way a bench hands one back: fields, `get`, `as_dict`,
+	`update` — and no mapping protocol, so `dict(row)` raises as Frappe's
+	`BaseDocument` does."""
+
+	def __init__(self, values: dict):
+		self.__dict__.update(values)
+
+	def get(self, key, default=None):
+		return self.__dict__.get(key, default)
+
+	def as_dict(self) -> dict:
+		return dict(self.__dict__)
+
+	def update(self, values: dict) -> None:
+		self.__dict__.update(values)
+
+
+class BenchDoc:
+	"""A harness document whose child tables come back as `BenchRow`s."""
+
+	TABLES = ("pieces", "easements", "open_items")
+
+	def __init__(self, doc):
+		self._doc = doc
+		self.name = doc.name
+
+	def get(self, key, default=None):
+		value = self._doc.get(key, default)
+		if key in self.TABLES:
+			return [BenchRow(dict(row)) for row in value or []]
+		return value
+
 
 # ── 6 ───────────────────────────────────────────────────────────────────────
 class TheDeskDownloads(ExportTestCase):

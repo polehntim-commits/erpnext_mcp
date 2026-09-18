@@ -391,8 +391,21 @@ def fetch_tax_lots(
 
 
 # ── Lot Line Adjustment ─────────────────────────────────────────────────────
+def child_rows(doc, fieldname: str) -> list:
+	"""A child table as plain dicts, on a bench and in the standalone suite alike.
+
+	A BENCH HANDS BACK `Document` ROWS AND `dict(row)` RAISES ON THEM: Frappe's
+	`BaseDocument` has no `keys` and no `__iter__`, so it is not a mapping and
+	not an iterable of pairs — TypeError, a 500 on the export. The standalone
+	double hands back dicts, which have no `as_dict`, so `dict(row)` passed every
+	test and failed on the first real adjustment with an easement. Asked both
+	ways, both are right; the `tools/agronomy.py` idiom.
+	"""
+	return [row.as_dict() if hasattr(row, "as_dict") else dict(row) for row in (doc.get(fieldname) or [])]
+
+
 def piece_rows(doc) -> list:
-	return [dict(row) for row in (doc.get("pieces") or [])]
+	return child_rows(doc, "pieces")
 
 
 def check_parties(doc) -> None:
