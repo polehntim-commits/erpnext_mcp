@@ -131,11 +131,18 @@ acreage, the tax lot number, the assessor account and the owner of record, with
 the draft-for-a-surveyor disclaimer as its description.
 
 The **survey packet** is the sheet to hand a surveyor or attach to a county
-filing: two drawn maps — **before**, the county's tax lots as recorded, and
-**after**, the proposal and the easement corridors over them — each shape
-labelled with its acreage, with a north arrow and a scale bar in feet and
-metres; then the tax lots and parties; then the acreage before and after for
-each side; then the metes-and-bounds description; then the disclaimer. Each map
+filing: two **outline** maps — lines only, no imagery and no fill, because it
+is photocopied and marked up in pencil — **before**, the county's tax lots as
+recorded, and **after**, the proposal as a heavy line with every corner
+numbered (corner 1 is the point of beginning) and the easement corridors dashed
+over the lots, with a north arrow and a scale bar in feet and metres. Then the
+tables a surveyor works from: the courses corner to corner with area, perimeter
+and closure; each corner's latitude and longitude; the point of beginning; the
+parties, signers, tax lots, assessor accounts, owners of record and situs; the
+acreage before and after; the pieces changing hands; the easements on the
+record and drawn, and whether the new line crosses one; the open questions;
+then the metes-and-bounds description, the notes and the disclaimer. The
+header carries the lender, the target close and the basis of bearings. Each map
 is an SVG built from the stored geometry and embedded as a `data:` URI image —
 no tiles, nothing fetched — so it prints the same on a bench with no route out.
 It is an image and not inline `<svg>` because Frappe's `get_pdf` re-parses the

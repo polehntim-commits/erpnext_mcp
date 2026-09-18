@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.174.2 — 2026-09-17 — just the outline, and what a surveyor needs
+
+**897 tools** (unchanged). The survey packet (`export_lla_survey_packet_pdf`
+and the Desk's download, one engine) is rebuilt around the person it is for.
+
+- **The maps are outlines.** No fill, no tint, no imagery: the proposal is a
+  heavy solid line, a county lot a thin grey one, an easement corridor a dashed
+  one, which survives a photocopier and a pencil. Every corner of the proposal
+  is numbered on the drawing and corner 1 is marked POB, so the tables below
+  read straight off the map. The drawing now keeps clear of the north arrow's
+  column and the scale bar's band. The KML keeps its colours.
+- **What a surveyor works from, read off the record.** After the maps: the
+  course table, corner to corner, with bearing, feet and metres, and the area,
+  perimeter and closure; every corner's latitude and longitude; the point of
+  beginning, with the description's own tie; parties, signers, tax lots,
+  assessor accounts, owners of record and situs; acreage before and after; the
+  pieces changing hands with their improvements and line notes; the easements
+  on the record, the corridors drawn with their length, and whether the new
+  line crosses one; the open questions still open; the record's notes. The
+  header adds the target close, the lender and its conditions, and the basis of
+  bearings.
+- **No new arithmetic.** Bearings, distances and closure are
+  `surveying.courses` / `closure`, area is `geo.area_acres`, crossings are
+  `surveying.crossings` — the same numbers `/app/land-map` shows. The sections
+  are built once and set twice, by wkhtmltopdf and by `render/pdf.py` where
+  there is none, so the two PDFs carry the same tables.
+
 ## 0.174.1 — 2026-09-17 — the survey packet prints its maps
 
 **897 tools** (unchanged). One fix to `export_lla_survey_packet_pdf` and the

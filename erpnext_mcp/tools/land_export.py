@@ -9,7 +9,8 @@ on the other end opens.
   export_lla_kml                     Google Earth and a handheld GPS
   export_boundary_geojson            QGIS and ArcGIS, for any land record
   export_lla_legal_description_pdf   the metes-and-bounds page
-  export_lla_survey_packet_pdf       that page with the before and after maps above it
+  export_lla_survey_packet_pdf       outline maps, before and after, and every table a
+                                     surveyor works from
 
 THE DESK HAS THE SAME FOUR as file downloads — `api/land_map.export_kml`,
 `export_geojson` and `export_pdf`, wired to the buttons on `/app/land-map`.

@@ -13,8 +13,12 @@ leaves the site:
                        browser hands it to the GIS and not to a text editor.
   Legal description    the metes-and-bounds text as a page, with the lots, the
                        acreage before and after, the date and the disclaimer.
-  Survey packet        that page with a drawn map above it — the sheet somebody
-                       staples to a county filing or emails to a surveyor.
+  Survey packet        the sheet somebody staples to a county filing or emails
+                       to a surveyor: two OUTLINE maps, before and after, with
+                       the corners numbered, then every table a surveyor works
+                       from — courses, corner coordinates, the point of
+                       beginning, parties and lots, pieces, easements, open
+                       questions — then the description (v0.174.2).
 
 ────────────────────────────────────────────────────────────────────────────
 IT EXPORTS WHAT IS STORED. IT COMPUTES NO GEOMETRY AND NO GEODESY.
@@ -270,6 +274,359 @@ def acreage_table(doc) -> list:
 	return rows
 
 
+def _parts(shape: dict) -> list:
+	"""`(points, closed)` for each figure one proposed shape is made of.
+
+	A polygon's exterior ring (a hole is not a boundary anybody walks), each
+	polygon of a MultiPolygon, and a line or each line of a MultiLineString —
+	which is how a proposed lot line is drawn when it is a line and not a lot.
+	"""
+	kind, coordinates = shape.get("type"), shape.get("coordinates") or []
+	if kind == "Polygon":
+		return [(surveying.ring(coordinates[0]), True)] if coordinates else []
+	if kind == "MultiPolygon":
+		return [(surveying.ring(polygon[0]), True) for polygon in coordinates if polygon]
+	if kind == "LineString":
+		return [([[float(point[0]), float(point[1])] for point in coordinates], False)]
+	if kind == "MultiLineString":
+		return [([[float(point[0]), float(point[1])] for point in line], False) for line in coordinates]
+	return []
+
+
+def traverses(shapes: list) -> list:
+	"""Each proposed figure as a surveyor reads it: numbered corners and courses.
+
+	Corners are numbered once, in drawn order, straight through every figure, so
+	the number on the map, the course table and the coordinate table are the same
+	number. Corner 1 is the first point drawn, which is the point of beginning the
+	stored description starts from. Bearings, distances and closure are
+	`surveying.courses` and `surveying.closure`; area is `surveying.acres`, which
+	is `geo.area_acres`. Nothing is measured here.
+	"""
+	proposed = [shape for shape in shapes if shape.get("layer") == "proposed"]
+	out, number = [], 0
+	for shape in proposed:
+		parts = [(points, closed) for points, closed in _parts(shape) if len(points) >= 2]
+		for index, (points, closed) in enumerate(parts, start=1):
+			first = number + 1
+			corners = [{"number": first + offset, "point": point} for offset, point in enumerate(points)]
+			number += len(points)
+			rows = []
+			for row in surveying.courses(points, close=closed):
+				start = first + row["index"] - 1
+				end = first if row["closing"] else start + 1
+				rows.append({**row, "from_corner": start, "to_corner": end})
+			figure_closed = closed and len(points) >= 3
+			label = str(shape.get("label") or "Proposed boundary")
+			out.append(
+				{
+					"label": label if len(parts) == 1 else f"{label} ({index})",
+					"closed": figure_closed,
+					"points": points,
+					"corners": corners,
+					"courses": rows,
+					"closure": surveying.closure(points) if figure_closed else None,
+					"acres": round(surveying.acres(points), 3) if figure_closed else None,
+					"length_ft": round(sum(row["distance_ft"] for row in rows), 2),
+				}
+			)
+	return out
+
+
+def _side_label(doc, which: str) -> str:
+	index = 1 if which == land_adjustment.PARTY_1 else 2
+	party = doc.get(f"party_{index}")
+	return f"{which} — {party}" if party else which
+
+
+def _acres_cell(value, places: int = 2) -> str:
+	"""Acres for a table. A Float column stores 0 for "not entered", so 0 is a dash."""
+	try:
+		number = float(value)
+	except (TypeError, ValueError):
+		return "—"
+	return f"{number:,.{places}f}" if number else "—"
+
+
+def _section(heading: str, headers=None, rows=None, align=None, notes=()) -> dict:
+	return {
+		"heading": heading,
+		"headers": list(headers or []),
+		"rows": [[("" if cell is None else str(cell)) for cell in row] for row in rows or []],
+		"align": list(align or []),
+		"notes": [str(note) for note in notes if note],
+	}
+
+
+def packet_header(doc) -> list:
+	"""`(label, value)` pairs for the top of the packet, blanks dropped."""
+	lots = []
+	for index in (1, 2):
+		named = doc.get(f"lot_{index}")
+		if named:
+			lots.append(f"{named} ({doc.get(f'party_{index}') or 'party not named'})")
+	county = f"{doc.get('county')} County, {doc.get('state')}" if doc.get("county") else None
+	pairs = [
+		("Lot line adjustment", doc.name),
+		("Title", doc.get("title")),
+		("County", county),
+		("Tax lots", "; ".join(lots) or "to be confirmed"),
+		("Status", doc.get("status")),
+		("Target close", doc.get("target_close")),
+		("Recording number", doc.get("recording_number")),
+		("Recorded on", doc.get("recorded_on")),
+		("Survey reference", doc.get("survey_reference")),
+		("Lender", doc.get("lender")),
+		("Lender conditions", doc.get("lender_conditions")),
+		(
+			"Basis of bearings",
+			"True north on the WGS84 ellipsoid — not magnetic, not state plane. "
+			"Distances in international feet (0.3048 m).",
+		),
+		("Printed", _today()),
+	]
+	return [(label, str(value)) for label, value in pairs if value not in (None, "")]
+
+
+def packet_sections(doc, shapes: list, runs: list) -> list:
+	"""Everything a surveyor works from, as tables — read off the record, in order.
+
+	One list, rendered twice: as HTML for wkhtmltopdf and through `render/pdf.py`
+	where there is none, so the two PDFs cannot disagree about a number.
+	"""
+	sections = []
+	for run in runs:
+		heading = "Courses" if len(runs) == 1 else f"Courses — {run['label']}"
+		if run["closed"]:
+			closure = run["closure"]
+			error = f", misses by {closure['error_ft']:,.3f} ft" if closure["precision"] else ""
+			summary = (
+				f"{len(run['courses'])} courses. Area {run['acres']:,.3f} acres; perimeter "
+				f"{closure['perimeter_ft']:,.2f} ft; closure {closure['precision_text']}{error}."
+			)
+		else:
+			summary = f"An open line of {len(run['courses'])} course(s), {run['length_ft']:,.2f} ft in all."
+		sections.append(
+			_section(
+				heading,
+				["Course", "From", "To", "Bearing", "Distance (ft)", "Distance (m)"],
+				[
+					[
+						row["index"],
+						row["from_corner"],
+						row["to_corner"],
+						row["bearing"],
+						f"{row['distance_ft']:,.2f}",
+						f"{row['distance_m']:,.3f}",
+					]
+					for row in run["courses"]
+				],
+				["r", "r", "r", "l", "r", "r"],
+				[summary],
+			)
+		)
+	corners = [corner for run in runs for corner in run["corners"]]
+	if corners:
+		sections.append(
+			_section(
+				"Corner coordinates",
+				["Corner", "Latitude", "Longitude"],
+				[
+					[
+						f"{corner['number']} (POB)" if corner["number"] == 1 else corner["number"],
+						f"{corner['point'][1]:.7f}",
+						f"{corner['point'][0]:.7f}",
+					]
+					for corner in corners
+				],
+				["l", "r", "r"],
+				[
+					"Decimal degrees on WGS84, as a handheld GPS takes them. Seven places is about a "
+					"centimetre; the drawing the corners came from is good to about a metre."
+				],
+			)
+		)
+		first = corners[0]["point"]
+		opening = _body_only(doc).split("\n\n", 1)[0].split(";", 1)[0].strip()
+		described = opening if opening.startswith(("Beginning", "Commencing")) else ""
+		sections.append(
+			_section(
+				"Point of beginning",
+				notes=[
+					f"Corner 1, at latitude {first[1]:.7f}, longitude {first[0]:.7f}.",
+					f"As the description has it: {described}." if described else "",
+				],
+			)
+		)
+
+	parties = []
+	for index, which in enumerate(land_adjustment.SIDES, start=1):
+		lot_name = doc.get(f"lot_{index}")
+		lot = land_adjustment.tax_lot_row(lot_name) or {}
+		signer = doc.get(f"signer_{index}")
+		title = doc.get(f"signer_{index}_title")
+		if not (doc.get(f"party_{index}") or lot_name or signer):
+			continue
+		parties.append(
+			[
+				which,
+				doc.get(f"party_{index}") or "not named",
+				f"{signer}, {title}" if signer and title else (signer or "—"),
+				lot.get("map_taxlot") or lot_name or "—",
+				lot.get("account") or "—",
+				lot.get("owner_of_record") or "—",
+				lot.get("situs") or "—",
+				_acres_cell(lot.get("acres_gis")),
+			]
+		)
+	sections.append(
+		_section(
+			"Parties and tax lots",
+			["Side", "Party", "Signer", "Tax lot", "Account", "Owner of record", "Situs", "GIS acres"],
+			parties,
+			["l", "l", "l", "l", "l", "l", "l", "r"],
+			[] if parties else ["No party or tax lot is named on this adjustment yet."],
+		)
+	)
+
+	acreage = acreage_table(doc)
+	basis = next((row["basis"] for row in acreage if row.get("basis")), "")
+	recorded = any(row["acres_before"] is not None or row["acres_after"] is not None for row in acreage)
+	sections.append(
+		_section(
+			"Acreage before and after",
+			["Side", "Party", "Tax lot", "Acres before", "Acres after", "Change"],
+			[
+				[
+					row["side"],
+					row["party"] or "",
+					row["lot"] or "",
+					f"{row['acres_before']:,.2f}" if row["acres_before"] is not None else "—",
+					f"{row['acres_after']:,.3f}" if row["acres_after"] is not None else "—",
+					f"{row['change']:+,.3f}" if row["change"] is not None else "—",
+				]
+				for row in acreage
+			]
+			if recorded
+			else [],
+			["l", "l", "l", "r", "r", "r"],
+			[basis] if recorded else ["No acreage is recorded for either lot yet."],
+		)
+	)
+
+	pieces = land_adjustment.piece_rows(doc)
+	if pieces:
+		sections.append(
+			_section(
+				"Land changing hands",
+				["Piece", "From", "To", "GIS acres", "Surveyed acres", "Improvements", "Line notes"],
+				[
+					[
+						row.get("piece_name") or "—",
+						_side_label(doc, row.get("from_party")) if row.get("from_party") else "—",
+						_side_label(doc, row.get("to_party")) if row.get("to_party") else "—",
+						_acres_cell(row.get("acres_gis")),
+						_acres_cell(row.get("acres_surveyed"), 3),
+						row.get("improvements") or "",
+						row.get("line_notes") or "",
+					]
+					for row in pieces
+				],
+				["l", "l", "l", "r", "r", "l", "l"],
+			)
+		)
+
+	recorded_easements = [dict(row) for row in (doc.get("easements") or [])]
+	if recorded_easements:
+		sections.append(
+			_section(
+				"Easements on the record",
+				["Type", "Burdened", "Benefited", "Notes"],
+				[
+					[
+						row.get("easement_type") or "—",
+						_side_label(doc, row.get("burdened")) if row.get("burdened") else "—",
+						_side_label(doc, row.get("benefited")) if row.get("benefited") else "—",
+						row.get("notes") or "",
+					]
+					for row in recorded_easements
+				],
+			)
+		)
+	corridors = [shape for shape in shapes if shape.get("layer") == "easement"]
+	if corridors:
+		touched = {}
+		for run in runs:
+			if not run["closed"]:
+				continue
+			hits = surveying.crossings(
+				run["points"], [{"label": c["label"], "geometry": c} for c in corridors]
+			)
+			for hit in hits:
+				touched[hit["label"]] = hit["how"]
+		rows = []
+		for corridor in corridors:
+			measured = [points for points, _closed in _parts(corridor)]
+			if corridor.get("type") in ("Polygon", "MultiPolygon"):
+				size = f"{corridor['acres']:,.3f} ac" if corridor.get("acres") is not None else "—"
+				drawn = "area"
+			else:
+				feet = sum(
+					row["distance_ft"] for points in measured for row in surveying.courses(points, False)
+				)
+				size = f"{feet:,.2f} ft"
+				drawn = "centre line"
+			how = touched.get(corridor["label"])
+			rows.append(
+				[
+					corridor["label"],
+					drawn,
+					size,
+					{"crosses": "yes — crosses it", "inside": "yes — lies inside it"}.get(how, "no"),
+				]
+			)
+		sections.append(
+			_section(
+				"Easement corridors drawn",
+				["Corridor", "Drawn as", "Size", "Proposed line crosses it?"],
+				rows,
+				["l", "l", "r", "l"],
+				[
+					"A crossing is a right somebody else holds over ground the new line divides; "
+					"it belongs on the survey and in the deed."
+					if touched
+					else ""
+				],
+			)
+		)
+	if not recorded_easements and not corridors:
+		sections.append(_section("Easements", notes=["No easement is recorded or drawn on this adjustment."]))
+
+	still_open = [
+		dict(row)
+		for row in (doc.get("open_items") or [])
+		if str(dict(row).get("status") or "Open") not in ("Resolved", "Dropped")
+	]
+	if still_open:
+		sections.append(
+			_section(
+				"Open questions",
+				["Item", "Question", "Owner", "Status", "Due"],
+				[
+					[
+						row.get("item") or "",
+						row.get("question") or "",
+						row.get("responsible") or "",
+						row.get("status") or "Open",
+						row.get("due") or "",
+					]
+					for row in still_open
+				],
+			)
+		)
+	return sections
+
+
 # ── KML ─────────────────────────────────────────────────────────────────────
 def _coords(pairs) -> str:
 	"""KML's `lon,lat,0` triples. Altitude is zero because none was surveyed."""
@@ -447,6 +804,9 @@ def _slug(text: str) -> str:
 SVG_WIDTH = 720.0
 SVG_HEIGHT = 470.0
 SVG_PAD = 26.0
+#: Kept free of the drawing: the north arrow's column and the scale bar's band.
+SVG_ARROW_COLUMN = 72.0
+SVG_SCALE_BAND = 46.0
 
 #: A scale bar is drawn at the longest of these that fits a third of the map.
 SCALE_STEPS_FEET = (50, 100, 200, 300, 500, 800, 1000, 1320, 2000, 2640, 5280)
@@ -483,14 +843,19 @@ def projection(shapes: list) -> dict:
 	ys = [point[1] for point in projected]
 	width = max(max(xs) - min(xs), 1e-6)
 	height = max(max(ys) - min(ys), 1e-6)
-	scale = min((SVG_WIDTH - 2 * SVG_PAD) / width, (SVG_HEIGHT - 2 * SVG_PAD) / height)
+	# The drawing keeps clear of the title band on top, the north arrow's column
+	# on the right and the scale bar's band along the bottom, so no line of the
+	# boundary runs through any of them.
+	left, right = SVG_PAD, SVG_WIDTH - SVG_ARROW_COLUMN
+	top, bottom = SVG_PAD + 6, SVG_HEIGHT - SVG_SCALE_BAND
+	scale = min((right - left) / width, (bottom - top) / height)
 	latitudes = [float(point[1]) for point in points]
 	return {
 		"xmin": min(xs),
 		"ymax": max(ys),
 		"scale": scale,
-		"x_offset": (SVG_WIDTH - width * scale) / 2,
-		"y_offset": (SVG_HEIGHT - height * scale) / 2,
+		"x_offset": left + ((right - left) - width * scale) / 2,
+		"y_offset": top + ((bottom - top) - height * scale) / 2,
 		"mid_latitude": (min(latitudes) + max(latitudes)) / 2,
 	}
 
@@ -537,8 +902,31 @@ def scale_bar(view: dict) -> dict:
 	}
 
 
-def svg_map(shapes: list, title: str = "") -> str:
-	"""The shapes drawn on a page: polygons, labels, a north arrow and a scale bar.
+#: How each layer is drawn on the packet's maps: stroke colour, width, dashes.
+#: OUTLINES ONLY — no fill, no imagery, no tint. The sheet is photocopied, faxed
+#: and marked up in pencil, and a filled polygon hides the line that matters.
+#: Black-and-white safe: the proposal is the heavy solid line, a lot the thin
+#: grey one, a corridor the dashed one. `LAYERS` keeps the colours the KML uses.
+OUTLINES = {
+	"lot": ("#6b6b6b", 1.2, ""),
+	"easement": ("#8a5a00", 1.6, "7 4"),
+	"proposed": ("#111111", 2.6, ""),
+}
+
+#: The legend under each map, in words, because the line styles are the key.
+OUTLINE_LEGEND = {
+	"proposed": "heavy solid line — proposed boundary",
+	"easement": "dashed line — easement corridor",
+	"lot": "thin grey line — county tax lot as recorded",
+}
+
+
+def svg_map(shapes: list, title: str = "", corners: list | None = None) -> str:
+	"""The shapes drawn as outlines: labels, numbered corners, a north arrow, a scale bar.
+
+	`corners` are `{"number", "point"}` rows from `traverses` — each is marked
+	with a dot and its number, and corner 1 is marked POB, so the course table
+	and the corner coordinates on the sheet can be read straight off the drawing.
 
 	Pure string building. No tiles, no images, no script — the sheet has to print
 	the same on a bench with no route to the internet as on one with.
@@ -553,21 +941,17 @@ def svg_map(shapes: list, title: str = "") -> str:
 	# The lots first, so the proposal draws on top of them.
 	order = ("lot", "easement", "proposed")
 	for layer in order:
-		style = LAYERS[layer]
+		stroke, width, dashes = OUTLINES[layer]
+		dash = f' stroke-dasharray="{dashes}"' if dashes else ""
 		for shape in [entry for entry in shapes if entry.get("layer", "proposed") == layer]:
+			closed = shape.get("type") in ("Polygon", "MultiPolygon")
 			for ring in _rings(shape):
 				if len(ring) < 2:
 					continue
-				closed = shape.get("type") in ("Polygon", "MultiPolygon")
 				path = _path(view, ring) if closed else _path(view, ring)[:-2]
-				dashes = "" if closed else ' stroke-dasharray="6 4"'
-				fill = style["svg_fill"] if closed else "none"
-				opacity = style["svg_opacity"] if closed else 0
-				stroke = style["svg_line"]
-				width = 2.0 if layer == "proposed" else 1.4
 				parts.append(
-					f'<path d="{path}" fill="{fill}" fill-opacity="{opacity}" stroke="{stroke}" '
-					f'stroke-width="{width}"{dashes}/>'
+					f'<path d="{path}" fill="none" stroke="{stroke}" stroke-width="{width}" '
+					f'stroke-linejoin="round"{dash}/>'
 				)
 	for layer in order:
 		for shape in [entry for entry in shapes if entry.get("layer", "proposed") == layer]:
@@ -578,15 +962,8 @@ def svg_map(shapes: list, title: str = "") -> str:
 				y = round(min(place(view, point)[1] for ring in _rings(shape) for point in ring) + 16, 2)
 			label = str(shape.get("label") or "")
 			acres = f" — {shape['acres']:,.2f} ac" if shape.get("acres") is not None else ""
-			text = html.escape(label + acres)
-			font = f'x="{x}" y="{y}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11"'
-			# Halo, then ink. wkhtmltopdf ignores paint-order, and a stroke drawn
-			# over the glyphs whites the label out.
-			parts.append(
-				f'<text {font} fill="#ffffff" stroke="#ffffff" stroke-width="3" '
-				f'stroke-linejoin="round">{text}</text>'
-			)
-			parts.append(f'<text {font} fill="#111">{text}</text>')
+			parts.append(_svg_label(x, y, label + acres, 11))
+	parts.extend(_corner_marks(view, corners or []))
 	parts.append(_north_arrow())
 	parts.append(_scale_bar_svg(scale_bar(view)))
 	parts.append(
@@ -597,13 +974,46 @@ def svg_map(shapes: list, title: str = "") -> str:
 	return "".join(parts)
 
 
-def map_image(shapes: list, title: str = "") -> str:
+def _svg_label(x: float, y: float, words: str, size: int, anchor: str = "middle") -> str:
+	"""Halo, then ink. wkhtmltopdf ignores paint-order, and a stroke drawn over
+	the glyphs whites the label out."""
+	text = html.escape(words)
+	font = (
+		f'x="{x}" y="{y}" text-anchor="{anchor}" font-family="Helvetica, Arial, sans-serif" '
+		f'font-size="{size}"'
+	)
+	return (
+		f'<text {font} fill="#ffffff" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">{text}</text>'
+		f'<text {font} fill="#111">{text}</text>'
+	)
+
+
+def _corner_marks(view: dict, corners: list) -> list:
+	"""A dot on each corner and its number set just outside the figure."""
+	if not corners:
+		return []
+	placed = [(corner, place(view, corner["point"])) for corner in corners]
+	middle_x = sum(point[0] for _, point in placed) / len(placed)
+	middle_y = sum(point[1] for _, point in placed) / len(placed)
+	out = []
+	for corner, (x, y) in placed:
+		dx, dy = x - middle_x, y - middle_y
+		length = math.hypot(dx, dy) or 1.0
+		label_x = round(x + dx / length * 13, 2)
+		label_y = round(y + dy / length * 13 + 4, 2)
+		words = f"{corner['number']} POB" if corner["number"] == 1 else str(corner["number"])
+		out.append(f'<circle cx="{x}" cy="{y}" r="3" fill="#ffffff" stroke="#111" stroke-width="1.4"/>')
+		out.append(_svg_label(label_x, label_y, words, 10))
+	return out
+
+
+def map_image(shapes: list, title: str = "", corners: list | None = None) -> str:
 	"""`svg_map` as an `<img>` whose source is the SVG itself, base64 in a `data:` URI.
 
 	The form wkhtmltopdf draws. The module docstring says why inline `<svg>` is
 	not: Frappe's HTML parser lowercases `viewBox` on the way to the renderer.
 	"""
-	encoded = base64.b64encode(svg_map(shapes, title).encode("utf-8")).decode("ascii")
+	encoded = base64.b64encode(svg_map(shapes, title, corners).encode("utf-8")).decode("ascii")
 	alt = html.escape(title or "Proposed lot line")
 	return (
 		f'<img src="data:image/svg+xml;base64,{encoded}" alt="{alt}" '
@@ -710,6 +1120,9 @@ pre.legal { font-family: "Courier New", monospace; font-size: 10pt; white-space:
 .muted { color: #555; font-size: 9.5pt; }
 .map { border: 0; margin: 0 0 4pt; }
 .figure { page-break-inside: avoid; }
+.section { page-break-inside: avoid; }
+table.grid { font-size: 9.5pt; }
+p.notes { white-space: pre-wrap; }
 """
 
 
@@ -749,34 +1162,74 @@ def survey_packet_html(doc) -> str:
 			"this adjustment."
 		)
 	title = document_title(doc)
+	runs = traverses(shapes)
+	corners = [corner for run in runs for corner in run["corners"]]
+	after_note = (
+		"Numbers are the corners in the course and coordinate tables below; corner 1 is the point of beginning."
+		if corners
+		else ""
+	)
+	notes = str(doc.get("notes") or "").strip()
 	return (
 		f"<style>{STYLE}</style>"
 		"<h1>Survey packet</h1>"
 		f"<p class='sub'>{html.escape(title)}</p>"
-		f"{_header_html(doc)}"
+		f"{_meta_html(packet_header(doc))}"
 		f"{_before_figure(doc, shapes)}"
-		f"{_figure('Proposed boundary', 'After', shapes, title)}"
-		"<h2>Acreage before and after</h2>"
-		f"{_acreage_html(doc)}"
-		"<h2>Metes and bounds</h2>"
+		f"{_figure('Proposed boundary', 'After', shapes, title, corners, after_note)}"
+		+ "".join(_section_html(section) for section in packet_sections(doc, shapes, runs))
+		+ "<h2>Metes and bounds</h2>"
 		f"<pre class='legal'>{html.escape(_body_only(doc))}</pre>"
-		f"<div class='disclaimer'>{html.escape(surveying.DISCLAIMER)}</div>"
+		+ (f"<h2>Notes</h2><p class='notes'>{html.escape(notes)}</p>" if notes else "")
+		+ f"<div class='disclaimer'>{html.escape(surveying.DISCLAIMER)}</div>"
 	)
 
 
+def _meta_html(pairs: list) -> str:
+	return "<table class='meta'>" + "".join(_row(label, value) for label, value in pairs) + "</table>"
+
+
+def _section_html(section: dict) -> str:
+	parts = [f"<div class='section'><h2>{html.escape(section['heading'])}</h2>"]
+	if section["rows"]:
+		align = section["align"] or ["l"] * len(section["headers"])
+		head = "".join(
+			f"<th class='num'>{html.escape(cell)}</th>"
+			if align[i] == "r"
+			else f"<th>{html.escape(cell)}</th>"
+			for i, cell in enumerate(section["headers"])
+		)
+		body = "".join(
+			"<tr>"
+			+ "".join(
+				f"<td class='num'>{html.escape(cell)}</td>"
+				if align[i] == "r"
+				else f"<td>{html.escape(cell)}</td>"
+				for i, cell in enumerate(row)
+			)
+			+ "</tr>"
+			for row in section["rows"]
+		)
+		parts.append(f"<table class='grid'><tr>{head}</tr>{body}</table>")
+	parts.extend(f"<p class='muted'>{html.escape(note)}</p>" for note in section["notes"])
+	parts.append("</div>")
+	return "".join(parts)
+
+
 def _legend(shapes: list) -> str:
-	return " &nbsp;·&nbsp; ".join(
-		f"<span style='color:{LAYERS[key]['svg_line']}'>&#9632;</span> {html.escape(LAYERS[key]['label'])}"
+	return "; ".join(
+		OUTLINE_LEGEND[key]
 		for key in ("proposed", "easement", "lot")
 		if any(shape["layer"] == key for shape in shapes)
 	)
 
 
-def _figure(heading: str, caption: str, shapes: list, title: str) -> str:
+def _figure(heading: str, caption: str, shapes: list, title: str, corners=None, note: str = "") -> str:
+	extra = f" {html.escape(note)}" if note else ""
 	return (
 		f"<div class='figure'><h2>{html.escape(heading)}</h2>"
-		f"<div class='map'>{map_image(shapes, title)}</div>"
-		f"<p class='muted'>{html.escape(caption)}: {_legend(shapes)}</p></div>"
+		f"<div class='map'>{map_image(shapes, title, corners)}</div>"
+		f"<p class='muted'>{html.escape(caption)}: {html.escape(_legend(shapes))}.{extra}</p></div>"
 	)
 
 
@@ -849,46 +1302,62 @@ def plain_pdf(doc, kind: str) -> bytes:
 		document_title(doc),
 		f"{doc.get('county')} County, {doc.get('state')} · printed {_today()}",
 	)
-	lots = []
-	for index in (1, 2):
-		named = doc.get(f"lot_{index}")
-		if named:
-			party = doc.get(f"party_{index}") or "party not named"
-			lots.append(f"{named} ({party})")
-	pdf.key_values(
-		[
-			("Tax lots", "; ".join(lots) or "to be confirmed"),
-			("Status", doc.get("status") or ""),
-			("Recording number", doc.get("recording_number") or "—"),
-			("Survey reference", doc.get("survey_reference") or "—"),
-		]
-	)
 	if kind == "packet":
-		pdf.heading("Proposed boundary")
-		pdf.paragraph(
-			"The drawn map is not set in this version of the document — this bench has no HTML-to-PDF "
-			"renderer. The HTML version carries it, and the courses below describe the same figure."
+		shapes = shapes_of(doc)
+		runs = traverses(shapes)
+		pdf.key_values(
+			[(label, value) for label, value in packet_header(doc) if label != "Lot line adjustment"]
 		)
-	pdf.heading("Acreage before and after")
-	pdf.table(
-		["Side", "Party", "Tax lot", "Before", "After", "Change"],
-		[
+		pdf.heading("Existing tax lots and proposed boundary")
+		pdf.paragraph(
+			"The drawn maps are not set in this version of the document — this bench has no HTML-to-PDF "
+			"renderer. The HTML version carries them, and the tables below describe the same figures."
+		)
+		for section in packet_sections(doc, shapes, runs):
+			pdf.heading(section["heading"])
+			if section["rows"]:
+				pdf.table(section["headers"], section["rows"], align=section["align"] or None)
+			for note in section["notes"]:
+				pdf.paragraph(note)
+	else:
+		lots = []
+		for index in (1, 2):
+			named = doc.get(f"lot_{index}")
+			if named:
+				party = doc.get(f"party_{index}") or "party not named"
+				lots.append(f"{named} ({party})")
+		pdf.key_values(
 			[
-				row["side"],
-				row["party"] or "",
-				row["lot"] or "",
-				f"{row['acres_before']:,.2f}" if row["acres_before"] is not None else "-",
-				f"{row['acres_after']:,.3f}" if row["acres_after"] is not None else "-",
-				f"{row['change']:+,.3f}" if row["change"] is not None else "-",
+				("Tax lots", "; ".join(lots) or "to be confirmed"),
+				("Status", doc.get("status") or ""),
+				("Recording number", doc.get("recording_number") or "—"),
+				("Survey reference", doc.get("survey_reference") or "—"),
 			]
-			for row in acreage_table(doc)
-		],
-		align=["l", "l", "l", "r", "r", "r"],
-	)
+		)
+		pdf.heading("Acreage before and after")
+		pdf.table(
+			["Side", "Party", "Tax lot", "Before", "After", "Change"],
+			[
+				[
+					row["side"],
+					row["party"] or "",
+					row["lot"] or "",
+					f"{row['acres_before']:,.2f}" if row["acres_before"] is not None else "-",
+					f"{row['acres_after']:,.3f}" if row["acres_after"] is not None else "-",
+					f"{row['change']:+,.3f}" if row["change"] is not None else "-",
+				]
+				for row in acreage_table(doc)
+			],
+			align=["l", "l", "l", "r", "r", "r"],
+		)
 	pdf.heading("Metes and bounds")
 	for paragraph in _body_only(doc).split("\n\n"):
 		pdf.paragraph(paragraph)
 		pdf.spacer(4)
+	notes = str(doc.get("notes") or "").strip()
+	if kind == "packet" and notes:
+		pdf.heading("Notes")
+		pdf.paragraph(notes)
 	pdf.heading("Disclaimer")
 	pdf.paragraph(surveying.DISCLAIMER)
 	return pdf.render()

@@ -16,6 +16,9 @@ SEVEN CLAIMS.
 5. `TheSurveyPacket` — the same page with two maps in it, before and after,
    each as an image wkhtmltopdf actually draws, and the plain-PDF fallback that
    says where the maps went.
+   `ThePacketIsWhatASurveyorWorksFrom` — the maps are outlines only, and the
+   courses, corners, parties, pieces, easements and open questions are tabled
+   off the record in both PDFs.
 6. `TheDeskDownloads` — the three whitelisted methods answer a FILE, under
    Frappe's own read permission on the record.
 7. `TheButtonsAreOnTheMap` — the page carries them, and running the script
@@ -39,8 +42,9 @@ from erpnext_mcp import land_export, surveying
 from erpnext_mcp.api import land_map
 from erpnext_mcp.errors import ToolError
 
+from .fixtures import MAIN
 from .harness import STORE
-from .test_land_map import DRAWN, EAST, LOT, NORTH, PAGE_DIR, SOUTH, WEST, LandMapTestCase, box
+from .test_land_map import DRAWN, EAST, LOT, NEIGHBOUR, NORTH, PAGE_DIR, SOUTH, WEST, LandMapTestCase, box
 
 try:
 	from pypdf import PdfReader
@@ -48,6 +52,9 @@ except Exception:  # pragma: no cover - the first CI leg has no pypdf
 	PdfReader = None
 
 KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
+
+#: The second county lot the full fixture names, east of the first.
+NEXT_LOT = "1N 13E 3 1100"
 
 #: The easement the map saves: a corridor as a line, not an area.
 EASEMENT = {
@@ -99,6 +106,70 @@ class ExportTestCase(LandMapTestCase):
 
 	def doc(self, name):
 		return frappe.get_doc(land.LOT_LINE_ADJUSTMENT, name)
+
+	def a_full_adjustment(self) -> str:
+		"""An adjustment filled in the way one is by the time it goes to a surveyor."""
+		self.a_lot()
+		land.upsert_tax_lot(
+			{
+				"map_taxlot": NEXT_LOT,
+				"county": "Wasco",
+				"account": "7504",
+				"owner_of_record": "Mill Creek Farms",
+				"situs": "4120 Dry Hollow Rd",
+				"acres_gis": 38.5,
+				"source": "Manual",
+				"geometry": box(EAST, SOUTH, EAST + 0.003, NORTH),
+			}
+		)
+		name = self.an_adjustment(
+			lot_1=LOT,
+			lot_2=NEXT_LOT,
+			lender="Columbia Bank",
+			lender_conditions="Written consent required before recording.",
+			target_close="2026-12-31",
+			notes="Fence line on the north side is 3 ft off the drawn line; surveyor to decide.",
+			pieces=[
+				{
+					"piece_name": "Parcel A",
+					"from_party": MAIN,
+					"to_party": NEIGHBOUR,
+					"acres_gis": 1.5,
+					"improvements": "Pump house",
+					"line_notes": "Follows the fence on the south side.",
+					"geometry": proposal(),
+				}
+			],
+			easements=[
+				{
+					"type": "access",
+					"burdened": NEIGHBOUR,
+					"benefited": MAIN,
+					"notes": "Truck access to the shop.",
+				}
+			],
+			open_items=[
+				{
+					"item": "Bank written consent",
+					"question": "Columbia Bank must consent.",
+					"owner": "A Signer",
+				}
+			],
+		)
+		self.tool_data(
+			"lla_update",
+			{
+				"name": name,
+				"fields": {
+					"proposed_geometry": json.dumps(proposal()),
+					"easement_geometry": json.dumps(EASEMENT),
+					"generated_legal_description": surveying.legal_description(
+						DRAWN, f"Beginning at the southwest corner of {LOT}"
+					)["text"],
+				},
+			},
+		)
+		return name
 
 
 # ── 1 ───────────────────────────────────────────────────────────────────────
@@ -462,6 +533,150 @@ class TheSurveyPacket(ExportTestCase):
 		self.assertIn(
 			"no legal description", self.tool_error("export_lla_survey_packet_pdf", {"name": no_words})
 		)
+
+
+# ── 5b ──────────────────────────────────────────────────────────────────────
+class ThePacketIsWhatASurveyorWorksFrom(TheSurveyPacket):
+	"""v0.174.2. "Just the outline, and the information someone will need."
+
+	The maps are outlines and nothing else; the tables are read off the record
+	and every number in them is `surveying.py`'s, so the packet cannot state a
+	bearing the land map did not.
+	"""
+
+	def full(self) -> tuple:
+		name = self.a_full_adjustment()
+		doc = self.doc(name)
+		shapes = land_export.shapes_of(doc)
+		runs = land_export.traverses(shapes)
+		sections = {section["heading"]: section for section in land_export.packet_sections(doc, shapes, runs)}
+		return name, doc, runs, sections
+
+	def test_the_maps_are_outlines_with_no_fill_and_no_picture(self):
+		before, after = self.maps(self.packet_of(self.a_full_adjustment()))
+		for svg in (before, after):
+			shapes = svg.split("<path")[1:]
+			self.assertTrue(shapes)
+			for path in shapes:
+				self.assertIn('fill="none"', path.split("/>", 1)[0])
+			for forbidden in ("fill-opacity", "<image", "<img", "href", "pattern"):
+				self.assertNotIn(forbidden, svg)
+		self.assertIn('stroke="#111111" stroke-width="2.6"', after)
+		self.assertNotIn('stroke-width="2.6"', before)
+
+	def test_the_after_map_numbers_every_corner_and_marks_the_point_of_beginning(self):
+		before, after = self.maps(self.packet_of(self.a_full_adjustment()))
+		self.assertEqual(after.count("<circle"), len(DRAWN))
+		self.assertIn(">1 POB<", after)
+		for number in range(2, len(DRAWN) + 1):
+			self.assertIn(f">{number}<", after)
+		self.assertNotIn("<circle", before)
+
+	def test_every_course_is_surveying_s_own_numbers_between_numbered_corners(self):
+		_name, _doc, runs, sections = self.full()
+		expected = surveying.courses(DRAWN)
+		rows = sections["Courses"]["rows"]
+		self.assertEqual(len(rows), len(expected))
+		for row, course in zip(rows, expected, strict=True):
+			self.assertEqual(row[3], course["bearing"])
+			self.assertEqual(row[4], f"{course['distance_ft']:,.2f}")
+			self.assertEqual(row[5], f"{course['distance_m']:,.3f}")
+		self.assertEqual([row[1:3] for row in rows], [["1", "2"], ["2", "3"], ["3", "4"], ["4", "1"]])
+		summary = sections["Courses"]["notes"][0]
+		self.assertIn(f"{surveying.acres(DRAWN):,.3f} acres", summary)
+		self.assertIn(surveying.closure(DRAWN)["precision_text"], summary)
+		self.assertEqual(runs[0]["corners"][0]["point"], [float(value) for value in DRAWN[0]])
+
+	def test_the_corner_table_is_latitude_then_longitude_in_drawn_order(self):
+		_name, _doc, _runs, sections = self.full()
+		rows = sections["Corner coordinates"]["rows"]
+		self.assertEqual(rows[0][0], "1 (POB)")
+		for row, point in zip(rows, DRAWN, strict=True):
+			self.assertEqual(row[1], f"{point[1]:.7f}")
+			self.assertEqual(row[2], f"{point[0]:.7f}")
+		self.assertIn(f"latitude {DRAWN[0][1]:.7f}", sections["Point of beginning"]["notes"][0])
+		self.assertIn(f"southwest corner of {LOT}", sections["Point of beginning"]["notes"][1])
+
+	def test_the_people_the_lots_and_the_lender_come_off_the_record(self):
+		name, doc, _runs, sections = self.full()
+		parties = sections["Parties and tax lots"]["rows"]
+		self.assertEqual(parties[0][2], "A Signer, President")
+		self.assertEqual(parties[0][4], "7503")
+		self.assertEqual(parties[1][3:7], [NEXT_LOT, "7504", "Mill Creek Farms", "4120 Dry Hollow Rd"])
+		header = dict(land_export.packet_header(doc))
+		self.assertEqual(header["Lender"], "Columbia Bank")
+		self.assertEqual(header["Target close"], "2026-12-31")
+		self.assertIn("TRUE NORTH".lower(), header["Basis of bearings"].lower())
+		page = self.packet_of(name)
+		self.assertIn("Fence line on the north side", page)
+
+	def test_pieces_easements_and_open_questions_are_tabled(self):
+		_name, _doc, _runs, sections = self.full()
+		piece = sections["Land changing hands"]["rows"][0]
+		self.assertEqual(piece[0], "Parcel A")
+		self.assertEqual(piece[1], f"Party 1 — {MAIN}")
+		self.assertEqual(piece[4], "—")  # a Float 0 is "not surveyed yet", never "0.000 acres"
+		self.assertEqual(piece[5], "Pump house")
+		self.assertEqual(
+			sections["Easements on the record"]["rows"][0][:3],
+			["Access", f"Party 2 — {NEIGHBOUR}", f"Party 1 — {MAIN}"],
+		)
+		corridor = sections["Easement corridors drawn"]["rows"][0]
+		self.assertEqual(corridor[1], "centre line")
+		self.assertEqual(corridor[3], "no")
+		self.assertEqual(sections["Open questions"]["rows"][0][0], "Bank written consent")
+
+	def test_a_resolved_question_is_not_on_the_sheet(self):
+		name = self.a_full_adjustment()
+		doc = self.doc(name)
+		for row in doc.get("open_items"):
+			row.update({"status": "Resolved"})
+		shapes = land_export.shapes_of(doc)
+		headings = [
+			s["heading"] for s in land_export.packet_sections(doc, shapes, land_export.traverses(shapes))
+		]
+		self.assertNotIn("Open questions", headings)
+
+	def test_a_corridor_the_new_line_cuts_is_called_out(self):
+		name = self.a_full_adjustment()
+		middle = (DRAWN[0][0] + DRAWN[1][0]) / 2
+		across = {"type": "LineString", "coordinates": [[middle, SOUTH + 0.0001], [middle, NORTH - 0.0001]]}
+		self.tool_data("lla_update", {"name": name, "fields": {"easement_geometry": json.dumps(across)}})
+		doc = self.doc(name)
+		shapes = land_export.shapes_of(doc)
+		sections = {
+			s["heading"]: s for s in land_export.packet_sections(doc, shapes, land_export.traverses(shapes))
+		}
+		self.assertEqual(sections["Easement corridors drawn"]["rows"][0][3], "yes — crosses it")
+
+	def test_a_proposed_line_that_is_a_line_reads_as_an_open_traverse(self):
+		line = {"type": "LineString", "coordinates": [list(point) for point in DRAWN[:3]]}
+		runs = land_export.traverses([{**line, "layer": "proposed", "label": "Proposed boundary"}])
+		self.assertFalse(runs[0]["closed"])
+		self.assertEqual(
+			[(row["from_corner"], row["to_corner"]) for row in runs[0]["courses"]], [(1, 2), (2, 3)]
+		)
+		self.assertIsNone(runs[0]["closure"])
+
+	def test_the_plain_pdf_carries_the_same_tables(self):
+		name = self.a_full_adjustment()
+		data = self.tool_data("export_lla_survey_packet_pdf", {"name": name})
+		self.assertEqual(data["renderer"], "erpnext_mcp render/pdf.py")
+		if PdfReader is None:
+			self.skipTest("pypdf is not installed")
+		pdf = base64.b64decode(data["pdf_base64"])
+		text = " ".join(page.extract_text() for page in PdfReader(__import__("io").BytesIO(pdf)).pages)
+		doc = self.doc(name)
+		shapes = land_export.shapes_of(doc)
+		for section in land_export.packet_sections(doc, shapes, land_export.traverses(shapes)):
+			with self.subTest(section=section["heading"]):
+				self.assertIn(section["heading"].upper(), text)  # render/pdf.py sets headings in capitals
+		self.assertIn(f"{DRAWN[0][1]:.7f}", text)
+		self.assertIn("Mill Creek", text)
+		self.assertIn("7504", text)
+
+	def packet_of(self, name: str) -> str:
+		return self.tool_data("export_lla_survey_packet_pdf", {"name": name, "include_html": True})["html"]
 
 
 # ── 6 ───────────────────────────────────────────────────────────────────────

@@ -6581,14 +6581,20 @@ TOOLS = {
 	"export_lla_survey_packet_pdf": _tool(
 		land_export.export_lla_survey_packet_pdf,
 		"THE SHEET YOU HAND A SURVEYOR OR ATTACH TO A COUNTY FILING (PDF, base64). Read-only.\n\n"
-		"The legal description page with TWO DRAWN MAPS above it: BEFORE, the county's tax lots "
-		"as recorded; AFTER, the proposal and the easement corridors over those lots. Each shape "
-		"is labelled with its acreage, projected to Web Mercator with a north arrow and a scale "
-		"bar in feet and metres. Each map is an SVG built from the stored geometry and embedded "
-		"as a data: URI image — no tile server, nothing fetched — so it prints the same on a "
-		"bench with no route out.\n\n"
+		"TWO OUTLINE MAPS — lines only, no imagery, no fill: BEFORE, the county's tax lots as "
+		"recorded; AFTER, the proposal (heavy line, every corner numbered, corner 1 marked POB) "
+		"and the easement corridors (dashed) over those lots. North arrow and a scale bar in "
+		"feet and metres. Each map is an SVG built from the stored geometry and embedded as a "
+		"data: URI image — nothing fetched — so it prints the same on a bench with no route out.\n\n"
+		"THEN WHAT A SURVEYOR WORKS FROM, read off the record: the course table (bearing, feet, "
+		"metres, corner to corner) with area, perimeter and closure; every corner's latitude and "
+		"longitude; the point of beginning; parties, signers, tax lots, assessor accounts, owners "
+		"of record and situs; acreage before and after; the pieces changing hands; easements on "
+		"the record and drawn, and whether the new line crosses one; open questions; the lender; "
+		"the basis of bearings; the metes and bounds; the notes; the disclaimer. Every number is "
+		"surveying.py's, the same the land map shows.\n\n"
 		"Needs both the geometry and the description. Where the bench has no HTML-to-PDF "
-		"renderer the words are set by this app's own writer and the map is on the HTML "
+		"renderer this app's own writer sets every table and the maps are on the HTML "
 		"(`include_html`), which the document says in its own text.",
 		{
 			"name": _field(_STRING, "The Lot Line Adjustment docname."),
