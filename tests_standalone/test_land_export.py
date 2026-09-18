@@ -13,8 +13,9 @@ SEVEN CLAIMS.
    is GROUND feet and not mercator feet, and nothing external is referenced.
 4. `TheLegalDescriptionPage` — the header, the before/after acreage, the
    description and the disclaimer; refused when there is no description.
-5. `TheSurveyPacket` — the same page with the map in it, and the plain-PDF
-   fallback that says where the map went.
+5. `TheSurveyPacket` — the same page with two maps in it, before and after,
+   each as an image wkhtmltopdf actually draws, and the plain-PDF fallback that
+   says where the maps went.
 6. `TheDeskDownloads` — the three whitelisted methods answer a FILE, under
    Frappe's own read permission on the record.
 7. `TheButtonsAreOnTheMap` — the page carries them, and running the script
@@ -354,14 +355,91 @@ class TheLegalDescriptionPage(ExportTestCase):
 
 
 # ── 5 ───────────────────────────────────────────────────────────────────────
+def reparsed(page: str) -> str:
+	"""The page after the pass `frappe.utils.pdf.get_pdf` gives it.
+
+	`inline_private_images` re-serialises through BeautifulSoup's `html.parser`,
+	which is the stdlib parser below, and it hands tags back with every attribute
+	name LOWERCASED. That turned the inline map's `viewBox` into `viewbox`.
+	"""
+	from html.parser import HTMLParser
+
+	out = []
+
+	class Echo(HTMLParser):
+		def handle_starttag(self, tag, attrs):
+			rendered = "".join(f' {key}="{value}"' for key, value in attrs)
+			out.append(f"<{tag}{rendered}>")
+
+		def handle_endtag(self, tag):
+			out.append(f"</{tag}>")
+
+		def handle_data(self, data):
+			out.append(data)
+
+	Echo(convert_charrefs=True).feed(page)
+	return "".join(out)
+
+
 class TheSurveyPacket(ExportTestCase):
+	PREFIX = 'src="data:image/svg+xml;base64,'
+
+	def maps(self, page: str) -> list:
+		"""Every map on the page, decoded back to the SVG the renderer draws."""
+		found = []
+		for chunk in page.split(self.PREFIX)[1:]:
+			found.append(base64.b64decode(chunk.split('"', 1)[0]).decode("utf-8"))
+		return found
+
+	def packet(self, **kwargs) -> str:
+		return self.tool_data(
+			"export_lla_survey_packet_pdf",
+			{"name": self.an_export_adjustment(**kwargs), "include_html": True},
+		)["html"]
+
+	def test_the_maps_survive_the_parser_frappe_runs_before_wkhtmltopdf(self):
+		"""v0.173.0 inlined the SVG, and every PDF printed a legend with no map:
+		the parser lowercased viewBox. An image's bytes are out of its reach."""
+		page = self.packet()
+		self.assertNotIn("<svg", page)
+		after = self.maps(reparsed(page))
+		self.assertEqual(len(after), 2)
+		for svg in after:
+			self.assertIn('viewBox="0 0 720 470"', svg)
+			self.assertIn('height="470"', svg)
+
+	def test_the_negative_control_the_old_inline_map_loses_its_viewbox(self):
+		svg = land_export.svg_map(land_export.shapes_of(self.doc(self.an_export_adjustment())), "x")
+		self.assertIn("viewBox", svg)
+		self.assertNotIn("viewBox", reparsed(f"<div class='map'>{svg}</div>"))
+
+	def test_before_is_the_county_lots_and_after_is_the_proposal_over_them(self):
+		before, after = self.maps(self.packet())
+		self.assertIn(LOT, before)
+		self.assertNotIn("Proposed boundary", before)
+		self.assertIn("Proposed boundary", after)
+		self.assertIn(LOT, after)
+		page = self.packet()
+		self.assertLess(page.index("Existing tax lots"), page.index("<h2>Proposed boundary"))
+
+	def test_with_no_county_lot_shape_the_before_map_says_why_it_is_missing(self):
+		page = self.packet(lots=False)
+		self.assertEqual(len(self.maps(page)), 1)
+		self.assertIn("before map cannot be drawn", page)
+
+	def test_a_label_is_drawn_as_halo_then_ink_without_paint_order(self):
+		"""wkhtmltopdf ignores paint-order, and the white stroke hid every label."""
+		svg = land_export.svg_map(land_export.shapes_of(self.doc(self.an_export_adjustment())), "x")
+		self.assertNotIn("paint-order", svg)
+		self.assertIn(f'fill="#111">{LOT}', svg)
+
 	def test_the_packet_is_the_description_with_the_map_above_it(self):
 		data = self.tool_data(
 			"export_lla_survey_packet_pdf", {"name": self.an_export_adjustment(), "include_html": True}
 		)
 		html = data["html"]
 		self.assertIn("Survey packet", html)
-		self.assertIn("<svg", html)
+		self.assertEqual(len(self.maps(html)), 2)
 		self.assertIn("thence", html)
 		self.assertIn("Acreage before and after", html)
 		self.assertIn(surveying.DISCLAIMER, html)

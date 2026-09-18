@@ -131,12 +131,16 @@ acreage, the tax lot number, the assessor account and the owner of record, with
 the draft-for-a-surveyor disclaimer as its description.
 
 The **survey packet** is the sheet to hand a surveyor or attach to a county
-filing: a drawn map of the proposal, the easement corridors and the lots, each
+filing: two drawn maps — **before**, the county's tax lots as recorded, and
+**after**, the proposal and the easement corridors over them — each shape
 labelled with its acreage, with a north arrow and a scale bar in feet and
 metres; then the tax lots and parties; then the acreage before and after for
-each side; then the metes-and-bounds description; then the disclaimer. The map
-is an inline SVG built from the stored geometry — no tiles, no images, nothing
-fetched — so it prints the same on a bench with no route out.
+each side; then the metes-and-bounds description; then the disclaimer. Each map
+is an SVG built from the stored geometry and embedded as a `data:` URI image —
+no tiles, nothing fetched — so it prints the same on a bench with no route out.
+It is an image and not inline `<svg>` because Frappe's `get_pdf` re-parses the
+page with an HTML parser that lowercases `viewBox`, and an inline map then
+prints as nothing.
 
 The same four exports are MCP tools, and they read the same record through the
 same code: `export_lla_kml`, `export_boundary_geojson` (which also serves a

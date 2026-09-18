@@ -9,7 +9,7 @@ on the other end opens.
   export_lla_kml                     Google Earth and a handheld GPS
   export_boundary_geojson            QGIS and ArcGIS, for any land record
   export_lla_legal_description_pdf   the metes-and-bounds page
-  export_lla_survey_packet_pdf       that page with the drawn map above it
+  export_lla_survey_packet_pdf       that page with the before and after maps above it
 
 THE DESK HAS THE SAME FOUR as file downloads — `api/land_map.export_kml`,
 `export_geojson` and `export_pdf`, wired to the buttons on `/app/land-map`.
@@ -116,6 +116,6 @@ def export_lla_legal_description_pdf(args: dict) -> ToolResult:
 
 
 def export_lla_survey_packet_pdf(args: dict) -> ToolResult:
-	"""The drawn map and the description on one sheet."""
+	"""The before and after maps and the description on one sheet."""
 	doc = _lla(args, "export a lot line adjustment")
 	return _pdf_result(doc, "packet", args, "survey packet")

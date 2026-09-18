@@ -6581,18 +6581,19 @@ TOOLS = {
 	"export_lla_survey_packet_pdf": _tool(
 		land_export.export_lla_survey_packet_pdf,
 		"THE SHEET YOU HAND A SURVEYOR OR ATTACH TO A COUNTY FILING (PDF, base64). Read-only.\n\n"
-		"The legal description page with a DRAWN MAP above it: the proposal, the easement "
-		"corridors and the county's lots, each labelled with its acreage, projected to Web "
-		"Mercator with a north arrow and a scale bar in feet and metres. The map is an inline "
-		"SVG built from the stored geometry — no tile server, no image, nothing fetched — so "
-		"it prints the same on a bench with no route out.\n\n"
+		"The legal description page with TWO DRAWN MAPS above it: BEFORE, the county's tax lots "
+		"as recorded; AFTER, the proposal and the easement corridors over those lots. Each shape "
+		"is labelled with its acreage, projected to Web Mercator with a north arrow and a scale "
+		"bar in feet and metres. Each map is an SVG built from the stored geometry and embedded "
+		"as a data: URI image — no tile server, nothing fetched — so it prints the same on a "
+		"bench with no route out.\n\n"
 		"Needs both the geometry and the description. Where the bench has no HTML-to-PDF "
 		"renderer the words are set by this app's own writer and the map is on the HTML "
 		"(`include_html`), which the document says in its own text.",
 		{
 			"name": _field(_STRING, "The Lot Line Adjustment docname."),
 			"include_html": _field(
-				_BOOLEAN, "Also return the HTML, which carries the drawn map. Default false."
+				_BOOLEAN, "Also return the HTML, which carries the drawn maps. Default false."
 			),
 		},
 		required=("name",),

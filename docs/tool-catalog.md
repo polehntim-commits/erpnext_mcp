@@ -19239,10 +19239,13 @@ adjustment carries no description.
 
 ### `export_lla_survey_packet_pdf` — read-only, default ON
 
-`name`, optional `include_html`. The page above with a drawn map over it — the
-proposal, the easement corridors and the lots, labelled with acreages, in Web
-Mercator with a north arrow and a scale bar in feet and metres. The map is an
-inline SVG built from the stored geometry: no tiles, no images, nothing fetched.
+`name`, optional `include_html`. The page above with two drawn maps over it —
+**before**, the county's tax lots as recorded; **after**, the proposal and the
+easement corridors over those lots — labelled with acreages, in Web Mercator
+with a north arrow and a scale bar in feet and metres. Each map is an SVG built
+from the stored geometry and embedded as a `data:` URI image: no tiles, nothing
+fetched. (v0.174.1: v0.173.0 inlined the SVG, and Frappe's HTML parser lowercased
+its `viewBox` on the way to wkhtmltopdf, so every PDF printed without a map.)
 
 **The renderer is named on every answer.** `frappe.utils.pdf` (wkhtmltopdf)
 where the bench has it; otherwise this app's own PDF writer sets the same words,

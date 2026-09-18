@@ -3,6 +3,31 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.174.1 — 2026-09-17 — the survey packet prints its maps
+
+**897 tools** (unchanged). One fix to `export_lla_survey_packet_pdf` and the
+Desk's survey packet download, which share one engine.
+
+- **The map was never in the PDF.** v0.173.0 inlined the map as `<svg>`, and
+  every packet wkhtmltopdf printed had the "Proposed boundary" heading and the
+  legend square with nothing between them. Two causes, either one fatal:
+  `frappe.utils.pdf.get_pdf` re-serialises the page through BeautifulSoup's
+  `html.parser`, which lowercases attribute names, so `viewBox` arrived as
+  `viewbox`; and an inline SVG sized `width="100%"` with no height gets no height
+  in wkhtmltopdf's QtWebKit. The map is now an `<img>` whose source is the SVG as
+  a base64 `data:` URI. No parser reaches inside it, and Frappe's `scrub_urls`
+  leaves `data:` alone. Verified by running the packet through the real
+  `get_pdf` and wkhtmltopdf 0.12.6.1 in the `erpnext-umbrel:15` image.
+- **Two maps, before and after.** *Existing tax lots* draws the county's lots as
+  recorded, on their own extent; *Proposed boundary* draws the proposal and the
+  easement corridors over them. An adjustment whose lots carry no stored shape
+  gets a line saying the before map cannot be drawn and which field to set,
+  rather than a blank.
+- **Labels are legible.** The same WebKit ignores `paint-order`, so the white
+  halo stroke was painted over every label. Each label is now drawn twice, halo
+  then ink. A county lot's label sits just inside the lot's top edge, so it no
+  longer lands on the proposal's label at the centre.
+
 ## 0.174.0 — 2026-09-17 — the strip of ground somebody may cross
 
 The Lot Line Adjustment form draws its own map now, and the land map stops

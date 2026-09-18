@@ -43,15 +43,26 @@ document itself that the map is on the HTML version. That is the contract
 `mou_print_format` already keeps, and `renderer` on every answer says which one
 produced the file. A caller that needs the map can always take the HTML.
 
-NO EXTERNAL RESOURCE IS REFERENCED. No `<img>`, no stylesheet link, no web
-font: wkhtmltopdf fetches every URL it finds, with no timeout worth the name,
-and one that does not answer hangs the render. The map is an inline `<svg>`
-drawn from the geometry, which is also why it needs no tile server and no
-network.
+NO EXTERNAL RESOURCE IS REFERENCED. No stylesheet link, no web font, no image
+URL: wkhtmltopdf fetches every URL it finds, with no timeout worth the name,
+and one that does not answer hangs the render. The map is an SVG drawn from the
+geometry, which is also why it needs no tile server and no network.
+
+THE MAP GOES IN AS AN `<img>` WITH A `data:` URI, NOT AS INLINE `<svg>`. v0.173.0
+inlined it, and every packet wkhtmltopdf printed had a heading, a legend and no
+map. Two things killed it, and either one alone was enough. `frappe.utils.pdf.get_pdf`
+re-serialises the page through BeautifulSoup's `html.parser`, which lowercases
+attribute names, so `viewBox` became `viewbox` and the SVG lost its coordinate
+system. And an inline SVG sized `width="100%"` with no height gets no height in
+wkhtmltopdf's QtWebKit. An image's bytes go through neither parser, and Frappe's
+`scrub_urls` leaves a `data:` source alone, so the map prints on a bench exactly
+as it looks in a browser. The same WebKit ignores `paint-order`, so each label is
+drawn twice, a white halo and then the ink, rather than relying on it.
 """
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 import math
@@ -536,7 +547,7 @@ def svg_map(shapes: list, title: str = "") -> str:
 	_label_attribute = html.escape(title or "Proposed lot line")
 	parts = [
 		f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SVG_WIDTH:g} {SVG_HEIGHT:g}" '
-		f'width="100%" role="img" aria-label="{_label_attribute}">',
+		f'width="{SVG_WIDTH:g}" height="{SVG_HEIGHT:g}" role="img" aria-label="{_label_attribute}">',
 		f'<rect x="0" y="0" width="{SVG_WIDTH:g}" height="{SVG_HEIGHT:g}" fill="#ffffff" stroke="#333" stroke-width="1"/>',
 	]
 	# The lots first, so the proposal draws on top of them.
@@ -561,13 +572,21 @@ def svg_map(shapes: list, title: str = "") -> str:
 	for layer in order:
 		for shape in [entry for entry in shapes if entry.get("layer", "proposed") == layer]:
 			x, y = _centroid(view, shape)
+			if layer == "lot":
+				# Just inside the lot's top edge: the proposal sits inside the lot
+				# and usually near its middle, so two centred labels collide.
+				y = round(min(place(view, point)[1] for ring in _rings(shape) for point in ring) + 16, 2)
 			label = str(shape.get("label") or "")
 			acres = f" — {shape['acres']:,.2f} ac" if shape.get("acres") is not None else ""
+			text = html.escape(label + acres)
+			font = f'x="{x}" y="{y}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11"'
+			# Halo, then ink. wkhtmltopdf ignores paint-order, and a stroke drawn
+			# over the glyphs whites the label out.
 			parts.append(
-				f'<text x="{x}" y="{y}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" '
-				f'font-size="11" fill="#111" stroke="#ffffff" stroke-width="3" paint-order="stroke">'
-				f"{html.escape(label + acres)}</text>"
+				f'<text {font} fill="#ffffff" stroke="#ffffff" stroke-width="3" '
+				f'stroke-linejoin="round">{text}</text>'
 			)
+			parts.append(f'<text {font} fill="#111">{text}</text>')
 	parts.append(_north_arrow())
 	parts.append(_scale_bar_svg(scale_bar(view)))
 	parts.append(
@@ -576,6 +595,20 @@ def svg_map(shapes: list, title: str = "") -> str:
 	)
 	parts.append("</svg>")
 	return "".join(parts)
+
+
+def map_image(shapes: list, title: str = "") -> str:
+	"""`svg_map` as an `<img>` whose source is the SVG itself, base64 in a `data:` URI.
+
+	The form wkhtmltopdf draws. The module docstring says why inline `<svg>` is
+	not: Frappe's HTML parser lowercases `viewBox` on the way to the renderer.
+	"""
+	encoded = base64.b64encode(svg_map(shapes, title).encode("utf-8")).decode("ascii")
+	alt = html.escape(title or "Proposed lot line")
+	return (
+		f'<img src="data:image/svg+xml;base64,{encoded}" alt="{alt}" '
+		f'width="{SVG_WIDTH:g}" height="{SVG_HEIGHT:g}" style="width:100%;height:auto">'
+	)
 
 
 def _north_arrow() -> str:
@@ -675,7 +708,8 @@ table.grid td.num, table.grid th.num { text-align: right; }
 pre.legal { font-family: "Courier New", monospace; font-size: 10pt; white-space: pre-wrap; }
 .disclaimer { border: 1px solid #888; padding: 6pt; font-size: 9.5pt; }
 .muted { color: #555; font-size: 9.5pt; }
-.map { border: 0; margin: 0 0 8pt; }
+.map { border: 0; margin: 0 0 4pt; }
+.figure { page-break-inside: avoid; }
 """
 
 
@@ -715,24 +749,50 @@ def survey_packet_html(doc) -> str:
 			"this adjustment."
 		)
 	title = document_title(doc)
-	legend = " &nbsp;·&nbsp; ".join(
-		f"<span style='color:{LAYERS[key]['svg_line']}'>&#9632;</span> {html.escape(LAYERS[key]['label'])}"
-		for key in ("proposed", "easement", "lot")
-		if any(shape["layer"] == key for shape in shapes)
-	)
 	return (
 		f"<style>{STYLE}</style>"
 		"<h1>Survey packet</h1>"
 		f"<p class='sub'>{html.escape(title)}</p>"
 		f"{_header_html(doc)}"
-		"<h2>Proposed boundary</h2>"
-		f"<div class='map'>{svg_map(shapes, title)}</div>"
-		f"<p class='muted'>{legend}</p>"
+		f"{_before_figure(doc, shapes)}"
+		f"{_figure('Proposed boundary', 'After', shapes, title)}"
 		"<h2>Acreage before and after</h2>"
 		f"{_acreage_html(doc)}"
 		"<h2>Metes and bounds</h2>"
 		f"<pre class='legal'>{html.escape(_body_only(doc))}</pre>"
 		f"<div class='disclaimer'>{html.escape(surveying.DISCLAIMER)}</div>"
+	)
+
+
+def _legend(shapes: list) -> str:
+	return " &nbsp;·&nbsp; ".join(
+		f"<span style='color:{LAYERS[key]['svg_line']}'>&#9632;</span> {html.escape(LAYERS[key]['label'])}"
+		for key in ("proposed", "easement", "lot")
+		if any(shape["layer"] == key for shape in shapes)
+	)
+
+
+def _figure(heading: str, caption: str, shapes: list, title: str) -> str:
+	return (
+		f"<div class='figure'><h2>{html.escape(heading)}</h2>"
+		f"<div class='map'>{map_image(shapes, title)}</div>"
+		f"<p class='muted'>{html.escape(caption)}: {_legend(shapes)}</p></div>"
+	)
+
+
+def _before_figure(doc, shapes: list) -> str:
+	"""The county's lots as they stand, so the sheet shows before AND after.
+
+	Drawn from the lots alone, on their own extent. With no lot shape cached
+	there is nothing to draw, and the sheet says which record would supply it.
+	"""
+	lots = [shape for shape in shapes if shape["layer"] == "lot"]
+	if lots:
+		return _figure("Existing tax lots", "Before", lots, f"{doc.name} — tax lots as recorded")
+	return (
+		"<div class='figure'><h2>Existing tax lots</h2>"
+		"<p class='muted'>No county tax lot shape is stored for this adjustment's lots, so the "
+		"before map cannot be drawn. Set Lot 1 and Lot 2 to County Tax Lots that carry a geometry.</p></div>"
 	)
 
 
