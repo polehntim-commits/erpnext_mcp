@@ -690,6 +690,9 @@
   "allow_revoke_api_token",
   "allow_recover_mobile_access",
   "allow_generate_mobile_login_qr",
+  "allow_open_device_enrollment",
+  "allow_list_mobile_devices",
+  "allow_revoke_mobile_device",
   "org_master_section",
   "allow_list_designations",
   "allow_list_departments",
@@ -5635,6 +5638,27 @@
    "fieldname": "allow_generate_mobile_login_qr",
    "fieldtype": "Check",
    "label": "Generate Mobile Login QR"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. v0.175.0. Opens a one-time enrolment window for one phone and returns a QR carrying the server URL and a single-use token — no credential. The phone exchanges the token for its own device credential. 24 hours by default; a newer window closes an older unscanned one.",
+   "fieldname": "allow_open_device_enrollment",
+   "fieldtype": "Check",
+   "label": "Open Device Enrollment"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.175.0. Every phone enrolled, pending or revoked on a mobile account, with its last-seen time and idle days. Never the secret or the enrolment token.",
+   "fieldname": "allow_list_mobile_devices",
+   "fieldtype": "Check",
+   "label": "List Mobile Devices"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. v0.175.0. Ends ONE phone's credential and leaves the account and its other devices working. A reason is required and kept on the row.",
+   "fieldname": "allow_revoke_mobile_device",
+   "fieldtype": "Check",
+   "label": "Revoke Mobile Device"
   },
   {
    "fieldname": "org_master_section",

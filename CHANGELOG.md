@@ -3,6 +3,64 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.175.0 — 2026-09-18 — one phone, one credential, one row
+
+**900 tools** (+3: `open_device_enrollment`, `list_mobile_devices`,
+`revoke_mobile_device`). A phone's credential moves off the worker's User row
+and onto a row of its own, and the enrolment QR stops carrying a credential.
+
+- **New child doctype `Mobile Device Enrollment`** on Mobile Access Grant
+  (`devices`): device name and identifier, `api_key`, `api_secret` (a Password
+  field, encrypted at rest), the enrolment token's SHA-256 and deadline,
+  Pending / Enrolled / Revoked, enrolled, last seen, issued by, revoked on / by
+  / why. **Every per-device credential lives here.**
+- **One lookup path.** `fallback_auth._verified_user` — the one verifier both
+  phone transports call — now reads device rows only. A Frappe User API key no
+  longer signs a phone in, and a device secret is unknown to Frappe's own REST
+  API, so it opens the Farm Ops surface and nothing else. Each row's
+  `last_seen_on` is stamped at most hourly.
+- **The enrolment exchange.** `open_device_enrollment` (and the Desk button
+  below) opens a 24-hour window and returns a QR carrying only
+  `{type: "farm_ops_enroll", url, api_base, token}`. The phone posts the token
+  to the new unauthenticated **`POST /farmops/api/mobile/enroll_device`**,
+  which mints its own pair and returns it once, in a `farm_ops_login`-shaped
+  answer. The token is single-use, stored hashed, superseded by a newer window,
+  and refused when expired (410), used or unknown (404), or on an inactive
+  account (403) — never 401. Bad tokens are metered per address (30/minute).
+- **Per-device revocation.** `revoke_mobile_device` ends one phone and leaves
+  the others working. The nightly idle sweep now also revokes a single idle
+  device on an account that is otherwise in daily use.
+- **Actions › Onboard Worker on the Employee form** (a Client Script, like
+  ID Card). A dialog shows the enrolment QR with a countdown, polls until the
+  phone has enrolled, and saves nothing — the QR lives in one `<img>` and is
+  emptied on close. An Employee with no account gets one first
+  (`create_mobile_user`, no credential minted).
+- **Existing phones keep working.** Patch `move_mobile_credentials_to_devices`
+  copies each Active or Expired grant's User pair onto an Enrolled row. The
+  User pair is left in place — something else may present it — and
+  `list_mobile_users` flags it; revoking the migrated device clears it.
+- **What changed for existing tools.** `create_mobile_user`,
+  `generate_mobile_login_qr` and `recover_mobile_access` mint device rows (and
+  replace the account's other devices, as issuing always meant). The login
+  card remains for Farm Ops builds without the exchange. `generate_api_token`
+  still mints the Frappe User key — MCP identity and scripts — and says it no
+  longer signs in a phone. `revoke_api_token`, `revoke_mobile_user` and the
+  sweep revoke every device. `GET /farmops/api/mobile/login_qr_image` now needs
+  a device credential like every other route there; office staff use the Desk.
+- **A sidecar bug a real bench found.** `farmops_api.session` set
+  `form_dict` to a plain dict; Frappe reads `form_dict.cmd` by attribute when a
+  save fills a child row's defaults, so the exchange answered 500 on a bench
+  while every standalone test passed. It is `frappe._dict` now, for every
+  `/farmops` route. Verified end to end on a local v0.142.0 → v0.175.0 upgrade
+  of the Umbrel image: the patch moved the enrolled phone, it kept working, the
+  exchange, single use, per-device revocation and Frappe's own 401 for a device
+  key in `Authorization` all behaved as described.
+- **QR images.** The corrupt-PNG report traces to the `png_base64`
+  decode-and-re-save round-trip commit 3d34d8c describes, not to segno, which
+  only supplies the module matrix here; `render/qr.py` writes the PNG, and both
+  encoders produce valid files. New tests check every chunk's CRC, a whole
+  IDAT and a Pillow decode. No dependency changed.
+
 ## 0.174.3 — 2026-09-17 — a child row is not a dict on a bench
 
 **897 tools** (unchanged). A patch for a server error on the survey packet.

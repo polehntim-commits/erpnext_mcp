@@ -136,7 +136,14 @@ def request_session(request=None, body=None):
 		except Exception:  # pragma: no cover - a local that is not a mapping
 			pass
 	frappe.local.request = request
-	frappe.local.form_dict = dict(body or {})
+	# `frappe._dict` and NOT a plain dict. v0.175.0 found it on a real bench:
+	# Frappe reads `frappe.local.form_dict.cmd` BY ATTRIBUTE inside
+	# `get_user_permissions`, which `Document.save` reaches whenever it has to
+	# fill a child row's defaults while a request is present. A plain dict
+	# raised AttributeError there and the enrolment exchange answered 500; the
+	# double never calls that code, so only a bench could show it.
+	make = getattr(frappe, "_dict", None) or dict
+	frappe.local.form_dict = make(body or {})
 	try:
 		frappe.local.response = frappe._dict() if hasattr(frappe, "_dict") else {}
 	except Exception:  # pragma: no cover

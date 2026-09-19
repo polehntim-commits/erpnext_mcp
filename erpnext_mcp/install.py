@@ -116,6 +116,7 @@ from . import (
 	i9_print_format,
 	irrigation_workspace,
 	onboard_worker,
+	onboard_worker_action,
 	roles,
 	settings,
 	sidebar,
@@ -153,6 +154,7 @@ def after_install() -> None:
 	_mou_print_format()
 	_badge_list_action()
 	_badge_form_action()
+	_onboard_worker_action()
 	_asset_tag_list_action()
 	_asset_tag_form_action()
 	_farm_task_map_action()
@@ -202,6 +204,7 @@ def after_migrate() -> None:
 	_mou_print_format()
 	_badge_list_action()
 	_badge_form_action()
+	_onboard_worker_action()
 	_asset_tag_list_action()
 	_asset_tag_form_action()
 	_farm_task_map_action()
@@ -2003,6 +2006,7 @@ def before_uninstall() -> None:
 	"""
 	_remove_badge_list_action()
 	_remove_badge_form_action()
+	_remove_onboard_worker_action()
 	_remove_asset_tag_list_action()
 	_remove_asset_tag_form_action()
 	_remove_farm_task_map_action()
@@ -2078,6 +2082,44 @@ def _remove_badge_list_action() -> None:
 			"\nerpnext_mcp: could not remove this app's Client Script from the Employee list — "
 			f"{report['reason']}.\nDelete it by hand in the Desk under Client Script, or its "
 			'"Print Badge Sheet" button will stay on the list calling a method that has gone.\n'
+		)
+
+
+def _onboard_worker_action() -> None:
+	"""Put Actions › Onboard Worker on the Employee form. v0.175.0.
+
+	A one-time enrolment QR for the worker's phone, drawn in a dialog and never
+	saved. A Client Script row for the reason `_badge_form_action` gives, with
+	the same three states — written, brought up to date, or left alone because
+	somebody edited it, which PRINTS.
+	"""
+	report = onboard_worker_action.seed_onboard_worker_action()
+	if report.get("created"):
+		print(
+			f"erpnext_mcp: seeded the {report['name']!r} Client Script — an Employee form now has "
+			"Actions › Onboard Worker, which shows a one-time enrolment QR for that worker's phone "
+			"(the server address and a single-use token, no credential) with a countdown, and "
+			"saves nothing. Untick `enabled` or delete the row and this app will not put it back."
+		)
+	elif report.get("updated"):
+		print(
+			f"erpnext_mcp: {report['reason']} — the {report['name']!r} Client Script was brought up to date."
+		)
+	elif report.get("reason", "").startswith("left alone"):
+		print(f"\nerpnext_mcp: the {report['name']!r} Client Script was {report['reason']}.\n")
+	elif report.get("reason") not in ("already present", ""):
+		print(f"erpnext_mcp: did not seed the Onboard Worker button — {report['reason']}.")
+
+
+def _remove_onboard_worker_action() -> None:
+	"""Take the Onboard Worker button off the Employee form before the app goes."""
+	report = onboard_worker_action.remove_onboard_worker_action()
+	if report.get("removed"):
+		print(f"erpnext_mcp: removed the {report['name']!r} Client Script from the Employee form.")
+	elif report.get("reason") not in ("not present", ""):
+		print(
+			"\nerpnext_mcp: could not remove the Onboard Worker Client Script from the Employee "
+			f"form — {report['reason']}. Delete it by hand in the Desk under Client Script.\n"
 		)
 
 

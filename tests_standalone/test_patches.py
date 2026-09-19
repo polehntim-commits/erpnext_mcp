@@ -38,6 +38,7 @@ from erpnext_mcp.patches import (
 	migrate_declarative_rules,
 	migrate_incident_tool_switches,
 	migrate_training_types,
+	move_mobile_credentials_to_devices,
 	recompute_2026_dependents_credit,
 	register_custom_party_types,
 	rename_discipline_record,
@@ -76,6 +77,7 @@ PATCHES = (
 	("erpnext_mcp.patches.backfill_field_varieties", backfill_field_varieties),
 	("erpnext_mcp.patches.backfill_valve_rank", backfill_valve_rank),
 	("erpnext_mcp.patches.migrate_asset_types", migrate_asset_types),
+	("erpnext_mcp.patches.move_mobile_credentials_to_devices", move_mobile_credentials_to_devices),
 )
 
 

@@ -1542,6 +1542,7 @@ APP_DOCTYPES = {
 	"Water Test": "water_test",
 	# ── v0.17.0: mobile access ──────────────────────────────────────────────
 	"Mobile Access Grant": "mobile_access_grant",
+	"Mobile Device Enrollment": "mobile_device_enrollment",
 	# ── v0.19.0: the training register ──────────────────────────────────────
 	"Employee Training Record": "employee_training_record",
 	# ── v0.19.2: the regime vocabulary and the curriculum master ─────────────
@@ -2471,6 +2472,13 @@ def _key(value):
 
 # ── documents ───────────────────────────────────────────────────────────────
 CHILD_TABLES = {
+	# v0.175.0. One phone per row, each with its own credential. Registered here
+	# so `append` stamps the child doctype and `_extract_passwords` finds the
+	# Password field on the row — Frappe encrypts a child row's Password exactly
+	# as it does a parent's (`Document._validate` runs `_save_passwords` on
+	# every child), and a double that kept the secret in the row would let "the
+	# secret is never readable after enrolment" pass while it was.
+	("Mobile Access Grant", "devices"): "Mobile Device Enrollment",
 	# v0.79.0. The narrative table has THREE PARENTS and that is the point of it:
 	# appending an account of what happened is one act, and three near-identical
 	# tables would drift the first time one of them grew a column.
@@ -2611,6 +2619,8 @@ CHILD_TABLES = {
 #: plain dicts. A row this app appends to and re-reads has to behave the same on
 #: the second read as on the first.
 REHYDRATED_CHILD_FIELDS = (
+	# v0.175.0. A grant's device rows are re-read and mutated in place.
+	"devices",
 	"accounts",
 	"payment_entries",
 	"companies",
@@ -4259,7 +4269,18 @@ class Store:
 		that here is what makes "the token is never returned to a caller"
 		something the tests can actually check rather than take on trust.
 		"""
-		meta = META.get(doc.doctype)
+		# CHILD ROWS TOO. v0.175.0. Frappe's `Document._validate` calls
+		# `_save_passwords` on every child, keyed by the CHILD's doctype and name.
+		for (parent, fieldname), child_doctype in CHILD_TABLES.items():
+			if parent != doc.doctype or not META.get(child_doctype):
+				continue
+			for row in doc.get(fieldname) or []:
+				if isinstance(row, dict):
+					self._extract_row_passwords(child_doctype, row)
+		self._extract_row_passwords(doc.doctype, doc)
+
+	def _extract_row_passwords(self, doctype: str, doc):
+		meta = META.get(doctype)
 		if not meta:
 			return
 		for field in meta.fields:
@@ -4278,10 +4299,10 @@ class Store:
 				# None for a Password field nobody set, and treating THAT as a
 				# deletion would wipe the settings token on every `seed_defaults`
 				# save.
-				self.passwords.pop((doc.doctype, doc.get("name"), field["fieldname"]), None)
+				self.passwords.pop((doctype, doc.get("name"), field["fieldname"]), None)
 				continue
 			if value and not set(str(value)) <= {"*"}:
-				self.passwords[(doc.doctype, doc.get("name"), field["fieldname"])] = value
+				self.passwords[(doctype, doc.get("name"), field["fieldname"])] = value
 				doc[field["fieldname"]] = "*" * len(str(value))
 
 	def get_raw(self, doctype: str, name: str):
@@ -4440,6 +4461,13 @@ def _reject_default_ordering(doctype: str, order_by) -> None:
 		"use the framework's own accessor (frappe.db.get_singles_dict for "
 		"tabSingles)."
 	)
+
+
+def _stub_get_decrypted_password(doctype, name, fieldname="password", raise_exception=True):
+	value = STORE.passwords.get((doctype, name, fieldname))
+	if value is None and raise_exception:
+		raise ValidationError(f"no password stored for {doctype} {name}.{fieldname}")
+	return value
 
 
 class FakeDB:
@@ -4659,6 +4687,10 @@ class FakeDB:
 #: every other record's evidence as absent, which is the kind of empty result
 #: that reads as "no photographs were filed".
 CHILD_TABLE_SOURCES = {
+	# v0.175.0. `device_enrollment.verify` finds a phone by its api_key and
+	# `exchange` by its token hash — both direct queries on the child doctype,
+	# which is the one lookup path every mobile request takes.
+	"Mobile Device Enrollment": (("Mobile Access Grant", "devices"),),
 	"Journal Entry Account": (("Journal Entry", "accounts"),),
 	# v0.91.0. The wizard's steps, read by `parent` rather than off the
 	# definition in hand — which is how `wizards._step_names` finds the rows a
@@ -5650,6 +5682,13 @@ def install() -> types.ModuleType:
 	sys.modules["frappe.model.document"] = document
 	sys.modules["frappe.model.workflow"] = workflow
 	sys.modules["frappe.utils"] = module.utils
+	# v0.175.0. `frappe.utils.password.get_decrypted_password` is what Frappe's
+	# own api-key validator reads a secret with, and what the device verifier
+	# calls. It answers from the same `__Auth` stand-in `get_password` does.
+	password = types.ModuleType("frappe.utils.password")
+	password.get_decrypted_password = _stub_get_decrypted_password
+	module.utils.password = password
+	sys.modules["frappe.utils.password"] = password
 	module.model = model
 
 	desk = types.ModuleType("frappe.desk")

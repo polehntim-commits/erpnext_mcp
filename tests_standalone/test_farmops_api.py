@@ -107,6 +107,27 @@ class FarmOpsAPITestCase(MobileAPITestCase):
 			self.credential = credential
 		return credential
 
+	def device_credential(self, user, state="Active", role="Field Worker"):
+		"""A device credential for `user`, on a grant in `state`. v0.175.0.
+
+		The only credential this service accepts is a `Mobile Device Enrollment`
+		row. Tests that need a caller who authenticates but is then refused by a
+		gate further in — no Active grant, the wrong role — build one here rather
+		than seeding a User key, which since v0.175.0 is refused at the door.
+		"""
+		from erpnext_mcp import device_enrollment
+
+		if not frappe.db.exists("Mobile Access Grant", user):
+			frappe.get_doc(
+				{"doctype": "Mobile Access Grant", "user": user, "mobile_role": role, "state": "Active"}
+			).insert(ignore_permissions=True)
+		issued = device_enrollment.issue_direct(
+			user, device_name="test", issued_by="Administrator", replace=False
+		)
+		if state != "Active":
+			frappe.db.set_value("Mobile Access Grant", user, "state", state)
+		return {"api_key": issued["api_key"], "api_secret": issued["api_secret"]}
+
 	# ── calling it ──────────────────────────────────────────────────────────
 	def post(self, path, body=None, credential=None, token=None, headers=None, method="POST"):
 		"""One HTTP call at the service. Returns the werkzeug response.
@@ -1168,13 +1189,27 @@ class TheSevenGatesStillRun(FarmOpsAPITestCase):
 		self.assertIn("enrolled Farm Ops credential", body["error"])
 
 	def test_the_grant_gate_refuses_a_field_role_that_was_never_enrolled(self):
-		"""Holding the role is not being enrolled. The grant IS the enrolment."""
+		"""Holding the role is not being enrolled. The grant IS the enrolment.
+
+		v0.175.0: a Frappe User key is not a door here at all — 401, not 403 —
+		because phones are looked up on device rows only. The grant gate itself
+		is held by the test below and by `test_a_device_on_a_grant_that_is_not_active`.
+		"""
 		STORE.seed("User", [{"name": "casual@example.test", "enabled": 1, "full_name": "Casual"}])
 		set_roles("casual@example.test", ["Field Worker"])
 		frappe.db.set_value("User", "casual@example.test", "api_key", "casualkey")
 		STORE.passwords[("User", "casual@example.test", "api_secret")] = "c" * 56
 		status, _ = self.refusal(MY_TASKS, credential={"api_key": "casualkey", "api_secret": "c" * 56})
+		self.assertEqual(status, 401)
+
+	def test_a_device_on_a_grant_that_is_not_active(self):
+		"""The grant gate, with a device credential that verifies perfectly."""
+		STORE.seed("User", [{"name": "casual@example.test", "enabled": 1, "full_name": "Casual"}])
+		set_roles("casual@example.test", ["Field Worker"])
+		credential = self.device_credential("casual@example.test", state="Expired")
+		status, body = self.refusal(MY_TASKS, credential=credential)
 		self.assertEqual(status, 403)
+		self.assertIn("enrolled Farm Ops credential", body["error"])
 
 	def test_a_grant_that_is_no_longer_active_closes_this_door_on_the_next_call(self):
 		"""THE GRANT GATE ON ITS OWN, with the credential left live on purpose.
@@ -1202,11 +1237,22 @@ class TheSevenGatesStillRun(FarmOpsAPITestCase):
 		self.assertEqual(self.refusal(CONTEXT)[0], 401)
 
 	def test_administrator_holds_every_role_and_still_cannot_call_this(self):
-		"""The reason the grant gate exists, re-run against the new entry point."""
+		"""The reason the grant gate exists, re-run against the new entry point.
+
+		A device credential on a grant that is not Active: it verifies, and
+		every role Administrator holds still does not get it past the gate.
+		"""
+		credential = self.device_credential("Administrator", state="Expired", role="Foreman")
+		status, _ = self.refusal(MY_TASKS, credential=credential)
+		self.assertEqual(status, 403)
+
+	def test_a_frappe_user_key_is_not_a_phone_credential(self):
+		"""v0.175.0. ONE LOOKUP PATH. Administrator's own Frappe API key — the
+		credential Frappe's REST API honours — is refused at this door outright."""
 		frappe.db.set_value("User", "Administrator", "api_key", "adminkey")
 		STORE.passwords[("User", "Administrator", "api_secret")] = "a" * 56
 		status, _ = self.refusal(MY_TASKS, credential={"api_key": "adminkey", "api_secret": "a" * 56})
-		self.assertEqual(status, 403)
+		self.assertEqual(status, 401)
 
 	def test_a_company_the_caller_cannot_reach_is_refused_not_quietly_emptied(self):
 		"""An empty list reads on a phone as a quiet day. 'Not yours' is a
@@ -1386,15 +1432,15 @@ class TheLoginQRImageRoute(FarmOpsAPITestCase):
 	PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 	def _office(self, user="Administrator"):
-		"""A credential that can call this door: an HR role, no phone grant.
+		"""A credential that can call this door: an HR role, no ACTIVE phone grant.
 
 		Deliberately the same recipe `TheSevenGatesStillRun` uses for
 		Administrator — the point of this route is that a credential the grant
-		gate refuses is exactly the one this door must accept.
+		gate refuses is exactly the one this door must accept. v0.175.0: that
+		credential is a device row, because this service looks callers up on
+		device rows only; a Frappe User key is refused at the door.
 		"""
-		frappe.db.set_value("User", user, "api_key", "officekey")
-		STORE.passwords[("User", user, "api_secret")] = "o" * 56
-		return {"api_key": "officekey", "api_secret": "o" * 56}
+		return self.device_credential(user, state="Expired", role="Foreman")
 
 	def test_an_hr_role_with_no_mobile_grant_gets_a_working_png(self):
 		"""THE POINT OF THE ROUTE. Administrator holds System Manager — an

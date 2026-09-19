@@ -56,6 +56,7 @@ ON = {
 		"complete_task_via_mobile",
 		# what they need to have something to talk about
 		"create_mobile_user",
+		"generate_api_token",
 		"get_current_user_context",
 		"create_parcel",
 		"create_housing_unit",
@@ -107,7 +108,13 @@ class FieldworkTestCase(V12TestCase):
 				"entity_access": entities or [MAIN],
 			},
 		)
-		return data["api_key"], data["api_secret"]
+		# v0.175.0: create_mobile_user's pair is a DEVICE credential, which the
+		# phone presents on /farmops. These tools are reached through the MCP
+		# endpoint, whose per-user identity is Frappe's own `Authorization: token`
+		# — a User API key, which is what generate_api_token mints.
+		self.device_credential = (data["api_key"], data["api_secret"])
+		key = self.tool_data("generate_api_token", {"user": email})
+		return key["api_key"], key["api_secret"]
 
 	def as_worker(self, tool, arguments=None, credential=None):
 		key, secret = credential or self.credential

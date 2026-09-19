@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 897 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 900 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 448 read tools are **on** by default and can be switched off individually. A
+All 449 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -7524,6 +7524,56 @@ is the Mobile Access Grant, which holds no secret.
 **Site prerequisite.** Needs `segno` or `qrcode`. Without either, this one tool is
 not advertised and everything else in the flow still works: `generate_api_token`
 returns the same credential as text.
+
+**v0.175.0: the credential on the card is a DEVICE credential.** It is minted on a
+`Mobile Device Enrollment` row under the worker's grant rather than on the User,
+and minting it revokes the account's other devices. This card remains for Farm
+Ops builds that predate the enrolment exchange; `open_device_enrollment` below is
+the card that carries no credential at all.
+
+## 191a–c. Phone enrolment, one device at a time (v0.175.0)
+
+Every per-device credential lives on a **Mobile Device Enrollment** row, a child
+of the worker's Mobile Access Grant, and the phone verifier looks phones up there
+and nowhere else. Frappe's own REST auth never reads that table, so a device
+secret opens the Farm Ops surface and nothing more.
+
+**`open_device_enrollment`** — MUTATING, default OFF. Opens a one-time enrolment
+window and returns its QR:
+
+```json
+{"type": "farm_ops_enroll", "v": 1,
+ "url": "https://umbrel.tail1234.ts.net", "api_base": "/farmops/api",
+ "token": "<43-character single-use token>"}
+```
+
+No user, no key, no secret. The phone posts `{"token", "device_name",
+"device_identifier"}` to `POST /farmops/api/mobile/enroll_device` and receives
+its own `api_key`/`api_secret` — in a `farm_ops_login`-shaped answer, so a client
+already able to read a login card can store it unchanged. That response is the
+only time the secret exists in plaintext. The row stores the token's SHA-256,
+never the token; the window is 24 hours by default (1–168); a newer window for
+the same account closes an older unscanned one. Refusals are 400/403/404/410 and
+never 401. The Employee form's **Actions › Onboard Worker** does the same from
+the Desk, with the QR drawn in the dialog and never saved.
+
+| Argument | Meaning |
+| --- | --- |
+| `user` | Required. The account must have an Active grant |
+| `device_name` | A label, e.g. "Ana's iPhone" |
+| `expiry_hours` | 1–168, default 24 |
+| `url` | Base URL. Defaults to `public_url`. Must be `https://` |
+
+**`list_mobile_devices`** — READ. Every device on one account or all of them:
+status, `api_key` (the public half), enrolled, last seen, idle days. Never the
+secret or the token hash. `user`, `include_revoked`.
+
+**`revoke_mobile_device`** — MUTATING, default OFF. Ends one device's credential;
+the account and its other devices keep working. `user`, `device`, `reason`
+(required). The row stays, Revoked, with who and why.
+
+The nightly idle sweep now also judges each device by its own `last_seen_on`, so
+a lost phone is revoked while the worker's new one keeps working.
 
 ## 192–195. The mobile-ergonomic reads
 

@@ -24,6 +24,8 @@
   "token_issue_count",
   "last_seen_on",
   "persistent",
+  "devices_section",
+  "devices",
   "qr_section",
   "last_qr_issued_on",
   "qr_expires_at",
@@ -40,7 +42,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-01 12:00:00.000000",
+ "modified": "2026-09-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Mobile Access Grant",
@@ -186,6 +188,20 @@
    "fieldname": "persistent",
    "fieldtype": "Check",
    "label": "Exempt From Idle Sweep"
+  },
+  {
+   "fieldname": "devices_section",
+   "fieldtype": "Section Break",
+   "label": "Devices",
+   "description": "Every phone that holds, held or was offered a credential on this account. v0.175.0: phones authenticate against these rows and nothing else."
+  },
+  {
+   "fieldname": "devices",
+   "fieldtype": "Table",
+   "label": "Devices",
+   "options": "Mobile Device Enrollment",
+   "read_only": 1,
+   "description": "Written by the enrolment flow, never by hand: a credential is minted by the server when a phone exchanges its one-time QR token. Revoke one device with revoke_mobile_device or the Revoke Device button; the others keep working."
   },
   {
    "fieldname": "qr_section",

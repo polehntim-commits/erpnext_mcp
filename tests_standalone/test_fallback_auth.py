@@ -103,6 +103,15 @@ class FallbackTestCase(MobileAPITestCase):
 		auth = payload if payload is not None else dict(credential)
 		return self.as_guest(body={fallback_auth.BODY_KEY: auth}, **kwargs)
 
+	def frappe_key(self, email=WORKER):
+		"""A genuine Frappe User API key — the credential Frappe's own validator
+		authenticates. v0.175.0: a phone holds a DEVICE credential, which that
+		validator has never heard of, so the "Frappe already authenticated
+		somebody" door needs one of these to be exercised at all."""
+		from erpnext_mcp.tools import mobile as mobile_tools
+
+		return mobile_tools._issue_user_token(email)
+
 	def by_authorization(self, credential=None, **kwargs):
 		"""The primary path: the header survived, so the harness authenticates it.
 
@@ -124,11 +133,25 @@ class FallbackTestCase(MobileAPITestCase):
 # ── 1. the three doors ──────────────────────────────────────────────────────
 class TheThreeDoors(FallbackTestCase):
 	def test_authorization_still_works_when_it_survives_the_proxy(self):
-		"""The primary path, unchanged. This is the one that was never broken."""
-		self.by_authorization()
+		"""Frappe's own door, unchanged — for a credential Frappe issued."""
+		self.by_authorization(credential=self.frappe_key())
 		self.assertEqual(frappe.session.user, WORKER)
 		self.assertEqual(mobile_api.get_current_user_context()["user"], WORKER)
 		self.assertEqual(fallback_auth.source(), "")
+
+	def test_a_device_pair_is_not_a_frappe_api_key(self):
+		"""v0.175.0. A phone's pair in `Authorization` alone names nobody.
+
+		Frappe's validator looks the key up on User, where a device key never is
+		— on a bench it answers 401 before any hook runs, and here the double
+		leaves the request as Guest. The phone is served by X-FarmOps-Token (and
+		by the /farmops transport, which reads both headers itself), which is
+		what it has sent on every call since v0.17.2.
+		"""
+		self.by_authorization()
+		self.assertIn(frappe.session.user, ("", "Guest"))
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.get_current_user_context()
 
 	def test_the_farmops_header_works_when_authorization_is_absent(self):
 		"""THE BUG. Guest in, worker out, on the header the proxy leaves alone."""
@@ -170,7 +193,7 @@ class TheThreeDoors(FallbackTestCase):
 	def test_a_session_frappe_established_is_never_overridden_by_a_fallback(self):
 		"""Priority order: (a) Frappe's own auth beats (b) header beats (c) body."""
 		other = self.enrol(email=OUTSIDER, name="Ben Ortiz", role="Foreman", entities=[OTHER])
-		self.by_authorization()
+		self.by_authorization(credential=self.frappe_key())
 		frappe.local.request.headers[fallback_auth.HEADER] = f"{other['api_key']}:{other['api_secret']}"
 		self.assertEqual(mobile_api.get_current_user_context()["user"], WORKER)
 		self.assertEqual(fallback_auth.source(), "")
@@ -403,7 +426,7 @@ class TheLogSaysWhichDoor(FallbackTestCase):
 
 	def test_the_primary_path_is_tagged_with_nothing_at_all(self):
 		"""An untagged row IS the signal: that request's header survived."""
-		self.by_authorization()
+		self.by_authorization(credential=self.frappe_key())
 		mobile_api.get_current_user_context()
 		self.assertNotIn("fallback_auth", self.last_summary())
 

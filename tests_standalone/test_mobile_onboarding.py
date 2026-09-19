@@ -287,7 +287,7 @@ class TheWrapper(OnboardingTestCase):
 		live credential in the network log and in devtools to no end — nobody
 		types this one in."""
 		blob = json.dumps(self.enrol())
-		secret = STORE.passwords.get(("User", WORKER, "api_secret"))
+		secret = mobile.read_api_secret(WORKER)
 		self.assertTrue(secret, "the account should have been given a credential")
 		self.assertNotIn(secret, blob)
 		self.assertNotIn("api_secret", blob)

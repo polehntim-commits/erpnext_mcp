@@ -51,9 +51,13 @@ server takes the first one that arrives:
       layer that rewrites the request body is not a proxy, it is an attack.
 
 NOTHING HERE WIDENS WHAT A CREDENTIAL MAY DO. This module answers exactly one
-question — *which Frappe user is this?* — and answers it the way Frappe answers
-it: look the `api_key` up on User, compare the stored `api_secret` with
-`hmac.compare_digest`, refuse a disabled account. Everything downstream is
+question — *which Frappe user is this?* — by looking the `api_key` up, comparing
+the stored `api_secret` with `hmac.compare_digest`, and refusing a disabled
+account. SINCE v0.175.0 THE LOOKUP IS ON DEVICE ROWS, NOT ON USER: a phone's pair
+lives on a `Mobile Device Enrollment` row (see `device_enrollment`), so door (a)
+above no longer carries it — Frappe's own validator has never heard of a device
+key and answers 401 on a bench before any hook runs. The phone has sent (b) on
+every call since v0.17.2, and the /farmops transport reads both headers itself. Everything downstream is
 unchanged, and `guard.endpoint` still runs all seven of its checks on the user
 this establishes. A phone that got in through door (b) and a phone that got in
 through door (a) are the same principal with the same role gate, the same
@@ -122,7 +126,6 @@ correct guess of a 56-character secret.
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import time
 
@@ -369,38 +372,27 @@ def _json_body() -> dict:
 
 # ── verification ────────────────────────────────────────────────────────────
 def _verified_user(api_key: str, api_secret: str) -> str:
-	"""The User this pair belongs to, or "". FRAPPE'S OWN SCHEME, NOT A SECOND ONE.
+	"""The User this DEVICE pair belongs to, or "". v0.175.0: devices, not Users.
 
-	`api_secret` is stored encrypted in `__Auth` and read back through the
-	document's `get_password` — which is what `tools.mobile.read_api_secret`
-	already does, and why this calls that rather than reaching into the table. A
-	second reader of the same secret would be a second thing to keep in step with
-	Frappe, and the day they disagreed the symptom would be an authentication
-	bug on forty phones.
+	Until v0.175.0 this looked the key up on `User.api_key`. It now delegates to
+	`device_enrollment.verify`, which reads the `Mobile Device Enrollment` rows on
+	the worker's grant and nothing else — so a phone's credential is one Frappe's
+	own REST auth has never heard of, and revoking one handset leaves the
+	worker's other devices working. `device_enrollment`'s module docstring argues
+	the move; this function is still the only verifier both transports call.
+
+	The secret is read back through Frappe's own `get_decrypted_password` and
+	compared with `hmac.compare_digest`, and a DISABLED ACCOUNT IS STILL REFUSED
+	— an operator who unticks Enabled means it, and it is the fastest way to stop
+	one person without touching anybody else's enrolment.
 
 	The import is deferred because this module is loaded by an auth hook on every
-	request to the site and `tools.mobile` is not: a Desk page load should not
-	pay for a module it will never call.
-
-	A DISABLED ACCOUNT IS REFUSED. Frappe's own api-key path checks it, an
-	operator who unticks Enabled means it, and it is the fastest way to stop one
-	person without touching anybody else's enrolment.
+	request to the site: a Desk page load should not pay for a module it will
+	never call.
 	"""
-	from ..tools import mobile as mobile_tools
+	from .. import device_enrollment
 
-	name = frappe.db.get_value("User", {"api_key": api_key}, "name")
-	if not name:
-		return ""
-	name = str(name)
-	row = frappe.db.get_value("User", name, ["enabled"], as_dict=True) or {}
-	if not int(row.get("enabled") or 0):
-		return ""
-	stored = str(mobile_tools.read_api_secret(name) or "")
-	if not stored:
-		return ""
-	if not hmac.compare_digest(stored, str(api_secret)):
-		return ""
-	return name
+	return device_enrollment.verify(api_key, api_secret)
 
 
 def _establish(user: str) -> None:

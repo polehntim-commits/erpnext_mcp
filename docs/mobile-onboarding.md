@@ -88,6 +88,26 @@ camera.
 
 ---
 
+## v0.175.0 — the QR that carries no credential
+
+The Employee form now has **Actions › Onboard Worker**. It shows a QR holding
+the server address and a **single-use enrolment token** — no key, no secret —
+with a countdown to the end of the window (24 hours by default). The worker's
+phone posts the token to `POST /farmops/api/mobile/enroll_device` and receives
+its own credential, once. The dialog notices the phone arrive and takes the QR
+off the screen; nothing is saved as a file.
+
+Every phone now has its own row (**Mobile Device Enrollment**) under the
+worker's Mobile Access Grant, so a lost phone is revoked on its own —
+`revoke_mobile_device`, or the idle sweep — and the worker's other phone keeps
+working. Phones enrolled before this release were moved onto rows by a patch and
+need no re-scan.
+
+This page still prints the older **login card**, which does carry a credential,
+because Farm Ops builds without the enrolment exchange can only read that card.
+Once the phones in the field understand `farm_ops_enroll`, Onboard Worker is the
+only enrolment surface anybody needs.
+
 ## Re-enrolment
 
 **Regenerate QR** on any row of the roster. The ordinary reasons are a replaced

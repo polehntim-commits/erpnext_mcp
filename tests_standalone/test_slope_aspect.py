@@ -509,7 +509,6 @@ class TheRanking(SlopeSiteMixin, V12TestCase):
 
 
 # ── 7. the phone ────────────────────────────────────────────────────────────
-from .harness import STORE  # noqa: E402
 from .test_api_mobile import WORKER  # noqa: E402
 from .test_farmops_api import PREFIX, FarmOpsAPITestCase  # noqa: E402
 
@@ -565,12 +564,11 @@ class TheTileRoute(SlopeSiteMixin, FarmOpsAPITestCase):
 		self.assertIn("usable Farm Ops credential", body["error"])
 
 	def test_a_real_credential_with_no_mobile_grant_is_403(self):
+		"""v0.175.0: a real credential is a device row; this one sits on a grant
+		that is not Active, so it verifies and the grant gate refuses it."""
 		path = self.build()
-		frappe.db.set_value("User", "Administrator", "api_key", "officekey")
-		STORE.passwords[("User", "Administrator", "api_secret")] = "o" * 56
-		status, _body = self.refusal(
-			path, method="GET", credential={"api_key": "officekey", "api_secret": "o" * 56}
-		)
+		credential = self.device_credential("Administrator", state="Expired", role="Foreman")
+		status, _body = self.refusal(path, method="GET", credential=credential)
 		self.assertEqual(status, 403)
 
 	def test_a_revoked_grant_closes_the_tiles_too(self):

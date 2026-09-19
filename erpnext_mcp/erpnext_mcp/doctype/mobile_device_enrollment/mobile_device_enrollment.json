@@ -1,0 +1,152 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-18 12:00:00.000000",
+ "description": "One phone's credential on a Mobile Access Grant. Every per-device credential this app issues lives on one of these rows — never on the User — so there is one place to look a phone up, and revoking one handset leaves the worker's other devices working. A row starts Pending when the office shows a one-time enrolment QR, becomes Enrolled when a phone exchanges that token for its own api_key/api_secret, and ends Revoked.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "device_name",
+  "enrollment_status",
+  "device_identifier",
+  "api_key",
+  "api_secret",
+  "enrollment_col",
+  "enrollment_token",
+  "enrollment_expires_at",
+  "enrolled_at",
+  "last_seen_on",
+  "issued_by",
+  "revocation_section",
+  "revoked_on",
+  "revoked_by",
+  "revocation_col",
+  "revocation_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "device_name",
+   "fieldtype": "Data",
+   "label": "Device",
+   "in_list_view": 1,
+   "description": "What the phone calls itself, or what the office wrote when it opened the enrolment window — 'Ana's iPhone', 'Crew truck 3'. A label for a person reading this list; nothing checks it."
+  },
+  {
+   "fieldname": "enrollment_status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nEnrolled\nRevoked",
+   "default": "Pending",
+   "in_list_view": 1,
+   "reqd": 1,
+   "read_only": 1,
+   "description": "Pending: a QR was shown and nobody has scanned it yet. Enrolled: a phone exchanged the QR's one-time token for its own credential, and that credential works. Revoked: it does not, and never will again — a revoked row is kept as the record, never reused."
+  },
+  {
+   "fieldname": "device_identifier",
+   "fieldtype": "Data",
+   "label": "Device Identifier",
+   "read_only": 1,
+   "description": "The stable identifier the phone reported at enrolment (the same device_id it registers for push). Recorded so two rows for one handset can be told apart from two handsets."
+  },
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Data",
+   "label": "API Key",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "The public half of THIS DEVICE's credential — the part before the colon in X-FarmOps-Token. One key per device, never shared with the User record or with another phone, so revoking this row ends this phone and nothing else."
+  },
+  {
+   "fieldname": "api_secret",
+   "fieldtype": "Password",
+   "label": "API Secret",
+   "read_only": 1,
+   "description": "Encrypted at rest in Frappe's password store. It exists in plaintext exactly once — in the enroll_device response the phone received — and nothing in this app returns it again."
+  },
+  {
+   "fieldname": "enrollment_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "enrollment_token",
+   "fieldtype": "Data",
+   "label": "Enrollment Token Hash",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "SHA-256 of the one-time token the QR carried, NOT the token. The token itself is a bearer credential for the enrolment window; storing its hash means somebody who can read this row still cannot enrol a phone with it. Cleared the moment the token is exchanged, so it can be used once."
+  },
+  {
+   "fieldname": "enrollment_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Enrolment Window Closes",
+   "read_only": 1,
+   "description": "After this the QR is refused, whether or not anybody scanned it. 24 hours by default."
+  },
+  {
+   "fieldname": "enrolled_at",
+   "fieldtype": "Datetime",
+   "label": "Enrolled At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_seen_on",
+   "fieldtype": "Datetime",
+   "label": "Last Seen",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "The last time this credential authenticated a request, stamped at most once an hour. The idle sweep reads it per device, so a phone lost in an orchard is revoked on its own while the worker's new phone keeps working."
+  },
+  {
+   "fieldname": "issued_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Issued By",
+   "read_only": 1,
+   "description": "Who opened the enrolment window, or who minted the credential directly."
+  },
+  {
+   "fieldname": "revocation_section",
+   "fieldtype": "Section Break",
+   "label": "Revocation",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "revoked_on",
+   "fieldtype": "Datetime",
+   "label": "Revoked On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Revoked By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revocation_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "revocation_reason",
+   "fieldtype": "Data",
+   "label": "Revocation Reason",
+   "read_only": 1,
+   "description": "Why this one device stopped working. 'Phone lost', 'replaced by a new card', 'idle 30 days' — the grant's own reason is about the person; this is about the handset."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Mobile Device Enrollment",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

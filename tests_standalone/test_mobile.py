@@ -184,7 +184,13 @@ class CreatingAnAccount(MobileTestCase):
 		self.make()
 		row = STORE.get_raw("Mobile Access Grant", WORKER)
 		self.assertNotIn("api_secret", row)
-		self.assertEqual(row["api_key"], STORE.get_raw("User", WORKER)["api_key"])
+		# v0.175.0: the pair lives on a device row under the grant, and the
+		# secret on that row is Frappe's masked placeholder, never the value.
+		(device,) = row["devices"]
+		self.assertEqual(row["api_key"], device["api_key"])
+		self.assertTrue(set(str(device["api_secret"])) <= {"*"})
+		self.assertTrue(mobile.read_api_secret(WORKER))
+		self.assertFalse(STORE.get_raw("User", WORKER).get("api_key"))
 
 	def test_the_preferred_company_carries_is_default(self):
 		self.make(entity_access=[MAIN, OTHER], preferred_company=OTHER)
@@ -426,22 +432,32 @@ class TheCredential(MobileTestCase):
 
 	def test_a_wrong_secret_is_nobody(self):
 		self.make()
-		key = STORE.get_raw("User", WORKER)["api_key"]
+		key, _ = self.token_for()
 		result = self.as_worker("get_current_user_context", key=key, secret="wrong")
 		self.assertFalse(json.loads(result["content"][0]["text"])["identified"])
 
 	def test_re_issuing_stops_the_previous_one_working(self):
-		"""Which is what makes this the answer to a lost phone."""
+		"""The Frappe API key: a second issue replaces the first."""
 		self.make()
-		first = mobile.read_api_secret(WORKER)
+		first = self.tool_data("generate_api_token", {"user": WORKER})
+		self.assertFalse(first["replaced_previous_token"], "create_mobile_user no longer writes the User key")
 		data = self.tool_data("generate_api_token", {"user": WORKER})
 		self.assertTrue(data["replaced_previous_token"])
-		self.assertNotEqual(data["api_secret"], first)
-		self.assertEqual(mobile.read_api_secret(WORKER), data["api_secret"])
+		self.assertNotEqual(data["api_secret"], first["api_secret"])
+		self.assertEqual(mobile.read_user_api_secret(WORKER), data["api_secret"])
+
+	def test_the_user_key_is_not_a_phone_credential(self):
+		"""v0.175.0. ONE LOOKUP PATH: the phone verifier reads device rows only."""
+		from erpnext_mcp.api import fallback_auth
+
+		self.make()
+		key, secret = self.token_for()
+		self.assertEqual(fallback_auth.verify_credential(key, secret), "")
+		self.assertTrue(mobile.read_api_secret(WORKER), "the phone's own device credential is untouched")
 
 	def test_the_public_half_is_kept_so_an_access_log_still_names_somebody(self):
 		self.make()
-		key = STORE.get_raw("User", WORKER)["api_key"]
+		key, _ = self.token_for()
 		self.assertEqual(self.tool_data("generate_api_token", {"user": WORKER})["api_key"], key)
 
 	def test_the_review_date_is_called_a_review_date_and_not_an_expiry(self):
@@ -516,8 +532,9 @@ class UserContext(MobileTestCase):
 		to anything."""
 		self.make()
 		self.make(email="fran@example.test", full_name="Fran F", role="Foreman", entity_access=[MAIN])
-		key = STORE.get_raw("User", WORKER)["api_key"]
-		secret = mobile.read_api_secret(WORKER)
+		# The MCP identity header is Frappe's own User key — generate_api_token's.
+		issued = self.tool_data("generate_api_token", {"user": WORKER})
+		key, secret = issued["api_key"], issued["api_secret"]
 		result = self.as_worker(
 			"get_current_user_context", {"user": "fran@example.test"}, key=key, secret=secret
 		)
@@ -528,8 +545,8 @@ class UserContext(MobileTestCase):
 
 	def test_naming_yourself_is_allowed(self):
 		self.make()
-		key = STORE.get_raw("User", WORKER)["api_key"]
-		secret = mobile.read_api_secret(WORKER)
+		issued = self.tool_data("generate_api_token", {"user": WORKER})
+		key, secret = issued["api_key"], issued["api_secret"]
 		result = self.as_worker("get_current_user_context", {"user": WORKER}, key=key, secret=secret)
 		self.assertFalse(result["isError"])
 
@@ -606,12 +623,13 @@ class TheLoginCard(MobileTestCase):
 		self.assertEqual(self.card()["payload"]["v"], 1)
 
 	def test_the_token_on_the_card_is_the_one_that_works(self):
+		"""v0.175.0: the card's pair is a device credential, verified by the one
+		verifier both phone transports call."""
+		from erpnext_mcp.api import fallback_auth
+
 		self.make()
 		payload = self.card()["payload"]
-		result = self.as_worker(
-			"get_current_user_context", key=payload["api_key"], secret=payload["api_secret"]
-		)
-		self.assertEqual(json.loads(result["content"][0]["text"])["user"], WORKER)
+		self.assertEqual(fallback_auth.verify_credential(payload["api_key"], payload["api_secret"]), WORKER)
 
 	def test_rotating_by_default_kills_the_phone_that_was_already_enrolled(self):
 		"""Which is what makes re-minting a card a real revocation of the old one."""
@@ -883,12 +901,14 @@ class LosingThePhone(MobileTestCase):
 		self.an_employee()
 		self.assertTrue(self.secret_of())
 
-		def explode(_args):
+		def explode(*_args, **_kwargs):
 			raise RuntimeError("the mint failed after the revocation")
 
-		original = mobile.generate_api_token
-		mobile.generate_api_token = explode
-		self.addCleanup(setattr, mobile, "generate_api_token", original)
+		# v0.175.0: the phone's replacement is a device credential minted by
+		# `_issue_token`, not a User key from `generate_api_token`.
+		original = mobile._issue_token
+		mobile._issue_token = explode
+		self.addCleanup(setattr, mobile, "_issue_token", original)
 
 		self.tool("recover_mobile_access", {"user": WORKER, "reason": self.REASON})
 		self.assertEqual(self.secret_of(), "", "the lost phone still has a working credential")

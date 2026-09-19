@@ -124,7 +124,7 @@ ignore = [
   "RUF003", # ambiguous unicode character in a comment
 ]
 
-# UP031 wants `%`-formatting rewritten to a format specifier. In these nine
+# UP031 wants `%`-formatting rewritten to a format specifier. In these ten
 # modules the `%`-string is not a string being formatted at the point it is
 # written — it is a CSS/JS TEMPLATE CONSTANT held at module level and filled in
 # much later with a `% {...}` mapping. Two things follow. The substitution is
@@ -144,6 +144,7 @@ ignore = [
 "erpnext_mcp/badge_sheet.py" = ["UP031"]
 "erpnext_mcp/farm_task_map_action.py" = ["UP031"]
 "erpnext_mcp/mobile_onboarding.py" = ["UP031"]
+"erpnext_mcp/onboard_worker_action.py" = ["UP031"]
 "erpnext_mcp/pdf_signing.py" = ["UP031"]
 
 [tool.ruff.format]

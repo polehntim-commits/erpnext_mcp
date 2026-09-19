@@ -168,10 +168,10 @@ class ItIsBoundedInEveryDirection(IdleSweepTestCase):
 
 		original = mobile_tools._clear_token
 
-		def explode(user):
+		def explode(user, *args):
 			if user == WORKER:
 				raise RuntimeError("the database said no")
-			return original(user)
+			return original(user, *args)
 
 		try:
 			mobile_tools._clear_token = explode

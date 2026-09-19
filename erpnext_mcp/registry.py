@@ -20459,6 +20459,61 @@ TOOLS = {
 		available=_qr_available,
 		requires=qr.REQUIRES,
 	),
+	"open_device_enrollment": _tool(
+		mobile.open_device_enrollment,
+		"MUTATING (default OFF). v0.175.0. A ONE-TIME ENROLMENT QR for one phone: "
+		"the server URL and a single-use token, and NO CREDENTIAL. The phone posts "
+		"the token to /farmops/api/mobile/enroll_device and receives its own "
+		"api_key/api_secret, which exist in plaintext only in that one response and "
+		"live encrypted on a Mobile Device Enrollment row from then on.\n\n"
+		"The window is 24 hours by default (1–168). Opening a new window for an "
+		"account closes any older unscanned one. The account must already have an "
+		"Active Mobile Access Grant — create_mobile_user makes one.\n\n"
+		"The Desk's Employee form does the same from Actions › Onboard Worker, "
+		"with the QR drawn in the dialog and never saved as a file.",
+		{
+			"user": _field(_STRING, "The account to enrol a phone on."),
+			"device_name": _field(_STRING, 'A label for the phone, e.g. "Ana\'s iPhone". Optional.'),
+			"expiry_hours": _field(_INTEGER, "How long the token may be exchanged. 1–168, default 24."),
+			"url": _field(_STRING, "Public base URL for the QR. Defaults to public_url. Must be https."),
+		},
+		required=("user",),
+		mutating=True,
+		title="Open a phone enrolment window",
+		available=_qr_available,
+		requires=qr.REQUIRES,
+	),
+	"list_mobile_devices": _tool(
+		mobile.list_mobile_devices,
+		"v0.175.0. Every phone enrolled, pending or revoked on one mobile account, "
+		"or on all of them: its name, status, api_key (the public half), when it "
+		"enrolled, when it last authenticated and how many days it has been idle. "
+		"NEVER the secret and never the enrolment token.\n\n"
+		"`idle_days` is what the idle sweep acts on per device, so a lost phone is "
+		"revoked on its own while the worker's new one keeps working.",
+		{
+			"user": _field(_STRING, "One account. Omit for every account."),
+			"include_revoked": _field(_BOOLEAN, "Include revoked devices. Default false."),
+		},
+		title="List mobile devices",
+	),
+	"revoke_mobile_device": _tool(
+		mobile.revoke_mobile_device,
+		"MUTATING (default OFF). v0.175.0. End ONE phone's credential. The account, "
+		"its roles and every other device on it are untouched — this is 'that "
+		"phone is lost', where revoke_api_token ends every device and "
+		"revoke_mobile_user ends the person's access.\n\n"
+		"The row is kept, Revoked, with who and why. A reason is required.",
+		{
+			"user": _field(_STRING, "The account the device belongs to."),
+			"device": _field(_STRING, "The device row's name, from list_mobile_devices."),
+			"reason": _field(_STRING, "Why — 'phone lost', 'replaced'. Required."),
+		},
+		required=("user", "device", "reason"),
+		mutating=True,
+		destructive=True,
+		title="Revoke one mobile device",
+	),
 	"claim_task_via_mobile": _tool(
 		fieldwork.claim_task_via_mobile,
 		"MUTATING (default OFF). Take one task from the pool AS THE AUTHENTICATED "

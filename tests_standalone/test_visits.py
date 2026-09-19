@@ -71,6 +71,7 @@ class VisitTestCase(FieldworkTestCase):
 			allow_list_visits=1,
 			allow_start_shift=1,
 			allow_create_mobile_user=1,
+			allow_generate_api_token=1,
 			allow_create_parcel=1,
 			allow_create_housing_unit=1,
 			allow_create_farm_task=1,

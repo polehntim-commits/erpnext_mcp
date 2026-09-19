@@ -74,17 +74,19 @@ later". So the mapping below is deliberate and narrow:
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
 import re
+import time
 import traceback
 
 import frappe
 from werkzeug.wrappers import Request, Response
 
-from .. import __version__, audit, security, slope_aspect, slope_grade
-from ..api import guard
+from .. import __version__, audit, device_enrollment, security, slope_aspect, slope_grade
+from ..api import fallback_auth, guard
 from ..errors import ToolError
 from ..tools import employee as personnel
 from ..tools import mobile as mobile_tools
@@ -159,8 +161,27 @@ GRADE_TILE_DESCRIBED_ROUTE = {
 	"arguments": ["z", "x", "y", "asset"],
 }
 
+#: `POST /mobile/enroll_device` — the one route a phone calls BEFORE it holds a
+#: credential. v0.175.0. See `_enroll_device` and `device_enrollment.exchange`.
+ENROLL_PATH = device_enrollment.ENROLL_PATH
+
+ENROLL_DESCRIBED_ROUTE = {
+	"path": ENROLL_PATH,
+	"method": "enroll_device",
+	"group": "mobile",
+	"mutating": True,
+	"arguments": ["token", "device_name", "device_identifier"],
+}
+
+#: Refused exchanges a minute from one address before the route stops listening
+#: to it. A token is 256 bits, so this is not what stops a guesser — it stops a
+#: caller making the server hash and look up an unbounded stream of junk. Only
+#: FAILURES count, for the reason `fallback_auth` meters only failures: forty
+#: phones enrolling through one funnel address must never lock each other out.
+ENROLL_FAILURE_LIMIT = 30
+
 #: Every route `routes.ROUTES` cannot describe, for `list_sidecar_routes`.
-DESCRIBED_ROUTES = (DESCRIBED_ROUTE, TILE_DESCRIBED_ROUTE, GRADE_TILE_DESCRIBED_ROUTE)
+DESCRIBED_ROUTES = (DESCRIBED_ROUTE, TILE_DESCRIBED_ROUTE, GRADE_TILE_DESCRIBED_ROUTE, ENROLL_DESCRIBED_ROUTE)
 
 _MAX_BODY = auth.MAX_BODY_BYTES
 
@@ -447,6 +468,100 @@ def _login_qr_image(request: Request) -> Response:
 		)
 
 
+def _enroll_slot(ip: str) -> str:
+	window = int(time.time() // 60)
+	fingerprint = hashlib.sha256(str(ip or "").encode()).hexdigest()[:16]
+	return f"erpnext_mcp:farmops:enroll_fail:{fingerprint}:{window}"
+
+
+def _enroll_device(request: Request) -> Response:
+	"""`POST /mobile/enroll_device` — spend a one-time QR token, receive a credential.
+
+	THE ONLY UNAUTHENTICATED WRITE ON THIS SURFACE, and it is unauthenticated
+	because it has to be: the phone calling it holds nothing yet. What stands in
+	for a credential is the token itself — 256 bits, single use, inside a window
+	the office opened — and everything the token does not prove is checked
+	against the grant it names. See `device_enrollment.exchange`.
+
+	The answer carries the device's `api_key` and `api_secret`. It is the ONLY
+	time the secret exists in plaintext; the row keeps it encrypted from here on.
+	A refusal is never 401: the phone has no session to lose, and 401 means
+	"sign out" to it.
+
+	The token is never logged and never audited. The audit row records the
+	device name, the address and the outcome.
+	"""
+	if request.method != "POST":
+		return _failure(405, f"{ENROLL_PATH} is POST only.")
+	body = _body(request)
+
+	with session.request_session(request=request, body=body):
+		if not guard.mobile_enabled():
+			return _failure(503, "The Farm Ops mobile API is switched off on this site.")
+
+		ip = security.caller_ip()
+		slot = _enroll_slot(ip)
+		if fallback_auth._failures(slot) >= ENROLL_FAILURE_LIMIT:
+			return _failure(
+				429, "Too many enrolment attempts from this address. Wait a minute and scan again."
+			)
+
+		device_name = str(body.get("device_name") or "")[:120]
+		try:
+			issued = device_enrollment.exchange(
+				body.get("token"),
+				device_name=device_name,
+				device_identifier=str(body.get("device_identifier") or ""),
+			)
+		except device_enrollment.EnrollmentRefused as exc:
+			session.rollback()
+			fallback_auth._note_failure(slot)
+			audit.record(
+				"mobile:enroll_device",
+				{"device_name": device_name},
+				audit.STATUS_ERROR,
+				f"Error — enrolment refused: {exc}",
+				caller_ip=ip,
+				commit=True,
+			)
+			logger.info("farmops-api %s %s from %s", exc.status, ENROLL_PATH, request.remote_addr)
+			return _failure(exc.status if exc.status != 401 else 403, str(exc))
+		except Exception:
+			session.rollback()
+			logger.error("farmops-api 500 %s\n%s", ENROLL_PATH, traceback.format_exc())
+			return _failure(500, INTERNAL)
+
+		session.commit()
+		audit.record(
+			"mobile:enroll_device",
+			{"device_name": issued.get("device_name"), "device": issued.get("device")},
+			audit.STATUS_SUCCESS,
+			f"Success — {issued['user']} enrolled device {issued.get('device')} ({issued.get('device_name')})",
+			caller_ip=ip,
+			commit=True,
+		)
+		logger.info("farmops-api 200 %s user=%s device=%s", ENROLL_PATH, issued["user"], issued.get("device"))
+		base = mobile_tools._endpoint_url({})
+		return _success(
+			{
+				"type": "farm_ops_login",
+				"v": 1,
+				"url": base,
+				"api_base": mobile_tools.API_BASE,
+				"user": issued["user"],
+				"device": issued["device"],
+				"device_name": issued.get("device_name"),
+				"api_key": issued["api_key"],
+				"api_secret": issued["api_secret"],
+				"token": issued["token"],
+				"note": (
+					"Store api_key and api_secret in the Keychain now: this is the only time the "
+					"secret is sent. Send them on every call as X-FarmOps-Token: <api_key>:<api_secret>."
+				),
+			}
+		)
+
+
 def _png(data: bytes, cache: str) -> Response:
 	return Response(
 		data,
@@ -588,6 +703,9 @@ def dispatch(request: Request) -> Response:
 
 	if path == QR_IMAGE_PATH:
 		return _login_qr_image(request)
+
+	if path == ENROLL_PATH:
+		return _enroll_device(request)
 
 	if path.startswith(TILE_PREFIX):
 		return _slope_aspect_tile(request, path)

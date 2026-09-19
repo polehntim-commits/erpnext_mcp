@@ -95,7 +95,7 @@ import json
 
 import frappe
 
-from .. import audit, compat, roles, security, settings
+from .. import audit, compat, device_enrollment, roles, security, settings
 from ..args import as_bool, as_int, as_str, resolve_company
 from ..compat import doctype_exists
 from ..errors import ToolError
@@ -339,13 +339,58 @@ def _write_grant(user: str, values: dict) -> str:
 	return doc.name
 
 
-def _issue_token(user: str) -> dict:
-	"""Mint a fresh API key/secret pair on a User. Returns the plaintext ONCE.
+def _ensure_grant(user: str) -> None:
+	"""A grant row to hang a device on. v0.175.0.
 
-	`api_key` is reused where one exists — it is the public half, it appears in
-	access logs, and rotating it would orphan every log line that named it. The
-	SECRET is always new, because the whole point of issuing a token is that the
+	Every credential lives on a `Mobile Device Enrollment` row under the
+	account's grant, so issuing one for an account with no grant has to write
+	the grant first. The role recorded is the one the account actually holds —
+	guessing would put a fact on the record that nobody stated.
+	"""
+	_require_grant()
+	if not frappe.db.exists(GRANT, user):
+		_write_grant(user, {"mobile_role": _role_from_held(user), "state": "Active"})
+
+
+def _issue_token(user: str, device_name: str = "") -> dict:
+	"""Mint a fresh DEVICE credential for an account. Returns the plaintext ONCE.
+
+	v0.175.0: THIS NO LONGER TOUCHES THE USER ROW. The pair is minted on a
+	`Mobile Device Enrollment` row (`device_enrollment.issue_direct`), which is
+	the only place `api/fallback_auth` looks a phone up — Frappe's own REST auth
+	never reads it, so the secret opens this app's guarded surface and nothing
+	else. Issuing REPLACES the account's other devices, because that is what
+	every caller of this function has always meant by issuing a token: the
 	previous one stops working.
+
+	The caller writes the grant first; `_ensure_grant` is the one-line way.
+	"""
+	_ensure_grant(user)
+	try:
+		issued = device_enrollment.issue_direct(
+			user,
+			device_name=device_name,
+			issued_by=str(frappe.session.user or ""),
+			replace=True,
+		)
+	except device_enrollment.EnrollmentRefused as exc:
+		raise ToolError(str(exc)) from exc
+	# A pair that predates v0.175.0 may still sit on the User row. It is the
+	# credential the replaced device mirrored, so it goes with it.
+	_clear_user_pair(user)
+	return {"api_key": issued["api_key"], "api_secret": issued["api_secret"], "device": issued["device"]}
+
+
+def _issue_user_token(user: str) -> dict:
+	"""Mint a Frappe API key/secret pair on the User. Returns the plaintext ONCE.
+
+	FOR `generate_api_token` ONLY, and v0.175.0 is why that matters. This is
+	Frappe's own REST credential — what an MCP client presents for a per-user
+	identity and what a script uses — and since v0.175.0 it is NOT a phone
+	credential: `api/fallback_auth` looks phones up on device rows and never
+	here. `api_key` is reused where one exists, because it is the public half
+	and rotating it would orphan every log line that named it; the SECRET is
+	always new.
 	"""
 	doc = frappe.get_doc(USER, user)
 	api_key = str(doc.get("api_key") or "").strip() or frappe.generate_hash(length=SECRET_LENGTH)
@@ -357,36 +402,57 @@ def _issue_token(user: str) -> dict:
 	return {"api_key": api_key, "api_secret": secret}
 
 
-def read_api_secret(user: str) -> str:
-	"""The stored API secret in plaintext, or "".
-
-	Used in exactly one place — `generate_mobile_login_qr` with
-	`rotate_token=false`, for re-printing a card without breaking the phone that
-	already has it — and by the tests that prove a revocation actually revoked.
-	Frappe stores this encrypted at rest; this is the framework's own accessor
-	and not a way round it.
-	"""
+def read_user_api_secret(user: str) -> str:
+	"""The Frappe API secret on the User row in plaintext, or "". Frappe's own accessor."""
 	try:
 		return str(frappe.get_doc(USER, user).get_password("api_secret", raise_exception=False) or "")
 	except Exception:
 		return ""
 
 
-def _clear_token(user: str) -> bool:
-	"""Invalidate the credential. True if there was one to invalidate.
+def read_api_secret(user: str) -> str:
+	"""The newest live device secret in plaintext, or "".
 
-	BOTH HALVES GO. Clearing only the secret leaves an api_key on the row that
-	reads like a live credential to anybody scanning the User list, and the
-	whole value of a revocation record is that somebody can tell at a glance
-	that it happened.
+	Used by `generate_mobile_login_qr` with `rotate_token=false` — re-printing a
+	card for a phone that is still working — and by the tests that prove a
+	revocation actually revoked. Read back through Frappe's own
+	`get_decrypted_password`; this is the framework's accessor and not a way
+	round it.
 	"""
-	had = bool(read_api_secret(user)) or bool(frappe.db.get_value(USER, user, "api_key"))
+	return str(device_enrollment.latest_issued(user).get("api_secret") or "")
+
+
+def _user_pair_exists(user: str) -> bool:
+	try:
+		if frappe.db.get_value(USER, user, "api_key"):
+			return True
+		return bool(frappe.get_doc(USER, user).get_password("api_secret", raise_exception=False))
+	except Exception:
+		return False
+
+
+def _clear_user_pair(user: str) -> bool:
+	"""Clear a pre-v0.175.0 credential off the User row. True if there was one."""
+	if not _user_pair_exists(user):
+		return False
 	doc = frappe.get_doc(USER, user)
 	doc.api_secret = ""
 	doc.api_key = ""
 	doc.flags.ignore_permissions = True
 	doc.save(ignore_permissions=True)
-	return had
+	return True
+
+
+def _clear_token(user: str, reason: str = "credential revoked") -> bool:
+	"""Invalidate every credential on the account. True if there was one to invalidate.
+
+	EVERY DEVICE GOES, and so does any pair left on the User row from before
+	v0.175.0. The rows are kept, Revoked, with the reason — a revocation record
+	that vanished would be no record at all.
+	"""
+	revoked = device_enrollment.revoke_all(user, reason, revoked_by=str(frappe.session.user or ""))
+	cleared = _clear_user_pair(user)
+	return bool(revoked) or cleared
 
 
 def _endpoint_url(args: dict | None = None) -> str:
@@ -488,10 +554,6 @@ def create_mobile_user(args: dict) -> ToolResult:
 
 	permissions = _sync_user_permissions(email, entities, preferred)
 
-	token = {}
-	if with_token:
-		token = _issue_token(email)
-
 	grant_values = {
 		"full_name": full_name or str(frappe.db.get_value(USER, email, "full_name") or ""),
 		"mobile_role": spec.name,
@@ -504,17 +566,22 @@ def create_mobile_user(args: dict) -> ToolResult:
 		"revoked_on": None,
 		"revoked_by": None,
 	}
-	if token:
-		grant_values.update(
-			{
-				"api_key": token["api_key"],
-				"token_issued_on": _now(),
-				"token_expires_on": frappe.utils.add_days(frappe.utils.today(), review_days),
-				"token_revoked_on": None,
-				"token_issue_count": int(_grant_row(email).get("token_issue_count") or 0) + 1,
-			}
-		)
+	# THE GRANT FIRST, THEN THE CREDENTIAL. v0.175.0: the credential is a row on
+	# the grant, so the grant has to exist before there is anywhere to put it.
 	grant = _write_grant(email, grant_values)
+
+	token = {}
+	if with_token:
+		token = _issue_token(email, device_name=device_enrollment.ISSUED_DEVICE_NAME)
+		token_values = {
+			"api_key": token["api_key"],
+			"token_issued_on": _now(),
+			"token_expires_on": frappe.utils.add_days(frappe.utils.today(), review_days),
+			"token_revoked_on": None,
+			"token_issue_count": int(_grant_row(email).get("token_issue_count") or 0) + 1,
+		}
+		grant_values.update(token_values)
+		grant = _write_grant(email, token_values)
 
 	data = {
 		"user": email,
@@ -649,7 +716,10 @@ def list_mobile_users(args: dict) -> ToolResult:
 		if company and company not in live_entities:
 			continue
 		enabled = bool(frappe.db.get_value(USER, user, "enabled")) if frappe.db.exists(USER, user) else False
-		has_secret = bool(read_api_secret(user))
+		devices = device_enrollment.devices_of(user)
+		live_devices = [d for d in devices if d["status"] == device_enrollment.ENROLLED]
+		legacy_pair = _user_pair_exists(user)
+		has_secret = bool(live_devices)
 		review_due = str(row.get("token_expires_on") or "")
 		overdue = bool(review_due and review_due < today and row.get("state") == "Active" and has_secret)
 
@@ -661,6 +731,12 @@ def list_mobile_users(args: dict) -> ToolResult:
 			"user_enabled": enabled,
 			"has_live_token": has_secret,
 			"api_key": row.get("api_key") or None,
+			# v0.175.0. Every phone, one row each. The secret is never here.
+			"devices": devices,
+			"live_devices": len(live_devices),
+			"pending_enrollments": sum(
+				1 for d in devices if d["status"] == device_enrollment.PENDING and not d["window_expired"]
+			),
 			"entity_access": live_entities,
 			"entity_access_recorded": recorded,
 			"preferred_company": row.get("preferred_company") or None,
@@ -702,7 +778,19 @@ def list_mobile_users(args: dict) -> ToolResult:
 				"one without the other."
 			)
 		if row.get("state") == "Revoked" and has_secret:
-			concerns.append("REVOKED BUT THE TOKEN STILL WORKS. Run revoke_api_token.")
+			concerns.append(
+				f"REVOKED BUT THE TOKEN STILL WORKS — {len(live_devices)} device credential(s) are "
+				"still live. Run revoke_api_token."
+			)
+		if row.get("state") == "Revoked" and legacy_pair:
+			concerns.append("REVOKED BUT A FRAPPE API KEY IS STILL ON THE USER ROW. Run revoke_api_token.")
+		elif legacy_pair and has_secret:
+			concerns.append(
+				"this account also holds a Frappe API key on its User row. Since v0.175.0 phones do "
+				"not use it — it opens Frappe's own REST API and the MCP identity header as this "
+				"worker. If it was left over from a phone enrolled before v0.175.0 and nothing else "
+				"presents it, revoking that migrated device with revoke_mobile_device clears it."
+			)
 		if row.get("state") == "Revoked" and enabled:
 			concerns.append("REVOKED BUT THE LOGIN IS STILL ENABLED.")
 		if overdue:
@@ -771,7 +859,7 @@ def revoke_mobile_user(args: dict) -> ToolResult:
 		)
 
 	keep_permissions = as_bool(args, "keep_user_permissions", True)
-	had_token = _clear_token(email)
+	had_token = _clear_token(email, f"account revoked: {reason}")
 	was_enabled = bool(row.get("enabled"))
 	if was_enabled:
 		frappe.db.set_value(USER, email, "enabled", 0)
@@ -854,8 +942,8 @@ def generate_api_token(args: dict) -> ToolResult:
 	if review_days <= 0:
 		raise ToolError("expiry_days must be a positive number of days.")
 
-	replaced = bool(read_api_secret(email))
-	token = _issue_token(email)
+	replaced = _user_pair_exists(email)
+	token = _issue_user_token(email)
 	review_due = frappe.utils.add_days(frappe.utils.today(), review_days)
 	existing = _grant_row(email)
 	grant = None
@@ -917,10 +1005,11 @@ def generate_api_token(args: dict) -> ToolResult:
 			"transport_note": (
 				"This credential buys IDENTITY, not entry. Against the MCP endpoint it is the "
 				"second header: that request still presents the shared X-MCP-Token and still "
-				"has to come from an allowed CIDR. Against the mobile endpoint (mobile_endpoint "
-				"above, v0.18.0) it is the ONLY credential — there is no shared token and no "
-				"CIDR gate on that path, and what stands in their place is the role gate, the "
-				"Mobile Access Grant, entity scoping and the rate limit, on every call."
+				"has to come from an allowed CIDR. v0.175.0: IT DOES NOT SIGN IN A PHONE. It is "
+				"Frappe's own API key on the User row, and the mobile endpoint looks phones up "
+				"on their device rows only — enrol a phone with open_device_enrollment (the "
+				"Employee form's Actions › Onboard Worker), or hand one over with "
+				"generate_mobile_login_qr."
 			),
 		},
 		summary=f"issued an API token for {email}"
@@ -939,8 +1028,8 @@ def revoke_api_token(args: dict) -> ToolResult:
 	"""Invalidate one user's API credential. The account itself stays enabled."""
 	email = (as_str(args, "user", required=True) or "").strip().lower()
 	_user_row(email)
-	had = _clear_token(email)
 	reason = as_str(args, "reason")
+	had = _clear_token(email, f"token revoked: {reason}" if reason else "token revoked")
 
 	grant = None
 	if doctype_exists(GRANT) and frappe.db.exists(GRANT, email):
@@ -1148,12 +1237,15 @@ def generate_mobile_login_qr(args: dict) -> ToolResult:
 
 	rotate = as_bool(args, "rotate_token", True)
 	if rotate:
-		token = _issue_token(email)
+		token = _issue_token(email, device_name=device_enrollment.LOGIN_CARD_DEVICE_NAME)
 		secret = token["api_secret"]
 		api_key = token["api_key"]
 	else:
-		secret = read_api_secret(email)
-		api_key = str(row.get("api_key") or "")
+		# The newest live DEVICE's pair — v0.175.0. The User row no longer holds
+		# a phone's credential, so reading it would re-print a dead card.
+		current = device_enrollment.latest_issued(email)
+		secret = str(current.get("api_secret") or "")
+		api_key = str(current.get("api_key") or "")
 		if not secret or not api_key:
 			raise ToolError(
 				f"{email} has no live API credential to put on a card, and rotate_token=false "
@@ -1485,13 +1577,16 @@ def _sweep_idle(days: int) -> tuple:
 	)
 
 	swept, skipped = [], []
+	#: Accounts the grant pass judged idle — revoked, or tried and failed. The
+	#: device pass below leaves them to it.
+	judged = set()
 	for row in rows:
 		row = dict(row)
 		if compat.checked(row.get("persistent")):
 			continue
 		# A grant carrying no credential has nothing to revoke — a worker whose
 		# token was already taken away is not swept again.
-		if not read_api_secret(row["user"]):
+		if not (device_enrollment.has_live_credential(row["user"]) or _user_pair_exists(row["user"])):
 			continue
 		clock = str(row.get("last_seen_on") or "") or str(row.get("token_issued_on") or "")
 		if not clock:
@@ -1499,8 +1594,9 @@ def _sweep_idle(days: int) -> tuple:
 			continue
 		if clock >= cutoff:
 			continue
+		judged.add(row["user"])
 		try:
-			_clear_token(row["user"])
+			_clear_token(row["user"], IDLE_REASON.format(days=days))
 			_write_grant(
 				row["user"],
 				{
@@ -1523,6 +1619,34 @@ def _sweep_idle(days: int) -> tuple:
 			{"user": row["user"], "idle_since": clock, "idle_days": days},
 			audit.STATUS_SUCCESS,
 			f"revoked the idle credential for {row['user']} (last seen {clock})",
+			commit=False,
+		)
+
+	# PER DEVICE. v0.175.0. The grant's own clock moves whenever ANY of its
+	# phones calls, so a worker with a new phone in daily use and the old one
+	# lost in an orchard never looks idle above — and the lost one kept a live
+	# credential forever. Each device row carries its own `last_seen_on`; a
+	# stale one is revoked on its own and the worker's other devices keep
+	# working. Grants swept above, persistent grants and inactive grants are
+	# left to the rules that already govern them.
+	grants = {dict(row)["name"]: dict(row) for row in rows}
+	for user, device, clock in device_enrollment.idle_devices(cutoff):
+		grant = grants.get(user)
+		if user in judged or grant is None or compat.checked(grant.get("persistent")):
+			continue
+		try:
+			device_enrollment.revoke(user, device, IDLE_REASON.format(days=days), revoked_by="Administrator")
+		except Exception as exc:
+			skipped.append({"user": user, "device": device, "reason": f"{type(exc).__name__}: {exc}"})
+			continue
+		swept.append(
+			{"user": user, "device": device, "full_name": grant.get("full_name"), "last_seen_on": clock}
+		)
+		audit.record(
+			"sweep_idle_grants",
+			{"user": user, "device": device, "idle_since": clock, "idle_days": days},
+			audit.STATUS_SUCCESS,
+			f"revoked the idle device {device} for {user} (last seen {clock})",
 			commit=False,
 		)
 	return swept, skipped
@@ -1687,18 +1811,53 @@ def recover_mobile_access(args: dict) -> ToolResult:
 			"was lost still works, so fix the argument and call again."
 		)
 
+	if not row.get("enabled"):
+		raise ToolError(
+			f"User {email!r} is disabled, so a new credential would not work. Enable the account "
+			"first — or, if they no longer work here, revoke_mobile_user is the call. Nothing "
+			"was changed."
+		)
+
 	# REVOKED FIRST, ALWAYS. The old phone is in somebody else's pocket while
 	# this call runs; a failure after this point leaves the account with NO
 	# credential, which is the safe side of that trade.
-	had_token = _clear_token(email)
+	had_token = _clear_token(email, f"access recovered: {reason}")
 
-	issued = generate_api_token(
+	# A DEVICE CREDENTIAL, v0.175.0 — not `generate_api_token`, which now mints
+	# Frappe's own User key and no longer signs in a phone.
+	token = _issue_token(email, device_name="Recovered phone")
+	review_due = frappe.utils.add_days(frappe.utils.today(), review_days)
+	existing_grant = _grant_row(email)
+	_write_grant(
+		email,
 		{
-			"user": email,
-			"expiry_days": review_days,
-			"url": args.get("url"),
-		}
-	).data
+			"mobile_role": existing_grant.get("mobile_role") or _role_from_held(email),
+			"state": "Active",
+			"api_key": token["api_key"],
+			"token_issued_on": _now(),
+			"token_expires_on": review_due,
+			"token_revoked_on": None,
+			"token_issue_count": int(existing_grant.get("token_issue_count") or 0) + 1,
+			"revocation_reason": "",
+			"revoked_on": None,
+			"revoked_by": None,
+		},
+	)
+	issued = {
+		"api_key": token["api_key"],
+		"api_secret": token["api_secret"],
+		"auth_header": f"Authorization: token {token['api_key']}:{token['api_secret']}",
+		"farmops_auth_header": f"X-FarmOps-Token: {token['api_key']}:{token['api_secret']}",
+		"mobile_endpoint": f"{_endpoint_url(args)}{LOGIN_PROBE_PATH}",
+		"token_review_due": review_due,
+		"entity_access": roles.companies_for(email),
+		"roles_held": roles.roles_of(email),
+		"secret_note": (
+			"THIS IS THE ONLY TIME THE SECRET APPEARS IN A RESULT. It is stored encrypted on "
+			"the new device row from here on. Hand it over now, or recover again — which "
+			"mints a new one and stops this one working."
+		),
+	}
 
 	if doctype_exists(GRANT) and frappe.db.exists(GRANT, email):
 		existing = _grant_row(email)
@@ -1758,6 +1917,142 @@ def recover_mobile_access(args: dict) -> ToolResult:
 			+ ("; previous credential revoked" if had_token else "; there was no live credential")
 			+ ("; QR issued" if card else "")
 		),
+	)
+
+
+# ── device enrolment (v0.175.0) ────────────────────────────────────────────
+def open_device_enrollment(args: dict) -> ToolResult:
+	"""A one-time enrolment QR: the server URL and a token, NO CREDENTIAL.
+
+	The phone exchanges the token at `/farmops/api/mobile/enroll_device` for
+	its own device credential; see `device_enrollment`. Nothing here is a
+	credential a photograph could reuse after the phone has scanned it.
+	"""
+	if not qr.available():
+		raise ToolError(
+			"this site has no QR encoder, so the enrolment QR cannot be drawn. It needs " + qr.REQUIRES
+		)
+	email = (as_str(args, "user", required=True) or "").strip().lower()
+	_user_row(email)
+	url = _endpoint_url(args)
+	if not str(url).lower().startswith("https://"):
+		raise ToolError(
+			f"the endpoint URL is {url or 'unset'!r}, which is not HTTPS. The phone would send its "
+			"new credential back over it in the clear. Fill in public_url on ERPNext MCP Settings "
+			"or pass an https:// url. Nothing was written."
+		)
+	hours = as_int(args, "expiry_hours", device_enrollment.DEFAULT_ENROLLMENT_HOURS)
+	try:
+		opened = device_enrollment.open_enrollment(
+			email,
+			device_name=as_str(args, "device_name"),
+			hours=hours,
+			issued_by=str(frappe.session.user or ""),
+		)
+	except device_enrollment.EnrollmentRefused as exc:
+		raise ToolError(str(exc)) from exc
+
+	payload = device_enrollment.enroll_payload(url, opened["token"])
+	text = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+	drawn = qr.render(text, error="M")
+	return ToolResult(
+		data={
+			"user": email,
+			"device": opened["device"],
+			"expires_at": opened["expires_at"],
+			"expiry_hours": opened["hours"],
+			"superseded_pending": opened["superseded"],
+			"png_base64": base64.b64encode(drawn["png"]).decode("ascii"),
+			"mime_type": "image/png",
+			"pixels": drawn["pixels"],
+			"modules": drawn["modules"],
+			"encoder": drawn["encoder"],
+			"payload": payload,
+			"exchange_endpoint": f"{str(url).rstrip('/')}{device_enrollment.ENROLL_PATH}",
+			"security_note": (
+				"This QR carries a ONE-TIME ENROLMENT TOKEN and no credential. It can be spent "
+				f"once, until {opened['expires_at']}; the phone that spends it receives its own "
+				"api_key/api_secret, which exist in plaintext only in that one response. A newer "
+				"QR for this account closes this one."
+			),
+			"app_note": (
+				f"The QR's type is `{device_enrollment.ENROLL_QR_TYPE}`. A Farm Ops build that "
+				"predates the enrolment exchange reads only `farm_ops_login` cards and will refuse "
+				"this one; generate_mobile_login_qr still prints the older card for those builds."
+			),
+		},
+		summary=f"enrolment QR for {email}, valid until {opened['expires_at']}",
+	)
+
+
+def list_mobile_devices(args: dict) -> ToolResult:
+	"""Every device on one account, or on every account. Never a secret."""
+	_require_grant()
+	include_revoked = as_bool(args, "include_revoked", False)
+	email = (as_str(args, "user") or "").strip().lower()
+	if email:
+		users = [email]
+	else:
+		users = [
+			str(name)
+			for name in frappe.db.get_all(GRANT, fields=["name"], limit=LIST_CAP, pluck="name") or []
+		]
+	now = _now()
+	devices = []
+	for user in users:
+		for entry in device_enrollment.devices_of(user, include_revoked=include_revoked):
+			clock = entry.get("last_seen_on") or entry.get("enrolled_at")
+			idle_days = None
+			if entry["status"] == device_enrollment.ENROLLED and clock:
+				try:
+					idle_days = int(frappe.utils.time_diff_in_seconds(now, clock) // 86400)
+				except Exception:
+					idle_days = None
+			devices.append({"user": user, **entry, "idle_days": idle_days})
+	idle_after = settings.mobile_grant_idle_days()
+	return ToolResult(
+		data={
+			"count": len(devices),
+			"devices": devices,
+			"enrolled": sum(1 for d in devices if d["status"] == device_enrollment.ENROLLED),
+			"pending": sum(1 for d in devices if d["status"] == device_enrollment.PENDING),
+			"idle_sweep_days": idle_after,
+			"note": (
+				"`idle_days` is counted from the device's own last_seen_on (stamped at most once "
+				"an hour when it authenticates), or from enrolled_at for a phone that never called. "
+				f"The idle sweep revokes a device at {idle_after} day(s); 0 means the sweep is off."
+			),
+		},
+		summary=f"{len(devices)} device(s)" + (f" for {email}" if email else ""),
+	)
+
+
+def revoke_mobile_device(args: dict) -> ToolResult:
+	"""Revoke ONE device. The account and its other phones keep working."""
+	email = (as_str(args, "user", required=True) or "").strip().lower()
+	device = as_str(args, "device", required=True)
+	try:
+		result = device_enrollment.revoke(
+			email, device, as_str(args, "reason"), revoked_by=str(frappe.session.user or "")
+		)
+	except device_enrollment.EnrollmentRefused as exc:
+		raise ToolError(str(exc)) from exc
+	if not result["revoked"]:
+		return ToolResult(
+			data=result,
+			summary=f"device {device} on {email} was already revoked; nothing changed",
+		)
+	return ToolResult(
+		data={
+			**result,
+			"still_live": len(device_enrollment.live_devices(email)),
+			"note": (
+				"This device's credential stopped working now; its row stays, Revoked, as the "
+				"record. The account and every other device on it are untouched — revoke_mobile_user "
+				"is 'they no longer work here'."
+			),
+		},
+		summary=f"revoked device {device} ({result.get('device_name')}) on {email}",
 	)
 
 
