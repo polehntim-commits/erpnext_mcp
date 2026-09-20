@@ -3,6 +3,48 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.0 — 2026-09-20 — a training is a Farm Task
+
+**900 tools** (no change). `task_type: "Training"` becomes the whole of what a
+training is on a handset: the task is the record, it names the class it is for,
+and its payload carries that class's day, venue, provider and head count.
+
+- **No new doctype, no new column, no generated second record.** A Training task
+  references its `Training Session` through the `subject_doctype`/`subject_docname`
+  pair the Farm Task schema already had for "the record this task is about", and
+  `create_farm_task` takes `training_session` to set it.
+- **The class's details are denormalised onto the task payload at read time**
+  (`_training_details`), because Farm Task cannot hold them: the doctype has **no
+  date column** — `reported_at` and `observed_at` mean other things — no provider,
+  no instructor, and its `location` is a Dynamic Link into a farm register, which
+  a community college two counties away is not. Copying them onto new columns
+  would be a second register of the same afternoon that disagrees with the first
+  the moment somebody moves a class in the Desk. Read this way there is one copy,
+  and it is the one the compliance side reads too.
+- **It never raises and never blocks a task.** A deleted session, a site without
+  the doctype, an older bench missing a column — each answers no details, and a
+  Training task with no details is still a task somebody can be sent to. A
+  dispatch board that will not draw because a training register is missing would
+  be the worse failure.
+- **The payload also names what would stop the records being filed**
+  (`completion_blockers`, the session's own sentences), so a foreman reads it
+  while everybody is still in the room rather than hitting it as a refusal
+  afterwards.
+- **Completing the task files the compliance record.** When a Training task with
+  a class behind it completes, the server runs `complete_training_session`:
+  one Employee Training Record per provable attendance. A class nobody signed, or
+  one with no regime tags, is **named rather than marked Completed** — the task
+  still completes, because taking that away over short paperwork teaches people
+  not to file it. The phone is told in three flat keys on the completion.
+- A Training task with **no** session behind it is legal and is the tailgate talk
+  at the end of a row; it closes nothing and says nothing.
+- `shape.task` carries `training` and the subject pair to the handset; every
+  other task's payload is byte-for-byte what it was.
+
+**Supersedes the approach drafted earlier the same day** — Training Sessions
+generating Farm Tasks on a nightly sweep — at Tim's direction: Farm Task is the
+atom, and a class is a kind of field work rather than a second system.
+
 ## 0.175.1 — 2026-09-19 — the ticket at the classroom door
 
 **900 tools** (no change). A Training Session's attachments become readable from

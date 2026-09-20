@@ -10716,6 +10716,15 @@ TOOLS = {
 			),
 			"source_alert": _field(_STRING, "The Compliance Alert this answers, if any."),
 			"source_workorder": _field(_STRING, "A work order in another system this task answers."),
+			"training_session": _field(
+				_STRING,
+				"For a Training task: the Training Session docname this class is. The task's "
+				"payload then carries the day, the venue, the provider and the head count read "
+				"off that session — one record on the phone, one copy of the facts here — and "
+				"completing the task closes the session, filing an Employee Training Record for "
+				"everybody who signed. Optional: a tailgate talk is a Training task with no "
+				"formal session behind it, and that is not an error.",
+			),
 			"assigned_to": _field(_STRING, "Dispatch it to this Employee id straight away."),
 			"assigned_to_name": _field(_STRING, "Their name, where no HR app can resolve it."),
 			"draft": _field(_BOOLEAN, "Hold it in Draft rather than publishing to the pool. Default false."),

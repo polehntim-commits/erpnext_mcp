@@ -104,6 +104,11 @@ FARM_TASK_ASSIGNMENT = "Farm Task Assignment"
 #: a restricted-entry and a pre-harvest window from it. Named once here because
 #: three places test it and a literal in each is how the fourth gets missed.
 SPRAY_TASK_TYPE = "Spray"
+
+#: The `task_type` whose payload carries a class: the day, the venue, the
+#: provider and the head count, read off the Training Session it names. Named
+#: once here for the reason `SPRAY_TASK_TYPE` is — several places test it.
+TRAINING_TASK_TYPE = "Training"
 ALERT = alerts.ALERT_DOCTYPE
 
 #: The alert type whose several rows become ONE afternoon, and the register it
@@ -137,6 +142,11 @@ _TASK_FIELDS = (
 	"estimated_duration_minutes",
 	"source_alert",
 	"source_workorder",
+	# v0.176.0. THE RECORD THIS TASK IS ABOUT, read here because three callers
+	# need it: the payload that carries it to a phone, the training close-out
+	# below, and `collect_form_signature` finding the task a signature answers.
+	"subject_doctype",
+	"subject_docname",
 	"evidence_required",
 	"creates_record",
 	"creates_record_data",
@@ -810,6 +820,18 @@ def _describe_task(row: dict) -> dict:
 		"estimated_duration_minutes": int(row.get("estimated_duration_minutes") or 0) or None,
 		"source_alert": row.get("source_alert") or None,
 		"source_workorder": row.get("source_workorder") or None,
+		# v0.176.0. REPORTED ONLY WHERE THERE IS ONE, the same rule as every
+		# optional key below: a task about nothing in particular carries the
+		# payload it always carried. What reads it on the handset is the card
+		# that shows a training session's ticket on the task raised for it.
+		**(
+			{
+				"subject_doctype": row["subject_doctype"],
+				"subject_docname": row.get("subject_docname") or None,
+			}
+			if row.get("subject_doctype")
+			else {}
+		),
 		"evidence_required": contract,
 		"evidence_required_summary": _contract_sentence(contract),
 		"creates_record": row.get("creates_record") or None,
@@ -822,6 +844,12 @@ def _describe_task(row: dict) -> dict:
 	# v0.41.0. The template is PROVENANCE and the checklist is the task's own
 	# snapshot — both reported only when there is one, so the shape of a plain
 	# hand-raised task's payload is exactly what it was before this release.
+	# v0.176.0. THE CLASS, WHERE THIS TASK IS ONE. Present only for a Training
+	# task that names its session, so every other task's payload is exactly what
+	# it was. See `_training_details` — read off the session, stored nowhere.
+	training = _training_details(row)
+	if training:
+		out["training"] = training
 	if row.get("template"):
 		out["template"] = row["template"]
 	items = checklist_items(row.get("checklist_status"))
@@ -1167,6 +1195,14 @@ def create_farm_task(args: dict) -> ToolResult:
 			"Nothing was created."
 		)
 
+	# v0.176.0. THE CLASS A TRAINING TASK IS FOR, NAMED WHEN THE WORK IS RAISED.
+	# Validated here rather than left to the doctype's Dynamic Link, for the
+	# reason `_overrides` gives about a Select: a link that refuses inside
+	# `doc.insert()` refuses after everything else has been worked out, and the
+	# sentence a caller gets back names a Frappe field rather than the argument
+	# they sent.
+	training_session = _training_session_argument(args)
+
 	source_alert = as_str(args, "source_alert")
 	if source_alert:
 		if not compat.doctype_exists(ALERT) or not frappe.db.exists(ALERT, source_alert):
@@ -1250,6 +1286,9 @@ def create_farm_task(args: dict) -> ToolResult:
 	# `complete_farm_task` draws whatever is on this column down out of stock.
 	doc.materials_used = json.dumps(_materials_argument(args))
 	doc.evidence_required = json.dumps(_evidence_argument(args))
+	if training_session:
+		doc.subject_doctype = training_sessions.DOCTYPE
+		doc.subject_docname = training_session
 	doc.farm_shift = farm_shift or None
 	doc.state = DRAFT if draft else AVAILABLE
 	if worker:
@@ -1319,6 +1358,38 @@ def create_farm_task(args: dict) -> ToolResult:
 		),
 		docstatus_delta="none → 0 (created)",
 	)
+
+
+def _training_session_argument(args: dict) -> str:
+	"""The Training Session a task names, checked. "" where none was given.
+
+	**A TRAINING TASK MAY BE RAISED WITHOUT ONE AND THAT IS NOT AN ERROR.** The
+	tailgate talk a foreman gives at the end of a row is a Training task that
+	will never have a formal session behind it, and refusing it would push that
+	work back off the board it was put on. What is refused is a session that does
+	not exist, and a session named on a task that is not a training — both are
+	somebody meaning something the record cannot hold.
+	"""
+	session = as_str(args, "training_session")
+	if not session:
+		return ""
+	task_type = as_str(args, "task_type")
+	if task_type and task_type != TRAINING_TASK_TYPE:
+		raise ToolError(
+			f"training_session was given on a {task_type!r} task. A class belongs to a "
+			f"{TRAINING_TASK_TYPE!r} task — that is the type whose payload carries the day, the "
+			"venue and the sheet. Nothing was created."
+		)
+	compat.require_doctype(
+		training_sessions.DOCTYPE,
+		"It ships with erpnext_mcp — run `bench --site <site> migrate` after upgrading the app.",
+	)
+	if not frappe.db.exists(training_sessions.DOCTYPE, session):
+		raise ToolError(
+			f"no Training Session called {session!r} on this site. list_training_sessions has the "
+			"register. Nothing was created."
+		)
+	return session
 
 
 def _evidence_argument(args: dict) -> dict:
@@ -2385,6 +2456,15 @@ def complete_farm_task(args: dict) -> ToolResult:
 			"what the sweep said. Rules outside that narrowing are untouched and reach the "
 			"scheduled pass as they always did."
 		)
+	# v0.176.0. THE CLASS THIS TASK WAS RAISED FOR, CLOSED OUT. Runs after the
+	# evidence is filed and before the shadow copy, so the snapshot carries what
+	# the session did. `_close_out_training` never raises — see its docstring: a
+	# session that will not close must not cost somebody the completion they just
+	# filed, and every reason it did not is reported instead.
+	training_close = _close_out_training(task, assignment, worker)
+	if training_close is not None:
+		data["training_session"] = training_close
+
 	# v0.85.0. THE COMPLETION GOES UP THE CHAIN, FROZEN. It runs last, after the
 	# record, the stock movement, the spray windows and the compliance
 	# re-evaluation, so the snapshot freezes the completion as it finally stands
@@ -4859,6 +4939,256 @@ def _pool_dispatch(recipe: dict) -> str:
 #: certificate points at a certificate, and a certificate is not somewhere
 #: anybody can be sent.
 _DISPATCHABLE_LOCATIONS = ("Housing Unit", "Field", "Irrigation Zone", "Parcel")
+
+
+# ── 11b. the class a task is about ──────────────────────────────────────────
+#: v0.176.0. A TRAINING IS A FARM TASK, AND THE TASK IS THE RECORD THE PHONE
+#: HOLDS. `task_type` has carried "Training" since the type list was written;
+#: what it lacked was any way to say WHICH class, so the ticket, the venue and
+#: the sign-in sheet lived in a register no handset opened.
+#:
+#: SO THE TASK REFERENCES THE SESSION AND THE PAYLOAD CARRIES ITS DETAILS. The
+#: reference is `subject_doctype`/`subject_docname`, the pair the schema already
+#: has for "the record this task is about" — no new column, no second link. The
+#: DETAILS are read off that session when the task is described (see
+#: `_training_details`), so a handset gets the day, the venue, the provider and
+#: the head count on the task it already asked for: one record on the phone, one
+#: copy of the facts on the server.
+#:
+#: WHY NOT COLUMNS ON FARM TASK. Copying `session_date`, `location`, `provider`
+#: and the attendee table onto the task would be a second register of the same
+#: afternoon, and the two would disagree the first time somebody moved a class in
+#: the Desk. A Training Session is also the record the compliance side reads —
+#: `complete_training_session` writes the Employee Training Records an auditor
+#: asks for — so it is not a doctype this app could stop keeping.
+
+def _training_session_for_task(task: dict) -> str:
+	"""The session a task is about, or "" — the one place that comparison lives."""
+	if str(task.get("subject_doctype") or "") != training_sessions.DOCTYPE:
+		return ""
+	return str(task.get("subject_docname") or "")
+
+
+def _training_details(task: dict) -> dict | None:
+	"""The class this task is about, read off its session. None for anything else.
+
+	────────────────────────────────────────────────────────────────────────────
+	ONE RECORD ON THE PHONE, ONE COPY OF THE FACTS ON THE SERVER
+	────────────────────────────────────────────────────────────────────────────
+
+	**THE HANDSET ASKED FOR A TASK AND GETS THE CLASS WITH IT.** A Training task
+	is the whole of what a worker deals with — it is on their Today screen, it
+	holds the paperwork, it is what they finish — and a phone that had to fetch a
+	second doctype to learn WHEN and WHERE would be doing a join at a classroom
+	door on a tethered connection.
+
+	**DENORMALISED AT READ TIME AND STORED NOWHERE.** Copying these onto columns
+	of the Farm Task would be a second register of the same afternoon, and the
+	two would disagree the first time somebody moved the class in the Desk. Read
+	here, they cannot: there is one copy, and it is the one the compliance side
+	reads too.
+
+	**NEVER RAISES AND NEVER BLOCKS A TASK.** A session somebody deleted, a
+	doctype this site does not have, a column an older bench lacks — every one of
+	those answers None, and a Training task with no details is still a task
+	somebody can be sent to. The alternative is a dispatch board that will not
+	draw because a training register is missing.
+	"""
+	session = _training_session_for_task(task)
+	if not session or not compat.doctype_exists(training_sessions.DOCTYPE):
+		return None
+	try:
+		row = dict(
+			frappe.db.get_value(
+				training_sessions.DOCTYPE,
+				session,
+				compat.existing_fields(training_sessions.DOCTYPE, _TRAINING_DETAIL_FIELDS),
+				as_dict=True,
+			)
+			or {}
+		)
+	except Exception:  # pragma: no cover - a register that will not read
+		return None
+	if not row:
+		return None
+
+	# The instructor, whoever that was. The server offers three columns for it
+	# because a trainer who is not on the payroll is recorded differently from
+	# one who is; a phone wants one line. Same order `TrainingSessionDetail
+	# .instructorLabel` reads them in on the handset.
+	instructor = ""
+	for key in ("conducted_by_name", "instructor_name", "instructor", "provider"):
+		value = str(row.get(key) or "").strip()
+		if value:
+			instructor = value
+			break
+
+	attendees = training_sessions.attendees_of(session)
+	described = [training_sessions.describe_attendee(dict(attendee)) for attendee in attendees]
+	summary = training_sessions.attendance_summary(described)
+	return {
+		"session": session,
+		"training_type": row.get("training_type") or None,
+		"status": training_sessions.canon_status(row.get("status")) or None,
+		# THE DAY, WHICH THE TASK ITSELF HAS NO COLUMN FOR. Farm Task carries no
+		# scheduled date — `reported_at` and `observed_at` mean other things — so
+		# for a class this is the only statement of when it happens.
+		"session_date": str(row.get("session_date") or "")[:10] or None,
+		"start_time": training_sessions.clock(row.get("start_time")) or None,
+		"end_time": training_sessions.clock(row.get("end_time")) or None,
+		# FREE TEXT, AND THAT IS WHY IT IS NOT THE TASK'S `location`. A Farm
+		# Task's location is a Dynamic Link into a farm register — a cabin, a
+		# block, a zone — and a community college two counties away is in none of
+		# them. The session's own column is prose and holds the address.
+		"venue": row.get("location") or None,
+		"instructor": instructor or None,
+		"provider": row.get("provider") or None,
+		"delivery_method": row.get("delivery_method") or None,
+		"attendee_count": len(attendees),
+		"signed_count": int(summary.get("ready", 0)) + int(summary.get("recorded", 0)),
+		"records_created": int(row.get("records_created") or 0),
+		# What a completion would still be refused for, in the session's own
+		# words. Present so a foreman learns it BEFORE they walk away from the
+		# class rather than from a refusal afterwards.
+		"completion_blockers": training_sessions.completion_blockers(
+			{
+				"regimes": training_sessions.alert_names(row.get("regimes"))
+				if row.get("regimes")
+				else _session_regimes(session),
+				"content_topics_covered": row.get("content_topics_covered") or "",
+				"attendance": summary,
+			}
+		),
+	}
+
+
+def _session_regimes(session: str) -> list:
+	"""The audits a session is tagged for, off its child table. Never raises."""
+	try:
+		rows = frappe.db.get_all(
+			"Training Session Regime",
+			filters={"parenttype": training_sessions.DOCTYPE, "parent": session},
+			fields=["regime"],
+			limit=50,
+		)
+	except Exception:  # pragma: no cover - a bench without the child table
+		return []
+	return [str(row.get("regime") or "") for row in rows or [] if row.get("regime")]
+
+
+#: What the payload needs to know about the class. Read in one go: a dispatch
+#: board draws fifty tasks and a second read per training would be a round trip
+#: per afternoon.
+_TRAINING_DETAIL_FIELDS = (
+	"name",
+	"training_type",
+	"status",
+	"session_date",
+	"start_time",
+	"end_time",
+	"location",
+	"conducted_by_name",
+	"instructor_name",
+	"instructor",
+	"provider",
+	"delivery_method",
+	"content_topics_covered",
+	"records_created",
+)
+
+
+def _close_out_training(task: dict, assignment: dict, worker: str) -> dict | None:
+	"""Close the Training Session a finished task was raised for. NEVER RAISES.
+
+	────────────────────────────────────────────────────────────────────────────
+	EVIDENCE FIRST, AND THE SESSION CLOSES ONLY IF THERE IS ANY
+	────────────────────────────────────────────────────────────────────────────
+
+	**A TASK COMPLETION IS NOT AN ATTENDANCE RECORD AND MUST NEVER STAND IN FOR
+	ONE.** What makes a training defensible is a badge scan and a signature per
+	person, collected on the session itself, which `complete_training_session`
+	turns into one Employee Training Record each. A foreman who closed this task
+	with nobody signed in would otherwise mark the afternoon Completed and file
+	NOTHING — a training the matrix believes happened, with no evidence under it,
+	which is worse than a training it knows is outstanding.
+
+	So this calls the same tool a person would, and `completion_blockers` does
+	the refusing: no regimes, no topics or nobody ready and the session stays
+	open with the reasons named in the answer. The task is still complete either
+	way — the work of turning up was done, and taking that away from somebody
+	because the paperwork is short would teach them not to file it.
+
+	**IT WAITS FOR THE LAST ATTENDEE.** One task per attendee means twelve
+	completions for one afternoon, and closing on the first would file records for
+	whoever had signed by then and shut the door on the rest. So it runs when no
+	other task for the same session is still open — the tasks find each other
+	through `subject_docname`, which is the same link the phone reads to show the
+	class's ticket.
+
+	**THE ROLE GATE IS THE SESSION'S, NOT THIS TASK'S.** `complete_training_session`
+	takes `require_shift_role`; a picker finishing their own row does not hold it
+	and is not refused anything — the close simply does not happen on their
+	completion, and the answer says who can make it happen.
+	"""
+	session = _training_session_for_task(task)
+	if not session:
+		return None
+
+	out: dict = {"training_session": session, "completed": False}
+	still_open = frappe.db.count(
+		FARM_TASK,
+		{
+			"subject_doctype": training_sessions.DOCTYPE,
+			"subject_docname": session,
+			"name": ("!=", task.get("name")),
+			"state": ("not in", TERMINAL_STATES),
+		},
+	)
+	if still_open:
+		out["still_open"] = still_open
+		out["note"] = (
+			f"{still_open} other attendee(s) have not finished this class yet, so the session was "
+			"left open too. It closes with the last one — closing it now would file records for "
+			"whoever had signed by now and shut the door on everybody else."
+		)
+		return out
+
+	try:
+		status = training_sessions.canon_status(
+			frappe.db.get_value(training_sessions.DOCTYPE, session, "status")
+		)
+	except Exception:  # pragma: no cover - a session somebody deleted under us
+		status = ""
+	if status == training_sessions.STATUS_COMPLETED:
+		out["completed"] = True
+		out["note"] = "The session was already closed; its records are filed."
+		return out
+
+	# Imported here rather than at module scope, the way `spray` and `signers`
+	# are in this file: `tools/training_sessions` is a heavier module than this
+	# one needs at import time, and a top-level edge between two tool modules is
+	# how an import cycle arrives later without anybody meaning it.
+	from . import training_sessions as training_session_tools
+
+	try:
+		result = training_session_tools.complete_training_session({"session": session})
+	except ToolError as exc:
+		# The ordinary outcome, and the whole reason this reports rather than
+		# throws: an untagged curriculum or a sheet nobody signed.
+		out["note"] = str(exc)
+		out["blocked"] = True
+		return out
+	except Exception as exc:  # pragma: no cover - never at a worker's expense
+		out["note"] = f"The session could not be closed: {type(exc).__name__}: {exc}"
+		out["blocked"] = True
+		return out
+
+	answer = result.data or {}
+	out["completed"] = True
+	out["records_created"] = answer.get("records_created")
+	out["skipped"] = answer.get("skipped") or answer.get("not_recorded") or []
+	out["note"] = result.summary
+	return out
 
 
 # ── 12. report_field_task ───────────────────────────────────────────────────

@@ -268,6 +268,23 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 	if request:
 		out["signature_request"] = request
 
+	# v0.176.0. THE CLASS, WHERE THIS TASK IS ONE. A Training task is the whole
+	# of what a worker deals with — it is on their Today screen, it holds the
+	# paperwork, it is what they finish — so the day, the venue, the provider and
+	# the head count ride on the task rather than behind a second fetch of a
+	# doctype the handset would otherwise have to know about. Read off the
+	# session by `dispatch._training_details`; stored nowhere.
+	#
+	# PRESENT ONLY WHERE THERE IS ONE, the same rule as `signature_request` above
+	# and `subject_doctype` below: every other task's payload is untouched.
+	if isinstance(row.get("training"), dict) and row["training"].get("session"):
+		out["training"] = row["training"]
+	# The reference itself, for a client that wants the docname rather than the
+	# details — the documents card asks the server for this session's folder.
+	if row.get("subject_doctype"):
+		out["subject_doctype"] = row.get("subject_doctype")
+		out["subject_docname"] = row.get("subject_docname")
+
 	latitude, longitude = coordinates(row.get("location_doctype"), row.get("location"))
 	if latitude is not None and longitude is not None:
 		out["latitude"] = latitude
@@ -665,4 +682,29 @@ def completion(data: dict) -> dict:
 		"idempotent_note": data.get("idempotent_note"),
 		"visit_id": data.get("visit_id"),
 		"completion_signature": data.get("completion_signature"),
+		# v0.176.0. WHAT HAPPENED TO THE CLASS THIS TASK WAS RAISED FOR, and the
+		# three keys are flat rather than a nested object because the projection
+		# above is flat and the handset decodes every key leniently.
+		#
+		# PROJECTED RATHER THAN LEFT ON THE MCP SURFACE — which is the exception
+		# the paragraph above describes, and it is earned. The worker who just
+		# closed a training task is the person who needs to know whether the
+		# afternoon FILED: "twelve records" and "nothing filed, nobody signed"
+		# are the two outcomes, they are indistinguishable from "Done", and the
+		# second one is fixable in the ten minutes while everybody is still in
+		# the room. A note they read tomorrow is a note that costs a re-run.
+		**_training_close(data),
+	}
+
+
+def _training_close(data: dict) -> dict:
+	"""The training-session close-out, flattened. Absent where this task was not
+	a class, so nothing about any other completion's payload changed."""
+	close = data.get("training_session")
+	if not isinstance(close, dict) or not close.get("training_session"):
+		return {}
+	return {
+		"training_session": close.get("training_session"),
+		"training_session_completed": bool(close.get("completed")),
+		"training_session_note": close.get("note"),
 	}
