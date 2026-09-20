@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.175.1 — 2026-09-19 — the ticket at the classroom door
+
+**900 tools** (no change). A Training Session's attachments become readable from
+a handset, which they were not — AFB-2026-00015, "We should be able to pull up
+the pdf here please".
+
+- **`Training Session` joins `ATTACHMENT_PARENTS`.** The list is closed by
+  design, and a phone asking for one got "Training Session is not a record this
+  surface reads attachments from" before any permission was consulted. So a
+  ticket the office had scanned and filed was unreachable from the phone of the
+  person standing at the classroom door with it.
+- **A third gate value, `SHIFT_GATE`, and this is the entry that needed one.**
+  `get_training_session` runs `require_shift_role` — `HR_ROLES` plus Foreman and
+  Crew Leader — so an HR gate on the folder would have been NARROWER THAN THE
+  PARENT'S OWN READ: a Foreman could open the sheet and not the handout stapled
+  to it, which reads on a handset as a missing file rather than as a refusal.
+  `False` would have been wider than the session read. The gate is now the one
+  the parent already carries, and `_attachment_parent` matches it by identity —
+  the `if gate:` it replaced would have run the HR gate on a truthy sentinel.
+- Company scope and the doctype's own DocPerms are unchanged: another entity's
+  session still reads as not found, through the docname and through the File
+  handle both.
+
 ## 0.175.0 — 2026-09-18 — one phone, one credential, one row
 
 **900 tools** (+3: `open_device_enrollment`, `list_mobile_devices`,

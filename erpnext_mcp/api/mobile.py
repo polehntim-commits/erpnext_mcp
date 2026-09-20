@@ -5628,8 +5628,18 @@ def set_employee_contact_fields(
 	}
 
 
-#: The parent doctypes whose attachments a phone may read, and whether reading
-#: one is a personnel act.
+#: The value on `ATTACHMENT_PARENTS` for a parent whose folder is gated by the
+#: same roles its own read is — `SHIFT_ROLES`, which is `HR_ROLES` plus the two
+#: supervisor roles. A THIRD ANSWER BESIDE True AND False, added in v0.175.1
+#: because `Training Session` needed a gate that was neither the personnel one
+#: nor none at all. It is a sentinel rather than a bare string so that `is`
+#: compares it and a typo cannot silently read as "no gate".
+SHIFT_GATE = "shift-role"
+
+#: The parent doctypes whose attachments a phone may read, and which gate riding
+#: with the read: `True` for a personnel folder (HR_ROLES), `SHIFT_GATE` for one
+#: the parent's own read already gates (SHIFT_ROLES), `False` for field work,
+#: where the six gates `guard.endpoint` has run are the whole of it.
 #:
 #: A CLOSED LIST, FOR THE REASON `attach_onboarding_document` NAMES ONE PARENT IN
 #: CODE. `files.list_attachments` takes any doctype on the site, which is right on
@@ -5711,6 +5721,29 @@ ATTACHMENT_PARENTS = {
 	# which says why — so the folder behind this entry is filled at a desk and
 	# read in an orchard, which is the whole shape of item 2.
 	FARM_TASK_TEMPLATE: False,
+	# v0.175.1. The ticket, the catalogue and the course handout filed against a
+	# session, readable by the person standing at the classroom door.
+	#
+	# `SHIFT_GATE` RATHER THAN True OR False, AND IT IS THE FIRST ENTRY THAT
+	# NEEDED A THIRD ANSWER. `get_training_session` runs `require_shift_role` —
+	# HR_ROLES plus Foreman and Crew Leader — so the sheet itself is already
+	# readable by the supervisor who held the session. `True` here would have
+	# been NARROWER THAN THE PARENT'S OWN READ: a Foreman could open the session
+	# and not the handout attached to it, which is the kind of gap nobody
+	# reports because it looks like a missing file rather than a refusal.
+	# `False` would have been wider — it would have left the door open to any
+	# enrolled account Frappe's DocPerm lets through, including a Field Worker.
+	# The gate that is right is the one the parent already carries.
+	#
+	# NOT A PERSONNEL FOLDER, WHICH IS WHY IT IS NOT `True`. What hangs off a
+	# Training Session is what was TAUGHT — a certificate of attendance from a
+	# community college, a pesticide-handler catalogue, the trainer's slides.
+	# The record of who sat it is the attendee table and the Employee Training
+	# Records the completion writes, and neither of those comes through this
+	# door. A signed sign-in sheet is the one artefact here that names people,
+	# and `SHIFT_ROLES` is exactly the set already trusted to collect those
+	# signatures in the first place.
+	TRAINING_SESSION: SHIFT_GATE,
 }
 
 #: The parents whose folder this surface opens on the strength of ITS OWN gates
@@ -5779,7 +5812,8 @@ def _attachment_parent(doctype, docname, allowed: list) -> tuple:
 	"""One parent document, proved readable by this caller. Returns (doctype, name).
 
 	THREE GATES, IN THIS ORDER. The doctype has to be one on `ATTACHMENT_PARENTS`;
-	a personnel parent brings the HR role with it; and the docname has to name a
+	the gate that parent carries is run — the HR role for a personnel folder, the
+	shift roles for one whose own read takes them; and the docname has to name a
 	record inside the caller's own entities, which reads as not found when it does
 	not — the same refusal `require_scoped_doc` gives everywhere else, so a caller
 	cannot map the site's docnames by watching which error comes back.
@@ -5791,8 +5825,15 @@ def _attachment_parent(doctype, docname, allowed: list) -> tuple:
 			"are: " + ", ".join(sorted(ATTACHMENT_PARENTS)) + ". Nothing was read.",
 			frappe.PermissionError,
 		)
-	if ATTACHMENT_PARENTS[wanted]:
+	gate = ATTACHMENT_PARENTS[wanted]
+	# MATCHED EXACTLY RATHER THAN FOR TRUTHINESS. `SHIFT_GATE` is a non-empty
+	# string, so the `if gate:` this replaced would have run the HR gate on it —
+	# quietly refusing the Foreman this entry was added for, in the one code path
+	# nobody would think to read.
+	if gate is True:
 		personnel.require_hr_role()
+	elif gate is SHIFT_GATE:
+		personnel.require_shift_role()
 	compat.require_doctype(
 		wanted,
 		"It is not installed on this site, so nothing is filed against it.",
