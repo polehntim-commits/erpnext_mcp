@@ -8693,7 +8693,9 @@ def get_receipt_image(user: str, receipt=None, name=None, max_bytes=None) -> dic
 	looking its URL up across the File table. It prefers the attachment whose
 	`file_url` is the current `receipt_image`, then the one attached through that
 	field, then the newest image filed against the receipt by
-	`attach_file_to_document`. Only image extensions (`files.CAMERA_EXTENSIONS`)
+	`attach_file_to_document`. Only receipt extensions (`files.RECEIPT_EXTENSIONS`
+	— the camera's formats plus PDF, because most of this farm's slips arrive as
+	emailed invoices rather than photographs)
 	count, so a PDF someone attached beside the slip is never sent as the picture.
 
 	WHY ONLY THE RECEIPT'S OWN ATTACHMENTS. `create_expense_receipt` writes
@@ -8775,22 +8777,45 @@ def get_receipt_image(user: str, receipt=None, name=None, max_bytes=None) -> dic
 
 
 def _receipt_image_attachment(docname: str, field_value: str):
-	"""The File on one receipt that is its photograph, or None. See `get_receipt_image`."""
+	"""The File on one receipt that is the slip itself, or None. See `get_receipt_image`.
+
+	**A PHOTOGRAPH IS PREFERRED AND A PDF IS ACCEPTED, WHICH IS THE WHOLE OF
+	v0.176.2's RECEIPT FIX.** This looked among `CAMERA_EXTENSIONS` alone, so a
+	farm whose slips are emailed invoices got `has_image: false` on every one of
+	them and an app that said the receipt had been filed without a photograph.
+	Reported four times before anybody read this function.
+
+	**THE ORDER IS PHOTOGRAPHS FIRST, THEN DOCUMENTS**, and that is not
+	arbitrary: a receipt carrying both is one somebody PHOTOGRAPHED at a counter
+	and later had the invoice emailed for, and the photograph is the thing that
+	was in their hand. `test_a_photograph_attached_without_the_field_is_still_found`
+	is that rule, and it predates this change.
+
+	**AN EXPLICIT POINTER BEATS BOTH.** `receipt_image` on the record, or a File
+	filed into that field, is somebody having SAID which one the slip is — a
+	newer attachment does not overrule it whatever its type.
+	"""
 	rows = file_tools.list_attachments_on_authorized_parent(EXPENSE_RECEIPT, docname).data
-	images = []
+	photographs, documents = [], []
 	for row in rows.get("attachments") or []:
 		named = str(row.get("file_name") or row.get("file_url") or "")
-		if "." in named and named.rsplit(".", 1)[-1].lower() in file_tools.CAMERA_EXTENSIONS:
-			images.append(row)
+		extension = named.rsplit(".", 1)[-1].lower() if "." in named else ""
+		if extension in file_tools.CAMERA_EXTENSIONS:
+			photographs.append(row)
+		elif extension in file_tools.RECEIPT_EXTENSIONS:
+			documents.append(row)
+
 	# The list is newest first, so each loop below takes the newest match.
 	if field_value:
-		for row in images:
+		for row in photographs + documents:
 			if row.get("file_url") == field_value:
 				return row
-	for row in images:
+	for row in photographs + documents:
 		if row.get("attached_to_field") == "receipt_image":
 			return row
-	return images[0] if images else None
+	if photographs:
+		return photographs[0]
+	return documents[0] if documents else None
 
 
 def _image_content_type(content_base64: str):
@@ -8807,6 +8832,12 @@ def _image_content_type(content_base64: str):
 		return "image/jpeg"
 	if head.startswith(b"\x89PNG\r\n\x1a\n"):
 		return "image/png"
+	# v0.176.2. A PDF slip, read the same way and for the same reason: a File row
+	# whose `mime_type` is empty or wrong would otherwise reach a handset with no
+	# type at all, and a viewer that has to guess draws a broken image over a
+	# receipt that is perfectly fine.
+	if head.startswith(b"%PDF-"):
+		return "application/pdf"
 	return None
 
 

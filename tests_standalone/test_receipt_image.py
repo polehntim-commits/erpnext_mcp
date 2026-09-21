@@ -154,9 +154,51 @@ class WhichFileIsThePhotograph(ReceiptImageTestCase):
 		)
 		self.assertEqual(mobile_api.get_receipt_image(receipt=receipt)["file"], "file-retake")
 
-	def test_a_pdf_beside_the_slip_is_never_the_photograph(self):
+	def test_a_pdf_is_the_slip_when_it_is_the_only_thing_filed(self):
+		"""**THE BUG THIS FILE USED TO ASSERT, REPORTED FOUR TIMES.** It read "a
+		PDF beside the slip is never the photograph", which was written about a
+		receipt that ALSO had a photograph. On this farm the slips ARE the PDFs —
+		emailed invoices, co-op statements, fuel accounts — so every receipt
+		answered `has_image: false` and the app said it had been filed without a
+		photograph about a document sitting on the record.
+
+		A PDF alone is the slip. A PDF beside a photograph is still not, which is
+		the test below this one and the rule that survived."""
 		receipt = self.receipt()
-		self.a_file("file-invoice", receipt, b"%PDF-1.7", file_name="invoice.pdf")
+		self.a_file("file-invoice", receipt, b"%PDF-1.7 a co-op statement", file_name="invoice.pdf")
+
+		data = mobile_api.get_receipt_image(receipt=receipt)
+		self.assertTrue(data["has_image"])
+		self.assertEqual(data["file"], "file-invoice")
+		self.assertEqual(base64.b64decode(data["content"]), b"%PDF-1.7 a co-op statement")
+
+	def test_a_pdf_slip_is_typed_as_a_pdf_off_its_own_bytes(self):
+		"""A handset that has to guess draws a broken image over a receipt that is
+		perfectly fine — the same argument the JPEG/PNG sniff already makes."""
+		receipt = self.receipt()
+		self.a_file("file-invoice", receipt, b"%PDF-1.7 x", file_name="invoice.pdf", mime_type="")
+
+		data = mobile_api.get_receipt_image(receipt=receipt)
+		self.assertEqual(data["content_type"], "application/pdf")
+		self.assertEqual(data["mime_type"], "application/pdf")
+
+	def test_a_pointer_at_a_pdf_is_honoured(self):
+		"""`receipt_image` naming the PDF is somebody having SAID which file the
+		slip is, and a newer attachment does not overrule it."""
+		receipt = self.receipt(receipt_image="/private/files/invoice.pdf")
+		self.a_file("file-invoice", receipt, b"%PDF-1.7", file_name="invoice.pdf",
+		            file_url="/private/files/invoice.pdf")
+		self.a_file("file-later", receipt, JPEG, file_name="later.jpg",
+		            creation="2027-01-01 10:00:00")
+
+		self.assertEqual(mobile_api.get_receipt_image(receipt=receipt)["file"], "file-invoice")
+
+	def test_a_file_that_is_neither_is_still_not_the_slip(self):
+		"""The filter widened by exactly one format. A spreadsheet somebody
+		attached to a receipt is not the receipt."""
+		receipt = self.receipt()
+		self.a_file("file-notes", receipt, b"PK\x03\x04", file_name="workings.xlsx")
+
 		self.assertFalse(mobile_api.get_receipt_image(receipt=receipt)["has_image"])
 
 	def test_a_photograph_attached_without_the_field_is_still_found(self):

@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
-## 0.176.2 — 2026-09-20 — the training ticket a phone was still refused
+## 0.176.2 — 2026-09-20 — two folders a phone was refused, and a slip it could not find
 
 **900 tools** (no change). `Training Session` joins `BROKERED_PARENTS`, which is
 the one-line fix for a refusal v0.175.1 shipped and this suite could not see.
@@ -22,6 +22,21 @@ the one-line fix for a refusal v0.175.1 shipped and this suite could not see.
   without a User Permission per row. Not a Custom DocPerm, because one of those
   makes Frappe ignore every standard permission on the doctype during `bench
   migrate` — `roles.py` rule 1.
+- **AND THE RECEIPT SLIP NOBODY COULD SEE, REPORTED FOUR TIMES.**
+  `_receipt_image_attachment` looked for the slip among `CAMERA_EXTENSIONS`
+  alone — jpg, jpeg, png, heic, heif — and this farm's receipts are **PDFs**:
+  emailed invoices, co-op statements, fuel accounts. None ever matched, so
+  `get_receipt_image` answered `has_image: false` and the app reported the
+  receipt as filed without a photograph while the document sat on the record.
+  A new `files.RECEIPT_EXTENSIONS` adds PDF for this lookup only — `CAMERA_EXTENSIONS`
+  still answers the different question it was written for, which is whether a
+  site's upload allowlist permits the formats a phone's camera makes.
+  **A PHOTOGRAPH STILL WINS WHERE THERE IS ONE**: a receipt carrying both was
+  photographed at a counter and had the invoice emailed afterwards, and the
+  photograph is the thing that was in somebody's hand. An explicit `receipt_image`
+  pointer beats both. `%PDF-` is sniffed off the bytes like the JPEG and PNG
+  magic numbers beside it, so a File row with no mime type still reaches the
+  handset typed.
 - **WHY THE ORIGINAL ELEVEN TESTS PASSED.** The harness's `has_permission` is
   DEFAULT-ALLOW; `test_employee_documents` says so in its own header and warns
   that "a DocPerm mistake in this repo passes ten thousand tests and fails on the

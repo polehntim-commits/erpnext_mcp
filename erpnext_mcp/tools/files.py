@@ -764,6 +764,22 @@ def _check_company(doctype: str, name: str, parent: dict, company: str, tail: st
 #: refused something, to say whether the thing refused was a photograph.
 CAMERA_EXTENSIONS = frozenset({"jpg", "jpeg", "png", "heic", "heif"})
 
+#: What a RECEIPT can be, which is more than what a camera produces.
+#:
+#: **THE BUG THIS EXISTS FOR WAS REPORTED FOUR TIMES.** `get_receipt_image`
+#: looked for the slip among `CAMERA_EXTENSIONS` alone, and this farm's receipts
+#: are PDFs — an emailed invoice, a co-op statement, a fuel account. None of them
+#: ever matched, so the route answered `has_image: false` and the app said the
+#: receipt had been "filed without a photograph" about a document sitting right
+#: there on the record.
+#:
+#: **SEPARATE FROM `CAMERA_EXTENSIONS` AND NOT ADDED TO IT.** That set answers a
+#: different question — whether a site's upload allowlist permits the formats a
+#: phone's camera makes (see `_check_extension` below) — and a PDF is not
+#: something a camera produces. Folding the two would quietly change what this
+#: app tells an operator about their own upload settings.
+RECEIPT_EXTENSIONS = CAMERA_EXTENSIONS | {"pdf"}
+
 
 def _check_extension(file_name: str, tail: str = "Nothing was attached.") -> None:
 	"""Honour whatever extension allowlist this site declares, and no other.
