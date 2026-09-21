@@ -41,6 +41,8 @@ import frappe
 from erpnext_mcp import roles
 from erpnext_mcp.api import guard
 from erpnext_mcp.api import mobile as mobile_api
+from erpnext_mcp.errors import ToolError
+from erpnext_mcp.tools import files as file_tools
 
 from .fixtures import MAIN, OTHER, V12TestCase, install_hrms
 from .harness import ROLES, STORE
@@ -157,10 +159,88 @@ class TrainingSessionDocumentsTestCase(V12TestCase):
 		frappe.local.session.user = user
 		return user
 
+	def no_session_read(self):
+		"""The bench condition: no Frappe read on Training Session.
+
+		A denial rather than a role edit, because the harness's `has_permission`
+		is default-allow and there is no set of roles that makes it say no. This
+		is the ONE lever that models what a mobile account actually is — the
+		doctype grants read to System Manager and Accounts Manager, and a phone
+		holds neither.
+		"""
+		STORE.denied_permissions.add(("Training Session", "read"))
+		self.addCleanup(STORE.denied_permissions.discard, ("Training Session", "read"))
+
+
+# ── 0. the negative control, first ──────────────────────────────────────────
+class TheDocPermIsReal(TrainingSessionDocumentsTestCase):
+	"""**THE TEST THAT SHOULD HAVE EXISTED IN v0.175.1, AND ITS ABSENCE IS WHY
+	TIM'S TICKET DID NOT APPEAR.**
+
+	WHAT WENT WRONG. The allow-list entry passed this surface's three gates and
+	then `tools/files._require_parent_read` refused on Frappe's own permission:
+	"…is not permitted to read Training Session TRNS-2026-0001, so its
+	attachments are not available." `training_session.json` ships DocPerms for
+	System Manager and Accounts Manager; `roles.py` grants the phone roles
+	nothing on that doctype; so every handset was refused.
+
+	WHY THE ORIGINAL SUITE WENT GREEN ANYWAY. `STORE`'s `has_permission` is
+	DEFAULT-ALLOW — `test_employee_documents` says so in its own header and warns
+	that "a DocPerm mistake in this repo passes ten thousand tests and fails on
+	the bench". Eleven tests passed against a double that answers yes.
+
+	SO THE DENIAL IS MODELLED HERE, and every claim in the classes below is now
+	made with it in place. If this class goes green for the wrong reason, the
+	rest of this file is measuring nothing.
+	"""
+
+	def test_the_tool_refuses_without_the_brokering(self):
+		"""The negative control: with the read denied, the TOOL still refuses.
+		Delete the brokering and `TheDoorOpens` goes red; delete this denial and
+		the whole file stops meaning anything."""
+		self.no_session_read()
+		with self.assertRaises(ToolError) as caught:
+			file_tools.list_attachments({"doctype": "Training Session", "name": SESSION})
+		self.assertIn("not permitted to read Training Session", str(caught.exception))
+
+	def test_the_route_reads_it_anyway(self):
+		"""The fix. Same denial, same session, and the mobile route lists the
+		folder — because the three gates it ran are stricter than the DocPerm it
+		skipped."""
+		self.no_session_read()
+		self.be(MANAGER)
+		data = mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
+		self.assertEqual(data["count"], 2)
+
+	def test_the_bytes_come_back_under_the_denial_too(self):
+		"""The read side of the same brokering — a listing somebody cannot open
+		is a list of filenames."""
+		self.no_session_read()
+		self.no_session_read()
+		self.be(MANAGER)
+		data = mobile_api.get_attachment_content(file=TICKET)
+		self.assertEqual(data["encoding"], "base64")
+
+	def test_the_gates_still_refuse_a_field_worker_under_the_denial(self):
+		"""**THE BROKERING IS NOT A WIDENING.** Skipping Frappe's DocPerm did not
+		skip `SHIFT_ROLES`: a picker is refused with or without it."""
+		self.no_session_read()
+		self.be(PICKER)
+		with self.assertRaises(frappe.ValidationError):
+			mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
+
+	def test_another_entitys_session_is_still_not_found_under_the_denial(self):
+		"""And nor did it skip the company scope."""
+		self.no_session_read()
+		self.be(MANAGER)
+		with self.assertRaises(frappe.DoesNotExistError):
+			mobile_api.list_attachments(doctype="Training Session", docname=OUTSIDER_SESSION)
+
 
 # ── 1. the door opens ───────────────────────────────────────────────────────
 class TheDoorOpens(TrainingSessionDocumentsTestCase):
 	def test_the_folder_lists(self):
+		self.no_session_read()
 		self.be(MANAGER)
 		data = mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
 		self.assertEqual(data["count"], 2)
@@ -172,6 +252,7 @@ class TheDoorOpens(TrainingSessionDocumentsTestCase):
 		"""The whole point of the feature: the file itself, through the sidecar,
 		because a private Frappe file cannot be fetched over its `file_url` from a
 		handset — see `AttachmentAPI` on the iOS side."""
+		self.no_session_read()
 		self.be(MANAGER)
 		data = mobile_api.get_attachment_content(file=TICKET)
 		self.assertEqual(data["attached_to_doctype"], "Training Session")
@@ -201,6 +282,7 @@ class TheGateMatchesTheParentsOwnRead(TrainingSessionDocumentsTestCase):
 	"""
 
 	def test_a_foreman_reads_the_folder_and_the_file(self):
+		self.no_session_read()
 		self.be(FOREMAN)
 		data = mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
 		self.assertEqual(data["count"], 2)

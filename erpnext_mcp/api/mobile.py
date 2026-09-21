@@ -5747,8 +5747,9 @@ ATTACHMENT_PARENTS = {
 }
 
 #: The parents whose folder this surface opens on the strength of ITS OWN gates
-#: rather than on Frappe's DocPerm for the doctype. ONE ENTRY, AND IT IS MEANT TO
-#: STAY THAT SHORT.
+#: rather than on Frappe's DocPerm for the doctype. TWO ENTRIES, AND IT IS MEANT
+#: TO STAY THAT SHORT — each one is a doctype whose DocPerms do not reach the
+#: phone roles, and each had to be found on a farm before it was found here.
 #:
 #: v0.100.1. WHAT WENT WRONG. A farm owner opening an employee's Documents
 #: section on the handset got "…is not permitted to read Employee HR-EMP-00011,
@@ -5805,7 +5806,35 @@ ATTACHMENT_PARENTS = {
 #: grants the phone roles read on directly, so `_require_parent_read` already
 #: passes for them and adding one here would change nothing except the number of
 #: places a future reader has to check.
-BROKERED_PARENTS = frozenset({EMPLOYEE})
+#:
+#: v0.176.2 ADDS `Training Session`, AND IT IS THE SAME BUG AS v0.100.1 FOUND ON
+#: `Employee` — caught on a farm rather than in this suite, for the reason that
+#: release already wrote down.
+#:
+#: WHAT TIM SAW. The training card reached his Today screen and the ticket filed
+#: against the class did not. `list_attachments` passed all three of this
+#: surface's gates and then `tools/files._require_parent_read` refused: "…is not
+#: permitted to read Training Session TRNS-2026-0001, so its attachments are not
+#: available." Correct code, refusing on a permission the account genuinely does
+#: not hold — `training_session.json` ships DocPerms for System Manager and
+#: Accounts Manager only, and `roles.py` grants the phone roles nothing on it.
+#:
+#: WHY THIS IS NOT A WIDENING, WHICH IS THE ONLY QUESTION THAT MATTERS. The
+#: three gates run before this is consulted are STRICTER than the one being
+#: skipped, exactly as the paragraphs above argue for `Employee`: the parent has
+#: to be on `ATTACHMENT_PARENTS` at all; `Training Session` carries `SHIFT_GATE`,
+#: so `employee.SHIFT_ROLES` rides with it (the HR roles plus Foreman and Crew
+#: Leader — a Field Worker is refused here and would be refused by Frappe too);
+#: and `require_scoped_doc` refuses any docname outside the companies this
+#: caller's Mobile Access Grant names, which is a scope Frappe's model cannot
+#: express without a User Permission per row.
+#:
+#: WHY NOT A CUSTOM DOCPERM INSTEAD. `roles.py` rule 1: one Custom DocPerm makes
+#: Frappe ignore EVERY standard permission that doctype has, for every role on
+#: the site, silently, during `bench migrate`. `Training Session` is this app's
+#: own doctype, so the rule permits it — and the cost is still worse than the
+#: door this set opens, which is narrow, reviewable and code.
+BROKERED_PARENTS = frozenset({EMPLOYEE, TRAINING_SESSION})
 
 
 def _attachment_parent(doctype, docname, allowed: list) -> tuple:

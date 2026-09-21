@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.2 — 2026-09-20 — the training ticket a phone was still refused
+
+**900 tools** (no change). `Training Session` joins `BROKERED_PARENTS`, which is
+the one-line fix for a refusal v0.175.1 shipped and this suite could not see.
+
+- **WHAT TIM SAW.** The training card reached his Today screen and the ticket
+  filed against the class did not. `list_attachments` passed all three of this
+  surface's gates and then `tools/files._require_parent_read` refused: "…is not
+  permitted to read Training Session TRNS-2026-0001, so its attachments are not
+  available." Correct code, refusing on a permission the account genuinely does
+  not hold — `training_session.json` ships DocPerms for **System Manager and
+  Accounts Manager only**, and `roles.py` grants the phone roles nothing on it.
+- **THE SAME BUG v0.100.1 FOUND ON `Employee`**, and the same fix: this surface's
+  own three gates are STRICTER than the DocPerm being skipped — the closed
+  allow-list, `SHIFT_ROLES` (so a Field Worker is still refused), and
+  `require_scoped_doc`, which is a company scope Frappe's model cannot express
+  without a User Permission per row. Not a Custom DocPerm, because one of those
+  makes Frappe ignore every standard permission on the doctype during `bench
+  migrate` — `roles.py` rule 1.
+- **WHY THE ORIGINAL ELEVEN TESTS PASSED.** The harness's `has_permission` is
+  DEFAULT-ALLOW; `test_employee_documents` says so in its own header and warns
+  that "a DocPerm mistake in this repo passes ten thousand tests and fails on the
+  bench". `test_training_session_documents` now opens with `TheDocPermIsReal`,
+  which models the denial, and every other claim in that file is made with the
+  denial in place. Run against the un-brokered code those five go red with the
+  farm's own sentence.
+
 ## 0.176.1 — 2026-09-20 — the class's own note travels with it
 
 **900 tools** (no change). One key added to the `training` block a Training task
