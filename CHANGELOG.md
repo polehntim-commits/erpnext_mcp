@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.1 — 2026-09-20 — the class's own note travels with it
+
+**900 tools** (no change). One key added to the `training` block a Training task
+carries: `notes`, the session's own prose.
+
+- **IT IS THE ONLY PLACE A MULTI-DAY COURSE SAYS SO.** A Training Session holds
+  one `session_date` and no end date, so "2-day course Oct 28-29" and "3rd day
+  exam at OSU" live in free text. The handset now puts that text into the notes
+  of a calendar invite it builds from the task, so whoever is handed the invite
+  reads the real shape of the week even though the event itself can only cover
+  the day the register states. **An `end_date` column is the real fix** and is
+  not in this release.
+
 ## 0.176.0 — 2026-09-20 — a training is a Farm Task
 
 **900 tools** (no change). `task_type: "Training"` becomes the whole of what a

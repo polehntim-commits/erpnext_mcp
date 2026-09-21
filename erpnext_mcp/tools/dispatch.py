@@ -5044,6 +5044,14 @@ def _training_details(task: dict) -> dict | None:
 		"instructor": instructor or None,
 		"provider": row.get("provider") or None,
 		"delivery_method": row.get("delivery_method") or None,
+		# v0.176.1. THE SESSION'S OWN PROSE, AND IT IS THE ONLY PLACE A MULTI-DAY
+		# COURSE SAYS SO. There is no end-date column on a Training Session —
+		# `session_date` is one Date — so "2-day course Nov 17-18 + exam on the
+		# 19th" lives in this free text and nowhere a machine can read. The
+		# handset puts it in the notes of a calendar invite, so whoever is given
+		# the invite gets the real shape of the week even though the event itself
+		# can only cover the one day the register states.
+		"notes": row.get("notes") or None,
 		"attendee_count": len(attendees),
 		"signed_count": int(summary.get("ready", 0)) + int(summary.get("recorded", 0)),
 		"records_created": int(row.get("records_created") or 0),
@@ -5094,6 +5102,7 @@ _TRAINING_DETAIL_FIELDS = (
 	"delivery_method",
 	"content_topics_covered",
 	"records_created",
+	"notes",
 )
 
 
