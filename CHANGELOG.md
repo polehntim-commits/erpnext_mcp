@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.3 — 2026-09-20 — a receipt list a phone can page through
+
+**900 tools** (no change). `list_expense_receipts` learns a second ordering and
+the mobile wrapper forwards the date window it already supported.
+
+- **TWO ORDERS, BECAUSE THE LIST ANSWERS TWO QUESTIONS.** Least-confident-OCR
+  first is a REVIEW QUEUE — the receipts somebody must open the photograph for
+  sit at the top — and stays the default for the MCP console. `newest_first` is
+  a DIARY, and it is what a handset asks: *the last ten I filed*. Under the
+  review order a `limit` of ten answers the ten least confident receipts in the
+  whole register, which is neither the last ten nor a page of anything.
+- **The mobile route always asks for the diary order** and now forwards
+  `from_date`/`to_date`, which the tool has always taken. **There is no offset
+  on this tool**, so a handset pages by DATE: ask for the newest N, then ask
+  again with `to_date` set to the oldest row it got. A cursor the caller can
+  see, rather than a page number that shifts under somebody's thumb when a
+  receipt is filed mid-scroll. The boundary day is inclusive and can repeat a
+  row, so the client de-duplicates by docname — losing a receipt silently is the
+  worse of the two failures.
+
 ## 0.176.2 — 2026-09-20 — two folders a phone was refused, and a slip it could not find
 
 **900 tools** (no change). `Training Session` joins `BROKERED_PARENTS`, which is

@@ -461,14 +461,29 @@ def list_expense_receipts(args: dict) -> ToolResult:
 	# a 0 reached `limit_page_length`, where Frappe reads it as NO LIMIT.
 	limit = as_limit(args)
 
-	# Lowest confidence first, so the receipts a person most needs to open the
-	# photo for are the ones at the top of the page rather than at the end of it.
+	# **TWO ORDERS, BECAUSE THIS LIST ANSWERS TWO DIFFERENT QUESTIONS.**
+	#
+	# Lowest confidence first is a REVIEW QUEUE: the receipts somebody most needs
+	# to open the photograph for are at the top of the page rather than the end
+	# of it, which is what a bookkeeper at a desk wants and is the default.
+	#
+	# `newest_first` is a DIARY, and it is what a handset asks for — "the last
+	# ten I filed", and then the ten before those. v0.176.3, and it is not a
+	# preference: with the review order a `limit` of ten answers the ten LEAST
+	# confident receipts in the whole register, which is neither the last ten nor
+	# a page of anything. Paging by date on top of that order would return
+	# overlapping, gap-ridden sets.
+	newest_first = as_bool(args, "newest_first", False)
 	rows = frappe.db.get_all(
 		EXPENSE_RECEIPT,
 		filters=filters,
 		fields=_read_fields(),
 		limit_page_length=limit,
-		order_by="ocr_confidence asc, receipt_date desc",
+		order_by=(
+			"receipt_date desc, creation desc"
+			if newest_first
+			else "ocr_confidence asc, receipt_date desc"
+		),
 	)
 	receipts = [_row_out(row) for row in rows]
 	total = sum(receipt["amount"] for receipt in receipts)

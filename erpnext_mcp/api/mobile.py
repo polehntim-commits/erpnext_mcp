@@ -8609,22 +8609,38 @@ def list_suppliers(user: str, company=None, supplier_group=None, search=None, li
 # ── 74. list_expense_receipts ───────────────────────────────────────────────
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("list_expense_receipts", limit=guard.READ_LIMIT)
-def list_expense_receipts(user: str, company=None, status=None, limit=None) -> dict:
+def list_expense_receipts(
+	user: str, company=None, status=None, limit=None, from_date=None, to_date=None
+) -> dict:
 	"""Receipts already captured, for the detail view `create_expense_receipt` feeds into.
 
 	SCOPED TWICE, like every other list here. The tool filters by company when
 	one is sent; `guard.scoped` runs on the answer either way, because a row
 	that escapes the filter through a code path nobody thought about is the
 	failure this surface exists to prevent.
+
+	**NEWEST FIRST ON THIS SURFACE, ALWAYS, AND THE MCP CONSOLE KEEPS THE OTHER
+	ORDER.** v0.176.3. The tool's default is a review queue — least confident
+	OCR at the top, which is what somebody reconciling at a desk wants. A phone
+	is asking a different question: *the last ten I filed*. Under the review
+	order a `limit` of ten answers the ten least confident receipts in the whole
+	register, which is neither the last ten nor a page of anything.
+	Dates were not forwarded before this release, which is the other half of the
+	same gap: **there is no offset on this tool**, so a handset pages by date —
+	ask for the newest N, then ask again with `to_date` set to the oldest row it
+	got. A cursor a caller can see, rather than a page number that shifts under
+	them when somebody files a receipt mid-scroll.
 	"""
 	allowed = guard.require_scope(user)
 	wanted = guard.require_company(user, company, allowed)
 
-	inner = {}
+	inner = {"newest_first": True}
 	for key, value in (
 		("company", wanted),
 		("status", status),
 		("limit", limit),
+		("from_date", from_date),
+		("to_date", to_date),
 	):
 		if value not in (None, ""):
 			inner[key] = value
