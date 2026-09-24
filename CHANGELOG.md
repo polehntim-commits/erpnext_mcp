@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.5 — 2026-09-24 — reconcile_bank_transaction raised KeyError on every ERPNext 15 site
+
+**900 tools** (no change). Two bugs on the path that hands the work to
+ERPNext's own `BankTransaction.add_payment_entries`, which every v15 site has.
+
+- **THE KEY NAMES.** ERPNext's method reads `voucher["payment_doctype"]` and
+  `voucher["payment_name"]` — the Bank Reconciliation Tool's names. This tool's
+  schema takes the child table's `payment_document` and `payment_entry`, and
+  passed them straight through, so every call raised
+  `KeyError: 'payment_doctype'`. The schema is unchanged; the vouchers are
+  translated at the call.
+- **THE RELOAD.** The method only appends rows; it does not save. The
+  `doc.reload()` that followed would have discarded them even with the keys
+  right. The handler now runs `reconcile_vouchers`' own sequence —
+  `validate_duplicate_references`, `allocate_payment_entries`,
+  `update_allocated_amount`, `set_status`, `save`.
+- **`allocated_now` is what ERPNext allocated,** which on v15 is the voucher's
+  GL amount capped at the transaction's remainder, not the `allocated_amount`
+  passed in. The request is reported beside it as `allocated_requested`.
+- The test stubs that let this ship read the handler's keys rather than
+  ERPNext's; they are now ERPNext 15.x's body verbatim.
+
 ## 0.176.4 — 2026-09-24 — repoint a tag at the Asset the books already have
 
 **900 tools** (no change). `update_registered_asset` takes an optional

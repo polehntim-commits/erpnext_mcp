@@ -1580,22 +1580,49 @@ def reconcile_bank_transaction(args: dict) -> ToolResult:
 	# do) would pass hasattr and then fail on the call.
 	delegate = getattr(doc, "add_payment_entries", None)
 	if callable(delegate):
-		delegate(vouchers)
-		doc.reload()
+		# v0.176.5. ERPNEXT'S METHOD HAS ITS OWN KEY NAMES AND DOES NOT SAVE.
+		# `add_payment_entries` reads `voucher["payment_doctype"]` and
+		# `voucher["payment_name"]` — the shape the Bank Reconciliation Tool's
+		# page sends — and handing it this tool's `payment_document` rows raised
+		# KeyError: 'payment_doctype' on every call. It also only APPENDS, with
+		# allocated_amount 0, and the reload that used to follow threw the rows
+		# away. The sequence below is `bank_reconciliation_tool.reconcile_vouchers`
+		# line for line: ERPNext allocates from the voucher's own GL figure and
+		# sets the clearance date in `allocate_payment_entries`, then saves.
+		delegate([_erpnext_voucher(voucher) for voucher in vouchers])
+		for step in (
+			"validate_duplicate_references",
+			"allocate_payment_entries",
+			"update_allocated_amount",
+			"set_status",
+		):
+			method = getattr(doc, step, None)
+			if callable(method):
+				method()
+		doc.save()
 	else:
 		for voucher in vouchers:
 			doc.append("payment_entries", voucher)
 		doc.save()
 
 	unallocated = round(float(doc.get(money["unallocated"]) or 0), 2) if money["unallocated"] else None
+	allocated_total = round(float(doc.get(money["allocated"]) or 0), 2) if money["allocated"] else None
 	data = {
 		"name": doc.name,
 		"bank_account": doc.get("bank_account"),
 		"gross_amount": gross,
-		"allocated_now": requested,
-		"allocated_total": (
-			round(float(doc.get(money["allocated"]) or 0), 2) if money["allocated"] else None
+		# WHAT WAS ALLOCATED, NOT WHAT WAS ASKED. On the delegate path ERPNext
+		# decides each amount — the voucher's unallocated GL figure, capped at the
+		# transaction's remainder — so the two can differ, and reporting the
+		# request as the result would claim an allocation nobody made. On the
+		# legacy path this tool wrote the amounts itself, so they are the same.
+		"allocated_now": (
+			round(allocated_total - already, 2)
+			if callable(delegate) and allocated_total is not None
+			else requested
 		),
+		"allocated_requested": requested,
+		"allocated_total": allocated_total,
 		"unallocated_amount": unallocated,
 		"status": doc.get("status"),
 		"payment_entries": [
@@ -1613,10 +1640,24 @@ def reconcile_bank_transaction(args: dict) -> ToolResult:
 	after = int(doc.docstatus or 0)
 	return ToolResult(
 		data,
-		f"reconciled {requested} against Bank Transaction {doc.name} "
+		f"reconciled {data['allocated_now']} against Bank Transaction {doc.name} "
 		f"({len(vouchers)} voucher(s)); status {doc.get('status')}",
 		docstatus_delta=f"{before} → {after}" if before != after else "",
 	)
+
+
+def _erpnext_voucher(voucher: dict) -> dict:
+	"""One validated voucher, in the shape `BankTransaction.add_payment_entries` reads.
+
+	This tool's own keys are the child table's column names; ERPNext's method
+	takes the Bank Reconciliation Tool's. `amount` is carried because that page
+	sends it too, though v15 allocates from the GL rather than reading it.
+	"""
+	return {
+		"payment_doctype": voucher["payment_document"],
+		"payment_name": voucher["payment_entry"],
+		"amount": voucher["allocated_amount"],
+	}
 
 
 def _validated_vouchers(raw) -> list[dict]:

@@ -537,35 +537,107 @@ class ReconcileBankTransaction(SeededTestCase):
 		self.assertIn("payment_document", message)
 		self.assertIn("payment_entry", message)
 
-	def test_it_delegates_to_erpnext_when_the_method_exists(self):
-		"""On a real site ERPNext owns clearance dates, allocation arithmetic and
-		status; reimplementing those is how a transaction ends up looking
-		reconciled without being it."""
+	def as_erpnext_v15(self, gl=None):
+		"""Patch `get_doc` so a Bank Transaction carries ERPnext 15's own methods.
+
+		`add_payment_entries` is ERPNext 15.x's body VERBATIM — read out of
+		`polehntim/erpnext-umbrel:15.1.4` — down to the two keys it indexes and
+		the save it does not do. The stubs this replaced read `payment_entry` and
+		`allocated_amount` and saved themselves: they described the handler's
+		assumption, not ERPNext, and so passed against a call that raised
+		KeyError: 'payment_doctype' on every real site.
+
+		`allocate_payment_entries` is simplified to its arithmetic: each
+		zero-allocated row takes its voucher's GL amount (`gl`, keyed by docname),
+		capped at what the transaction has left, and clears it.
+		"""
 		from erpnext_mcp.tools import mutate
 
-		called = {}
-
+		gl = gl or {}
 		original = mutate.frappe.get_doc
+		test = self
+
+		def value(row, key):
+			return row.get(key) if isinstance(row, dict) else getattr(row, key, None)
 
 		def patched(*args, **kwargs):
 			doc = original(*args, **kwargs)
-			if args and args[0] == "Bank Transaction":
+			if not (args and args[0] == "Bank Transaction"):
+				return doc
 
-				def add_payment_entries(vouchers):
-					called["vouchers"] = vouchers
-					doc.status = "Reconciled"
-					doc.save()
+			def gross():
+				return abs(float(doc.get("withdrawal") or 0) - float(doc.get("deposit") or 0))
 
-				doc.add_payment_entries = add_payment_entries
+			def update_allocated_amount():
+				allocated = sum(
+					float(value(p, "allocated_amount") or 0) for p in doc.get("payment_entries") or []
+				)
+				doc.allocated_amount = allocated
+				doc.unallocated_amount = gross() - allocated
+
+			def add_payment_entries(vouchers):
+				update_allocated_amount()
+				if 0.0 >= doc.unallocated_amount:
+					raise AssertionError(f"Bank Transaction {doc.name} is already fully reconciled")
+				for voucher in vouchers:
+					doc.append(
+						"payment_entries",
+						{
+							"payment_document": voucher["payment_doctype"],
+							"payment_entry": voucher["payment_name"],
+							"allocated_amount": 0.0,  # Temporary
+						},
+					)
+
+			def allocate_payment_entries():
+				update_allocated_amount()
+				remaining = doc.unallocated_amount
+				for row in doc.get("payment_entries") or []:
+					if float(value(row, "allocated_amount") or 0) != 0:
+						continue
+					amount = min(gl.get(value(row, "payment_entry"), remaining), remaining)
+					if isinstance(row, dict):
+						row["allocated_amount"] = amount
+					else:
+						row.allocated_amount = amount
+					remaining -= amount
+				doc.clearance_date = "2026-01-15"
+				test.calls.append("allocate_payment_entries")
+
+			def set_status():
+				doc.status = "Reconciled" if doc.unallocated_amount <= 0 else "Unreconciled"
+
+			doc.add_payment_entries = add_payment_entries
+			doc.allocate_payment_entries = allocate_payment_entries
+			doc.update_allocated_amount = update_allocated_amount
+			doc.set_status = set_status
 			return doc
 
+		self.calls = []
 		mutate.frappe.get_doc = patched
-		try:
-			data = self.tool_data("reconcile_bank_transaction", self.voucher())
-		finally:
-			mutate.frappe.get_doc = original
-		self.assertEqual(called["vouchers"][0]["payment_entry"], "PE-0002")
+		self.addCleanup(setattr, mutate.frappe, "get_doc", original)
+
+	def test_erpnexts_method_is_handed_its_own_key_names(self):
+		"""THE v0.176.5 BUG. ERPNext's `add_payment_entries` indexes
+		`voucher["payment_doctype"]` and `voucher["payment_name"]`; this tool's
+		schema, correctly, takes the child table's `payment_document` and
+		`payment_entry`. Handing one to the other raised KeyError on every site
+		that has the method — which is every ERPNext 15 site."""
+		self.as_erpnext_v15(gl={"PE-0002": 400})
+		data = self.tool_data("reconcile_bank_transaction", self.voucher())
 		self.assertEqual(data["applied_via"], "ERPNext add_payment_entries")
+		self.assertEqual(data["payment_entries"][0]["payment_document"], "Payment Entry")
+		self.assertEqual(data["payment_entries"][0]["payment_entry"], "PE-0002")
+
+	def test_the_rows_erpnext_appends_are_saved_not_reloaded_away(self):
+		"""`add_payment_entries` only appends. The reload that used to follow it
+		would have discarded the rows even once the keys were right."""
+		self.as_erpnext_v15(gl={"PE-0002": 400})
+		self.tool_data("reconcile_bank_transaction", self.voucher())
+		stored = STORE.get_raw("Bank Transaction", "BT-2026-0001")["payment_entries"]
+		self.assertEqual([row["payment_entry"] for row in stored], ["PE-0002"])
+		self.assertEqual(float(stored[0]["allocated_amount"]), 400)
+		self.assertEqual(self.calls, ["allocate_payment_entries"])
 
 	def test_the_fallback_path_is_labelled(self):
 		data = self.tool_data("reconcile_bank_transaction", self.voucher())
@@ -633,37 +705,22 @@ class ReconcileBankTransaction(SeededTestCase):
 
 	def test_erpnexts_own_method_gets_the_allocation_and_sets_the_clearance_date(self):
 		"""Clearance dates and the allocated/unallocated split are ERPNext's to
-		write; this asserts what it is handed and that the result is read back."""
-		from erpnext_mcp.tools import mutate
-
-		original = mutate.frappe.get_doc
-
-		def patched(*args, **kwargs):
-			doc = original(*args, **kwargs)
-			if args and args[0] == "Bank Transaction":
-
-				def add_payment_entries(vouchers):
-					allocated = sum(v["allocated_amount"] for v in vouchers)
-					for voucher in vouchers:
-						doc.append("payment_entries", voucher)
-					doc.allocated_amount = allocated
-					doc.unallocated_amount = 1000 - allocated
-					doc.clearance_date = "2026-01-15"
-					doc.status = "Reconciled"
-					doc.save()
-
-				doc.add_payment_entries = add_payment_entries
-			return doc
-
-		mutate.frappe.get_doc = patched
-		try:
-			data = self.tool_data("reconcile_bank_transaction", self.voucher(amount=400))
-		finally:
-			mutate.frappe.get_doc = original
+		write; this asserts that the result is read back."""
+		self.as_erpnext_v15(gl={"PE-0002": 400})
+		data = self.tool_data("reconcile_bank_transaction", self.voucher(amount=400))
 		self.assertEqual(data["allocated_total"], 400)
 		self.assertEqual(data["unallocated_amount"], 600)
-		self.assertEqual(data["status"], "Reconciled")
+		self.assertEqual(data["status"], "Unreconciled")
 		self.assertEqual(STORE.get_raw("Bank Transaction", "BT-2026-0001")["clearance_date"], "2026-01-15")
+
+	def test_it_reports_what_erpnext_allocated_not_what_was_asked(self):
+		"""ERPNext allocates the voucher's own GL figure, so a request for 400
+		against a 250 voucher allocates 250 — and saying 400 would claim an
+		allocation nobody made."""
+		self.as_erpnext_v15(gl={"PE-0002": 250})
+		data = self.tool_data("reconcile_bank_transaction", self.voucher(amount=400))
+		self.assertEqual(data["allocated_now"], 250)
+		self.assertEqual(data["allocated_requested"], 400)
 
 
 class AccountCurrencyAmounts(SeededTestCase):
