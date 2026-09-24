@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.4 — 2026-09-24 — repoint a tag at the Asset the books already have
+
+**900 tools** (no change). `update_registered_asset` takes an optional
+`erpnext_asset`: the ERPNext Asset docname this tag should be mirrored by.
+
+- **THE FIX FOR A DUPLICATE THE MIRROR MADE.** A tag whose Submitted Asset was
+  never linked gets a fresh Draft from the mirror, and the tag then points at
+  the Draft. `erpnext_asset` moves the `asset_register` link onto the named
+  Asset and clears it on every other Asset carrying it. The ones cleared are
+  listed in `erpnext_asset_unlinked` and **are not deleted** — removing a
+  leftover Draft stays a Desk act.
+- **Refused, with nothing changed,** when the Asset does not exist, belongs to
+  another company, is cancelled, already mirrors a different tag, or the mirror
+  switch is off. Like `asset_location` it may be passed on its own.
+
 ## 0.176.3 — 2026-09-20 — a receipt list a phone can page through
 
 **900 tools** (no change). `list_expense_receipts` learns a second ordering and

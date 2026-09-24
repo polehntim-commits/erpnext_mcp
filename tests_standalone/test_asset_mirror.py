@@ -451,6 +451,105 @@ class ItDoesNotDuplicate(MirrorTestCase):
 		self.assertEqual(len(self.assets()), 1)
 
 
+# ── repointing ──────────────────────────────────────────────────────────────
+class Repointing(MirrorTestCase):
+	"""v0.176.4. The mirror made a Draft while the Submitted Asset for the same
+	machine already existed; `erpnext_asset` moves the tag onto the real one."""
+
+	def a_submitted_asset(self, name="ACC-ASS-2026-00001", company=MAIN, **kw):
+		STORE.seed(
+			"Asset",
+			[{"name": name, "company": company, "docstatus": 1, "asset_name": "Trackhoe", **kw}],
+		)
+		return name
+
+	def repoint(self, target, **kw):
+		return self.tool_data(
+			"update_registered_asset", {"asset_name": "MC-Tractor-01", "erpnext_asset": target, **kw}
+		)
+
+	def test_the_link_moves_and_the_draft_is_unlinked_not_deleted(self):
+		draft = self.costed()["erpnext_asset"]
+		real = self.a_submitted_asset()
+		data = self.repoint(real)
+		self.assertEqual(data["erpnext_asset"], real)
+		self.assertEqual(data["erpnext_asset_unlinked"], [draft])
+		self.assertEqual(data["changed"]["erpnext_asset"], [draft, real])
+		self.assertEqual(self.asset(real)["asset_register"], "MC-Tractor-01")
+		self.assertFalse(self.asset(draft).get("asset_register"))
+		self.assertEqual(len(self.assets()), 2)
+		self.assertEqual(asset_mirror.mirror_of("MC-Tractor-01"), real)
+
+	def test_it_settles_a_tag_with_two_assets(self):
+		"""The duplicate case `mirror_of` refuses to pick from."""
+		draft = self.costed()["erpnext_asset"]
+		real = self.a_submitted_asset(asset_register="MC-Tractor-01")
+		self.assertEqual(asset_mirror.mirror_of("MC-Tractor-01"), "")
+		data = self.repoint(real)
+		self.assertEqual(data["erpnext_asset_unlinked"], [draft])
+		self.assertEqual(asset_mirror.mirror_of("MC-Tractor-01"), real)
+
+	def test_another_companys_asset_is_refused(self):
+		draft = self.costed()["erpnext_asset"]
+		other = self.a_submitted_asset(company=OTHER)
+		error = self.tool_error(
+			"update_registered_asset", {"asset_name": "MC-Tractor-01", "erpnext_asset": other}
+		)
+		self.assertIn(OTHER, error)
+		self.assertEqual(self.asset(draft)["asset_register"], "MC-Tractor-01")
+		self.assertFalse(self.asset(other).get("asset_register"))
+
+	def test_a_missing_asset_is_refused(self):
+		self.costed()
+		error = self.tool_error(
+			"update_registered_asset", {"asset_name": "MC-Tractor-01", "erpnext_asset": "ACC-ASS-NOPE"}
+		)
+		self.assertIn("ACC-ASS-NOPE", error)
+
+	def test_a_cancelled_asset_is_refused(self):
+		self.costed()
+		gone = self.a_submitted_asset(docstatus=2)
+		error = self.tool_error(
+			"update_registered_asset", {"asset_name": "MC-Tractor-01", "erpnext_asset": gone}
+		)
+		self.assertIn("cancelled", error)
+
+	def test_another_tags_asset_is_refused(self):
+		self.costed()
+		taken = self.a_submitted_asset(asset_register="MC-Tractor-02")
+		error = self.tool_error(
+			"update_registered_asset", {"asset_name": "MC-Tractor-01", "erpnext_asset": taken}
+		)
+		self.assertIn("MC-Tractor-02", error)
+		self.assertEqual(self.asset(taken)["asset_register"], "MC-Tractor-02")
+
+	def test_a_refused_repoint_leaves_the_register_alone(self):
+		self.costed(description="before")
+		self.tool_error(
+			"update_registered_asset",
+			{"asset_name": "MC-Tractor-01", "erpnext_asset": "ACC-ASS-NOPE", "description": "after"},
+		)
+		self.assertEqual(frappe.db.get_value("Asset Register", "MC-Tractor-01", "description"), "before")
+
+	def test_pointing_at_the_current_mirror_changes_nothing(self):
+		draft = self.costed()["erpnext_asset"]
+		data = self.repoint(draft)
+		self.assertNotIn("erpnext_asset", data["changed"])
+		self.assertNotIn("erpnext_asset_unlinked", data)
+
+
+class RepointingWithTheMirrorOff(MirrorTestCase):
+	MIRROR_ON = False
+
+	def test_it_is_refused(self):
+		self.register()
+		STORE.seed("Asset", [{"name": "ACC-ASS-2026-00001", "company": MAIN, "docstatus": 1}])
+		error = self.tool_error(
+			"update_registered_asset", {"asset_name": "MC-Tractor-01", "erpnext_asset": "ACC-ASS-2026-00001"}
+		)
+		self.assertIn("mirroring is off", error)
+
+
 # ── retirement ──────────────────────────────────────────────────────────────
 class Retiring(MirrorTestCase):
 	def test_retiring_a_tag_does_not_dispose_of_the_asset(self):

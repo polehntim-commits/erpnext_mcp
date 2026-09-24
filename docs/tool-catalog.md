@@ -20030,6 +20030,14 @@ where there is more than one. It changes nothing on the register, so it may be
 passed to `update_registered_asset` **on its own** to retry a mirror that was
 refused for want of it.
 
+`erpnext_asset` on `update_registered_asset` (v0.176.4) — the ERPNext Asset
+docname this tag should be mirrored by, for when the mirror made a Draft while a
+Submitted Asset for the same machine already existed. The link moves to the
+named Asset and is cleared on every other one; those are listed in
+`erpnext_asset_unlinked` and are not deleted. Refused when the Asset is missing,
+on another company, cancelled, or already mirroring a different tag. It may be
+passed on its own.
+
 `acquired_on`, `purchase_value` and `replacement_value` per row on
 `bulk_create_assets`. Both optional; the shape the tool has always taken still
 works and simply mirrors nothing.

@@ -252,6 +252,66 @@ def mirrors_for(tags) -> dict:
 	return found
 
 
+def repoint(row: dict, target: str) -> dict:
+	"""Make `target` the one ERPNext Asset mirroring this tag.
+
+	THE CORRECTION FOR A DUPLICATE THE MIRROR MADE. A tag registered before its
+	Asset was linked gets a fresh Draft from `sync`, and then the tag points at
+	the Draft while the Submitted Asset the ledger knows about points at nothing.
+	This moves the link: `target` gets it, and every other Asset carrying it has
+	it cleared. The ones cleared are RETURNED, NOT DELETED — a Draft nobody wants
+	is removed in the Desk, where cancelling or deleting an Asset is a decision
+	somebody makes with the books open.
+
+	`frappe.db.set_value` for the same reason `_refresh` uses it: a Submitted
+	Asset refuses a save on a field ERPNext does not mark allow-on-submit.
+
+	Raises ValueError with the sentence to show. Returns
+	`{"before": [...], "after": target, "unlinked": [...]}`, or `{}` when the
+	tag already points at `target` and nothing else.
+	"""
+	tag = str(row.get("name") or "").strip()
+	target = (target or "").strip()
+	if not target:
+		raise ValueError(
+			"erpnext_asset cannot be empty. Unlinking a tag from the books is done by cancelling "
+			"or deleting the Asset in the Desk. Nothing was changed."
+		)
+	blocked = available()
+	if blocked:
+		raise ValueError(f"{blocked} Nothing was changed.")
+	found = frappe.db.get_value(ASSET, target, ["name", "company", "docstatus", LINK_FIELD], as_dict=True)
+	if not found:
+		raise ValueError(f"no ERPNext Asset called {target!r} on this site. Nothing was changed.")
+	company = str(row.get("company") or "")
+	if str(found.get("company") or "") != company:
+		raise ValueError(
+			f"ERPNext Asset {target} belongs to {found.get('company') or 'no company'} and {tag} "
+			f"belongs to {company}. A tag is mirrored by an Asset on its own company's books. "
+			"Nothing was changed."
+		)
+	if int(found.get("docstatus") or 0) == 2:
+		raise ValueError(
+			f"ERPNext Asset {target} is cancelled, so it is not on the books to mirror anything. "
+			"Nothing was changed."
+		)
+	owner = str(found.get(LINK_FIELD) or "")
+	if owner and owner != tag:
+		raise ValueError(
+			f"ERPNext Asset {target} already mirrors {owner}. Pointing {tag} at it too would give "
+			f"two tags one set of books; repoint {owner} first. Nothing was changed."
+		)
+
+	before = [str(n) for n in frappe.db.get_all(ASSET, filters={LINK_FIELD: tag}, pluck="name", limit=20)]
+	if before == [target]:
+		return {}
+	unlinked = [name for name in before if name != target]
+	for name in unlinked:
+		frappe.db.set_value(ASSET, name, LINK_FIELD, None, update_modified=False)
+	frappe.db.set_value(ASSET, target, LINK_FIELD, tag, update_modified=False)
+	return {"before": before, "after": target, "unlinked": unlinked}
+
+
 def sync(row: dict, *, location: str = "", photo_file: str = "") -> dict:
 	"""Create or refresh the ERPNext Asset mirroring one Asset Register record.
 

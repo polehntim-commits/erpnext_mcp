@@ -1354,18 +1354,32 @@ def update_registered_asset(args: dict) -> ToolResult:
 	# that follows carries only that argument; refusing it as "nothing to change"
 	# would make the refusal unactionable through the door that raised it.
 	mirror_location = as_str(args, "asset_location")
-	if not changes and not mirror_location:
+	# v0.176.4. `erpnext_asset` moves which ERPNext Asset mirrors this tag — the
+	# fix for a Draft the mirror made while a Submitted Asset for the same
+	# machine already existed. Like `asset_location` it writes nothing on the
+	# register row, so on its own it is not "nothing to change". Checked BEFORE
+	# the save, so a refused repoint leaves the register untouched too.
+	repointed = {}
+	if "erpnext_asset" in args:
+		try:
+			repointed = asset_mirror.repoint(dict(doc.as_dict()), as_str(args, "erpnext_asset"))
+		except ValueError as exc:
+			raise ToolError(str(exc)) from exc
+	if not changes and not mirror_location and "erpnext_asset" not in args:
 		raise ToolError(
 			"nothing to change. Pass at least one of: asset_type, parent_asset (or location), "
 			"description, nfc_uid, serial_number, model, acquired_on, purchase_value, "
 			"replacement_value, gps_latitude, gps_longitude, current_state, "
 			"max_safe_slope_degrees — or "
 			"asset_location, which files this asset's ERPNext Asset under an ERPNext "
-			"Location and leaves the register row alone."
+			"Location and leaves the register row alone, or erpnext_asset, which repoints "
+			"the tag at a different ERPNext Asset."
 		)
 
 	if changes:
 		doc.save(ignore_permissions=True)
+	if repointed:
+		changes["erpnext_asset"] = [", ".join(repointed["before"]) or None, repointed["after"]]
 	described = _describe_asset(dict(doc.as_dict()))
 
 	# v0.148.0. An edit that supplies purchase_value and acquired_on is the edit
@@ -1374,6 +1388,14 @@ def update_registered_asset(args: dict) -> ToolResult:
 	# identity only — never the money. `asset_mirror._refresh` says why.
 	verdict = asset_mirror.sync(dict(doc.as_dict()), location=mirror_location)
 	described = _with_mirror(described, verdict)
+	if repointed.get("unlinked"):
+		described["erpnext_asset_unlinked"] = repointed["unlinked"]
+		note = (
+			f"{', '.join(repointed['unlinked'])} no longer mirror(s) {doc.name} and still exist. "
+			"A Draft left over from a duplicate mirror is deleted in the Desk."
+		)
+		prior = described.get("erpnext_asset_note")
+		described["erpnext_asset_note"] = f"{prior} {note}" if prior else note
 
 	return ToolResult(
 		data={

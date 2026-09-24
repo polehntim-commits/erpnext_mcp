@@ -21396,6 +21396,14 @@ TOOLS = {
 				"register, so it may be passed on its own to retry a mirror that was refused "
 				"because the site has more than one Location.",
 			),
+			"erpnext_asset": _field(
+				_STRING,
+				"v0.176.4. Repoint this tag at a different ERPNext Asset docname — e.g. the "
+				"Submitted one, when the mirror made a duplicate Draft. It must exist, be on the "
+				"same company, not be cancelled and not mirror another tag. Every other Asset "
+				"linked to this tag is unlinked (not deleted) and listed in "
+				"erpnext_asset_unlinked. May be passed on its own.",
+			),
 			"max_safe_slope_degrees": _field(
 				_NUMBER,
 				"v0.168.0. Tractor, Vehicle, Sprayer or Implement only. The steepest slope in degrees "
