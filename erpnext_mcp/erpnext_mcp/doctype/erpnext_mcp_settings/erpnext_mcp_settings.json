@@ -89,8 +89,12 @@
   "attachment_tools_section",
   "allow_list_attachments",
   "allow_get_attachment_content",
+  "allow_list_incoming_documents",
+  "allow_get_incoming_document",
+  "allow_list_document_intake_log",
   "attachment_tools_col",
   "allow_attach_file_to_document",
+  "allow_route_incoming_document",
   "printing_tools_section",
   "allow_create_check_print_format",
   "upload_tools_section",
@@ -1672,6 +1676,27 @@
    "label": "Get Attachment Content"
   },
   {
+   "default": "1",
+   "description": "The intake queue: received email with attachments that is not yet linked to any record. Subjects, senders and filenames only.",
+   "fieldname": "allow_list_incoming_documents",
+   "fieldtype": "Check",
+   "label": "List Incoming Documents"
+  },
+  {
+   "default": "1",
+   "description": "One received email as plain text, with its attachments listed and any PDF up to 2 MB returned as base64. Needs read permission on the email. Turn this off if the inbox holds anything an AI client should not read.",
+   "fieldname": "allow_get_incoming_document",
+   "fieldtype": "Check",
+   "label": "Get Incoming Document"
+  },
+  {
+   "default": "1",
+   "description": "What the document intake agent has routed, read from its own audit comments on each email.",
+   "fieldname": "allow_list_document_intake_log",
+   "fieldtype": "Check",
+   "label": "List Document Intake Log"
+  },
+  {
    "fieldname": "attachment_tools_col",
    "fieldtype": "Column Break"
   },
@@ -1681,6 +1706,13 @@
    "fieldname": "allow_attach_file_to_document",
    "fieldtype": "Check",
    "label": "Attach File To Document"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. File every attachment on a received email onto one record by file_url (one stored copy, no re-upload), link the email to that record the way the Desk\u2019s Relink does, and leave an audit comment on the email. Needs write permission on both. Refuses an email already linked.",
+   "fieldname": "allow_route_incoming_document",
+   "fieldtype": "Check",
+   "label": "Route Incoming Document"
   },
   {
    "description": "Putting a document on paper.",

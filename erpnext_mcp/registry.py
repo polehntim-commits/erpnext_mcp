@@ -76,6 +76,7 @@ from .tools import (
 	discipline,
 	disclosure,
 	dispatch,
+	document_intake,
 	docvalidation,
 	employee,
 	engine_hours,
@@ -2669,6 +2670,88 @@ TOOLS = {
 		required=("doctype", "name", "file_name"),
 		mutating=True,
 		title="Attach a file to a document",
+	),
+	# ── document intake (v0.177.0) ──────────────────────────────────────────
+	"list_incoming_documents": _tool(
+		document_intake.list_incoming_documents,
+		"The intake queue: RECEIVED email with at least one attachment that is not yet "
+		"linked to any record — a Communication with has_attachment set and no "
+		"reference_doctype. Email this site sent is never in it. Newest first, each with "
+		"its subject, sender, attachment count and filenames. Read-only.\n\n"
+		"ERPNext's Email Account pulls the inbox into Communication and links what it "
+		"can place by itself (a reply on a thread it knows); what is left here is what "
+		"a person — or the intake agent — has to read and file. get_incoming_document "
+		"reads one; route_incoming_document files it.",
+		{
+			"sender": _field(_STRING, "Only messages whose sender contains this, e.g. 'wsda.wa.gov'."),
+			"since_date": _field(_STRING, "Only messages received on or after this date, YYYY-MM-DD."),
+			"limit": _field(_INTEGER, "Maximum messages. Default 20, hard maximum 500."),
+		},
+		title="List incoming documents",
+	),
+	"get_incoming_document": _tool(
+		document_intake.get_incoming_document,
+		"One received email in full: subject, sender, recipients, the body as PLAIN TEXT "
+		"(HTML stripped), when it arrived, and every attachment — File docname, filename, "
+		"file_url, size, mime type, private flag. A PDF up to 2 MB comes back inline as "
+		"`content_base64`, read through get_attachment_content so its permission check and "
+		"size cap apply; a PDF that cannot be read carries `content_error` instead and the "
+		"rest of the message still comes back. Also says whether the email is already "
+		"linked, and to what. Needs read permission on the Communication. Read-only.",
+		{"name": _field(_STRING, "The Communication docname, from list_incoming_documents.")},
+		required=("name",),
+		title="Read an incoming document",
+	),
+	"route_incoming_document": _tool(
+		document_intake.route_incoming_document,
+		"MUTATING (default OFF). File a received email's attachments onto the record they "
+		"belong to, and link the email to that record.\n\n"
+		"EVERY ATTACHMENT, BY file_url — NO BASE64. Each File on the email is attached to "
+		"the target through attach_file_to_document's file_url path, so the site keeps one "
+		"stored copy with a second File row on the target; nothing travels through this "
+		"call and nothing is re-encoded. All of attach_file_to_document's checks apply per "
+		"file: the target must exist, be writable by the acting user and not be cancelled; "
+		"a filename it already has, a disallowed extension or its max_attachments refuse "
+		"the whole call, and nothing is left half-routed.\n\n"
+		"THE EMAIL IS LINKED THE WAY THE DESK'S RELINK BUTTON LINKS IT: reference_doctype, "
+		"reference_name and status 'Linked', with no save, so the target's own status is "
+		"not touched. An email already linked to something is refused — re-routing would "
+		"file every attachment twice. Needs write permission on the Communication.\n\n"
+		"THE AUDIT TRAIL is a comment on the email — 'Document Intake Agent routed to "
+		"<doctype> <name> as <classification>.' plus the note — which is what "
+		"list_document_intake_log reads.",
+		{
+			"communication": _field(_STRING, "The Communication docname, from list_incoming_documents."),
+			"target_doctype": _field(
+				_STRING, "The DocType to file onto, e.g. 'Employee', 'Expense Receipt'."
+			),
+			"target_name": _field(_STRING, "That record's docname, e.g. 'HR-EMP-00007'."),
+			"classification": _field(
+				_STRING,
+				"What the document is, as a lower-case tag of letters, digits and underscores: "
+				"training_certificate, expense_receipt, applicator_license.",
+			),
+			"note": _field(_STRING, "Optional. Why it was filed there, kept in the audit comment."),
+		},
+		required=("communication", "target_doctype", "target_name", "classification"),
+		mutating=True,
+		title="Route an incoming document",
+	),
+	"list_document_intake_log": _tool(
+		document_intake.list_document_intake_log,
+		"What the intake agent has routed, newest first: each email's subject and sender, "
+		"the record it is linked to now, the classification it was filed as, any note, and "
+		"when and by whom it was routed. Built from route_incoming_document's own audit "
+		"comments, so an email ERPNext linked by itself — a sent invoice, a reply on a "
+		"thread — is never in it. Filter by classification, target doctype or date. "
+		"Read-only.",
+		{
+			"classification": _field(_STRING, "Only this classification, e.g. 'training_certificate'."),
+			"target_doctype": _field(_STRING, "Only emails routed to this DocType, e.g. 'Employee'."),
+			"since_date": _field(_STRING, "Only routings on or after this date, YYYY-MM-DD."),
+			"limit": _field(_INTEGER, "Maximum entries. Default 50, hard maximum 500."),
+		},
+		title="Document intake log",
 	),
 	# ── printing ────────────────────────────────────────────────────────────
 	"create_check_print_format": _tool(

@@ -691,6 +691,30 @@ ERPNEXT_SCHEMA = {
 		"creation",
 		"modified",
 	],
+	# v0.177.0. Frappe's email register, which the document-intake tools read and
+	# relink. Core, not this app's; the columns are the ones those tools touch,
+	# taken from `frappe/core/doctype/communication/communication.json` in the
+	# shipped image. `reference_name` is a Dynamic Link there.
+	"Communication": [
+		"name",
+		"subject",
+		"sender",
+		"sender_full_name",
+		"recipients",
+		"cc",
+		"content",
+		"communication_type",
+		"sent_or_received",
+		"communication_date",
+		"status",
+		"reference_doctype",
+		"reference_name",
+		"email_account",
+		"has_attachment",
+		"owner",
+		"creation",
+		"modified",
+	],
 	"ToDo": [
 		"name",
 		"status",
@@ -2446,16 +2470,27 @@ def _eq(actual, expected) -> bool:
 
 
 def _like(actual, pattern: str) -> bool:
-	# MariaDB LIKE with the site's default collation: case-insensitive.
+	"""MariaDB LIKE with the site's default collation: case-insensitive.
+
+	v0.177.0: `%` ANYWHERE and `_` as one character, as the server does. The
+	double used to understand a `%` only at either end, so a pattern with one in
+	the middle — `list_document_intake_log`'s "routed to % as <tag>.%" — matched
+	nothing here and everything it should on a bench. A backslash escapes the
+	next character, which is MariaDB's default escape.
+	"""
 	text = str(actual or "").lower()
 	needle = str(pattern or "").lower()
-	if needle.startswith("%") and needle.endswith("%"):
-		return needle.strip("%") in text
-	if needle.startswith("%"):
-		return text.endswith(needle.lstrip("%"))
-	if needle.endswith("%"):
-		return text.startswith(needle.rstrip("%"))
-	return text == needle
+	parts = []
+	index = 0
+	while index < len(needle):
+		char = needle[index]
+		if char == "\\" and index + 1 < len(needle):
+			parts.append(re.escape(needle[index + 1]))
+			index += 2
+			continue
+		parts.append(".*" if char == "%" else "." if char == "_" else re.escape(char))
+		index += 1
+	return re.fullmatch("".join(parts), text, flags=re.DOTALL) is not None
 
 
 def _key(value):

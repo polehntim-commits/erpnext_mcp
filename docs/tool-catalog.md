@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 901 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 905 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 449 read tools are **on** by default and can be switched off individually. A
+All 452 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20314,3 +20314,62 @@ At install, Manufacturing, Quality, Projects, Support, Website and CRM are put
 away. Accounting and HR stay — they are where somebody who has used ERPNext
 before goes looking. Agriculture is left alone because it belongs to another app
 and a farm may be using it; `hide_default_workspace("Agriculture")` is one call.
+
+## v0.177.0 — the inbox, filed
+
+ERPNext's Email Account already pulls office@ into `Communication`, and each
+attachment on a message is a `File` hanging off that Communication. These four
+tools are the step after: reading what arrived and putting it on the record it
+is evidence for.
+
+**The queue is the unlinked ones.** `list_incoming_documents` returns RECEIVED
+Communications (`communication_type` Communication, `sent_or_received`
+Received) with `has_attachment` set and **no** `reference_doctype` — ERPNext
+links what it can place by itself, so what is left is the pile. Email this site
+sent is never in it. Arguments: `sender` (substring), `since_date`, `limit`
+(default 20). Returns each message's `name`, `subject`, `sender`, `creation`,
+`attachment_count` and `attachment_filenames`, newest first.
+
+`get_incoming_document(name)` returns the subject, sender, recipients, the body
+as **plain text** (tags, `<style>` and `<script>` removed, entities decoded),
+`creation`, any existing `reference_doctype`/`reference_name`, and every
+attachment: File docname, `file_name`, `file_url`, `file_size`, `mime_type`,
+`is_private`. A PDF up to 2 MB comes back as `content_base64`, read through
+`get_attachment_content` so its permission check and size cap apply; one that
+cannot be read carries `content_error` and the rest still returns. Needs read
+permission on the Communication.
+
+### `route_incoming_document` — MUTATING, default off
+
+Arguments: `communication`, `target_doctype`, `target_name`, `classification`
+(a lower-case tag: `training_certificate`, `expense_receipt`,
+`applicator_license`), `note` (optional).
+
+**Every attachment goes onto the target by `file_url` — no base64.** Each File
+on the email is attached through `attach_file_to_document`'s `file_url` path.
+Frappe reads the stored file, finds the email's own File by content hash and
+reuses its `file_url`, so the site keeps **one** copy with a second File row on
+the target. All of `attach_file_to_document`'s checks run per file — the target
+exists, is writable, is not cancelled, the extension is allowed, the filename is
+not already on it, `max_attachments` — and the first refusal rolls the whole
+call back, files already attached included.
+
+**The email is linked the way the Desk's Relink button links it:**
+`reference_doctype`, `reference_name` and `status = "Linked"`, written directly
+with no save, so the target's own status is not touched. Needs write permission
+on the Communication. An email already linked is refused.
+
+**The audit trail is a comment on the email:** `Document Intake Agent routed to
+<doctype> <name> as <classification>.` and, on the next line, `Note: <note>`.
+
+Returns `communication`, `target_doctype`, `target_name`, `classification`,
+`attachments_routed`, `file_names`, `files[]` (source File, new File, name,
+url), `audit_comment`.
+
+`list_document_intake_log` is read **from those comments**, not from linked
+Communications, so an email ERPNext linked by itself — a sent invoice, a reply on
+a thread — is never in it. Arguments: `classification` (exact; a filter for
+`training_certificate` does not match `training_certificate_renewal`),
+`target_doctype`, `since_date`, `limit` (default 50). Returns each entry's
+`communication`, `subject`, `sender`, `creation`, `reference_doctype`,
+`reference_name`, `classification`, `note`, `routed_at` and `routed_by`.

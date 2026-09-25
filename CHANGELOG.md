@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.177.0 — 2026-09-25 — the inbox, filed
+
+**905 tools** (+4: three read, on by default; one mutating, off by default).
+Four tools for an agent that reads the email arriving at office@ and files the
+attachments on the records they belong to.
+
+- **`list_incoming_documents`** — received email with an attachment and no
+  linked record, newest first, with filenames. Filters: `sender`, `since_date`,
+  `limit` (default 20).
+- **`get_incoming_document`** — one email: body as plain text, headers, every
+  attachment, and any PDF up to 2 MB inline as base64 (through
+  `get_attachment_content`, so its permission check applies).
+- **`route_incoming_document`** (switch `allow_route_incoming_document`) — every
+  attachment onto one record **by `file_url`**, through
+  `attach_file_to_document`. Frappe reuses the stored file (content-hash match,
+  read from `file.py` in the shipped image), so there is one copy on disk and no
+  base64 on the way. The email is linked as the Desk's Relink links it —
+  `reference_doctype`, `reference_name`, `status = "Linked"`, no save — and gets
+  an audit comment naming the target and the classification. Any refusal rolls
+  the whole call back. An email already linked is refused.
+- **`list_document_intake_log`** — what the agent routed, read from those
+  comments, so emails ERPNext linked by itself are not in it. Filters:
+  `classification` (exact), `target_doctype`, `since_date`, `limit` (default 50).
+- **Test double:** `LIKE` now follows MariaDB — `%` anywhere and `_` as one
+  character. It used to understand `%` only at either end, so a pattern with one
+  in the middle matched nothing in the suite and everything it should on a bench.
+  `Communication` is added to the double's core doctypes.
+
 ## 0.176.9 — 2026-09-25 — a draft purchase invoice can be withdrawn, and its receipt billed again
 
 **901 tools** (+1, mutating, default off). `delete_draft_purchase_invoice` is
