@@ -18744,6 +18744,13 @@ written since is sitting in a queue on somebody's handset.
 |---|---|
 | `POST /farmops/api/mobile/submit_app_feedback` | One note from the bubble. **Deduplicated on `entry_uuid`.** |
 
+A note can say **which record it is about** (v0.176.8): optional
+`reference_doctype` and `reference_name`, e.g. `Item` / `SURROUND-WP` from a
+product screen. Both are Data columns stored as sent, never checked against the
+site: a refused note is re-sent forever, and a note about a product renamed since
+is still about that product. `list_app_feedback` filters on both, and every note
+about one product is `reference_name=<item code>`.
+
 The owner's half of the feature is a **list view** on the doctype — sorted by
 when Send was pressed, filterable by screen and by role — which is what
 `SERVER_CHANGES.md` item 24 asks for and what a Desk list already does against

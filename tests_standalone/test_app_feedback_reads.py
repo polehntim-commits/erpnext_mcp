@@ -422,6 +422,9 @@ class TheReadsAreScopedAndFound(AppFeedbackReadTestCase):
 		"device_model": "iPad13,1",
 		"device_id": "E7F1-ZZZZ",
 		"entry_uuid": "no-such-uuid",
+		# v0.176.8. The fixture's notes name no record, so any value matches none.
+		"reference_doctype": "Item",
+		"reference_name": "SURROUND-WP",
 		# v0.159.0. The fixture's three notes are unanswered — their column is
 		# NULL, which `_describe` reads as Open — so "Resolved" matches none of
 		# them. `status="Open"` would match all three and prove nothing, which is

@@ -12,6 +12,8 @@
   "entry_uuid",
   "screen_name",
   "screen_label",
+  "reference_doctype",
+  "reference_name",
   "feedback_section",
   "feedback_text",
   "feedback_col",
@@ -51,7 +53,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-19 14:00:00.000000",
+ "modified": "2026-09-24 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "App Feedback",
@@ -120,6 +122,21 @@
    "fieldname": "screen_label",
    "fieldtype": "Data",
    "label": "Screen Label"
+  },
+  {
+   "description": "The kind of record the worker was looking at when they wrote this, as the app names it (Item, Spray REI, MRL Record ...). Optional, and stored as sent rather than checked: a note about a record somebody has since renamed or deleted is still worth reading, and a refused note is re-sent by the phone forever.",
+   "fieldname": "reference_doctype",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Reference DocType"
+  },
+  {
+   "description": "Which one: the docname of the product, block or record on the screen. With Reference DocType it answers 'which product is this note about' without anyone reading the screenshot.",
+   "fieldname": "reference_name",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Reference Name",
+   "search_index": 1
   },
   {
    "fieldname": "feedback_section",

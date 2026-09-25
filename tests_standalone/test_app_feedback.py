@@ -766,3 +766,57 @@ class ANoteCanBeAnswered(AppFeedbackTestCase):
 				self.assertEqual(fields[name].get("read_only"), 1)
 		self.assertEqual(fields["status"]["options"].split("\n"), ["Open", "Resolved", "Won't Fix"])
 		self.assertEqual(fields["status"]["default"], "Open")
+
+
+# ── what the note is about ───────────────────────────────────────────────────
+class TheNoteNamesItsRecord(AppFeedbackTestCase):
+	"""`reference_doctype` / `reference_name`: which product, block or record the
+	worker was looking at. Optional, stored as sent, and never a reason to refuse
+	a note (TELL_THE_FARM_AUDIT.md, F3)."""
+
+	def test_a_note_about_a_product_names_it(self):
+		self.file({"screen": "inventory", "reference_doctype": "Item", "reference_name": "SURROUND-WP"})
+		row = self.only()
+		self.assertEqual(row["reference_doctype"], "Item")
+		self.assertEqual(row["reference_name"], "SURROUND-WP")
+
+	def test_a_note_without_one_files_exactly_as_before(self):
+		self.file()
+		row = self.only()
+		self.assertFalse(row.get("reference_doctype"))
+		self.assertFalse(row.get("reference_name"))
+
+	def test_a_record_the_site_does_not_have_still_files(self):
+		"""A refused note is re-sent forever. A product renamed since the note was
+		written is still the product the worker meant."""
+		answer = self.file({"reference_doctype": "Spray Thing", "reference_name": "GONE-1"})
+		self.assertTrue(answer["filed"])
+		self.assertEqual(self.only()["reference_name"], "GONE-1")
+
+	def test_an_over_long_reference_is_cut_not_refused(self):
+		self.file({"reference_doctype": "Item", "reference_name": "X" * 500})
+		self.assertEqual(len(self.only()["reference_name"]), feedback_tools.REFERENCE_MAX)
+
+	def test_the_doctype_declares_both_columns(self):
+		spec = json.loads(
+			(
+				Path(feedback_tools.__file__).resolve().parents[1]
+				/ "erpnext_mcp/doctype/app_feedback/app_feedback.json"
+			).read_text()
+		)
+		fields = {field["fieldname"]: field for field in spec["fields"]}
+		for name in ("reference_doctype", "reference_name"):
+			self.assertIn(name, spec["field_order"])
+			self.assertEqual(fields[name]["fieldtype"], "Data", "a Link would refuse the note")
+			self.assertFalse(fields[name].get("reqd"))
+
+	def test_the_feed_can_be_filtered_to_one_record(self):
+		self.file({"entry_uuid": "A-1", "reference_doctype": "Item", "reference_name": "SURROUND-WP"})
+		self.file({"entry_uuid": "A-2", "reference_doctype": "Item", "reference_name": "SULFUR-90"})
+		self.file({"entry_uuid": "A-3"})
+		data = feedback_tools.list_app_feedback({"reference_name": "SURROUND-WP"}).data
+		rows = next(
+			value for value in data.values() if isinstance(value, list) and value and "entry_uuid" in value[0]
+		)
+		self.assertEqual([row["entry_uuid"] for row in rows], ["A-1"])
+		self.assertEqual(rows[0]["reference_doctype"], "Item")

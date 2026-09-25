@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.8 — 2026-09-24 — a feedback note can name the record it is about
+
+**900 tools** (no change). App Feedback has two new optional Data columns,
+`reference_doctype` and `reference_name`, and `submit_app_feedback` on the phone
+accepts both. A note from a product screen can now say `Item` / `SURROUND-WP`
+instead of leaving the office to recognise the product from a screenshot.
+
+- **STORED AS SENT, NEVER CHECKED.** A refused note is re-sent by the phone
+  forever, and a note about a record since renamed or deleted is still worth
+  reading. An over-long value is cut to 140 characters, not refused. Data rather
+  than Link / Dynamic Link for the same reason.
+- An older phone that sends neither files exactly the note it always did. On a
+  site that has not migrated yet, the values are dropped rather than failing the
+  insert.
+- `list_app_feedback` filters on both, and `list_app_feedback` /
+  `get_app_feedback` return both.
+
 ## 0.176.7 — 2026-09-24 — a phone can ask whether a block is under REI
 
 **900 tools** (no change). `get_active_rei` and `list_active_reis` are phone

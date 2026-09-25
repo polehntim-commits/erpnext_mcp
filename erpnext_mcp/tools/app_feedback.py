@@ -84,6 +84,9 @@ EMPLOYEE = "Employee"
 #: was interrupted or because the server was.
 TRUNCATION_MARKER = " […truncated on arrival]"
 
+#: Width of a Data column, and so of `reference_doctype` / `reference_name`.
+REFERENCE_MAX = 140
+
 #: The biggest screenshot this route will store inline. A JPEG of a phone screen
 #: is well under this; the handset holds its own captures under 512 KB and drops
 #: anything larger before it sends. The ceiling is here so a client bug cannot
@@ -103,6 +106,8 @@ _FIELDS = (
 	"entry_uuid",
 	"screen_name",
 	"screen_label",
+	"reference_doctype",
+	"reference_name",
 	"feedback_text",
 	"language",
 	"was_dictated",
@@ -171,7 +176,9 @@ def _submitted_at(args: dict) -> str:
 
 
 def _row(name: str) -> dict:
-	rows = frappe.db.get_all(APP_FEEDBACK, filters={"name": name}, fields=list(_FIELDS), limit=1)
+	rows = frappe.db.get_all(
+		APP_FEEDBACK, filters={"name": name}, fields=compat.existing_fields(APP_FEEDBACK, _FIELDS), limit=1
+	)
 	return rows[0] if rows else {"name": name}
 
 
@@ -286,6 +293,15 @@ def submit_app_feedback(args: dict) -> ToolResult:
 		"os_version": as_str(args, "os_version"),
 		"device_id": as_str(args, "device_id"),
 	}
+	# WHAT THE WORKER WAS LOOKING AT, stored as sent. Not checked against the
+	# site, because a refused note is re-sent forever and a note about a record
+	# since renamed or deleted is still worth reading. Cut to the column's width
+	# rather than refused, and dropped on a site that has not migrated the two
+	# columns yet rather than failing the insert.
+	for key in ("reference_doctype", "reference_name"):
+		given = as_str(args, key)[:REFERENCE_MAX]
+		if given and compat.has_field(APP_FEEDBACK, key):
+			values[key] = given
 	if claimed_employee and claimed_employee != caller_employee:
 		values["claimed_employee"] = claimed_employee
 		values["claimed_employee_name"] = as_str(args, "employee_name")
@@ -368,6 +384,8 @@ _LIST_FIELDS = (
 	"entry_uuid",
 	"screen_name",
 	"screen_label",
+	"reference_doctype",
+	"reference_name",
 	"feedback_text",
 	"language",
 	"was_dictated",
@@ -426,6 +444,8 @@ _TEXT_FILTERS = (
 	("device_model", "device_model"),
 	("device_id", "device_id"),
 	("entry_uuid", "entry_uuid"),
+	("reference_doctype", "reference_doctype"),
+	("reference_name", "reference_name"),
 )
 
 #: The two Check columns, filtered on only when the caller says either way —
@@ -523,6 +543,9 @@ def _describe(row: dict) -> dict:
 		"entry_uuid": row.get("entry_uuid") or None,
 		"screen_name": row.get("screen_name") or None,
 		"screen_label": row.get("screen_label") or None,
+		# Which record the note is about, when the screen said. As the app sent it.
+		"reference_doctype": row.get("reference_doctype") or None,
+		"reference_name": row.get("reference_name") or None,
 		"feedback_text": feedback_text,
 		"comment": feedback_text,
 		"language": row.get("language") or None,

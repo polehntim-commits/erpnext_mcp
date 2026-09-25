@@ -14001,8 +14001,16 @@ def submit_app_feedback(
 	device_id=None,
 	screenshot=None,
 	screenshot_omitted=None,
+	reference_doctype=None,
+	reference_name=None,
 ) -> dict:
 	"""The in-app feedback bubble's one call. Deduplicated on `entry_uuid`.
+
+	`reference_doctype` / `reference_name` SAY WHICH RECORD THE NOTE IS ABOUT —
+	the product, block or record on the screen when the bubble was tapped. Both
+	optional, both stored as sent: a phone that does not send them files exactly
+	the note it always did, and one that names a record since deleted still
+	files. Declared here, so `routes.bind` no longer drops them.
 
 	`UPLOAD_LIMIT` RATHER THAN `WRITE_LIMIT`, and for the reason
 	`sync_bucket_entries` takes it. This route has never existed, so the iOS half
@@ -14085,6 +14093,8 @@ def submit_app_feedback(
 			"device_id": device_id,
 			"screenshot": screenshot,
 			"screenshot_omitted": screenshot_omitted,
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_name,
 		}
 	).data
 	row = answer.get("app_feedback") or {}

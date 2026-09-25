@@ -27386,6 +27386,15 @@ TOOLS = {
 				"harvest_day, bucket_capture. NEVER a translated label: grouping on the key is "
 				"what answers 'which part of this is people struggling with'.",
 			),
+			"reference_doctype": _field(
+				_STRING,
+				"Only notes about this kind of record (Item, Spray REI ...): what the worker "
+				"was looking at when they tapped the bubble, as the app sent it.",
+			),
+			"reference_name": _field(
+				_STRING,
+				"Only notes about this one record, e.g. an Item code. Every note about a product.",
+			),
 			"role": _field(
 				_STRING,
 				"The role the person was acting as in the app. The app's claim, and it authorises nothing.",
