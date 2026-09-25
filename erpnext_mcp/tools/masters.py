@@ -53,6 +53,8 @@ row, it refuses and lists them instead of picking the first.
 
 from __future__ import annotations
 
+import json
+
 import frappe
 
 from .. import compat
@@ -108,6 +110,32 @@ _HINT = "It ships with ERPNext's Stock, Buying and Selling modules."
 #: The root of ERPNext's Item Group tree on a stock install, and the parent
 #: `create_item_group` uses when the caller names none.
 ALL_ITEM_GROUPS = "All Item Groups"
+
+#: Where `create_item` files a product that arrives with an EPA registration
+#: number and no group. The caller should not have to know the name: a number
+#: off a pesticide label already says what the product is. The group is made,
+#: as a leaf under the root, the first time a site needs it. The name also
+#: matches `compliance_fields.CHEMICAL_ITEM_DEPENDS_ON`, so the Desk shows the
+#: label fields on everything filed here.
+CROP_PROTECTION_GROUP = "Crop Protection Products"
+
+#: The pesticide label columns `compliance_fields._ITEM_FIELDS` installs on
+#: Item, as `create_item` / `update_item` accept them: argument name → kind.
+#: The argument IS the fieldname, so nothing here renames anything.
+PESTICIDE_FIELDS = {
+	"epa_registration_number": "text",
+	"signal_word": "signal_word",
+	"restricted_use": "check",
+	"active_ingredients": "ingredients",
+	"rei_hours": "whole",
+	"phi_days": "whole",
+	"phi_crop": "text",
+	"application_rate": "text",
+	"ppe_requirements": "text",
+	"label_scan_validation": "validation",
+}
+SIGNAL_WORDS = ("Danger", "Warning", "Caution", "None")
+_INGREDIENT_KEYS = ("name", "concentration", "unit")
 
 #: The same for the two party trees and the territory tree. Each is only ever a
 #: *fallback*: the tool checks the site actually has it before using it, and
@@ -592,9 +620,7 @@ def create_item(args: dict) -> ToolResult:
 	_require(ITEM)
 	item_code = as_str(args, "item_code", required=True)
 	item_name = as_str(args, "item_name") or item_code
-	# NOT `_tree_parent`: an Item belongs to a LEAF group, so requiring is_group
-	# here would refuse exactly the groups items are supposed to go in.
-	item_group = _item_group_for(as_str(args, "item_group"))
+	label = _pesticide_values(args, "created")
 	stock_uom = _resolve_uom(as_str(args, "stock_uom") or "Nos")
 	is_stock_item = as_bool(args, "is_stock_item", True)
 	disabled = bool(as_bool(args, "disabled", False))
@@ -606,6 +632,16 @@ def create_item(args: dict) -> ToolResult:
 			"docname, so they are unique. Use update_item to change it. Nothing was created."
 		)
 
+	# NOT `_tree_parent`: an Item belongs to a LEAF group, so requiring is_group
+	# here would refuse exactly the groups items are supposed to go in. Resolved
+	# after every refusal above, because the crop-protection group is created on
+	# first use and a refused call should leave nothing behind.
+	group_created = False
+	if not as_str(args, "item_group") and label.get("epa_registration_number"):
+		item_group, group_created = _crop_protection_group()
+	else:
+		item_group = _item_group_for(as_str(args, "item_group"))
+
 	doc = frappe.new_doc(ITEM)
 	doc.item_code = item_code
 	doc.item_name = item_name
@@ -616,6 +652,8 @@ def create_item(args: dict) -> ToolResult:
 		doc.description = description
 	if disabled and compat.has_field(ITEM, "disabled"):
 		doc.disabled = 1
+	for key, value in label.items():
+		doc.set(key, value)
 
 	warehouse = as_str(args, "default_warehouse")
 	default_note = ""
@@ -642,6 +680,18 @@ def create_item(args: dict) -> ToolResult:
 	}
 	if default_note:
 		data["default_warehouse_stored_on"] = default_note
+	if label:
+		data["pesticide_label"] = {
+			key: (json.loads(value) if key == "active_ingredients" and value else value)
+			for key, value in label.items()
+		}
+	if group_created:
+		data["item_group_created"] = True
+		data["item_group_note"] = (
+			f"An EPA registration number with no item_group files the product under "
+			f"{CROP_PROTECTION_GROUP!r}. This site had no such group, so it was created "
+			f"under {ALL_ITEM_GROUPS!r}."
+		)
 	return ToolResult(
 		data,
 		f"created Item {doc.name} ({item_name}) in {item_group}, stocked in {stock_uom}",
@@ -670,6 +720,194 @@ def _item_group_for(given: str) -> str:
 		f"item_group is required: this site has no Item Group called {ALL_ITEM_GROUPS!r} to "
 		f"default to. Call list_item_groups to see the tree. Nothing was created."
 	)
+
+
+def _crop_protection_group() -> tuple[str, bool]:
+	"""`(group, created)` for an Item that arrived with an EPA number and no group."""
+	if _exists(ITEM_GROUP, CROP_PROTECTION_GROUP):
+		return CROP_PROTECTION_GROUP, False
+	if not _exists(ITEM_GROUP, ALL_ITEM_GROUPS):
+		raise ToolError(
+			f"an EPA registration number files a product under {CROP_PROTECTION_GROUP!r}, and this "
+			f"site has neither that group nor {ALL_ITEM_GROUPS!r} to make it under. Pass item_group, "
+			"or create the group with create_item_group. Nothing was created."
+		)
+	group = frappe.new_doc(ITEM_GROUP)
+	group.item_group_name = CROP_PROTECTION_GROUP
+	group.parent_item_group = ALL_ITEM_GROUPS
+	group.is_group = 0
+	group.insert()
+	return group.name, True
+
+
+def _pesticide_values(args: dict, verb: str) -> dict:
+	"""The label fields this call sets, validated, as `{fieldname: stored value}`.
+
+	Only keys the caller actually sent are returned, so an update touches nothing
+	it was not asked to. An empty string clears a text, Select, JSON or Link field.
+	Nothing is written to a column the site does not have: that is refused and
+	names the installer, because a label value that silently goes nowhere is
+	exactly what an applicator must never be told was recorded.
+	"""
+	values: dict = {}
+	for key, kind in PESTICIDE_FIELDS.items():
+		raw = args.get(key)
+		if raw is None:
+			continue
+		if kind == "text":
+			values[key] = str(raw).strip()
+		elif kind == "check":
+			values[key] = 1 if as_bool(args, key) else 0
+		elif kind == "whole":
+			values[key] = _whole_non_negative(raw, key, verb)
+		elif kind == "signal_word":
+			values[key] = _signal_word(raw, verb)
+		elif kind == "ingredients":
+			values[key] = _ingredients(raw, verb)
+		elif kind == "validation":
+			values[key] = _label_validation(str(raw).strip(), verb)
+
+	for key in values:
+		if not compat.has_field(ITEM, key):
+			raise ToolError(
+				f"this site's Item has no {key!r} column. The pesticide label fields are added by "
+				"install_compliance_fields, which also runs on every bench migrate. "
+				f"Nothing was {verb}."
+			)
+	return values
+
+
+def _whole_non_negative(raw, key: str, verb: str) -> int:
+	"""A label interval as a whole number of at least zero. A fraction is refused, not truncated.
+
+	`int(4.5)` is 4, and a four-hour answer to a 4.5-hour REI puts a crew in the
+	block half an hour early. The column is an Int, so the caller rounds up and
+	knows it did.
+	"""
+	if isinstance(raw, bool):
+		raise ToolError(f"{key} must be a whole number of at least 0, got {raw!r}. Nothing was {verb}.")
+	try:
+		number = float(raw)
+	except (TypeError, ValueError):
+		raise ToolError(
+			f"{key} must be a whole number of at least 0, got {raw!r}. Nothing was {verb}."
+		) from None
+	if number != number or number < 0:
+		raise ToolError(f"{key} must be at least 0, got {raw!r}. Nothing was {verb}.")
+	if number != int(number):
+		raise ToolError(
+			f"{key} must be a whole number, got {raw!r}. Round a label interval UP, never down. "
+			f"Nothing was {verb}."
+		)
+	return int(number)
+
+
+def _signal_word(raw, verb: str) -> str:
+	"""One of the four signal words in their stored casing, or '' to clear."""
+	word = str(raw).strip()
+	if not word:
+		return ""
+	for option in SIGNAL_WORDS:
+		if option.lower() == word.lower():
+			return option
+	raise ToolError(
+		f"signal_word must be one of {', '.join(SIGNAL_WORDS)}, got {word!r}. 'None' is the "
+		f"answer for a product whose label carries no signal word. Nothing was {verb}."
+	)
+
+
+def _ingredients(raw, verb: str) -> str | None:
+	"""`active_ingredients` as the JSON text the column stores, or None to clear.
+
+	Accepts a list or a JSON string of one. Each entry is an object with a
+	non-empty `name` and optional `concentration` (a number) and `unit`; any
+	other key is refused rather than stored for nothing to read.
+	"""
+	if isinstance(raw, str):
+		if not raw.strip():
+			return None
+		try:
+			raw = json.loads(raw)
+		except ValueError:
+			raise ToolError(
+				"active_ingredients must be valid JSON: a list of "
+				f'{{"name", "concentration", "unit"}} objects. Nothing was {verb}.'
+			) from None
+	if not isinstance(raw, list):
+		raise ToolError(
+			"active_ingredients must be a list of "
+			f'{{"name", "concentration", "unit"}} objects, got {type(raw).__name__}. Nothing was {verb}.'
+		)
+	if not raw:
+		return None
+	clean = []
+	for position, entry in enumerate(raw, start=1):
+		if not isinstance(entry, dict):
+			raise ToolError(f"active_ingredients entry {position} must be an object. Nothing was {verb}.")
+		unknown = sorted(set(entry) - set(_INGREDIENT_KEYS))
+		if unknown:
+			raise ToolError(
+				f"active_ingredients entry {position} has keys this record does not keep: "
+				f"{', '.join(unknown)}. Use name, concentration and unit. Nothing was {verb}."
+			)
+		name = str(entry.get("name") or "").strip()
+		if not name:
+			raise ToolError(f"active_ingredients entry {position} needs a name. Nothing was {verb}.")
+		row: dict = {"name": name}
+		concentration = entry.get("concentration")
+		if concentration not in (None, ""):
+			if isinstance(concentration, bool):
+				concentration = "not a number"
+			try:
+				row["concentration"] = float(concentration)
+			except (TypeError, ValueError):
+				raise ToolError(
+					f"active_ingredients entry {position} ({name}): concentration must be a number, "
+					f"got {concentration!r}. Nothing was {verb}."
+				) from None
+			if row["concentration"] < 0:
+				raise ToolError(
+					f"active_ingredients entry {position} ({name}): concentration cannot be negative. "
+					f"Nothing was {verb}."
+				)
+		unit = str(entry.get("unit") or "").strip()
+		if unit:
+			row["unit"] = unit
+		clean.append(row)
+	return json.dumps(clean)
+
+
+def _label_validation(name: str, verb: str) -> str:
+	"""A Document Validation docname, or '' to clear the link."""
+	if not name:
+		return ""
+	if not compat.doctype_exists("Document Validation"):
+		raise ToolError(f"this site has no Document Validation DocType. Nothing was {verb}.")
+	if not _exists("Document Validation", name):
+		raise ToolError(
+			f"no Document Validation called {name!r} on this site. list_document_validations has "
+			f"them. Nothing was {verb}."
+		)
+	return name
+
+
+def _stored_label_value(key: str, value):
+	"""What a label column holds, in the shape `_pesticide_values` produces, for comparing."""
+	kind = PESTICIDE_FIELDS[key]
+	if kind == "check":
+		return 1 if _checked(value) else 0
+	if kind == "whole":
+		return int(value or 0)
+	if kind == "ingredients":
+		if value in (None, "", []):
+			return None
+		if isinstance(value, str):
+			try:
+				value = json.loads(value)
+			except ValueError:
+				return value
+		return json.dumps(value)
+	return value or ""
 
 
 def _resolve_uom(uom: str) -> str:
@@ -733,8 +971,9 @@ def _set_default_warehouse(doc, warehouse: str, company: str) -> str:
 
 
 def update_item(args: dict) -> ToolResult:
-	"""Change one Item's description, group, disabled flag, default warehouse or
-	reorder rule. Never renames it — the item_code is the docname."""
+	"""Change one Item's description, group, disabled flag, default warehouse,
+	reorder rule or pesticide label fields. Never renames it — the item_code is
+	the docname."""
 	_require(ITEM)
 	code = _require_item(args)
 	doc = frappe.get_doc(ITEM, code)
@@ -747,6 +986,7 @@ def update_item(args: dict) -> ToolResult:
 	reorder_level = args.get("reorder_level")
 	reorder_qty = args.get("reorder_qty")
 	reorder_warehouse = as_str(args, "reorder_warehouse")
+	label = _pesticide_values(args, "changed")
 
 	touched = (
 		description is not None
@@ -756,11 +996,13 @@ def update_item(args: dict) -> ToolResult:
 		or bool(warehouse)
 		or reorder_level not in (None, "")
 		or reorder_qty not in (None, "")
+		or bool(label)
 	)
 	if not touched:
 		raise ToolError(
 			"nothing to change. Pass at least one of description, item_name, item_group, "
-			"disabled, default_warehouse, reorder_level or reorder_qty."
+			"disabled, default_warehouse, reorder_level, reorder_qty, or a pesticide label "
+			f"field ({', '.join(PESTICIDE_FIELDS)})."
 		)
 
 	changes: dict = {}
@@ -787,6 +1029,12 @@ def update_item(args: dict) -> ToolResult:
 		if current != disabled:
 			changes["disabled"] = [current, disabled]
 			doc.disabled = 1 if disabled else 0
+
+	for key, value in label.items():
+		current = _stored_label_value(key, doc.get(key))
+		if current != value:
+			changes[key] = [current, value]
+			doc.set(key, value)
 
 	stored_on = ""
 	if warehouse:

@@ -216,6 +216,46 @@ def _field(kind: dict, description: str) -> dict:
 	return {**kind, "description": description}
 
 
+#: The pesticide label columns `compliance_fields` installs on Item, as
+#: `create_item` and `update_item` both accept them. One dict so the two schemas
+#: cannot drift apart; `masters.PESTICIDE_FIELDS` is the handler's copy of the
+#: same keys, and a test holds them equal.
+_ITEM_LABEL_ARGS = {
+	"epa_registration_number": _field(
+		_STRING,
+		"EPA registration number off the label, e.g. '100-1234'. On create_item with no "
+		"item_group, it files the product under 'Crop Protection Products', creating that "
+		"group if the site has none.",
+	),
+	"signal_word": _field(
+		_STRING,
+		"The label's signal word: Danger, Warning, Caution or None ('None' means the label "
+		"carries none). An empty string clears it on update_item.",
+	),
+	"restricted_use": _field(_BOOLEAN, "true when the label says RESTRICTED USE PESTICIDE."),
+	"active_ingredients": _field(
+		{"type": ["array", "string"], "items": _OBJECT},
+		'The ingredient statement: a list of {"name", "concentration", "unit"} objects, or '
+		"the same list as a JSON string. name is required; concentration is a number. An "
+		"empty list clears it on update_item.",
+	),
+	"rei_hours": _field(
+		_INTEGER,
+		"Restricted-entry interval in whole hours, 0 or more. A fraction is refused: round a "
+		"label interval up.",
+	),
+	"phi_days": _field(_INTEGER, "Pre-harvest interval in whole days, 0 or more."),
+	"phi_crop": _field(_STRING, "The crop the PHI above applies to."),
+	"application_rate": _field(_STRING, "The labeled rate as written, e.g. '2-4 lb/acre'."),
+	"ppe_requirements": _field(_STRING, "The label's PPE statement for handlers and early entry."),
+	"label_scan_validation": _field(
+		_STRING,
+		"The Document Validation (a scanned label) these values were read from. "
+		"list_document_validations has them.",
+	),
+}
+
+
 def _always() -> bool:
 	return True
 
@@ -4209,15 +4249,19 @@ TOOLS = {
 		"has no docstatus, so it is live the moment it is created — pass disabled "
 		"to keep it out of transactions instead. The stock_uom is checked against "
 		"this site's UOM list and refused with the units it actually has, and the "
-		"item_group must already exist (create_item_group makes one).",
+		"item_group must already exist (create_item_group makes one). Also takes the "
+		"pesticide label fields (EPA number, signal word, restricted use, active "
+		"ingredients, REI, PHI, rate, PPE, label scan). An EPA number with no "
+		"item_group files the product under 'Crop Protection Products'.",
 		{
 			"item_code": _field(_STRING, "The code, which becomes the docname. Must be unique."),
 			"item_name": _field(_STRING, "Display name. Defaults to the item_code."),
 			"item_group": _field(
 				_STRING,
-				"An existing Item Group. Defaults to 'All Item Groups'. A LEAF group is "
-				"the normal choice — unlike parent_item_group on create_item_group, this "
-				"is not required to be a branch.",
+				"An existing Item Group. Defaults to 'All Item Groups', or to 'Crop "
+				"Protection Products' when an epa_registration_number is given. A LEAF "
+				"group is the normal choice — unlike parent_item_group on "
+				"create_item_group, this is not required to be a branch.",
 			),
 			"stock_uom": _field(_STRING, "Stock unit of measure. Defaults to 'Nos'."),
 			"is_stock_item": _field(_BOOLEAN, "Defaults to true. false for a service or a fee."),
@@ -4234,6 +4278,7 @@ TOOLS = {
 				"Which company the default_warehouse row belongs to. Inferred from the "
 				"warehouse itself when omitted.",
 			),
+			**_ITEM_LABEL_ARGS,
 		},
 		required=("item_code",),
 		mutating=True,
@@ -4244,7 +4289,9 @@ TOOLS = {
 	"update_item": _tool(
 		masters.update_item,
 		"MUTATING (default OFF). Change one Item's description, name, group, "
-		"disabled flag, default warehouse or reorder rule in place. Never renames "
+		"disabled flag, default warehouse, reorder rule or pesticide label fields "
+		"(EPA number, signal word, restricted use, active ingredients, REI, PHI, "
+		"rate, PPE, label scan) in place. Never renames "
 		"it — the item_code IS the docname. A reorder level needs a warehouse "
 		"(ERPNext keys the Item Reorder row by one): reorder_warehouse, or the "
 		"item's own default, or a refusal saying so. Returns a `changed` map of "
@@ -4266,6 +4313,7 @@ TOOLS = {
 				"default warehouse; required when it has none.",
 			),
 			"company": _field(_STRING, "Which company a default_warehouse row belongs to."),
+			**_ITEM_LABEL_ARGS,
 		},
 		required=("item_code",),
 		mutating=True,

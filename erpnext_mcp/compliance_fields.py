@@ -871,7 +871,7 @@ _ASSET_FIELDS = (
 # REI would make every one of them unsaveable until somebody typed a zero into a
 # column that does not apply to a pallet.
 
-#: When the seven label-detail fields are SHOWN. Frappe stores the column on
+#: When the eight label-detail fields are SHOWN. Frappe stores the column on
 #: every Item either way; this decides whether a person editing a picking bag
 #: has to look at seven columns about pesticide labels.
 #:
@@ -945,7 +945,7 @@ _ITEM_FIELDS = (
 			"takes the LONGEST PHI of the products in it."
 		),
 	),
-	# The seven label-detail columns, which ARE hidden on anything that is not a
+	# The eight label-detail columns, which ARE hidden on anything that is not a
 	# chemical — nothing computes off them, so hiding one costs a person a
 	# scroll rather than costing a crew a re-entry window.
 	ComplianceField(
@@ -983,6 +983,29 @@ _ITEM_FIELDS = (
 			"What the person mixing puts on before they open the jug. A blank here and a 'None' "
 			"here mean different things to that person, and only one of them is safe to act on."
 		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="restricted_use",
+		label="Restricted Use Pesticide",
+		fieldtype="Check",
+		framework="FIFRA 7 USC 136a(d); 40 CFR 152.160-175 — restricted use classification",
+		why=(
+			"A restricted use pesticide may only be applied by, or under the direct "
+			"supervision of, a certified applicator, and its use must be recorded. The "
+			"classification is on the label, so it belongs on the product rather than being "
+			"remembered at the tank."
+		),
+		operational=(
+			"Who may fill the sprayer. Recorded here, the product itself says a licence is "
+			"needed. Recorded nowhere, the only thing standing between an uncertified worker "
+			"and a restricted product is whoever happens to remember."
+		),
+		description=(
+			"Tick when the label says RESTRICTED USE PESTICIDE. Application then needs a "
+			"certified applicator."
+		),
+		default="0",
 		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
 	),
 	ComplianceField(
@@ -1061,7 +1084,7 @@ _ITEM_FIELDS = (
 		options="Document Validation",
 		framework="Internal provenance — v0.69.0 Document Intelligence",
 		why=(
-			"Where the eight fields above came from. A Document Validation holds the "
+			"Where the nine fields above came from. A Document Validation holds the "
 			"photograph, the OCR text, the extraction and every check run against it, so a "
 			"number on this Item can be traced to the label it was read off rather than to "
 			"whoever typed it. It also carries whether a person has confirmed the reading, "

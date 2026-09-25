@@ -282,24 +282,25 @@ class MigrateThreeTimes(V12TestCase):
 			counts.append(len(compliance_custom_fields()))
 		# Six on Employee since v0.79.0 added `preferred_language`, the v0.19.3
 		# Attendance bridge column, the four v0.19.5
-		# capex columns on ERPNext's Asset, and the nine v0.69.0 columns on
-		# ERPNext's Item — the REI/PHI pair the spray window computes from, plus
-		# the seven label-detail columns a scanned pesticide label lands in. Spray
+		# capex columns on ERPNext's Asset, and the ten columns on ERPNext's
+		# Item — the v0.69.0 REI/PHI pair the spray window computes from, the
+		# seven label-detail columns a scanned pesticide label lands in, and the
+		# restricted-use flag create_item and update_item added. Spray
 		# Log and Bucket Log Entry are genuinely absent from the fixture site, so
 		# they add nothing here and are reported as skipped instead.
 		#
-		# All nine Item columns land on EVERY Item, not only the chemicals — the
-		# `depends_on` on seven of them decides what is SHOWN and Frappe stores the
-		# column either way, which is exactly why none of the nine is `reqd`.
+		# All ten Item columns land on EVERY Item, not only the chemicals — the
+		# `depends_on` on eight of them decides what is SHOWN and Frappe stores the
+		# column either way, which is exactly why none of the ten is `reqd`.
 		#
 		# Three more from v0.148.0, all on Asset: the Link back to the printed
 		# tag and the two read-only columns that make the link auditable — what
 		# kind of machine it is, and when the mirror last agreed with it.
 		self.assertEqual(
 			counts[0],
-			27,
+			28,
 			"six Employee fields, the Attendance bridge, four Asset capex columns, "
-			"six Asset register-mirror columns, nine Item label columns, and the "
+			"six Asset register-mirror columns, ten Item label columns, and the "
 			"v0.94.0 Company housing-deduction default",
 		)
 		self.assertEqual(counts, [counts[0]] * 3, f"custom fields multiplied across migrations: {counts}")

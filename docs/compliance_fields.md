@@ -259,21 +259,24 @@ takes the **longest** REI and the longest PHI of the products in it: a mix is
 under the strictest thing in it, and a block does not become half-enterable at
 hour twelve.
 
-**What the other seven buy.** They are the rest of what a photographed label
+**What the other eight buy.** They are the rest of what a photographed label
 says, so a scanned pesticide label has somewhere to land and the two numbers
 above have something to be checked *against* rather than being the only copy of
 what somebody typed. `label_scan_validation` links back to the
 `Document Validation` they were read off — the photograph, the OCR text, every
 check run against it, and whether a person has confirmed the reading.
+`restricted_use` is the label's restricted use classification. It was added
+with `create_item` / `update_item` accepting these columns, so a product can be
+filed with its whole label over MCP rather than only in the Desk.
 
 **None is `reqd`,** in the way `Asset.capex_type` is not: most items in an
 orchard's register are bins, twine and diesel, and a required REI would make
 every one of them unsaveable until somebody typed a zero into a column that does
 not apply to a pallet.
 
-**`depends_on` decides what is SHOWN, and only for seven of the nine.** All nine
+**`depends_on` decides what is SHOWN, and only for eight of the ten.** All ten
 columns exist on every Item row; the expression in `CHEMICAL_ITEM_DEPENDS_ON`
-decides whether a person editing a picking bag has to look at the seven
+decides whether a person editing a picking bag has to look at the eight
 label-detail ones. It matches on the group's *name* — `chemical`, `pesticide`,
 `spray`, `crop protection`, `fungicide`, `herbicide`, `insecticide` — rather than
 on a hard-coded list of groups, because every site names its item groups
@@ -294,11 +297,12 @@ feature a zero it could not tell from a real one.
 | `phi_days` | Int | no | FIFRA label; FDA tolerances 40 CFR 180 | The label's pre-harvest interval for this product, in days. Picking inside it is a residue violation on a shipped load, and the interval is a property of the product the same way the REI is. | Harvest scheduling weeks out. A block sprayed inside its PHI cannot be picked, and the pick date is planned against this number long before the sprayer is filled — so it has to be knowable from the product, not only from the last application record. |
 | `epa_registration_number` | Data | no | FIFRA 7 USC 136; 40 CFR 152.132 registration numbering | The registration number identifies the product as registered for this crop and this use, and it is the number a residue detection is traced back through. On the Item rather than only on each Spray Log it is stated once, from the label, instead of typed from memory on every application. | Whether the jug in the shed may be used on the block at all. Without it nobody can check the product against the crop, the rate or the buyer's maximum residue limit before the tank is filled — which is a decision made at the shed, not at a desk afterwards. |
 | `signal_word` | Select | no | FIFRA labeling — 40 CFR 156.64 signal words | The signal word is the label's own statement of acute toxicity, and it is what decides the personal protective equipment the applicator wears. 'None' is a real answer for a Category IV product and is in the list for that reason. | What the person mixing puts on before they open the jug. A blank here and a 'None' here mean different things to that person, and only one of them is safe to act on. |
+| `restricted_use` | Check | no | FIFRA 7 USC 136a(d); 40 CFR 152.160-175 — restricted use classification | A restricted use pesticide may only be applied by, or under the direct supervision of, a certified applicator, and its use must be recorded. The classification is on the label, so it belongs on the product rather than being remembered at the tank. | Who may fill the sprayer. Recorded here, the product itself says a licence is needed. Recorded nowhere, the only thing standing between an uncertified worker and a restricted product is whoever happens to remember. |
 | `phi_crop` | Data | no | FIFRA label; FDA tolerances 40 CFR 180 | One label carries a different pre-harvest interval for cherries, apples and pears. An interval with no crop beside it cannot be applied to a block, so the crop is stored with the number rather than assumed from the operation. | Which blocks the interval above actually governs. A grower running cherries and pears off one chemical shed has two answers for one jug, and a record holding only one of them is wrong half the time. |
 | `active_ingredients` | JSON | no | FIFRA 40 CFR 156.10(g) ingredient statement; FRAC/IRAC resistance management | The ingredient statement is what ties a product to a resistance-management group, to the restricted-entry interval its class carries, and to every residue tolerance downstream. Stored as [{name, concentration, unit}] because a product is often several ingredients and the concentrations are what distinguish two formulations of the same active. | Rotation. Two products with different trade names and the same active ingredient are one spray as far as resistance is concerned, and a shed that cannot see that builds resistance while believing it is rotating. |
 | `application_rate` | Data | no | FIFRA label use directions — 40 CFR 156.10(i) | Applying above the labeled rate is an off-label application and a residue risk; applying below it is a failed spray. The rate is on the label and belongs on the product record beside the interval it goes with. | What goes in the tank. The mix is calculated from this number and the acreage, at the shed, usually before anybody has opened a compliance record. |
 | `ppe_requirements` | Small Text | no | EPA WPS 40 CFR 170.507 — handler PPE; label PPE statement | The label's PPE statement is what the handler and any early-entry worker must wear, and the Worker Protection Standard requires the employer to provide it. It is a property of the product, so it is recorded once per product. | What has to be in the shed before the spray can happen. A respirator nobody stocked is a spray that does not go out, and this is the field that says so a week early instead of on the morning. |
-| `label_scan_validation` | Link | no | Internal provenance — v0.69.0 Document Intelligence | Where the eight fields above came from. A Document Validation holds the photograph, the OCR text, the extraction and every check run against it, so a number on this Item can be traced to the label it was read off rather than to whoever typed it. It also carries whether a person has confirmed the reading, which is the only thing on that record a machine did not produce. | Whether the numbers above can be trusted at the shed. An unvalidated REI and one read off a photograph a supervisor confirmed are the same integer on the screen and two very different things to bet a crew's re-entry on. |
+| `label_scan_validation` | Link | no | Internal provenance — v0.69.0 Document Intelligence | Where the nine fields above came from. A Document Validation holds the photograph, the OCR text, the extraction and every check run against it, so a number on this Item can be traced to the label it was read off rather than to whoever typed it. It also carries whether a person has confirmed the reading, which is the only thing on that record a machine did not produce. | Whether the numbers above can be trusted at the shed. An unvalidated REI and one read off a photograph a supervisor confirmed are the same integer on the screen and two very different things to bet a crew's re-entry on. |
 
 ### `Company` — erpnext
 

@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.6 — 2026-09-24 — create_item and update_item take the pesticide label
+
+**900 tools** (no change). The label columns `install_compliance_fields` puts on
+Item could only be filled in the Desk. `create_item` and `update_item` now take
+them: `epa_registration_number`, `signal_word`, `restricted_use`,
+`active_ingredients`, `rei_hours`, `phi_days`, `phi_crop`, `application_rate`,
+`ppe_requirements` and `label_scan_validation`.
+
+- **`restricted_use` IS NEW.** A Check custom field on Item, installed with the
+  others on the next migrate (or `install_compliance_fields`). Ten Item label
+  columns now, not nine.
+- **AN EPA NUMBER FILES THE PRODUCT.** `create_item` with an
+  `epa_registration_number` and no `item_group` puts it in
+  `Crop Protection Products`, which is created as a leaf under the root the
+  first time a site needs it (the OML site has none today). An explicit
+  `item_group` still wins, and `update_item` never moves a group on its own.
+- **VALIDATED, NOTHING WRITTEN ON A REFUSAL.** `signal_word` must be Danger,
+  Warning, Caution or None. `rei_hours` and `phi_days` must be whole numbers of 0
+  or more: a fraction is refused, not truncated, because 4 h is the wrong answer
+  to a 4.5 h REI. `active_ingredients` must be a list (or JSON string of one) of
+  `{name, concentration, unit}` objects. `label_scan_validation` must be a real
+  Document Validation. A site missing a column is refused and pointed at the
+  installer rather than having the value dropped.
+- `update_item` reports each label field in `changed` with its before and
+  after, and can set an interval to 0.
+
 ## 0.176.5 — 2026-09-24 — reconcile_bank_transaction raised KeyError on every ERPNext 15 site
 
 **900 tools** (no change). Two bugs on the path that hands the work to

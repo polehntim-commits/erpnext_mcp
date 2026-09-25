@@ -6,7 +6,13 @@ different thing on each of these doctypes, and the whole of what this module can
 get quietly wrong is answering as if it meant the same one everywhere.
 """
 
-from erpnext_mcp import registry
+import json
+from typing import ClassVar
+
+import frappe
+
+from erpnext_mcp import compat, compliance_fields, registry
+from erpnext_mcp.tools import masters
 
 from .fixtures import (
 	CHEMICALS,
@@ -29,7 +35,7 @@ from .fixtures import (
 	TWINE,
 	MastersTestCase,
 )
-from .harness import STORE, register_doctype
+from .harness import META, STORE, register_doctype
 
 #: Every switch this release added, so the "on by default" posture is asserted
 #: once against the registry rather than remembered per test.
@@ -373,6 +379,175 @@ class UpdateItem(MastersTestCase):
 			"update_item", {"item_code": TWINE, "reorder_level": 10, "reorder_warehouse": STORES}
 		)
 		self.assertEqual(data["reorder"]["warehouse"], STORES)
+
+
+class PesticideLabelFields(MastersTestCase):
+	"""create_item / update_item and the label columns `compliance_fields` installs.
+
+	The columns go on through the real installer rather than onto the fixture by
+	hand, because the handler refuses a column `compat.has_field` cannot see and
+	that refusal is the behaviour a half-migrated site gets.
+	"""
+
+	LABEL: ClassVar[dict] = {
+		"epa_registration_number": "100-1234",
+		"signal_word": "warning",
+		"restricted_use": True,
+		"active_ingredients": [{"name": "Lambda-cyhalothrin", "concentration": 22.8, "unit": "%"}],
+		"rei_hours": 24,
+		"phi_days": 14,
+		"phi_crop": "Cherries",
+		"application_rate": "2.56-3.84 fl oz/acre",
+		"ppe_requirements": "Coveralls, chemical-resistant gloves",
+	}
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **WRITES_ON)
+		compliance_fields.install_compliance_fields(respect_switch=False)
+
+	def test_the_handler_and_the_schema_name_the_same_fields(self):
+		for tool in ("create_item", "update_item"):
+			properties = registry.TOOLS[tool]["inputSchema"]["properties"]
+			self.assertLessEqual(set(masters.PESTICIDE_FIELDS), set(properties), tool)
+		installed = {field.fieldname for field in compliance_fields._ITEM_FIELDS}
+		self.assertEqual(set(masters.PESTICIDE_FIELDS), installed)
+
+	def test_restricted_use_is_installed_on_item(self):
+		self.assertTrue(compat.has_field("Item", "restricted_use"))
+
+	def test_create_stores_every_label_field(self):
+		data = self.tool_data(
+			"create_item", {"item_code": "WARRIOR-II", "item_group": CONSUMABLES, **self.LABEL}
+		)
+		row = STORE.get_raw("Item", "WARRIOR-II")
+		self.assertEqual(row["epa_registration_number"], "100-1234")
+		self.assertEqual(row["signal_word"], "Warning")
+		self.assertEqual(row["restricted_use"], 1)
+		self.assertEqual(row["rei_hours"], 24)
+		self.assertEqual(row["phi_days"], 14)
+		self.assertEqual(row["phi_crop"], "Cherries")
+		self.assertEqual(
+			json.loads(row["active_ingredients"]),
+			[{"name": "Lambda-cyhalothrin", "concentration": 22.8, "unit": "%"}],
+		)
+		self.assertEqual(data["pesticide_label"]["active_ingredients"][0]["name"], "Lambda-cyhalothrin")
+		self.assertEqual(row["item_group"], CONSUMABLES, "an explicit group wins over the EPA default")
+
+	def test_an_epa_number_with_no_group_files_it_under_crop_protection(self):
+		self.assertFalse(frappe.db.exists("Item Group", masters.CROP_PROTECTION_GROUP))
+		data = self.tool_data(
+			"create_item", {"item_code": "WARRIOR-II", "epa_registration_number": "100-1234"}
+		)
+		self.assertEqual(data["item_group"], masters.CROP_PROTECTION_GROUP)
+		self.assertIs(data["item_group_created"], True)
+		group = STORE.get_raw("Item Group", masters.CROP_PROTECTION_GROUP)
+		self.assertEqual(group["parent_item_group"], ITEM_GROUP_ROOT)
+		self.assertEqual(group["is_group"], 0)
+		second = self.tool_data("create_item", {"item_code": "ASSAIL", "epa_registration_number": "8033-36"})
+		self.assertEqual(second["item_group"], masters.CROP_PROTECTION_GROUP)
+		self.assertNotIn("item_group_created", second)
+
+	def test_no_epa_number_keeps_the_old_default_group(self):
+		data = self.tool_data("create_item", {"item_code": "TWINE-2", "rei_hours": 0})
+		self.assertEqual(data["item_group"], ITEM_GROUP_ROOT)
+
+	def test_a_refused_create_does_not_make_the_group(self):
+		self.tool_error(
+			"create_item", {"item_code": "X", "epa_registration_number": "1-2", "signal_word": "Deadly"}
+		)
+		self.assertFalse(frappe.db.exists("Item Group", masters.CROP_PROTECTION_GROUP))
+
+	def test_an_unknown_signal_word_is_refused_with_the_four(self):
+		message = self.tool_error("create_item", {"item_code": "X", "signal_word": "Deadly"})
+		for word in ("Danger", "Warning", "Caution", "None"):
+			self.assertIn(word, message)
+		self.assertIsNone(STORE.get_raw("Item", "X"))
+
+	def test_negative_intervals_are_refused(self):
+		for key in ("rei_hours", "phi_days"):
+			message = self.tool_error("create_item", {"item_code": "X", key: -1})
+			self.assertIn(key, message)
+			self.assertIn("at least 0", message)
+
+	def test_a_fractional_rei_is_refused_rather_than_truncated(self):
+		message = self.tool_error("create_item", {"item_code": "X", "rei_hours": 4.5})
+		self.assertIn("whole number", message)
+
+	def test_zero_is_a_real_interval_and_is_stored(self):
+		self.tool_data("create_item", {"item_code": "FOLIAR-N", "rei_hours": 0, "phi_days": 0})
+		row = STORE.get_raw("Item", "FOLIAR-N")
+		self.assertEqual((row["rei_hours"], row["phi_days"]), (0, 0))
+
+	def test_active_ingredients_as_a_json_string_is_accepted(self):
+		self.tool_data(
+			"create_item",
+			{
+				"item_code": "X",
+				"active_ingredients": '[{"name": "Captan", "concentration": 80, "unit": "%"}]',
+			},
+		)
+		self.assertEqual(json.loads(STORE.get_raw("Item", "X")["active_ingredients"])[0]["name"], "Captan")
+
+	def test_invalid_active_ingredients_are_refused(self):
+		cases = (
+			("not json", "valid JSON"),
+			('{"name": "Captan"}', "list"),
+			([{"concentration": 80}], "needs a name"),
+			([{"name": "Captan", "concentration": "lots"}], "must be a number"),
+			([{"name": "Captan", "moa": "M4"}], "moa"),
+		)
+		for value, expected in cases:
+			message = self.tool_error("create_item", {"item_code": "X", "active_ingredients": value})
+			self.assertIn(expected, message, value)
+		self.assertIsNone(STORE.get_raw("Item", "X"))
+
+	def test_an_unknown_label_scan_is_refused(self):
+		message = self.tool_error("create_item", {"item_code": "X", "label_scan_validation": "DV-NOPE"})
+		self.assertIn("no Document Validation called 'DV-NOPE'", message)
+
+	def test_a_site_without_the_columns_refuses_rather_than_dropping_them(self):
+		frappe.get_meta("Item")  # warm
+		meta = META["Item"]
+		field = meta._by_name.pop("restricted_use")
+		meta.fields.remove(field)
+		try:
+			message = self.tool_error("create_item", {"item_code": "X", "restricted_use": True})
+		finally:
+			meta.add(field)
+		self.assertIn("install_compliance_fields", message)
+		self.assertIsNone(STORE.get_raw("Item", "X"))
+
+	def test_update_changes_label_fields_and_reports_before_and_after(self):
+		self.tool_data("create_item", {"item_code": "WARRIOR-II", **self.LABEL})
+		data = self.tool_data(
+			"update_item",
+			{"item_code": "WARRIOR-II", "rei_hours": 48, "phi_days": 14, "signal_word": "Danger"},
+		)
+		self.assertEqual(data["changed"]["rei_hours"], [24, 48])
+		self.assertEqual(data["changed"]["signal_word"], ["Warning", "Danger"])
+		self.assertNotIn("phi_days", data["changed"], "an unchanged value is not reported as a change")
+		self.assertEqual(STORE.get_raw("Item", "WARRIOR-II")["rei_hours"], 48)
+
+	def test_update_can_set_an_interval_to_zero(self):
+		self.tool_data("create_item", {"item_code": "WARRIOR-II", **self.LABEL})
+		data = self.tool_data("update_item", {"item_code": "WARRIOR-II", "rei_hours": 0})
+		self.assertEqual(data["changed"]["rei_hours"], [24, 0])
+		self.assertEqual(STORE.get_raw("Item", "WARRIOR-II")["rei_hours"], 0)
+
+	def test_update_with_only_a_label_field_is_not_nothing_to_change(self):
+		data = self.tool_data("update_item", {"item_code": SPRAY, "restricted_use": True})
+		self.assertEqual(data["changed"]["restricted_use"], [0, 1])
+
+	def test_update_validates_like_create(self):
+		message = self.tool_error("update_item", {"item_code": SPRAY, "phi_days": -3})
+		self.assertIn("at least 0", message)
+		self.assertIn("Nothing was changed", message)
+
+	def test_update_does_not_move_the_group(self):
+		before = STORE.get_raw("Item", SPRAY)["item_group"]
+		self.tool_data("update_item", {"item_code": SPRAY, "epa_registration_number": "70051-2"})
+		self.assertEqual(STORE.get_raw("Item", SPRAY)["item_group"], before)
 
 
 class Suppliers(MastersTestCase):

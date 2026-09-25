@@ -12714,7 +12714,7 @@ directly and the note is absent.
 Arguments: `item_code` (required), `item_name` (defaults to the code),
 `item_group` (defaults to `All Item Groups`), `stock_uom` (defaults to `Nos`),
 `is_stock_item` (defaults to true), `description`, `disabled`,
-`default_warehouse`, `company`.
+`default_warehouse`, `company`, and the pesticide label fields below.
 
 The `stock_uom` is checked against this site's own UOM list and refused with the
 units it actually has — ERPNext ships around a hundred and a farm uses six, and
@@ -12723,11 +12723,24 @@ inside the insert. A `default_warehouse` lands on the `item_defaults` row for th
 company, which is **inferred from the warehouse itself** when `company` is
 omitted; a warehouse belonging to another company is refused.
 
+**Pesticide label fields** (both `create_item` and `update_item`):
+`epa_registration_number`, `signal_word` (Danger / Warning / Caution / None),
+`restricted_use`, `active_ingredients` (a list of `{name, concentration, unit}`,
+or that list as a JSON string), `rei_hours` and `phi_days` (whole numbers, 0 or
+more; a fraction is refused rather than truncated, so round a label interval
+up), `phi_crop`, `application_rate`, `ppe_requirements` and
+`label_scan_validation` (a Document Validation). They are the Item columns
+`install_compliance_fields` adds, and a site without them is refused rather than
+having the values dropped. On `create_item`, an `epa_registration_number` with
+no `item_group` files the product under **`Crop Protection Products`**, and
+that leaf group is created under the root the first time a site needs it.
+
 ## `update_item` — MUTATING, default off
 
 Changes `description`, `item_name`, `item_group`, `disabled`,
-`default_warehouse`, `reorder_level` / `reorder_qty` / `reorder_warehouse`.
-**Never renames** — the `item_code` is the docname.
+`default_warehouse`, `reorder_level` / `reorder_qty` / `reorder_warehouse`, and
+the pesticide label fields above (an empty string clears a text, signal word or
+link field). **Never renames** — the `item_code` is the docname.
 
 ```json
 {"name": "SURROUND-WP",
