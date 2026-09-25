@@ -1264,3 +1264,71 @@ class PurchaseInvoiceFromReceipt(PurchasingTestCase):
 		)
 		error = self.tool_error("create_purchase_invoice_from_receipt", {"receipt": name})
 		self.assertIn("switched off", error)
+
+
+class DeleteDraftPurchaseInvoiceReleasesTheReceipt(PurchasingTestCase):
+	"""The delete-and-recreate path an OCR misread needs. `delete_draft_purchase_invoice`
+	is tested for its own refusals in test_purchasing; this is the receipt side."""
+
+	approved_receipt = PurchaseInvoiceFromReceipt.approved_receipt
+
+	def setUp(self):
+		super().setUp()
+		install_hrms()
+		self.configure(
+			enabled=1,
+			**PI_FROM_RECEIPT_TOOLS_ON,
+			allow_delete_draft_purchase_invoice=1,
+			allow_update_expense_receipt=1,
+		)
+
+	def billed_receipt(self, **overrides):
+		name = self.approved_receipt(**overrides)
+		invoice = self.tool_data("create_purchase_invoice_from_receipt", {"receipt": name})
+		return name, invoice["purchase_invoice"]
+
+	def delete(self, invoice):
+		return self.tool_data(
+			"delete_draft_purchase_invoice",
+			{"name": invoice, "reason": "OCR matched the wrong supplier"},
+		)
+
+	def test_the_link_is_cleared_on_the_receipt(self):
+		name, invoice = self.billed_receipt()
+		data = self.delete(invoice)
+		receipt = STORE.get_raw("Expense Receipt", name)
+		self.assertFalse(receipt.get("linked_document"))
+		self.assertFalse(receipt.get("linked_doctype"))
+		self.assertEqual([row["name"] for row in data["receipts_released"]], [name])
+		self.assertIsNone(STORE.get_raw("Purchase Invoice", invoice))
+
+	def test_the_receipt_can_be_billed_again(self):
+		name, invoice = self.billed_receipt()
+		self.delete(invoice)
+		again = self.tool_data("create_purchase_invoice_from_receipt", {"receipt": name})
+		self.assertNotEqual(again["purchase_invoice"], invoice)
+		self.assertEqual(STORE.get_raw("Expense Receipt", name)["linked_document"], again["purchase_invoice"])
+
+	def test_a_corrected_supplier_is_what_the_new_invoice_carries(self):
+		name, invoice = self.billed_receipt(merchant="Totally New Vendor Ninety Two")
+		data = self.delete(invoice)
+		released = data["receipts_released"][0]
+		self.assertEqual(released["supplier"], "Totally New Vendor Ninety Two")
+		self.assertIn("update_expense_receipt", data["next_step"])
+
+		self.tool_data("update_expense_receipt", {"name": name, "supplier": MASTER_SUPPLIER})
+		again = self.tool_data("create_purchase_invoice_from_receipt", {"receipt": name})
+		self.assertEqual(again["supplier"], MASTER_SUPPLIER)
+
+	def test_a_receipt_linked_to_another_invoice_is_left_alone(self):
+		_, first_invoice = self.billed_receipt()
+		second, _ = self.billed_receipt(merchant="Another Vendor")
+		self.delete(first_invoice)
+		self.assertTrue(STORE.get_raw("Expense Receipt", second)["linked_document"])
+
+	def test_a_journal_entry_link_with_the_same_docname_is_left_alone(self):
+		_, invoice = self.billed_receipt()
+		other = self.approved_receipt(merchant="Owner")
+		STORE.tables["Expense Receipt"][other].update(linked_doctype="Journal Entry", linked_document=invoice)
+		self.delete(invoice)
+		self.assertEqual(STORE.get_raw("Expense Receipt", other)["linked_document"], invoice)

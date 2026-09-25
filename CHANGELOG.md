@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.9 — 2026-09-25 — a draft purchase invoice can be withdrawn, and its receipt billed again
+
+**901 tools** (+1, mutating, default off). `delete_draft_purchase_invoice` is
+`delete_draft_journal_entry` for Purchase Invoices. It exists for the invoice an
+OCR misread put against the wrong Supplier. Until now the only fix was a manual
+delete in the Desk.
+
+- **DRAFTS ONLY.** A submitted invoice is refused, because it has already posted
+  the expense and the payable; cancel it in ERPNext. A cancelled invoice is
+  refused too, because it is the audit trail. `reason` is mandatory, and the
+  reply carries the company, supplier, date, total and every line (item, qty,
+  rate, expense account, cost center). Once the invoice is gone, the MCP Action
+  Log row is the only record of it.
+- **THE RECEIPT IS RELEASED FIRST.** Every Expense Receipt whose
+  `linked_document` names the invoice has `linked_doctype` and `linked_document`
+  cleared before the delete. The link is a Dynamic Link, so Frappe would refuse
+  the delete while it stood, and `create_purchase_invoice_from_receipt` refuses
+  a receipt that still has one. If the delete fails, the whole call rolls back.
+  A receipt that links a Journal Entry with the same docname is left alone.
+- **THE RECEIPT'S SUPPLIER IS NOT CHANGED, AND THE REPLY SAYS SO.**
+  `create_purchase_invoice_from_receipt` wrote the Supplier it matched onto the
+  receipt, and on the next run it prefers that link over its own `supplier`
+  argument. `receipts_released` shows each receipt's current supplier, and
+  `next_step` points at `update_expense_receipt(name=…, supplier=…)`. The whole
+  fix is: delete, correct the supplier, recreate.
+
 ## 0.176.8 — 2026-09-24 — a feedback note can name the record it is about
 
 **900 tools** (no change). App Feedback has two new optional Data columns,

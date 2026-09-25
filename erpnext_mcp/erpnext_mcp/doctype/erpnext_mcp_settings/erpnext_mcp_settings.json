@@ -133,6 +133,7 @@
   "allow_submit_purchase_receipt",
   "allow_create_purchase_invoice",
   "allow_submit_purchase_invoice",
+  "allow_delete_draft_purchase_invoice",
   "allow_create_payment_entry",
   "allow_submit_payment_entry",
   "sales_tools_section",
@@ -1956,6 +1957,13 @@
    "fieldname": "allow_submit_purchase_invoice",
    "fieldtype": "Check",
    "label": "Submit Purchase Invoice"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Delete a DRAFT purchase invoice outright, recording what it was and why in the audit log, and release any Expense Receipt linked to it so it can be billed again. Refuses submitted invoices (cancel those instead) and cancelled ones \u2014 a cancelled invoice and its reversing rows are the audit trail.",
+   "fieldname": "allow_delete_draft_purchase_invoice",
+   "fieldtype": "Check",
+   "label": "Delete Draft Purchase Invoice"
   },
   {
    "default": "0",

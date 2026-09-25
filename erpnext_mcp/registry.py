@@ -3415,6 +3415,42 @@ TOOLS = {
 		available=_app_installed("erpnext"),
 		requires="the ERPNext app",
 	),
+	"delete_draft_purchase_invoice": _tool(
+		purchasing.delete_draft_purchase_invoice,
+		"MUTATING (default OFF). Delete a DRAFT Purchase Invoice outright — docstatus "
+		"0 only, a real delete, nothing left in the table.\n\n"
+		"THE GAP IT FILLS. An OCR misread makes create_purchase_invoice_from_receipt "
+		"put a draft against the wrong Supplier, and withdrawing it meant a human "
+		"opening ERPNext. This is delete_draft_journal_entry for invoices.\n\n"
+		"DRAFTS ONLY, WHATEVER IS ASKED. A SUBMITTED invoice has posted the expense "
+		"and the payable; deleting it would take those balances with it, so it is "
+		"refused and must be cancelled. A CANCELLED invoice and its reversing rows "
+		"are the evidence a posting was made and undone, so that is refused too.\n\n"
+		"THE RECEIPT IS RELEASED. Every Expense Receipt whose linked_document names "
+		"this invoice has linked_doctype and linked_document cleared, so "
+		"create_purchase_invoice_from_receipt will take it again; they are listed in "
+		"receipts_released. The receipt's own supplier link is left alone and "
+		"reported — the pipeline prefers it over its supplier argument, so correct a "
+		"misread one with update_expense_receipt before recreating.\n\n"
+		"`reason` is mandatory, and the response carries the deleted invoice's "
+		"company, supplier, date, total and every line, because once this returns "
+		"the MCP Action Log row is the only record that the document ever existed.",
+		{
+			"name": _field(_STRING, "Docname of a DRAFT Purchase Invoice."),
+			"reason": _field(
+				_STRING,
+				"Why it is being deleted, e.g. 'OCR matched EXR-2026-0014 to the wrong "
+				"supplier; recreating against Sawyer's Ace Hardware'. Recorded permanently "
+				"in the audit log, which is all that survives the delete.",
+			),
+		},
+		required=("name", "reason"),
+		mutating=True,
+		destructive=True,
+		title="Delete a draft purchase invoice",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
 	"create_payment_entry": _tool(
 		purchasing.create_payment_entry,
 		"MUTATING (default OFF). Create a DRAFT Payment Entry paying a "

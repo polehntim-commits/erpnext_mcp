@@ -976,6 +976,136 @@ def submit_purchase_invoice(args: dict) -> ToolResult:
 	)
 
 
+#: The register `create_purchase_invoice_from_receipt` links back from. Named
+#: here rather than imported, because `receipts` imports this module.
+EXPENSE_RECEIPT = "Expense Receipt"
+
+
+def delete_draft_purchase_invoice(args: dict) -> ToolResult:
+	"""Delete a DRAFT Purchase Invoice outright. Drafts only, and it says what it deleted.
+
+	THE GAP THIS FILLS. An OCR misread makes `create_purchase_invoice_from_receipt`
+	put a draft against the wrong Supplier, and there was no MCP path to withdraw
+	it — only the Desk. `delete_draft_journal_entry` closed the same gap for
+	journal entries and this is that tool for invoices: drafts, and only drafts.
+	A submitted invoice has posted to AP and gets cancelled, never deleted.
+
+	THE RECEIPT IS RELEASED FIRST, AND IT HAS TO BE. `Expense Receipt.linked_document`
+	is a Dynamic Link, so Frappe's `delete_doc` refuses the delete while a receipt
+	still points here — and `create_purchase_invoice_from_receipt` refuses a
+	receipt that has one. Clearing `linked_doctype`/`linked_document` BEFORE the
+	delete is what makes both work; the dispatcher rolls the whole call back if
+	the delete then fails, so a receipt is never left released from an invoice
+	that still exists.
+
+	THE RECEIPT'S `supplier` IS NOT TOUCHED. The pipeline wrote the Supplier it
+	matched onto the receipt, and it prefers that link over its own `supplier`
+	argument on the next run. Whether the link is the misread or a person's
+	deliberate choice is not something this tool can tell, so it reports the
+	link on every released receipt and `next_step` says how to change it.
+
+	IT IS A REAL DELETE, so `reason` is mandatory and the response carries the
+	company, supplier, date, total and every line: once this returns, the MCP
+	Action Log row is the only description of the document that ever existed.
+	"""
+	compat.require_doctype(PURCHASE_INVOICE, "It ships with ERPNext's Accounts module.")
+	name = as_str(args, "name", required=True)
+	reason = as_str(args, "reason", required=True)
+	if len(reason) < 4:
+		raise ToolError("reason must be a real explanation, not a placeholder. Nothing was deleted.")
+	if not frappe.db.exists(PURCHASE_INVOICE, name):
+		raise ToolError(f"no Purchase Invoice called {name!r} on this site. Nothing was deleted.")
+	doc = frappe.get_doc(PURCHASE_INVOICE, name)
+	docstatus = int(doc.docstatus or 0)
+	if docstatus == 1:
+		raise ToolError(
+			f"Purchase Invoice {name} is submitted: it has posted the expense and the payable, "
+			"and deleting it would take those balances with it and leave nothing saying why. "
+			"Cancel it in ERPNext, which writes the reversing entries and keeps the record. "
+			"Nothing was deleted."
+		)
+	if docstatus == 2:
+		raise ToolError(
+			f"Purchase Invoice {name} is cancelled. ERPNext keeps cancelled invoices and their "
+			"reversing GL rows on purpose — the pair is the evidence that a posting was made "
+			"and undone. Deleting one leaves an audit trail with a hole in it. Nothing was "
+			"deleted."
+		)
+
+	# Read everything worth keeping BEFORE the document stops existing.
+	items = doc.get("items") or []
+	deleted = {
+		"name": doc.name,
+		"company": doc.get("company"),
+		"supplier": doc.get("supplier"),
+		"supplier_name": doc.get("supplier_name"),
+		"posting_date": str(doc.get("posting_date") or ""),
+		"bill_no": doc.get("bill_no"),
+		"grand_total": float(doc.get("grand_total") or 0),
+		"line_count": len(items),
+		"items": [
+			{
+				"item_code": row.get("item_code"),
+				"qty": float(row.get("qty") or 0),
+				"rate": float(row.get("rate") or 0),
+				"amount": float(row.get("amount") or 0),
+				"expense_account": row.get("expense_account"),
+				"cost_center": row.get("cost_center"),
+			}
+			for row in items
+		],
+	}
+
+	released = []
+	if compat.doctype_exists(EXPENSE_RECEIPT):
+		released = frappe.db.get_all(
+			EXPENSE_RECEIPT,
+			filters={"linked_doctype": PURCHASE_INVOICE, "linked_document": name},
+			fields=["name", "merchant", "amount", "supplier"],
+			order_by="name asc",
+		)
+		for row in released:
+			frappe.db.set_value(EXPENSE_RECEIPT, row["name"], {"linked_doctype": "", "linked_document": ""})
+
+	frappe.delete_doc(PURCHASE_INVOICE, name, ignore_permissions=False)
+
+	receipts = [
+		{
+			"name": row["name"],
+			"merchant": row.get("merchant"),
+			"amount": float(row.get("amount") or 0),
+			"supplier": row.get("supplier"),
+		}
+		for row in released
+	]
+	data = {
+		"deleted": deleted,
+		"reason": reason,
+		"gl_entries_removed": 0,
+		"receipts_released": receipts,
+		"note": (
+			"A draft writes no GL Entries, so no balance changed when this was created and none "
+			"changed when it was deleted. The MCP Action Log row for this call is now the only "
+			"record that the invoice existed; it carries the lines above and this reason."
+		),
+		"next_step": (
+			"The receipt(s) above no longer name an invoice, so create_purchase_invoice_from_receipt "
+			"will take them again. It uses each receipt's own `supplier` link ahead of its "
+			"`supplier` argument: if that link is the misread, correct it with "
+			"update_expense_receipt(name=…, supplier=…) first."
+			if receipts
+			else "No Expense Receipt was linked to this invoice, so nothing else changed."
+		),
+	}
+	return ToolResult(
+		data,
+		f"deleted draft Purchase Invoice {name} ({deleted['company']}, {deleted['supplier']}, "
+		f"{deleted['posting_date']}, {deleted['grand_total']}, {deleted['line_count']} line(s); "
+		f"{len(receipts)} receipt(s) released) — {reason}",
+		docstatus_delta="0 (draft) → deleted",
+	)
+
+
 # ── Payment Entry ────────────────────────────────────────────────────────────
 
 

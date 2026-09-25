@@ -27,6 +27,7 @@ ALL_ON = {
 		"submit_purchase_receipt",
 		"create_purchase_invoice",
 		"submit_purchase_invoice",
+		"delete_draft_purchase_invoice",
 		"create_payment_entry",
 		"submit_payment_entry",
 	)
@@ -250,6 +251,86 @@ class PurchaseInvoices(WriteEnabledTestCase):
 		credits = {row["account"]: row["credit"] for row in rows if row["credit"]}
 		self.assertEqual(debits[supplies()], 100.0)
 		self.assertEqual(credits[payable()], 100.0)
+
+
+class DeleteDraftPurchaseInvoice(WriteEnabledTestCase):
+	def draft(self, **overrides):
+		return self.tool_data("create_purchase_invoice", _pi_args(**overrides))["name"]
+
+	def payload(self, name, **overrides):
+		values = {"name": name, "reason": "OCR matched the receipt to the wrong supplier"}
+		values.update(overrides)
+		return values
+
+	def test_it_deletes_the_draft(self):
+		name = self.draft()
+		data = self.tool_data("delete_draft_purchase_invoice", self.payload(name))
+		self.assertEqual(data["deleted"]["name"], name)
+		self.assertIsNone(STORE.get_raw("Purchase Invoice", name))
+
+	def test_it_reports_what_it_deleted_because_nothing_else_will(self):
+		name = self.draft()
+		deleted = self.tool_data("delete_draft_purchase_invoice", self.payload(name))["deleted"]
+		self.assertEqual(deleted["company"], MAIN)
+		self.assertEqual(deleted["supplier"], MASTER_SUPPLIER)
+		self.assertTrue(deleted["posting_date"])
+		self.assertEqual(deleted["grand_total"], 100.0)
+		self.assertEqual(deleted["line_count"], 1)
+		line = deleted["items"][0]
+		self.assertEqual(line["item_code"], SPRAY)
+		self.assertEqual(line["qty"], 4)
+		self.assertEqual(line["rate"], 25.0)
+		self.assertEqual(line["expense_account"], supplies())
+		self.assertIn("cost_center", line)
+
+	def test_the_audit_row_carries_the_reason_and_the_invoice(self):
+		name = self.draft()
+		self.tool_data("delete_draft_purchase_invoice", self.payload(name))
+		row = self.assertAudited("delete_draft_purchase_invoice", status="Success")
+		self.assertIn(f"deleted draft Purchase Invoice {name}", row["result_summary"])
+		self.assertIn(MASTER_SUPPLIER, row["result_summary"])
+		self.assertIn("wrong supplier", row["result_summary"])
+		self.assertEqual(row["docstatus_delta"], "0 (draft) → deleted")
+
+	def test_a_submitted_invoice_is_refused_and_pointed_at_cancel(self):
+		message = self.tool_error("delete_draft_purchase_invoice", self.payload("ACC-PINV-2026-00001"))
+		self.assertIn("Cancel it", message)
+		self.assertIn("Nothing was deleted", message)
+		self.assertIsNotNone(STORE.get_raw("Purchase Invoice", "ACC-PINV-2026-00001"))
+
+	def test_a_cancelled_invoice_is_refused(self):
+		name = self.draft()
+		STORE.tables["Purchase Invoice"][name]["docstatus"] = 2
+		message = self.tool_error("delete_draft_purchase_invoice", self.payload(name))
+		self.assertIn("audit trail with a hole in it", message)
+		self.assertIsNotNone(STORE.get_raw("Purchase Invoice", name))
+
+	def test_an_invoice_that_does_not_exist_is_refused(self):
+		message = self.tool_error("delete_draft_purchase_invoice", self.payload("ACC-PINV-NOPE"))
+		self.assertIn("no Purchase Invoice called", message)
+
+	def test_a_placeholder_reason_is_refused(self):
+		name = self.draft()
+		message = self.tool_error("delete_draft_purchase_invoice", self.payload(name, reason="x"))
+		self.assertIn("real explanation", message)
+		self.assertIsNotNone(STORE.get_raw("Purchase Invoice", name))
+
+	def test_a_missing_reason_is_refused(self):
+		name = self.draft()
+		message = self.tool_error("delete_draft_purchase_invoice", {"name": name})
+		self.assertIn("reason is required", message)
+
+	def test_an_invoice_no_receipt_names_releases_nothing(self):
+		data = self.tool_data("delete_draft_purchase_invoice", self.payload(self.draft()))
+		self.assertEqual(data["receipts_released"], [])
+		self.assertIn("nothing else changed", data["next_step"])
+
+	def test_the_switch_keeps_it_shut(self):
+		name = self.draft()
+		self.configure(enabled=1, allow_create_purchase_invoice=1)
+		message = self.tool_error("delete_draft_purchase_invoice", self.payload(name))
+		self.assertIn("allow_delete_draft_purchase_invoice", message)
+		self.assertIsNotNone(STORE.get_raw("Purchase Invoice", name))
 
 
 def _pe_args(**overrides):

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 900 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 901 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -1329,6 +1329,33 @@ as ERPNext's own controller does.
 
 **Returns** `name`, `docstatus` (1), `status`, `outstanding_amount`,
 `gl_entries_created`.
+
+### `delete_draft_purchase_invoice` — MUTATING, default off
+
+Delete a **draft** Purchase Invoice outright — `docstatus 0` only, a real
+delete. This is `delete_draft_journal_entry` for invoices, added in v0.176.9
+for the invoice an OCR misread put against the wrong Supplier.
+
+**Refused:** a submitted invoice (it has posted the expense and the payable;
+cancel it in ERPNext), a cancelled one (it and its reversing rows are the
+audit trail), and a `reason` shorter than four characters.
+
+**Releases the receipt.** Every Expense Receipt whose `linked_document` names
+this invoice has `linked_doctype` and `linked_document` cleared **before** the
+delete — the link is a Dynamic Link, so Frappe would refuse the delete while it
+stood, and `create_purchase_invoice_from_receipt` refuses a receipt that has
+one. The receipt's own `supplier` link is **not** touched: the pipeline prefers
+it over its `supplier` argument, so correct a misread one with
+`update_expense_receipt(name=…, supplier=…)` before recreating.
+
+**Arguments:** `name`, `reason` (both required).
+
+**Returns** `deleted` (`name`, `company`, `supplier`, `supplier_name`,
+`posting_date`, `bill_no`, `grand_total`, `line_count`, and `items[]` each with
+`item_code`, `qty`, `rate`, `amount`, `expense_account`, `cost_center`),
+`reason`, `gl_entries_removed` (0), `receipts_released[]` (`name`, `merchant`,
+`amount`, `supplier`), `note`, `next_step`. The MCP Action Log row is the only
+record left once this returns.
 
 ### `create_payment_entry` — MUTATING, default off
 
