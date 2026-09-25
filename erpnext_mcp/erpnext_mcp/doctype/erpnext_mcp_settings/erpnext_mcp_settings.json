@@ -1139,6 +1139,7 @@
   "hidden_default_workspaces",
   "update_document_section",
   "allow_update_document",
+  "allow_manage_updatable_fields",
   "update_document_fields"
  ],
  "fields": [
@@ -8680,6 +8681,13 @@
    "fieldname": "allow_update_document",
    "fieldtype": "Check",
    "label": "Update Document (generic)"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Lets an MCP client add, remove and list rows of the Updatable Fields table below — i.e. widen or narrow what update_document may write. Pairs update_document could never write (system columns, Password and Table fields, child DocTypes, credential stores, this table itself) are refused whatever is asked. Leave off unless the whitelist should be managed remotely.",
+   "fieldname": "allow_manage_updatable_fields",
+   "fieldtype": "Check",
+   "label": "Manage Updatable Fields"
   },
   {
    "description": "The fields update_document may write, one row per (DocType, field). An empty table means the tool can write nothing even when switched on.",

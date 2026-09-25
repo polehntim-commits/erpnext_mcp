@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.180.0 — 2026-09-25 — the whitelist can be kept from MCP
+
+**909 tools** (+1, mutating, off by default). `update_document` writes only the
+fields on ERPNext MCP Settings → Updatable Fields, and until now that table could
+only be edited at the Desk.
+
+- **`manage_updatable_fields`** (switch `allow_manage_updatable_fields`, its own,
+  separate from `allow_update_document`) — `action` `add`, `remove` or `list`.
+  - `add` takes `entries` `[{doctype, fieldname}]`. It appends ticked rows, skips
+    a pair already ticked (`already_present`) and re-ticks one present but
+    unticked (`re_enabled`). A pair `update_document` could never write is
+    refused: an unknown DocType or field (with a *Did you mean*), a child
+    DocType, a system column, a Password, Table or layout field, or a credential
+    store, the audit log or this table itself. One refused entry refuses the
+    whole call.
+  - `remove` deletes every row for each pair. A pair not on the table comes back
+    in `not_found`, not as an error.
+  - `list` takes an optional `doctype`. Each row comes back with its fieldtype
+    and label, plus a `problem` if the row can never take effect.
+    `enabled_by_doctype` is what `update_document` will actually accept.
+- `update_document` still refuses to write the whitelist table itself.
+- **`scripts/seed_updatable_fields.py`** — a bench-console script that seeds a
+  starter whitelist for the registers with a create tool and no update tool.
+  That covers Training Session, Warehouse, ToDo, Farm Task, Planting Season and
+  23 more. It uses descriptive fields only: no amounts, no workflow states, no
+  approval fields. It is idempotent, leaves an unticked row unticked, and skips
+  and names any pair this site cannot take. Run it with
+  `bench --site <site> console`, then
+  `%run apps/erpnext_mcp/scripts/seed_updatable_fields.py`.
+- Needs `bench migrate` for the new switch.
+
 ## 0.179.1 — 2026-09-25 — update_document says what a field expects
 
 No new tools. `update_document` now checks every value against its field type

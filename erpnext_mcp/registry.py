@@ -27585,6 +27585,40 @@ TOOLS = {
 		mutating=True,
 		title="Update fields on a draft document",
 	),
+	"manage_updatable_fields": _tool(
+		generic_update.manage_updatable_fields,
+		"MUTATING (default OFF). Add, remove or list the (DocType, field) pairs "
+		"update_document may write — the Updatable Fields table on ERPNext MCP "
+		"Settings. Its own switch, allow_manage_updatable_fields, is separate from "
+		"allow_update_document; update_document itself still refuses to write this "
+		"table.\n\n"
+		"action='add': `entries` [{doctype, fieldname}, ...]. Each pair is added "
+		"ticked; one already present and ticked is skipped (already_present); one "
+		"present but unticked is ticked again (re_enabled). A pair update_document "
+		"could never write is refused — an unknown DocType or fieldname (with a "
+		"'Did you mean'), a child DocType, a system column, a Password, Table or "
+		"layout field, or a credential store such as User or ERPNext MCP Settings — "
+		"and one refused entry refuses the whole call.\n\n"
+		"action='remove': `entries` as above. Deletes every row for each pair; pairs "
+		"not on the table come back in not_found rather than as an error.\n\n"
+		"action='list': optional `doctype` filter. Returns each row's doctype, "
+		"fieldname, enabled, fieldtype and label, a `problem` on any row that can "
+		"never take effect, and enabled_by_doctype (the fields update_document will "
+		"actually accept).",
+		{
+			"action": _field(_STRING, "One of: add, remove, list."),
+			"entries": _field(
+				{"type": "array", "items": _OBJECT},
+				'Required for add and remove: [{"doctype": "Training Session", '
+				'"fieldname": "expires_date"}, ...]. The DocType as the Desk shows it; '
+				"the fieldname, not the label.",
+			),
+			"doctype": _field(_STRING, "list only: show just this DocType's rows."),
+		},
+		required=("action",),
+		mutating=True,
+		title="Manage update_document's field whitelist",
+	),
 	"list_sidecar_routes": _tool(
 		diagnostics.list_sidecar_routes,
 		"Every path the farmops sidecar publishes, what each one is called, "

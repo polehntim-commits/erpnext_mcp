@@ -10,4 +10,4 @@ Everything the server can do lives in `erpnext_mcp.registry`. The transport is
 company, account and fiscal-year names are all discovered at call time.
 """
 
-__version__ = "0.179.1"
+__version__ = "0.180.0"

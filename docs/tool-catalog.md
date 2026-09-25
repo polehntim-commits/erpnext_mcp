@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 908 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 909 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20489,3 +20489,35 @@ message, and carries `attempted` (the entries the save was given).
 update_document(doctype="Training Session", docname="<session name>",
                 updates={"session_date": "2026-10-28"})
 ```
+
+## v0.180.0 — the whitelist can be kept from MCP
+
+### `manage_updatable_fields` — MUTATING, default off
+
+**Switch:** `allow_manage_updatable_fields`, which is separate from
+`allow_update_document`. Turning it on is still a decision made at the Desk.
+`update_document` itself still refuses to write the whitelist table.
+
+**Arguments:** `action` (`add` | `remove` | `list`). `entries` is
+`[{"doctype", "fieldname"}]` and is required for `add` and `remove`; a JSON
+string of the list is also accepted. `doctype` is optional and filters `list`.
+
+| Action | Does | Returns |
+| --- | --- | --- |
+| `add` | Appends each pair ticked. A pair already ticked is skipped. A pair present but unticked is ticked again. Duplicates within the call collapse. | `added`, `re_enabled`, `already_present` (each with `fieldtype`, `label`) |
+| `remove` | Deletes every row for each pair. | `removed`, `not_found` |
+| `list` | Reads the table. | `entries` (`doctype`, `fieldname`, `enabled`, `fieldtype`, `label`, `problem`), `count`, `enabled_by_doctype` |
+
+**`add` refuses what `update_document` would refuse anyway:** an unknown DocType
+or fieldname (with a *Did you mean*), a child DocType, a system column, a
+`Password`, `Table` or layout field, and `query_doctype`'s refused doctypes, the
+MCP Action Log and the whitelist itself. One refused entry refuses the whole
+call, and nothing is written.
+
+The write is one save of ERPNext MCP Settings, so it needs write permission on
+that document (System Manager).
+
+**Starter set:** `scripts/seed_updatable_fields.py` seeds descriptive fields on
+the 28 registers that have a create tool and no update tool. It is idempotent and
+run from `bench console`; see the script's docstring for what it leaves out and
+why.

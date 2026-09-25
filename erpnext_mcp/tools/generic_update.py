@@ -620,3 +620,261 @@ def _brief(info: dict) -> dict:
 	if info.get("options"):
 		out["options"] = info["options"]
 	return out
+
+
+# ---------------------------------------------------------------------------
+# manage_updatable_fields — the whitelist above, managed over MCP.
+#
+# `update_document` still refuses to write MCP Update Document Field, and must:
+# a generic writer that could widen its own whitelist would be a switch that
+# turns every other switch on. This tool is the deliberate exception, and it is
+# fenced three ways instead:
+#
+#   1. ITS OWN SWITCH. `allow_manage_updatable_fields` ships off, and turning it
+#      on is a Desk decision on the same settings form — so an operator still
+#      decides whether the whitelist can be widened remotely at all.
+#   2. IT CANNOT WIDEN THE FENCES. An entry `update_document` would refuse
+#      whatever the table said — a system column, a Password or Table field, a
+#      child DocType, a credential store, this whitelist — is refused here too,
+#      so the table only ever holds rows that mean something.
+#   3. IT WRITES THROUGH THE SETTINGS DOCUMENT'S OWN SAVE, under the MCP user's
+#      write permission on it, exactly as a Desk edit of the table does.
+# ---------------------------------------------------------------------------
+
+MANAGE_ACTIONS = ("add", "remove", "list")
+
+
+def _entries(args: dict) -> list[tuple]:
+	"""`entries` as (doctype, fieldname) pairs, in order, duplicates dropped."""
+	raw = args.get("entries")
+	if isinstance(raw, str) and raw.strip():
+		try:
+			raw = json.loads(raw)
+		except ValueError:
+			raise ToolError(
+				'`entries` must be a list of {"doctype", "fieldname"} objects. Nothing was changed.'
+			) from None
+	if not isinstance(raw, list) or not raw:
+		raise ToolError(
+			'`entries` must be a non-empty list of {"doctype", "fieldname"} objects, e.g. '
+			'[{"doctype": "Training Session", "fieldname": "expires_date"}]. Nothing was changed.'
+		)
+	pairs: list[tuple] = []
+	problems = []
+	for index, entry in enumerate(raw):
+		if not isinstance(entry, dict):
+			problems.append(f"- entries[{index}]: expected an object, got {type(entry).__name__}.")
+			continue
+		doctype = entry.get("doctype")
+		fieldname = entry.get("fieldname")
+		if not isinstance(doctype, str) or not doctype.strip():
+			problems.append(f"- entries[{index}]: `doctype` is missing or empty.")
+			continue
+		if not isinstance(fieldname, str) or not fieldname.strip():
+			problems.append(f"- entries[{index}]: `fieldname` is missing or empty.")
+			continue
+		pair = (doctype.strip(), fieldname.strip())
+		if pair not in pairs:
+			pairs.append(pair)
+	if problems:
+		raise ToolError(
+			f"manage_updatable_fields refused {len(problems)} malformed entr"
+			f"{'y' if len(problems) == 1 else 'ies'}. Nothing was changed.\n" + "\n".join(problems)
+		)
+	return pairs
+
+
+def _whitelist_refusal(doctype: str, fieldname: str):
+	"""Why update_document could never write this pair, whatever the table said.
+
+	Returns (reason, field_info_or_None). An empty reason means the pair is one
+	an operator may whitelist.
+	"""
+	why = _refusal_reason(doctype)
+	if why:
+		return f"{doctype} is never writable through update_document: {why}", None
+	if not compat.doctype_exists(doctype):
+		return (
+			f"no DocType called {doctype!r} on this site (use the name the Desk shows, "
+			"'Training Session', not 'training_session')",
+			None,
+		)
+	if int(frappe.db.get_value("DocType", doctype, "istable") or 0):
+		return f"{doctype} is a child table; update_document refuses child DocTypes", None
+	if fieldname in SYSTEM_FIELDS:
+		return f"{fieldname} is a system field and is never writable", None
+	df = compat.field_meta(doctype, fieldname)
+	if df is None:
+		suggestions = _suggest_fields(doctype, fieldname)
+		hint = f" Did you mean: {', '.join(repr(x) for x in suggestions)}?" if suggestions else ""
+		return f"{doctype} has no field called {fieldname!r} (use the fieldname, not the label).{hint}", None
+	info = field_info(df)
+	why = REFUSED_FIELDTYPES.get(info["fieldtype"])
+	if why:
+		return f"{fieldname} is never writable: {why}", info
+	return "", info
+
+
+def _whitelist_rows(doc) -> list:
+	return list(doc.get(WHITELIST_FIELD) or [])
+
+
+def _row_pair(row) -> tuple:
+	return (str(row.get("doctype_name") or "").strip(), str(row.get("field_name") or "").strip())
+
+
+def _save_settings(doc) -> None:
+	try:
+		doc.save()
+	except frappe.PermissionError as exc:
+		raise ToolError(
+			f"this account may not write {settings.SETTINGS_DOCTYPE}: {exc}. The whitelist lives on "
+			"that document, so changing it needs write permission on it (System Manager). "
+			"Nothing was changed."
+		) from exc
+	except frappe.ValidationError as exc:
+		raise ToolError(
+			f"{settings.SETTINGS_DOCTYPE} refused the save: {type(exc).__name__}: {exc}. This is the "
+			"settings form's own validation, not the whitelist — fix it at the Desk. Nothing was changed."
+		) from exc
+
+
+def _add(doc, pairs: list[tuple]) -> dict:
+	rejected = {}
+	infos = {}
+	for doctype, fieldname in pairs:
+		reason, info = _whitelist_refusal(doctype, fieldname)
+		if reason:
+			rejected[f"{doctype}.{fieldname}"] = {
+				"doctype": doctype,
+				"fieldname": fieldname,
+				"reason": reason,
+			}
+		else:
+			infos[(doctype, fieldname)] = info
+	if rejected:
+		lines = [f"- {key}: {problem['reason']}" for key, problem in rejected.items()]
+		raise ToolError(
+			f"manage_updatable_fields refused {len(rejected)} of {len(pairs)} entr"
+			f"{'y' if len(pairs) == 1 else 'ies'}; one refused entry refuses the whole call. "
+			"Nothing was changed.\n"
+			+ "\n".join(lines)
+			+ "\n\nDetails (JSON): "
+			+ json.dumps({"rejected": rejected}, default=str, ensure_ascii=False)
+		)
+
+	existing: dict = {}
+	for row in _whitelist_rows(doc):
+		existing.setdefault(_row_pair(row), []).append(row)
+
+	added, enabled, skipped = [], [], []
+	for pair in pairs:
+		doctype, fieldname = pair
+		entry = {"doctype": doctype, "fieldname": fieldname, **_brief(infos[pair])}
+		rows = existing.get(pair)
+		if not rows:
+			doc.append(WHITELIST_FIELD, {"doctype_name": doctype, "field_name": fieldname, "enabled": 1})
+			added.append(entry)
+		elif any(settings.as_bool(row.get("enabled")) for row in rows):
+			skipped.append(entry)
+		else:
+			# Present but unticked: asking to add it is asking for it to count.
+			for row in rows:
+				if hasattr(row, "set"):
+					row.set("enabled", 1)
+				else:
+					row["enabled"] = 1
+			enabled.append(entry)
+	if added or enabled:
+		_save_settings(doc)
+	return {"added": added, "re_enabled": enabled, "already_present": skipped}
+
+
+def _remove(doc, pairs: list[tuple]) -> dict:
+	wanted = set(pairs)
+	kept, removed_pairs = [], []
+	for row in _whitelist_rows(doc):
+		pair = _row_pair(row)
+		if pair in wanted:
+			if pair not in removed_pairs:
+				removed_pairs.append(pair)
+			continue
+		kept.append(row)
+	if removed_pairs:
+		doc.set(WHITELIST_FIELD, kept)
+		_save_settings(doc)
+	removed = [{"doctype": d, "fieldname": f} for d, f in pairs if (d, f) in removed_pairs]
+	not_found = [{"doctype": d, "fieldname": f} for d, f in pairs if (d, f) not in removed_pairs]
+	return {"removed": removed, "not_found": not_found}
+
+
+def _list(doc, doctype: str) -> dict:
+	entries = []
+	for row in _whitelist_rows(doc):
+		row_doctype, fieldname = _row_pair(row)
+		if doctype and row_doctype != doctype:
+			continue
+		entry = {
+			"doctype": row_doctype,
+			"fieldname": fieldname,
+			"enabled": settings.as_bool(row.get("enabled")),
+		}
+		# Say which rows can never take effect, so a dead row is visible here
+		# rather than as a refusal on the next update_document call.
+		reason, info = _whitelist_refusal(row_doctype, fieldname)
+		if info:
+			entry.update(_brief(info))
+		if reason:
+			entry["problem"] = reason
+		entries.append(entry)
+	entries.sort(key=lambda e: (e["doctype"], e["fieldname"]))
+	by_doctype: dict = {}
+	for entry in entries:
+		if entry["enabled"] and "problem" not in entry:
+			by_doctype.setdefault(entry["doctype"], []).append(entry["fieldname"])
+	return {
+		"entries": entries,
+		"count": len(entries),
+		"enabled_by_doctype": by_doctype,
+		"doctype_filter": doctype or None,
+	}
+
+
+def manage_updatable_fields(args: dict) -> ToolResult:
+	"""MUTATING. Add, remove or list rows of update_document's whitelist."""
+	if not settings.tool_enabled("manage_updatable_fields"):
+		raise ToolError(
+			"manage_updatable_fields is switched off. An operator must tick "
+			"'allow_manage_updatable_fields' in ERPNext MCP Settings to enable it. Nothing was changed."
+		)
+	action = as_str(args, "action", required=True).strip().lower()
+	if action not in MANAGE_ACTIONS:
+		raise ToolError(
+			f"`action` must be one of: {', '.join(MANAGE_ACTIONS)} — got {action!r}. Nothing was changed."
+		)
+
+	doc = frappe.get_single(settings.SETTINGS_DOCTYPE)
+
+	if action == "list":
+		doctype = as_str(args, "doctype").strip()
+		data = _list(doc, doctype)
+		scope = f" for {doctype}" if doctype else ""
+		return ToolResult(data=data, summary=f"{data['count']} whitelisted field(s){scope}")
+
+	pairs = _entries(args)
+	if not frappe.has_permission(settings.SETTINGS_DOCTYPE, "write"):
+		raise ToolError(
+			f"this account may not write {settings.SETTINGS_DOCTYPE}, where the whitelist lives. "
+			"Nothing was changed."
+		)
+	if action == "add":
+		data = _add(doc, pairs)
+		summary = (
+			f"added {len(data['added'])}, re-enabled {len(data['re_enabled'])}, "
+			f"already present {len(data['already_present'])}"
+		)
+	else:
+		data = _remove(doc, pairs)
+		summary = f"removed {len(data['removed'])}, not found {len(data['not_found'])}"
+	data["action"] = action
+	return ToolResult(data=data, summary=summary)
