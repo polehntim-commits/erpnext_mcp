@@ -196,7 +196,7 @@
    "fieldname": "delivery_method",
    "fieldtype": "Select",
    "label": "Delivery Method",
-   "options": "\nVideo\nClassroom\nField Demo\nOnline\nSelf Study"
+   "options": "\nVideo\nClassroom\nField Demo\nOnline\nSelf Study\nBlended"
   },
   {
    "description": "When the training this session delivered lapses, copied onto every record it produces. LEAVING IT EMPTY MEANS ONE-TIME and the compliance calendar will never ask for a renewal — right for a new-hire orientation, WRONG for WPS (12 months), Oregon heat illness (12 months) and annual GAP hygiene. complete_training_session says so when it is empty rather than guessing a year.",
@@ -283,7 +283,7 @@
  "index_web_pages_for_search": 0,
  "links": [],
  "max_attachments": 20,
- "modified": "2026-08-17 14:00:00.000000",
+ "modified": "2026-09-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Training Session",

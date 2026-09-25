@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 905 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 907 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -7842,6 +7842,23 @@ pulls per-person rows. The session is the **act**; the records are the
 second, and it writes them *through* `record_training` so there is a single code
 path on this site that knows what a training record means.
 
+#### `create_training_type`
+
+**MUTATING, default OFF** (`allow_create_training_type`). A curriculum for a
+course that has not run yet, so a session can be booked against it.
+`record_training` also creates curricula, but only while filing a completed
+training, and `create_training_session` refuses a name that is not on the register.
+
+| Argument | Notes |
+| --- | --- |
+| `name` | **Required.** A name already on the register, in any casing, is refused. Use `update_training_type` instead. |
+| `description` | What the course covers, and the citation that says so. |
+| `regimes` | Unknown tokens refused by name. Omitted → inferred from the name, reported as `regimes_guessed`. |
+| `delivery_method` | `Video`, `Classroom`, `Field Demo`, `Online`, `Self Study`, `Blended` — or `classroom`, `field`, `online`, `blended` etc. |
+| `retention_years` | Defaults to the longest its regimes require. A shorter figure is raised to that floor and says so. |
+| `duration_hours` / `duration_minutes` | One or the other; both must agree if both are given. Stored as minutes. |
+| `video_url`, `materials_description`, `group_training` | As on `update_training_type`. |
+
 #### `update_training_type`
 
 **MUTATING, default OFF.** Puts the content on a curriculum.
@@ -7853,7 +7870,7 @@ path on this site that knows what a training record means.
 | `materials_description` | What the trainer has to bring. |
 | `duration_minutes` | Becomes the default duration of every session of it. |
 | `description` | What the course covers, and the citation that says so. |
-| `delivery_method` | `Video`, `Classroom`, `Field Demo`, `Online`, `Self Study` — or `field_demo` etc. |
+| `delivery_method` | `Video`, `Classroom`, `Field Demo`, `Online`, `Self Study`, `Blended` — or `field_demo` etc. |
 | `regimes` | Which audits the course answers. Unknown tokens refused by name. |
 | `active`, `retention_years` | |
 
@@ -7868,6 +7885,19 @@ site's own extension allowlist and permission model rather than a second one.
 
 **It touches nothing already filed.** Every session and every training record
 carries its own copy of what actually happened, taken on the day.
+
+#### `deactivate_training_type`
+
+**MUTATING, default OFF** (`allow_deactivate_training_type`). Retires a
+curriculum: `active = 0`, never a delete. `training_type` and `reason`
+(at least 10 characters, written to the timeline) are required.
+
+Every training record and session that names it is untouched. It is then held
+against nobody in the compliance matrix, drops out of the curriculum listing,
+and `create_training_session` refuses to book it. `record_training` still
+accepts it, so paperwork for a class that already ran can still be filed. Sessions
+still Scheduled or In Progress are listed in `open_sessions`. They can still be
+completed. `update_training_type(active=true)` reverses it.
 
 #### `get_training_curriculum`
 

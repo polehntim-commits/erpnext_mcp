@@ -105,7 +105,11 @@ STATUS_ALIASES = {
 #: UNDERSCORES — that is the spelling the iOS build and every other client in
 #: this app use — so both are accepted and one is stored. A column holding both
 #: `field_demo` and `Field Demo` would be a column no filter can group.
-DELIVERY_METHODS = ("Video", "Classroom", "Field Demo", "Online", "Self Study")
+#:
+#: `Blended` arrived in v0.178.0 with `create_training_type`: a train-the-trainer
+#: course is a classroom morning and a field afternoon, and filing it under
+#: either one misdescribes the other half.
+DELIVERY_METHODS = ("Video", "Classroom", "Field Demo", "Online", "Self Study", "Blended")
 
 DELIVERY_ALIASES = {
 	"video": "Video",
@@ -114,7 +118,10 @@ DELIVERY_ALIASES = {
 	"field_demo": "Field Demo",
 	"field demo": "Field Demo",
 	"fielddemo": "Field Demo",
+	"field": "Field Demo",
 	"demo": "Field Demo",
+	"blended": "Blended",
+	"hybrid": "Blended",
 	"online": "Online",
 	"self_study": "Self Study",
 	"self study": "Self Study",
@@ -132,6 +139,7 @@ DELIVERY_NOTES = {
 	"Field Demo": "Shown on the ground with the equipment in hand — a respirator fit, a ladder, a valve. The one delivery method whose evidence an auditor will ask to see photographs of.",
 	"Online": "A course somebody completes elsewhere, usually with a certificate at the end. Attach the certificate to the training record rather than to the curriculum.",
 	"Self Study": "A handout somebody reads on their own. The attachments are the training; the signature is the whole of the evidence that it happened.",
+	"Blended": "Part in a room, part on the ground or online — a train-the-trainer course is the usual case. The materials list should say which half needs what; photographs of the field half are what an auditor will ask for.",
 }
 
 # ── what an attendee row is worth ───────────────────────────────────────────

@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.178.0 — 2026-09-25 — a course can be booked before it has run
+
+**907 tools** (+2, both mutating, both off by default). Until now the only way
+to create a Training Type through MCP was `record_training`, which needs a
+completed date in the past. `create_training_session` refuses a name that is not
+on the register. So a class booked for next month (WPS Train the Trainer, Oct
+28–29) could not be scheduled at all.
+
+- **`create_training_type`** (switch `allow_create_training_type`) — `name`,
+  `description`, `regimes`, `delivery_method`, `retention_years`,
+  `duration_hours` (or `duration_minutes`), plus `video_url`,
+  `materials_description`, `group_training`. Writes the same record
+  `training.ensure_type` writes. A name already on the register, in any casing,
+  is refused and pointed at `update_training_type`. Regimes left out are inferred
+  from the name, as `record_training` infers them, and the reply says so.
+  Unknown regimes and delivery methods are refused by name. The controller still
+  raises a retention shorter than the regimes' floor, and the reply says so.
+- **`deactivate_training_type`** (switch `allow_deactivate_training_type`) —
+  `active = 0` with a mandatory `reason` on the timeline. Nothing is deleted, and
+  no training record or session is touched. The reply counts the records kept and
+  names any session still Scheduled or In Progress. Those sessions can still be
+  completed.
+- **`create_training_session` now refuses an inactive curriculum**, on MCP and
+  on the phone, and points at `update_training_type(active=true)`. Only an
+  explicit `active = 0` refuses. `record_training` still accepts an inactive
+  type, so a class that already ran can still be filed.
+- **`Blended` delivery method** on Training Type and Training Session (Select
+  options; migrate picks it up), and `field` / `hybrid` as aliases for
+  `Field Demo` / `Blended`.
+
 ## 0.177.0 — 2026-09-25 — the inbox, filed
 
 **905 tools** (+4: three read, on by default; one mutating, off by default).

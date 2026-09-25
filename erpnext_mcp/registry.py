@@ -16527,6 +16527,75 @@ TOOLS = {
 	# session is the ACT, `complete_training_session` is the one moment it becomes
 	# records, and it writes them THROUGH `record_training` so there is one code
 	# path on this site that knows what a training record means.
+	"create_training_type": _tool(
+		training_sessions.create_training_type,
+		"MUTATING (default OFF). Create a curriculum for a course that has not run yet, "
+		"so a Training Session can be booked against it.\n\n"
+		"record_training creates a curriculum from free text, but only while filing a "
+		"completed training, so it needs a past date. create_training_session refuses a "
+		"name that is not on the register. This is the call for the class booked next "
+		"month.\n\n"
+		"A name already on the register (case- and space-insensitive) is refused. Use "
+		"update_training_type to change it. Regimes left out are inferred from the name, "
+		"as record_training infers them, and the reply says so. Retention defaults to what "
+		"the regimes require.\n\n"
+		"Requires System Manager, HR Manager, HR User or Farm Manager.",
+		{
+			"name": _field(
+				_STRING,
+				"The course name every record of it will be filed under, e.g. 'WPS Train the "
+				"Trainer'. At most 140 characters.",
+			),
+			"description": _field(
+				_STRING,
+				"What the course covers, who issues it, how often it must be repeated and the "
+				"citation that says so.",
+			),
+			"regimes": _field(
+				_STRING_ARRAY,
+				"Which audits the course counts towards: FSMA, GAP, GlobalGAP, PrimusGFS, NOP, "
+				"OTCO, WPS, OR-OSHA, Internal or Other. An unknown token is refused by name. "
+				"Omit to infer from the name.",
+			),
+			"delivery_method": _field(
+				_STRING,
+				"Video, Classroom, Field Demo, Online, Self Study or Blended, or the lower-case "
+				"spellings (classroom, field, online, blended, ...).",
+			),
+			"retention_years": _field(
+				_INTEGER,
+				"Years to keep a record of this training. Defaults to the longest any of its "
+				"regimes requires.",
+			),
+			"duration_hours": _field(
+				_NUMBER,
+				"How long one session normally runs, in hours (1.5 = 90 minutes). Stored as "
+				"duration_minutes and inherited by every session of the course.",
+			),
+			"duration_minutes": _field(
+				_INTEGER,
+				"The same, in minutes. Pass one or the other; both must agree if both are given.",
+			),
+			"video_url": _field(
+				_STRING,
+				"An http:// or https:// link to the training film. A path or filename is refused.",
+			),
+			"materials_description": _field(
+				_STRING,
+				"What the trainer has to bring.",
+			),
+			"group_training": _field(
+				_BOOLEAN,
+				"Delivered to a crew at once. The compliance-alert bundler turns several lapsing "
+				"records of a group course into one session rather than one task each.",
+			),
+		},
+		required=("name",),
+		mutating=True,
+		title="Create a training curriculum",
+		available=_needs_doctype("Training Type"),
+		requires="the Training Type DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
 	"update_training_type": _tool(
 		training_sessions.update_training_type,
 		"MUTATING (default OFF). Put the content on a curriculum: the safety video, "
@@ -16580,8 +16649,8 @@ TOOLS = {
 			),
 			"delivery_method": _field(
 				_STRING,
-				"Video, Classroom, Field Demo, Online or Self Study — or the same words as "
-				"video, classroom, field_demo, online, self_study. It is how a handset knows "
+				"Video, Classroom, Field Demo, Online, Self Study or Blended — or the same words as "
+				"video, classroom, field_demo, online, self_study, blended. It is how a handset knows "
 				"whether to open a player, a document or nothing.",
 			),
 			"regimes": _field(
@@ -16606,6 +16675,33 @@ TOOLS = {
 		required=("training_type",),
 		mutating=True,
 		title="Update a training curriculum",
+		available=_needs_doctype("Training Type"),
+		requires="the Training Type DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"deactivate_training_type": _tool(
+		training_sessions.deactivate_training_type,
+		"MUTATING (default OFF). Retire a curriculum: sets active=0. Never deletes.\n\n"
+		"Every training record and session that names it is untouched and still reads, "
+		"still counts in the audit packet. From then on it is held against nobody in the "
+		"compliance matrix, drops out of get_training_curriculum's listing, and "
+		"create_training_session refuses to book it. record_training still accepts it, so "
+		"paperwork for a class that already ran can still be filed. Sessions still "
+		"Scheduled or In Progress are named in the reply. Reverse with "
+		"update_training_type(active=true).\n\n"
+		"Requires System Manager, HR Manager, HR User or Farm Manager.",
+		{
+			"training_type": _field(
+				_STRING,
+				"The curriculum to retire. An existing Training Type, matched case- and space-insensitively.",
+			),
+			"reason": _field(
+				_STRING,
+				"Why it is being retired, at least 10 characters. Written to the curriculum's timeline.",
+			),
+		},
+		required=("training_type", "reason"),
+		mutating=True,
+		title="Deactivate a training curriculum",
 		available=_needs_doctype("Training Type"),
 		requires="the Training Type DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
@@ -16704,7 +16800,7 @@ TOOLS = {
 			),
 			"delivery_method": _field(
 				_STRING,
-				"Video, Classroom, Field Demo, Online or Self Study. Defaults to the curriculum's.",
+				"Video, Classroom, Field Demo, Online, Self Study or Blended. Defaults to the curriculum's.",
 			),
 			"regimes": _field(
 				_STRING_ARRAY,

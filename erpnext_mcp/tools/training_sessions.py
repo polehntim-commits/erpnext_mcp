@@ -10,9 +10,10 @@ crew leader who trained twelve people in a shed on Tuesday had twelve forms to
 type, and twelve forms typed one at a time disagree about the date, the topics
 and the trainer by the third one.
 
-These eight tools are those two ends. `update_training_type` and
-`get_training_curriculum` put the content on the curriculum and hand it to a
-screen. The six session tools record the afternoon once and turn it into as many
+These tools are those two ends. `create_training_type`, `update_training_type`
+and `deactivate_training_type` keep the curriculum register (v0.178.0 added the
+first and last, so a class can be booked before it has run), and
+`get_training_curriculum` hands it to a screen. The six session tools record the afternoon once and turn it into as many
 training records as there were people who can be proved to have been there.
 
 ────────────────────────────────────────────────────────────────────────────
@@ -146,9 +147,9 @@ def _resolve_type(value: str) -> str:
 	found = training.find_type(wanted)
 	if not found:
 		raise ToolError(
-			f"no {TYPE_DOCTYPE} called {wanted!r} on this site. Curricula are created by "
-			"record_training from free text on first use, and the ten common ones are seeded on "
-			"install — so a name nothing has been filed against does not exist yet. "
+			f"no {TYPE_DOCTYPE} called {wanted!r} on this site. create_training_type makes one "
+			"for a course that has not run yet; record_training also creates one from free text "
+			"when it files a completed training, and the ten common ones are seeded on install. "
 			"get_training_curriculum lists them. Nothing was changed."
 		)
 	return found
@@ -201,6 +202,148 @@ def _attendee_index(doc, employee: str) -> int:
 
 def _described(row: dict) -> dict:
 	return training_sessions.describe(row, training_sessions.attendees_of(str(row.get("name") or "")))
+
+
+# ── 0. create_training_type ─────────────────────────────────────────────────
+def create_training_type(args: dict) -> ToolResult:
+	"""A curriculum for a course that has not run yet, so a session can be booked against it.
+
+	THE GAP THIS CLOSES IS THE FUTURE CLASS. `record_training` creates a curriculum
+	from free text, but only while filing a completed training, so it needs a date
+	that has already happened. `create_training_session` refuses a name that is not on the register.
+	A class booked for next month therefore had no way on: the curriculum did not
+	exist, and the only call that could create it needed the class to be over.
+
+	THE SAME RECORD `ensure_type` WRITES, with the content set at birth. Regimes
+	given are validated by `training.require` and refused by name; regimes left
+	out are guessed from the name exactly as `record_training` guesses them, and
+	the reply says so. Retention defaults to what the regimes demand.
+
+	A NAME ALREADY ON THE REGISTER IS REFUSED, not updated. Matching is case- and
+	space-insensitive for the reason `find_type` gives: a second curriculum for a
+	casing would split one course's history across two masters.
+	"""
+	_require_type()
+	actor = employee_tool.require_hr_role()
+	wanted = " ".join(str(as_str(args, "name", required=True) or "").split()).strip()
+	if not wanted:
+		raise ToolError("name is required — it is what every record of this course will be filed under.")
+	if len(wanted) > 140:
+		raise ToolError(
+			f"name is {len(wanted)} characters; a Training Type name holds 140. Put the detail in "
+			"description. Nothing was created."
+		)
+
+	existing = training.find_type(wanted)
+	if existing:
+		row = training_sessions.type_row(existing)
+		inactive = not compat.checked(row.get("active"))
+		raise ToolError(
+			f"{TYPE_DOCTYPE} {existing!r} already exists"
+			+ (" and is inactive" if inactive else "")
+			+ ". To change it use update_training_type"
+			+ (", with active=true to bring it back" if inactive else "")
+			+ ". Nothing was created."
+		)
+
+	if args.get("regimes") not in (None, "", []):
+		try:
+			regimes = training.require(args.get("regimes"))
+		except ValueError as exc:
+			raise ToolError(f"{exc} Nothing was created.") from None
+		guessed = False
+	else:
+		regimes = training.guess_type_regimes(wanted)
+		guessed = True
+
+	method = ""
+	raw_method = args.get("delivery_method")
+	if raw_method not in (None, ""):
+		method = training_sessions.canon_delivery(raw_method)
+		if not method:
+			raise ToolError(
+				f"delivery_method {raw_method!r} is not one this app knows. "
+				f"{training_sessions.delivery_note()} Nothing was created."
+			)
+
+	minutes = as_int(args, "duration_minutes")
+	# `as_float` answers 0.0 for a missing value, so absence is read off the raw
+	# argument — otherwise "no duration given" would store a zero-length course.
+	raw_hours = args.get("duration_hours")
+	hours = None if raw_hours in (None, "") else as_float(raw_hours, "duration_hours")
+	if minutes is not None and hours is not None and round(hours * 60) != minutes:
+		raise ToolError(
+			f"duration_hours={hours:g} and duration_minutes={minutes} disagree. Pass one. "
+			"Nothing was created."
+		)
+	if minutes is None and hours is not None:
+		minutes = round(hours * 60)
+	if minutes is not None and minutes < 0:
+		raise ToolError("the duration cannot be negative. Nothing was created.")
+
+	derived_retention = training.retention_years(regimes)
+	retention = as_int(args, "retention_years")
+	if retention is not None and retention < 0:
+		raise ToolError("retention_years cannot be negative. Nothing was created.")
+
+	video_url = _url(args)
+
+	doc = frappe.new_doc(TYPE_DOCTYPE)
+	doc.training_type_name = wanted
+	doc.active = 1
+	doc.retention_years = derived_retention if retention is None else retention
+	training.set_rows(doc, "regimes", regimes)
+	optional = {
+		"description": as_str(args, "description"),
+		"delivery_method": method,
+		"duration_minutes": minutes,
+		"video_url": video_url,
+		"materials_description": as_str(args, "materials_description"),
+	}
+	group = as_bool(args, "group_training", None)
+	if group is not None:
+		optional["group_training"] = 1 if group else 0
+	for fieldname, value in optional.items():
+		if value not in (None, "") and compat.has_field(TYPE_DOCTYPE, fieldname):
+			doc.set(fieldname, value)
+	doc.flags.ignore_permissions = True
+	doc.insert(ignore_permissions=True)
+
+	described = training_sessions.describe_type(training_sessions.type_row(doc.name))
+	data = {
+		**described,
+		"actor": actor,
+		"created": True,
+		"regimes_guessed": guessed,
+		"next_step": (
+			f"create_training_session with training_type={doc.name!r} books a class of it. "
+			"Attach handouts or slides with attach_file_to_document against doctype 'Training Type'."
+		),
+	}
+	if guessed:
+		data["regime_note"] = (
+			f"No regimes were passed, so {', '.join(regimes) or 'none'} was inferred from the name, "
+			"as record_training would have inferred it. If that is wrong, correct it now with "
+			"update_training_type: every session of this course inherits it."
+		)
+	if retention is not None and retention < derived_retention:
+		# The Training Type controller raises a short figure to the floor on every
+		# save — the one direction a retention period must never be wrong in.
+		data["retention_note"] = (
+			f"retention_years={retention} is shorter than the {derived_retention} years "
+			f"{', '.join(regimes)} requires, so {derived_retention} was stored. A longer figure "
+			"is kept as given."
+		)
+	if method == "Video" and not described.get("video_url"):
+		data["content_note"] = (
+			"Marked as delivered by video with no video_url, so a handset has nothing to play. "
+			"Set video_url with update_training_type."
+		)
+	return ToolResult(
+		data=data,
+		summary=f"created {TYPE_DOCTYPE} {doc.name} ({', '.join(regimes) or 'untagged'})",
+		docstatus_delta="none → 0 (created)",
+	)
 
 
 # ── 1. update_training_type ─────────────────────────────────────────────────
@@ -329,6 +472,103 @@ def update_training_type(args: dict) -> ToolResult:
 		data=data,
 		summary=f"updated {name}: {', '.join(sorted(changed))}",
 		docstatus_delta="0 → 0 (amended)",
+	)
+
+
+# ── 1b. deactivate_training_type ────────────────────────────────────────────
+def deactivate_training_type(args: dict) -> ToolResult:
+	"""Retire a curriculum from new work. Everything already filed against it stays.
+
+	`active = 0`, never a delete. `Employee Training Record.training_type` and
+	`Training Session.training_type` are Links to this record, so a delete would
+	either be refused by Frappe or orphan years of evidence; an inactive type is
+	held against nobody in the compliance matrix, drops out of the curriculum
+	listing, and cannot have a new session booked against it, while every record
+	and session that names it reads exactly as before.
+
+	`record_training` still accepts it. A course that ran before it was retired
+	may still need its paperwork filed, and refusing that would push the record
+	under whatever name was still active, which is worse.
+	"""
+	_require_type()
+	actor = employee_tool.require_hr_role()
+	name = _resolve_type(as_str(args, "training_type", required=True))
+	reason = as_str(args, "reason", required=True)
+	if len(reason) < 10:
+		raise ToolError(
+			"reason must say something. A curriculum withdrawn with no sentence beside it is a "
+			"change nobody can explain to the auditor who asks next season why the course "
+			"stopped being tracked. Nothing was changed."
+		)
+
+	row = training_sessions.type_row(name)
+	if not compat.checked(row.get("active")):
+		raise ToolError(
+			f"{TYPE_DOCTYPE} {name} is already inactive. update_training_type with active=true "
+			"brings it back. Nothing was changed."
+		)
+
+	records = (
+		frappe.db.count(training.DOCTYPE, {"training_type": name})
+		if compat.doctype_exists(training.DOCTYPE)
+		else 0
+	)
+	open_sessions = []
+	if compat.doctype_exists(DOCTYPE):
+		open_sessions = [
+			str(entry.get("name"))
+			for entry in (
+				dict(item)
+				for item in frappe.db.get_all(
+					DOCTYPE,
+					filters={
+						"training_type": name,
+						"status": ["in", list(training_sessions.OPEN_STATUSES)],
+					},
+					fields=["name"],
+					limit=SESSION_CAP,
+				)
+				or []
+			)
+		]
+
+	doc = frappe.get_doc(TYPE_DOCTYPE, name)
+	doc.active = 0
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+	try:
+		doc.add_comment("Comment", f"Deactivated via MCP (erpnext_mcp) by {actor}. Reason: {reason}")
+	except Exception:
+		# The deactivation is what was asked for; the reason is in the reply and the
+		# action log regardless.
+		frappe.log_error(
+			title="erpnext_mcp: could not attach training type deactivation comment",
+			message=compat.traceback_text(),
+		)
+
+	data = {
+		**training_sessions.describe_type(training_sessions.type_row(name), with_attachments=False),
+		"actor": actor,
+		"reason": reason,
+		"training_records_kept": records,
+		"open_sessions": open_sessions,
+		"note": (
+			f"{records} training record(s) name this curriculum and every one is untouched: still "
+			"on the employee's file, still in the audit packet. It is now held against nobody in "
+			"the compliance matrix and no new session can be booked against it. Nothing was "
+			"deleted; update_training_type with active=true reverses this."
+		),
+	}
+	if open_sessions:
+		data["open_sessions_note"] = (
+			f"{len(open_sessions)} session(s) of it are still Scheduled or In Progress "
+			f"({', '.join(open_sessions)}). They can still be completed, and completing one "
+			"still files its records. Cancel them if the class is not going ahead."
+		)
+	return ToolResult(
+		data=data,
+		summary=f"deactivated {TYPE_DOCTYPE} {name}",
+		docstatus_delta="0 → 0 (updated)",
 	)
 
 
@@ -499,6 +739,14 @@ def create_training_session(args: dict) -> ToolResult:
 	_require()
 	actor = employee_tool.require_shift_role()
 	curriculum = _resolve_type(as_str(args, "training_type", required=True))
+	# Only an explicit 0 refuses: a row written before the column existed reads
+	# None and has never been retired by anybody.
+	if training_sessions.type_row(curriculum).get("active") in (0, "0"):
+		raise ToolError(
+			f"{TYPE_DOCTYPE} {curriculum} is inactive — it was retired with "
+			"deactivate_training_type or update_training_type. Bring it back with "
+			"update_training_type(active=true) if the course is running again. Nothing was created."
+		)
 	company = resolve_company(as_str(args, "company"), required=True)
 	employee_tool.require_company_scope(actor, company)
 

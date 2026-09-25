@@ -372,7 +372,9 @@
   "training_col",
   "allow_record_training",
   "allow_sign_training_supervisor_review",
+  "allow_create_training_type",
   "allow_update_training_type",
+  "allow_deactivate_training_type",
   "allow_create_training_session",
   "allow_add_session_attendee",
   "allow_sign_session_attendance",
@@ -3559,10 +3561,24 @@
   },
   {
    "default": "0",
+   "description": "MUTATING. Creates a curriculum for a course that has not run yet, so a Training Session can be booked against it. A name already on the register is refused; regimes left out are inferred from the name, as record_training infers them.",
+   "fieldname": "allow_create_training_type",
+   "fieldtype": "Check",
+   "label": "Create Training Type"
+  },
+  {
+   "default": "0",
    "description": "MUTATING. Puts the content on a curriculum — the safety video link, the materials list, the duration, the delivery method — so a handset can deliver the training a compliance gap names. It does NOT touch what is already filed: every session and every record carries its own copy of what actually happened, taken on the day.",
    "fieldname": "allow_update_training_type",
    "fieldtype": "Check",
    "label": "Update Training Type"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Retires a curriculum (active=0) with a stated reason. Nothing is deleted: every training record and session that names it is untouched. It is then held against nobody in the compliance matrix and no new session can be booked against it.",
+   "fieldname": "allow_deactivate_training_type",
+   "fieldtype": "Check",
+   "label": "Deactivate Training Type"
   },
   {
    "default": "0",

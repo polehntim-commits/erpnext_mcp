@@ -40,6 +40,10 @@ EIGHT CLAIMS.
    training records, which is the whole architecture: `get_training_compliance_report`
    reads them without knowing a session existed.
 
+9. `TheCurriculumRegisterHasBothEnds` — `create_training_type` makes a
+   curriculum for a class that has not run, so one can be booked a month out;
+   `deactivate_training_type` retires one without touching what was filed.
+
 8. `ReadingTheRegister` — the five filters, and the one that makes this more than
    a diary: `employee` finds the session somebody attended and did not sign, which
    produced no record and is invisible to `list_trainings`.
@@ -61,7 +65,9 @@ from .harness import ROLES, STORE, set_roles
 ON = {
 	f"allow_{name}": 1
 	for name in (
+		"create_training_type",
 		"update_training_type",
+		"deactivate_training_type",
 		"get_training_curriculum",
 		"create_training_session",
 		"add_session_attendee",
@@ -355,6 +361,174 @@ class TheCurriculumReadsBackForAScreen(TrainingSessionTestCase):
 
 		everything = self.tool_data("get_training_curriculum", {"include_inactive": True})
 		self.assertIn("OSHA 10", [row["training_type"] for row in everything["curriculum"]])
+
+
+# ── 9 ───────────────────────────────────────────────────────────────────────
+TRAIN_THE_TRAINER = "WPS Train the Trainer"
+
+
+class TheCurriculumRegisterHasBothEnds(TrainingSessionTestCase):
+	def create(self, **overrides) -> dict:
+		payload = {
+			"name": TRAIN_THE_TRAINER,
+			"description": "EPA-approved WPS train-the-trainer course, 40 CFR 170.501(c)(4).",
+			"regimes": ["WPS"],
+			"delivery_method": "blended",
+			"duration_hours": 16,
+		}
+		payload.update(overrides)
+		return self.tool_data("create_training_type", payload)
+
+	def test_a_class_that_has_not_run_can_be_booked(self):
+		"""The punch-list case: the Oct 28-29 class, with no curriculum and no past date."""
+		data = self.create()
+		self.assertTrue(data["created"])
+		self.assertEqual(data["training_type"], TRAIN_THE_TRAINER)
+		self.assertEqual(data["regimes"], ["WPS"])
+		self.assertFalse(data["regimes_guessed"])
+		self.assertEqual(data["delivery_method"], "Blended")
+		self.assertEqual(data["duration_minutes"], 960)
+		self.assertEqual(data["retention_years"], 2)
+		self.assertTrue(data["active"])
+
+		session = self.open_session(training_type=TRAIN_THE_TRAINER, session_date="2026-10-28")
+		self.assertEqual(session["training_type"], TRAIN_THE_TRAINER)
+		self.assertEqual(session["duration_minutes"], 960)
+		self.assertEqual(session["delivery_method"], "Blended")
+		self.assertEqual(STORE.rows(training.DOCTYPE), [])
+
+	def test_the_desk_spelling_of_the_field_method_is_stored(self):
+		self.assertEqual(self.create(delivery_method="field")["delivery_method"], "Field Demo")
+
+	def test_a_name_already_on_the_register_is_refused_whatever_its_casing(self):
+		error = self.tool_error("create_training_type", {"name": "  heat   illness PREVENTION "})
+		self.assertIn(CURRICULUM, error)
+		self.assertIn("update_training_type", error)
+		self.assertIn("Nothing was created", error)
+
+	def test_an_inactive_name_is_refused_with_the_way_back(self):
+		self.tool_data("update_training_type", {"training_type": "OSHA 10", "active": False})
+		error = self.tool_error("create_training_type", {"name": "OSHA 10"})
+		self.assertIn("inactive", error)
+		self.assertIn("active=true", error)
+
+	def test_regimes_left_out_are_inferred_and_the_reply_says_so(self):
+		data = self.create(regimes=None, retention_years=None)
+		self.assertEqual(data["regimes"], ["WPS"])
+		self.assertTrue(data["regimes_guessed"])
+		self.assertIn("update_training_type", data["regime_note"])
+
+	def test_an_unknown_regime_is_refused_and_nothing_is_created(self):
+		error = self.tool_error("create_training_type", {"name": TRAIN_THE_TRAINER, "regimes": ["EPA"]})
+		self.assertIn("EPA", error)
+		self.assertIn("Nothing was created", error)
+		self.assertFalse(training.find_type(TRAIN_THE_TRAINER))
+
+	def test_an_unknown_delivery_method_is_refused_by_name(self):
+		error = self.tool_error(
+			"create_training_type", {"name": TRAIN_THE_TRAINER, "delivery_method": "webinar"}
+		)
+		self.assertIn("webinar", error)
+		self.assertIn("Blended", error)
+		self.assertFalse(training.find_type(TRAIN_THE_TRAINER))
+
+	def test_hours_and_minutes_that_disagree_are_refused(self):
+		error = self.tool_error(
+			"create_training_type",
+			{"name": TRAIN_THE_TRAINER, "duration_hours": 2, "duration_minutes": 90},
+		)
+		self.assertIn("disagree", error)
+		self.assertEqual(self.create(duration_hours=1.5, duration_minutes=90)["duration_minutes"], 90)
+
+	def test_no_duration_given_stores_no_duration_rather_than_zero(self):
+		data = self.create(duration_hours=None)
+		self.assertIsNone(data["duration_minutes"])
+		self.assertIn(
+			dict(STORE.get_raw("Training Type", TRAIN_THE_TRAINER)).get("duration_minutes"), (None, 0)
+		)
+
+	def test_a_retention_shorter_than_the_regimes_require_is_raised_and_flagged(self):
+		data = self.create(regimes=["NOP"], retention_years=1)
+		self.assertEqual(data["retention_years"], 5)
+		self.assertIn("5 was stored", data["retention_note"])
+		self.assertEqual(
+			self.create(name="Organic Inputs", regimes=["NOP"], retention_years=7)["retention_years"], 7
+		)
+
+	def test_it_needs_an_hr_role(self):
+		set_roles("Administrator", ["Foreman"])
+		error = self.tool_error("create_training_type", {"name": TRAIN_THE_TRAINER})
+		self.assertFalse(training.find_type(TRAIN_THE_TRAINER))
+		self.assertTrue(error)
+
+	def test_it_ships_disabled(self):
+		self.configure(enabled=1, **{**ON, "allow_create_training_type": 0})
+		self.tool_error("create_training_type", {"name": TRAIN_THE_TRAINER})
+		self.assertFalse(training.find_type(TRAIN_THE_TRAINER))
+
+	# -- deactivate --------------------------------------------------------------
+	def test_deactivating_keeps_every_record_and_stops_new_sessions(self):
+		session = self.a_full_session()
+		self.tool_data("complete_training_session", {"session": session})
+		records_before = STORE.rows(training.DOCTYPE)
+		self.assertTrue(records_before)
+
+		data = self.tool_data(
+			"deactivate_training_type",
+			{"training_type": CURRICULUM, "reason": "Replaced by the 2027 heat rule course."},
+		)
+		self.assertFalse(data["active"])
+		self.assertEqual(data["training_records_kept"], len(records_before))
+		self.assertEqual(STORE.rows(training.DOCTYPE), records_before)
+		self.assertEqual(self.raw(session)["training_type"], CURRICULUM)
+		self.assertEqual(dict(STORE.get_raw("Training Type", CURRICULUM))["active"], 0)
+		self.assertTrue(
+			any(c["name"] == CURRICULUM and "Replaced by the 2027" in c["text"] for c in STORE.comments)
+		)
+
+		error = self.tool_error("create_training_session", {"training_type": CURRICULUM, "company": MAIN})
+		self.assertIn("inactive", error)
+		self.assertIn("Nothing was created", error)
+
+		listed = self.tool_data("get_training_curriculum", {})
+		self.assertNotIn(CURRICULUM, [row["training_type"] for row in listed["curriculum"]])
+
+	def test_open_sessions_are_named_and_can_still_be_completed(self):
+		session = self.a_full_session()
+		data = self.tool_data(
+			"deactivate_training_type",
+			{"training_type": CURRICULUM, "reason": "Course retired at the end of the season."},
+		)
+		self.assertEqual(data["open_sessions"], [session])
+		self.assertIn(session, data["open_sessions_note"])
+		self.assertTrue(self.tool_data("complete_training_session", {"session": session}))
+
+	def test_update_training_type_brings_it_back(self):
+		self.tool_data(
+			"deactivate_training_type",
+			{"training_type": CURRICULUM, "reason": "Paused while the rule is rewritten."},
+		)
+		self.tool_data("update_training_type", {"training_type": CURRICULUM, "active": True})
+		self.assertTrue(self.open_session()["name"])
+
+	def test_a_reason_is_required(self):
+		error = self.tool_error("deactivate_training_type", {"training_type": CURRICULUM, "reason": "old"})
+		self.assertIn("reason", error)
+		self.assertEqual(dict(STORE.get_raw("Training Type", CURRICULUM))["active"], 1)
+
+	def test_an_already_inactive_curriculum_is_refused(self):
+		args = {"training_type": CURRICULUM, "reason": "Course retired at the end of the season."}
+		self.tool_data("deactivate_training_type", args)
+		error = self.tool_error("deactivate_training_type", args)
+		self.assertIn("already inactive", error)
+
+	def test_a_name_not_on_the_register_is_refused(self):
+		error = self.tool_error(
+			"deactivate_training_type",
+			{"training_type": "Forklift Refresher", "reason": "Never ran this course at all."},
+		)
+		self.assertIn("Forklift Refresher", error)
+		self.assertIn("create_training_type", error)
 
 
 # ── 3 ───────────────────────────────────────────────────────────────────────
