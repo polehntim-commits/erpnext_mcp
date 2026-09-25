@@ -17,14 +17,30 @@ FIVE CLAIMS.
 
 5. `TheWriteIsOneOrdinarySave` — values are read back after save, unchanged
    values are reported rather than rewritten, and a write DocPerm denial refuses.
+
+6. `EachFieldTypeIsChecked` — Int, Float, Currency, Check, Date, Datetime, Time,
+   Link, Dynamic Link, Select and Data each accept their own shape (and the
+   obvious coercions) and refuse anything else, naming the field, what was sent
+   and what was expected, before anything is written.
+
+7. `TheReplyIsEnoughToTroubleshoot` — every refusal carries the field's metadata
+   as JSON, every problem in a call is reported at once, a mistyped fieldname
+   gets a suggestion, and a value the save rewrote is flagged.
+
+The Float, Currency, Percent, Check, Time and Duration cases use fields added to
+Farm Task's meta for the test (`extra_fields`), because no app doctype has all of
+them. The checks are keyed on fieldtype, never on the doctype.
 """
 
 import json
+from unittest import mock
+
+import frappe
 
 from erpnext_mcp.tools import generic_update
 
-from .fixtures import V12TestCase
-from .harness import STORE
+from .fixtures import MAIN, V12TestCase
+from .harness import STORE, Field
 
 TASK = "FT-0001"
 #: A valid Farm Task names its evidence; the save below runs that validation.
@@ -86,7 +102,17 @@ class TheSwitchAndTheWhitelistDecide(UpdateDocumentTestCase):
 	def test_writes_a_whitelisted_field(self):
 		self.enable(rows(("Farm Task", "notes"), ("Farm Task", "task_name")))
 		data = self.tool_data("update_document", self.update({"notes": "new", "task_name": "Prune block 5"}))
-		self.assertEqual(data["updated"]["notes"], {"from": "old", "to": "new"})
+		self.assertEqual(
+			data["updated"]["notes"],
+			{
+				"from": "old",
+				"sent": "new",
+				"to": "new",
+				"took_effect": True,
+				"fieldtype": "Text",
+				"label": "Instructions",
+			},
+		)
 		self.assertEqual(data["updated"]["task_name"]["to"], "Prune block 5")
 		stored = STORE.get_raw("Farm Task", TASK)
 		self.assertEqual((stored["notes"], stored["task_name"]), ("new", "Prune block 5"))
@@ -202,7 +228,9 @@ class TheWriteIsOneOrdinarySave(UpdateDocumentTestCase):
 	def test_an_unchanged_value_is_reported_not_rewritten(self):
 		self.enable(rows(("Farm Task", "notes"), ("Farm Task", "task_name")))
 		data = self.tool_data("update_document", self.update({"notes": "old", "task_name": "Renamed"}))
-		self.assertEqual(data["unchanged"], ["notes"])
+		self.assertEqual(
+			data["unchanged"], {"notes": {"value": "old", "fieldtype": "Text", "label": "Instructions"}}
+		)
 		self.assertEqual(list(data["updated"]), ["task_name"])
 
 	def test_nothing_to_change_saves_nothing(self):
@@ -219,7 +247,231 @@ class TheWriteIsOneOrdinarySave(UpdateDocumentTestCase):
 		self.assertIn("may not write Farm Task", error)
 		self.assertEqual(STORE.get_raw("Farm Task", TASK)["notes"], "old")
 
-	def test_a_boolean_is_written_as_a_check(self):
-		self.enable(rows(("Farm Task", "notes")))
-		data = self.tool_data("update_document", self.update({"notes": True}))
-		self.assertEqual(data["updated"]["notes"]["to"], 1)
+
+def details(error: str) -> dict:
+	"""The JSON block every field refusal ends with."""
+	return json.loads(error.split("Details (JSON): ", 1)[1])
+
+
+#: Fields no app doctype has together, added to Farm Task's meta for these tests.
+EXTRA_FIELDS = (
+	("load_kg", "Float"),
+	("cost", "Currency"),
+	("done_pct", "Percent"),
+	("is_urgent", "Check"),
+	("start_time", "Time"),
+	("run_time", "Duration"),
+)
+
+
+class TypedTestCase(UpdateDocumentTestCase):
+	def setUp(self):
+		super().setUp()
+		meta = frappe.get_meta("Farm Task")
+		for fieldname, fieldtype in EXTRA_FIELDS:
+			meta.add(
+				Field(fieldname=fieldname, fieldtype=fieldtype, label=fieldname.replace("_", " ").title())
+			)
+		self.enable(
+			rows(
+				*(("Farm Task", name) for name, _ in EXTRA_FIELDS),
+				("Farm Task", "estimated_duration_minutes"),
+				("Farm Task", "phi_clears_on"),
+				("Farm Task", "reported_at"),
+				("Farm Task", "company"),
+				("Farm Task", "urgency"),
+				("Farm Task", "task_type"),
+				("Farm Task", "task_name"),
+				("Farm Task", "subject_doctype"),
+				("Farm Task", "subject_docname"),
+				("Farm Task", "notes"),
+			)
+		)
+
+	def written(self, field, value):
+		data = self.tool_data("update_document", self.update({field: value}))
+		return data["updated"][field]["to"] if field in data["updated"] else data["unchanged"][field]["value"]
+
+	def refused(self, field, value):
+		error = self.tool_error("update_document", self.update({field: value}))
+		self.assertIn(f"- {field}:", error)
+		problem = details(error)["rejected"][field]
+		self.assertEqual(problem["sent"], value)
+		self.assertTrue(problem["expected"], problem)
+		self.assertEqual(problem["field"]["fieldname"], field)
+		return error, problem
+
+
+class EachFieldTypeIsChecked(TypedTestCase):
+	def test_int(self):
+		self.assertEqual(self.written("estimated_duration_minutes", 45), 45)
+		self.assertEqual(self.written("estimated_duration_minutes", "60"), 60)
+		self.assertEqual(self.written("estimated_duration_minutes", 90.0), 90)
+		for bad in ("ninety", 12.5, True):
+			with self.subTest(bad=bad):
+				_, problem = self.refused("estimated_duration_minutes", bad)
+				self.assertEqual(problem["field"]["fieldtype"], "Int")
+				self.assertIn("a whole number", problem["expected"])
+
+	def test_float_currency_percent(self):
+		self.assertEqual(self.written("load_kg", 12.5), 12.5)
+		self.assertEqual(self.written("load_kg", "7.25"), 7.25)
+		self.assertEqual(self.written("done_pct", 40), 40)
+		self.assertEqual(self.written("cost", "1200.50"), 1200.5)
+		error, _ = self.refused("cost", "$1,200")
+		self.assertIn("thousands separator", error)
+		self.assertIn("currency symbol", error)
+		self.refused("load_kg", "heavy")
+		self.refused("load_kg", False)
+
+	def test_check(self):
+		for sent, stored in ((True, 1), (False, 0), (1, 1), ("yes", 1), ("false", 0)):
+			with self.subTest(sent=sent):
+				self.assertEqual(self.written("is_urgent", sent), stored)
+		_, problem = self.refused("is_urgent", "maybe")
+		self.assertEqual(problem["expected"], "true/false or 1/0")
+		self.refused("is_urgent", 2)
+
+	def test_date(self):
+		self.assertEqual(self.written("phi_clears_on", "2026-10-28"), "2026-10-28")
+		for bad in (
+			"10/28/2026",
+			"2026-02-30",
+			"tomorrow",
+			"2026-10-28 07:00:00",
+			20261028,
+			"20261028",
+			"2026-W43-3",
+		):
+			with self.subTest(bad=bad):
+				_, problem = self.refused("phi_clears_on", bad)
+				self.assertIn("YYYY-MM-DD", problem["expected"])
+
+	def test_datetime(self):
+		self.assertEqual(self.written("reported_at", "2026-07-20 07:30"), "2026-07-20 07:30:00")
+		self.assertEqual(self.written("reported_at", "2026-07-20T08:15:30"), "2026-07-20 08:15:30")
+		for bad in ("2026-07-20", "07:30", "2026-13-01 07:30"):
+			with self.subTest(bad=bad):
+				_, problem = self.refused("reported_at", bad)
+				self.assertIn("HH:MM:SS", problem["expected"])
+
+	def test_time_and_duration(self):
+		self.assertEqual(self.written("start_time", "07:30"), "07:30:00")
+		self.assertEqual(self.written("start_time", "23:59:59"), "23:59:59")
+		self.refused("start_time", "25:00")
+		self.refused("start_time", "7am")
+		self.assertEqual(self.written("run_time", 3600), 3600)
+		self.refused("run_time", -5)
+
+	def test_link(self):
+		self.assertEqual(self.written("company", MAIN), MAIN)
+		error, problem = self.refused("company", "Example Trading")
+		self.assertIn("company: linked document 'Example Trading' does not exist in doctype 'Company'", error)
+		self.assertEqual(problem["field"]["links_to"], "Company")
+		self.assertEqual(problem["links_to"], "Company")
+		self.assertIn(MAIN, problem["did_you_mean"])
+		self.assertIn("[Link → Company]", error)
+
+	def test_dynamic_link(self):
+		# The doctype comes from the controlling field, sent in the same call.
+		data = self.tool_data(
+			"update_document", self.update({"subject_doctype": "Company", "subject_docname": MAIN})
+		)
+		self.assertEqual(data["updated"]["subject_docname"]["to"], MAIN)
+		error, _ = self.refused("subject_docname", "Nobody Ltd")
+		self.assertIn("linked document 'Nobody Ltd' does not exist in doctype 'Company'", error)
+
+	def test_dynamic_link_with_no_doctype_says_which_field_to_send(self):
+		error, problem = self.refused("subject_docname", MAIN)
+		self.assertIn("'subject_doctype' is empty", error)
+		self.assertEqual(problem["field"]["doctype_from_field"], "subject_doctype")
+
+	def test_select(self):
+		self.assertEqual(self.written("urgency", "High"), "High")
+		error, problem = self.refused("urgency", "high")
+		self.assertEqual(problem["field"]["options"], ["Low", "Normal", "High", "Critical"])
+		self.assertEqual(problem["did_you_mean"], ["High"])
+		self.assertIn("one of: Low, Normal, High, Critical", error)
+		self.refused("urgency", "Whenever")
+
+	def test_mandatory_fields_cannot_be_cleared(self):
+		for field in ("task_type", "task_name"):
+			with self.subTest(field=field):
+				error, problem = self.refused(field, "")
+				self.assertIn("is mandatory on Farm Task", error)
+				self.assertTrue(problem["field"]["reqd"])
+
+	def test_an_optional_field_can_be_cleared(self):
+		self.assertIsNone(self.written("urgency", None))
+
+	def test_text(self):
+		self.assertEqual(self.written("task_name", 42), "42")
+		_, problem = self.refused("task_name", "x" * 141)
+		self.assertIn("at most 140 characters", problem["expected"])
+		self.refused("notes", True)
+
+
+class TheReplyIsEnoughToTroubleshoot(TypedTestCase):
+	def test_every_problem_in_the_call_is_reported_at_once(self):
+		error = self.tool_error(
+			"update_document",
+			self.update(
+				{
+					"phi_clears_on": "Oct 28",
+					"company": "Nope Inc",
+					"urgency": "Soon",
+					"estimated_duration_minutes": 30,
+				}
+			),
+		)
+		self.assertIn("refused 3 of 4 field(s)", error)
+		found = details(error)
+		self.assertEqual(set(found["rejected"]), {"phi_clears_on", "company", "urgency"})
+		self.assertEqual(found["accepted"]["estimated_duration_minutes"]["fieldtype"], "Int")
+		self.assertIsNone(STORE.get_raw("Farm Task", TASK).get("urgency"))
+
+	def test_every_rejection_carries_the_field_metadata(self):
+		_, problem = self.refused("urgency", "Soon")
+		self.assertEqual(
+			{key: problem["field"][key] for key in ("fieldname", "label", "fieldtype", "reqd")},
+			{"fieldname": "urgency", "label": "Urgency", "fieldtype": "Select", "reqd": False},
+		)
+
+	def test_a_label_or_typo_gets_a_fieldname_suggestion(self):
+		error = self.tool_error("update_document", self.update({"Urgncy": "High"}))
+		self.assertIn("urgency", details(error)["rejected"]["Urgncy"]["did_you_mean"])
+		self.assertIn("Did you mean: 'urgency'?", error)
+
+	def test_success_echoes_before_sent_after_and_type(self):
+		data = self.tool_data("update_document", self.update({"estimated_duration_minutes": "75"}))
+		entry = data["updated"]["estimated_duration_minutes"]
+		self.assertEqual((entry["from"], entry["sent"], entry["to"]), (None, "75", 75))
+		self.assertEqual(entry["fieldtype"], "Int")
+		self.assertTrue(entry["took_effect"])
+		self.assertNotIn("warnings", data)
+
+	def test_a_value_the_save_rewrote_is_flagged(self):
+		controller = type(frappe.get_doc("Farm Task", TASK))
+		original = controller.validate
+
+		def rewrite(doc):
+			original(doc)
+			doc.urgency = "Normal"
+
+		with mock.patch.object(controller, "validate", rewrite):
+			data = self.tool_data("update_document", self.update({"urgency": "High"}))
+		entry = data["updated"]["urgency"]
+		self.assertEqual((entry["sent"], entry["to"], entry["took_effect"]), ("High", "Normal", False))
+		self.assertIn("urgency: sent 'High' but the saved value is 'Normal'", data["warnings"][0])
+
+	def test_the_documents_own_validation_is_named_with_the_attempt(self):
+		controller = type(frappe.get_doc("Farm Task", TASK))
+
+		def refuse(doc):
+			frappe.throw("Urgency High needs a foreman")
+
+		with mock.patch.object(controller, "validate", refuse):
+			error = self.tool_error("update_document", self.update({"urgency": "High"}))
+		self.assertIn("refused the save", error)
+		self.assertIn("Urgency High needs a foreman", error)
+		self.assertEqual(details(error)["attempted"]["urgency"]["sent"], "High")

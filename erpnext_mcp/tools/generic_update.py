@@ -26,7 +26,11 @@ door for those, and it is deliberately narrow:
      field, so the write is all-or-nothing.
 """
 
+import datetime
+import difflib
 import json
+import math
+import re
 
 import frappe
 
@@ -120,16 +124,291 @@ def _updates(args: dict) -> dict:
 	return raw
 
 
-def _field_refusal(doctype: str, fieldname: str, value, allowed: set[str]) -> str:
-	"""Why this one field may not be written, or "" if it may."""
+#: Fieldtypes whose value is text. A number sent to one is written as its text;
+#: anything else that is not a string is refused.
+TEXT_TYPES = frozenset(
+	{
+		"Data",
+		"Small Text",
+		"Text",
+		"Long Text",
+		"Text Editor",
+		"Code",
+		"Markdown Editor",
+		"HTML Editor",
+		"Read Only",
+		"Phone",
+		"Autocomplete",
+		"Barcode",
+		"Color",
+		"Attach",
+		"Attach Image",
+		"Signature",
+		"Geolocation",
+		"JSON",
+		"Icon",
+	}
+)
+
+#: Frappe stores a Data field in a varchar(140) unless the field sets a length.
+DATA_LENGTH = 140
+
+_INT = re.compile(r"^[+-]?\d+$")
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATETIME = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$")
+_TIME = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$")
+
+_EXPECTED = {
+	"Int": "a whole number, e.g. 42",
+	"Duration": "a whole number of seconds, e.g. 3600",
+	"Float": "a number, e.g. 12.5",
+	"Currency": "a plain number with no currency symbol or thousands separator, e.g. 1200.50",
+	"Percent": "a number, e.g. 12.5 for 12.5%",
+	"Rating": "a number from 0 to 1, e.g. 0.8",
+	"Check": "true/false or 1/0",
+	"Date": "a date as YYYY-MM-DD, e.g. 2026-10-28",
+	"Datetime": "a date and time as YYYY-MM-DD HH:MM:SS, e.g. 2026-10-28 07:30:00",
+	"Time": "a time as HH:MM or HH:MM:SS, e.g. 07:30",
+}
+
+
+class _Bad(Exception):
+	"""One value that does not fit its field. Carries what was expected."""
+
+	def __init__(self, reason: str, expected: str = "", **extra):
+		super().__init__(reason)
+		self.reason = reason
+		self.expected = expected
+		self.extra = extra
+
+
+def _attr(df, key: str, default=None):
+	value = getattr(df, key, None)
+	if value is None and hasattr(df, "get"):
+		value = df.get(key)
+	return default if value is None else value
+
+
+def _select_options(df) -> list[str]:
+	return [option for option in str(_attr(df, "options", "") or "").split("\n") if option != ""]
+
+
+def field_info(df) -> dict:
+	"""What a field expects, in the shape an error or a reply echoes back."""
+	fieldtype = str(_attr(df, "fieldtype", "") or "")
+	info = {
+		"fieldname": _attr(df, "fieldname"),
+		"label": _attr(df, "label") or None,
+		"fieldtype": fieldtype,
+		"reqd": bool(int(_attr(df, "reqd", 0) or 0)),
+	}
+	options = _attr(df, "options", "") or ""
+	if fieldtype == "Select":
+		info["options"] = _select_options(df)
+	elif fieldtype == "Link":
+		info["options"] = options
+		info["links_to"] = options
+	elif fieldtype == "Dynamic Link":
+		info["options"] = options
+		info["doctype_from_field"] = options
+	elif options:
+		info["options"] = options
+	if int(_attr(df, "read_only", 0) or 0):
+		info["read_only"] = True
+	if _attr(df, "fetch_from"):
+		info["fetch_from"] = _attr(df, "fetch_from")
+	return info
+
+
+def _suggest_fields(doctype: str, fieldname: str) -> list[str]:
+	"""Fieldnames close to what was sent, matched on fieldname and on label."""
+	try:
+		fields = list(frappe.get_meta(doctype).fields)
+	except Exception:
+		return []
+	by_key = {}
+	for df in fields:
+		name = _attr(df, "fieldname")
+		if not name or str(_attr(df, "fieldtype", "")) in REFUSED_FIELDTYPES:
+			continue
+		by_key[str(name).lower()] = name
+		label = _attr(df, "label")
+		if label:
+			by_key[str(label).lower()] = name
+	wanted = str(fieldname).lower().strip()
+	matches = difflib.get_close_matches(wanted, list(by_key), n=3, cutoff=0.6)
+	out = []
+	for match in matches:
+		if by_key[match] not in out:
+			out.append(by_key[match])
+	return out
+
+
+def _number(value, fieldtype: str) -> float:
+	if isinstance(value, bool):
+		raise _Bad(
+			f"got {json.dumps(value)}, which is a true/false and this is a {fieldtype} field",
+			_EXPECTED[fieldtype],
+		)
+	if isinstance(value, (int, float)):
+		number = float(value)
+	elif isinstance(value, str):
+		text = value.strip()
+		try:
+			number = float(text)
+		except ValueError:
+			hint = " Drop the thousands separator." if "," in text else ""
+			hint += " Drop the currency symbol." if text[:1] in "$€£" else ""
+			raise _Bad(f"{value!r} is not a number.{hint}", _EXPECTED[fieldtype]) from None
+	else:
+		raise _Bad(f"got a {type(value).__name__}", _EXPECTED[fieldtype])
+	if math.isnan(number) or math.isinf(number):
+		raise _Bad(f"{value!r} is not a finite number", _EXPECTED[fieldtype])
+	return number
+
+
+def _coerce(doctype: str, docname: str, df, value, updates: dict):
+	"""The value to write for this field, or raise _Bad saying why it cannot be."""
+	fieldtype = str(_attr(df, "fieldtype", "") or "")
+	fieldname = _attr(df, "fieldname")
+
+	if value is None or (isinstance(value, str) and value.strip() == ""):
+		if int(_attr(df, "reqd", 0) or 0):
+			raise _Bad(
+				f"{fieldname} is mandatory on {doctype} and cannot be cleared",
+				_EXPECTED.get(fieldtype, "a non-empty value"),
+			)
+		return None
+
+	if fieldtype in ("Int", "Duration"):
+		number = _number(value, fieldtype)
+		if not number.is_integer():
+			raise _Bad(f"{value!r} is not a whole number", _EXPECTED[fieldtype])
+		if fieldtype == "Duration" and number < 0:
+			raise _Bad(f"{value!r} is negative", _EXPECTED[fieldtype])
+		return int(number)
+
+	if fieldtype in ("Float", "Currency", "Percent", "Rating"):
+		number = _number(value, fieldtype)
+		if fieldtype == "Rating" and not 0 <= number <= 1:
+			raise _Bad(f"{value!r} is outside 0 to 1", _EXPECTED[fieldtype])
+		return int(number) if isinstance(value, int) else number
+
+	if fieldtype == "Check":
+		if isinstance(value, bool):
+			return int(value)
+		if isinstance(value, (int, float)) and value in (0, 1):
+			return int(value)
+		if isinstance(value, str) and value.strip().lower() in ("1", "0", "true", "false", "yes", "no"):
+			return 1 if value.strip().lower() in ("1", "true", "yes") else 0
+		raise _Bad(f"{value!r} is not a yes/no value", _EXPECTED["Check"])
+
+	if fieldtype == "Date":
+		text = str(value).strip() if isinstance(value, str) else None
+		if text is None or not _DATE.match(text):
+			raise _Bad(f"{value!r} is not in YYYY-MM-DD form", _EXPECTED["Date"])
+		try:
+			datetime.date.fromisoformat(text)
+		except ValueError:
+			raise _Bad(f"{value!r} is not a real calendar date", _EXPECTED["Date"]) from None
+		return text
+
+	if fieldtype == "Datetime":
+		match = _DATETIME.match(value.strip()) if isinstance(value, str) else None
+		if not match:
+			raise _Bad(f"{value!r} is not in YYYY-MM-DD HH:MM:SS form", _EXPECTED["Datetime"])
+		text = f"{match.group(1)} {match.group(2)}"
+		try:
+			datetime.datetime.fromisoformat(text)
+		except ValueError:
+			raise _Bad(f"{value!r} is not a real date and time", _EXPECTED["Datetime"]) from None
+		return text if len(match.group(2)) > 5 else text + ":00"
+
+	if fieldtype == "Time":
+		match = _TIME.match(value.strip()) if isinstance(value, str) else None
+		if not match or int(match.group(1)) > 23 or int(match.group(2)) > 59 or int(match.group(3) or 0) > 59:
+			raise _Bad(f"{value!r} is not a time of day", _EXPECTED["Time"])
+		return value.strip() if match.group(3) else value.strip() + ":00"
+
+	if fieldtype in ("Link", "Dynamic Link"):
+		if isinstance(value, bool) or not isinstance(value, (str, int)):
+			raise _Bad(f"got a {type(value).__name__}", "the name of the linked document, as text")
+		value = str(value).strip()
+		if fieldtype == "Link":
+			target = str(_attr(df, "options", "") or "")
+		else:
+			source = str(_attr(df, "options", "") or "")
+			target = str(updates.get(source) or frappe.db.get_value(doctype, docname, source) or "")
+			if not target:
+				raise _Bad(
+					f"{fieldname} is a Dynamic Link whose doctype is read from {source!r}, and "
+					f"{source!r} is empty on this document. Send {source!r} in the same call",
+					f"{source} set to a DocType name, and {fieldname} set to a document of it",
+				)
+		if target and not frappe.db.exists(target, value):
+			raise _Bad(
+				f"linked document {value!r} does not exist in doctype {target!r}",
+				f"the name of an existing {target}",
+				links_to=target,
+				did_you_mean=_suggest_names(target, value),
+			)
+		return value
+
+	if fieldtype == "Select":
+		options = _select_options(df)
+		if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+			raise _Bad(f"got a {type(value).__name__}", f"one of: {', '.join(options)}")
+		text = str(value)
+		if options and text not in options:
+			folded = [option for option in options if option.strip().lower() == text.strip().lower()]
+			raise _Bad(
+				f"{text!r} is not one of the options",
+				f"one of: {', '.join(options)}",
+				did_you_mean=folded,
+			)
+		return text
+
+	if fieldtype in TEXT_TYPES:
+		if isinstance(value, bool):
+			raise _Bad("got a true/false", "text")
+		if isinstance(value, (int, float)):
+			value = str(value)
+		if not isinstance(value, str):
+			raise _Bad(f"got a {type(value).__name__}", "text")
+		# A DocField `length` of 0 is Frappe's "not set", which for Data means the
+		# varchar(140) default — so here zero really is the absent case.
+		declared = _attr(df, "length")
+		if declared not in (None, "", 0, "0"):
+			limit = int(declared)
+		else:
+			limit = DATA_LENGTH if fieldtype == "Data" else 0
+		if limit and len(value) > limit:
+			raise _Bad(f"is {len(value)} characters long", f"text of at most {limit} characters")
+		return value
+
+	return value
+
+
+def _suggest_names(target: str, value: str) -> list[str]:
+	"""Best effort: documents of `target` whose name matches `value` ignoring case."""
+	try:
+		rows = frappe.db.get_all(target, filters={"name": ["like", f"%{value}%"]}, pluck="name", limit=5)
+	except Exception:
+		return []
+	lowered = value.lower()
+	rows = [str(row) for row in rows or []]
+	return sorted(rows, key=lambda name: (name.lower() != lowered, len(name)))[:3]
+
+
+def _structural_refusal(doctype: str, fieldname, value, allowed: set[str], df) -> str:
+	"""Why this field may not be written at all, whatever its value, or ""."""
 	if not isinstance(fieldname, str) or not fieldname.strip():
 		return "an empty fieldname"
 	if fieldname in SYSTEM_FIELDS:
 		return "it is a system field"
-	df = compat.field_meta(doctype, fieldname)
 	if df is None:
 		return f"{doctype} has no field called {fieldname!r} (use the fieldname, not the label)"
-	why = REFUSED_FIELDTYPES.get(str(getattr(df, "fieldtype", "") or ""))
+	why = REFUSED_FIELDTYPES.get(str(_attr(df, "fieldtype", "") or ""))
 	if why:
 		return why
 	if fieldname not in allowed:
@@ -137,6 +416,58 @@ def _field_refusal(doctype: str, fieldname: str, value, allowed: set[str]) -> st
 	if isinstance(value, (dict, list, tuple)):
 		return "the value is an object or list; only a single value can be written to a field"
 	return ""
+
+
+def _refuse_fields(
+	doctype: str, docname: str, updates: dict, rejected: dict, accepted: dict, allowed: set
+) -> None:
+	lines = []
+	for fieldname, problem in rejected.items():
+		line = f"- {fieldname}: {problem['reason']}."
+		if problem.get("expected"):
+			line += f" Expected {problem['expected']}."
+		info = problem.get("field")
+		if info:
+			line += f" [{info['fieldtype']}"
+			if info.get("links_to"):
+				line += f" → {info['links_to']}"
+			line += "]"
+		if problem.get("did_you_mean"):
+			line += f" Did you mean: {', '.join(repr(x) for x in problem['did_you_mean'])}?"
+		lines.append(line)
+	note = f"\nNo field on {doctype} is whitelisted at all." if not allowed else ""
+	details = {
+		"doctype": doctype,
+		"docname": docname,
+		"rejected": rejected,
+		"accepted": accepted,
+	}
+	raise ToolError(
+		f"update_document refused {len(rejected)} of {len(updates)} field(s) on {doctype} {docname}. "
+		"Nothing was changed; one refused field refuses the whole call.\n"
+		+ "\n".join(lines)
+		+ note
+		+ "\n\nDetails (JSON): "
+		+ json.dumps(details, default=str, ensure_ascii=False)
+	)
+
+
+def _same(before, after) -> bool:
+	if before in (None, "") and after in (None, ""):
+		return True
+	if any(isinstance(x, (int, float)) and not isinstance(x, bool) for x in (before, after)):
+		try:
+			return float(before) == float(after)
+		except (TypeError, ValueError):
+			pass
+	return str(before if before is not None else "") == str(after if after is not None else "")
+
+
+def _plain(value):
+	"""A stored value as JSON can carry it: dates and decimals as text."""
+	if value is None or isinstance(value, (str, int, float, bool)):
+		return value
+	return str(value)
 
 
 def update_document(args: dict) -> ToolResult:
@@ -170,20 +501,6 @@ def update_document(args: dict) -> ToolResult:
 			"validated with it; update the parent instead. Nothing was changed."
 		)
 
-	allowed = whitelisted_fields(doctype)
-	rejected = {}
-	for fieldname, value in updates.items():
-		reason = _field_refusal(doctype, fieldname, value, allowed)
-		if reason:
-			rejected[str(fieldname)] = reason
-	if rejected:
-		detail = "; ".join(f"{field}: {reason}" for field, reason in rejected.items())
-		note = "" if allowed else f" No field on {doctype} is whitelisted at all."
-		raise ToolError(
-			f"update_document refused {len(rejected)} of {len(updates)} field(s) on {doctype} "
-			f"— {detail}.{note} Nothing was changed; one refused field refuses the whole call."
-		)
-
 	if not frappe.db.exists(doctype, docname):
 		raise ToolError(f"no {doctype} called {docname!r}. Nothing was changed.")
 	doc = frappe.get_doc(doctype, docname)
@@ -197,6 +514,36 @@ def update_document(args: dict) -> ToolResult:
 	if docstatus == 2:
 		raise ToolError(f"{doctype} {docname} is cancelled and cannot be edited. Nothing was changed.")
 
+	# EVERY FIELD IS CHECKED BEFORE ANY IS REFUSED, so one reply names every
+	# problem in the call — a caller fixing them one round trip at a time is the
+	# failure this shape exists to prevent.
+	allowed = whitelisted_fields(doctype)
+	rejected: dict = {}
+	accepted: dict = {}
+	values: dict = {}
+	for fieldname, value in updates.items():
+		df = compat.field_meta(doctype, fieldname) if isinstance(fieldname, str) else None
+		info = field_info(df) if df is not None else None
+		reason = _structural_refusal(doctype, fieldname, value, allowed, df)
+		if reason:
+			problem = {"sent": value, "reason": reason}
+			if info:
+				problem["field"] = info
+			elif isinstance(fieldname, str) and fieldname not in SYSTEM_FIELDS:
+				problem["did_you_mean"] = _suggest_fields(doctype, fieldname)
+			rejected[str(fieldname)] = problem
+			continue
+		try:
+			values[fieldname] = _coerce(doctype, docname, df, value, updates)
+		except _Bad as bad:
+			problem = {"sent": value, "reason": bad.reason, "expected": bad.expected, "field": info}
+			problem.update({key: val for key, val in bad.extra.items() if val})
+			rejected[fieldname] = problem
+			continue
+		accepted[fieldname] = info
+	if rejected:
+		_refuse_fields(doctype, docname, updates, rejected, accepted, allowed)
+
 	if not frappe.has_permission(doctype, "write", doc):
 		raise ToolError(
 			f"this account may not write {doctype} {docname}. The account is the one configured "
@@ -205,17 +552,20 @@ def update_document(args: dict) -> ToolResult:
 		)
 
 	changed: dict = {}
-	unchanged: list = []
-	for fieldname, value in updates.items():
-		if isinstance(value, bool):
-			value = int(value)
+	unchanged: dict = {}
+	for fieldname, value in values.items():
 		before = doc.get(fieldname)
-		if str(before if before is not None else "") == str(value if value is not None else ""):
-			unchanged.append(fieldname)
+		if _same(before, value):
+			unchanged[fieldname] = {"value": _plain(before), **_brief(accepted[fieldname])}
 			continue
-		changed[fieldname] = {"from": before}
+		changed[fieldname] = {
+			"from": _plain(before),
+			"sent": updates[fieldname],
+			**_brief(accepted[fieldname]),
+		}
 		doc.set(fieldname, value)
 
+	warnings = []
 	if changed:
 		try:
 			doc.save()
@@ -223,23 +573,50 @@ def update_document(args: dict) -> ToolResult:
 			raise ToolError(
 				f"this account may not write {doctype} {docname}: {exc}. Nothing was changed."
 			) from exc
-		# Read back what the save kept: validation may normalise a value.
-		for fieldname in changed:
-			changed[fieldname]["to"] = doc.get(fieldname)
+		except frappe.ValidationError as exc:
+			raise ToolError(
+				f"{doctype} {docname} refused the save: {type(exc).__name__}: {exc}. Every value "
+				"passed update_document's own checks, so this is the document's own validation "
+				"— usually a rule linking two fields, or a mandatory field elsewhere on the "
+				"record that is already empty. Nothing was changed.\n\nDetails (JSON): "
+				+ json.dumps(
+					{"doctype": doctype, "docname": docname, "attempted": changed},
+					default=str,
+					ensure_ascii=False,
+				)
+			) from exc
+		# Read back what the save kept: validation may normalise or overwrite a value.
+		for fieldname, entry in changed.items():
+			after = doc.get(fieldname)
+			entry["to"] = _plain(after)
+			entry["took_effect"] = _same(after, values[fieldname])
+			if not entry["took_effect"]:
+				warnings.append(
+					f"{fieldname}: sent {updates[fieldname]!r} but the saved value is {_plain(after)!r} "
+					"— the document's own save recomputed it (a fetched, computed or read-only field)."
+				)
 
 	summary = (
 		f"updated {', '.join(changed)} on {doctype} {docname}"
 		if changed
 		else f"no change to {doctype} {docname}: every value already matched"
 	)
-	return ToolResult(
-		data={
-			"doctype": doctype,
-			"docname": docname,
-			"updated": changed,
-			"unchanged": unchanged,
-			"modified": str(doc.get("modified") or "") or None,
-			"acting_user": str(getattr(frappe.session, "user", "") or "") or None,
-		},
-		summary=summary,
-	)
+	data = {
+		"doctype": doctype,
+		"docname": docname,
+		"updated": changed,
+		"unchanged": unchanged,
+		"modified": _plain(doc.get("modified")) or None,
+		"acting_user": str(getattr(frappe.session, "user", "") or "") or None,
+	}
+	if warnings:
+		data["warnings"] = warnings
+	return ToolResult(data=data, summary=summary)
+
+
+def _brief(info: dict) -> dict:
+	"""The part of a field's metadata a success reply echoes beside its value."""
+	out = {"fieldtype": info["fieldtype"], "label": info.get("label")}
+	if info.get("options"):
+		out["options"] = info["options"]
+	return out

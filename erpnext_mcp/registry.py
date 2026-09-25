@@ -27557,8 +27557,18 @@ TOOLS = {
 		"ERPNext MCP Settings.\n\n"
 		"The write is one ordinary save of the document, so its validation, link checks "
 		"and hooks run exactly as at the Desk, under the configured MCP user's own "
-		"permissions. The reply lists each field's value before and after, and the fields "
-		"that already held the value asked for.",
+		"permissions.\n\n"
+		"EVERY VALUE IS CHECKED AGAINST ITS FIELD TYPE FIRST, and every problem in the call is "
+		"reported at once: Int/Float/Currency/Percent take numbers (a numeric string is "
+		"accepted), Check takes true/false or 1/0, Date takes YYYY-MM-DD, Datetime "
+		"YYYY-MM-DD HH:MM[:SS], Time HH:MM[:SS], Select one of its options (exact case), "
+		"Link and Dynamic Link the name of a document that exists, Data at most 140 "
+		"characters. A mandatory field cannot be cleared. Each refusal names the field, what "
+		"was sent, what was expected and the field's metadata (fieldtype, options, label, "
+		"reqd), with a 'Did you mean' where one is close, and ends in a JSON block.\n\n"
+		"The reply echoes every field: `updated` {from, sent, to, took_effect, fieldtype, "
+		"label, options} with `to` read back after the save, `unchanged` for values that "
+		"already matched, and `warnings` naming any field the save rewrote.",
 		{
 			"doctype": _field(
 				_STRING,

@@ -20445,9 +20445,45 @@ link checks and hooks run as at the Desk, and the write is all or nothing. Write
 permission is checked for the configured MCP user first. A `true`/`false` value
 is written as 1/0.
 
-**Returns** `doctype`, `docname`, `updated` (`{field: {from, to}}`, `to` read
-back after the save), `unchanged` (fields that already held the value asked
-for — not rewritten), `modified`, `acting_user`.
+**Returns** `doctype`, `docname`, `updated`, `unchanged`, `modified`,
+`acting_user`, and `warnings` when there are any. Each `updated` entry is
+`{from, sent, to, took_effect, fieldtype, label, options?}`. `to` is read back
+after the save, and `took_effect: false` (with a line in `warnings`) means the
+document's own save recomputed the value: a fetched, computed or read-only field.
+`unchanged` is `{field: {value, fieldtype, label}}` for values that already
+matched. Those are not rewritten.
+
+### Value checks (v0.179.1)
+
+Every value is checked against its field before anything is written, and every
+problem in the call is reported in one refusal.
+
+| Fieldtype | Accepts | Refuses |
+| --- | --- | --- |
+| Int, Duration | a whole number, or a string of one (`"60"`), or `90.0` | `12.5`, `"ninety"`, `true`; a negative Duration |
+| Float, Currency, Percent | a number or numeric string | `"$1,200"` (names the symbol and the separator), `true` |
+| Rating | a number from 0 to 1 | anything outside 0 to 1 |
+| Check | `true`/`false`, `1`/`0`, `"yes"`/`"no"`, `"true"`/`"false"` | `2`, `"maybe"` |
+| Date | `YYYY-MM-DD` that is a real date | `10/28/2026`, `2026-02-30`, `20261028`, a datetime |
+| Datetime | `YYYY-MM-DD HH:MM[:SS]` (a `T` separator is accepted); stored with seconds | a bare date, a bare time |
+| Time | `HH:MM[:SS]`, stored with seconds | `25:00`, `7am` |
+| Link | the name of an existing document of the linked DocType | `field: linked document 'Y' does not exist in doctype 'Z'`, with close names |
+| Dynamic Link | as Link, with the DocType read from the controlling field. Send that field in the same call if the document has none | a missing controlling DocType, naming the field to send |
+| Select | exactly one of the options | a wrong case (suggests the right one), anything else, listing the options |
+| Data | text up to 140 characters (or the field's length); a number is written as text | longer text, `true` |
+| text types | text; a number is written as text | `true` |
+
+`null` or `""` clears a field, unless it is mandatory.
+
+**A refusal reads like this:** one line per field, with the reason, the
+expected shape, `[fieldtype → links_to]` and any *Did you mean*. It ends with
+`Details (JSON):` followed by `{doctype, docname, rejected: {field: {sent,
+reason, expected, field: {fieldname, label, fieldtype, reqd, options, links_to,
+doctype_from_field, read_only, fetch_from}, did_you_mean?}}, accepted: {field:
+metadata}}`. A mistyped fieldname or a label gets a *Did you mean* from the
+doctype's own fieldnames and labels. If every value passes and the document's
+own validation then refuses the save, the error says so, quotes Frappe's
+message, and carries `attempted` (the entries the save was given).
 
 ```
 update_document(doctype="Training Session", docname="<session name>",

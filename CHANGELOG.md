@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.179.1 — 2026-09-25 — update_document says what a field expects
+
+No new tools. `update_document` now checks every value against its field type
+before writing, and its replies are detailed enough to fix a call without
+opening the Desk.
+
+- **Type checks:** Int/Duration take whole numbers. Float/Currency/Percent take
+  numbers, and `"$1,200"` is refused naming the symbol and the separator. Check
+  takes true/false, 1/0 or yes/no. Date must be `YYYY-MM-DD` and a real date.
+  Datetime takes `YYYY-MM-DD HH:MM[:SS]` and Time takes `HH:MM[:SS]`. Select
+  must be one of its options. Link and Dynamic Link must name a document that
+  exists: `field X: linked document 'Y' does not exist in doctype 'Z'`. Data is
+  capped at 140 characters. A mandatory field cannot be cleared.
+- **Every problem in a call is reported at once.** Each carries the field's
+  metadata (`fieldtype`, `options`, `label`, `reqd`, `links_to`), what was
+  sent and what was expected, a *Did you mean* where one is close (a wrong-case
+  Select option, a Link name, a label typed as a fieldname), and a trailing
+  JSON block.
+- **Success echoes every field:** `{from, sent, to, took_effect, fieldtype,
+  label, options}`, with `to` read back after the save. `warnings` names any
+  field the save rewrote. `unchanged` is now an object carrying each value
+  (it was a list of names).
+- The missing-document and submitted/cancelled checks now run before the field
+  checks, so the reply can resolve a Dynamic Link against the document.
+- A validation error raised by the document's own save is reported as that,
+  with Frappe's message and the attempted values.
+
 ## 0.179.0 — 2026-09-25 — a draft can be corrected without a tool of its own
 
 **908 tools** (+1, mutating, off by default). More than fifty registers have a
