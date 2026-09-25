@@ -14630,6 +14630,22 @@ route around this app.
 deleted — *why did this block show as closed on Tuesday morning* has an answer,
 and a deleted row has none.
 
+**Both also read the REI a phone-finished Spray task stamps** (v0.176.7). A Spray
+Farm Task completed through `complete_task_via_mobile` writes `rei_expires_at` on
+the task and opens no Spray REI row, so a reader of the register alone called that
+block clear. Task windows come back with `source_doctype: "Farm Task"`; a task a
+Spray REI row already cites as `source_task` is counted once, through the row.
+`list_active_reis` leaves tasks out when filtered to one `sprayer` (a task records
+no machine) and says so in `spray_tasks_included`. **A window with no `company` is
+kept** under a company filter rather than dropped, because on this read dropping a
+row means calling a sprayed block clear.
+
+Both are **phone routes** since v0.176.7, open on enrolment and scoped to the
+caller's companies: `POST /farmops/api/mobile/get_active_rei` (`block`,
+`block_doctype`, `company`) and `.../list_active_reis`. WPS requires the notice
+posted where every worker can see it. `get_active_rei` also answers a top-level
+`products` list, which is what the app's `ActiveREI` decodes.
+
 ### Engine hours
 
 `Asset State Log.engine_hours` is the **series**; `Asset Register.current_hours`

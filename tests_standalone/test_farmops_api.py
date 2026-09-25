@@ -527,6 +527,10 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/get_osha_300_log",
 		"/mobile/get_osha_300a_summary",
 		"/mobile/get_spray_application_report",
+		# Restricted entry: the gate question and the board. Both read the REI a
+		# phone-finished Spray task stamps as well as the Spray REI register.
+		"/mobile/get_active_rei",
+		"/mobile/list_active_reis",
 		# The curriculum and the group training session. `update_training_type`
 		# is the one whose ABSENT arguments matter: `regimes` and
 		# `retention_years` are on the tool and not on the wrapper, so `bind`
@@ -3041,6 +3045,11 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# v0.168.0. How steep the ground is. The same public terrain, and the driver
 		# is who a rollover warning is for; `asset` is scoped by the wrapper.
 		"get_slope_grade_layer",
+		# v0.176.7. Restricted entry. WPS requires the notice posted where every
+		# worker can see it (40 CFR 170.409), and the worker at the edge of a
+		# sprayed block is exactly who asks. Scoped to the caller's companies.
+		"get_active_rei",
+		"list_active_reis",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -3050,7 +3059,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 103, "a method is named in two sets at once")
+		self.assertEqual(len(named), 105, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

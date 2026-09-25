@@ -851,8 +851,8 @@ ROUTES = (
 	# The two OSHA reads take the dispatch role for the same reason
 	# `list_accident_reports` does: filing a report is open to whoever finds
 	# somebody on the ground, but the register is somebody's job. The spray
-	# report is the operation's pesticide use record; `get_active_rei` is
-	# already the read a picker actually needs.
+	# report is the operation's pesticide use record; `get_active_rei`, routed
+	# just below it, is the read a picker actually needs.
 	#
 	# `get_osha_300a_summary`'s TWO OVERRIDE ARGUMENTS ARE UNREACHABLE HERE. The
 	# tool takes `total_hours_worked` and `average_employees` so a desk can
@@ -864,6 +864,13 @@ ROUTES = (
 	Route("/mobile", mobile_api.get_osha_300_log),
 	Route("/mobile", mobile_api.get_osha_300a_summary),
 	Route("/mobile", mobile_api.get_spray_application_report),
+	# RESTRICTED ENTRY, OPEN ON ENROLMENT. The gate question a worker asks before
+	# walking into a sprayed block, and the farm-wide board. Neither takes a role:
+	# WPS requires the notice posted where every worker can see it. Both read
+	# the REI a phone-finished Spray task stamps as well as the Spray REI
+	# register, or a block sprayed through the app would read as clear.
+	Route("/mobile", mobile_api.get_active_rei),
+	Route("/mobile", mobile_api.list_active_reis),
 	# The curriculum and the afternoon. THE ONLY SET ON THIS TABLE WHOSE WHOLE
 	# POINT IS THAT IT HAPPENS WITH A PHONE IN ONE HAND: a crew leader scans
 	# twelve badges at a shed door, takes twelve signatures an hour later, and

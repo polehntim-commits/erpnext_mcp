@@ -168,6 +168,7 @@ from ..tools import sessions as session_tools
 from ..tools import shadow_log as shadow_log_tools
 from ..tools import shipments as shipment_tools
 from ..tools import spray as spray_tools
+from ..tools import spray_rei as spray_rei_tools
 from ..tools import stock_inventory as stock_tools
 from ..tools import strategy as strategy_tools
 from ..tools import tasktemplates as template_tools
@@ -11991,8 +11992,8 @@ def get_spray_application_report(
 
 	THE DISPATCH GATE. What went onto which ground over a season is the
 	operation's pesticide use record, not a worker's own view of their work —
-	`get_active_rei` is the read a picker needs and it is already routed. This
-	is the one somebody answers a state inspector from.
+	`get_active_rei` below is the read a picker needs, and it is open on
+	enrolment. This is the one somebody answers a state inspector from.
 
 	`field` AND `item_code` ARE NOT DECLARED even though the tool accepts both as
 	aliases. One spelling per argument on this transport: two names for one
@@ -12015,6 +12016,70 @@ def get_spray_application_report(
 			inner[key] = str(value).strip()
 
 	return spray_tools.get_spray_application_report(inner).data
+
+
+# ── 265. get_active_rei ──────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_active_rei", limit=guard.READ_LIMIT)
+def get_active_rei(user: str, block=None, block_doctype=None, company=None) -> dict:
+	"""Is this block closed to entry right now, and until when.
+
+	OPEN ON ENROLMENT, scoped to the caller's companies. This is the question a
+	worker asks at the edge of a treated block, and WPS requires the answer to be
+	posted where every worker can see it (40 CFR 170.409). Gating it on a role
+	would send the one person who needs it to go and find someone who has it.
+
+	It reads Spray REI AND the REI stamped on a Spray Farm Task finished on a
+	phone, which opens no Spray REI row (`spray_rei.task_windows`). Publishing a
+	reader of the register alone would have told a worker a block sprayed through
+	the app was clear. The phone treats a failed call as "ask first", never as
+	clear, and so should anything else that calls this.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+
+	inner: dict = {"company": entity, "block": block}
+	if block_doctype not in (None, ""):
+		inner["block_doctype"] = str(block_doctype).strip()
+
+	return spray_rei_tools.get_active_rei(inner).data
+
+
+# ── 266. list_active_reis ────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_active_reis", limit=guard.READ_LIMIT)
+def list_active_reis(
+	user: str,
+	company=None,
+	product=None,
+	sprayer=None,
+	include_expired=None,
+	expired_within_hours=None,
+	limit=None,
+) -> dict:
+	"""Every block on the farm closed to entry right now: the board.
+
+	OPEN ON ENROLMENT for the reason `get_active_rei` is: it is the posted
+	notice, not a register about anybody. It names blocks, products and times,
+	not people's records. Spray tasks finished on a phone are included unless a
+	`sprayer` filter is given (a task records no machine), and
+	`spray_tasks_included` says which.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+
+	inner: dict = {"company": entity}
+	for key, value in (
+		("product", product),
+		("sprayer", sprayer),
+		("include_expired", include_expired),
+		("expired_within_hours", expired_within_hours),
+		("limit", limit),
+	):
+		if value not in (None, ""):
+			inner[key] = value
+
+	return spray_rei_tools.list_active_reis(inner).data
 
 
 # ── Direct deposit: a worker's own bank details, and nobody else's ──────────

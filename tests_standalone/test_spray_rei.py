@@ -533,3 +533,102 @@ class TheWindowRunsFromTheSpray(REITestCase):
 		row = self.rei_rows()[0]
 		self.assertEqual(str(row["started_at"]), "2026-08-14 06:00:00")
 		self.assertEqual(str(row["expires_at"]), "2026-08-14 10:00:00")
+
+
+# ── 11. the phone's spray path opens no Spray REI row ────────────────────────
+class ThePhonesSprayTaskIsARestriction(REITestCase):
+	"""A Spray task finished on a phone stamps `rei_expires_at` on the Farm Task
+	and writes no Spray REI row. Before this release `get_active_rei` read the
+	register alone and answered "clear" for that block — the reason the route was
+	held back from the phone (TELL_THE_FARM_AUDIT.md, F2)."""
+
+	TASK = "FT-SPRAY-PHONE"
+
+	def a_phone_spray(self, name=TASK, hours_left=4, state="Completed", company=MAIN, location=BLOCK):
+		now = frappe.utils.now()
+		STORE.seed(
+			"Farm Task",
+			[
+				{
+					"name": name,
+					"title": "Spray block 3",
+					"task_type": "Spray",
+					"state": state,
+					"company": company,
+					"location_doctype": "Field",
+					"location": location,
+					"spray_completed_at": str(frappe.utils.add_to_date(now, hours=-1)),
+					"rei_expires_at": str(frappe.utils.add_to_date(now, hours=hours_left)),
+					"rei_source_item": SPRAY,
+				}
+			],
+		)
+
+	def test_a_completed_phone_spray_restricts_the_block(self):
+		self.a_phone_spray()
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertIs(data["restricted"], True)
+		self.assertEqual(data["active_rei_count"], 1)
+		window = data["active_reis"][0]
+		self.assertEqual(window["source_doctype"], "Farm Task")
+		self.assertEqual(window["source_task"], self.TASK)
+		self.assertEqual(window["product"], SPRAY)
+		self.assertGreater(data["hours_remaining"], 3)
+		self.assertIn("REI active", data["warning"])
+		self.assertEqual(data["products"], ["Surround WP"])
+
+	def test_an_expired_task_window_is_clear(self):
+		self.a_phone_spray(hours_left=-2)
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertIs(data["restricted"], False)
+
+	def test_a_task_that_was_never_finished_is_not_a_spray(self):
+		self.a_phone_spray(state="In-Progress")
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertIs(data["restricted"], False)
+
+	def test_a_task_the_register_already_cites_is_counted_once(self):
+		self.a_phone_spray()
+		self.spray(blocks=(BLOCK,), source_task=self.TASK)
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertEqual(data["active_rei_count"], 1)
+		self.assertEqual(data["active_reis"][0]["source_doctype"], "Spray REI")
+
+	def test_another_entitys_task_is_not_on_this_block(self):
+		self.a_phone_spray(company=OTHER)
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertIs(data["restricted"], False)
+
+	def test_a_window_with_no_company_is_kept_rather_than_dropped(self):
+		"""`company` is optional on both registers. An equality filter would drop
+		the row, and dropping it here tells somebody a sprayed block is clear."""
+		self.a_phone_spray(company="")
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertIs(data["restricted"], True)
+
+	def test_a_register_row_with_no_company_is_kept_too(self):
+		self.spray(blocks=(BLOCK,))
+		name = self.rei_rows()[0]["name"]
+		STORE.get_raw("Spray REI", name)["company"] = None
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertIs(data["restricted"], True)
+
+	def test_the_board_includes_phone_sprays(self):
+		self.a_phone_spray()
+		self.spray(blocks=(BLOCK_TWO,))
+		data = self.tool_data("list_active_reis", {"company": MAIN})
+		self.assertEqual(sorted(data["restricted_blocks"]), sorted([BLOCK, BLOCK_TWO]))
+		self.assertIs(data["spray_tasks_included"], True)
+
+	def test_a_board_narrowed_to_one_machine_says_it_left_tasks_out(self):
+		self.a_phone_spray()
+		data = self.tool_data("list_active_reis", {"company": MAIN, "sprayer": "MC-Sprayer-01"})
+		self.assertEqual(data["restricted_blocks"], [])
+		self.assertIs(data["spray_tasks_included"], False)
+
+	def test_the_recently_cleared_view_includes_a_task_that_cleared(self):
+		self.a_phone_spray(hours_left=-2)
+		data = self.tool_data("list_active_reis", {"company": MAIN, "include_expired": True})
+		self.assertEqual([window["source_task"] for window in data["reis"]], [self.TASK])
+		self.assertIs(data["reis"][0]["active"], False)
+		self.assertEqual(data["active_count"], 0)

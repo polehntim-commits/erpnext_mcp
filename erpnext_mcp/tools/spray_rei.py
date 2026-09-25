@@ -283,8 +283,6 @@ def active_rows(
 		filters["block"] = block
 	if block_doctype:
 		filters["block_doctype"] = block_doctype
-	if company:
-		filters["company"] = company
 	if sprayer:
 		filters["sprayer"] = sprayer
 	try:
@@ -293,11 +291,23 @@ def active_rows(
 			filters=filters,
 			fields=compat.existing_fields(SPRAY_REI, _REI_FIELDS),
 			order_by="expires_at asc",
-			limit=min(limit, REGISTER_CAP),
+			limit=REGISTER_CAP,
 		)
 	except Exception:  # pragma: no cover - a site shaping these columns differently
 		return []
-	return [dict(row) for row in rows or []]
+	return [dict(row) for row in rows or [] if _for_company(dict(row), company)][: min(limit, REGISTER_CAP)]
+
+
+def _for_company(row: dict, company: str) -> bool:
+	"""Whether a window belongs in an answer scoped to `company`.
+
+	A WINDOW WITH NO COMPANY IS KEPT. `company` is optional on Spray REI and on
+	Farm Task, and a spray recorded without one still restricted the block. An
+	equality filter would drop it, and on this read dropping a row means telling
+	somebody a sprayed block is clear. Showing a restriction on another entity's
+	block is the safe mistake to make here.
+	"""
+	return not company or not row.get("company") or row.get("company") == company
 
 
 def active_for_blocks(blocks: list, company: str = "") -> list[dict]:
@@ -327,6 +337,139 @@ def active_for_blocks(blocks: list, company: str = "") -> list[dict]:
 	except Exception:  # pragma: no cover
 		return []
 	return [_describe(dict(row), now) for row in rows or []]
+
+
+#: Farm Task states whose REI stamp is a spray that happened. The same pair
+#: `spray.PHI_TASK_STATES` reads for the pre-harvest interval: a task is only
+#: stamped on completion, and one sent back for review was still sprayed.
+TASK_WINDOW_STATES = ("Awaiting-Review", "Completed")
+
+#: `Farm Task.task_type` for a spray, the literal `dispatch.py` and `spray.py` keep.
+SPRAY_TASK_TYPE = "Spray"
+
+
+def task_windows(
+	blocks=(),
+	block_doctype: str = "",
+	company: str = "",
+	product: str = "",
+	since: str = "",
+	limit: int = REGISTER_CAP,
+) -> list[dict]:
+	"""REI windows stamped on completed Spray Farm Tasks, shaped like Spray REI rows. NEVER RAISES.
+
+	THE PHONE'S SPRAY PATH OPENS NO SPRAY REI ROW. Finishing a Spray task through
+	`complete_task_via_mobile` stamps `rei_expires_at` on the task and nothing
+	else, so a reader of the Spray REI register alone answers "clear" for a block
+	that was sprayed an hour ago. `get_active_rei` and `list_active_reis` read
+	this as well, the way `spray.phi_windows_for_blocks` reads both registers for
+	the pre-harvest interval.
+
+	A task some Spray REI row already cites as `source_task` is left out, in any
+	status: that row is the register's decision about the window, including a
+	cancellation, and counting the task again would restrict the block twice or
+	re-open a window somebody closed on purpose.
+
+	`since` widens the read to windows that expired after it, for the board's
+	"cleared recently" view; the default is live windows only. A block_doctype
+	filter keeps a task with no `location_doctype`, because an older task that
+	never said which register its block is in is still a spray on that block.
+	"""
+	if not compat.doctype_exists(FARM_TASK) or not compat.has_field(FARM_TASK, "rei_expires_at"):
+		return []
+	now = _now()
+	filters: dict = {
+		"task_type": SPRAY_TASK_TYPE,
+		"state": ("in", list(TASK_WINDOW_STATES)),
+		"rei_expires_at": (">", since or now),
+	}
+	names = sorted({str(name).strip() for name in blocks or []} - {""})
+	if names:
+		filters["location"] = ("in", names)
+	if product:
+		filters["rei_source_item"] = product
+	try:
+		rows = [
+			dict(row)
+			for row in frappe.db.get_all(
+				FARM_TASK,
+				filters=filters,
+				fields=compat.existing_fields(
+					FARM_TASK,
+					[
+						"name",
+						"company",
+						"location",
+						"location_doctype",
+						"rei_expires_at",
+						"rei_source_item",
+						"spray_completed_at",
+					],
+				),
+				order_by="rei_expires_at asc",
+				limit=REGISTER_CAP,
+			)
+			or []
+		]
+		rows = [row for row in rows if _for_company(row, company)]
+		if block_doctype:
+			rows = [
+				row
+				for row in rows
+				if not row.get("location_doctype") or row["location_doctype"] == block_doctype
+			]
+		cited = set()
+		if rows and compat.doctype_exists(SPRAY_REI):
+			cited = set(
+				frappe.db.get_all(
+					SPRAY_REI,
+					filters={"source_task": ("in", [row["name"] for row in rows])},
+					pluck="source_task",
+				)
+				or []
+			)
+	except Exception:  # pragma: no cover - a site shaping these columns differently
+		return []
+
+	out = []
+	for row in rows[: min(limit, REGISTER_CAP)]:
+		if row["name"] in cited:
+			continue
+		expires = str(row.get("rei_expires_at") or "")
+		started = str(row.get("spray_completed_at") or "")
+		item = str(row.get("rei_source_item") or "")
+		try:
+			item_name = str(frappe.db.get_value(ITEM, item, "item_name") or "") if item else ""
+		except Exception:  # pragma: no cover - an Item register shaped differently
+			item_name = ""
+		hours = _hours_between(expires, started) if started else 0.0
+		out.append(
+			{
+				"name": row["name"],
+				"source_doctype": FARM_TASK,
+				"status": ACTIVE if _hours_between(expires, now) > 0 else EXPIRED,
+				"block": row.get("location"),
+				"block_doctype": row.get("location_doctype") or None,
+				"company": row.get("company") or None,
+				"source_task": row["name"],
+				"product": item or None,
+				"product_name": item_name or item or None,
+				"rei_hours": hours,
+				"all_products": (
+					[{"item_code": item, "item_name": item_name or None, "rei_hours": hours}] if item else []
+				),
+				"started_at": started or None,
+				"expires_at": expires or None,
+			}
+		)
+	return out
+
+
+def _describe_window(row: dict, now: str) -> dict:
+	"""`_describe`, plus which register the window came from."""
+	window = _describe(row, now)
+	window["source_doctype"] = row.get("source_doctype") or SPRAY_REI
+	return window
 
 
 def _resolve_block(name: str, block_doctype: str, verb: str) -> tuple[str, str]:
@@ -384,7 +527,9 @@ def get_active_rei(args: dict) -> ToolResult:
 
 	now = _now()
 	rows = active_rows(block=block, block_doctype=block_doctype, company=company or "")
-	windows = [_describe(row, now) for row in rows]
+	rows += task_windows(blocks=[block], block_doctype=block_doctype, company=company or "")
+	windows = [_describe_window(row, now) for row in rows]
+	windows = [window for window in windows if window["active"]]
 
 	clock = timezones.Renderer(args)
 	for window in windows:
@@ -405,6 +550,21 @@ def get_active_rei(args: dict) -> ToolResult:
 		"restricted": bool(windows),
 		"active_rei_count": len(windows),
 		"active_reis": windows,
+		# Every product behind a live window, by name, for a screen that lists
+		# them under the warning rather than walking `active_reis`.
+		"products": sorted(
+			{
+				str(product)
+				for window in windows
+				for product in [window.get("product_name")]
+				+ [
+					entry.get("item_name") or entry.get("item_code")
+					for entry in window.get("products") or []
+					if isinstance(entry, dict)
+				]
+				if product
+			}
+		),
 		"clears_at": longest["expires_at"] if longest else None,
 		"hours_remaining": longest["hours_remaining"] if longest else 0.0,
 		"warning": longest["warning"] if longest else None,
@@ -443,8 +603,6 @@ def list_active_reis(args: dict) -> ToolResult:
 	else:
 		filters["status"] = ACTIVE
 		filters["expires_at"] = (">", now)
-	if company:
-		filters["company"] = company
 	if sprayer:
 		filters["sprayer"] = sprayer
 	product = as_str(args, "product")
@@ -457,11 +615,27 @@ def list_active_reis(args: dict) -> ToolResult:
 			filters=filters,
 			fields=compat.existing_fields(SPRAY_REI, _REI_FIELDS),
 			order_by="expires_at asc",
-			limit=limit,
+			limit=REGISTER_CAP,
 		)
 		or []
 	)
-	windows = [_describe(dict(row), now) for row in rows]
+	windows = [_describe_window(dict(row), now) for row in rows if _for_company(dict(row), company)][:limit]
+	# Spray tasks finished on a phone, which open no Spray REI row. No sprayer is
+	# recorded on a task, so a board filtered to one machine cannot include them
+	# and says so rather than going quiet.
+	tasks_left_out = bool(sprayer)
+	if not sprayer:
+		windows += [
+			_describe_window(row, now)
+			for row in task_windows(
+				company=company or "",
+				product=product,
+				since=filters["expires_at"][1] if include_expired else "",
+				limit=limit,
+			)
+		]
+		windows.sort(key=lambda window: str(window.get("expires_at") or ""))
+		windows = windows[:limit]
 
 	clock = timezones.Renderer(args)
 	for window in windows:
@@ -484,6 +658,7 @@ def list_active_reis(args: dict) -> ToolResult:
 			"reis": windows,
 			"rei_count": len(windows),
 			"included_expired": include_expired,
+			"spray_tasks_included": not tasks_left_out,
 			**clock.block(),
 		},
 		summary=(

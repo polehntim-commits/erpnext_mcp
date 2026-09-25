@@ -954,6 +954,30 @@ class FeedbackReceiptModel(Codable):
 	LENIENT = (("name", str, 113),)
 
 
+class ActiveREIModel(Codable):
+	"""`ActiveREI` — `get_active_rei`, the restricted-entry question at a gate.
+
+	EVERY FIELD IS LENIENT, and `restricted` is the one that matters. Swift
+	reads `restricted`, then `is_restricted`, then falls back to whether a
+	`warning` arrived, so a missing flag cannot read as "go in". This mirror
+	holds the server to sending the first spelling as a real bool: a string
+	"false" would decode to nil and leave the answer to the fallback.
+
+	`products` is `try? c.decode([String].self)` — a list of anything else is
+	silently empty, so the test asserts every entry is a string.
+	"""
+
+	SWIFT = "SprayModels.swift"
+	LENIENT = (
+		("block", str, 58),
+		("restricted", bool, 64),
+		("warning", str, 67),
+		("hours_remaining", float, 68),
+		("clears_at", str, 69),
+		("products", list, 70),
+	)
+
+
 class UndecodedResponseModel(Codable):
 	"""A method `MobileAPI.swift` names and no Swift struct decodes yet.
 
@@ -4427,6 +4451,65 @@ class EveryMobileMethodDecodes(ContractTestCase):
 			{"name": "MC-Valve-05", "asset_type": "Irrigation Valve", "company": MAIN},
 		)
 
+	# ── v0.176.7: restricted entry, from the edge of the block ───────────────
+	def _a_sprayed_block(self, hours_left=4):
+		"""A block, and a Spray task a phone finished on it an hour ago.
+
+		The phone's own spray path, not an MCP one: it stamps the Farm Task and
+		opens no Spray REI row, which is the case this route exists to answer.
+		"""
+		self.configure(enabled=1, allow_create_parcel=1, allow_create_field=1)
+		self.tool_data(
+			"create_parcel", {"owning_entity": MAIN, "parcel_name": "REI Gate Ranch", "acreage": 40}
+		)
+		block = self.tool_data(
+			"create_field", {"parcel": "REI Gate Ranch", "field_name": "REI Gate Block 1", "acreage": 10}
+		)["name"]
+		now = frappe.utils.now()
+		STORE.seed(
+			"Farm Task",
+			[
+				{
+					"name": "FT-REI-GATE",
+					"title": "Spray REI Gate Block 1",
+					"task_type": "Spray",
+					"state": "Completed",
+					"company": MAIN,
+					"location_doctype": "Field",
+					"location": block,
+					"spray_completed_at": str(frappe.utils.add_to_date(now, hours=-1)),
+					"rei_expires_at": str(frappe.utils.add_to_date(now, hours=hours_left)),
+				}
+			],
+		)
+		return block
+
+	def test_60_get_active_rei(self):
+		"""A worker enrolled with no role asks, and is told the block is closed."""
+		block = self._a_sprayed_block()
+		self.be()
+		row = self.wire("get_active_rei", block=block)
+		ActiveREIModel.decode(row, "get_active_rei")
+		self.assertIs(row["restricted"], True)
+		self.assertIn("REI active", row["warning"])
+		self.assertGreater(row["hours_remaining"], 0)
+		self.assertTrue(all(isinstance(product, str) for product in row["products"]))
+
+	def test_60_a_clear_block_still_decodes_with_the_flag_set_false(self):
+		block = self._a_sprayed_block(hours_left=-1)
+		self.be()
+		row = self.wire("get_active_rei", block=block)
+		ActiveREIModel.decode(row, "get_active_rei")
+		self.assertIs(row["restricted"], False)
+		self.assertIsNone(row["warning"])
+		self.assertEqual(row["products"], [])
+
+	def test_60_an_unknown_block_is_refused_rather_than_called_clear(self):
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			self.wire("get_active_rei", block="Nowhere Block 9")
+		self.assertIn("no block called", str(caught.exception))
+
 	def test_59_update_irrigation_valve(self):
 		"""The link that prices a valve's minutes, set from in front of the gate.
 
@@ -4765,6 +4848,10 @@ class TheContractIsComplete(ContractTestCase):
 		# `ValveScanResult` and the screen redraws from the write with no second
 		# read and no second decoder.
 		"update_irrigation_valve": "test_59",
+		# v0.176.7 — restricted entry, published at last. `SprayAPI.activeREI`
+		# decodes `ActiveREI`; until now every call landed on the 404 and the
+		# screen said "ask your foreman".
+		"get_active_rei": "test_60",
 	}
 
 	def _published(self, module):
@@ -4839,6 +4926,7 @@ class TheContractIsComplete(ContractTestCase):
 			AttachedDocumentModel,
 			SignedI9Model,
 			ValveScanResultModel,
+			ActiveREIModel,
 		)
 		for mirror in mirrors:
 			with self.subTest(mirror=mirror.__name__):

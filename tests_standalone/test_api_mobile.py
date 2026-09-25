@@ -328,6 +328,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# shape `scan_valve` and `get_irrigation_valve` answer — so the screen
 		# redraws from the write with no second read.
 		"update_irrigation_valve",
+		# v0.176.7. Restricted entry, the gate question. HERE RATHER THAN IN
+		# `PENDING_IOS_INTEGRATION` because `MobileAPI.swift` names it —
+		# `activeREI = path("get_active_rei")` — and `SprayAPI.activeREI` has
+		# been answering "ask your foreman" on the 404 since before the route
+		# existed. It decodes `ActiveREI`, mirrored in `test_ios_contract`.
+		"get_active_rei",
 	}
 	FILES: ClassVar[set[str]] = {"stage_file_chunk", "finalize_staged_file"}
 
@@ -708,6 +714,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_osha_300_log",
 		"get_osha_300a_summary",
 		"get_spray_application_report",
+		# v0.176.7. The farm-wide restricted-entry board. `MobileAPI.swift`
+		# names only its sibling `get_active_rei`, which is in `MOBILE`.
+		"list_active_reis",
 		# The curriculum and the group training session — eight methods, and the
 		# same reason as every entry above: `MobileAPI.swift` names none of them
 		# yet, there being no training screen in the app, and the server half is

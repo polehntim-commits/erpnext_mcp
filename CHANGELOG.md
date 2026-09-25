@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.176.7 — 2026-09-24 — a phone can ask whether a block is under REI
+
+**900 tools** (no change). `get_active_rei` and `list_active_reis` are phone
+routes now. The app has called `get_active_rei` since its spray screen shipped
+and got a 404, which it shows as "ask your foreman". Two server comments said the
+route already existed; it did not.
+
+- **FIXED FIRST, THEN PUBLISHED.** Both tools read only the Spray REI register.
+  A Spray task finished on a phone stamps `rei_expires_at` on the Farm Task and
+  opens no Spray REI row, so publishing the register reader alone would have told
+  a worker a block sprayed through the app was clear. Both now also read
+  completed Spray tasks' REI windows (`spray_rei.task_windows`), the way the PHI
+  reader already reads both registers. A task a Spray REI row cites as
+  `source_task` is counted once. Windows say which register they came from in
+  `source_doctype`.
+- **A WINDOW WITH NO COMPANY IS KEPT.** `company` is optional on Spray REI and
+  on Farm Task, and an equality filter dropped those rows. Under a company filter
+  they are now kept: on this read the safe mistake is showing too much.
+- **OPEN ON ENROLMENT**, scoped to the caller's companies. WPS requires the
+  notice posted where every worker can see it (40 CFR 170.409).
+- `get_active_rei` also answers a top-level `products` list, which the app's
+  `ActiveREI` decodes. `list_active_reis` answers `spray_tasks_included`: false
+  when a `sprayer` filter left tasks out, since a task records no machine.
+- **NOT CHANGED:** the map layer, universal scan, asset scan and dispatch
+  warnings still read only Spray REI through `active_for_blocks`
+  (TELL_THE_FARM_AUDIT.md, F2).
+
 ## 0.176.6 — 2026-09-24 — create_item and update_item take the pesticide label
 
 **900 tools** (no change). The label columns `install_compliance_fields` puts on
