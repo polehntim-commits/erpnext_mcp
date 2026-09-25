@@ -1136,7 +1136,10 @@
   "allow_hide_default_workspace",
   "allow_set_user_role_profile",
   "sidebar_col",
-  "hidden_default_workspaces"
+  "hidden_default_workspaces",
+  "update_document_section",
+  "allow_update_document",
+  "update_document_fields"
  ],
  "fields": [
   {
@@ -8665,6 +8668,25 @@
    "fieldname": "hidden_default_workspaces",
    "fieldtype": "Small Text",
    "label": "Hidden Default Workspaces"
+  },
+  {
+   "fieldname": "update_document_section",
+   "fieldtype": "Section Break",
+   "label": "Generic Document Update"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Write whitelisted fields on a draft or non-submittable document of any DocType, through the document's own save, so validation, permissions and hooks all run. Only the (DocType, field) pairs ticked in the table below can be written; one field not on it refuses the whole call. Submitted and cancelled documents, Password fields, system columns and child tables are refused whatever the table says.",
+   "fieldname": "allow_update_document",
+   "fieldtype": "Check",
+   "label": "Update Document (generic)"
+  },
+  {
+   "description": "The fields update_document may write, one row per (DocType, field). An empty table means the tool can write nothing even when switched on.",
+   "fieldname": "update_document_fields",
+   "fieldtype": "Table",
+   "label": "Updatable Fields",
+   "options": "MCP Update Document Field"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -91,6 +91,7 @@ from .tools import (
 	fsa,
 	funnel,
 	garnishments,
+	generic_update,
 	governance,
 	haccp,
 	heat,
@@ -27537,6 +27538,42 @@ TOOLS = {
 		},
 		required=("doctype",),
 		title="Query any doctype",
+	),
+	"update_document": _tool(
+		generic_update.update_document,
+		"MUTATING (default OFF). Set fields on one draft or non-submittable document of "
+		"any DocType — the registers that have a create tool and no update tool of their "
+		"own (Training Session, Farm Task, Warehouse, Planting Season, Scale Ticket, a "
+		"draft Purchase Invoice ...). Prefer a dedicated update_* tool where one exists: "
+		"it carries that register's own rules.\n\n"
+		"EVERY FIELD MUST BE WHITELISTED. An operator lists (DocType, field) pairs in "
+		"ERPNext MCP Settings → Updatable Fields. One field not on that list refuses the "
+		"WHOLE call, and the error names each refused field and why; nothing is half-"
+		"written.\n\n"
+		"REFUSED WHATEVER THE LIST SAYS: submitted (docstatus 1) and cancelled (2) "
+		"documents; Password fields; child tables and layout fields; the system columns "
+		"name, docstatus, creation, modified, modified_by, owner, idx, doctype (and "
+		"parent*, amended_from); child DocTypes; and credential stores such as User and "
+		"ERPNext MCP Settings.\n\n"
+		"The write is one ordinary save of the document, so its validation, link checks "
+		"and hooks run exactly as at the Desk, under the configured MCP user's own "
+		"permissions. The reply lists each field's value before and after, and the fields "
+		"that already held the value asked for.",
+		{
+			"doctype": _field(
+				_STRING,
+				"The DocType's name as the Desk shows it, e.g. 'Training Session' — not 'training_session'.",
+			),
+			"docname": _field(_STRING, "The document's name (its ID) as the Desk shows it."),
+			"updates": _field(
+				_OBJECT,
+				'fieldname → value, e.g. {"expires_date": "2027-03-01", "status": "Open"}. '
+				"Fieldnames, not labels. Single values only; a Check takes true/false or 1/0.",
+			),
+		},
+		required=("doctype", "docname", "updates"),
+		mutating=True,
+		title="Update fields on a draft document",
 	),
 	"list_sidecar_routes": _tool(
 		diagnostics.list_sidecar_routes,

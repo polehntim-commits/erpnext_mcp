@@ -1525,6 +1525,7 @@ ERPNEXT_AUTONAME = {
 APP_DOCTYPES = {
 	"ERPNext MCP Settings": "erpnext_mcp_settings",
 	"MCP Action Log": "mcp_action_log",
+	"MCP Update Document Field": "mcp_update_document_field",
 	"Cap Table Entry": "cap_table_entry",
 	"Member Event": "member_event",
 	"Governance Document": "governance_document",

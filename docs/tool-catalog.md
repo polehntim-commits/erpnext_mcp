@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 907 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 908 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20403,3 +20403,53 @@ a thread — is never in it. Arguments: `classification` (exact; a filter for
 `target_doctype`, `since_date`, `limit` (default 50). Returns each entry's
 `communication`, `subject`, `sender`, `creation`, `reference_doctype`,
 `reference_name`, `classification`, `note`, `routed_at` and `routed_by`.
+
+## v0.179.0 — a draft can be corrected without a tool of its own
+
+More than fifty registers have a create tool and no update tool: Training
+Session, Farm Task, Warehouse, Salary Structure, Planting Season, Spray
+Application, Housing Assignment, Bank Account, a draft Journal Entry, Purchase
+Invoice or Sales Invoice, Scale Ticket. A typo on any of them could only be fixed
+at the Desk. The 76 dedicated `update_*` tools stay, and should be preferred
+where one exists: they carry that register's own rules.
+
+### `update_document` — MUTATING, default off
+
+**Switch:** `allow_update_document`. **Arguments:** `doctype` (the Desk label,
+e.g. `Training Session`), `docname`, `updates` (an object of fieldname → value;
+a JSON string of one is also accepted).
+
+**Every field must be whitelisted.** ERPNext MCP Settings → *Generic Document
+Update* → **Updatable Fields** (child DocType `MCP Update Document Field`) has one
+row per (`doctype_name`, `field_name`) with an `enabled` tick. A field not on it,
+or on it unticked, is refused — and **one refused field refuses the whole call**.
+The error names every refused field and the reason for each. An empty table means
+the tool writes nothing even when switched on.
+
+**Refused whatever the table says:**
+
+| What | Why |
+| --- | --- |
+| docstatus 1 (submitted) or 2 (cancelled) | A posted record is cancelled and amended, not edited. |
+| `Password` fields | Credentials. |
+| `Table` / `Table MultiSelect` fields | Would replace every child row, past the per-field whitelist. |
+| Layout and display fields | Hold no value. |
+| `name`, `docstatus`, `creation`, `modified`, `modified_by`, `owner`, `idx`, `doctype`, `parent`, `parentfield`, `parenttype`, `amended_from` | Framework columns. |
+| Child DocTypes | Their rows are validated with the parent. |
+| `query_doctype`'s refused doctypes (User, ERPNext MCP Settings, OAuth stores, Email Account…), `MCP Action Log`, `MCP Update Document Field` | Credential stores, the audit trail, and the whitelist itself. |
+| A value that is an object or a list | Only a single value can be written to a field. |
+
+**The write is one ordinary save.** One `get_doc`, every field set, one `save()`
+(what `frappe.client.set_value` does with a dict), so the doctype's validation,
+link checks and hooks run as at the Desk, and the write is all or nothing. Write
+permission is checked for the configured MCP user first. A `true`/`false` value
+is written as 1/0.
+
+**Returns** `doctype`, `docname`, `updated` (`{field: {from, to}}`, `to` read
+back after the save), `unchanged` (fields that already held the value asked
+for — not rewritten), `modified`, `acting_user`.
+
+```
+update_document(doctype="Training Session", docname="<session name>",
+                updates={"session_date": "2026-10-28"})
+```

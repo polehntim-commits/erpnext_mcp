@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.179.0 — 2026-09-25 — a draft can be corrected without a tool of its own
+
+**908 tools** (+1, mutating, off by default). More than fifty registers have a
+create tool and no update tool, so a typo on a Training Session, Farm Task,
+Warehouse or draft invoice could only be fixed at the Desk.
+
+- **`update_document`** (switch `allow_update_document`) — `doctype`,
+  `docname`, `updates` (fieldname → value). Writes only the (DocType, field)
+  pairs an operator has ticked in the new **Updatable Fields** table on ERPNext
+  MCP Settings (child DocType `MCP Update Document Field`: `doctype_name`,
+  `field_name`, `enabled`). One field not on the list refuses the whole call,
+  and the error names each refused field and why.
+- Refused whatever the list says: submitted and cancelled documents, Password
+  fields, child-table and layout fields, the system columns (`name`,
+  `docstatus`, `creation`, `modified`, `modified_by`, `owner`, `idx`, `doctype`,
+  `parent*`, `amended_from`), child DocTypes, `query_doctype`'s refused
+  credential stores, the MCP Action Log and the whitelist itself.
+- The write is one ordinary `save()`, so the doctype's own validation and hooks
+  run, under the MCP user's write permission. The 76 dedicated `update_*` tools
+  are unchanged and should be preferred where one exists.
+- Needs `bench migrate` for the new child DocType and settings fields.
+
 ## 0.178.0 — 2026-09-25 — a course can be booked before it has run
 
 **907 tools** (+2, both mutating, both off by default). Until now the only way

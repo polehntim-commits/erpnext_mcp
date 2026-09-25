@@ -296,6 +296,10 @@ SECTION_DOMAIN = {
 	# is, and it is a diagnostic; filing it under whichever domain its argument
 	# happened to name is not a thing a static table can do.
 	"diagnostics_section": "platform",
+	# v0.179.0. The generic field writer files beside `query_doctype` for the same
+	# reason: its chip is what KIND of tool it is, not whichever register its
+	# argument names.
+	"update_document_section": "platform",
 	"mobile_read_section": "platform",
 	"mobile_write_section": "platform",
 	"push_notification_section": "platform",

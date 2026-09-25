@@ -1,0 +1,53 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-25 12:00:00.000000",
+ "description": "ONE FIELD THE GENERIC update_document TOOL MAY WRITE, ON ONE DOCTYPE. A field absent from this table, or present with Enabled unticked, is refused, and one refused field refuses the whole call. Password fields, system columns and child tables are refused whatever this table says.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "doctype_name",
+  "field_name",
+  "enabled"
+ ],
+ "fields": [
+  {
+   "description": "The DocType being updated, e.g. Training Session.",
+   "fieldname": "doctype_name",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "description": "The fieldname as it is stored, e.g. expires_date — not the label.",
+   "fieldname": "field_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Field Name",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "Untick to withdraw this one field without deleting the row.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "MCP Update Document Field",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
