@@ -15586,6 +15586,15 @@ TOOLS = {
 			"expense_receipt": _field(_STRING, "Alias for name."),
 			"receipt": _field(_STRING, "Alias for name."),
 			"cost_center": _field(_STRING, "A Cost Center docname, or '' to clear it."),
+			"linked_by": _field(
+				_STRING,
+				"v0.183.0. 'person' (default) or 'automation'. Who decided the supplier. "
+				"A person's link teaches a Manual merchant alias that auto-links every "
+				"future receipt with that spelling; an automation's link (a nightly job "
+				"acting on normalize_merchant) teaches nothing. Unattended callers MUST "
+				"pass 'automation', and should only link when normalize_merchant "
+				"answered auto_link_safe: true.",
+			),
 			"supplier": _field(
 				_STRING,
 				"A Supplier docname, or '' to clear it. v0.75.0: setting one "

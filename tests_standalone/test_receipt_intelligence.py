@@ -919,3 +919,101 @@ class TheSchema(ReceiptIntelligenceTestCase):
 			"normalize_merchant", {"merchant": SIATAPING, "card_last_four": "4111111111114417"}
 		)
 		self.assertIn("do not send it", error)
+
+
+# ── v0.183.0 ────────────────────────────────────────────────────────────────
+class TheNightlyRunCannotLinkTheWrongSupplier(ReceiptIntelligenceTestCase):
+	"""EXR-2026-0015: COASTAL FARM STORES resolved to Sawyer's Hardware by Phone.
+
+	THREE DEFECTS, ONE RECEIPT. The phone pattern took the card terminal's
+	`TVR : 0000000000` as a phone number; nothing asked whether ten zeros could
+	ring a shop; and the phone verdict beat a printed name that plainly said
+	Coastal. Each is fixed separately, and each is tested separately, because a
+	nightly job with nobody watching needs all three to hold.
+	"""
+
+	COASTAL = "Coastal Farm and Ranch"
+	SAWYERS = "Sawyer's Hardware Llc"
+
+	#: The slip's own lines, as the scanner read them.
+	SLIP = """THANK YOU FOR SHOPPING AT
+COASTAL - THE DALLES
+COASTAL FARM STORES
+2600 W 6TH ST
+THE DALLES, OR 97058
+(541), 296-9610
+09/24/26 4:37PM 260502
+PROWLER RATKILLER REFILL 15PK
+TOTAL: $
+137.95
+xXXXXXXXXXXX0845
+TVR : 0000000000
+IAD : 06061203A00000
+Shop online at CoastalCountry.com"""
+
+	def setUp(self):
+		super().setUp()
+		STORE.seed(
+			"Supplier",
+			[
+				{"name": self.COASTAL, "supplier_name": self.COASTAL},
+				{"name": self.SAWYERS, "supplier_name": self.SAWYERS},
+			],
+		)
+
+	# ── the reading ─────────────────────────────────────────────────────────
+	def test_the_terminals_zeros_are_not_the_shops_phone(self):
+		found = receipts.extract_receipt_signals(self.SLIP)
+		self.assertEqual(found["merchant_phone"], "5412969610", "the comma'd number is the real one")
+
+	def test_a_bare_ten_digit_run_is_not_a_phone(self):
+		found = receipts.extract_receipt_signals("SKU 0123456789\nUPC 4006381333")
+		self.assertEqual(found["merchant_phone"], "")
+
+	def test_plausibility(self):
+		self.assertTrue(receipts.plausible_phone("5412969610"))
+		self.assertTrue(receipts.plausible_phone("5095550134"))
+		for junk in ("0000000000", "9999999999", "1234567890", "5410296961", "541296961"):
+			self.assertFalse(receipts.plausible_phone(junk), junk)
+
+	# ── the cascade ─────────────────────────────────────────────────────────
+	def test_a_placeholder_phone_is_dropped_not_matched_and_not_stored(self):
+		# The earlier receipt that taught the zeros a supplier.
+		first = self.capture(merchant="SAWYERS HDW", merchant_phone="0000000000")["name"]
+		self.tool_data("update_expense_receipt", {"name": first, "supplier": self.SAWYERS})
+
+		data = self.capture(merchant="COASTAL FARM STORES", merchant_phone="0000000000",
+		                    ocr_raw_text=self.SLIP)
+		self.assertNotEqual(data["resolution_method"], "Phone")
+		self.assertEqual(data["resolved_merchant"], self.COASTAL)
+		self.assertIsNone(self.receipt_row(data["name"]).get("merchant_phone") or None)
+
+	def test_a_phone_that_contradicts_the_printed_name_is_capped_and_flagged(self):
+		first = self.capture(merchant="SAWYERS HDW", merchant_phone="(541) 296-9610")["name"]
+		self.tool_data("update_expense_receipt", {"name": first, "supplier": self.SAWYERS})
+
+		answer = receipts.resolve_merchant("COASTAL FARM STORES", merchant_phone="5412969610")
+		self.assertEqual(answer["method"], "Phone")
+		self.assertLessEqual(answer["confidence"], receipts._CONFLICT_CAP)
+		self.assertEqual(answer["conflict"]["name_supplier"], self.COASTAL)
+		self.assertFalse(answer["auto_link_safe"])
+
+	def test_normalize_merchant_says_whether_an_unattended_link_is_safe(self):
+		exact = self.tool_data("normalize_merchant", {"merchant": "COASTAL FARM AND RANCH"})
+		self.assertTrue(exact["auto_link_safe"])
+		loose = self.tool_data("normalize_merchant", {"merchant": "COASTAL FARM STORES"})
+		self.assertFalse(loose["auto_link_safe"], "a 0.6-ish name match is a person's to confirm")
+
+	# ── the write ───────────────────────────────────────────────────────────
+	def test_an_automations_link_teaches_no_alias(self):
+		name = self.capture(merchant="COASTAL FARM STORES")["name"]
+		data = self.tool_data(
+			"update_expense_receipt", {"name": name, "supplier": self.COASTAL, "linked_by": "automation"}
+		)
+		self.assertEqual(data["alias_learned"]["action"], "skipped")
+		self.assertIsNone(self.alias_row(receipts.alias_key("COASTAL FARM STORES")))
+
+	def test_a_persons_link_still_teaches_one(self):
+		name = self.capture(merchant="COASTAL FARM STORES")["name"]
+		data = self.tool_data("update_expense_receipt", {"name": name, "supplier": self.COASTAL})
+		self.assertNotEqual(data["alias_learned"]["action"], "skipped")

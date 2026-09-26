@@ -993,6 +993,15 @@ def update_expense_receipt(args: dict) -> ToolResult:
 	from . import receipts  # see submit_expense_receipt on why this is local
 
 	name = _require_receipt(args)
+	# v0.183.0. WHO DECIDED THE SUPPLIER. A person coding a slip at a desk
+	# teaches an alias; a nightly job acting on `normalize_merchant` must not,
+	# because a Manual alias auto-links every future receipt with that spelling
+	# at submit — one wrong unattended link would become a permanent rule that
+	# looks like a human's decision. EXR-2026-0015 is the case it would have
+	# taught: COASTAL FARM STORES → Sawyer's Hardware.
+	linked_by = (as_str(args, "linked_by") or "person").lower()
+	if linked_by not in ("person", "automation"):
+		raise ToolError("linked_by must be 'person' or 'automation'. Nothing was changed.")
 	present = [key for key in UPDATABLE_FIELDS if key in args]
 	if not present:
 		raise ToolError(
@@ -1051,7 +1060,12 @@ def update_expense_receipt(args: dict) -> ToolResult:
 	frappe.db.set_value(EXPENSE_RECEIPT, name, after)
 
 	alias_learned = None
-	if after.get("supplier"):
+	if after.get("supplier") and linked_by == "automation":
+		alias_learned = {
+			"action": "skipped",
+			"why": "linked_by='automation' — an unattended link is never taught as an alias",
+		}
+	elif after.get("supplier"):
 		alias_learned = receipts.learn_merchant_alias(
 			doc.get("merchant") or "",
 			after["supplier"],

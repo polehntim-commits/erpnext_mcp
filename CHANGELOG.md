@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.183.0 — 2026-09-26 — an unattended run cannot link the wrong supplier
+
+**909 tools** (unchanged). Fixes EXR-2026-0015, where "COASTAL FARM STORES" resolved to
+Sawyer's Hardware Llc by Phone at 0.83.
+
+- **The phone pattern needs separators and allows `(541), 296-9610`.** The old one let
+  every separator be absent, so the card terminal's `TVR : 0000000000` was read as the
+  shop's phone, and the slip's real, comma'd number was missed.
+- **`plausible_phone`**: an area code or exchange starting 0/1, or one digit repeated, is
+  not a telephone. `resolve_merchant` drops such a number before any step (reported as
+  `dropped_phone`), so it is neither matched nor stored.
+- **A URL/phone verdict the printed name contradicts is capped at 0.5 and flagged.**
+  `resolution.conflict` names both suppliers; a `conflict` step says why.
+- **`auto_link_safe`** on `resolve_merchant` and `normalize_merchant` (and the mobile
+  route): true only for Alias/URL/Phone/OCR at ≥0.85 with no conflict. The one flag an
+  unattended caller should act on.
+- **`update_expense_receipt` `linked_by`**: `person` (default) teaches a Manual alias as
+  before; `automation` teaches nothing — a wrong nightly link must not become a rule
+  that auto-links every future receipt with that spelling.
+- Existing records are not rewritten: EXR-2026-0015 still carries `merchant_phone
+  0000000000` and `resolved_merchant` Sawyer's. Its supplier link and its Purchase
+  Invoice are Coastal Farm and Ranch.
+- Deploy: an image rebuild. No migrate.
+
 ## 0.182.0 — 2026-09-26 — a receipt is reviewed before it is filed
 
 **909 tools** (unchanged). Two new read-only `/mobile` routes, both open on enrolment.

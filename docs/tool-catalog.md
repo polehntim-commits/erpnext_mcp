@@ -20534,3 +20534,22 @@ another Item is refused by that Item's name — all before anything is created.
 create_item(item_code="Tomcat Mouse Killer", barcode="0036000291452",
             epa_registration_number="12455-89", signal_word="Caution")
 ```
+
+## v0.183.0 — an unattended run cannot link the wrong supplier
+
+### `normalize_merchant` — new keys `auto_link_safe`, `conflict`
+
+`auto_link_safe` is true only for an Alias/URL/Phone/OCR verdict at 0.85 or above that no
+other evidence contradicts. `conflict` names both sides when a phone or a domain points at
+one Supplier and the printed name at another; the verdict's confidence is then capped at
+0.5. A caller with nobody watching links only on `auto_link_safe: true`.
+
+### `update_expense_receipt` — new argument `linked_by`
+
+`person` (default) teaches a Manual merchant alias, as before. `automation` teaches
+nothing. Unattended callers pass `automation`:
+
+```
+update_expense_receipt(name="EXR-2026-0016", supplier="Coastal Farm and Ranch",
+                       linked_by="automation")
+```

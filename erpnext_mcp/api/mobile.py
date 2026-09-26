@@ -20063,6 +20063,11 @@ def normalize_merchant(
 		"match": _match_row(data.get("match")),
 		"alternatives": [row for row in map(_match_row, data.get("alternatives") or []) if row],
 		"threshold": data.get("threshold"),
+		# v0.183.0. Whether the evidence disagrees with itself — a phone or a
+		# domain pointing at one Supplier while the printed name reads like
+		# another. The phone shows it; it never auto-links either way.
+		"conflict": bool(data.get("conflict")),
+		"auto_link_safe": bool(data.get("auto_link_safe")),
 		"resolution": {
 			"supplier": supplier,
 			"supplier_name": frappe.db.get_value("Supplier", supplier, "supplier_name") if supplier else None,

@@ -1490,8 +1490,18 @@ _URL_RE = re.compile(
 	r"\b(?:https?://)?(?:www\.)?((?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24})\b(?:/\S*)?"
 )
 
-#: A North American phone number in any of the shapes a receipt printer uses.
-_PHONE_RE = re.compile(r"(?<!\d)(?:\+?1[\s.-]*)?\(?(\d{3})\)?[\s.-]*(\d{3})[\s.-]*(\d{4})(?!\d)")
+#: A North American phone number in the shapes a receipt printer uses.
+#:
+#: v0.183.0. A SEPARATOR IS REQUIRED between the groups — the rule the iOS
+#: extractor already had. The old pattern let every separator be absent, so a
+#: bare ten-digit run was a phone: a UPC, a loyalty number, and on EXR-2026-0015
+#: the card terminal's `TVR : 0000000000`, which the phone step then matched to
+#: another receipt coded to Sawyer's Hardware. And a COMMA after the area code is
+#: allowed, because that same slip printed its real number as `(541), 296-9610`
+#: and the old pattern could not see it.
+_PHONE_RE = re.compile(
+	r"(?<![\d-])(?:\+?1[\s.-]?)?(?:\((\d{3})\)[\s.,-]*|(\d{3})[\s.-]+)(\d{3})[\s.-]+(\d{4})(?![\d-])"
+)
 
 #: The last four of a card, and ONLY in the shapes that say so. A masked run
 #: (`************1234`, `XXXX 1234`) or a phrase (`card ending 1234`). A bare
@@ -1772,6 +1782,23 @@ def normalize_phone(value: str) -> str:
 	return digits if len(digits) == 10 else ""
 
 
+def plausible_phone(digits: str) -> bool:
+	"""Whether ten digits could ring a business, by the North American plan.
+
+	v0.183.0. `normalize_phone` answers "is this ten digits"; this answers "is it
+	a telephone". An area code or an exchange cannot start with 0 or 1, and a
+	number that is one digit repeated — 0000000000, 9999999999 — is a placeholder
+	or a terminal's status field, never a shop. EXR-2026-0015 carried 0000000000
+	and the phone step treated it as evidence; a number that fails here is not
+	evidence of anything, so the cascade drops it rather than matching on it.
+	"""
+	if len(digits) != 10 or not digits.isdigit():
+		return False
+	if digits[0] in "01" or digits[3] in "01":
+		return False
+	return len(set(digits)) > 1
+
+
 def normalize_domain(value: str) -> str:
 	"""A URL or hostname as a bare lower-case domain, or "" if it is not one.
 
@@ -1844,8 +1871,8 @@ def extract_receipt_signals(text: str) -> dict:
 		found[CARD_LAST_FOUR_FIELD] = card.group(1)
 
 	for match in _PHONE_RE.finditer(body):
-		phone = normalize_phone("".join(match.groups()))
-		if phone:
+		phone = normalize_phone("".join(group or "" for group in match.groups()))
+		if phone and plausible_phone(phone):
 			found[MERCHANT_PHONE_FIELD] = phone
 			break
 
@@ -2245,6 +2272,15 @@ def resolve_merchant(
 	# which are worth different amounts of trust when one turns out wrong.
 	signals = {name: given[name] or read[name] for name in SIGNAL_FIELDS}
 	from_text = sorted(name for name in SIGNAL_FIELDS if not given[name] and read[name])
+	# v0.183.0. A number no business could have is not a signal. Dropped here, so
+	# it is neither matched nor stored — a stored 0000000000 would go on to match
+	# every other slip whose terminal prints the same zeros.
+	dropped_phone = signals[MERCHANT_PHONE_FIELD] if (
+		signals[MERCHANT_PHONE_FIELD] and not plausible_phone(signals[MERCHANT_PHONE_FIELD])
+	) else ""
+	if dropped_phone:
+		signals[MERCHANT_PHONE_FIELD] = ""
+		from_text = [name for name in from_text if name != MERCHANT_PHONE_FIELD]
 	domain, phone = signals[MERCHANT_URL_FIELD], signals[MERCHANT_PHONE_FIELD]
 	store, card = signals[STORE_NUMBER_FIELD], signals[CARD_LAST_FOUR_FIELD]
 
@@ -2265,7 +2301,11 @@ def resolve_merchant(
 		"signals_from_raw_text": from_text,
 		"alias": None,
 		"llm_context": None,
+		"conflict": None,
+		"auto_link_safe": False,
 	}
+	if dropped_phone:
+		out["dropped_phone"] = dropped_phone
 
 	def settle(step: dict, *, supplier: str, label: str, method: str, confidence: float) -> dict:
 		out["steps"].append(step)
@@ -2274,6 +2314,14 @@ def resolve_merchant(
 		out["resolved_merchant"] = label or supplier or None
 		out["method"] = method
 		out["confidence"] = round(min(1.0, float(confidence)), 4)
+		# The one flag an UNATTENDED caller should act on. A person can weigh a
+		# 0.6 suggestion against the photo; a nightly job cannot, so it gets a
+		# yes only for a confident answer that no other evidence contradicts.
+		out["auto_link_safe"] = bool(
+			method in ("Alias", "URL", "Phone", "OCR")
+			and out["confidence"] >= _AUTO_LINK_THRESHOLD
+			and not out.get("conflict")
+		)
 		return out
 
 	# ── step 0: the caller already knows ────────────────────────────────────
@@ -2357,6 +2405,7 @@ def resolve_merchant(
 	# ── steps 2–4: the deterministic evidence, in order ─────────────────────
 	winner = _deterministic_steps(out, merchant, domain, phone, record_only=False)
 	if winner:
+		_check_conflict(out, winner)
 		return settle(
 			winner["step"],
 			supplier=winner["supplier"],
@@ -2564,6 +2613,52 @@ def _deterministic_steps(out: dict, merchant: str, domain: str, phone: str, *, r
 	return None if record_only else winner
 
 
+#: v0.183.0. What a URL or phone verdict is worth when the printed NAME points at
+#: a different Supplier. Below `_AUTO_LINK_THRESHOLD` and below the phone's own
+#: suggestion bar, so it is still shown to a person and never acted on alone.
+_CONFLICT_CAP = 0.5
+
+
+def _check_conflict(out: dict, winner: dict) -> None:
+	"""Cap a URL/phone verdict that the printed name contradicts, and say so.
+
+	v0.183.0. EXR-2026-0015: the slip says COASTAL FARM STORES, a Supplier called
+	Coastal Farm and Ranch scores on the name, and the phone step still won with
+	Sawyer's Hardware at 0.83 because a receipt it had seen before carried the
+	same (garbage) number. A domain or a phone is harder evidence than letters —
+	until it disagrees with the letters, and then one of them is wrong and a
+	machine cannot tell which. So the verdict stands, the confidence drops below
+	anything that links on its own, and `conflict` names both sides for the
+	person who will decide.
+	"""
+	if winner.get("method") not in ("URL", "Phone"):
+		return
+	ranked = out.get("ranked_name_matches") or []
+	best = ranked[0] if ranked and ranked[0]["confidence"] >= _MATCH_FLOOR else None
+	if not best or best["supplier"] == winner["supplier"]:
+		return
+	out["conflict"] = {
+		"evidence": winner["method"],
+		"evidence_supplier": winner["supplier"],
+		"name_supplier": best["supplier"],
+		"name_confidence": best["confidence"],
+		"why": (
+			f"the {winner['method'].lower()} points at {winner['supplier']!r} but the printed name "
+			f"reads like {best['supplier']!r} ({best['confidence']}) — one of them is wrong"
+		),
+	}
+	out["steps"].append(
+		_step(
+			"conflict",
+			winner["method"],
+			tried=True,
+			matched=winner["supplier"],
+			why=out["conflict"]["why"] + f"; confidence capped at {_CONFLICT_CAP}",
+		)
+	)
+	winner["confidence"] = min(float(winner["confidence"]), _CONFLICT_CAP)
+
+
 def _url_matches(stored: str, wanted: str) -> bool:
 	return _domains_agree(normalize_domain(stored), wanted)
 
@@ -2615,6 +2710,11 @@ def normalize_merchant(args: dict) -> ToolResult:
 		"threshold": _MATCH_FLOOR,
 		"suppliers_considered": len(_candidate_suppliers()),
 		"resolution": resolution,
+		# v0.183.0. For a caller with nobody watching — a nightly job. True only
+		# for a confident verdict that no other evidence contradicts; anything
+		# else is a suggestion for a person, however it is dressed.
+		"auto_link_safe": bool(resolution.get("auto_link_safe")),
+		"conflict": resolution.get("conflict"),
 		"note": (
 			"`match` is the NAME similarity alone, after stripping punctuation and legal-form "
 			"words (Co, LLC, Inc, Corp, Ltd …) from both sides — never a fitted model, so a low "
