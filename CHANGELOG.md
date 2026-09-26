@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.187.0 — 2026-09-26 — reimbursements match the phone's contract
+
+**910 tools** (unchanged). v0.186.0 was written before the iOS side committed; this
+release matches fafo_ios `SERVER_CHANGES.md` §39. v0.186.0 never left this machine,
+so no site holds its category value.
+
+- **The category is `Reimbursement`** (was `Reimbursement Received`).
+- **`check_number` and `check_memo`** — new Expense Receipt columns, taken by
+  `submit_expense_receipt` and the phone's `create_expense_receipt` on a Reimbursement
+  only. This is the release the phone's `acceptsReimbursementFields` waits for before
+  it stops folding them into `notes`.
+- **No cost center on a Reimbursement.** Refused at capture and on a recategorisation:
+  the money belongs to the receipt it repays. `post_reimbursement_receipt` takes the
+  original's cost center, then the company default.
+- **Not spend, anywhere.** `get_expense_summary` leaves it out (`reimbursements_excluded`,
+  `reimbursements_amount`) instead of netting it; `get_expense_report` lists it but
+  keeps it out of `total_amount`; the phone's `list_expense_receipts` header total
+  leaves it out. `is_return` stays set, for the bank matcher.
+- **`classify_receipt` answers `receipt_type: "reimbursement"`** for a check — the raw
+  value the phone decodes — with `suggested_category` `Reimbursement`.
+- The draft Journal Entry's reference number is the matched Bank Transaction, else the
+  check number; the memo goes in the remark.
+- Unchanged: Dr bank, Cr the original expense's account (or a named Due From / expense
+  account); never a Purchase Invoice; approve-then-post.
+- Deploy: an image rebuild, then `bench migrate` (two new columns).
+
 ## 0.186.0 — 2026-09-26 — a check paying back a share of an expense
 
 **910 tools** (+1 write, off). The farm fronts a shared expense and a family member

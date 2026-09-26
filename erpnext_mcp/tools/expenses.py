@@ -111,7 +111,7 @@ CATEGORIES = (
 	"Bill of Sale",
 	"Co-op Equity",
 	"Patronage Dividend",
-	"Reimbursement Received",
+	"Reimbursement",
 	"Other",
 )
 
@@ -143,16 +143,16 @@ COOP_CATEGORIES = (COOP_EQUITY_CATEGORY, PATRONAGE_CATEGORY)
 
 #: v0.186.0. A check somebody wrote the farm to pay back their share of an expense
 #: it fronted. Money IN, so a receipt in this category is always `is_return` — the
-#: bank matcher then looks for the deposit, and the expense summary nets it out of
-#: spend exactly as the ledger does. `merchant` is the payer. It never becomes a
-#: Purchase Invoice; `post_reimbursement_receipt` books it. See
-#: `tools/reimbursements.py`.
-REIMBURSEMENT_CATEGORY = "Reimbursement Received"
+#: bank matcher then looks for the deposit. It is NOT spend: v0.187.0 leaves it out
+#: of every expense total rather than netting it (the phone's contract, fafo_ios
+#: SERVER_CHANGES.md §39). `merchant` is the payer. It never becomes a Purchase
+#: Invoice; `post_reimbursement_receipt` books it. See `tools/reimbursements.py`.
+REIMBURSEMENT_CATEGORY = "Reimbursement"
 
 #: Every category that is not money spent on running the farm, which the expense
 #: totals leave out. One tuple, so the summary and the Purchase Invoice refusal
 #: cannot disagree about which categories those are.
-NON_EXPENSE_CATEGORIES = (*DOCUMENT_CATEGORIES, *COOP_CATEGORIES)
+NON_EXPENSE_CATEGORIES = (*DOCUMENT_CATEGORIES, *COOP_CATEGORIES, REIMBURSEMENT_CATEGORY)
 
 #: Fields `update_expense_receipt` may change. Deliberately NOT `merchant`,
 #: `amount` or `receipt_date` — those are the machine's reading of the paper, and
@@ -238,7 +238,7 @@ _TITLE_FIELDS = ("document_subtype", "vin", "linked_asset")
 _COOP_FIELDS = ("coop_name", "is_balance_sheet_item")
 
 #: v0.186.0. The reimbursement column, read back when the site has it.
-_REIMBURSEMENT_FIELDS = ("reimburses_receipt",)
+_REIMBURSEMENT_FIELDS = ("reimburses_receipt", "check_number", "check_memo")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────
@@ -700,7 +700,12 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 				else {}
 			),
 			**(
-				{"payer": merchant, "reimburses_receipt": reimbursement.get("reimburses_receipt")}
+				{
+					"payer": merchant,
+					"reimburses_receipt": reimbursement.get("reimburses_receipt"),
+					"check_number": reimbursement.get("check_number"),
+					"check_memo": reimbursement.get("check_memo"),
+				}
 				if category == REIMBURSEMENT_CATEGORY
 				else {}
 			),
@@ -1563,6 +1568,8 @@ def get_expense_summary(args: dict) -> ToolResult:
 	returns_amount = 0.0
 	documents_excluded = 0
 	coop_excluded = 0
+	reimbursements_excluded = 0
+	reimbursements_amount = 0.0
 	counted = 0
 	for row in rows:
 		# v0.165.0. A title or a bill of sale is a document, not spend. Counted
@@ -1574,6 +1581,12 @@ def get_expense_summary(args: dict) -> ToolResult:
 		# income. Neither is spend.
 		if row.get("category") in COOP_CATEGORIES:
 			coop_excluded += 1
+			continue
+		# v0.187.0. A check paid back to the farm is not spend, and it is not a
+		# negative one either: it is left out, counted and reported, like co-op money.
+		if row.get("category") == REIMBURSEMENT_CATEGORY:
+			reimbursements_excluded += 1
+			reimbursements_amount = round(reimbursements_amount + float(row.get("amount") or 0), 2)
 			continue
 		counted += 1
 		# v0.160.0. A RETURN SUBTRACTS. `is_return` says the money came back, and
@@ -1615,6 +1628,8 @@ def get_expense_summary(args: dict) -> ToolResult:
 		"total_amount": round(total, 2),
 		"documents_excluded": documents_excluded,
 		"coop_excluded": coop_excluded,
+		"reimbursements_excluded": reimbursements_excluded,
+		"reimbursements_amount": reimbursements_amount,
 		"returns_count": returns_count,
 		"returns_amount": returns_amount,
 		"by_category": by_category,
@@ -1650,6 +1665,12 @@ def get_expense_summary(args: dict) -> ToolResult:
 			f"{coop_excluded} {' / '.join(COOP_CATEGORIES)} receipt(s) left out: co-op equity is an "
 			"asset and patronage is income — list_coop_equity_summary totals them. "
 			if coop_excluded
+			else ""
+		)
+		+ (
+			f"{reimbursements_excluded} {REIMBURSEMENT_CATEGORY} check(s) totalling "
+			f"{reimbursements_amount} left out: money paid back to the farm is not spend. "
+			if reimbursements_excluded
 			else ""
 		)
 		+ (
@@ -1729,14 +1750,21 @@ def get_expense_report(args: dict) -> ToolResult:
 	receipts = [_row_out(row) for row in rows]
 	# Signed for the same reason `get_expense_summary`'s is: a return is money
 	# back, and a total that added it would be wrong by twice the refund.
-	total = round(sum(-r["amount"] if r.get("is_return") else r["amount"] for r in receipts), 2)
-	returns_count = sum(1 for r in receipts if r.get("is_return"))
+	#
+	# v0.187.0. A Reimbursement is LISTED — this is the export somebody checks a
+	# specific receipt in — and kept out of the total, which is spend.
+	spend = [r for r in receipts if r.get("category") != REIMBURSEMENT_CATEGORY]
+	total = round(sum(-r["amount"] if r.get("is_return") else r["amount"] for r in spend), 2)
+	returns_count = sum(1 for r in spend if r.get("is_return"))
+	reimbursements = [r for r in receipts if r.get("category") == REIMBURSEMENT_CATEGORY]
 
 	data = {
 		"receipts": receipts,
 		"count": len(receipts),
 		"total_amount": total,
 		"returns_count": returns_count,
+		"reimbursements_count": len(reimbursements),
+		"reimbursements_amount": round(sum(r["amount"] for r in reimbursements), 2),
 		"limit": limit,
 		"truncated": len(receipts) == limit,
 		"filters": {

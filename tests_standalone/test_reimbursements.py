@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: MIT
-"""Reimbursement Received — a check paying back a share of an expense. v0.186.0.
+"""Reimbursement — a check paying back a share of an expense. v0.186.0, v0.187.0.
+
+v0.187.0 matches the phone's contract (fafo_ios SERVER_CHANGES.md §39): category
+`Reimbursement`, `check_number` and `check_memo`, no cost center, not spend, and
+`classify_receipt` answering receipt_type `reimbursement`.
 
 SIX CLAIMS.
 
@@ -27,7 +31,7 @@ from .fixtures import BANK, MAIN, MAIN_ABBR, OTHER, PurchasingTestCase, install_
 from .harness import STORE
 from .test_api_mobile import WORKER_EMPLOYEE, MobileAPITestCase
 
-CATEGORY = "Reimbursement Received"
+CATEGORY = "Reimbursement"
 CHECK_TEXT = (
 	"JANE POLEHN 1024\nPAY TO THE ORDER OF Orchard Meadow LLC $ 42.25\n"
 	"Forty-two and 25/100 DOLLARS\nMEMO my share of Coastal\n⑆123000848⑆ 4455⑈"
@@ -125,6 +129,43 @@ class CapturingACheck(ReimbursementTestCase):
 		data = self.check()
 		self.assertIsNone(data["reimburses_receipt"])
 
+	def test_the_check_number_and_memo_are_kept(self):
+		data = self.check(check_number="1024", check_memo="Coastal — my half")
+		self.assertEqual((data["check_number"], data["check_memo"]), ("1024", "Coastal — my half"))
+		row = self.tool_data("get_expense_receipt", {"name": data["name"]})
+		self.assertEqual((row["check_number"], row["check_memo"]), ("1024", "Coastal — my half"))
+
+	def test_check_fields_on_another_category_are_refused(self):
+		error = self.tool_error(
+			"submit_expense_receipt",
+			{
+				"merchant": "Chevron",
+				"amount": 40,
+				"receipt_date": "2026-09-24",
+				"category": "Fuel",
+				"company": MAIN,
+				"submitted_by": "HR-EMP-00001",
+				"check_number": "1024",
+			},
+		)
+		self.assertIn("check_number", error)
+
+	def test_a_cost_center_is_refused(self):
+		"""It belongs to the receipt being repaid; coding it twice allocates it twice."""
+		error = self.tool_error(
+			"submit_expense_receipt",
+			{
+				"merchant": "Jane Polehn",
+				"amount": 42.25,
+				"receipt_date": "2026-09-24",
+				"category": CATEGORY,
+				"company": MAIN,
+				"submitted_by": "HR-EMP-00001",
+				"cost_center": f"Main - {MAIN_ABBR}",
+			},
+		)
+		self.assertIn("allocate it twice", error)
+
 	def test_a_check_needs_its_amount(self):
 		self.assertIn(
 			"positive amount",
@@ -155,7 +196,7 @@ class CapturingACheck(ReimbursementTestCase):
 			({"reimburses_receipt": "EXR-NOPE"}, "no Expense Receipt called"),
 			({"reimburses_receipt": other}, "belongs to"),
 			({"reimburses_receipt": rejected}, "Rejected"),
-			({"reimburses_receipt": earlier_check}, "itself a Reimbursement Received"),
+			({"reimburses_receipt": earlier_check}, "itself a Reimbursement"),
 			({"reimburses_receipt": original, "amount": 90}, "repay more than was spent"),
 			({"reimburses_receipt": original, "category": "Fuel"}, "belongs to a Reimbursement"),
 		):
@@ -216,6 +257,13 @@ class RecodingAtADesk(ReimbursementTestCase):
 		error = self.tool_error("update_expense_receipt", {"name": name, "reimburses_receipt": original})
 		self.assertIn("repay more than was spent", error)
 
+	def test_moving_in_with_a_cost_center_is_refused_until_it_is_cleared(self):
+		name = self.expense(merchant="Jane Polehn", cost_center=f"Main - {MAIN_ABBR}")
+		error = self.tool_error("update_expense_receipt", {"name": name, "category": CATEGORY})
+		self.assertIn("no cost center", error)
+		self.tool_data("update_expense_receipt", {"name": name, "category": CATEGORY, "cost_center": ""})
+		self.assertEqual(frappe.db.get_value("Expense Receipt", name, "category"), CATEGORY)
+
 	def test_moving_into_the_category_ticks_is_return(self):
 		name = self.expense(merchant="Jane Polehn")
 		data = self.tool_data("update_expense_receipt", {"name": name, "category": CATEGORY})
@@ -250,7 +298,7 @@ class RecodingAtADesk(ReimbursementTestCase):
 		original = self.expense()
 		name = self.expense(merchant="Somebody", amount=5)
 		error = self.tool_error("update_expense_receipt", {"name": name, "reimburses_receipt": original})
-		self.assertIn("belongs to a Reimbursement Received", error)
+		self.assertIn("belongs to a Reimbursement", error)
 
 
 # ── 3. ───────────────────────────────────────────────────────────────────────
@@ -260,13 +308,28 @@ class NotABill(ReimbursementTestCase):
 		error = self.tool_error("create_purchase_invoice_from_receipt", {"receipt": name})
 		self.assertIn("post_reimbursement_receipt", error)
 
-	def test_the_summary_nets_the_check_out_of_spend(self):
-		"""What the ledger does when the check credits the expense account."""
+	def test_the_summary_leaves_the_check_out_of_spend(self):
+		"""Not netted: left out, counted and reported (the phone's contract)."""
 		original = self.expense()
 		self.check(reimburses_receipt=original)
 		data = self.tool_data("get_expense_summary", {"company": MAIN, "from_date": "2026-09-01"})
-		self.assertEqual(data["total_amount"], 42.25)
-		self.assertEqual(data["returns_count"], 1)
+		self.assertEqual(data["total_amount"], 84.50)
+		self.assertEqual(data["count"], 1)
+		self.assertEqual(data["returns_count"], 0)
+		self.assertEqual(data["reimbursements_excluded"], 1)
+		self.assertEqual(data["reimbursements_amount"], 42.25)
+		self.assertNotIn(CATEGORY, data["by_category"])
+		self.assertIn("not spend", data["note"])
+
+	def test_the_export_lists_the_check_and_leaves_it_out_of_the_total(self):
+		self.expense()
+		self.check()
+		self.configure(enabled=1, **{**ON, "allow_get_expense_report": 1})
+		data = self.tool_data("get_expense_report", {"company": MAIN, "from_date": "2026-09-01"})
+		self.assertEqual(data["count"], 2)
+		self.assertEqual(data["total_amount"], 84.50)
+		self.assertEqual(data["reimbursements_count"], 1)
+		self.assertEqual(data["reimbursements_amount"], 42.25)
 
 
 # ── 4. ───────────────────────────────────────────────────────────────────────
@@ -343,6 +406,40 @@ class PostingTheCheck(ReimbursementTestCase):
 			frappe.db.get_value("Journal Entry", data["journal_entry"], "cheque_no"), "ACC-BTN-2026-00777"
 		)
 
+	def test_the_check_number_is_the_reference_until_the_deposit_is_matched(self):
+		name = self.approve(
+			self.check(reimburses_receipt=self.expense(), check_number="1024", check_memo="Coastal")["name"]
+		)
+		data = self.tool_data("post_reimbursement_receipt", {"receipt": name})
+		self.assertEqual(data["cheque_no"], "1024")
+		remark = frappe.db.get_value("Journal Entry", data["journal_entry"], "user_remark")
+		self.assertIn("check 1024", remark)
+		self.assertIn("memo: Coastal", remark)
+
+	def test_a_matched_deposit_wins_over_the_check_number(self):
+		name = self.approve(self.check(reimburses_receipt=self.expense(), check_number="1024")["name"])
+		frappe.db.set_value("Expense Receipt", name, "bank_transaction", "ACC-BTN-2026-00778")
+		self.assertEqual(
+			self.tool_data("post_reimbursement_receipt", {"receipt": name})["cheque_no"], "ACC-BTN-2026-00778"
+		)
+
+	def test_the_credit_comes_off_the_originals_cost_center(self):
+		STORE.seed(
+			"Cost Center",
+			[
+				{
+					"name": f"Orchard - {MAIN_ABBR}",
+					"cost_center_name": "Orchard",
+					"company": MAIN,
+					"is_group": 0,
+				}
+			],
+		)
+		original = self.expense(cost_center=f"Orchard - {MAIN_ABBR}")
+		name = self.approve(self.check(reimburses_receipt=original)["name"])
+		data = self.tool_data("post_reimbursement_receipt", {"receipt": name})
+		self.assertEqual(data["cost_center"], f"Orchard - {MAIN_ABBR}")
+
 	def test_every_refusal_writes_nothing(self):
 		self.seed_due_from()
 		unlinked = self.approve(self.check()["name"])
@@ -374,7 +471,10 @@ class TheClassifier(ReimbursementTestCase):
 
 	def test_a_check_that_says_why_is_a_confident_reimbursement(self):
 		data = self.classify(CHECK_TEXT)
+		# The raw value the phone decodes into its reimbursement form.
+		self.assertEqual(data["receipt_type"], "reimbursement")
 		self.assertEqual(data["suggested_category"], CATEGORY)
+		self.assertIn("category Reimbursement", data["suggested_tool"])
 		self.assertTrue(data["reimbursement"]["has_reason"])
 		self.assertGreater(data["confidence"], receipts.CHECK_ONLY_CEILING)
 		self.assertIn("my share", data["matched_signals"])
@@ -384,6 +484,7 @@ class TheClassifier(ReimbursementTestCase):
 		data = self.classify(
 			"PAY TO THE ORDER OF Orchard Meadow LLC\nForty-two and 25/100 DOLLARS\nMEMO Coastal"
 		)
+		self.assertEqual(data["receipt_type"], "reimbursement")
 		self.assertEqual(data["suggested_category"], CATEGORY)
 		self.assertFalse(data["reimbursement"]["has_reason"])
 		self.assertLessEqual(data["confidence"], receipts.CHECK_ONLY_CEILING)
@@ -433,6 +534,25 @@ class FromAPhone(MobileAPITestCase):
 		)
 		self.assertEqual(data["reimburses_receipt"], original)
 		self.assertTrue(data["is_return"])
+
+	def test_the_check_fields_reach_the_tool_and_the_total_leaves_the_check_out(self):
+		"""The route the phone's acceptsReimbursementFields flag waits for."""
+		self.be()
+		mobile_api.create_expense_receipt(
+			merchant="Coastal Farm & Ranch", amount=84.50, receipt_date="2026-09-10", category="Supplies"
+		)
+		data = mobile_api.create_expense_receipt(
+			merchant="Jane Polehn",
+			amount=42.25,
+			receipt_date="2026-09-24",
+			category=CATEGORY,
+			check_number="1024",
+			check_memo="Coastal",
+		)
+		self.assertEqual((data["check_number"], data["check_memo"]), ("1024", "Coastal"))
+		listed = mobile_api.list_expense_receipts()
+		self.assertEqual(listed["count"], 2)
+		self.assertEqual(listed["total_amount"], 84.50)
 
 	def test_another_companys_expense_reads_as_absent(self):
 		self.be()

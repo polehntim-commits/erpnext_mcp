@@ -2210,7 +2210,7 @@ outside 0 to the amount; a patronage receipt marked `is_return`.
 
 ### `post_reimbursement_receipt` — MUTATING, default off
 
-v0.186.0. Books one **Approved** `Reimbursement Received` receipt — a check somebody
+v0.186.0. Books one **Approved** `Reimbursement` receipt — a check somebody
 wrote the farm to pay back their share of an expense it fronted — as a DRAFT Journal
 Entry, and links the entry back to the receipt.
 
@@ -20566,6 +20566,37 @@ another Item is refused by that Item's name — all before anything is created.
 create_item(item_code="Tomcat Mouse Killer", barcode="0036000291452",
             epa_registration_number="12455-89", signal_word="Caution")
 ```
+
+## v0.187.0 — reimbursements match the phone's contract
+
+### `submit_expense_receipt` — category `Reimbursement`, new arguments `check_number`, `check_memo`
+
+The category value is `Reimbursement` (v0.186.0 called it `Reimbursement Received`).
+`check_number` and `check_memo` are taken on a Reimbursement only; `cost_center` is
+refused on one.
+
+```
+submit_expense_receipt(merchant="Jane Polehn", amount=42.25, receipt_date="2026-09-24",
+                       category="Reimbursement", company="...", submitted_by="HR-EMP-00001",
+                       reimburses_receipt="EXR-2026-0015", check_number="1024",
+                       check_memo="Coastal")
+```
+
+### `get_expense_summary` / `get_expense_report` — new keys
+
+A Reimbursement is not spend. The summary leaves it out and reports
+`reimbursements_excluded` and `reimbursements_amount`; the report lists it, keeps it out
+of `total_amount`, and reports `reimbursements_count` and `reimbursements_amount`.
+
+### `classify_receipt` — `receipt_type: "reimbursement"`
+
+A check answers the new receipt type `reimbursement`, with `suggested_category`
+`Reimbursement`.
+
+### `post_reimbursement_receipt` — the check number is the reference
+
+`cheque_no` is the matched Bank Transaction, else the receipt's `check_number`; the memo
+goes in the remark. The credit's cost center is the original's, then the company default.
 
 ## v0.186.0 — a check paying back a share of an expense
 

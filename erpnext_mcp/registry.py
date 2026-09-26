@@ -15388,13 +15388,17 @@ TOOLS = {
 		"is_balance_sheet_item is set) or `Patronage Dividend` (income paid back) "
 		"needs a positive amount, takes `coop_name`, and refuses `cost_center`. "
 		"Neither is an expense: post_coop_receipt books them.\n\n"
-		"v0.186.0: A CHECK PAID TO THE FARM. Category `Reimbursement Received` is "
+		"v0.186.0: A CHECK PAID TO THE FARM. Category `Reimbursement` (v0.187.0, "
+		"the phone's contract) is "
 		"somebody paying back their share of an expense the farm fronted: "
 		"`merchant` is the PAYER, `amount` the check, `receipt_image` its photo, "
 		"and `reimburses_receipt` optionally the expense it pays back. It needs a "
 		"positive amount and is ALWAYS captured with is_return set (money in), so "
-		"the bank matcher looks for the deposit and the expense totals net it out. "
-		"Nothing posts at capture: once approved, post_reimbursement_receipt books it.",
+		"the bank matcher looks for the deposit. v0.187.0: it takes `check_number` "
+		"and `check_memo`, REFUSES `cost_center` (the money belongs to the receipt "
+		"it repays), and is NOT spend — every expense total leaves it out. Never a "
+		"Purchase Invoice. Nothing posts at capture: once approved, "
+		"post_reimbursement_receipt books it.",
 		{
 			"merchant": _field(_STRING, "The vendor as it reads on the receipt."),
 			"amount": _field(
@@ -15405,14 +15409,18 @@ TOOLS = {
 				_STRING,
 				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, "
 				"Owner Draw, Title/MCO, Bill of Sale, Co-op Equity, Patronage Dividend, "
-				"Reimbursement Received or Other. Defaults to Other.",
+				"Reimbursement or Other. Defaults to Other.",
 			),
 			"reimburses_receipt": _field(
 				_STRING,
-				"v0.186.0. On a Reimbursement Received receipt only: the Expense Receipt "
+				"v0.186.0. On a Reimbursement receipt only: the Expense Receipt "
 				"this check pays back part or all of. Optional. Same company, not "
 				"Rejected, and never more paid back than the expense cost.",
 			),
+			"check_number": _field(
+				_STRING, "v0.187.0. On a Reimbursement receipt only: the number in the check's corner."
+			),
+			"check_memo": _field(_STRING, "v0.187.0. On a Reimbursement receipt only: the memo line."),
 			"coop_name": _field(
 				_STRING,
 				"v0.166.0. On a Co-op Equity or Patronage Dividend receipt only: the "
@@ -15623,13 +15631,14 @@ TOOLS = {
 				_STRING,
 				"Fuel, Equipment Parts, Supplies, Hardware, Feed, Seed, Fertilizer, Owner Draw, "
 				"Title/MCO, Bill of Sale, Co-op Equity, Patronage Dividend, Reimbursement "
-				"Received or Other. v0.186.0: moving INTO Reimbursement Received ticks "
-				"is_return in the same write; moving out of it is refused while "
-				"reimburses_receipt is set (pass it as '' in the same call).",
+				"or Other. v0.186.0: moving INTO Reimbursement ticks is_return in the "
+				"same write, and is refused while the receipt carries a cost_center "
+				"(v0.187.0); moving out of it is refused while reimburses_receipt is "
+				"set (pass it as '' in the same call).",
 			),
 			"reimburses_receipt": _field(
 				_STRING,
-				"v0.186.0. On a Reimbursement Received receipt: the Expense Receipt the "
+				"v0.186.0. On a Reimbursement receipt: the Expense Receipt the "
 				"check pays back, or '' to unlink. Same company, not Rejected, and the "
 				"checks linked to one expense may not add up to more than it cost.",
 			),
@@ -15734,7 +15743,10 @@ TOOLS = {
 		"breakdown alongside the category one. Rejected receipts are EXCLUDED "
 		"by default — a rejected receipt was decided not to be a real expense, "
 		"and the excluded count is reported rather than hidden; pass `status` "
-		"explicitly to see one status only, Rejected included. Read-only.",
+		"explicitly to see one status only, Rejected included. v0.187.0: "
+		"Reimbursement checks are money paid BACK to the farm and are left out "
+		"of every total, reported as `reimbursements_excluded` and "
+		"`reimbursements_amount`. Read-only.",
 		{
 			"company": _COMPANY,
 			"from_date": _field(_STRING, "Earliest receipt_date as YYYY-MM-DD."),
@@ -15776,7 +15788,7 @@ TOOLS = {
 	),
 	"post_reimbursement_receipt": _tool(
 		reimbursements.post_reimbursement_receipt,
-		"MUTATING (default OFF). Book one APPROVED Reimbursement Received receipt "
+		"MUTATING (default OFF). Book one APPROVED Reimbursement receipt "
 		"— a check somebody wrote the farm to pay back their share of an expense "
 		"— as a DRAFT Journal Entry, and link it back to the receipt.\n\n"
 		"Dr the bank the check went into: `counter_account`, else the company's "
@@ -15785,9 +15797,10 @@ TOOLS = {
 		"the ORIGINAL expense's own account when reimburses_receipt is set — read "
 		"off the Purchase Invoice it became, or matched from its category as "
 		"create_purchase_invoice_from_receipt would. An Expense or Income credit "
-		"takes `cost_center`, else the receipt's, the original's, then the "
-		"company default. When the receipt is already matched to a Bank "
-		"Transaction, that BTN goes in the entry's cheque_no.\n\n"
+		"takes `cost_center`, else the original's, then the company default. "
+		"When the receipt is already matched to a Bank Transaction, that BTN goes "
+		"in the entry's cheque_no; otherwise the check_number does (v0.187.0), "
+		"and the memo goes in the remark.\n\n"
 		"REFUSES: any other category; not Approved; already linked; no "
 		"reimburses_receipt and no credit_account; a Receivable or Payable "
 		"credit account (ERPNext needs a party, and the payer is neither); an "
@@ -15805,14 +15818,13 @@ TOOLS = {
 				"Required when the receipt names no reimburses_receipt.",
 			),
 			"cost_center": _field(
-				_STRING,
-				"For an Expense or Income credit: instead of the receipt's, the original's or the default.",
+				_STRING, "For an Expense or Income credit: instead of the original's, or the company default."
 			),
 			"posting_date": _field(_STRING, "YYYY-MM-DD. Defaults to the receipt date."),
 		},
 		required=("receipt",),
 		mutating=True,
-		title="Post a reimbursement received",
+		title="Post a reimbursement",
 		available=_needs_doctype("Expense Receipt"),
 		requires="the Expense Receipt doctype (run bench migrate after installing v0.186.0)",
 	),
@@ -16172,8 +16184,9 @@ TOOLS = {
 		"block naming the cooperative where it can; a co-op's name alone never "
 		"chooses the category. v0.186.0: a CHECK paid to the farm (pay to the "
 		"order of, MICR symbols, a memo line) that no settlement, scale ticket or "
-		"invoice wording claims answers `suggested_category` Reimbursement "
-		"Received with a `reimbursement` block; a reason on it (reimburse, my "
+		"invoice wording claims answers receipt_type `reimbursement` (v0.187.0; "
+		"the phone decodes it) with `suggested_category` Reimbursement and a "
+		"`reimbursement` block; a reason on it (reimburse, my "
 		"share, pay back) raises the confidence, and without one it is capped at "
 		"0.5 — confirm, do not assume. `bill` currently has no "
 		"register to land in and says so in `suggested_tool`. Read-only, and it "

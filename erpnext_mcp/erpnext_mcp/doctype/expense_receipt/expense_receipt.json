@@ -30,6 +30,8 @@
   "coop_col",
   "is_balance_sheet_item",
   "reimburses_receipt",
+  "check_number",
+  "check_memo",
   "image_section",
   "receipt_image",
   "items_section",
@@ -109,7 +111,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nTitle/MCO\nBill of Sale\nCo-op Equity\nPatronage Dividend\nReimbursement Received\nOther"
+   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nTitle/MCO\nBill of Sale\nCo-op Equity\nPatronage Dividend\nReimbursement\nOther"
   },
   {
    "default": "0",
@@ -250,8 +252,22 @@
    "fieldtype": "Link",
    "options": "Expense Receipt",
    "label": "Reimburses Receipt",
-   "depends_on": "eval:doc.category=='Reimbursement Received'",
-   "description": "On a Reimbursement Received receipt: the expense this check pays back part or all of. Optional. When set, post_reimbursement_receipt credits that expense's own account, and the reimbursements linked to one expense may not add up to more than it."
+   "depends_on": "eval:doc.category=='Reimbursement'",
+   "description": "On a Reimbursement receipt: the expense this check pays back part or all of. Optional. When set, post_reimbursement_receipt credits that expense's own account, and the reimbursements linked to one expense may not add up to more than it."
+  },
+  {
+   "fieldname": "check_number",
+   "fieldtype": "Data",
+   "label": "Check Number",
+   "depends_on": "eval:doc.category=='Reimbursement'",
+   "description": "On a Reimbursement receipt: the number in the check's corner. post_reimbursement_receipt carries it as the Journal Entry's reference number when the deposit has not been matched to a Bank Transaction yet."
+  },
+  {
+   "fieldname": "check_memo",
+   "fieldtype": "Data",
+   "label": "Check Memo",
+   "depends_on": "eval:doc.category=='Reimbursement'",
+   "description": "On a Reimbursement receipt: what the payer wrote on the memo line."
   },
   {
    "fieldname": "image_section",

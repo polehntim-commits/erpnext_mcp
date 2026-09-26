@@ -4522,7 +4522,7 @@
   },
   {
    "default": "0",
-   "description": "MUTATING. Book an Approved Reimbursement Received receipt (a check paying back a share of an expense) as a draft Journal Entry: Dr bank, Cr the original expense's account or the one named.",
+   "description": "MUTATING. Book an Approved Reimbursement receipt (a check paying back a share of an expense) as a draft Journal Entry: Dr bank, Cr the original expense's account or the one named.",
    "fieldname": "allow_post_reimbursement_receipt",
    "fieldtype": "Check",
    "label": "Post Reimbursement Receipt"

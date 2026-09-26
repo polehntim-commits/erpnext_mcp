@@ -1019,6 +1019,10 @@ CLASSIFIER_TARGETS = {
 	"settlement": "Settlement Statement (create_settlement_statement)",
 	"bill": "Purchase Invoice — NOT YET IMPLEMENTED, capture as an expense for now",
 	"expense": "Expense Receipt (submit_expense_receipt)",
+	# v0.187.0. Not a register of its own: an Expense Receipt in category
+	# Reimbursement. A type of its own on the wire because the phone decodes the raw
+	# value "reimbursement" into its own capture form (fafo_ios SERVER_CHANGES.md §39).
+	"reimbursement": "Expense Receipt, category Reimbursement (submit_expense_receipt)",
 }
 
 #: v0.166.0. CO-OP SIGNALS, and they choose a CATEGORY rather than a register: a
@@ -1114,8 +1118,8 @@ def _coop_suggestion(haystack: str) -> dict:
 
 #: v0.186.0. A CHECK PAID TO THE FARM, and the words that say it pays somebody's
 #: share back. Like the co-op signals, these choose a CATEGORY rather than a
-#: register: a reimbursement is captured as an Expense Receipt in `Reimbursement
-#: Received`. `(keyword, weight)`.
+#: register: a reimbursement is captured as an Expense Receipt in
+#: `Reimbursement`. `(keyword, weight)`.
 #:
 #: THE CHECK'S OWN SHAPE is weight 1 per word — the printed "pay to the order of",
 #: the MICR symbols along the bottom, the memo line. THE REASON is weight 2, and
@@ -1151,7 +1155,7 @@ REIMBURSEMENT_SIGNALS = (
 #: "dollars" on any printed check; one stray "memo" on a receipt is not one.
 CHECK_THRESHOLD = 2
 
-#: A CHECK WITH NO REASON ON IT still leans to Reimbursement Received, because on
+#: A CHECK WITH NO REASON ON IT still leans to Reimbursement, because on
 #: this farm's capture flow the other incoming checks already have a home: a
 #: packer's check comes with its settlement wording and a co-op's with its notice.
 #: But the lean is capped here, because "it is a check" is not "it is a
@@ -1182,7 +1186,7 @@ def _reimbursement_suggestion(haystack: str, scores: dict) -> dict:
 	else:
 		confidence = round(min(CHECK_ONLY_CEILING, check_score / CLASSIFIER_SATURATION), 2)
 	return {
-		"suggested_category": "Reimbursement Received" if suggested else None,
+		"suggested_category": "Reimbursement" if suggested else None,
 		"is_check": is_check,
 		"has_reason": reason_score >= 2,
 		"matched_signals": [keyword for keyword, _ in check] + [keyword for keyword, _ in reason],
@@ -1264,11 +1268,12 @@ def classify_receipt(args: dict) -> ToolResult:
 	reimbursement = _reimbursement_suggestion(haystack, scores)
 	if reimbursement["suggested_category"]:
 		# v0.186.0. A check paid to the farm is captured as an Expense Receipt in
-		# Reimbursement Received. After the co-op branch, because a co-op's equity
-		# retirement arrives as a check too and its notice says so.
+		# Reimbursement; v0.187.0 answers it as receipt_type `reimbursement`. After
+		# the co-op branch, because a co-op's equity retirement arrives as a check
+		# too and its notice says so.
 		return ToolResult(
 			data={
-				"receipt_type": "expense",
+				"receipt_type": "reimbursement",
 				"confidence": reimbursement["confidence"],
 				"default_applied": False,
 				"matched_signals": reimbursement["matched_signals"],
@@ -1278,7 +1283,7 @@ def classify_receipt(args: dict) -> ToolResult:
 					for kind in CLASSIFIER_PRECEDENCE
 					if kind != "expense" and scores[kind]
 				],
-				"suggested_tool": CLASSIFIER_TARGETS["expense"],
+				"suggested_tool": CLASSIFIER_TARGETS["reimbursement"],
 				"amount": float(amount) if amount not in (None, "") else None,
 				"coop": coop,
 				"reimbursement": reimbursement,
@@ -1286,18 +1291,17 @@ def classify_receipt(args: dict) -> ToolResult:
 				"note": (
 					"the text reads as a check paying back a share of an expense ("
 					+ ", ".join(reimbursement["matched_signals"])
-					+ "). Capture it as Reimbursement Received with the payer as merchant; "
+					+ "). Capture it as Reimbursement with the payer as merchant; "
 					"post_reimbursement_receipt books it once approved."
 					if reimbursement["has_reason"]
 					else "the text reads as a check ("
 					+ ", ".join(reimbursement["matched_signals"])
 					+ ") and says nothing about what it is for. If it pays back somebody's share "
-					"of an expense, capture it as Reimbursement Received — confirm rather than "
+					"of an expense, capture it as Reimbursement — confirm rather than "
 					f"assume: confidence is capped at {CHECK_ONLY_CEILING} without a reason on it."
 				),
 			},
-			summary=f"expense / Reimbursement Received on {len(reimbursement['matched_signals'])} "
-			"check signal(s)",
+			summary=f"reimbursement on {len(reimbursement['matched_signals'])} check signal(s)",
 		)
 
 	if not total:

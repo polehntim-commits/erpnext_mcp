@@ -1,15 +1,21 @@
 # SPDX-License-Identifier: MIT
-"""Reimbursement Received — somebody's check paying back their share of an expense.
+"""Reimbursement — somebody's check paying back their share of an expense.
 
 v0.186.0. The farm fronts a shared expense (a Coastal run, say) and a family
 member pays their portion back with a personal check days or weeks later. The
 check is photographed through the same receipt flow as everything else, as
-category `Reimbursement Received`:
+category `Reimbursement`:
 
   * `merchant` is the PAYER — whoever the paper is from, as on every receipt;
   * `amount` is the check;
   * `receipt_image` is the photograph of it;
-  * `reimburses_receipt` optionally names the expense it pays back.
+  * `reimburses_receipt` optionally names the expense it pays back;
+  * `check_number` and `check_memo` are the check's corner number and memo line.
+
+v0.187.0 MATCHES THE PHONE'S CONTRACT (fafo_ios SERVER_CHANGES.md §39): the
+category is `Reimbursement`, and a reimbursement carries NO cost center — the
+money belongs to the receipt it repays, and coding it twice would allocate it
+twice. It is not spend either: the expense totals leave it out altogether.
 
 IT IS MONEY IN, SO IT IS ALWAYS `is_return`. That one flag already does the two
 things a deposit needs: the bank matcher looks at credits for it, and the expense
@@ -51,6 +57,8 @@ from . import expenses, governance, mutate
 EXPENSE_RECEIPT = expenses.EXPENSE_RECEIPT
 REIMBURSEMENT_CATEGORY = expenses.REIMBURSEMENT_CATEGORY
 LINK_FIELD = "reimburses_receipt"
+#: v0.187.0. The two check columns the phone sends, as `(fieldname, label)`.
+CHECK_FIELDS = (("check_number", "check number"), ("check_memo", "check memo"))
 
 #: What a reimbursement may be credited to when the caller names the account. An
 #: expense account (the usual case) or an asset one (a "Due From" the farm keeps).
@@ -140,16 +148,37 @@ def capture_arguments(args: dict, category: str, company: str, amount: float) ->
 	"""The reimbursement columns for `submit_expense_receipt`, checked. `{}` otherwise."""
 	tail = "Nothing was created."
 	link = as_str(args, LINK_FIELD)
+	sent = [field for field, _label in CHECK_FIELDS if as_str(args, field)]
 	if category != REIMBURSEMENT_CATEGORY:
-		if link:
+		named = ([LINK_FIELD] if link else []) + sent
+		if named:
+			verb = "belongs" if len(named) == 1 else "belong"
 			raise ToolError(
-				f"reimburses_receipt belongs to a {REIMBURSEMENT_CATEGORY} receipt, and this receipt "
-				f"is categorised {category!r}. {tail}"
+				f"{' and '.join(named)} {verb} to a {REIMBURSEMENT_CATEGORY} receipt, and this "
+				f"receipt is categorised {category!r}. {tail}"
 			)
 		return {}
 	if amount <= 0:
 		raise ToolError(f"a {REIMBURSEMENT_CATEGORY} receipt needs the check's positive amount. {tail}")
+	if as_str(args, "cost_center"):
+		# v0.187.0. The phone never sends one, and a desk client that does is told
+		# why rather than having it dropped.
+		raise ToolError(
+			f"cost_center does not apply to a {REIMBURSEMENT_CATEGORY}: the money belongs to the "
+			"receipt it repays, and coding it here too would allocate it twice. Leave it out. "
+			f"{tail}"
+		)
 	columns = {}
+	for field, label in CHECK_FIELDS:
+		value = as_str(args, field)
+		if not value:
+			continue
+		if not compat.has_field(EXPENSE_RECEIPT, field):
+			raise ToolError(
+				f"this site's Expense Receipt has no {label} column yet. Run `bench --site <site> "
+				f"migrate` after installing v0.187.0. {tail}"
+			)
+		columns[field] = value
 	if link:
 		columns[LINK_FIELD] = checked_link(
 			link, category=category, company=company, amount=amount, receipt="", tail=tail
@@ -170,6 +199,13 @@ def follow_update(doc, before: dict, after: dict) -> None:
 	new = after.get("category", old)
 	link = after[LINK_FIELD] if LINK_FIELD in after else doc.get(LINK_FIELD)
 	if new == REIMBURSEMENT_CATEGORY:
+		cost_center = after["cost_center"] if "cost_center" in after else doc.get("cost_center")
+		if cost_center:
+			raise ToolError(
+				f"a {REIMBURSEMENT_CATEGORY} has no cost center — the money belongs to the receipt "
+				f"it repays — and this one would carry {cost_center!r}. Pass cost_center as '' in the "
+				f"same call. {tail}"
+			)
 		if not compat.has_field(EXPENSE_RECEIPT, "is_return"):
 			return
 		if "is_return" in after and not after["is_return"]:
@@ -272,7 +308,7 @@ def _original_account(original: dict, company: str, tail: str) -> tuple:
 
 
 def post_reimbursement_receipt(args: dict) -> ToolResult:
-	"""Book one Approved Reimbursement Received receipt as a DRAFT Journal Entry."""
+	"""Book one Approved Reimbursement receipt as a DRAFT Journal Entry."""
 	tail = "Nothing was created."
 	receipt = as_str(args, "receipt") or as_str(args, "expense_receipt") or as_str(args, "name")
 	if not receipt:
@@ -292,7 +328,9 @@ def post_reimbursement_receipt(args: dict) -> ToolResult:
 			"cost_center",
 			"linked_doctype",
 			"linked_document",
-			*compat.existing_fields(EXPENSE_RECEIPT, (LINK_FIELD, "bank_transaction")),
+			*compat.existing_fields(
+				EXPENSE_RECEIPT, (LINK_FIELD, "bank_transaction", "check_number", "check_memo")
+			),
 		],
 		as_dict=True,
 	)
@@ -349,10 +387,12 @@ def post_reimbursement_receipt(args: dict) -> ToolResult:
 	# was coded to is the right one to take the money back off.
 	cost_center = None
 	if credit_row.get("root_type") in ("Expense", "Income"):
+		# The ORIGINAL's cost center first: the check pays back that receipt's cost,
+		# so it comes off the same line. A reimbursement carries none of its own.
 		cost_center = (
 			as_str(args, "cost_center")
-			or row.get("cost_center")
 			or (original or {}).get("cost_center")
+			or row.get("cost_center")
 			or frappe.db.get_value("Company", company, "cost_center")
 		)
 		if not cost_center:
@@ -363,8 +403,11 @@ def post_reimbursement_receipt(args: dict) -> ToolResult:
 		if not frappe.db.exists("Cost Center", cost_center):
 			raise ToolError(f"no Cost Center called {cost_center!r} on this site. {tail}")
 
-	remark = f"{REIMBURSEMENT_CATEGORY} — {payer} ({receipt})" + (
-		f", paying back {original_name}" if original_name else ""
+	remark = (
+		f"{REIMBURSEMENT_CATEGORY} — {payer} ({receipt})"
+		+ (f", check {row['check_number']}" if row.get("check_number") else "")
+		+ (f", paying back {original_name}" if original_name else "")
+		+ (f" — memo: {row['check_memo']}" if row.get("check_memo") else "")
 	)
 	credit_line = {"account": credit, "credit": amount, "user_remark": remark}
 	if cost_center:
@@ -375,9 +418,13 @@ def post_reimbursement_receipt(args: dict) -> ToolResult:
 	# That is where every bank-fed entry on this site carries its BTN, and v0.184.0's
 	# duplicate control reads it: two reimbursements of the same amount on one day
 	# with different deposits are then never reported as duplicates of each other.
+	#
+	# v0.187.0. OTHERWISE THE CHECK'S OWN NUMBER, which is what ERPNext's
+	# Reference Number field is for. Either one tells two same-amount checks apart.
 	extras = {}
-	if row.get("bank_transaction"):
-		extras = {"cheque_no": row["bank_transaction"], "cheque_date": posting_date}
+	reference = row.get("bank_transaction") or row.get("check_number")
+	if reference:
+		extras = {"cheque_no": reference, "cheque_date": posting_date}
 
 	lines = mutate.validated_journal_lines(raw, company)
 	doc = mutate.insert_draft_journal_entry(company, posting_date, lines, remark, extras)
@@ -400,6 +447,8 @@ def post_reimbursement_receipt(args: dict) -> ToolResult:
 			"credit_account_resolved_by": credit_resolved_by,
 			"cost_center": cost_center,
 			"cheque_no": extras.get("cheque_no"),
+			"check_number": row.get("check_number") or None,
+			"check_memo": row.get("check_memo") or None,
 			"lines": [
 				{
 					"account": line["account"],

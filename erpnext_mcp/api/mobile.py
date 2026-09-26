@@ -6512,6 +6512,8 @@ def create_expense_receipt(
 	linked_asset=None,
 	coop_name=None,
 	reimburses_receipt=None,
+	check_number=None,
+	check_memo=None,
 ) -> dict:
 	"""The fuel slip at the pump, with v0.67.0's Supplier and Item links.
 
@@ -6555,10 +6557,15 @@ def create_expense_receipt(
 	`_company` has already proved this caller may reach.
 
 	v0.186.0: A CHECK PAID TO THE FARM is captured here as category
-	`Reimbursement Received`, with the payer as `merchant` and, optionally,
+	`Reimbursement`, with the payer as `merchant` and, optionally,
 	`reimburses_receipt` naming the expense it pays back. That docname is scoped
 	like every other a body names. Nothing is booked from the phone: approval
 	and `post_reimbursement_receipt` are desk acts.
+
+	v0.187.0: THE PHONE'S CONTRACT (fafo_ios SERVER_CHANGES.md §39). The
+	category is `Reimbursement`, and `check_number` and `check_memo` are declared
+	here — the release the phone's `acceptsReimbursementFields` waits for before
+	it stops folding them into `notes`.
 	"""
 	allowed = guard.require_scope(user)
 	if str(linked_asset or "").strip():
@@ -6597,9 +6604,11 @@ def create_expense_receipt(
 		# v0.166.0. A co-op equity purchase or patronage notice; the tool refuses it
 		# on any other category.
 		("coop_name", coop_name),
-		# v0.186.0. The expense a Reimbursement Received check pays back; the tool
+		# v0.186.0. The expense a Reimbursement check pays back; the tool
 		# refuses it on any other category.
 		("reimburses_receipt", reimburses_receipt),
+		("check_number", check_number),
+		("check_memo", check_memo),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -8666,7 +8675,16 @@ def list_expense_receipts(
 		"receipts": rows,
 		"count": len(rows),
 		"company": wanted or None,
-		"total_amount": round(sum(float(row.get("amount") or 0) for row in rows), 2),
+		# v0.187.0. A Reimbursement check is money paid BACK, so it is listed and
+		# not added to the header total (fafo_ios SERVER_CHANGES.md §39).
+		"total_amount": round(
+			sum(
+				float(row.get("amount") or 0)
+				for row in rows
+				if row.get("category") != expense_tools.REIMBURSEMENT_CATEGORY
+			),
+			2,
+		),
 	}
 
 
