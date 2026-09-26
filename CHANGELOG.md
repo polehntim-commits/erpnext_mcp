@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.184.0 — 2026-09-26 — two bank transactions are not a duplicate
+
+**909 tools** (unchanged). `journal_entry_duplicate` was filing most of its alerts on
+bank-fed entries that each carry their own Bank Transaction in `cheque_no` — two $10
+charges in one week, two transfers on one day.
+
+- **Different, non-empty `cheque_no` on both sides → not a duplicate.** The pair is not
+  reported: no finding, no Compliance Alert, and no refusal under Enforced.
+- **Same `cheque_no` on both sides is still a duplicate**, and `why` now says both
+  reference that bank transaction — the same BTN booked twice is the case the control is for.
+- **A reference on only one side, or neither, is compared exactly as before.** A
+  hand-keyed copy of a bank-fed entry is still caught.
+- `create_journal_entry` passes its `cheque_no` to the control; `check_journal_entry_controls`
+  reads it off an existing entry, or takes a new `cheque_no` argument. Each match's
+  `detail` carries the other entry's `cheque_no`.
+- Existing alerts are not rewritten. Deploy: an image rebuild. No migrate.
+
 ## 0.183.0 — 2026-09-26 — an unattended run cannot link the wrong supplier
 
 **909 tools** (unchanged). Fixes EXR-2026-0015, where "COASTAL FARM STORES" resolved to

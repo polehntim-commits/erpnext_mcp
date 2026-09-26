@@ -225,6 +225,9 @@ def controls_gate(company: str, posting_date, total_debit: float, lines: list, a
 		accounts,
 		preparer=preparer,
 		approver=approver,
+		# v0.184.0. The bank reference, so two bank-fed entries booked from
+		# different Bank Transactions are not reported as duplicates of each other.
+		cheque_no=as_str(args, "cheque_no"),
 	)
 
 

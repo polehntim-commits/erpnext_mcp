@@ -924,7 +924,7 @@ def _comparable_entries(company: str, accounts: tuple, exclude: str = "") -> lis
 	rows = frappe.db.get_all(
 		"Journal Entry",
 		filters=filters,
-		fields=["name", "posting_date", "total_debit", "docstatus"],
+		fields=["name", "posting_date", "total_debit", "docstatus", "cheque_no"],
 		order_by="posting_date desc",
 		limit=HISTORY_CAP,
 	)
@@ -936,6 +936,7 @@ def _comparable_entries(company: str, accounts: tuple, exclude: str = "") -> lis
 				"posting_date": row.get("posting_date"),
 				"total": float(row.get("total_debit") or 0),
 				"docstatus": int(row.get("docstatus") or 0),
+				"cheque_no": row.get("cheque_no") or "",
 				"accounts": _entry_accounts(row["name"]),
 			}
 		)
@@ -952,6 +953,7 @@ def journal_entry_findings(
 	approver: str = "",
 	exclude: str = "",
 	source_docname: str = "",
+	cheque_no: str = "",
 ) -> dict:
 	"""Run all four journal entry controls. Returns `{control_point: [Finding]}`.
 
@@ -1001,7 +1003,13 @@ def journal_entry_findings(
 	history = _comparable_entries(company, accounts, exclude=exclude)
 
 	duplicates = controls.duplicate_findings(
-		{"posting_date": posting_date, "total": total, "accounts": accounts, "company": company},
+		{
+			"posting_date": posting_date,
+			"total": total,
+			"accounts": accounts,
+			"company": company,
+			"cheque_no": cheque_no,
+		},
 		history,
 	)
 	for match in duplicates[:5]:
@@ -1199,6 +1207,7 @@ def journal_entry_gate(
 	preparer: str = "",
 	approver: str = "",
 	source_docname: str = "",
+	cheque_no: str = "",
 ) -> dict:
 	"""Run every journal entry control. THE CALL `create_journal_entry` MAKES.
 
@@ -1226,6 +1235,7 @@ def journal_entry_gate(
 			preparer=preparer,
 			approver=approver,
 			source_docname=source_docname,
+			cheque_no=cheque_no,
 		)
 	except ToolError:
 		raise
@@ -1271,13 +1281,17 @@ def check_journal_entry_controls(args: dict) -> ToolResult:
 		if not frappe.db.exists(JOURNAL_ENTRY, name):
 			raise ToolError(f"no Journal Entry called {name!r} on this site.")
 		row = frappe.db.get_value(
-			JOURNAL_ENTRY, name, ["company", "posting_date", "total_debit", "owner"], as_dict=True
+			JOURNAL_ENTRY,
+			name,
+			["company", "posting_date", "total_debit", "owner", "cheque_no"],
+			as_dict=True,
 		)
 		company = row["company"]
 		posting_date = str(row["posting_date"])
 		total = float(row["total_debit"] or 0)
 		accounts = tuple(_entry_accounts(name))
 		preparer = as_str(args, "preparer") or row.get("owner") or ""
+		cheque_no = as_str(args, "cheque_no") or row.get("cheque_no") or ""
 	else:
 		total = float(args.get("total") or 0)
 		if not total:
@@ -1290,6 +1304,7 @@ def check_journal_entry_controls(args: dict) -> ToolResult:
 			raise ToolError('accounts must be a list of account names, e.g. ["1100 - Cash - ETC"]')
 		accounts = tuple(sorted({str(entry).strip() for entry in raw if str(entry).strip()}))
 		preparer = as_str(args, "preparer")
+		cheque_no = as_str(args, "cheque_no")
 
 	approver = as_str(args, "approver")
 
@@ -1302,6 +1317,7 @@ def check_journal_entry_controls(args: dict) -> ToolResult:
 		approver=approver,
 		exclude=name,
 		source_docname=name,
+		cheque_no=cheque_no,
 	)
 
 	blocks = {}

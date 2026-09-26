@@ -20535,6 +20535,20 @@ create_item(item_code="Tomcat Mouse Killer", barcode="0036000291452",
             epa_registration_number="12455-89", signal_word="Caution")
 ```
 
+## v0.184.0 — two bank transactions are not a duplicate
+
+### `check_journal_entry_controls` — new argument `cheque_no`
+
+The entry's bank reference; defaults to the existing entry's own `cheque_no`. Two entries
+with different, non-empty references are never reported by `journal_entry_duplicate`;
+the same reference twice still is. `create_journal_entry` applies the same rule using the
+`cheque_no` it is given:
+
+```
+create_journal_entry(company=..., posting_date="2026-09-02", user_remark="Netflix",
+                     cheque_no="ACC-BTN-2026-00504", accounts=[...])
+```
+
 ## v0.183.0 — an unattended run cannot link the wrong supplier
 
 ### `normalize_merchant` — new keys `auto_link_safe`, `conflict`

@@ -231,7 +231,7 @@ def account_signature(lines: list) -> tuple:
 def duplicate_findings(candidate: dict, existing: list) -> list:
 	"""Entries already on the books that this one looks like. Most alike first.
 
-	`candidate` is `{posting_date, total, accounts, company}`; `existing` is rows
+	`candidate` is `{posting_date, total, accounts, company, cheque_no}`; `existing` is rows
 	read from the site with the same shape plus a `name`. Returns a list of dicts
 	each naming the match and WHY it matched, because "duplicate of ACC-2026-0031"
 	is actionable and "possible duplicate" is not.
@@ -240,15 +240,29 @@ def duplicate_findings(candidate: dict, existing: list) -> list:
 	live with. Same total, within a cent. Same accounts, as a set. Posting dates
 	within a week. A recurring monthly accrual matches the first two every single
 	month and fails the third, which is the whole reason the window is there.
+
+	v0.184.0. TWO DIFFERENT BANK REFERENCES ARE TWO DIFFERENT TRANSACTIONS. Both
+	sides may carry a `cheque_no` — on a bank-fed entry that is the Bank
+	Transaction docname (`ACC-BTN-…`) the entry was booked from. When both are
+	present and they differ, the pair is not a duplicate by definition, and it is
+	not reported: that is the two $10 subscription charges in one week and the
+	two transfers on one day, which were most of what this control filed. A
+	pair where either side has no reference, or both carry the SAME one, is still
+	compared as before — the same BTN booked twice is exactly the duplicate this
+	exists for, and is named as such in `why`.
 	"""
 	when = _date(candidate.get("posting_date"))
 	total = _money(candidate.get("total"))
 	accounts = tuple(candidate.get("accounts") or ())
+	reference = str(candidate.get("cheque_no") or "").strip()
 	out = []
 	if not when or not total:
 		return out
 
 	for row in existing or []:
+		other_reference = str(row.get("cheque_no") or "").strip()
+		if reference and other_reference and reference != other_reference:
+			continue
 		other_when = _date(row.get("posting_date"))
 		if not other_when:
 			continue
@@ -265,6 +279,12 @@ def duplicate_findings(candidate: dict, existing: list) -> list:
 		other_accounts = tuple(row.get("accounts") or ())
 		if accounts and other_accounts and set(accounts) != set(other_accounts):
 			continue
+		why = (
+			f"same total ({total}), same {len(accounts) or len(other_accounts)} account(s), "
+			f"and posted {gap} day(s) apart"
+		)
+		if reference and reference == other_reference:
+			why += f", and both reference bank transaction {reference}"
 		out.append(
 			{
 				"name": row.get("name"),
@@ -273,10 +293,8 @@ def duplicate_findings(candidate: dict, existing: list) -> list:
 				"days_apart": gap,
 				"accounts": list(other_accounts),
 				"docstatus": int(row.get("docstatus") or 0),
-				"why": (
-					f"same total ({total}), same {len(accounts) or len(other_accounts)} account(s), "
-					f"and posted {gap} day(s) apart"
-				),
+				"cheque_no": other_reference or None,
+				"why": why,
 			}
 		)
 	return sorted(out, key=lambda row: (row["days_apart"], str(row["name"])))

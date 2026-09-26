@@ -1305,7 +1305,12 @@ TOOLS = {
 				"Why this entry exists. Required — it is what an accountant reads "
 				"first, and what the audit log records.",
 			),
-			"cheque_no": _field(_STRING, "Reference number, if any."),
+			"cheque_no": _field(
+				_STRING,
+				"Reference number, if any. For an entry booked from a bank feed, pass the "
+				"Bank Transaction docname: the duplicate control never reports two entries "
+				"with different references as duplicates of each other.",
+			),
 			"cheque_date": _field(_STRING, "Reference date, YYYY-MM-DD."),
 			"voucher_type": _field(
 				_STRING,
@@ -25335,6 +25340,14 @@ TOOLS = {
 				"Who would release it. Segregation of duties compares this against the "
 				"preparer; a blank approver is NOT a match, because an entry nobody has "
 				"approved is a different finding from one approved by its own author.",
+			),
+			"cheque_no": _field(
+				_STRING,
+				"v0.184.0. The entry's bank reference — on a bank-fed entry, the Bank "
+				"Transaction it was booked from. Defaults to the entry's own cheque_no when "
+				"checking an existing one. Two entries with DIFFERENT references are "
+				"different bank transactions and are never reported as duplicates; the "
+				"same reference twice still is.",
 			),
 			"limit": _LIMIT,
 		},

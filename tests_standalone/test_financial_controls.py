@@ -437,6 +437,59 @@ class TheJournalEntryControlsFind(ControlsTestCase):
 		)
 		self.assertEqual(matches, [])
 
+	def test_different_bank_references_are_not_duplicates(self):
+		"""v0.184.0. Two entries booked from two different Bank Transactions are
+		two bank transactions, however alike their total, accounts and date."""
+		matches = controls.duplicate_findings(
+			{"posting_date": "2026-09-02", "total": 10.0, "accounts": ("A", "B"), "cheque_no": "ACC-BTN-1"},
+			[
+				{
+					"name": "ACC-1",
+					"posting_date": "2026-09-02",
+					"total": 10.0,
+					"accounts": ["A", "B"],
+					"cheque_no": "ACC-BTN-2",
+				}
+			],
+		)
+		self.assertEqual(matches, [])
+
+	def test_the_same_bank_reference_twice_is_still_a_duplicate(self):
+		"""The same BTN booked twice is the duplicate this control exists for."""
+		matches = controls.duplicate_findings(
+			{"posting_date": "2026-09-02", "total": 10.0, "accounts": ("A", "B"), "cheque_no": "ACC-BTN-1"},
+			[
+				{
+					"name": "ACC-1",
+					"posting_date": "2026-09-02",
+					"total": 10.0,
+					"accounts": ["A", "B"],
+					"cheque_no": " ACC-BTN-1 ",
+				}
+			],
+		)
+		self.assertEqual(len(matches), 1)
+		self.assertIn("both reference bank transaction ACC-BTN-1", matches[0]["why"])
+
+	def test_one_missing_bank_reference_is_still_compared(self):
+		"""A reference on only one side proves nothing about the other: a
+		hand-keyed copy of a bank-fed entry is the other classic duplicate."""
+		for mine, theirs in (("ACC-BTN-1", ""), ("", "ACC-BTN-1"), ("", None)):
+			with self.subTest(mine=mine, theirs=theirs):
+				matches = controls.duplicate_findings(
+					{"posting_date": "2026-09-02", "total": 10.0, "accounts": ("A",), "cheque_no": mine},
+					[
+						{
+							"name": "ACC-1",
+							"posting_date": "2026-09-02",
+							"total": 10.0,
+							"accounts": ["A"],
+							"cheque_no": theirs,
+						}
+					],
+				)
+				self.assertEqual(len(matches), 1)
+
 	def test_a_transposed_digit_is_caught(self):
 		history = [1000.0] * 12
 		verdict = controls.unusual_amount(90_000.0, history)
@@ -767,6 +820,53 @@ class TheGateIsWiredIntoCreateJournalEntry(ControlsTestCase):
 		block = data["controls"]["controls"]["journal_entry_duplicate"]
 		self.assertEqual(block["finding_count"], 1)
 		self.assertIn("already on the books", block["findings"][0]["message"])
+
+	def test_entries_from_different_bank_transactions_are_not_flagged(self):
+		"""v0.184.0. Two identical charges on one day, each booked from its own
+		Bank Transaction, file no duplicate alert."""
+		self.tool_data("create_journal_entry", self.a_clean_entry(cheque_no="ACC-BTN-2026-00001"))
+		before_alerts = len(STORE.rows("Compliance Alert"))
+		data = self.tool_data("create_journal_entry", self.a_clean_entry(cheque_no="ACC-BTN-2026-00002"))
+		block = data["controls"]["controls"]["journal_entry_duplicate"]
+		self.assertEqual(block["finding_count"], 0)
+		self.assertEqual(len(STORE.rows("Compliance Alert")), before_alerts)
+
+	def test_the_same_bank_transaction_booked_twice_is_flagged(self):
+		self.tool_data("create_journal_entry", self.a_clean_entry(cheque_no="ACC-BTN-2026-00001"))
+		data = self.tool_data("create_journal_entry", self.a_clean_entry(cheque_no="ACC-BTN-2026-00001"))
+		block = data["controls"]["controls"]["journal_entry_duplicate"]
+		self.assertEqual(block["finding_count"], 1)
+		self.assertIn("ACC-BTN-2026-00001", block["findings"][0]["message"])
+
+	def test_a_bank_fed_entry_and_an_unreferenced_copy_are_flagged(self):
+		self.tool_data("create_journal_entry", self.a_clean_entry(cheque_no="ACC-BTN-2026-00001"))
+		data = self.tool_data("create_journal_entry", self.a_clean_entry())
+		self.assertEqual(data["controls"]["controls"]["journal_entry_duplicate"]["finding_count"], 1)
+
+	def test_the_preview_reads_the_existing_entrys_bank_reference(self):
+		first = self.tool_data("create_journal_entry", self.a_clean_entry(cheque_no="ACC-BTN-2026-00001"))
+		second = self.tool_data("create_journal_entry", self.a_clean_entry(cheque_no="ACC-BTN-2026-00002"))
+		data = self.tool_data(
+			"check_journal_entry_controls",
+			{"journal_entry": second["name"], "company": MAIN, "posting_date": TODAY},
+		)
+		self.assertEqual(data["controls"]["journal_entry_duplicate"]["finding_count"], 0)
+		# The negative control: the same entry, asked about as if it carried the
+		# first one's reference, IS a duplicate — so the zero above is the BTN
+		# rule, not a preview that cannot see the other entry.
+		data = self.tool_data(
+			"check_journal_entry_controls",
+			{
+				"journal_entry": second["name"],
+				"company": MAIN,
+				"posting_date": TODAY,
+				"cheque_no": "ACC-BTN-2026-00001",
+			},
+		)
+		self.assertEqual(data["controls"]["journal_entry_duplicate"]["finding_count"], 1)
+		self.assertEqual(
+			data["controls"]["journal_entry_duplicate"]["findings"][0]["detail"]["name"], first["name"]
+		)
 
 	def test_the_preview_writes_nothing_and_files_no_alert(self):
 		"""`check_journal_entry_controls` is how somebody decides whether to
