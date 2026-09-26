@@ -113,6 +113,12 @@ function erpnext_mcp_farm_overview(page) {
 	// cost register reads that somebody opening this page to check a boundary
 	// should not pay for.
 	let overlay = null;
+	// v0.185.0. Which slope raster is on — "slope_aspect", "slope_grade" or null.
+	// Held here rather than read off the map because the map is rebuilt on every
+	// reload, and a layer somebody switched on should survive picking an entity.
+	// OFF BY DEFAULT: a raster over the whole farm hides the imagery a boundary
+	// check needs, and nobody opening the page to look at a block asked for it.
+	let terrain = null;
 
 	function esc(value) {
 		return String(value === null || value === undefined ? "" : value)
@@ -148,6 +154,7 @@ function erpnext_mcp_farm_overview(page) {
 	const $panel = body.find(".fo-panel");
 	const $canvas = body.find(".fo-map");
 	const $legend = body.find(".fo-legend");
+	const $terrain_legend = body.find(".fo-terrain-legend");
 
 	page.set_primary_action(__("Refresh"), () => reload(), "refresh");
 
@@ -559,6 +566,21 @@ function erpnext_mcp_farm_overview(page) {
 			notes.push(`<div class="fo-note fo-note-warn"><p>${esc(warning)}</p></div>`);
 		});
 
+		// v0.185.0. ONE LINE FOR BOTH SLOPE LAYERS, because they are one build:
+		// grade reads the terrain aspect caches. An unbuilt layer gets no toggle,
+		// so this sentence is the only place a farm learns the layers exist.
+		const unbuilt = (answer.terrain_layers || []).filter((spec) => !spec.available);
+		if (unbuilt.length) {
+			notes.push(
+				`<div class="fo-note fo-note-warn"><p>${esc(
+					__("The slope layers ({0}) are not on this map: {1}", [
+						unbuilt.map((spec) => spec.label).join(", "),
+						unbuilt[0].reason || "",
+					])
+				)}</p></div>`
+			);
+		}
+
 		$notices.html(notes.join(""));
 	}
 
@@ -909,7 +931,8 @@ function erpnext_mcp_farm_overview(page) {
 				// A LAYER WITH NOTHING IN IT IS NOT OFFERED. An entry that
 				// toggles an empty group is a control that does nothing, and
 				// three of them is a control nobody trusts.
-				widget.add_base_layers(L, map, toggles);
+				const base = widget.add_base_layers(L, map, toggles);
+				add_terrain(L, base && base.control);
 
 				// THE VIEW IS SET BEFORE A SINGLE SHAPE IS ADDED, AND THE ORDER IS
 				// LOAD-BEARING RATHER THAN TIDY. A Leaflet map has no pixel origin
@@ -1050,6 +1073,141 @@ function erpnext_mcp_farm_overview(page) {
 			});
 	}
 
+	/** The slope rasters, as two entries in the map's own layer control. v0.185.0.
+	 *
+	 * TILE LAYERS, SO THEY SIT UNDER EVERY SHAPE. Leaflet puts a tile layer in
+	 * its tile pane and a polygon in the overlay pane above it, so the blocks,
+	 * the pins and whichever operational layer is picked all stay on top and
+	 * clickable. The alpha is baked into the pixels server-side, so the imagery
+	 * shows through without this page choosing a blend.
+	 *
+	 * ONE AT A TIME. Aspect and grade both colour every cell of the same ground,
+	 * and the two palettes share red; turning one on turns the other off.
+	 *
+	 * AN UNBUILT LAYER IS NOT OFFERED — a toggle that draws nothing is the
+	 * control nobody trusts, see the register toggles above — and the notice
+	 * says how to build it. Leaflet itself does not ask for a tile below the
+	 * layer's minimum zoom or outside its bounds, so a farm fitted at zoom 10
+	 * costs no request until somebody zooms in.
+	 */
+	function add_terrain(L, control) {
+		const specs = (answer.terrain_layers || []).filter((spec) => spec.available);
+		if (!control || !control.addOverlay || !specs.length) {
+			render_terrain_legend(null);
+			return;
+		}
+		const tiles = {};
+		specs.forEach((spec) => {
+			const b = spec.bounds;
+			tiles[spec.key] = L.tileLayer(spec.tile_url_template, {
+				tileSize: spec.tile_size || 256,
+				minZoom: spec.min_zoom,
+				// Past the deepest zoom the server renders, Leaflet enlarges that
+				// zoom's tiles rather than asking for ones that do not exist.
+				maxNativeZoom: spec.max_zoom,
+				maxZoom: 19,
+				bounds: b ? L.latLngBounds([b.south, b.west], [b.north, b.east]) : undefined,
+				attribution: esc(spec.source || ""),
+			});
+			control.addOverlay(tiles[spec.key], spec.label);
+		});
+		const key_of = (layer) => Object.keys(tiles).find((key) => tiles[key] === layer) || null;
+		const owner = map;
+		// A MAP BEING TAKEN DOWN IS NOT SOMEBODY UNTICKING A BOX. `map.remove()`
+		// — every reload, every entity change — fires `unload` and then removes
+		// each layer, and the control reports each removal as `overlayremove`.
+		// Left attached, the handler below reads that as "switched off" and the
+		// layer is gone after every Refresh. Found on a live bench, 2026-09-26.
+		// `unload` comes first, so detaching there is in time.
+		owner.on("unload", () => {
+			owner.off("overlayadd");
+			owner.off("overlayremove");
+		});
+		map.on("overlayadd", (event) => {
+			const key = key_of(event.layer);
+			if (!key) {
+				return;
+			}
+			// Set BEFORE the other is removed, so its overlayremove below sees
+			// that it is no longer the one on and leaves `terrain` alone.
+			terrain = key;
+			render_terrain_legend(specs.find((spec) => spec.key === key));
+			// THE SIBLING COMES OFF AFTER THE CLICK, NOT DURING IT. Leaflet's
+			// `_onInputClick` walks every box and re-adds each ticked layer that
+			// is not on the map — so a sibling removed from inside this handler
+			// is put straight back by the same walk, whose `overlayadd` then
+			// removes THIS layer, and the control is left with both boxes ticked
+			// over the wrong raster. Found on a live bench, 2026-09-26. Once the
+			// walk is over, a removal also redraws the checkboxes, which a
+			// removal inside it does not.
+			setTimeout(() => {
+				if (terrain !== key || !map) {
+					return;
+				}
+				Object.keys(tiles).forEach((other) => {
+					if (other !== key && map.hasLayer(tiles[other])) {
+						map.removeLayer(tiles[other]);
+					}
+				});
+			}, 0);
+		});
+		map.on("overlayremove", (event) => {
+			const key = key_of(event.layer);
+			if (key && key === terrain) {
+				terrain = null;
+				render_terrain_legend(null);
+			}
+		});
+		if (terrain && tiles[terrain]) {
+			tiles[terrain].addTo(map);
+			render_terrain_legend(specs.find((spec) => spec.key === terrain));
+		} else {
+			terrain = null;
+			render_terrain_legend(null);
+		}
+	}
+
+	/** The key for the slope layer that is on, from the server's own legend. */
+	function render_terrain_legend(spec) {
+		if (!spec) {
+			$terrain_legend.html("").hide();
+			return;
+		}
+		const swatch = (colour, text) =>
+			`<div class="fo-legend-entry">
+				<span class="fo-swatch" style="background:${esc(colour)}"></span>
+				<span>${esc(text)}</span>
+			</div>`;
+		const rows = [`<div class="fo-legend-entry"><strong>${esc(spec.label)}</strong></div>`];
+		if (spec.key === "slope_aspect") {
+			(spec.legend || []).forEach((entry) => {
+				rows.push(swatch(entry.color, __("{0}-facing", [entry.aspect])));
+			});
+			if (spec.flat_color) {
+				rows.push(swatch(spec.flat_color, __("Flat (under {0}°)", [spec.flat_slope_degrees])));
+			}
+		} else {
+			(spec.legend || []).forEach((entry) => {
+				const range =
+					entry.max_degrees === null || entry.max_degrees === undefined
+						? __("{0}° and over", [entry.min_degrees])
+						: __("{0}–{1}°", [entry.min_degrees, entry.max_degrees]);
+				rows.push(swatch(entry.color, `${entry.label} (${range})`));
+			});
+		}
+		const zoom = map && map.getZoom ? map.getZoom() : null;
+		const hint =
+			zoom !== null && zoom !== undefined && zoom < spec.min_zoom
+				? " " + __("Zoom in to see it — it draws from zoom {0}.", [spec.min_zoom])
+				: "";
+		rows.push(
+			`<div class="fo-terrain-note">${esc(spec.detail || "")}${esc(hint)} ${esc(
+				__("Source: {0}.", [spec.source || ""])
+			)}</div>`
+		);
+		$terrain_legend.html(rows.join("")).css("display", "flex");
+	}
+
 	/** What to show when there is no Leaflet: the farm, as a table of names.
 	 *
 	 * The same call `geo_map_widget.render_fallback` makes for a single record,
@@ -1063,6 +1221,8 @@ function erpnext_mcp_farm_overview(page) {
 			map.remove();
 			map = null;
 		}
+		// No map, so no raster and nothing for its key to describe.
+		render_terrain_legend(null);
 		$canvas.hide();
 		$panel.find(".fo-fallback, .fo-empty").remove();
 

@@ -501,15 +501,20 @@ class ItWritesNothing(OverviewTestCase):
 				self.assertEqual(frappe.db.get_value(doctype, name, "boundary_geojson"), before[doctype])
 
 	def test_the_module_publishes_one_method_and_it_is_a_read(self):
-		"""A whitelisted name is a reachable URL. This module has exactly one, and
-		its own `methods` is Frappe's default GET-and-POST read."""
+		"""A whitelisted name is a reachable URL. This module has exactly two, and
+		each one's `methods` is Frappe's default GET-and-POST read.
+
+		v0.185.0 added `terrain_tile`: the Desk's door to the slope rasters, since
+		the phone's (the farmops sidecar) authenticates a device a browser does
+		not hold. It reads a cached PNG and writes nothing — see
+		test_farm_overview_terrain.py."""
 		published = {
 			name
 			for name in dir(farm_overview)
 			if not name.startswith("_")
 			and getattr(getattr(farm_overview, name), "__wrapped_whitelisted__", False)
 		}
-		self.assertEqual(published, {"farm_overview"})
+		self.assertEqual(published, {"farm_overview", "terrain_tile"})
 
 
 # ── 6 ─────────────────────────────────────────────────────────────────────────

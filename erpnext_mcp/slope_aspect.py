@@ -793,6 +793,10 @@ def describe(meta: dict | None = None) -> dict:
 		"max_zoom": MAX_ZOOM,
 		"legend": legend(),
 		"flat_slope_degrees": FLAT_DEGREES,
+		# v0.185.0. The ninth colour on the map, which `legend()` does not key
+		# because flat ground has no bearing. Sent so a client drawing the key
+		# does not have to carry its own copy of the grey.
+		"flat_color": hex_colour(FLAT_GREY),
 		"steep_slope_degrees": STEEP_DEGREES,
 		"opacity": round(ALPHA / 255, 2),
 		"source": SOURCE_LABEL,

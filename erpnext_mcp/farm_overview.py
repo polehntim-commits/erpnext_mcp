@@ -109,7 +109,7 @@ from urllib.parse import quote
 
 import frappe
 
-from . import asset_types, compat, overlays
+from . import asset_types, compat, overlays, slope_aspect, slope_grade
 from .errors import ToolError
 from .tools import asset_tags as asset_tools
 from .tools import dispatch as dispatch_tools
@@ -1113,6 +1113,7 @@ def farm_overview(company=None, overlay=None) -> dict:
 		"capped": [doctype for doctype, total in counts.items() if total >= DRAW_CAP],
 		"page_route": PAGE_ROUTE,
 		**_overlay(entity, overlay),
+		"terrain_layers": _terrain_layers(),
 	}
 
 
@@ -1150,6 +1151,105 @@ def _overlay(entity: str, requested) -> dict:
 	return answer
 
 
+# ── v0.185.0: the terrain, under everything else ────────────────────────────
+#: The Desk's door to the two terrain rasters. The phone's is the farmops
+#: sidecar (`/farmops/api/tiles/...`), which authenticates a DEVICE — a Desk
+#: browser holds a Frappe session and no device credential, so it would get
+#: 401 on every tile. Same PNG bytes, from the same `tile_png`, through the door
+#: this login already has.
+TERRAIN_TILE_METHOD = "/api/method/erpnext_mcp.farm_overview.terrain_tile"
+
+#: The two layers, keyed as `slope_aspect.describe` and `slope_grade.describe`
+#: key them. Aspect first: it is the one the page was asked for.
+TERRAIN_LAYERS = {
+	"slope_aspect": (slope_aspect.describe, lambda z, x, y: slope_aspect.tile_png(z, x, y)),
+	"slope_grade": (slope_grade.describe, lambda z, x, y: slope_grade.tile_png(z, x, y)),
+}
+
+#: The terrain is computed over Parcel and Field boundaries, so a login that may
+#: read neither has no business being shown where the farm's ground lies.
+TERRAIN_SOURCES = (PARCEL, FIELD)
+
+
+def _may_see_terrain() -> bool:
+	return any(_may_read(doctype) for doctype in TERRAIN_SOURCES)
+
+
+def _terrain_layers() -> list:
+	"""The two slope rasters as the page draws them, or `[]`.
+
+	RASTERS UNDER THE BLOCKS, NOT A SIXTH OPERATIONAL LAYER. `overlays.py`'s
+	five colour a polygon by what is true of it now, one at a time; terrain is a
+	picture of the ground that does not change between one morning and the next.
+	It is a tile layer in the map's own layer control, OFF by default, and it can
+	sit under any operational layer — which way a restricted block faces is a
+	fair question.
+
+	`describe()` reads one small JSON file and no register, so an unbuilt layer
+	costs nothing and still arrives, `available: false` with the sentence that
+	says how to build it. The URL is swapped for the Desk's own, and the standard
+	grade scheme is the only one offered here: a per-machine rollover map is a
+	question about one tractor, and the phone that is sitting on it asks it.
+	"""
+	if not _may_see_terrain():
+		return []
+	out = []
+	for key, (describe, _render) in TERRAIN_LAYERS.items():
+		try:
+			spec = describe()
+		except Exception:  # pragma: no cover - a cache folder the worker cannot read
+			continue
+		spec["tile_url_template"] = f"{TERRAIN_TILE_METHOD}?layer={key}&z={{z}}&x={{x}}&y={{y}}"
+		out.append(spec)
+	return out
+
+
+@frappe.whitelist()
+def terrain_tile(layer=None, z=None, x=None, y=None) -> None:
+	"""One slope tile for the Desk map, as `image/png`. v0.185.0.
+
+	The bytes `/farmops/api/tiles/<layer>/...` serves the phone, from the same
+	cache. Gated on reading Parcel or Field — see `TERRAIN_SOURCES` — and
+	nothing else: the pixels are public USGS survey, not a record. No audit row,
+	for the reason `farmops_api._slope_aspect_tile` gives: a map pan asks for
+	dozens of tiles a second.
+
+	FRAPPE'S OWN EXCEPTIONS AND NOT `ToolError`, which out of a whitelisted
+	method is a 500 (see `api/gis.speaks_frappe`). And not `speaks_frappe`
+	either: its channel is a modal, and the caller here is an `<img>` that no
+	modal reaches. A 4xx is the whole answer a tile request can use.
+	"""
+	key = str(layer or "").strip()
+	if key not in TERRAIN_LAYERS:
+		raise frappe.ValidationError(f"layer must be one of {', '.join(TERRAIN_LAYERS)}, got {key!r}.")
+	if not slope_aspect.valid_tile(z, x, y):
+		raise frappe.ValidationError(f"{z}/{x}/{y} is not a map tile address.")
+	if not _may_see_terrain():
+		raise frappe.PermissionError(
+			frappe._(
+				"The slope layers are drawn over Parcel and Field boundaries, and this login may read neither."
+			)
+		)
+	try:
+		png = TERRAIN_LAYERS[key][1](int(z), int(x), int(y))
+	except ToolError as error:  # numpy is not installed on this bench
+		raise frappe.ValidationError(str(error)) from None
+	if png is None:
+		raise frappe.DoesNotExistError(
+			frappe._(
+				"The slope layers have not been built on this site. An operator runs "
+				"build_slope_aspect_layer once to fetch the elevation and cache the tiles."
+			)
+		)
+	bag = frappe.local.response
+	bag["filename"] = f"{key}-{int(z)}-{int(x)}-{int(y)}.png"
+	bag["filecontent"] = png
+	bag["type"] = "download"
+	# INLINE, or the browser treats every tile as a file to save.
+	bag["display_content_as"] = "inline"
+	bag["content_type"] = "image/png"
+
+
 __all__ = [
 	"PAGE_ROUTE",
 	"PAGE_TITLE",
@@ -1158,4 +1258,5 @@ __all__ = [
 	"parse_geometry",
 	"points_of",
 	"readable_companies",
+	"terrain_tile",
 ]

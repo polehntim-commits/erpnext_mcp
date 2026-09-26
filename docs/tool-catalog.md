@@ -20535,6 +20535,13 @@ create_item(item_code="Tomcat Mouse Killer", barcode="0036000291452",
             epa_registration_number="12455-89", signal_word="Caution")
 ```
 
+## v0.185.0 — slope aspect and grade on the Farm Overview map
+
+### `get_slope_aspect_layer` — new key `flat_color`
+
+The hex grey drawn under the flat-ground threshold (`flat_slope_degrees`), which `legend`
+does not key because flat ground has no bearing.
+
 ## v0.184.0 — two bank transactions are not a duplicate
 
 ### `check_journal_entry_controls` — new argument `cheque_no`

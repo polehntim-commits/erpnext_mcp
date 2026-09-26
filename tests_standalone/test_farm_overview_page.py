@@ -241,7 +241,64 @@ const calls = {
 	popups: [],
 	fitted: null,
 	html: {},            // selector -> last html() written to it
+	tiles: [],           // v0.185.0: every L.tileLayer, with its url and options
+	overlays: [],        // labels handed to control.addOverlay, in order
+	on_map: [],          // tile layers currently on the map, by key
+	after: [],           // what each scripted action left behind
 };
+
+// v0.185.0. A MAP THAT FIRES WHAT LEAFLET FIRES. Control.Layers listens to every
+// overlay it holds and fires `overlayadd`/`overlayremove` on the map whenever one
+// is added or removed BY ANY MEANS — a tick in the control, `addTo(map)` or
+// `map.removeLayer` — so the page's own restore-on-reload and its one-at-a-time
+// removal both go through these handlers. A stub that fired only on a simulated
+// click would test a Leaflet that does not exist.
+//
+// AND A CONTROL THAT CLICKS THE WAY LEAFLET 1.9's DOES. `_onInputClick` does not
+// add the one layer that was ticked: it walks EVERY input, removes the unticked
+// ones and adds the ticked ones, with `_handlingClick` set so the checkboxes are
+// not redrawn until it is done. A handler that removes a sibling during that walk
+// has it re-added by the walk a moment later — the bug the live bench showed on
+// 2026-09-26 and a stub that fired one add per tick could not.
+const handlers = {};
+const in_control = new Set();
+const control_order = [];
+const checked = new Map();
+const present = new Set();
+let handling_click = false;
+function fire(type, layer) {
+	(handlers[type] || []).forEach(function (handler) { handler({ layer: layer }); });
+}
+function sync(layer) {
+	// `_onLayerChange`: the boxes follow the map, except mid-click.
+	if (!handling_click) { checked.set(layer, present.has(layer)); }
+}
+function put(layer) {
+	if (present.has(layer)) { return; }
+	present.add(layer);
+	if (in_control.has(layer)) { sync(layer); fire("overlayadd", layer); }
+}
+function take(layer) {
+	if (!present.has(layer)) { return; }
+	present.delete(layer);
+	if (in_control.has(layer)) { sync(layer); fire("overlayremove", layer); }
+}
+function click(layer) {
+	checked.set(layer, !checked.get(layer));
+	handling_click = true;
+	const added = [];
+	const removed = [];
+	for (let i = control_order.length - 1; i >= 0; i--) {
+		(checked.get(control_order[i]) ? added : removed).push(control_order[i]);
+	}
+	removed.forEach(function (entry) { if (present.has(entry)) { take(entry); } });
+	added.forEach(function (entry) { if (!present.has(entry)) { put(entry); } });
+	handling_click = false;
+}
+function tile_key(layer) {
+	const match = /layer=([a-z_]+)/.exec(layer.__url);
+	return match ? match[1] : layer.__url;
+}
 
 let next_group = 0;
 function layerGroup() {
@@ -274,11 +331,33 @@ function shapeish(kind, detail) {
 const L = {
 	map: function () {
 		return {
-			remove: function () {}, invalidateSize: function () {},
+			// A removed map takes its listeners and its layers with it, as
+			// Leaflet's does — or a reload would be tested against the old map.
+			// AND IN LEAFLET's ORDER: `unload` first, then every layer removed,
+			// each removal of a control overlay firing `overlayremove` while the
+			// page's handlers are still attached. Found on the live bench,
+			// 2026-09-26: a handler that read that as "switched off" lost the
+			// layer on every Refresh, and a stub that cleared silently hid it.
+			remove: function () {
+				fire("unload", null);
+				Array.from(present).forEach(take);
+				Object.keys(handlers).forEach(function (type) { delete handlers[type]; });
+				present.clear();
+				in_control.clear();
+				control_order.length = 0;
+				checked.clear();
+			},
+			invalidateSize: function () {},
 			setView: function () {}, getContainer: function () { return { offsetWidth: 900 }; },
 			fitBounds: function (bounds) { calls.fitted = bounds; },
 			getSize: function () { return { x: 900, y: 620 }; },
-			addLayer: function () {}, on: function () {},
+			addLayer: function (layer) { put(layer); },
+			removeLayer: function (layer) { take(layer); },
+			hasLayer: function (layer) { return present.has(layer); },
+			getZoom: function () { return 15; },
+			on: function (type, handler) { (handlers[type] = handlers[type] || []).push(handler); },
+			// Leaflet's `off(type)` with no function drops every listener of that type.
+			off: function (type) { delete handlers[type]; },
 		};
 	},
 	layerGroup: layerGroup,
@@ -292,8 +371,19 @@ const L = {
 		tip.addTo = function (target) { calls.tooltips.push(tip.__detail); return add(target); };
 		return tip;
 	},
-	latLngBounds: function (bounds) { return { pad: function () { return bounds; } }; },
-	tileLayer: function () { return { addTo: function () {} }; },
+	latLngBounds: function (a, b) {
+		const bounds = b === undefined ? a : [a, b];
+		return { pad: function () { return bounds; }, __bounds: bounds };
+	},
+	tileLayer: function (url, options) {
+		const layer = { __url: url, __options: options || null };
+		layer.addTo = function () { put(layer); return layer; };
+		// Base imagery is created with no options object worth recording.
+		if (options && options.maxNativeZoom !== undefined) {
+			calls.tiles.push({ url: url, options: options });
+		}
+		return layer;
+	},
 };
 
 // A jQuery thin enough for this page: chainable, records `html()`, and every
@@ -305,6 +395,7 @@ function $node(selector) {
 		length: 1,
 		find: function (inner) { return $node(selector + " " + inner); },
 		html: function (value) { if (value !== undefined) { calls.html[selector] = String(value); } return node; },
+		css: function () { return node; },
 		text: function () { return node; },
 		append: function () { return node; },
 		after: function () { return node; },
@@ -374,7 +465,16 @@ sandbox.erpnext_mcp.geo_map = {
 	load_leaflet: function () { return Promise.resolve(L); },
 	add_base_layers: function (lib, map, overlays) {
 		calls.control = Object.keys(overlays || {});
-		return { control: {} };
+		return {
+			control: {
+				addOverlay: function (layer, label) {
+					in_control.add(layer);
+					control_order.push(layer);
+					checked.set(layer, present.has(layer));
+					calls.overlays.push(label);
+				},
+			},
+		};
 	},
 };
 
@@ -383,7 +483,29 @@ vm.runInContext(fs.readFileSync(SCRIPT, "utf8"), sandbox, { filename: SCRIPT });
 const wrapper = {};
 pages["farm-overview"].on_page_load(wrapper);
 
-setTimeout(function () {
+function snapshot() {
+	return {
+		on_map: Array.from(present).filter(function (layer) { return layer.__url && calls.tiles.some(function (t) { return t.url === layer.__url; }); }).map(tile_key),
+		ticked: control_order.filter(function (layer) { return checked.get(layer); }).map(tile_key),
+		terrain_legend: calls.html[Object.keys(calls.html).filter(function (key) { return key.indexOf("fo-terrain-legend") >= 0; })[0]] || "",
+	};
+}
+
+// `__actions`: ["click", key] is a person ticking or unticking that box. Each is
+// followed by a pause, so anything the page deferred has run before the snapshot.
+function act(done) {
+	const actions = (PAYLOAD.__actions || []).slice();
+	(function next() {
+		const action = actions.shift();
+		if (!action) { done(); return; }
+		const layer = Array.from(in_control).find(function (entry) { return tile_key(entry) === action[1]; });
+		if (!layer) { calls.after.push({ missing: action[1] }); next(); return; }
+		click(layer);
+		setTimeout(function () { calls.after.push(snapshot()); next(); }, 20);
+	})();
+}
+
+function report(before, after_reload) {
 	const summary = {};
 	Object.keys(calls.groups).forEach(function (id) {
 		summary[id] = calls.groups[id].map(function (entry) {
@@ -406,7 +528,33 @@ setTimeout(function () {
 			.map(function (key) { return calls.html[key]; })
 			.join(""),
 		html_keys: Object.keys(calls.html),
+		tiles: calls.tiles,
+		overlays: calls.overlays,
+		terrain_before: before,
+		after: calls.after,
+		notices: Object.keys(calls.html)
+			.filter(function (key) { return key.indexOf("fo-notices") >= 0; })
+			.map(function (key) { return calls.html[key]; })
+			.join(""),
+		after_reload: after_reload,
 	}));
+}
+
+function finish(before) {
+	if (!PAYLOAD.__reload) {
+		report(before, null);
+		return;
+	}
+	// What on_page_show and every entity change do: re-read and rebuild the map.
+	calls.tiles = [];
+	calls.overlays = [];
+	wrapper.farm_overview.reload();
+	setTimeout(function () { report(before, snapshot()); }, 80);
+}
+
+setTimeout(function () {
+	const before = snapshot();
+	act(function () { finish(before); });
 }, 80);
 """
 
@@ -581,3 +729,148 @@ class ThePageDraws(unittest.TestCase):
 		"""A key listing a colour nothing on screen is using is a key somebody
 		has to check against the map rather than read."""
 		self.assertNotIn("Normal", self.drawn["legend"])
+
+
+# ── v0.185.0: the slope layers ──────────────────────────────────────────────
+DESK = "/api/method/erpnext_mcp.farm_overview.terrain_tile"
+BOUNDS = {"west": -121.19, "south": 45.59, "east": -121.17, "north": 45.61}
+
+ASPECT = {
+	"key": "slope_aspect",
+	"label": "Slope aspect",
+	"detail": "Which way the ground faces.",
+	"tile_url_template": f"{DESK}?layer=slope_aspect&z={{z}}&x={{x}}&y={{y}}",
+	"tile_size": 256,
+	"min_zoom": 11,
+	"max_zoom": 17,
+	"legend": [
+		{"aspect": "N", "bearing": 0, "color": "#285fcd"},
+		{"aspect": "S", "bearing": 180, "color": "#cd232d"},
+	],
+	"flat_slope_degrees": 2.0,
+	"flat_color": "#969696",
+	"source": "USGS 3DEP 1/3 arc-second DEM (The National Map)",
+	"available": True,
+	"bounds": BOUNDS,
+}
+GRADE = {
+	"key": "slope_grade",
+	"label": "Slope grade",
+	"detail": "How steep the ground is.",
+	"tile_url_template": f"{DESK}?layer=slope_grade&z={{z}}&x={{x}}&y={{y}}",
+	"tile_size": 256,
+	"min_zoom": 11,
+	"max_zoom": 17,
+	"legend": [
+		{"label": "Gentle", "min_degrees": 0.0, "max_degrees": 8.0, "color": "#2e9e48"},
+		{"label": "Very steep", "min_degrees": 25.0, "max_degrees": None, "color": "#d02428"},
+	],
+	"source": "USGS 3DEP 1/3 arc-second DEM (The National Map)",
+	"available": True,
+	"bounds": BOUNDS,
+}
+
+
+def with_terrain(*specs, actions=(), reload=False):
+	payload = json.loads(json.dumps(PAYLOAD))
+	payload["terrain_layers"] = [json.loads(json.dumps(spec)) for spec in specs]
+	payload["__actions"] = [list(action) for action in actions]
+	payload["__reload"] = reload
+	return payload
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed on this machine")
+class TheSlopeLayers(unittest.TestCase):
+	def test_both_are_offered_in_the_layer_control_and_neither_is_on(self):
+		"""OFF BY DEFAULT: a raster over the whole farm hides the imagery a
+		boundary check needs."""
+		drawn = drive(with_terrain(ASPECT, GRADE))
+		self.assertEqual(drawn["overlays"], ["Slope aspect", "Slope grade"])
+		self.assertEqual(drawn["terrain_before"]["on_map"], [])
+		self.assertEqual(drawn["terrain_before"]["ticked"], [])
+		self.assertEqual(drawn["terrain_before"]["terrain_legend"], "")
+
+	def test_the_register_toggles_are_unchanged(self):
+		"""The rasters are added to the control, not to the register dict the
+		control was built from — so the register list is what it always was."""
+		drawn = drive(with_terrain(ASPECT, GRADE))
+		self.assertEqual(
+			drawn["control"],
+			["Parcels (1)", "Fields (2)", "Structures (1)", "Assets (1)", "Open tasks (3)"],
+		)
+
+	def test_the_tiles_come_from_the_url_the_server_sent(self):
+		"""The page holds no tile URL of its own — see ThePageOnDisk — and
+		enlarges zoom 17 rather than asking for tiles that do not exist."""
+		drawn = drive(with_terrain(ASPECT, GRADE))
+		by_url = {tile["url"]: tile["options"] for tile in drawn["tiles"]}
+		self.assertEqual(sorted(by_url), sorted([ASPECT["tile_url_template"], GRADE["tile_url_template"]]))
+		options = by_url[ASPECT["tile_url_template"]]
+		self.assertEqual(options["minZoom"], 11)
+		self.assertEqual(options["maxNativeZoom"], 17)
+		self.assertEqual(options["bounds"]["__bounds"], [[45.59, -121.19], [45.61, -121.17]])
+
+	def test_switching_aspect_on_draws_the_compass_key_and_the_flat_grey(self):
+		drawn = drive(with_terrain(ASPECT, GRADE, actions=[("click", "slope_aspect")]))
+		(after,) = drawn["after"]
+		self.assertEqual(after["on_map"], ["slope_aspect"])
+		legend = after["terrain_legend"]
+		self.assertIn("N-facing", legend)
+		self.assertIn("#cd232d", legend)
+		self.assertIn("Flat (under 2°)", legend)
+		self.assertIn("#969696", legend)
+		self.assertIn("USGS 3DEP", legend)
+
+	def test_one_at_a_time_turning_grade_on_takes_aspect_off(self):
+		"""Both palettes colour every cell of the same ground and both use red."""
+		drawn = drive(
+			with_terrain(ASPECT, GRADE, actions=[("click", "slope_aspect"), ("click", "slope_grade")])
+		)
+		_first, second = drawn["after"]
+		self.assertEqual(second["on_map"], ["slope_grade"])
+		# THE CHECKBOXES AGREE WITH THE MAP. Found on the live bench, 2026-09-26:
+		# removing aspect inside the click let Leaflet's own walk re-add it, and
+		# the control showed both ticked over a map drawing aspect.
+		self.assertEqual(second["ticked"], ["slope_grade"])
+		self.assertIn("Very steep (25° and over)", second["terrain_legend"])
+		self.assertIn("Gentle (0–8°)", second["terrain_legend"])
+		self.assertNotIn("N-facing", second["terrain_legend"])
+
+	def test_switching_it_off_clears_the_key(self):
+		drawn = drive(
+			with_terrain(ASPECT, GRADE, actions=[("click", "slope_grade"), ("click", "slope_grade")])
+		)
+		self.assertEqual(drawn["after"][-1], {"on_map": [], "ticked": [], "terrain_legend": ""})
+
+	def test_a_layer_switched_on_survives_the_page_re_reading(self):
+		"""The page rebuilds its map on every return and every entity change. A
+		slope layer that vanished each time would be switched off by picking an
+		entity, which nobody would guess."""
+		drawn = drive(with_terrain(ASPECT, GRADE, actions=[("click", "slope_grade")], reload=True))
+		self.assertEqual(drawn["after_reload"]["on_map"], ["slope_grade"])
+		self.assertEqual(drawn["after_reload"]["ticked"], ["slope_grade"])
+		self.assertIn("Very steep", drawn["after_reload"]["terrain_legend"])
+
+	def test_a_layer_switched_off_stays_off_after_the_re_read(self):
+		drawn = drive(
+			with_terrain(
+				ASPECT, GRADE, actions=[("click", "slope_grade"), ("click", "slope_grade")], reload=True
+			)
+		)
+		self.assertEqual(drawn["after_reload"], {"on_map": [], "ticked": [], "terrain_legend": ""})
+
+	def test_an_unbuilt_layer_is_not_offered_and_the_notice_says_how_to_build_it(self):
+		unbuilt = [
+			{**spec, "available": False, "reason": "Run build_slope_aspect_layer once."}
+			for spec in (ASPECT, GRADE)
+		]
+		for spec in unbuilt:
+			spec.pop("bounds")
+		drawn = drive(with_terrain(*unbuilt))
+		self.assertEqual(drawn["overlays"], [])
+		self.assertEqual(drawn["tiles"], [])
+		self.assertIn("Slope aspect, Slope grade", drawn["notices"])
+		self.assertIn("build_slope_aspect_layer", drawn["notices"])
+
+	def test_a_built_site_carries_no_slope_notice(self):
+		self.assertNotIn("slope", drive(with_terrain(ASPECT, GRADE))["notices"].lower())

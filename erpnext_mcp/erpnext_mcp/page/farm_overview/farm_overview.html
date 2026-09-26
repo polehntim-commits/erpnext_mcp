@@ -55,6 +55,13 @@
 		.fo-legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 12px 16px;
 			border-top: 1px solid var(--border-color, #e2e8f0); font-size: 12px; }
 		.fo-legend-entry { display: flex; align-items: center; gap: 8px; }
+		/* v0.185.0. THE SLOPE KEY, ITS OWN ROW AND ONLY WHILE A SLOPE LAYER IS ON.
+		   A raster under the blocks colours the ground rather than any shape, so it
+		   cannot share the register key or the operational one — a south-facing red
+		   and a restricted-entry red are two different facts in one hue. */
+		.fo-terrain-legend { flex-wrap: wrap; gap: 14px; padding: 10px 16px;
+			border-top: 1px dashed var(--border-color, #e2e8f0); font-size: 12px; }
+		.fo-terrain-note { flex-basis: 100%; font-size: 11px; color: var(--text-muted, #8d99a6); }
 		.fo-swatch { width: 22px; height: 12px; border-radius: 3px; display: inline-block; }
 		.fo-legend-count { color: var(--text-muted, #8d99a6); }
 		.fo-notices { margin-bottom: 16px; }
@@ -117,5 +124,6 @@
 	<div class="fo-panel">
 		<div class="fo-map"></div>
 		<div class="fo-legend"></div>
+		<div class="fo-terrain-legend" style="display:none"></div>
 	</div>
 </div>

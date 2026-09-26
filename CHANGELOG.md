@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.185.0 — 2026-09-26 — slope aspect and grade on the Farm Overview map
+
+**909 tools** (unchanged). The phone has drawn both slope layers since v0.167.0/v0.168.0;
+`/app/farm-overview` (Map & Terrain) now does too.
+
+- **Two entries in the map's layer control, "Slope aspect" and "Slope grade", both off by
+  default and one at a time.** Tile layers, so every block, pin and operational layer stays
+  on top and clickable. Aspect: north blue, east green, south red, west yellow, grey under
+  2°, colour strengthening to 20°. Grade: the standard four bands (8°/15°/25°).
+- **A key for whichever is on**, built from the server's legend, with the source survey and a
+  "zoom in" hint below the layer's minimum zoom. A layer switched on survives the page
+  re-reading (entity change, returning to the page).
+- **`farm_overview.terrain_tile`** — a new whitelisted GET that serves the same cached PNG
+  as `/farmops/api/tiles/...`, inline `image/png`, to a Desk session. The phone's route
+  authenticates a device, which a browser does not hold. Gated on reading Parcel or Field;
+  no audit row per tile, for the reason the phone route gives.
+- `farm_overview` answers `terrain_layers`: both descriptors with the Desk URL. An unbuilt
+  site gets no toggle and one notice naming `build_slope_aspect_layer`.
+- `get_slope_aspect_layer` / `slope_aspect.describe` gain `flat_color`, the grey the legend
+  did not key.
+- The per-machine rollover grade stays on the phone. Deploy: an image rebuild, then
+  `bench build` (the page script changed). No migrate.
+- Verified on a live bench against real USGS terrain (Wenatchee, WA). It found two
+  layer-control bugs the node harness passed: ticking grade left aspect drawn with both
+  boxes ticked, and Refresh dropped the layer that was on. Both are fixed, and the
+  harness now models Leaflet's click walk and teardown order so they stay caught.
+
 ## 0.184.0 — 2026-09-26 — two bank transactions are not a duplicate
 
 **909 tools** (unchanged). `journal_entry_duplicate` was filing most of its alerts on
