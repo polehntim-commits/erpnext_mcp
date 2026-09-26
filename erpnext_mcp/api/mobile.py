@@ -6511,6 +6511,7 @@ def create_expense_receipt(
 	vin=None,
 	linked_asset=None,
 	coop_name=None,
+	reimburses_receipt=None,
 ) -> dict:
 	"""The fuel slip at the pump, with v0.67.0's Supplier and Item links.
 
@@ -6552,11 +6553,21 @@ def create_expense_receipt(
 	`linked_asset`. `linked_asset` is scoped like every docname a body names; a VIN
 	match the tool makes on its own is confined to the receipt's company, which
 	`_company` has already proved this caller may reach.
+
+	v0.186.0: A CHECK PAID TO THE FARM is captured here as category
+	`Reimbursement Received`, with the payer as `merchant` and, optionally,
+	`reimburses_receipt` naming the expense it pays back. That docname is scoped
+	like every other a body names. Nothing is booked from the phone: approval
+	and `post_reimbursement_receipt` are desk acts.
 	"""
 	allowed = guard.require_scope(user)
 	if str(linked_asset or "").strip():
 		linked_asset = guard.require_scoped_doc(
 			asset_tags.ASSET_REGISTER, linked_asset, "linked_asset", allowed
+		)
+	if str(reimburses_receipt or "").strip():
+		reimburses_receipt = guard.require_scoped_doc(
+			expense_tools.EXPENSE_RECEIPT, reimburses_receipt, "reimburses_receipt", allowed
 		)
 
 	inner = {
@@ -6586,6 +6597,9 @@ def create_expense_receipt(
 		# v0.166.0. A co-op equity purchase or patronage notice; the tool refuses it
 		# on any other category.
 		("coop_name", coop_name),
+		# v0.186.0. The expense a Reimbursement Received check pays back; the tool
+		# refuses it on any other category.
+		("reimburses_receipt", reimburses_receipt),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -19905,7 +19919,11 @@ def search_items(user: str, search=None, limit=None) -> dict:
 	if str(search or "").strip():
 		inner["search"] = str(search).strip()
 	data = master_tools.list_items(inner).data
-	return {"items": data.get("items") or [], "count": data.get("count", 0), "truncated": data.get("truncated")}
+	return {
+		"items": data.get("items") or [],
+		"count": data.get("count", 0),
+		"truncated": data.get("truncated"),
+	}
 
 
 # ── 122. link_item_barcode ───────────────────────────────────────────────────
@@ -19968,7 +19986,9 @@ def create_item(
 	guard.require_dispatch_role(user, "Adding a product")
 	name = str(item_name or "").strip()
 	if not name:
-		frappe.throw("item_name is required — what the product is called on its label.", frappe.ValidationError)
+		frappe.throw(
+			"item_name is required — what the product is called on its label.", frappe.ValidationError
+		)
 	inner: dict = {"item_code": str(item_code or "").strip() or name, "item_name": name}
 	if str(stock_uom or "").strip():
 		inner["stock_uom"] = str(stock_uom).strip()

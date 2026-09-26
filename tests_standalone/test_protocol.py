@@ -1144,10 +1144,14 @@ class Catalogue(SeededTestCase):
 		`import_fsa_clu_boundaries` matches those CLUs against the blocks that are
 		already here and sets their boundaries. The pair is one read and one write
 		on purpose — the file is looked at before it is believed.
+
+		v0.186.0 ADDS ONE WRITE, `post_reimbursement_receipt`: the check a family
+		member writes to pay back their share of an expense the farm fronted,
+		booked once approved as a draft Journal Entry into the bank.
 		"""
-		self.assertEqual(len(registry.TOOLS), 909)
+		self.assertEqual(len(registry.TOOLS), 910)
 		self.assertEqual(len(registry.READ_TOOLS), 452)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 457)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 458)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

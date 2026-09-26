@@ -111,6 +111,7 @@ CATEGORIES = (
 	"Bill of Sale",
 	"Co-op Equity",
 	"Patronage Dividend",
+	"Reimbursement Received",
 	"Other",
 )
 
@@ -140,6 +141,14 @@ COOP_EQUITY_CATEGORY = "Co-op Equity"
 PATRONAGE_CATEGORY = "Patronage Dividend"
 COOP_CATEGORIES = (COOP_EQUITY_CATEGORY, PATRONAGE_CATEGORY)
 
+#: v0.186.0. A check somebody wrote the farm to pay back their share of an expense
+#: it fronted. Money IN, so a receipt in this category is always `is_return` — the
+#: bank matcher then looks for the deposit, and the expense summary nets it out of
+#: spend exactly as the ledger does. `merchant` is the payer. It never becomes a
+#: Purchase Invoice; `post_reimbursement_receipt` books it. See
+#: `tools/reimbursements.py`.
+REIMBURSEMENT_CATEGORY = "Reimbursement Received"
+
 #: Every category that is not money spent on running the farm, which the expense
 #: totals leave out. One tuple, so the summary and the Purchase Invoice refusal
 #: cannot disagree about which categories those are.
@@ -158,7 +167,7 @@ NON_EXPENSE_CATEGORIES = (*DOCUMENT_CATEGORIES, *COOP_CATEGORIES)
 #: OCR never claimed it, so changing it corrects nothing and there is nothing to
 #: keep an original of. `amount` and `receipt_date` get their own tools, with an
 #: audit trail each: see `correct_receipt_amount`.
-UPDATABLE_FIELDS = ("cost_center", "supplier", "category", "notes", "is_return")
+UPDATABLE_FIELDS = ("cost_center", "supplier", "category", "notes", "is_return", "reimburses_receipt")
 
 #: What every read tool returns for a receipt, minus the raw OCR text and the
 #: line items — both of which are large and only `get_expense_receipt` returns.
@@ -228,6 +237,9 @@ _TITLE_FIELDS = ("document_subtype", "vin", "linked_asset")
 #: v0.166.0. The co-op columns, read back when the site has them.
 _COOP_FIELDS = ("coop_name", "is_balance_sheet_item")
 
+#: v0.186.0. The reimbursement column, read back when the site has it.
+_REIMBURSEMENT_FIELDS = ("reimburses_receipt",)
+
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -240,6 +252,7 @@ def _read_fields() -> list[str]:
 		*compat.existing_fields(EXPENSE_RECEIPT, _CORRECTION_FIELDS),
 		*compat.existing_fields(EXPENSE_RECEIPT, _TITLE_FIELDS),
 		*compat.existing_fields(EXPENSE_RECEIPT, _COOP_FIELDS),
+		*compat.existing_fields(EXPENSE_RECEIPT, _REIMBURSEMENT_FIELDS),
 	]
 
 
@@ -480,9 +493,7 @@ def list_expense_receipts(args: dict) -> ToolResult:
 		fields=_read_fields(),
 		limit_page_length=limit,
 		order_by=(
-			"receipt_date desc, creation desc"
-			if newest_first
-			else "ocr_confidence asc, receipt_date desc"
+			"receipt_date desc, creation desc" if newest_first else "ocr_confidence asc, receipt_date desc"
 		),
 	)
 	receipts = [_row_out(row) for row in rows]
@@ -548,10 +559,15 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	company = resolve_company(as_str(args, "company"), required=True)
 	submitted_by = _resolve_employee(as_str(args, "submitted_by") or as_str(args, "employee"), "submitted_by")
 
-	from . import vehicle_titles  # imports this module; see `receipts` below
+	from . import reimbursements, vehicle_titles  # both import this module; see `receipts` below
 
 	title = _title_arguments(args, category, company)
 	coop = _coop_arguments(args, category, merchant, amount)
+	# v0.186.0. Checked here, before anything is written. A reimbursement is money
+	# IN whatever the phone sent, so the direction is not a question to ask.
+	reimbursement = reimbursements.capture_arguments(args, category, company, amount)
+	if category == REIMBURSEMENT_CATEGORY:
+		is_return = 1
 
 	status = as_str(args, "status") or SUBMITTED
 	if status not in CREATABLE_STATUSES:
@@ -626,6 +642,7 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	payload.update(intelligence["columns"])
 	payload.update(title["columns"])
 	payload.update(coop)
+	payload.update(reimbursement)
 
 	doc = frappe.get_doc(payload)
 	for row in _read_items(args):
@@ -680,6 +697,11 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 					"is_balance_sheet_item": bool(coop["is_balance_sheet_item"]),
 				}
 				if coop
+				else {}
+			),
+			**(
+				{"payer": merchant, "reimburses_receipt": reimbursement.get("reimburses_receipt")}
+				if category == REIMBURSEMENT_CATEGORY
 				else {}
 			),
 			**(
@@ -1032,6 +1054,19 @@ def update_expense_receipt(args: dict) -> ToolResult:
 			# 0 and 1 rather than False and True: the column is a Frappe Check,
 			# which is an Int, and the comparison below is on the string form.
 			value = 1 if as_bool(args, "is_return", False) else 0
+		elif key == "reimburses_receipt":
+			# v0.186.0. Checked against the category the receipt will HAVE after
+			# this call, so recategorising and linking can be one call.
+			from . import reimbursements
+
+			value = reimbursements.checked_link(
+				as_str(args, "reimburses_receipt"),
+				category=as_str(args, "category") if "category" in args else doc.get("category"),
+				company=doc.get("company"),
+				amount=float(doc.get("amount") or 0),
+				receipt=name,
+				tail="Nothing was changed.",
+			)
 		else:  # notes
 			value = as_str(args, "notes")
 
@@ -1056,6 +1091,11 @@ def update_expense_receipt(args: dict) -> ToolResult:
 
 	if "category" in after:
 		_follow_category(doc, before, after)
+	# v0.186.0. On EVERY update, not only a recategorisation: unticking is_return
+	# on a reimbursement is a change to the receipt's own direction too.
+	from . import reimbursements
+
+	reimbursements.follow_update(doc, before, after)
 
 	frappe.db.set_value(EXPENSE_RECEIPT, name, after)
 

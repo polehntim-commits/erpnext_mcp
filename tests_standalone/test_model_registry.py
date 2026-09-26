@@ -892,9 +892,11 @@ class ToolRegistration(unittest.TestCase):
 		# blocks already registered and sets their boundaries. The seven `fsa_`
 		# columns on Field are new columns on an existing register and carry no
 		# tools of their own — no existing signature changed.
-		self.assertEqual(len(self.registry.TOOLS), 909)
+		# v0.186.0 adds one write, `post_reimbursement_receipt`: an approved check
+		# paying back a share of an expense, booked as a draft Journal Entry.
+		self.assertEqual(len(self.registry.TOOLS), 910)
 		self.assertEqual(len(self.registry.READ_TOOLS), 452)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 457)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 458)
 
 
 if __name__ == "__main__":

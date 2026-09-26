@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 909 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 910 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -2207,6 +2207,38 @@ names its own; without them the accounts are found by the default names).
 Co-op Equity Investments (run `ensure_coop_accounts`) or, for patronage, without
 Dividend Income; `retained_amount` on Co-op Equity or
 outside 0 to the amount; a patronage receipt marked `is_return`.
+
+### `post_reimbursement_receipt` — MUTATING, default off
+
+v0.186.0. Books one **Approved** `Reimbursement Received` receipt — a check somebody
+wrote the farm to pay back their share of an expense it fronted — as a DRAFT Journal
+Entry, and links the entry back to the receipt.
+
+- **Dr** the bank the check went into: `counter_account`, else the company's default
+  bank (then cash) account.
+- **Cr** `credit_account` when named (Expense, Asset such as a "Due From", or Income);
+  else the **original expense's own account** when the receipt names
+  `reimburses_receipt` — read off the Purchase Invoice the original became, or
+  matched from its category as `create_purchase_invoice_from_receipt` would.
+- An Expense or Income credit takes `cost_center`, else the receipt's, the
+  original's, then the company default.
+- A receipt already matched to a Bank Transaction puts that BTN in the entry's
+  `cheque_no`, where the duplicate control reads it.
+
+```
+post_reimbursement_receipt(receipt="EXR-2026-0042")
+```
+
+**Arguments:** `receipt` (required; `expense_receipt` alias), `counter_account`,
+`credit_account`, `cost_center`, `posting_date`.
+
+**Returns** `journal_entry`, `docstatus` (0), `payer`, `amount`, `reimburses_receipt`,
+`bank_account`, `credit_account`, `credit_account_resolved_by`, `cost_center`,
+`cheque_no`, `lines[]`.
+
+**Refused:** another category; not Approved; already linked; no `reimburses_receipt`
+and no `credit_account`; a Receivable or Payable credit account (ERPNext needs a
+party, and the payer is neither); an original split across several expense accounts.
 
 ### `list_coop_equity_summary` — read, default on
 
@@ -20534,6 +20566,35 @@ another Item is refused by that Item's name — all before anything is created.
 create_item(item_code="Tomcat Mouse Killer", barcode="0036000291452",
             epa_registration_number="12455-89", signal_word="Caution")
 ```
+
+## v0.186.0 — a check paying back a share of an expense
+
+### `submit_expense_receipt` — new category `Reimbursement Received`, new argument `reimburses_receipt`
+
+`merchant` is the payer, `amount` the check, `receipt_image` its photo, and
+`reimburses_receipt` optionally the expense it pays back (same company, not Rejected,
+never more paid back than it cost). Always captured with `is_return` set.
+
+```
+submit_expense_receipt(merchant="Jane Polehn", amount=84.50, receipt_date="2026-09-24",
+                       category="Reimbursement Received", company="...",
+                       submitted_by="HR-EMP-00001", reimburses_receipt="EXR-2026-0015",
+                       receipt_image="/private/files/check.jpg")
+```
+
+### `update_expense_receipt` — new argument `reimburses_receipt`
+
+Link a reimbursement to its expense after capture, or `''` to unlink.
+
+### `classify_receipt` — new `reimbursement` block
+
+A check paid to the farm that no settlement, scale-ticket or invoice wording claims
+answers `suggested_category` `Reimbursement Received`. Reimbursement wording raises the
+confidence; without it the confidence is capped at 0.5.
+
+### `post_reimbursement_receipt` — new, MUTATING, default off
+
+See its section above.
 
 ## v0.185.0 — slope aspect and grade on the Farm Overview map
 

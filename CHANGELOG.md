@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.186.0 — 2026-09-26 — a check paying back a share of an expense
+
+**910 tools** (+1 write, off). The farm fronts a shared expense and a family member
+pays their portion back with a personal check later. It is now captured through the
+receipt flow and booked into the bank.
+
+- **Expense Receipt category `Reimbursement Received`.** `merchant` is the payer,
+  `amount` the check, `receipt_image` its photo. Always captured with `is_return`
+  set (money in), so the bank matcher looks for the deposit and `get_expense_summary`
+  nets it out of spend — which is what the ledger does when the check credits the
+  expense account.
+- **`reimburses_receipt`** (new column, optional) names the expense it pays back:
+  same company, not Rejected, not itself a check, and the checks linked to one
+  expense may not add up to more than it cost (a rejected check frees its share).
+  Settable at capture (`submit_expense_receipt`, the phone's `create_expense_receipt`,
+  where it is company-scoped) or later (`update_expense_receipt`).
+- **`post_reimbursement_receipt`** (MUTATING, default off) books an **Approved**
+  check as a draft Journal Entry: Dr the company's default bank (or
+  `counter_account`); Cr `credit_account` if named, else the original expense's own
+  account — read off the Purchase Invoice it became, or matched from its category.
+  A matched Bank Transaction goes in `cheque_no`. Receivable/Payable credits are
+  refused (they need a party). Approve-then-post, as for co-op receipts and owner
+  draws: the phone never writes to the ledger (Tim's call, in session).
+- **`classify_receipt`** recognises a check (pay to the order of, MICR symbols, memo)
+  that no settlement, scale-ticket or invoice wording claims, and suggests
+  `Reimbursement Received`; reimbursement wording raises the confidence, otherwise
+  it is capped at 0.5. It still reads no doctype. Every answer carries a
+  `reimbursement` block.
+- `create_purchase_invoice_from_receipt` refuses the category by name. Recoding
+  into it ticks `is_return`; out of it is refused while a link is set; the direction
+  cannot be unticked.
+- Deploy: an image rebuild, then `bench migrate` (new column and category option).
+
 ## 0.185.0 — 2026-09-26 — slope aspect and grade on the Farm Overview map
 
 **909 tools** (unchanged). The phone has drawn both slope layers since v0.167.0/v0.168.0;

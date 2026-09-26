@@ -29,6 +29,7 @@
   "coop_name",
   "coop_col",
   "is_balance_sheet_item",
+  "reimburses_receipt",
   "image_section",
   "receipt_image",
   "items_section",
@@ -108,7 +109,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nTitle/MCO\nBill of Sale\nCo-op Equity\nPatronage Dividend\nOther"
+   "options": "Fuel\nEquipment Parts\nSupplies\nHardware\nFeed\nSeed\nFertilizer\nOwner Draw\nTitle/MCO\nBill of Sale\nCo-op Equity\nPatronage Dividend\nReimbursement Received\nOther"
   },
   {
    "default": "0",
@@ -243,6 +244,14 @@
    "fieldtype": "Check",
    "label": "Balance Sheet Item",
    "read_only": 1
+  },
+  {
+   "fieldname": "reimburses_receipt",
+   "fieldtype": "Link",
+   "options": "Expense Receipt",
+   "label": "Reimburses Receipt",
+   "depends_on": "eval:doc.category=='Reimbursement Received'",
+   "description": "On a Reimbursement Received receipt: the expense this check pays back part or all of. Optional. When set, post_reimbursement_receipt credits that expense's own account, and the reimbursements linked to one expense may not add up to more than it."
   },
   {
    "fieldname": "image_section",
@@ -391,7 +400,7 @@
   },
   {
    "collapsible": 1,
-   "description": "What the scanner read, before somebody corrected it. Empty on a receipt nobody has had to correct \u2014 read the two timestamps, not the two originals: a Currency column is NOT NULL DEFAULT 0 on a real site, so an untouched original_amount reads 0.00 and not blank.",
+   "description": "What the scanner read, before somebody corrected it. Empty on a receipt nobody has had to correct — read the two timestamps, not the two originals: a Currency column is NOT NULL DEFAULT 0 on a real site, so an untouched original_amount reads 0.00 and not blank.",
    "fieldname": "corrections_section",
    "fieldtype": "Section Break",
    "label": "Corrections"
