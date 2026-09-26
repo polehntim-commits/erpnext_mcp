@@ -676,6 +676,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"search_items",
 		"link_item_barcode",
 		"create_item",
+		# v0.182.0 — where a receipt category will be booked.
+		"get_expense_account_map",
+		"normalize_merchant",
 		"start_inspection",
 		# `submit_wizard_via_mobile` is here for `start_inspection`'s reason and
 		# then some: `MobileAPI.swift` will never name it either, because
@@ -4022,6 +4025,90 @@ class TheStoreAisleReachesTheCatalogue(MobileAPITestCase):
 		self.be()
 		answer = mobile_api.search_items(search="surround")
 		self.assertEqual([row["item_code"] for row in answer["items"]], [SPRAY])
+
+
+class TheReceiptIsReviewedBeforeItIsFiled(MobileAPITestCase):
+	"""v0.182.0. The supplier a slip most likely is, and where each category is booked.
+
+	BOTH ARE THE SERVER'S OWN ANSWERS, ASKED EARLY. `normalize_merchant` has been
+	the read-only "did you mean" since v0.75.0 and `_match_expense_account` is
+	what `create_purchase_invoice_from_receipt` books against; a phone showing
+	anything else would disagree with the bill the office makes.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		STORE.seed(
+			"Supplier",
+			[
+				{"name": "Coastal Farm & Ranch", "supplier_name": "Coastal Farm & Ranch"},
+				{"name": "Sawyer's Hardware LLC", "supplier_name": "Sawyer's Hardware LLC"},
+			],
+		)
+
+	def account(self, name, number, company=MAIN, abbr="ETC"):
+		return {
+			"name": f"{number} - {name} - {abbr}",
+			"account_name": name,
+			"account_number": number,
+			"is_group": 0,
+			"root_type": "Expense",
+			"disabled": 0,
+			"company": company,
+		}
+
+	# ── normalize_merchant ──────────────────────────────────────────────────
+	def test_the_slips_merchant_finds_its_supplier_and_not_the_last_one_used(self):
+		self.be()
+		answer = mobile_api.normalize_merchant(merchant="COASTAL FARM AND RANCH #214")
+		self.assertEqual(answer["match"]["supplier"], "Coastal Farm & Ranch")
+		self.assertNotIn(
+			"Sawyer's Hardware LLC",
+			[answer["match"]["supplier"]] + [row["supplier"] for row in answer["alternatives"]
+			                                 if row["confidence"] >= answer["threshold"]],
+		)
+
+	def test_only_the_verdict_travels(self):
+		"""`steps` and `llm_context` read the whole site's receipt corpus."""
+		self.be()
+		answer = mobile_api.normalize_merchant(merchant="COASTAL FARM AND RANCH")
+		self.assertEqual(set(answer["resolution"]), {"supplier", "supplier_name", "method", "confidence"})
+		self.assertNotIn("steps", str(answer))
+
+	def test_an_unrelated_merchant_matches_nothing(self):
+		self.be()
+		self.assertIsNone(mobile_api.normalize_merchant(merchant="Zzyzx Quantum Widgets")["match"])
+
+	# ── get_expense_account_map ─────────────────────────────────────────────
+	def test_each_category_names_the_account_its_bill_will_post_to(self):
+		STORE.seed("Account", [
+			self.account("Repairs & Maintenance", "6800"),
+			self.account("Vehicles & Fuel", "6300"),
+		])
+		self.be()
+		answer = mobile_api.get_expense_account_map()
+		self.assertEqual(answer["company"], MAIN)
+		cats = answer["categories"]
+		self.assertEqual(cats["Equipment Parts"]["account"], "6800 - Repairs & Maintenance - ETC")
+		self.assertEqual(cats["Fuel"]["account"], "6300 - Vehicles & Fuel - ETC")
+		self.assertTrue(cats["Supplies"]["account"].endswith("Office Supplies - ETC"))
+
+	def test_no_account_and_two_accounts_are_said_rather_than_guessed(self):
+		STORE.seed("Account", [
+			self.account("Hardware - Shop", "6810"),
+			self.account("Hardware - Irrigation", "6820"),
+		])
+		self.be()
+		cats = mobile_api.get_expense_account_map()["categories"]
+		self.assertIsNone(cats["Feed"]["account"])
+		self.assertIn("no expense account", cats["Feed"]["problem"])
+		self.assertIsNone(cats["Hardware"]["account"])
+		self.assertEqual(len(cats["Hardware"]["candidates"]), 2)
+
+	def test_another_entitys_chart_is_refused(self):
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.get_expense_account_map(company=OTHER)
 
 
 class TheWizardKnowsWhereToPostItsAnswers(MobileAPITestCase):

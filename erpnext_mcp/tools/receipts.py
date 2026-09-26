@@ -2788,6 +2788,15 @@ def _leaf_expense_accounts(company: str) -> list[dict]:
 	]
 
 
+def _accounts_matching(candidates: list[dict], keywords) -> list[dict]:
+	"""The leaf accounts whose name carries one of a category's keywords."""
+	return [
+		row
+		for row in candidates
+		if any(keyword in str(row.get("account_name") or "").lower() for keyword in keywords)
+	]
+
+
 def _match_expense_account(company: str, category: str) -> str:
 	"""One leaf Expense account whose name matches a receipt category.
 
@@ -2798,11 +2807,7 @@ def _match_expense_account(company: str, category: str) -> str:
 	"""
 	keywords = _CATEGORY_ACCOUNT_KEYWORDS.get(category, (category.lower(),))
 	candidates = _leaf_expense_accounts(company)
-	matches = [
-		row
-		for row in candidates
-		if any(keyword in str(row.get("account_name") or "").lower() for keyword in keywords)
-	]
+	matches = _accounts_matching(candidates, keywords)
 	if len(matches) == 1:
 		return matches[0]["name"]
 	listing = ", ".join(row["name"] for row in candidates) or "<none>"
@@ -2818,6 +2823,39 @@ def _match_expense_account(company: str, category: str) -> str:
 		f"{', '.join(row['name'] for row in matches)}. Name it explicitly with expense_account. "
 		"Nothing was created."
 	)
+
+
+def expense_account_map(company: str) -> dict:
+	"""Which expense account each receipt category will post to on `company`.
+
+	v0.182.0. THE SAME `_match_expense_account` `create_purchase_invoice_from_receipt`
+	calls, asked in advance, so a phone can show "Equipment Parts → Repairs &
+	Maintenance" before the receipt is filed and never disagree with the bill the
+	office makes from it. A category that matches no account, or more than one,
+	answers `account: None` with the refusal's own sentence — the phone says the
+	office will choose rather than guessing a line of the P&L.
+	"""
+	candidates = _leaf_expense_accounts(company)
+	categories = {}
+	for category, keywords in _CATEGORY_ACCOUNT_KEYWORDS.items():
+		# The filter `_match_expense_account` applies, over one read of the
+		# accounts rather than one read per category.
+		matches = [row["name"] for row in _accounts_matching(candidates, keywords)]
+		if len(matches) == 1:
+			categories[category] = {"account": matches[0], "problem": None, "candidates": matches}
+		elif not matches:
+			categories[category] = {
+				"account": None,
+				"problem": f"no expense account is named after {', '.join(keywords)}",
+				"candidates": [],
+			}
+		else:
+			categories[category] = {
+				"account": None,
+				"problem": f"{len(matches)} accounts could be it",
+				"candidates": matches,
+			}
+	return {"company": company, "categories": categories}
 
 
 _RECEIPT_FIELDS_FOR_PI = (

@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.182.0 — 2026-09-26 — a receipt is reviewed before it is filed
+
+**909 tools** (unchanged). Two new read-only `/mobile` routes, both open on enrolment.
+
+- **`/mobile/normalize_merchant`** — the read-only "did you mean …?" `normalize_merchant`
+  has been since v0.75.0, now reachable from a phone. Answers `match`, `alternatives`,
+  `threshold` and the cascade's verdict (`resolution`: supplier, supplier_name, method,
+  confidence). `steps` and `llm_context` are NOT returned: they read the whole site's
+  receipt corpus. Suggests; sets nothing.
+- **`/mobile/get_expense_account_map`** — receipt category → the leaf Expense account a
+  Purchase Invoice from it will post to, using the same keyword match
+  `create_purchase_invoice_from_receipt` books against (now one shared
+  `_accounts_matching`). No match or more than one answers `account: null` with the
+  problem and the candidates, never a guess. The company must be one the caller reaches.
+- Deploy: an image rebuild. No migrate.
+
 ## 0.181.0 — 2026-09-25 — a shed picker, and a store barcode onto a pesticide
 
 **909 tools** (unchanged). `create_item` takes a `barcode`; five new `/mobile` routes.

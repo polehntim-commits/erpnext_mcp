@@ -402,6 +402,12 @@ ROUTES = (
 	# `/private/files/…` link, and this door cannot follow one.
 	Route("/mobile", mobile_api.get_receipt_image),
 	Route("/mobile", mobile_api.update_expense_receipt),
+	# v0.182.0. Where each category will be booked — the same match the office's
+	# Purchase Invoice makes later, asked while the slip is still in hand.
+	Route("/mobile", mobile_api.get_expense_account_map),
+	# v0.182.0. The supplier a slip's merchant most likely is — the read-only
+	# suggestion `normalize_merchant` was written to be, trimmed to its verdict.
+	Route("/mobile", mobile_api.normalize_merchant),
 	# v0.165.0. Filing a captured vehicle title on the Vehicle or Tractor it
 	# belongs to, when capture matched no VIN or matched the wrong one.
 	Route("/mobile", mobile_api.link_title_to_asset),

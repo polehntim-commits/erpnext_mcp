@@ -483,6 +483,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/search_items",
 		"/mobile/link_item_barcode",
 		"/mobile/create_item",
+		"/mobile/get_expense_account_map",
+		"/mobile/normalize_merchant",
 		# v0.91.0. The fifth wizard submit target. The other four —
 		# `create_employee`, `register_asset`, `create_accident_report`,
 		# `create_discipline_record` — were already on this table; the
@@ -3065,6 +3067,11 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"list_warehouses",
 		"find_item_by_barcode",
 		"search_items",
+		# v0.182.0. Account names on the caller's own company's chart, read so a
+		# receipt's category shows its P&L line before it is filed.
+		"get_expense_account_map",
+		# Suppliers are already open via `list_suppliers`; only the verdict travels.
+		"normalize_merchant",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -3074,7 +3081,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 110, "a method is named in two sets at once")
+		self.assertEqual(len(named), 112, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

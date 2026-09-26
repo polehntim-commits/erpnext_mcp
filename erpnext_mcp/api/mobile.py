@@ -19989,3 +19989,84 @@ def create_item(
 		if label[key] not in (None, ""):
 			inner[key] = label[key]
 	return master_tools.create_item(inner).data
+
+
+# ── 124. get_expense_account_map ─────────────────────────────────────────────
+#
+# v0.182.0. THE RECEIPT FORM SHOWED A CATEGORY AND NOT WHAT IT MEANT. Equipment
+# Parts is a P&L line — "Repairs & Maintenance" on this farm's chart — and the
+# line is decided later, when the office turns the receipt into a Purchase
+# Invoice, by `receipts._match_expense_account`. This answers that same match
+# in advance, per category, so the person holding the slip sees where it will
+# be booked while they can still change the category. Read-only; the company
+# must be one the caller reaches.
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_expense_account_map", limit=guard.READ_LIMIT)
+def get_expense_account_map(user: str, company=None) -> dict:
+	"""Receipt category → the expense account a bill from it will post to."""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	if not entity:
+		frappe.throw("company is required — the chart of accounts is per company.", frappe.ValidationError)
+	return receipt_tools.expense_account_map(entity)
+
+
+# ── 125. normalize_merchant ──────────────────────────────────────────────────
+#
+# v0.182.0. "DID YOU MEAN COASTAL FARM & RANCH?", ASKED BEFORE FILING. The tool
+# has existed since v0.75.0 for exactly this — read-only, a suggestion a person
+# confirms — and a phone could not reach it, so the receipt form's supplier box
+# was filled from this handset's own history and a model's pick among it. That
+# is how a Coastal Farm & Ranch slip arrived linked to Sawyer's Hardware: the
+# history had one supplier in it and nothing checked it against the slip.
+#
+# THE ANSWER IS TRIMMED ON PURPOSE. `resolution.steps` and `llm_context` read
+# the receipt corpus across the whole site — other entities' merchant strings
+# and receipt names — so only the verdict travels: which Supplier, by which
+# evidence, how confident. Suppliers are a shared register and `list_suppliers`
+# already answers them to any enrolled phone, so nothing new is disclosed.
+_MERCHANT_MATCH_KEYS = ("supplier", "supplier_name", "confidence")
+
+
+def _match_row(row) -> dict | None:
+	if not isinstance(row, dict):
+		return None
+	return {key: row.get(key) for key in _MERCHANT_MATCH_KEYS}
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("normalize_merchant", limit=guard.READ_LIMIT)
+def normalize_merchant(
+	user: str,
+	merchant=None,
+	merchant_url=None,
+	merchant_phone=None,
+	store_number=None,
+	ocr_raw_text=None,
+) -> dict:
+	"""The Supplier a printed merchant most likely is, with the runners-up. Suggests; sets nothing."""
+	guard.require_scope(user)
+	inner: dict = {"merchant": str(merchant or "").strip()}
+	for key, value in (
+		("merchant_url", merchant_url),
+		("merchant_phone", merchant_phone),
+		("store_number", store_number),
+		("ocr_raw_text", ocr_raw_text),
+	):
+		if value not in (None, ""):
+			inner[key] = str(value)
+	data = receipt_tools.normalize_merchant(inner).data
+	resolution = data.get("resolution") or {}
+	supplier = resolution.get("supplier")
+	return {
+		"merchant": data.get("merchant"),
+		"match": _match_row(data.get("match")),
+		"alternatives": [row for row in map(_match_row, data.get("alternatives") or []) if row],
+		"threshold": data.get("threshold"),
+		"resolution": {
+			"supplier": supplier,
+			"supplier_name": frappe.db.get_value("Supplier", supplier, "supplier_name") if supplier else None,
+			"method": resolution.get("method"),
+			"confidence": resolution.get("confidence"),
+		},
+	}
