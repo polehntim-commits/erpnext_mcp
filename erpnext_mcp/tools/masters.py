@@ -611,6 +611,139 @@ def _require_item(args: dict) -> str:
 	raise ToolError(f"no Item called {code!r} on this site. Call list_items to find it.")
 
 
+#: ERPNext's own child table of retail codes on an Item. v0.181.0. A UPC read
+#: off a tub of mouse bait at a farm store goes HERE, on the Item that carries
+#: the EPA registration and the REI — not on a register of its own. The
+#: barcode is how somebody holding the tub finds the record; the registration
+#: number is what the record IS.
+ITEM_BARCODE = "Item Barcode"
+
+#: The GTIN lengths the check digit is verified on, and the `barcode_type` each
+#: is stored as. ERPNext's Select spells the 12-digit US code "UPC-A" and the
+#: 13-digit one plain "EAN"; anything else (a Code 128 on a distributor's
+#: case) is stored with no type rather than a guessed one.
+_GTIN_TYPES = {8: "EAN-8", 12: "UPC-A", 13: "EAN"}
+
+
+def normalize_barcode(raw) -> tuple[str, str]:
+	"""A scanned or typed retail code as `(code, barcode_type)`, check digit verified.
+
+	A UPC-A REACHES A PHONE AS THIRTEEN DIGITS. iOS reports a 12-digit UPC-A
+	as the EAN-13 it is a subset of, with a leading zero, and a person typing
+	the numbers under the bars types twelve. Stored as either spelling, one
+	lookup would miss the other, so a leading-zero EAN-13 is folded to its
+	12-digit UPC-A here and `_barcode_spellings` still matches both.
+
+	A GTIN WHOSE CHECK DIGIT FAILS IS REFUSED, not stored. A camera validates
+	the digit before it reports a code, so a failure means a typed code with a
+	slipped digit — and a wrong code on the Item is a tub that scans to nothing,
+	or to somebody else's product.
+	"""
+	text = str(raw or "").strip()
+	compact = "".join(text.split())
+	if not compact:
+		raise ToolError("barcode is required — the digits under the bars, or a scan of them.")
+	if not compact.isdigit():
+		return compact, ""
+	if len(compact) == 13 and compact.startswith("0"):
+		compact = compact[1:]
+	kind = _GTIN_TYPES.get(len(compact), "")
+	if kind and not _gtin_check_ok(compact):
+		raise ToolError(
+			f"{compact} is not a valid {kind} — its last digit is the check digit and it does not "
+			"match the rest. Check the digits under the bars, or scan it. Nothing was changed."
+		)
+	return compact, kind
+
+
+def _gtin_check_ok(digits: str) -> bool:
+	"""GS1 mod-10: from the right, excluding the check digit, weights 3,1,3,1…"""
+	body, check = digits[:-1], int(digits[-1])
+	total = sum(int(d) * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
+	return (10 - total % 10) % 10 == check
+
+
+def _barcode_spellings(code: str) -> list[str]:
+	"""Every spelling of one code a site may already hold — see `normalize_barcode`."""
+	spellings = [code]
+	if code.isdigit() and len(code) == 12:
+		spellings.append("0" + code)
+	return spellings
+
+
+def _barcode_owner(code: str) -> str | None:
+	"""The Item this code is already on, or None."""
+	rows = frappe.db.get_all(
+		ITEM_BARCODE,
+		filters={"barcode": ("in", _barcode_spellings(code)), "parenttype": ITEM},
+		fields=["parent"],
+		limit_page_length=1,
+	)
+	return str(rows[0]["parent"]) if rows else None
+
+
+def _item_card(code: str) -> dict:
+	"""What a phone needs to say which product this is, and what its label closes."""
+	fields = compat.existing_fields(ITEM, list(_ITEM_LIST_FIELDS) + list(PESTICIDE_FIELDS))
+	row = frappe.db.get_value(ITEM, code, fields, as_dict=True) or {}
+	card = _clean(dict(row))
+	card["barcodes"] = [
+		{"barcode": _row_get(b, "barcode"), "barcode_type": _row_get(b, "barcode_type") or None}
+		for b in _child_rows(frappe.get_doc(ITEM, code), "barcodes")
+	]
+	return card
+
+
+def find_item_by_barcode(args: dict) -> ToolResult:
+	"""The Item a retail barcode is on. Read-only. `found: false` is an answer, not an error.
+
+	NOT FOUND IS THE ORDINARY CASE THE FIRST TIME A PRODUCT IS BOUGHT, and the
+	caller's next step — link the code to an Item, or create one — depends on
+	knowing that rather than on catching a refusal.
+	"""
+	_require(ITEM)
+	_require(ITEM_BARCODE)
+	code, kind = normalize_barcode(args.get("barcode"))
+	owner = _barcode_owner(code)
+	data = {"barcode": code, "barcode_type": kind or None, "found": bool(owner)}
+	if owner:
+		data["item"] = _item_card(owner)
+	summary = f"{code} is on Item {owner}" if owner else f"no Item carries {code}"
+	return ToolResult(data, summary)
+
+
+def add_item_barcode(args: dict) -> ToolResult:
+	"""Put a retail barcode on an existing Item. Idempotent for the Item that already has it.
+
+	A CODE ALREADY ON ANOTHER ITEM IS REFUSED BY NAME. ERPNext keeps barcodes
+	unique site-wide, and moving one silently would make yesterday's scan of the
+	other product answer with this one.
+	"""
+	_require(ITEM)
+	_require(ITEM_BARCODE)
+	item_code = _require_item(args)
+	code, kind = normalize_barcode(args.get("barcode"))
+	owner = _barcode_owner(code)
+	if owner and owner != item_code:
+		raise ToolError(
+			f"{code} is already on Item {owner}. A barcode can only name one product — remove it "
+			f"from {owner} in the Desk first if it was put there by mistake. Nothing was changed."
+		)
+	if not owner:
+		doc = frappe.get_doc(ITEM, item_code)
+		doc.append("barcodes", {"barcode": code, "barcode_type": kind})
+		doc.save()
+	data = {
+		"item_code": item_code,
+		"barcode": code,
+		"barcode_type": kind or None,
+		"already_linked": bool(owner),
+		"item": _item_card(item_code),
+	}
+	verb = "was already on" if owner else "added to"
+	return ToolResult(data, f"barcode {code} {verb} Item {item_code}")
+
+
 def create_item(args: dict) -> ToolResult:
 	"""Create one Item.
 
@@ -631,6 +764,20 @@ def create_item(args: dict) -> ToolResult:
 			f"an Item called {item_code!r} already exists on this site. Item codes are the "
 			"docname, so they are unique. Use update_item to change it. Nothing was created."
 		)
+
+	# v0.181.0. The retail code a product was scanned by, checked BEFORE anything
+	# is written for the same reason the group below is resolved late: a refused
+	# call leaves nothing behind.
+	barcode: tuple[str, str] | None = None
+	if args.get("barcode") not in (None, ""):
+		_require(ITEM_BARCODE)
+		barcode = normalize_barcode(args.get("barcode"))
+		owner = _barcode_owner(barcode[0])
+		if owner:
+			raise ToolError(
+				f"barcode {barcode[0]} is already on Item {owner}. That is probably the product "
+				f"you are holding — use it, or remove the code from {owner} first. Nothing was created."
+			)
 
 	# NOT `_tree_parent`: an Item belongs to a LEAF group, so requiring is_group
 	# here would refuse exactly the groups items are supposed to go in. Resolved
@@ -654,6 +801,8 @@ def create_item(args: dict) -> ToolResult:
 		doc.disabled = 1
 	for key, value in label.items():
 		doc.set(key, value)
+	if barcode:
+		doc.append("barcodes", {"barcode": barcode[0], "barcode_type": barcode[1]})
 
 	warehouse = as_str(args, "default_warehouse")
 	default_note = ""
@@ -680,6 +829,9 @@ def create_item(args: dict) -> ToolResult:
 	}
 	if default_note:
 		data["default_warehouse_stored_on"] = default_note
+	if barcode:
+		data["barcode"] = barcode[0]
+		data["barcode_type"] = barcode[1] or None
 	if label:
 		data["pesticide_label"] = {
 			key: (json.loads(value) if key == "active_ingredients" and value else value)

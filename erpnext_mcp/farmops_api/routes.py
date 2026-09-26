@@ -755,6 +755,17 @@ ROUTES = (
 	Route("/mobile", mobile_api.get_stock_ledger),
 	Route("/mobile", mobile_api.list_reorder_alerts),
 	Route("/mobile", mobile_api.create_stock_entry),
+	# v0.181.0. THE PICKER'S LIST AND THE STORE-AISLE PATH TO A PRODUCT. The form
+	# above takes a warehouse docname and nothing listed one — "Stores - OML",
+	# not "Stores", is what nobody types. And a UPC off a retail tub goes onto
+	# the Item that carries the EPA number, in ERPNext's own `Item Barcode`
+	# table, so scanning it finds the label. The two writes take the dispatch
+	# role inside their bodies; the three reads are open on enrolment.
+	Route("/mobile", mobile_api.list_warehouses),
+	Route("/mobile", mobile_api.find_item_by_barcode),
+	Route("/mobile", mobile_api.search_items),
+	Route("/mobile", mobile_api.link_item_barcode),
+	Route("/mobile", mobile_api.create_item),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

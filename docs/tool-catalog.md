@@ -20521,3 +20521,16 @@ that document (System Manager).
 the 28 registers that have a create tool and no update tool. It is idempotent and
 run from `bench console`; see the script's docstring for what it leaves out and
 why.
+
+## v0.181.0 — a store barcode onto a pesticide
+
+### `create_item` — new argument `barcode`
+
+A retail UPC/EAN for the Item's `barcodes` table. A leading-zero EAN-13 is stored as
+its 12-digit UPC-A, a GTIN with a bad check digit is refused, and a code already on
+another Item is refused by that Item's name — all before anything is created.
+
+```
+create_item(item_code="Tomcat Mouse Killer", barcode="0036000291452",
+            epa_registration_number="12455-89", signal_word="Caution")
+```

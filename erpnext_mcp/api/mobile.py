@@ -19825,3 +19825,167 @@ def approve_leave_request(user: str, leave_application=None, reason=None) -> dic
 def reject_leave_request(user: str, leave_application=None, reason=None) -> dict:
 	"""Refuse a leave request, with a reason the worker reads on the record."""
 	return _answer_leave_via_mobile(user, leave_application, reason, approve=False)
+
+
+# ── 119–123. The store and the shelf: warehouses, products and their barcodes ──
+#
+# v0.181.0. THE FORM THAT LOGS STOCK HAD NO WAY TO NAME A SHED. Every stock read
+# above takes a warehouse and none of them lists one, so the app offered the
+# names it had seen in reorder alerts and made the person type the rest — and a
+# docname is "Stores - OML", not "Stores", which is exactly the spelling nobody
+# types. `list_warehouses` is the picker's list: stock-holding leaves only (a
+# group warehouse cannot hold stock and ERPNext refuses a line against one),
+# enabled only, in the caller's entities only.
+#
+# THE BARCODE IS A WAY TO FIND A PRODUCT, NOT WHAT THE PRODUCT IS. A UPC read off
+# a tub of rodent bait at a farm store lands in ERPNext's own `Item Barcode`
+# table on the Item that carries the EPA registration and the label intervals.
+# No new register: the Item is the product, its registration number is the
+# identity a regulator reads, and the retail code is the fast path to it.
+#
+# THE TWO WRITES TAKE THE DISPATCH ROLE. An Item is a master every stock entry,
+# purchase and spray record points at; adding one — or deciding which product a
+# code belongs to — is a foreman's act, the same line `assign_task` draws.
+# The reads are open on enrolment, because "what is this tub" is a picker's
+# question too.
+def _warehouse_row(row: dict) -> dict:
+	return {
+		"name": row.get("name"),
+		"warehouse_name": row.get("warehouse_name") or row.get("name"),
+		"company": row.get("company"),
+		"warehouse_type": row.get("warehouse_type"),
+		"parent_warehouse": row.get("parent_warehouse"),
+	}
+
+
+# ── 119. list_warehouses ─────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_warehouses", limit=guard.READ_LIMIT)
+def list_warehouses(user: str, company=None) -> dict:
+	"""The sheds a stock line may name: leaves, enabled, in the caller's entities.
+
+	`name` is the docname the stock routes take; `warehouse_name` is what a
+	person calls it. A picker shows the second and sends the first.
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed)
+	companies = [entity] if entity else list(allowed or [])
+
+	rows: list = []
+	for each in companies:
+		data = master_tools.list_warehouses(
+			{"company": each, "is_group": False, "disabled": False, "limit": 500}
+		).data
+		rows.extend(_warehouse_row(row) for row in data.get("warehouses") or [])
+	rows = guard.scoped(rows, allowed)
+	rows.sort(key=lambda row: (str(row.get("company") or ""), str(row.get("warehouse_name") or "")))
+	return {"warehouses": rows, "count": len(rows)}
+
+
+# ── 120. find_item_by_barcode ────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("find_item_by_barcode", limit=guard.READ_LIMIT)
+def find_item_by_barcode(user: str, barcode=None) -> dict:
+	"""Which product a scanned retail code is on. `found: false` is an answer.
+
+	An Item is site-wide rather than an entity's (see `tools/masters.py`), so
+	there is no entity filter to apply beyond the enrolment check.
+	"""
+	guard.require_scope(user)
+	return master_tools.find_item_by_barcode({"barcode": barcode}).data
+
+
+# ── 121. search_items ────────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("search_items", limit=guard.READ_LIMIT)
+def search_items(user: str, search=None, limit=None) -> dict:
+	"""Live Items whose name contains `search` — the list a code is linked from."""
+	guard.require_scope(user)
+	inner: dict = {"disabled": False, "limit": limit if limit not in (None, "") else 50}
+	if str(search or "").strip():
+		inner["search"] = str(search).strip()
+	data = master_tools.list_items(inner).data
+	return {"items": data.get("items") or [], "count": data.get("count", 0), "truncated": data.get("truncated")}
+
+
+# ── 122. link_item_barcode ───────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("link_item_barcode", mutating=True, limit=guard.WRITE_LIMIT)
+def link_item_barcode(user: str, item_code=None, barcode=None) -> dict:
+	"""Put a scanned retail code on an existing product. Idempotent for the same one."""
+	guard.require_scope(user)
+	guard.require_dispatch_role(user, "Linking a barcode to a product")
+	return master_tools.add_item_barcode({"item_code": item_code, "barcode": barcode}).data
+
+
+#: The label columns a phone may set when it adds a product. `label_scan_validation`
+#: is left out: it is a Document Validation docname, and one a handset names
+#: would need its own entity check before it could be trusted onto the Item.
+_MOBILE_LABEL_FIELDS = (
+	"epa_registration_number",
+	"signal_word",
+	"restricted_use",
+	"active_ingredients",
+	"rei_hours",
+	"phi_days",
+	"phi_crop",
+	"application_rate",
+	"ppe_requirements",
+)
+
+
+# ── 123. create_item ─────────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_item", mutating=True, limit=guard.WRITE_LIMIT)
+def create_item(
+	user: str,
+	item_name=None,
+	item_code=None,
+	stock_uom=None,
+	barcode=None,
+	epa_registration_number=None,
+	signal_word=None,
+	restricted_use=None,
+	active_ingredients=None,
+	rei_hours=None,
+	phi_days=None,
+	phi_crop=None,
+	application_rate=None,
+	ppe_requirements=None,
+) -> dict:
+	"""Add a product, with its retail code and its label, from a phone.
+
+	THE ITEM CODE DEFAULTS TO THE NAME. A foreman in a store aisle is naming a
+	product, not inventing a docname scheme, and the tool refuses a duplicate
+	code by name — which is the answer that sends them to the one already there.
+
+	NO `item_group` ARGUMENT. An EPA registration number files the product
+	under Crop Protection Products (the tool's own rule), and anything else
+	goes to the root for the office to place. A handset choosing from the whole
+	Item Group tree is a picker nobody would use correctly.
+	"""
+	guard.require_scope(user)
+	guard.require_dispatch_role(user, "Adding a product")
+	name = str(item_name or "").strip()
+	if not name:
+		frappe.throw("item_name is required — what the product is called on its label.", frappe.ValidationError)
+	inner: dict = {"item_code": str(item_code or "").strip() or name, "item_name": name}
+	if str(stock_uom or "").strip():
+		inner["stock_uom"] = str(stock_uom).strip()
+	if barcode not in (None, ""):
+		inner["barcode"] = barcode
+	label = {
+		"epa_registration_number": epa_registration_number,
+		"signal_word": signal_word,
+		"restricted_use": restricted_use,
+		"active_ingredients": active_ingredients,
+		"rei_hours": rei_hours,
+		"phi_days": phi_days,
+		"phi_crop": phi_crop,
+		"application_rate": application_rate,
+		"ppe_requirements": ppe_requirements,
+	}
+	for key in _MOBILE_LABEL_FIELDS:
+		if label[key] not in (None, ""):
+			inner[key] = label[key]
+	return master_tools.create_item(inner).data

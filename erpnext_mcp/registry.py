@@ -4398,6 +4398,13 @@ TOOLS = {
 				"Which company the default_warehouse row belongs to. Inferred from the "
 				"warehouse itself when omitted.",
 			),
+			"barcode": _field(
+				_STRING,
+				"A retail barcode (UPC/EAN) to put on the Item's barcodes table. A "
+				"13-digit code with a leading zero is stored as its 12-digit UPC-A; a "
+				"GTIN whose check digit fails, or a code already on another Item, is "
+				"refused before anything is created.",
+			),
 			**_ITEM_LABEL_ARGS,
 		},
 		required=("item_code",),

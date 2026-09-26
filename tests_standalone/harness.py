@@ -1249,6 +1249,20 @@ ERPNEXT_SCHEMA = {
 		# the branch that actually converts (3 Case → 36 Lb) needs a site that
 		# has the row, and the one that refuses needs an item that has not.
 		"uoms",
+		# v0.181.0. ERPNext's retail-code table. `find_item_by_barcode` queries
+		# the child doctype directly, which is why it also has a
+		# CHILD_TABLE_SOURCES entry.
+		"barcodes",
+	],
+	"Item Barcode": [
+		"name",
+		"parent",
+		"parenttype",
+		"parentfield",
+		"idx",
+		"barcode",
+		"barcode_type",
+		"uom",
 	],
 	"Item Default": [
 		"name",
@@ -2534,6 +2548,7 @@ CHILD_TABLES = {
 	("Asset Category", "accounts"): "Asset Category Account",
 	("Asset Category", "finance_books"): "Asset Finance Book",
 	("Item", "item_defaults"): "Item Default",
+	("Item", "barcodes"): "Item Barcode",
 	("Item", "reorder_levels"): "Item Reorder",
 	("Supplier", "accounts"): "Party Account",
 	("Customer", "accounts"): "Party Account",
@@ -4820,6 +4835,7 @@ CHILD_TABLE_SOURCES = {
 	# Without this entry the company filter on `list_items` would match nothing
 	# and the tool would report an empty catalogue as an answer.
 	"Item Default": (("Item", "item_defaults"),),
+	"Item Barcode": (("Item", "barcodes"),),
 	# v0.68.0. `tools/fill_pipeline.py` reads this child doctype directly with a
 	# `parenttype`/`parent` filter — once to count acknowledgments per change for
 	# list_fill_threshold_changes, once to know who has already acknowledged the

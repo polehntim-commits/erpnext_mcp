@@ -670,6 +670,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_stock_ledger",
 		"list_reorder_alerts",
 		"create_stock_entry",
+		# v0.181.0 — the warehouse picker, and a retail barcode onto a product.
+		"list_warehouses",
+		"find_item_by_barcode",
+		"search_items",
+		"link_item_barcode",
+		"create_item",
 		"start_inspection",
 		# `submit_wizard_via_mobile` is here for `start_inspection`'s reason and
 		# then some: `MobileAPI.swift` will never name it either, because
@@ -3895,6 +3901,127 @@ class TheInventoryTabReachesTheServer(MobileAPITestCase):
 				entry_type="Material Receipt",
 				items=[{"item_code": SPRAY, "qty": 5, "warehouse": OTHER_STORES}],
 			)
+
+
+class TheStoreAisleReachesTheCatalogue(MobileAPITestCase):
+	"""v0.181.0. The shed picker, and a retail barcode onto a pesticide product.
+
+	THE PICKER SENDS THE DOCNAME. "Stores" is what a person calls it and
+	"Stores - MAIN" is what `create_stock_entry` takes, so the list carries both
+	and the phone shows one and files the other. Groups cannot hold stock, and
+	another entity's shed is not this caller's to fill.
+
+	A UPC-A ARRIVES AS AN EAN-13. iOS reports the 12-digit US code with a
+	leading zero; the server keeps one spelling and finds either.
+	"""
+
+	#: A real UPC-A (check digit 2) and the EAN-13 a phone camera reports it as.
+	UPC = "036000291452"
+	EAN13_OF_UPC = "0036000291452"
+
+	def setUp(self):
+		super().setUp()
+		seed_masters()
+		seed_stock()
+		from erpnext_mcp import compliance_fields
+
+		compliance_fields.install_compliance_fields(respect_switch=False)
+
+	def foreman(self):
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		return self.be()
+
+	# ── list_warehouses ─────────────────────────────────────────────────────
+	def test_the_picker_lists_this_entitys_stock_holding_sheds_only(self):
+		self.be()
+		answer = mobile_api.list_warehouses()
+		names = {row["name"] for row in answer["warehouses"]}
+		self.assertEqual(names, {STORES, SHOP})
+		self.assertEqual(answer["count"], 2)
+
+	def test_each_row_carries_the_docname_and_the_name_a_person_uses(self):
+		self.be()
+		stores = next(row for row in mobile_api.list_warehouses()["warehouses"] if row["name"] == STORES)
+		self.assertEqual(stores["warehouse_name"], "Stores")
+		self.assertEqual(stores["company"], MAIN)
+
+	def test_naming_another_entity_is_refused(self):
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.list_warehouses(company=OTHER)
+
+	# ── the barcode ─────────────────────────────────────────────────────────
+	def test_an_unknown_code_is_an_answer_not_an_error(self):
+		self.be()
+		answer = mobile_api.find_item_by_barcode(barcode=self.UPC)
+		self.assertFalse(answer["found"])
+		self.assertEqual(answer["barcode_type"], "UPC-A")
+
+	def test_a_linked_code_finds_the_product_in_either_spelling(self):
+		self.foreman()
+		linked = mobile_api.link_item_barcode(item_code=SPRAY, barcode=self.EAN13_OF_UPC)
+		self.assertEqual(linked["barcode"], self.UPC, "the leading zero is folded away")
+		self.assertFalse(linked["already_linked"])
+		for spelling in (self.UPC, self.EAN13_OF_UPC):
+			answer = mobile_api.find_item_by_barcode(barcode=spelling)
+			self.assertTrue(answer["found"], spelling)
+			self.assertEqual(answer["item"]["item_code"], SPRAY)
+
+	def test_linking_the_same_code_twice_is_idempotent(self):
+		self.foreman()
+		mobile_api.link_item_barcode(item_code=SPRAY, barcode=self.UPC)
+		again = mobile_api.link_item_barcode(item_code=SPRAY, barcode=self.UPC)
+		self.assertTrue(again["already_linked"])
+		self.assertEqual(len(again["item"]["barcodes"]), 1)
+
+	def test_a_code_already_on_another_product_is_refused_by_name(self):
+		self.foreman()
+		mobile_api.link_item_barcode(item_code=SPRAY, barcode=self.UPC)
+		with self.assertRaises(Exception) as caught:
+			mobile_api.link_item_barcode(item_code="TWINE-BALE", barcode=self.UPC)
+		self.assertIn(SPRAY, str(caught.exception))
+
+	def test_a_typed_code_with_a_slipped_digit_is_refused(self):
+		self.be()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.find_item_by_barcode(barcode="036000291453")
+		self.assertIn("check digit", str(caught.exception))
+
+	def test_a_picker_may_look_a_code_up_and_may_not_link_one(self):
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.link_item_barcode(item_code=SPRAY, barcode=self.UPC)
+
+	# ── create_item ─────────────────────────────────────────────────────────
+	def test_a_product_is_added_with_its_code_and_its_label(self):
+		"""Tim's case: rodent bait bought at a store, scanned in the aisle."""
+		self.foreman()
+		answer = mobile_api.create_item(
+			item_name="Tomcat Mouse Killer",
+			barcode=self.EAN13_OF_UPC,
+			epa_registration_number="12455-89",
+			signal_word="Caution",
+			rei_hours=0,
+		)
+		self.assertEqual(answer["item_code"], "Tomcat Mouse Killer", "the code defaults to the name")
+		self.assertEqual(answer["item_group"], "Crop Protection Products")
+		self.assertEqual(answer["barcode"], self.UPC)
+		found = mobile_api.find_item_by_barcode(barcode=self.UPC)
+		self.assertEqual(found["item"]["epa_registration_number"], "12455-89")
+		self.assertEqual(found["item"]["rei_hours"], 0)
+
+	def test_a_product_whose_code_is_taken_is_not_created(self):
+		self.foreman()
+		mobile_api.link_item_barcode(item_code=SPRAY, barcode=self.UPC)
+		with self.assertRaises(Exception) as caught:
+			mobile_api.create_item(item_name="Second Tub", barcode=self.UPC)
+		self.assertIn(SPRAY, str(caught.exception))
+		self.assertIsNone(STORE.get_raw("Item", "Second Tub"))
+
+	def test_search_finds_live_items_by_name(self):
+		self.be()
+		answer = mobile_api.search_items(search="surround")
+		self.assertEqual([row["item_code"] for row in answer["items"]], [SPRAY])
 
 
 class TheWizardKnowsWhereToPostItsAnswers(MobileAPITestCase):

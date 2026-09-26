@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.181.0 — 2026-09-25 — a shed picker, and a store barcode onto a pesticide
+
+**909 tools** (unchanged). `create_item` takes a `barcode`; five new `/mobile` routes.
+
+- **`create_item` `barcode`** — puts a retail UPC/EAN on ERPNext's own `Item Barcode`
+  table (no new register). A 13-digit code with a leading zero, which is how iOS
+  reports a UPC-A, is stored as the 12-digit UPC-A; a GTIN whose check digit fails,
+  or a code already on another Item, is refused before anything is created.
+- **`/mobile/list_warehouses`** (open on enrolment) — stock-holding, enabled
+  warehouses in the caller's entities. Each row carries the docname the stock
+  routes take (`Stores - OML`) and the `warehouse_name` a person uses (`Stores`).
+- **`/mobile/find_item_by_barcode`** (open) — `found: false` is an answer, not an
+  error. Matches either spelling of a UPC-A and returns the Item's label fields
+  (EPA number, signal word, REI, PHI…).
+- **`/mobile/search_items`** (open) — live Items by name, for linking a code.
+- **`/mobile/link_item_barcode`** (dispatch role) — idempotent for the Item that
+  already carries the code; a code on another Item is refused by that Item's name.
+- **`/mobile/create_item`** (dispatch role) — a product with its barcode and label
+  fields. The item code defaults to the name; an EPA number files it under Crop
+  Protection Products. `label_scan_validation` is not accepted from a handset.
+- Deploy: an image rebuild for the routes. No migrate.
+
 ## 0.180.0 — 2026-09-25 — the whitelist can be kept from MCP
 
 **909 tools** (+1, mutating, off by default). `update_document` writes only the

@@ -478,6 +478,11 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/get_stock_ledger",
 		"/mobile/list_reorder_alerts",
 		"/mobile/create_stock_entry",
+		"/mobile/list_warehouses",
+		"/mobile/find_item_by_barcode",
+		"/mobile/search_items",
+		"/mobile/link_item_barcode",
+		"/mobile/create_item",
 		# v0.91.0. The fifth wizard submit target. The other four —
 		# `create_employee`, `register_asset`, `create_accident_report`,
 		# `create_discipline_record` — were already on this table; the
@@ -2868,6 +2873,10 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.181.0. An Item is a master every stock line and spray record points
+		# at, and which product a retail code belongs to is the same decision.
+		"link_item_barcode",
+		"create_item",
 		"assign_soil_profile",
 		"create_corrective_action_record",
 		"create_food_safety_plan",
@@ -3050,6 +3059,12 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# sprayed block is exactly who asks. Scoped to the caller's companies.
 		"get_active_rei",
 		"list_active_reis",
+		# v0.181.0. The stock form's shed picker, and "what is this tub" — a
+		# picker's question as much as a foreman's. Items are site-wide; the
+		# warehouses are filtered to the caller's entities.
+		"list_warehouses",
+		"find_item_by_barcode",
+		"search_items",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -3059,7 +3074,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 105, "a method is named in two sets at once")
+		self.assertEqual(len(named), 110, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
