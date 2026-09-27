@@ -13,6 +13,8 @@
   "result_status",
   "log_col_1",
   "caller_ip",
+  "agent_model",
+  "agent_session",
   "docstatus_delta",
   "detail_section",
   "result_summary",
@@ -65,6 +67,25 @@
    "read_only": 1
   },
   {
+   "description": "v0.196.0. Which AI model made this call, from the X-Agent-Model header (e.g. claude-opus-4-6, llama-3.1-8b-q4). The client's own claim, for attribution only: the authenticated user is still the identity and nothing gates on this. Empty when the header was not sent.",
+   "fieldname": "agent_model",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Agent Model",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "description": "v0.196.0. The client's conversation or session id, from the X-Agent-Session header, so one agent session's calls can be read together. Empty when not sent.",
+   "fieldname": "agent_session",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Agent Session",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "description": "Document-state change, for mutations only: 'none to 0 (draft)', '0 to 1 (submitted)', '1 to 2 (cancelled)'. Empty for reads.",
    "fieldname": "docstatus_delta",
    "fieldtype": "Data",
@@ -96,7 +117,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-07-26 15:00:00.000000",
+ "modified": "2026-09-27 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "MCP Action Log",

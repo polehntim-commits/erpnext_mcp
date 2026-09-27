@@ -59,6 +59,17 @@ _MAX_VALUE = 512
 
 _SECRET_HINTS = ("token", "password", "secret", "api_key", "apikey", "credential")
 
+#: v0.196.0. WHICH MODEL MADE THE CALL. Every call on both transports already
+#: writes one row here, so attribution is two columns on that row rather than a
+#: second log: `X-Agent-Model` names the model ("claude-opus-4-6",
+#: "llama-3.1-8b-q4"), `X-Agent-Session` groups one conversation's calls. Both
+#: optional — a call without them is logged exactly as before. They are the
+#: CLIENT'S CLAIM, like `role` on App Feedback: attribution, never authority.
+#: Nothing gates on them, and the authenticated user is still the identity.
+AGENT_MODEL_HEADER = "X-Agent-Model"
+AGENT_SESSION_HEADER = "X-Agent-Session"
+_MAX_AGENT = 140
+
 
 def record(
 	tool_name: str,
@@ -85,6 +96,7 @@ def record(
 				"result_status": status,
 				"result_summary": _truncate(summary or "", _MAX_SUMMARY),
 				"docstatus_delta": (docstatus_delta or "")[:140],
+				**_agent_columns(),
 			}
 		)
 		doc.flags.ignore_permissions = True
@@ -103,6 +115,38 @@ def record(
 		except Exception:
 			pass
 		return None
+
+
+def agent_identity() -> tuple[str, str]:
+	"""(model, session) from this request's `X-Agent-*` headers, or ("", ""). NEVER RAISES.
+
+	Its own try, separate from `record`'s: a header that will not read — no
+	request at all in a scheduled job, an odd proxy — must cost the attribution
+	and never the audit row.
+	"""
+	try:
+		model = frappe.get_request_header(AGENT_MODEL_HEADER) or ""
+		session = frappe.get_request_header(AGENT_SESSION_HEADER) or ""
+	except Exception:
+		return "", ""
+	return _clean_agent(model), _clean_agent(session)
+
+
+def _clean_agent(value) -> str:
+	"""Printable, trimmed, capped — a header is free text from the client."""
+	text = "".join(ch for ch in str(value or "") if ch.isprintable()).strip()
+	return text[:_MAX_AGENT]
+
+
+def _agent_columns() -> dict:
+	"""The two columns, only when a header said something."""
+	model, session = agent_identity()
+	out = {}
+	if model:
+		out["agent_model"] = model
+	if session:
+		out["agent_session"] = session
+	return out
 
 
 def _arguments_json(arguments: dict | None) -> str:

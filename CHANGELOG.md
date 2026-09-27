@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.196.0 — 2026-09-27 — which model made the call
+
+**910 tools** (unchanged). No new routes. Two new MCP Action Log columns.
+
+- **`X-Agent-Model`** and **`X-Agent-Session`** request headers, both optional, on every
+  sidecar request — MCP JSON-RPC and the `/farmops` phone routes alike. When present they are
+  stored on that call's **MCP Action Log** row as **`agent_model`** and **`agent_session`**
+  (Data, read-only, indexed, standard filters in the Desk list). Absent, the row is exactly
+  what it was.
+- **One row per call, already.** Every call on both transports writes its MCP Action Log row
+  through `audit.record`, which now reads the two headers itself — no caller changed, no tool
+  or business logic touched, and failed/blocked/unauthorized calls are attributed too. Not
+  written into Frappe's Comment/Version log: that would be a second write per document per
+  call, and the Action Log already names the tool, arguments, result and caller.
+- **Attribution, not authority.** The headers are the client's claim, like App Feedback's
+  `role`: nothing gates on them and the authenticated user is still the identity. Values are
+  stripped of non-printable characters and capped at 140. A header that cannot be read (no
+  request in a scheduled job, a proxy) costs the attribution and never the row.
+- **Querying:** Desk → MCP Action Log, filter Agent Model / Agent Session; or over MCP,
+  `query_doctype` with `doctype: "MCP Action Log"`, `filters: {"agent_session": "…"}`.
+- Deploy: **`bench migrate`** (the two columns), then an image rebuild.
+
 ## 0.195.0 — 2026-09-27 — my bed, a spray from the phone, and my job title
 
 **910 tools** (unchanged). Four new `/mobile` routes. fafo_ios SERVER_CHANGES §42, §43, §44.
