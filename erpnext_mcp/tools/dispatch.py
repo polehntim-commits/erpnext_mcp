@@ -1822,7 +1822,9 @@ def _phi_windows(task: dict) -> list[dict]:
 		return []
 
 
-def _refuse_harvest_inside_phi(task: dict, args: dict, verb: str, override_tool: str = "") -> dict | None:
+def _refuse_harvest_inside_phi(
+	task: dict, args: dict, verb: str, override_tool: str = "", *, windows: list | None = None
+) -> dict | None:
 	"""Refuse a harvest inside a live pre-harvest interval. Returns the override, or None.
 
 	`override_tool` empty means THIS CALLER HAS NO OVERRIDE — the worker's door.
@@ -1830,7 +1832,8 @@ def _refuse_harvest_inside_phi(task: dict, args: dict, verb: str, override_tool:
 	does, so somebody standing on a block is told who can act rather than only
 	that they cannot.
 	"""
-	windows = _phi_windows(task)
+	if windows is None:
+		windows = _phi_windows(task)
 	if not windows:
 		return None
 
@@ -1893,6 +1896,31 @@ def _refuse_harvest_inside_phi(task: dict, args: dict, verb: str, override_tool:
 			"so the compliance alert stands until the date passes."
 		),
 	}
+
+
+def _phi_sprayed_since(task: dict, since: str) -> list[dict]:
+	"""Live PHI windows on this task's block opened by a spray AFTER `since`. v0.194.0.
+
+	THE START IS THE LAST DOOR, AND IT ONLY ASKS ABOUT WHAT IS NEW. Every window
+	that existed when the task was claimed or assigned was already put to the
+	worker (refused at `claim_farm_task`) or to the foreman (refused, or
+	overridden WITH A REASON, at `assign_farm_task`) — asking again here would
+	re-refuse a foreman's recorded override. What nobody has been asked about is
+	a block sprayed between the claim and the first bucket: the task was clear
+	when it was taken and is not clear now.
+
+	A window with no `sprayed_at` is treated as already asked about: both
+	registers stamp it whenever they stamp a PHI, so an empty one is a row that
+	predates the stamp rather than a new spray.
+	"""
+	since = str(since or "")
+	if not since:
+		return []
+	return [
+		window
+		for window in _phi_windows(task)
+		if str(window.get("sprayed_at") or "") and str(window["sprayed_at"]) > since
+	]
 
 
 def _record_override_on_task(task: str, override: dict) -> None:
@@ -2051,6 +2079,14 @@ def start_farm_task(args: dict) -> ToolResult:
 		)
 
 	task = task_row(assignment["task"])
+
+	# v0.194.0. A HARVEST TASK TAKEN BEFORE A SPRAY IS NOT CLEAR AFTER IT. The
+	# worker's door, so no override here — the refusal names assign_farm_task,
+	# where a foreman re-sends it with a reason if the stamped date is wrong.
+	_refuse_harvest_inside_phi(
+		task, args, "started", windows=_phi_sprayed_since(task, str(assignment.get("claimed_at") or ""))
+	)
+
 	farm_shift = _shift_argument(args, str(task.get("company") or ""))
 
 	# ONE TASK IN PROGRESS PER WORKER, ENFORCED BY PAUSING RATHER THAN REFUSING.

@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.194.0 — 2026-09-27 — a harvest taken before a spray is not clear after it
+
+**910 tools** (unchanged). No new routes. Aug 17 audit Tier 2, checked item by item;
+three of the four had already shipped.
+
+- **PHI at `start_farm_task` (#12).** `create_farm_task`, `assign_farm_task` and
+  `claim_farm_task` already refused a Harvest task inside a live pre-harvest interval
+  (both spray registers, `spray.phi_windows_for_blocks`), with an audited foreman override
+  on create/assign. The start was not checked, so a task claimed before a cover spray went
+  out to the block with nothing said. It now refuses any PHI window opened by a spray AFTER
+  the assignment's `claimed_at`; windows older than that were already refused or overridden
+  with a reason at the claim/dispatch, so a recorded override is not re-refused. Worker's
+  door, no override: the refusal names `assign_farm_task`. Reaches the phone through
+  `/mobile/start_task_via_mobile` unchanged — same error shape as the claim refusal.
+- **Already there, not rebuilt:**
+  - **#13 roles.** Crew Leader is a role since v0.68.1. Checker and Tractor Driver are
+    `Employee.designation` values mapped to Field Worker in `roles.JOB_TITLES` (seeded by
+    `install._farm_designations`), because neither touches a register a picker does not.
+    `get_current_user_context` answers `designation` beside `mobile_roles`.
+  - **#14 safety events.** A near miss is `/mobile/create_accident_report` with
+    `severity: "Near Miss"` (open to any enrolled worker; no injured person required), and
+    fafo_ios already sends it (`SafetyModels.swift`). A hazard — a condition to fix — is
+    `/mobile/report_field_task`. `create_heat_exposure_event` is MCP-only.
+  - **#8 org structure.** All fifteen create/list/update routes for Department, Designation,
+    Branch, Employment Type and Employee Grade are on `/mobile` since ec02c67.
+- Deploy: an image rebuild. No migrate.
+
 ## 0.193.0 — 2026-09-27 — the feedback loop goes both ways; a late training certificate
 
 **910 tools** (unchanged). Three new `/mobile` routes, one new App Feedback column.

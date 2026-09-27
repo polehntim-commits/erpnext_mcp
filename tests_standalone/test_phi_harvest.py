@@ -391,3 +391,81 @@ class TheWorkersDoorHasNoOverride(PhiTestCase):
 	def test_a_worker_may_still_claim_a_clear_block(self):
 		task = self.raise_harvest(BLOCK_TWO, dispatch_mode="Self-pick")["name"]
 		self.assertTrue(self.tool_data("claim_farm_task", {"task": task, "worker_id": WORKER}))
+
+
+# ── v0.194.0 ────────────────────────────────────────────────────────────────
+class TheStartIsTheLastDoor(PhiTestCase):
+	"""A Harvest task claimed on a clear block, then sprayed, then started.
+
+	Create, assign and claim were guarded; start was not, so a task taken the
+	evening before a morning cover spray went out to the block with nothing said.
+	The start refuses only windows opened AFTER the claim or dispatch — anything
+	older was already refused or overridden with a reason at that door.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **ALL_ON, allow_start_farm_task=1)
+
+	def claimed(self, block=BLOCK_TWO):
+		task = self.raise_harvest(block, dispatch_mode="Self-pick")["name"]
+		self.tool_data("claim_farm_task", {"task": task, "worker_id": WORKER})
+		return task
+
+	def start(self, task):
+		return self.tool_data("start_farm_task", {"task": task, "worker_id": WORKER})
+
+	def test_a_spray_after_the_claim_refuses_the_start(self):
+		task = self.claimed()
+		self.a_spray(blocks=(BLOCK_TWO,))
+		error = self.tool_error("start_farm_task", {"task": task, "worker_id": WORKER})
+		self.assertIn("pre-harvest interval", error)
+		self.assertIn("assign_farm_task", error)
+		self.assertIn("Nothing was started", error)
+		self.assertNotEqual(frappe.db.get_value("Farm Task", task, "state"), "In-Progress")
+
+	def test_a_clear_block_starts(self):
+		task = self.claimed()
+		self.assertEqual(self.start(task)["assignment"]["state"], "In-Progress")
+
+	def test_a_spray_on_another_block_does_not_refuse(self):
+		task = self.claimed(BLOCK_TWO)
+		self.a_spray(blocks=(BLOCK,))
+		self.assertEqual(self.start(task)["assignment"]["state"], "In-Progress")
+
+	def test_a_foremans_override_is_not_re_refused_at_the_start(self):
+		task = self.raise_harvest(BLOCK_TWO)["name"]
+		self.a_spray(blocks=(BLOCK_TWO,))
+		self.tool_data(
+			"assign_farm_task",
+			{
+				"task": task,
+				"assigned_to": WORKER,
+				"override_phi": True,
+				"phi_override_reason": "Juice fruit, not fresh.",
+			},
+		)
+		self.assertEqual(self.start(task)["assignment"]["state"], "In-Progress")
+
+	def test_a_new_spray_after_an_override_is_refused(self):
+		"""The override covered the spray the foreman was shown, not the next one."""
+		task = self.raise_harvest(BLOCK_TWO)["name"]
+		self.a_spray(blocks=(BLOCK_TWO,))
+		self.tool_data(
+			"assign_farm_task",
+			{
+				"task": task,
+				"assigned_to": WORKER,
+				"override_phi": True,
+				"phi_override_reason": "Juice fruit.",
+			},
+		)
+		self.a_spray(blocks=(BLOCK_TWO,))
+		error = self.tool_error("start_farm_task", {"task": task, "worker_id": WORKER})
+		self.assertIn("pre-harvest interval", error)
+
+	def test_a_task_that_is_not_a_harvest_starts_inside_the_interval(self):
+		task = self.raise_harvest(BLOCK_TWO, task_type="Scouting", dispatch_mode="Self-pick")["name"]
+		self.tool_data("claim_farm_task", {"task": task, "worker_id": WORKER})
+		self.a_spray(blocks=(BLOCK_TWO,))
+		self.assertEqual(self.start(task)["assignment"]["state"], "In-Progress")
