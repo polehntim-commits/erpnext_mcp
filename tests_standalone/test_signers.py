@@ -21,7 +21,7 @@ import frappe
 
 from erpnext_mcp.tools import signers
 
-from .harness import STORE, set_roles
+from .harness import ROLES, STORE, set_roles
 from .test_i9 import I9TestCase
 
 #: The four tools this file is about.
@@ -70,10 +70,21 @@ class SignerTestCase(I9TestCase):
 		# tests below prove they are separate: Ana can raise a form because of her
 		# role and may sign Section 2 because of the roster, and losing either one
 		# stops her at a different step with a different sentence.
+		#
+		# RESTORED AFTERWARDS, because `ROLES` is module-global and outlives this
+		# file. Left in place, Ana stayed a Foreman for every module after this one,
+		# and `test_training_session_documents` — whose picker is also
+		# ana@example.test — watched `SHIFT_ROLES` admit a Field Worker.
+		roles_before = {user: list(held) for user, held in ROLES.items()}
+		self.addCleanup(self._restore_roles, roles_before)
 		for account in (ANA, LUIS):
 			set_roles(account, ["Foreman"])
 		set_roles(PICKER, ["Field Worker"])
 		self.addCleanup(self._restore_session, frappe.session.user)
+
+	def _restore_roles(self, before):
+		ROLES.clear()
+		ROLES.update(before)
 
 	def _i9_switches(self) -> dict:
 		from .test_i9 import I9_TOOLS_ON
