@@ -490,6 +490,16 @@ def linked_task(alert_name) -> str | None:
 
 
 # ── the user context ────────────────────────────────────────────────────────
+def designation_of(employee) -> str | None:
+	"""`Employee.designation` for the caller, or None. Never raises."""
+	if not employee:
+		return None
+	try:
+		return str(frappe.db.get_value("Employee", employee, "designation") or "") or None
+	except Exception:  # pragma: no cover - an Employee register shaped differently
+		return None
+
+
 def user_context(data: dict, user: str) -> dict:
 	"""`get_current_user_context` in the shape `UserContext` decodes.
 
@@ -521,6 +531,11 @@ def user_context(data: dict, user: str) -> dict:
 		"companies": [{"name": name, "abbr": company_abbr(name)} for name in companies],
 		"default_company": data.get("preferred_company") or (companies[0] if companies else None),
 		"skills": skills_of(data.get("employee")),
+		# v0.195.0, SERVER_CHANGES §44. THE JOB TITLE, BESIDE THE ROLES AND NOT
+		# INSTEAD OF THEM. A Checker and a Tractor Driver hold Field Worker
+		# (`roles.JOB_TITLES`), so `mobile_roles` cannot tell them from a picker;
+		# `Employee.designation` can. A display fact — nothing gates on it.
+		"designation": designation_of(data.get("employee")),
 		"enabled": data.get("enabled"),
 		"grant_state": data.get("grant_state"),
 		# The credential's review date is NOT sent. `UserContext` does not decode

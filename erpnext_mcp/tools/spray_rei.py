@@ -558,6 +558,12 @@ def open_for_task(task: dict, window: dict, materials: list, applicator: str = "
 			)
 			return report
 		blocks, report["warnings"] = _task_blocks(task)
+		if not blocks and frappe.db.exists(SPRAY_REI, {"source_task": task_name}):
+			# v0.195.0. A Spray Application filed for this task already opened
+			# its blocks' windows — the phone's spray route does exactly that
+			# before it completes the task — so a task naming no block is not
+			# an unrestricted spray here, and warning that it is would be false.
+			return report
 		if not blocks:
 			report["warnings"].append(
 				f"{task_name} names no block, so its {rei_hours:g} h restricted-entry window "

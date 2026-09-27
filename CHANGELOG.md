@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.195.0 — 2026-09-27 — my bed, a spray from the phone, and my job title
+
+**910 tools** (unchanged). Four new `/mobile` routes. fafo_ios SERVER_CHANGES §42, §43, §44.
+
+- **§44 — `designation` on `get_current_user_context`**: `Employee.designation`, or null.
+  A Checker and a Tractor Driver hold Field Worker (`roles.JOB_TITLES`), so only this tells
+  them from a picker. Display only; nothing gates on it. (Correction: v0.194.0's notes said
+  the context already answered it — that was the employee roster, not the caller's context.)
+- **§42 — `POST /mobile/get_my_housing`** (no arguments; open on enrolment; the caller's own
+  Employee only) → `{assignment: {name, housing_unit, unit_label, bed, camp, start_date,
+  end_date, status}, unit: {address, occupancy, capacity, last_habitability_inspection}}`, or
+  `{assignment: null, unit: null}`. `bed` is always null: this farm assigns a unit, and no
+  Housing Assignment carries a bed. `camp` is the unit's Parcel and `address` the Parcel's.
+  `status` is the register's own word, `Current`.
+- **§43 — `POST /mobile/record_spray_application`** `(blocks, materials_used, completed_at?,
+  sprayer?, tank_mix?, rei_hours?, wind_speed_mph?, wind_direction?, temperature_f?,
+  relative_humidity?, source_task?, notes?, company?)` → `{spray_application, task: {name,
+  state}, reis: [{block, expires_at}], warnings}`. Files a **Spray Application**
+  (`spray.create_spray_application`, which opens the REIs and stamps the PHI) — not the MCP
+  `record_spray_application`, which writes Spray REI rows only and would leave the phone's
+  history empty. Farm Task first: with no `source_task` a Spray task is raised for the
+  caller, cited by the application, and completed, which draws the tank mix out of the shed.
+  `materials_used` quantities are tank TOTALS, divided by the Fields' `acreage` into the
+  per-acre rate the record keeps (a warning when no block has an acreage).
+  `relative_humidity` is stored as `humidity_pct` — the weather columns already existed.
+  Open on enrolment; the applicator is the login; a `source_task` must be held by the caller.
+- **`POST /mobile/list_spray_applications`** `(block?, from_date?, to_date?, limit? ≤100,
+  company?)` → `{applications: [row], truncated}` and **`POST /mobile/get_spray_application`**
+  `(name)` → `row`. `row` is `get_spray_application`'s answer plus `blocks` (names),
+  `block_rows`, `products: [{item_code, item_name, qty, uom, rate_per_acre}]`,
+  `applicator_name` and `wind_speed_mph`. Open on enrolment — WPS 40 CFR 170.311 requires the
+  application record be displayed to workers — scoped to the caller's entities.
+- **Fixed:** one spray counted twice. `spray._phi_from_tasks` now skips a Spray task a
+  non-cancelled Spray Application cites (the REI reader already skipped tasks a Spray REI
+  cites), and `spray_rei.open_for_task` no longer warns "names no block" for a task whose
+  blocks the application already restricted.
+- Deploy: an image rebuild. No migrate.
+
 ## 0.194.0 — 2026-09-27 — a harvest taken before a spray is not clear after it
 
 **910 tools** (unchanged). No new routes. Aug 17 audit Tier 2, checked item by item;

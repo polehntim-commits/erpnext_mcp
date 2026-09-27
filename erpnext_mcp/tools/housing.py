@@ -1289,3 +1289,68 @@ def get_employee_housing_history(args: dict) -> ToolResult:
 			+ (f"currently in {current[0]['unit']}" if current else "currently unassigned")
 		),
 	)
+
+
+# ── my_housing ── v0.195.0, SERVER_CHANGES §42 ──────────────────────────────
+def my_housing(employee: str) -> dict:
+	"""One worker's current bed, in the shape the phone's My Records screen reads.
+
+	THE CALLER'S OWN EMPLOYEE ONLY — the mobile wrapper resolves it from the
+	login and never takes one from the body, because a shared handset must not
+	show one worker another's cabin. `{"assignment": None, "unit": None}` when
+	they hold none, which is a real answer rather than an error.
+
+	`bed` IS ALWAYS NULL, AND THAT IS THE REGISTER'S TRUTH: this farm assigns a
+	UNIT, and no Housing Assignment has ever carried a bed. `camp` is the unit's
+	Parcel — where the cabins stand — and `address` is that parcel's. `status`
+	is this register's own word, `Current`.
+	"""
+	empty = {"assignment": None, "unit": None}
+	if not employee or not compat.doctype_exists(HOUSING_ASSIGNMENT):
+		return empty
+	rows = frappe.db.get_all(
+		HOUSING_ASSIGNMENT,
+		filters={"employee": employee, "end_date": ("is", "not set")},
+		fields=compat.existing_fields(HOUSING_ASSIGNMENT, _ASSIGNMENT_FIELDS),
+		order_by="assigned_date desc, creation desc",
+		limit=1,
+	)
+	if not rows:
+		return empty
+	assignment = _describe_assignment(dict(rows[0]))
+	unit_name = assignment["unit"]
+	unit_row = {}
+	if unit_name and frappe.db.exists(HOUSING_UNIT, unit_name):
+		unit_row = dict(
+			frappe.db.get_value(
+				HOUSING_UNIT, unit_name, compat.existing_fields(HOUSING_UNIT, _UNIT_FIELDS), as_dict=True
+			)
+			or {}
+		)
+	parcel = unit_row.get("parcel") or assignment.get("parcel") or None
+	address = None
+	if parcel and compat.has_field("Parcel", "address"):
+		address = str(frappe.db.get_value("Parcel", parcel, "address") or "") or None
+	occupancy = (
+		frappe.db.count(HOUSING_ASSIGNMENT, {"unit": unit_name, "end_date": ("is", "not set")})
+		if unit_name
+		else None
+	)
+	return {
+		"assignment": {
+			"name": assignment["name"],
+			"housing_unit": unit_name,
+			"unit_label": unit_row.get("unit_name") or unit_name,
+			"bed": None,
+			"camp": parcel,
+			"start_date": assignment["assigned_date"],
+			"end_date": assignment["end_date"],
+			"status": assignment["status"],
+		},
+		"unit": {
+			"address": address,
+			"occupancy": occupancy,
+			"capacity": int(unit_row.get("capacity") or 0) or None,
+			"last_habitability_inspection": _date_str(unit_row.get("last_habitability_inspection")),
+		},
+	}

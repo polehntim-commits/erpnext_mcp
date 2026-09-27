@@ -1045,6 +1045,14 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"list_app_feedback",
 		"reply_to_app_feedback",
 		"attach_training_certificate",
+		# v0.195.0. fafo_ios names all four as path constants (6e9cfd0) and no
+		# Codable decodes their answers yet, so there is nothing to mirror; the
+		# payloads are asserted key by key in test_wave5_server_changes against
+		# SERVER_CHANGES §42/§43.
+		"get_my_housing",
+		"record_spray_application",
+		"list_spray_applications",
+		"get_spray_application",
 	}
 
 	def _whitelisted(self, module):

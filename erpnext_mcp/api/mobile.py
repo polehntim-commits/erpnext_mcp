@@ -20866,3 +20866,311 @@ def attach_training_certificate(
 		if value not in (None, ""):
 			inner[key] = str(value)
 	return training_tools.attach_training_certificate(inner).data
+
+
+# ── v0.195.0: SERVER_CHANGES §42 and §43 ─────────────────────────────────────
+
+
+# ── 270. get_my_housing ──────────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_my_housing", limit=guard.READ_LIMIT)
+def get_my_housing(user: str) -> dict:
+	"""The caller's own current housing assignment. v0.195.0, SERVER_CHANGES §42.
+
+	NO ARGUMENTS, AND THAT IS THE GATE. The Employee is the login's own, never
+	one named in the body — a shared handset must not show one worker another's
+	cabin — so this is open on enrolment and needs nothing narrower. A login with
+	no Employee record, or a worker with no current assignment, answers
+	`{"assignment": null, "unit": null}`.
+	"""
+	guard.require_scope(user)
+	return housing_tools.my_housing(fieldwork._employee_for(user) or "")
+
+
+# ── 271. record_spray_application ────────────────────────────────────────────
+#: The one contract the spray task carries: the findings ARE the record's name.
+SPRAY_TASK_EVIDENCE = {"findings_text": True}
+
+
+def _spray_blocks(blocks) -> list:
+	"""The phone's block names as `create_spray_application` rows, WITH ACRES.
+
+	A bare name reaches `_application_blocks` with no acreage, and the rate the
+	phone's total quantity is divided by needs it — so each Field's own
+	`acreage` is read here. A block-tag Asset Register row has none, and its
+	acres stay 0.
+	"""
+	if isinstance(blocks, str):
+		try:
+			blocks = json.loads(blocks)
+		except (json.JSONDecodeError, ValueError):
+			blocks = [blocks]
+	if not isinstance(blocks, list) or not [b for b in blocks if b]:
+		frappe.throw("blocks is required — a list of the blocks this tank went on.", frappe.ValidationError)
+	out = []
+	for entry in blocks:
+		name = str((entry.get("block") if isinstance(entry, dict) else entry) or "").strip()
+		if not name:
+			continue
+		row = {"block": name}
+		if frappe.db.exists("Field", name):
+			row["block_doctype"] = "Field"
+			row["acres"] = float(frappe.db.get_value("Field", name, "acreage") or 0)
+		out.append(row)
+	return out
+
+
+def _spray_products(materials_used, acres: float) -> tuple[list, list]:
+	"""(products, warnings) — the phone's tank TOTALS as the per-acre rates the record keeps."""
+	if isinstance(materials_used, str):
+		try:
+			materials_used = json.loads(materials_used)
+		except (json.JSONDecodeError, ValueError):
+			frappe.throw(
+				"materials_used must be a JSON list of {item_code, qty, uom}.", frappe.ValidationError
+			)
+	if not isinstance(materials_used, list) or not materials_used:
+		frappe.throw(
+			"materials_used is required — [{item_code, qty, uom}], the tank mix.", frappe.ValidationError
+		)
+	products, warnings = [], []
+	for line in materials_used:
+		if not isinstance(line, dict):
+			frappe.throw("each materials_used line must be an object.", frappe.ValidationError)
+		qty = _quantity(line.get("qty"))
+		products.append(
+			{
+				"item_code": str(line.get("item_code") or "").strip(),
+				"rate_per_acre": round(qty / acres, 6) if acres else qty,
+				"rate_uom": str(line.get("uom") or "").strip() or None,
+			}
+		)
+	if not acres:
+		warnings.append(
+			"None of these blocks has an acreage on its record, so each product's rate was stored as "
+			"the tank TOTAL rather than per acre. Set the Field's acreage and the next spray's rate "
+			"is right; this one's REI and PHI are unaffected."
+		)
+	return products, warnings
+
+
+def _spray_materials(materials_used) -> list:
+	"""The same lines in `stock_bridge`'s shape, for the task's drawdown."""
+	if isinstance(materials_used, str):
+		materials_used = json.loads(materials_used)
+	return [
+		{
+			k: v
+			for k, v in (
+				("item_code", line.get("item_code")),
+				("qty", line.get("qty")),
+				("uom", line.get("uom")),
+			)
+			if v
+		}
+		for line in materials_used
+	]
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("record_spray_application", mutating=True, limit=guard.WRITE_LIMIT)
+def record_spray_application(
+	user: str,
+	blocks=None,
+	materials_used=None,
+	completed_at=None,
+	sprayer=None,
+	tank_mix=None,
+	rei_hours=None,
+	wind_speed_mph=None,
+	wind_direction=None,
+	temperature_f=None,
+	relative_humidity=None,
+	source_task=None,
+	notes=None,
+	company=None,
+) -> dict:
+	"""File a spray from the phone, through a Farm Task. v0.195.0, SERVER_CHANGES §43.
+
+	WRITES A SPRAY APPLICATION, NOT ONLY A RESTRICTION. The MCP tool of this name
+	(`spray_rei.record_spray_application`) writes Spray REI rows and nothing
+	else; the pesticide-use record — products, rates, weather, REI and PHI — is
+	the Spray Application, and it is what `list_spray_applications` reads back.
+	So this route files one (`spray.create_spray_application`), which opens the
+	REI windows itself.
+
+	FARM TASK FIRST. With no `source_task`, a Spray task is raised for the caller;
+	either way the application cites it, and the task is completed through
+	`complete_farm_task` — which draws the tank mix out of the shed and stamps
+	the windows on the task. The application's REIs cite the task, so the
+	completion opens no second set, and the PHI reader counts the task once.
+
+	`materials_used` is the TANK TOTAL per product; it is divided by the blocks'
+	acreage to give the per-acre rate the record keeps. `relative_humidity` is
+	stored as `humidity_pct`.
+
+	OPEN ON ENROLMENT. The applicator is whoever is on the tractor, and a record
+	of a spray that happened is never refused for the role of the person filing
+	it — the restriction it opens is the safe direction. The applicator is the
+	login, never the body. A `source_task` must be one this caller holds.
+	"""
+	allowed = guard.require_scope(user)
+	entity = _company(user, company, allowed)
+	worker = _employee(user)
+
+	rows = _spray_blocks(blocks)
+	acres = sum(float(row.get("acres") or 0) for row in rows)
+	products, warnings = _spray_products(materials_used, acres)
+	if sprayer:
+		guard.require_scoped_doc(asset_tags.ASSET_REGISTER, sprayer, "sprayer", allowed)
+
+	task = str(source_task or "").strip()
+	if task:
+		task = guard.require_scoped_doc(dispatch.FARM_TASK, task, "source_task", allowed)
+		held = dict(
+			frappe.db.get_value(dispatch.FARM_TASK, task, ["assigned_to", "state"], as_dict=True) or {}
+		)
+		if held.get("assigned_to") != worker or held.get("state") not in ("Claimed", "In-Progress"):
+			frappe.throw(
+				f"{task} is not a task you are holding, so this spray cannot close it. Send it without "
+				"source_task and it is filed under a task of its own.",
+				frappe.ValidationError,
+			)
+	else:
+		names = [row["block"] for row in rows]
+		one_field = len(rows) == 1 and rows[0].get("block_doctype") == "Field"
+		payload = {
+			"task_name": f"Spray {', '.join(names)}"[:140],
+			"task_type": dispatch.SPRAY_TASK_TYPE,
+			"company": entity,
+			"assigned_to": worker,
+			"evidence_required": dict(SPRAY_TASK_EVIDENCE),
+			"notes": f"Spray filed from a phone over: {', '.join(names)}.",
+		}
+		if one_field:
+			payload["location_doctype"] = "Field"
+			payload["location"] = names[0]
+		if sprayer:
+			payload["asset"] = str(sprayer)
+		task = dispatch.create_farm_task(payload).data["name"]
+
+	inner: dict = {
+		"blocks": rows,
+		"products": products,
+		"company": entity,
+		"source_task": task,
+		"applicator": user,
+	}
+	for key, value in (
+		("completed_at", completed_at),
+		("sprayer", sprayer),
+		("tank_mix", tank_mix),
+		("rei_hours", rei_hours),
+		("wind_speed_mph", wind_speed_mph),
+		("wind_direction", wind_direction),
+		("temperature_f", temperature_f),
+		("humidity_pct", relative_humidity),
+		("notes", notes),
+	):
+		if value not in (None, ""):
+			inner[key] = value
+	if any(
+		value not in (None, "")
+		for value in (wind_speed_mph, wind_direction, temperature_f, relative_humidity)
+	):
+		inner["weather_source"] = "Observed"
+	application = spray_tools.create_spray_application(inner).data
+
+	completion = dispatch.complete_farm_task(
+		{
+			"task": task,
+			"worker_id": worker,
+			"findings_text": f"Spray Application {application['name']}.",
+			"completion_narrative": f"Sprayed {', '.join(row['block'] for row in rows)} from the phone.",
+			"materials_used": _spray_materials(materials_used),
+			**({"completed_at": str(completed_at)} if completed_at else {}),
+		}
+	).data
+	warnings += list((completion.get("materials_consumed") or {}).get("warnings") or [])
+	warnings += [str(line) for line in application.get("notes_for_caller") or [] if line]
+	return {
+		"spray_application": application,
+		"task": {"name": task, "state": (completion.get("task") or {}).get("state")},
+		"reis": [
+			{"block": block.get("block"), "expires_at": application.get("rei_expires_at")}
+			for block in application.get("blocks") or []
+			if block.get("rei_record")
+		],
+		"warnings": warnings,
+	}
+
+
+# ── 272. list_spray_applications ─────────────────────────────────────────────
+def _spray_row(name: str) -> dict:
+	"""One application in the phone's history shape. Blocks and products included."""
+	data = spray_tools.get_spray_application({"application": name}).data
+	applicator = data.get("applicator") or ""
+	applicator_name = (
+		(str(frappe.db.get_value("User", applicator, "full_name") or "") if applicator else "")
+		or applicator
+		or None
+	)
+	return {
+		**data,
+		"blocks": [line.get("block") for line in data.get("blocks") or []],
+		"block_rows": data.get("blocks") or [],
+		"products": [
+			{
+				"item_code": line.get("item"),
+				"item_name": line.get("item_name") or line.get("item"),
+				"qty": line.get("total_applied"),
+				"uom": line.get("rate_uom"),
+				"rate_per_acre": line.get("rate_per_acre"),
+			}
+			for line in data.get("products_applied") or []
+		],
+		"applicator_name": applicator_name,
+		"wind_speed_mph": (data.get("weather") or {}).get("wind_speed_mph"),
+	}
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_spray_applications", limit=guard.READ_LIMIT)
+def list_spray_applications(
+	user: str, block=None, from_date=None, to_date=None, limit=None, company=None
+) -> dict:
+	"""Spray history, newest first. v0.195.0, SERVER_CHANGES §43.
+
+	OPEN ON ENROLMENT: WPS (40 CFR 170.311) requires the application record to be
+	DISPLAYED to workers — product, block, time, REI — so the phone showing it is
+	the rule being kept, not a privilege. Scoped to the caller's entities.
+	"""
+	allowed = guard.require_scope(user)
+	wanted = guard.require_company(user, company, allowed)
+	try:
+		cap = min(max(int(limit or 50), 1), 100)
+	except (TypeError, ValueError):
+		frappe.throw(f"limit must be a whole number, got {limit!r}.", frappe.ValidationError)
+	names, truncated = [], False
+	for entity in [wanted] if wanted else list(allowed):
+		inner = {"company": entity, "limit": cap}
+		for key, value in (("block", block), ("from_date", from_date), ("to_date", to_date)):
+			if value not in (None, ""):
+				inner[key] = str(value)
+		data = spray_tools.list_spray_applications(inner).data
+		truncated = truncated or bool(data.get("truncated"))
+		names += [(app.get("completed_at") or "", app["name"]) for app in data.get("applications") or []]
+	names.sort(reverse=True)
+	if len(names) > cap:
+		truncated = True
+	return {"applications": [_spray_row(name) for _when, name in names[:cap]], "truncated": truncated}
+
+
+# ── 273. get_spray_application ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_spray_application", limit=guard.READ_LIMIT)
+def get_spray_application(user: str, name=None) -> dict:
+	"""One spray in full, in the history row's shape. v0.195.0, SERVER_CHANGES §43."""
+	allowed = guard.require_scope(user)
+	target = guard.require_scoped_doc(spray_tools.APPLICATION, name, "name", allowed)
+	return _spray_row(target)

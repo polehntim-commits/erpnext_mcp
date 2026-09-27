@@ -418,6 +418,8 @@ ROUTES = (
 	# v0.193.0. A certificate that arrives after the record — the mailed card, the
 	# emailed ticket. `record_training` takes one only at filing time.
 	Route("/mobile", mobile_api.attach_training_certificate),
+	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
+	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),
 	Route("/mobile", mobile_api.update_regulatory_filing),
 	Route("/mobile", mobile_api.advance_policy_review),
@@ -910,6 +912,11 @@ ROUTES = (
 	# register, or a block sprayed through the app would read as clear.
 	Route("/mobile", mobile_api.get_active_rei),
 	Route("/mobile", mobile_api.list_active_reis),
+	# v0.195.0, SERVER_CHANGES §43. A spray filed from the phone is a Spray
+	# Application through a Spray Farm Task; history is the WPS display record.
+	Route("/mobile", mobile_api.record_spray_application),
+	Route("/mobile", mobile_api.list_spray_applications),
+	Route("/mobile", mobile_api.get_spray_application),
 	# The curriculum and the afternoon. THE ONLY SET ON THIS TABLE WHOSE WHOLE
 	# POINT IS THAT IT HAPPENS WITH A PHONE IN ONE HAND: a crew leader scans
 	# twelve badges at a shed door, takes twelve signatures an hour later, and

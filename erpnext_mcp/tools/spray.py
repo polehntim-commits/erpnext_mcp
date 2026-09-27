@@ -330,6 +330,22 @@ def _phi_from_tasks(names: list, company: str, today: str) -> list[dict]:
 			order_by="phi_clears_on desc",
 			limit=PHI_CAP,
 		)
+		# v0.195.0. A TASK A SPRAY APPLICATION CITES IS THAT APPLICATION'S SPRAY,
+		# and the branch above already answered for it — counting the task again
+		# listed one spray as two windows. The same rule `spray_rei.task_windows`
+		# keeps for REI. A cancelled application no longer speaks for the task.
+		cited = set()
+		names_found = [str(dict(row).get("name") or "") for row in rows or []]
+		if names_found and compat.doctype_exists(APPLICATION):
+			cited = set(
+				frappe.db.get_all(
+					APPLICATION,
+					filters={"source_task": ("in", names_found), "status": ("!=", "Cancelled")},
+					pluck="source_task",
+				)
+				or []
+			)
+		rows = [row for row in rows or [] if str(dict(row).get("name") or "") not in cited]
 	except Exception:  # pragma: no cover
 		return []
 	return [
