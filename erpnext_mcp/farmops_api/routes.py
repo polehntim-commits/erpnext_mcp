@@ -631,6 +631,11 @@ ROUTES = (
 	# Inventory section reads it. Narrow for the reason the line above gives;
 	# dispatch-gated and entity-checked on both records in the wrapper.
 	Route("/mobile", mobile_api.link_asset_warehouse),
+	# v0.189.0. An inspection's photographs, for the asset screen's Inspections
+	# section. The session is proved on both; the read opens only a File that is
+	# on that session's evidence. See `api/mobile._inspection_evidence`.
+	Route("/mobile", mobile_api.list_inspection_evidence),
+	Route("/mobile", mobile_api.get_inspection_evidence),
 	# Sprint 9 (v0.79.0): what the day actually looks like. Nineteen routes in
 	# four groups, and the gate is different on each group for a stated reason.
 	#

@@ -209,6 +209,24 @@ def attachment_content_on_authorized_parent(
 	return _attachment_payload(doc, max_bytes)
 
 
+def evidence_content(file_docname: str, max_bytes=None) -> ToolResult:
+	"""One file's bytes, for a caller that has proved the file is EVIDENCE on a
+	record it may read — a row of that record's own evidence table.
+
+	v0.189.0. THE THIRD READER, AND WHY THE OTHER TWO DO NOT FIT. An inspection's
+	photographs are rows of `Inspection Session.evidence_files`, each naming a
+	File; the phone's upload path commits those Files UNATTACHED on purpose
+	(`finalize_staged_file`), so `attached_to_*` is empty and neither
+	`_authorize_file` nor the parent-agreement check above can place them. The
+	authority here is the evidence ROW: the caller proves the session, reads the
+	File docnames off its table, and passes only one of those. It is not a
+	general reader — `api/mobile.get_inspection_evidence` is its only caller and
+	refuses any docname that is not on the session it proved.
+	"""
+	max_bytes = _resolve_max_bytes(as_int({"max_bytes": max_bytes}, "max_bytes", DEFAULT_MAX_BYTES))
+	return _attachment_payload(_open_attachment(file_docname), max_bytes)
+
+
 def _resolve_max_bytes(max_bytes) -> int:
 	"""The ceiling on one returned file, validated. Shared by both readers above."""
 	# Not `as_int(...) or DEFAULT`: that idiom turns an explicit 0 back into the

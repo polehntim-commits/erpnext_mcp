@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.189.0 — 2026-09-26 — an inspection shows what it found
+
+**910 tools** (unchanged). Two read-only `/mobile` routes, open on enrolment.
+
+- **`/mobile/list_inspection_evidence`** — one Inspection Session's photos and files:
+  its `evidence_files` rows (with caption, phase, type, captured_on, `is_image`) and any
+  File attached to it the usual way. The session must be the caller's entity's.
+- **`/mobile/get_inspection_evidence`** — one of those, base64. Opens ONLY a File that is
+  on that session's evidence. Needed because the phone commits evidence Files
+  unattached (`finalize_staged_file`), so `get_attachment_content` refuses them, and
+  Inspection Session is not on `ATTACHMENT_PARENTS`. New `files.evidence_content`.
+- Deploy: an image rebuild. No migrate.
+
 ## 0.188.0 — 2026-09-26 — a storage building knows which stock it holds
 
 **910 tools** (unchanged). One new column, one new `/mobile` route.

@@ -20153,3 +20153,99 @@ def link_asset_warehouse(user: str, asset_name=None, warehouse=None) -> dict:
 		"warehouse": wanted or None,
 		"warehouse_name": (frappe.db.get_value("Warehouse", wanted, "warehouse_name") if wanted else None),
 	}
+
+
+# ── 127–128. An inspection's photographs ────────────────────────────────────
+#
+# v0.189.0. THE ASSET SCREEN LISTED A STORAGE SHED'S INSPECTIONS AND COULD NOT
+# SHOW WHAT ANY OF THEM FOUND. The evidence is rows of `Inspection Session
+# .evidence_files`, each naming a File the phone uploaded — and those Files are
+# committed UNATTACHED (`finalize_staged_file`), so `get_attachment_content`,
+# which places a file by `attached_to_*`, refuses every one ("attached to no
+# document"). Inspection Session is not on `ATTACHMENT_PARENTS` either.
+#
+# SO THE SESSION IS THE AUTHORITY. The list proves the session is the caller's
+# entity's and reads its evidence rows (plus anything attached to it the usual
+# way). The read proves the session AGAIN and opens a File only if its docname
+# is on that list — a File docname is a global handle, and this door will not
+# open one somebody brought. Open on enrolment, like the asset history the
+# sessions come from: an inspection of a shed is not a personnel document.
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp")
+
+
+def _inspection_evidence(session: str) -> list:
+	"""Every photo or file on one Inspection Session, evidence rows first."""
+	doc = frappe.get_doc("Inspection Session", session)
+	rows: list = []
+	seen: set = set()
+
+	def add(file_docname, caption=None, phase=None, evidence_type=None, captured_on=None):
+		if not file_docname or file_docname in seen:
+			return
+		meta = frappe.db.get_value("File", file_docname, ["file_name", "file_url", "file_size"], as_dict=True)
+		if not meta:
+			return
+		seen.add(file_docname)
+		label = str(meta.get("file_name") or meta.get("file_url") or "")
+		rows.append({
+			"file": file_docname,
+			"file_name": meta.get("file_name"),
+			"file_size": meta.get("file_size"),
+			"caption": caption or None,
+			"phase": phase or None,
+			"evidence_type": evidence_type or None,
+			"captured_on": str(captured_on or "") or None,
+			"is_image": label.lower().endswith(_IMAGE_SUFFIXES),
+		})
+
+	for row in doc.get("evidence_files") or []:
+		# A child row is a dict here and a Document on a bench; both have `.get`.
+		file_docname = str(row.get("file") or "").strip()
+		url = str(row.get("file_url") or "").strip()
+		if not file_docname and url:
+			file_docname = str(frappe.db.get_value("File", {"file_url": url}, "name") or "")
+		add(file_docname, row.get("caption"), row.get("phase"),
+		    row.get("evidence_type"), row.get("captured_on"))
+	for attached in frappe.db.get_all(
+		"File",
+		filters={"attached_to_doctype": "Inspection Session", "attached_to_name": session},
+		fields=["name"],
+	) or []:
+		add(str(attached.get("name") or ""))
+	return rows
+
+
+# ── 127. list_inspection_evidence ────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_inspection_evidence", limit=guard.READ_LIMIT)
+def list_inspection_evidence(user: str, inspection_session=None) -> dict:
+	"""The photos and files one inspection recorded, with their captions."""
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc("Inspection Session", inspection_session, "inspection_session", allowed)
+	evidence = _inspection_evidence(name)
+	return {"inspection_session": name, "evidence": evidence, "count": len(evidence)}
+
+
+# ── 128. get_inspection_evidence ─────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_inspection_evidence", limit=guard.UPLOAD_LIMIT)
+def get_inspection_evidence(user: str, inspection_session=None, file=None, max_bytes=None) -> dict:
+	"""One of an inspection's photos, base64 — only a file that is on that inspection."""
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc("Inspection Session", inspection_session, "inspection_session", allowed)
+	wanted = str(file or "").strip()
+	if wanted not in {row["file"] for row in _inspection_evidence(name)}:
+		frappe.throw(
+			f"file {wanted or '(none)'} is not evidence on inspection {name}. Nothing was read.",
+			frappe.PermissionError,
+		)
+	data = file_tools.evidence_content(wanted, max_bytes if max_bytes not in (None, "") else None).data
+	return {
+		"inspection_session": name,
+		"file": data.get("name"),
+		"file_name": data.get("file_name"),
+		"file_size": data.get("file_size"),
+		"content_type": data.get("mime_type"),
+		"encoding": data.get("encoding"),
+		"content": data.get("content_base64"),
+	}

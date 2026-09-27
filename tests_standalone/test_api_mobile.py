@@ -681,6 +681,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"normalize_merchant",
 		# v0.188.0 — the storage asset's warehouse.
 		"link_asset_warehouse",
+		# v0.189.0 — an inspection's photos.
+		"list_inspection_evidence",
+		"get_inspection_evidence",
 		"start_inspection",
 		# `submit_wizard_via_mobile` is here for `start_inspection`'s reason and
 		# then some: `MobileAPI.swift` will never name it either, because
@@ -4177,6 +4180,63 @@ class TheShedKnowsWhichStockItHolds(MobileAPITestCase):
 		with self.assertRaises(Exception) as caught:
 			mobile_api.link_asset_warehouse(asset_name=self.SHED, warehouse="Stores")
 		self.assertIn("Stores - OML", str(caught.exception), "the refusal shows the docname shape")
+
+
+class AnInspectionShowsWhatItFound(MobileAPITestCase):
+	"""v0.189.0. An inspection's photographs, read through the session that holds them.
+
+	THE FILES ARE UNATTACHED ON PURPOSE (`finalize_staged_file`), so the session's
+	evidence table is the only thing that places them — and the only authority
+	this door accepts for opening one.
+	"""
+
+	SESSION = "INSP-0001"
+
+	def setUp(self):
+		super().setUp()
+		STORE.seed("File", [
+			{"name": "FILE-EV-1", "file_name": "shelf.jpg", "file_url": "/private/files/shelf.jpg",
+			 "is_private": 1, "attached_to_doctype": None, "attached_to_name": None},
+			{"name": "FILE-EV-2", "file_name": "log.pdf", "file_url": "/private/files/log.pdf",
+			 "is_private": 1, "attached_to_doctype": "Inspection Session", "attached_to_name": self.SESSION},
+			{"name": "FILE-ELSEWHERE", "file_name": "other.jpg", "file_url": "/private/files/other.jpg",
+			 "is_private": 1, "attached_to_doctype": None, "attached_to_name": None},
+		])
+		STORE.file_contents["FILE-EV-1"] = b"\xff\xd8jpeg-bytes"
+		STORE.file_contents["FILE-ELSEWHERE"] = b"\xff\xd8secret"
+		STORE.seed("Inspection Session", [{
+			"name": self.SESSION, "template": "Chemical storage monthly", "state": "Submitted",
+			"company": MAIN, "location_doctype": "Asset Register", "location": "40-5-MPH",
+			"evidence_files": [{"file": "FILE-EV-1", "caption": "Top shelf, no leaks", "phase": "After",
+			                    "evidence_type": "Photo"}],
+		}])
+
+	def test_the_list_carries_the_evidence_rows_and_the_attached_files(self):
+		self.be()
+		answer = mobile_api.list_inspection_evidence(inspection_session=self.SESSION)
+		self.assertEqual([row["file"] for row in answer["evidence"]], ["FILE-EV-1", "FILE-EV-2"])
+		first = answer["evidence"][0]
+		self.assertEqual(first["caption"], "Top shelf, no leaks")
+		self.assertTrue(first["is_image"])
+		self.assertFalse(answer["evidence"][1]["is_image"])
+
+	def test_a_photo_on_the_session_opens(self):
+		self.be()
+		answer = mobile_api.get_inspection_evidence(inspection_session=self.SESSION, file="FILE-EV-1")
+		self.assertEqual(base64.b64decode(answer["content"]), b"\xff\xd8jpeg-bytes")
+
+	def test_a_file_not_on_the_session_is_refused(self):
+		"""A File docname is a global handle; bringing one does not open it."""
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.get_inspection_evidence(inspection_session=self.SESSION, file="FILE-ELSEWHERE")
+
+	def test_another_entitys_inspection_is_not_found(self):
+		STORE.seed("Inspection Session", [{"name": "INSP-OTHER", "state": "Submitted", "company": OTHER,
+		                                    "evidence_files": [{"file": "FILE-ELSEWHERE"}]}])
+		self.be()
+		with self.assertRaises(Exception):
+			mobile_api.list_inspection_evidence(inspection_session="INSP-OTHER")
 
 
 class TheWizardKnowsWhereToPostItsAnswers(MobileAPITestCase):
