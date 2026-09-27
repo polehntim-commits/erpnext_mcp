@@ -22462,7 +22462,10 @@ TOOLS = {
 		"with four timestamps, and the reason a hearing believes any of it is "
 		"that Monday's account was written on Monday.",
 		{
-			"doctype": _field(_STRING, "Farm Task, Accident Report or Farm Incident Record."),
+			"doctype": _field(
+				_STRING,
+				"Farm Task, Accident Report, Farm Incident Record or App Feedback (its reply thread, v0.193.0).",
+			),
 			"name": _field(_STRING, "Which record."),
 			"task": _field(_STRING, "Shorthand for a Farm Task — the common case."),
 			"narrative": _field(_STRING, "The account itself."),
@@ -22499,7 +22502,10 @@ TOOLS = {
 		"A FAILED ATTACH DOES NOT LOSE THE WORDS — the narrative is written "
 		"first, and a broken file link comes back as `audio_error`.",
 		{
-			"doctype": _field(_STRING, "Farm Task, Accident Report or Farm Incident Record."),
+			"doctype": _field(
+				_STRING,
+				"Farm Task, Accident Report, Farm Incident Record or App Feedback (its reply thread, v0.193.0).",
+			),
 			"name": _field(_STRING, "Which record."),
 			"task": _field(_STRING, "Shorthand for a Farm Task."),
 			"transcription": _field(_STRING, "What the handset transcribed. Required."),
@@ -22530,7 +22536,10 @@ TOOLS = {
 		"`full_narrative` is the whole thing assembled in order with each "
 		"entry's author, timestamp and whether it was spoken. Read-only.",
 		{
-			"doctype": _field(_STRING, "Farm Task, Accident Report or Farm Incident Record."),
+			"doctype": _field(
+				_STRING,
+				"Farm Task, Accident Report, Farm Incident Record or App Feedback (its reply thread, v0.193.0).",
+			),
 			"name": _field(_STRING, "Which record."),
 			"task": _field(_STRING, "Shorthand for a Farm Task."),
 			"limit": _field(_INTEGER, "Maximum entries."),

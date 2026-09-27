@@ -821,6 +821,9 @@ def get_app_feedback(args: dict) -> ToolResult:
 	# screenshot of the app is a screenshot of whatever roster, wage or task list
 	# was on the screen. It still needs an authenticated fetch to read.
 	data["screenshot"] = row.get("screenshot") or None
+	# v0.193.0. The conversation, oldest first — see `replies_of`.
+	data["replies"] = replies_of(data["name"])
+	data["reply_count"] = len(data["replies"])
 
 	notes = []
 	if data["claimed_employee"] and data["claimed_employee"] != data["employee"]:
@@ -974,4 +977,197 @@ def resolve_app_feedback(args: dict) -> ToolResult:
 		data=data,
 		summary=f"{name}: {previous} → {status}",
 		docstatus_delta="",
+	)
+
+
+# ── replies, and the phone's read of them ── v0.193.0 ───────────────────────
+#
+# THE FEED WENT ONE WAY (TELL_THE_FARM_AUDIT.md F5). A worker could file a note
+# and never learn whether it was read, answered or refused, and the only answer
+# the farm could give was `resolve_app_feedback`'s one line — which also CLOSED
+# the note, so "we're looking at it" could not be said at all.
+#
+# THE REPLY IS A NARRATIVE ENTRY, NOT A NEW REGISTER. `Task Note` is already the
+# append-only, authored, stamped, language-tagged table three other registers
+# keep their conversation in, and App Feedback is its fourth parent
+# (`narrative.NARRATIVE_PARENTS`). So `add_task_note` over MCP writes a reply
+# with no new tool, and this module adds only what the phone needs on top.
+
+#: Most notes one phone read returns. A worker's own notes number in the tens.
+FEED_CAP = 100
+
+#: The `status` words the phone's feed takes, and which stored statuses each
+#: means. "resolved" is EVERY ANSWERED NOTE — Resolved and Won't Fix alike —
+#: because to the person who filed it both mean "the farm has answered"; the
+#: row's own `status` still says which.
+FEED_STATUSES = {
+	"open": None,
+	"resolved": ANSWERED,
+	"all": STATUSES,
+}
+
+REPLY_MAX = 4000
+
+
+def replies_of(name: str) -> list:
+	"""The reply thread on one note, oldest first. Never raises."""
+	from . import narrative
+
+	if not compat.has_field(APP_FEEDBACK, "replies"):
+		return []
+	return [
+		{
+			"author": entry["author"],
+			"author_name": entry["author_name"],
+			"written_at": entry["written_at"],
+			"reply": entry["narrative"],
+			"language": entry["source_language"],
+		}
+		for entry in narrative.describe_notes(APP_FEEDBACK, name, "replies")
+	]
+
+
+def _feed_status(value: str) -> tuple[str, dict | None]:
+	"""(word, filter) for the feed's `status` argument. Refused by name."""
+	word = (value or "all").strip().lower().replace("'", "").replace("\u2019", "")
+	if word in ("wont fix", "wont_fix", "wontfix"):
+		return WONT_FIX, WONT_FIX
+	if word not in FEED_STATUSES:
+		raise ToolError(
+			f"status must be one of {', '.join(FEED_STATUSES)} (or 'won't fix' for refusals "
+			f"only); got {value!r}."
+		)
+	if word == "open":
+		return word, _UNANSWERED
+	if word == "resolved":
+		return word, ("in", list(ANSWERED))
+	return word, None
+
+
+def feed(user: str = "", companies=None, status: str = "", limit=None) -> dict:
+	"""Notes with their replies, newest first — the phone's read. Never writes.
+
+	`user` narrows to one login's own notes (a worker's "my notes"); `companies`
+	to notes filed under those entities (a manager's feed). Either, both or
+	neither — the mobile wrapper decides which the caller is entitled to.
+	"""
+	_require()
+	word, status_filter = _feed_status(status)
+	filters: dict = {}
+	if user:
+		filters["user"] = user
+	if companies is not None:
+		filters["company"] = ("in", list(companies) or [""])
+	if status_filter is not None:
+		filters["status"] = status_filter
+	try:
+		cap = min(max(int(limit or FEED_CAP), 1), FEED_CAP)
+	except (TypeError, ValueError):
+		raise ToolError(f"limit must be a whole number, got {limit!r}.") from None
+
+	rows = (
+		frappe.db.get_all(
+			APP_FEEDBACK,
+			filters=filters,
+			fields=compat.existing_fields(APP_FEEDBACK, _LIST_FIELDS),
+			order_by="timestamp desc, creation desc",
+			limit=cap + 1,
+		)
+		or []
+	)
+	notes = []
+	for row in rows[:cap]:
+		note = _describe(dict(row))
+		note["replies"] = replies_of(note["name"])
+		note["reply_count"] = len(note["replies"])
+		notes.append(note)
+	return {
+		"status": word,
+		"count": len(notes),
+		"truncated": len(rows) > cap,
+		"open_count": sum(1 for note in notes if note["is_open"]),
+		"app_feedback": notes,
+	}
+
+
+def find(name: str) -> str:
+	"""A note's docname from its docname or the handset's entry_uuid, or a refusal."""
+	_require()
+	name = str(name or "").strip()
+	if not name:
+		raise ToolError("name is required — the App Feedback docname or the handset's entry_uuid.")
+	if frappe.db.exists(APP_FEEDBACK, name):
+		return name
+	matches = frappe.db.get_all(APP_FEEDBACK, filters={"entry_uuid": name}, pluck="name", limit=2)
+	if len(matches) == 1:
+		return matches[0]
+	raise ToolError(f"no App Feedback called {name!r} on this site, and no note carries it as an entry_uuid.")
+
+
+def reply_to_app_feedback(args: dict) -> ToolResult:
+	"""Add one reply to a note's thread, and optionally answer it in the same call.
+
+	`status` (Resolved / Won't Fix) closes the note through `resolve_app_feedback`
+	itself, so every rule that tool keeps — a refusal must say why, the answering
+	account comes from the session, it never reopens — holds here too. The reply
+	text is the resolution_note unless one is given.
+
+	The AUTHOR comes from the caller (`author` / `author_name`, filled by the
+	mobile wrapper from the login), never from the body of a phone request.
+	"""
+	from . import narrative
+
+	name = find(as_str(args, "name") or as_str(args, "entry_uuid"))
+	reply = (as_str(args, "reply") or as_str(args, "text")).strip()
+	if not reply:
+		raise ToolError(
+			"reply is required — a reply with nothing in it answers nothing. Nothing was changed."
+		)
+	if len(reply) > REPLY_MAX:
+		raise ToolError(
+			f"the reply is {len(reply)} characters, over the {REPLY_MAX} one carries. Nothing was changed."
+		)
+	status = as_str(args, "status")
+	if status:
+		status = _validated_status(status, "status", ANSWERED)
+	if not compat.has_field(APP_FEEDBACK, "replies"):
+		raise ToolError(
+			"this site's App Feedback has no replies table yet — run `bench --site <site> migrate` "
+			"after upgrading the app. Nothing was changed."
+		)
+
+	entry = narrative.append_note(
+		APP_FEEDBACK,
+		name,
+		"replies",
+		narrative._entry(
+			{
+				"note_type": "Conversation",
+				"author": as_str(args, "author"),
+				"author_name": as_str(args, "author_name"),
+				"language": as_str(args, "language"),
+			},
+			reply,
+			narrative.SOURCE_TYPED,
+		),
+	)
+	resolution = None
+	if status:
+		resolution = resolve_app_feedback(
+			{"name": name, "status": status, "resolution_note": as_str(args, "resolution_note") or reply}
+		).data
+
+	data = get_app_feedback({"name": name}).data
+	data["reply"] = {
+		"author": entry.get("author"),
+		"author_name": entry.get("author_name"),
+		"written_at": str(entry.get("written_at") or "") or None,
+		"reply": entry.get("narrative"),
+		"language": entry.get("source_language"),
+	}
+	data["resolution"] = resolution
+	return ToolResult(
+		data=data,
+		summary=f"reply {data['reply_count']} on {name}" + (f"; now {status}" if status else ""),
+		docstatus_delta="0 → 0 (updated)",
 	)

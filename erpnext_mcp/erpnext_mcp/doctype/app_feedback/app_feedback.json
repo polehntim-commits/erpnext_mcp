@@ -49,11 +49,13 @@
   "resolution_note",
   "resolution_col",
   "resolved_by",
-  "resolved_at"
+  "resolved_at",
+  "replies_section",
+  "replies"
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-24 18:00:00.000000",
+ "modified": "2026-09-27 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "App Feedback",
@@ -376,6 +378,18 @@
    "fieldtype": "Datetime",
    "label": "Resolved At",
    "read_only": 1
+  },
+  {
+   "fieldname": "replies_section",
+   "fieldtype": "Section Break",
+   "label": "Replies"
+  },
+  {
+   "description": "v0.193.0. The conversation about this note: a manager's answer and the worker's follow-up, as append-only Task Note rows, each with its author and timestamp. Written by reply_to_app_feedback on the phone and add_task_note over MCP. resolution_note above is still the one line that closes the note.",
+   "fieldname": "replies",
+   "fieldtype": "Table",
+   "label": "Replies",
+   "options": "Task Note"
   }
  ]
 }

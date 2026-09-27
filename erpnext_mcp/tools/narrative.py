@@ -15,8 +15,8 @@ of it:
                          and BOTH the text and the recording land here
     list_task_notes      reading the accumulated account back
 
-ONE CHILD TABLE, THREE PARENTS. `Task Note` hangs off Farm Task, Accident Report
-and Farm Incident Record, because it is the same act against all three and three
+ONE CHILD TABLE, FOUR PARENTS. `Task Note` hangs off Farm Task, Accident Report,
+Farm Incident Record and (v0.193.0) App Feedback's reply thread, because it is the same act against all three and three
 near-identical tables would drift the first time one of them grew a column. The
 parent is named per call and checked against an allowlist — a narrative table
 bolted onto an arbitrary doctype would be a general-purpose comment system with
@@ -54,6 +54,7 @@ TASK_NOTE = "Task Note"
 FARM_TASK = "Farm Task"
 ACCIDENT_REPORT = "Accident Report"
 DISCIPLINE_RECORD = "Farm Incident Record"
+APP_FEEDBACK = "App Feedback"
 FILE = "File"
 
 #: Which registers carry a narrative, and the field the table hangs off each.
@@ -65,6 +66,11 @@ NARRATIVE_PARENTS = {
 	FARM_TASK: "task_notes",
 	ACCIDENT_REPORT: "investigation_notes",
 	DISCIPLINE_RECORD: "discipline_notes",
+	# v0.193.0. The reply thread on an in-app feedback note: a manager's answer
+	# and the worker's follow-up are the same append-only, authored, stamped act.
+	# The phone's own `add_task_note` does NOT reach it — `api/mobile.py`'s
+	# NARRATIVE_TARGETS is a separate allowlist — `reply_to_app_feedback` does.
+	APP_FEEDBACK: "replies",
 }
 
 #: What kind of entry this is. The vocabulary is the doctype's; it is restated
@@ -339,7 +345,10 @@ def describe_notes(doctype: str, docname: str, fieldname: str, limit: int = NOTE
 		return []
 	out = []
 	for row in list(doc.get(fieldname) or [])[:limit]:
-		row = dict(row)
+		# v0.193.0. A bench hands back child `Document`s and `dict(row)` raises on
+		# them (no `keys`, no `__iter__`); the standalone double hands back dicts,
+		# which is why this passed every test. `land_adjustment.child_rows` idiom.
+		row = row.as_dict() if hasattr(row, "as_dict") else dict(row)
 		out.append(
 			{
 				"note_type": row.get("note_type") or "Note",

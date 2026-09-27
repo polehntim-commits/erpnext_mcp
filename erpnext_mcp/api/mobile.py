@@ -20222,16 +20222,18 @@ def _inspection_evidence(session: str) -> list:
 			return
 		seen.add(file_docname)
 		label = str(meta.get("file_name") or meta.get("file_url") or "")
-		rows.append({
-			"file": file_docname,
-			"file_name": meta.get("file_name"),
-			"file_size": meta.get("file_size"),
-			"caption": caption or None,
-			"phase": phase or None,
-			"evidence_type": evidence_type or None,
-			"captured_on": str(captured_on or "") or None,
-			"is_image": label.lower().endswith(_IMAGE_SUFFIXES),
-		})
+		rows.append(
+			{
+				"file": file_docname,
+				"file_name": meta.get("file_name"),
+				"file_size": meta.get("file_size"),
+				"caption": caption or None,
+				"phase": phase or None,
+				"evidence_type": evidence_type or None,
+				"captured_on": str(captured_on or "") or None,
+				"is_image": label.lower().endswith(_IMAGE_SUFFIXES),
+			}
+		)
 
 	for row in doc.get("evidence_files") or []:
 		# A child row is a dict here and a Document on a bench; both have `.get`.
@@ -20239,13 +20241,21 @@ def _inspection_evidence(session: str) -> list:
 		url = str(row.get("file_url") or "").strip()
 		if not file_docname and url:
 			file_docname = str(frappe.db.get_value("File", {"file_url": url}, "name") or "")
-		add(file_docname, row.get("caption"), row.get("phase"),
-		    row.get("evidence_type"), row.get("captured_on"))
-	for attached in frappe.db.get_all(
-		"File",
-		filters={"attached_to_doctype": "Inspection Session", "attached_to_name": session},
-		fields=["name"],
-	) or []:
+		add(
+			file_docname,
+			row.get("caption"),
+			row.get("phase"),
+			row.get("evidence_type"),
+			row.get("captured_on"),
+		)
+	for attached in (
+		frappe.db.get_all(
+			"File",
+			filters={"attached_to_doctype": "Inspection Session", "attached_to_name": session},
+			fields=["name"],
+		)
+		or []
+	):
 		add(str(attached.get("name") or ""))
 	return rows
 
@@ -20536,7 +20546,9 @@ def _staged_document(asset: str, token: str) -> dict:
 		or {}
 	)
 	if row.get("is_folder"):
-		frappe.throw(f"File {token} is a folder, not a document. Nothing was attached.", frappe.ValidationError)
+		frappe.throw(
+			f"File {token} is a folder, not a document. Nothing was attached.", frappe.ValidationError
+		)
 	parent = (str(row.get("attached_to_doctype") or ""), str(row.get("attached_to_name") or ""))
 	if parent == (asset_tags.ASSET_REGISTER, asset):
 		return {**row, "already": True}
@@ -20686,3 +20698,171 @@ def attach_asset_document(
 		f"Document added from {target['name']}'s screen ({source}).",
 	)
 	return {"asset": target["name"], "task": closed, "attachment": attachment}
+
+
+# ── v0.193.0: the feedback loop goes both ways ───────────────────────────────
+#
+# TELL_THE_FARM_AUDIT.md F5: a worker could file a note and never learn it was
+# read. `submit_app_feedback` was the only feedback route on this surface. These
+# two are the return path — a worker reads their own notes with the farm's
+# answers, and a Farm Manager reads the entity's feed and answers from the phone.
+
+#: Who answers the feed. FARM MANAGER ONLY: it is the one Farm Ops role the App
+#: Feedback DocPerm names, and the feed carries complaints about foremen — a
+#: Foreman reading every worker's note about their own crew is the reflex this
+#: surface avoids. System Manager cannot reach this transport at all.
+FEEDBACK_ROLES = frozenset({"Farm Manager"})
+
+
+def _feedback_manager(user: str) -> bool:
+	return bool(guard.roles_held(user) & FEEDBACK_ROLES)
+
+
+def _caller_author(user: str) -> tuple[str, str]:
+	"""(author, author_name) for a reply — the login's Employee where it has one."""
+	employee = fieldwork._employee_for(user) or ""
+	name = ""
+	if employee:
+		name = str(frappe.db.get_value(EMPLOYEE, employee, "employee_name") or "")
+	if not name:
+		name = (
+			str(frappe.db.get_value("User", user, "full_name") or "")
+			if frappe.db.exists("User", user)
+			else ""
+		)
+	return employee or user, name or employee or user
+
+
+# ── 267. list_app_feedback ───────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_app_feedback", limit=guard.READ_LIMIT)
+def list_app_feedback(user: str, status=None, scope=None, limit=None) -> dict:
+	"""Feedback notes with their replies, newest first. v0.193.0.
+
+	`scope` is `mine` (the default — the notes this login filed, whatever entity
+	they were filed under) or `all` (every note filed under the caller's
+	entities; Farm Manager only, 403 otherwise). `status` is `open`, `resolved`
+	(Resolved and Won't Fix alike: the farm has answered) or `all` (default);
+	`won't fix` narrows to refusals. `limit` defaults to and caps at 100.
+
+	OPEN ON ENROLMENT for `mine`: a note is its author's own words and the
+	farm's answer to them, and there is nothing in it the author may not read.
+	"""
+	allowed = guard.require_scope(user)
+	wanted = str(scope or "mine").strip().lower()
+	if wanted not in ("mine", "all"):
+		frappe.throw(f"scope must be 'mine' or 'all', not {scope!r}.", frappe.ValidationError)
+	if wanted == "all" and not _feedback_manager(user):
+		raise frappe.PermissionError(
+			"scope=all is the farm's whole feedback feed and is restricted to Farm Manager. "
+			"scope=mine — the default — returns the notes you filed, with every reply to them."
+		)
+	data = feedback_tools.feed(
+		user=user if wanted == "mine" else "",
+		companies=None if wanted == "mine" else allowed,
+		status=str(status or ""),
+		limit=limit,
+	)
+	data["scope"] = wanted
+	data["can_reply_to_all"] = _feedback_manager(user)
+	return data
+
+
+# ── 268. reply_to_app_feedback ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("reply_to_app_feedback", mutating=True, limit=guard.WRITE_LIMIT)
+def reply_to_app_feedback(
+	user: str,
+	name=None,
+	entry_uuid=None,
+	reply=None,
+	language=None,
+	status=None,
+	resolution_note=None,
+) -> dict:
+	"""Add a reply to a feedback note, and optionally answer it. v0.193.0.
+
+	`name` (the AFB docname) or `entry_uuid` (the handset's own id) names the
+	note. `reply` is the text; `language` is `en` / `es`. `status` — `Resolved`
+	or `Won't Fix` — also closes the note, with `reply` as its resolution unless
+	`resolution_note` is given; a note is never reopened.
+
+	WHO MAY: the note's author, to follow up on their own note (no `status`); a
+	Farm Manager, on any note filed under their entities (with or without
+	`status`). The reply's author is this login, never the body.
+	"""
+	allowed = guard.require_scope(user)
+	note = feedback_tools.find(str(name or entry_uuid or ""))
+	row = dict(
+		frappe.db.get_value(feedback_tools.APP_FEEDBACK, note, ["user", "company"], as_dict=True) or {}
+	)
+	manager = _feedback_manager(user) and (not row.get("company") or row.get("company") in allowed)
+	author_of_note = row.get("user") == user
+	if not (manager or author_of_note):
+		raise frappe.PermissionError(
+			"a reply on this note is for the person who filed it or a Farm Manager of the entity "
+			"it was filed under. Nothing was changed."
+		)
+	if status and not manager:
+		raise frappe.PermissionError(
+			"answering a note (status) is a Farm Manager's; your reply can be sent without it. "
+			"Nothing was changed."
+		)
+	author, author_name = _caller_author(user)
+	inner = {"name": note, "reply": str(reply or ""), "author": author, "author_name": author_name}
+	for key, value in (("language", language), ("status", status), ("resolution_note", resolution_note)):
+		if value not in (None, ""):
+			inner[key] = str(value)
+	return feedback_tools.reply_to_app_feedback(inner).data
+
+
+# ── 269. attach_training_certificate ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("attach_training_certificate", mutating=True, limit=guard.WRITE_LIMIT)
+def attach_training_certificate(
+	user: str,
+	training_record=None,
+	file=None,
+	file_url=None,
+	file_name=None,
+	file_content=None,
+	training_source=None,
+	provider=None,
+) -> dict:
+	"""Put an externally-issued certificate on an existing training record. v0.193.0.
+
+	`training_record` is the Employee Training Record docname. The certificate is
+	exactly one of `file` (a File docname from `stage_file_chunk` /
+	`finalize_staged_file` — the path for a photo of a card), `file_url` (a file
+	already on the site), or `file_name` + `file_content` (base64, 8 MB cap).
+	`training_source` (`External`, …) and `provider` are set when given.
+
+	WHO MAY: the person the record is about, for their own card; otherwise the
+	roles that run training — HR, Farm Manager, Foreman, Crew Leader
+	(`employee.SHIFT_ROLES`). The record must be inside the caller's entities.
+	"""
+	allowed = guard.require_scope(user)
+	record = guard.require_scoped_doc(TRAINING_RECORD, training_record, "training_record", allowed)
+	own = str(frappe.db.get_value(TRAINING_RECORD, record, "employee") or "") == (
+		fieldwork._employee_for(user) or "\0"
+	)
+	if not own:
+		personnel.require_shift_role()
+	if file_content and len(str(file_content)) > ATTACH_INLINE_LIMIT * 4 // 3 + 4:
+		frappe.throw(
+			"file_content is over the 8 MB inline limit — upload it with stage_file_chunk and "
+			"finalize_staged_file, then pass the File docname as `file`.",
+			frappe.ValidationError,
+		)
+	inner: dict = {"training_record": record}
+	for key, value in (
+		("file", file),
+		("file_url", file_url),
+		("file_name", file_name),
+		("file_content", file_content),
+		("training_source", training_source),
+		("provider", provider),
+	):
+		if value not in (None, ""):
+			inner[key] = str(value)
+	return training_tools.attach_training_certificate(inner).data

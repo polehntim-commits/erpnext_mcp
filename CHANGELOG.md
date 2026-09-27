@@ -3,6 +3,52 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.193.0 — 2026-09-27 — the feedback loop goes both ways; a late training certificate
+
+**910 tools** (unchanged). Three new `/mobile` routes, one new App Feedback column.
+Punch-list #6 and #9; TELL_THE_FARM_AUDIT.md F3 and F5.
+
+**Already there, not rebuilt.** A note naming its record: `submit_app_feedback` has
+taken `reference_doctype` / `reference_name` since before this release, stores them, and
+`list_app_feedback` (MCP) filters on them — the phone just does not send them yet
+(fafo_ios `AppFeedback.requestParams`). A certificate filed WITH its record:
+`/mobile/record_training` already takes `training_source` (`External`), `provider` and
+`certificate_file`.
+
+- **`App Feedback.replies`** (Table → Task Note). The reply thread is the same append-only,
+  authored, stamped narrative table Farm Task, Accident Report and Farm Incident Record keep
+  (`narrative.NARRATIVE_PARENTS`), so MCP `add_task_note` / `list_task_notes` work on a note
+  with no new tool. `get_app_feedback` now answers `replies` and `reply_count` (additive).
+  `resolution_note` is unchanged and still the one line that closes a note.
+- **`GET|POST /mobile/list_app_feedback`** `(status?, scope?, limit?)` → `{scope, status,
+  count, truncated, open_count, can_reply_to_all, app_feedback: [note]}`. `scope` = `mine`
+  (default; the caller's own notes, open on enrolment) or `all` (every note under the caller's
+  entities; **Farm Manager only**, 403 otherwise). `status` = `open` | `resolved` (Resolved
+  **and** Won't Fix) | `all` (default) | `won't fix`. `limit` ≤ 100. Each `note` is
+  `get_app_feedback`'s shape (`name`, `entry_uuid`, `screen_name`, `reference_doctype`,
+  `reference_name`, `comment`, `status`, `is_open`, `resolution_note`, `resolved_by`,
+  `resolved_at`, …) plus `replies: [{author, author_name, written_at, reply, language}]`
+  oldest first, and `reply_count`.
+- **`POST /mobile/reply_to_app_feedback`** `(name | entry_uuid, reply, language?, status?,
+  resolution_note?)` → the note as above plus `reply` (the entry just written) and
+  `resolution` (null, or `resolve_app_feedback`'s answer). The note's **author** may reply to
+  their own note; a **Farm Manager** may reply to any note under their entities and may pass
+  `status` = `Resolved` | `Won't Fix` to close it (the reply is the resolution unless
+  `resolution_note` is given). Anyone else: 403. A note is never reopened. The reply's author
+  is the login, never the body.
+- **`POST /mobile/attach_training_certificate`** `(training_record, file | file_url |
+  file_name + file_content, training_source?, provider?)` → the training record
+  (`record_training`'s shape) plus `certificate_file`, `file`, `replaced_certificate_file`.
+  For a certificate that arrives after the record. Exactly one source: `file` (a File docname
+  from `finalize_staged_file`), `file_url`, or base64 `file_content` (8 MB). The File is
+  attached to the record and its URL written to `certificate_file`. Allowed for the record's
+  own employee, or HR / Farm Manager / Foreman / Crew Leader; the record must be in the
+  caller's entities.
+- **Fixed:** `narrative.describe_notes` called `dict(row)` on child rows, which raises on a
+  bench's `Document` rows (the double hands back dicts). `list_task_notes`, the accident and
+  discipline readers, and the new reply thread all read through it.
+- Deploy: **`bench migrate`** (the `replies` column), then an image rebuild.
+
 ## 0.192.0 — 2026-09-27 — a spray finished on a phone closes the block
 
 **910 tools** (unchanged). No new routes. **Safety fix.**

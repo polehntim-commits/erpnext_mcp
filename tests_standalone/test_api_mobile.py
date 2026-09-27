@@ -1040,6 +1040,11 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_irrigation_valve",
 		"get_valve_runtime",
 		"get_irrigation_zone",
+		# v0.193.0. Server first; fafo_ios has no constant for these yet. The
+		# contract is in the release's commit message and CHANGELOG.
+		"list_app_feedback",
+		"reply_to_app_feedback",
+		"attach_training_certificate",
 	}
 
 	def _whitelisted(self, module):
@@ -4126,8 +4131,8 @@ class TheReceiptIsReviewedBeforeItIsFiled(MobileAPITestCase):
 		self.assertEqual(answer["match"]["supplier"], "Coastal Farm & Ranch")
 		self.assertNotIn(
 			"Sawyer's Hardware LLC",
-			[answer["match"]["supplier"]] + [row["supplier"] for row in answer["alternatives"]
-			                                 if row["confidence"] >= answer["threshold"]],
+			[answer["match"]["supplier"]]
+			+ [row["supplier"] for row in answer["alternatives"] if row["confidence"] >= answer["threshold"]],
 		)
 
 	def test_only_the_verdict_travels(self):
@@ -4143,10 +4148,13 @@ class TheReceiptIsReviewedBeforeItIsFiled(MobileAPITestCase):
 
 	# ── get_expense_account_map ─────────────────────────────────────────────
 	def test_each_category_names_the_account_its_bill_will_post_to(self):
-		STORE.seed("Account", [
-			self.account("Repairs & Maintenance", "6800"),
-			self.account("Vehicles & Fuel", "6300"),
-		])
+		STORE.seed(
+			"Account",
+			[
+				self.account("Repairs & Maintenance", "6800"),
+				self.account("Vehicles & Fuel", "6300"),
+			],
+		)
 		self.be()
 		answer = mobile_api.get_expense_account_map()
 		self.assertEqual(answer["company"], MAIN)
@@ -4156,10 +4164,13 @@ class TheReceiptIsReviewedBeforeItIsFiled(MobileAPITestCase):
 		self.assertTrue(cats["Supplies"]["account"].endswith("Office Supplies - ETC"))
 
 	def test_no_account_and_two_accounts_are_said_rather_than_guessed(self):
-		STORE.seed("Account", [
-			self.account("Hardware - Shop", "6810"),
-			self.account("Hardware - Irrigation", "6820"),
-		])
+		STORE.seed(
+			"Account",
+			[
+				self.account("Hardware - Shop", "6810"),
+				self.account("Hardware - Irrigation", "6820"),
+			],
+		)
 		self.be()
 		cats = mobile_api.get_expense_account_map()["categories"]
 		self.assertIsNone(cats["Feed"]["account"])
@@ -4220,14 +4231,27 @@ class TheShedKnowsWhichStockItHolds(MobileAPITestCase):
 
 	def test_the_history_says_what_state_an_inspection_is_in(self):
 		"""The history asked Inspection Session for `status`, which it has not got."""
-		STORE.seed("Inspection Session", [{
-			"name": "INSP-0001", "template": "Chemical storage monthly", "state": "Submitted",
-			"location_doctype": "Asset Register", "location": self.SHED, "company": MAIN,
-			"submitted_at": "2026-09-20 10:00:00", "creation": "2026-09-20 09:00:00",
-		}])
+		STORE.seed(
+			"Inspection Session",
+			[
+				{
+					"name": "INSP-0001",
+					"template": "Chemical storage monthly",
+					"state": "Submitted",
+					"location_doctype": "Asset Register",
+					"location": self.SHED,
+					"company": MAIN,
+					"submitted_at": "2026-09-20 10:00:00",
+					"creation": "2026-09-20 09:00:00",
+				}
+			],
+		)
 		self.be()
-		rows = [e for e in mobile_api.get_asset_detail(asset_name=self.SHED)["history"]
-		        if e["doctype"] == "Inspection Session"]
+		rows = [
+			e
+			for e in mobile_api.get_asset_detail(asset_name=self.SHED)["history"]
+			if e["doctype"] == "Inspection Session"
+		]
 		self.assertEqual(len(rows), 1)
 		self.assertEqual(rows[0]["state"], "Submitted")
 		self.assertEqual(rows[0]["template"], "Chemical storage monthly")
@@ -4251,22 +4275,58 @@ class AnInspectionShowsWhatItFound(MobileAPITestCase):
 
 	def setUp(self):
 		super().setUp()
-		STORE.seed("File", [
-			{"name": "FILE-EV-1", "file_name": "shelf.jpg", "file_url": "/private/files/shelf.jpg",
-			 "is_private": 1, "attached_to_doctype": None, "attached_to_name": None},
-			{"name": "FILE-EV-2", "file_name": "log.pdf", "file_url": "/private/files/log.pdf",
-			 "is_private": 1, "attached_to_doctype": "Inspection Session", "attached_to_name": self.SESSION},
-			{"name": "FILE-ELSEWHERE", "file_name": "other.jpg", "file_url": "/private/files/other.jpg",
-			 "is_private": 1, "attached_to_doctype": None, "attached_to_name": None},
-		])
+		STORE.seed(
+			"File",
+			[
+				{
+					"name": "FILE-EV-1",
+					"file_name": "shelf.jpg",
+					"file_url": "/private/files/shelf.jpg",
+					"is_private": 1,
+					"attached_to_doctype": None,
+					"attached_to_name": None,
+				},
+				{
+					"name": "FILE-EV-2",
+					"file_name": "log.pdf",
+					"file_url": "/private/files/log.pdf",
+					"is_private": 1,
+					"attached_to_doctype": "Inspection Session",
+					"attached_to_name": self.SESSION,
+				},
+				{
+					"name": "FILE-ELSEWHERE",
+					"file_name": "other.jpg",
+					"file_url": "/private/files/other.jpg",
+					"is_private": 1,
+					"attached_to_doctype": None,
+					"attached_to_name": None,
+				},
+			],
+		)
 		STORE.file_contents["FILE-EV-1"] = b"\xff\xd8jpeg-bytes"
 		STORE.file_contents["FILE-ELSEWHERE"] = b"\xff\xd8secret"
-		STORE.seed("Inspection Session", [{
-			"name": self.SESSION, "template": "Chemical storage monthly", "state": "Submitted",
-			"company": MAIN, "location_doctype": "Asset Register", "location": "40-5-MPH",
-			"evidence_files": [{"file": "FILE-EV-1", "caption": "Top shelf, no leaks", "phase": "After",
-			                    "evidence_type": "Photo"}],
-		}])
+		STORE.seed(
+			"Inspection Session",
+			[
+				{
+					"name": self.SESSION,
+					"template": "Chemical storage monthly",
+					"state": "Submitted",
+					"company": MAIN,
+					"location_doctype": "Asset Register",
+					"location": "40-5-MPH",
+					"evidence_files": [
+						{
+							"file": "FILE-EV-1",
+							"caption": "Top shelf, no leaks",
+							"phase": "After",
+							"evidence_type": "Photo",
+						}
+					],
+				}
+			],
+		)
 
 	def test_the_list_carries_the_evidence_rows_and_the_attached_files(self):
 		self.be()
@@ -4289,8 +4349,17 @@ class AnInspectionShowsWhatItFound(MobileAPITestCase):
 			mobile_api.get_inspection_evidence(inspection_session=self.SESSION, file="FILE-ELSEWHERE")
 
 	def test_another_entitys_inspection_is_not_found(self):
-		STORE.seed("Inspection Session", [{"name": "INSP-OTHER", "state": "Submitted", "company": OTHER,
-		                                    "evidence_files": [{"file": "FILE-ELSEWHERE"}]}])
+		STORE.seed(
+			"Inspection Session",
+			[
+				{
+					"name": "INSP-OTHER",
+					"state": "Submitted",
+					"company": OTHER,
+					"evidence_files": [{"file": "FILE-ELSEWHERE"}],
+				}
+			],
+		)
 		self.be()
 		with self.assertRaises(Exception):
 			mobile_api.list_inspection_evidence(inspection_session="INSP-OTHER")

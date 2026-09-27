@@ -2535,6 +2535,7 @@ CHILD_TABLES = {
 	("Farm Task", "task_notes"): "Task Note",
 	("Accident Report", "investigation_notes"): "Task Note",
 	("Farm Incident Record", "discipline_notes"): "Task Note",
+	("App Feedback", "replies"): "Task Note",
 	("Farm Task Assignment", "time_segments"): "Task Time Segment",
 	("Farm Task", "linked_tasks"): "Farm Task Link",
 	("Accident Report", "witnesses"): "Accident Witness",

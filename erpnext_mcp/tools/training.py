@@ -1002,3 +1002,122 @@ def sign_training_supervisor_review(args: dict) -> ToolResult:
 		),
 		docstatus_delta="0 → 0 (amended)",
 	)
+
+
+# ── attach_training_certificate ── v0.193.0 ─────────────────────────────────
+FILE = "File"
+
+
+def attach_training_certificate(args: dict) -> ToolResult:
+	"""Put an externally-issued certificate on a training record that already exists.
+
+	`record_training` takes `certificate_file` when the record is filed, and that
+	covers the certificate that arrives with the class. It does not cover the one
+	that arrives later — a community college mails the pesticide-handler card, a
+	vendor emails the forklift ticket — and until now nothing on the phone could
+	add it: Employee Training Record is not an attachment parent, and
+	`attach_file_to_document` would only have hung a File off the record without
+	setting `certificate_file`, which is the column the audit packet and the
+	training detail read.
+
+	THE FILE ARRIVES ONE OF THREE WAYS, the ways the rest of the app moves bytes:
+	`file` — a File docname from `stage_file_chunk` / `finalize_staged_file`, the
+	path a photo of a card should take; `file_url` — a File already on the site;
+	or `file_name` + `file_content` (base64) for a small PDF. Whichever it is,
+	the File ends up attached to the record and its URL in `certificate_file`, so
+	it is readable back from the record rather than orphaned.
+
+	A CERTIFICATE ALREADY ON THE RECORD IS REPLACED, and the answer names the one
+	it replaced: the old File stays on the site and on the record's attachments,
+	so nothing is lost, but the record says which certificate is current.
+
+	`training_source` and `provider` are set only when given — an external card
+	is the moment somebody learns who issued it — and never cleared.
+	"""
+	from . import files
+
+	record = as_str(args, "training_record") or as_str(args, "record") or as_str(args, "name")
+	if not record:
+		raise ToolError("training_record is required — which Employee Training Record? Nothing was changed.")
+	if not frappe.db.exists(DOCTYPE, record):
+		raise ToolError(f"no {DOCTYPE} called {record!r} on this site. Nothing was changed.")
+
+	token = as_str(args, "file")
+	file_url = as_str(args, "file_url")
+	file_content = as_str(args, "file_content")
+	given = [
+		label
+		for label, value in (("file", token), ("file_url", file_url), ("file_content", file_content))
+		if value
+	]
+	if len(given) != 1:
+		raise ToolError(
+			"send exactly one of file (a File docname from finalize_staged_file), file_url (a file "
+			"already on this site) or file_name + file_content (base64)"
+			+ (f"; got {', '.join(given)}" if given else "")
+			+ ". Nothing was changed."
+		)
+
+	source = ""
+	if args.get("training_source") not in (None, ""):
+		source = as_choice(DOCTYPE, "training_source", as_str(args, "training_source"), "training_source")
+
+	if file_content:
+		attached = files.attach_file_to_authorized_parent(
+			{
+				"doctype": DOCTYPE,
+				"name": record,
+				"file_name": as_str(args, "file_name") or f"{record}-certificate.pdf",
+				"file_content": file_content,
+				"is_private": True,
+			}
+		).data
+		file_docname, url = attached.get("file"), attached.get("file_url")
+	else:
+		if token:
+			if not frappe.db.exists(FILE, token):
+				raise ToolError(
+					f"no File called {token!r} on this site. Upload the certificate with "
+					"stage_file_chunk and finalize_staged_file first. Nothing was changed."
+				)
+			file_docname = token
+		else:
+			matches = frappe.db.get_all(FILE, filters={"file_url": file_url}, pluck="name", limit=1)
+			if not matches:
+				raise ToolError(f"no File on this site has the url {file_url!r}. Nothing was changed.")
+			file_docname = matches[0]
+		url = str(frappe.db.get_value(FILE, file_docname, "file_url") or "")
+		frappe.db.set_value(
+			FILE,
+			file_docname,
+			{
+				"attached_to_doctype": DOCTYPE,
+				"attached_to_name": record,
+				"attached_to_field": "certificate_file",
+			},
+			update_modified=False,
+		)
+
+	doc = frappe.get_doc(DOCTYPE, record)
+	previous = doc.get("certificate_file") or None
+	doc.certificate_file = url
+	if source:
+		doc.training_source = source
+	if as_str(args, "provider"):
+		doc.provider = as_str(args, "provider")
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+
+	data = {
+		**training.describe(dict(doc.as_dict())),
+		"training_record": record,
+		"certificate_file": url,
+		"file": file_docname,
+		"replaced_certificate_file": previous if previous and previous != url else None,
+	}
+	return ToolResult(
+		data=data,
+		summary=f"certificate {file_docname} on {DOCTYPE} {record}"
+		+ (f" (replaced {previous})" if data["replaced_certificate_file"] else ""),
+		docstatus_delta="0 → 0 (updated)",
+	)

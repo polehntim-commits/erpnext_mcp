@@ -658,6 +658,10 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# client is a park rather than a failure. `user` is absent from its
 		# signature, so no body can file a note under a colleague's login.
 		"/mobile/submit_app_feedback",
+		# v0.193.0. The feedback loop's return path, and a late training certificate.
+		"/mobile/list_app_feedback",
+		"/mobile/reply_to_app_feedback",
+		"/mobile/attach_training_certificate",
 		# v0.106.0. The compliance-alert-to-task feature's three missing paths.
 		#
 		# `materialize_task_for_alert` is the one the app has been CALLING and
@@ -3086,6 +3090,13 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# manual against a machine — each through a Farm Task on the asset.
 		"record_asset_stock_movement",
 		"attach_asset_document",
+		# v0.193.0. A worker reads their own feedback and the farm's replies, and
+		# may follow up on their own note; scope=all and answering a note are
+		# Farm Manager's, gated in the wrapper (`FEEDBACK_ROLES`). A certificate
+		# goes on your own training record, or on anyone's for SHIFT_ROLES.
+		"list_app_feedback",
+		"reply_to_app_feedback",
+		"attach_training_certificate",
 	}
 
 	#: The sentence `guard.require_dispatch_role` refuses with. Asserted on
@@ -3095,7 +3106,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 117, "a method is named in two sets at once")
+		self.assertEqual(len(named), 120, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
@@ -3158,8 +3169,10 @@ class ABareRefusalStillSaysSomething(FarmOpsAPITestCase):
 
 	def test_frappes_flagged_sentence_is_used(self):
 		frappe.flags.error_message = "Insufficient Permission for Item"
-		self.assertEqual(farmops_app._message_for(frappe.PermissionError(), 403),
-						 "Insufficient Permission for Item. Nothing was changed.")
+		self.assertEqual(
+			farmops_app._message_for(frappe.PermissionError(), 403),
+			"Insufficient Permission for Item. Nothing was changed.",
+		)
 
 	def test_a_bare_403_names_a_permission_rather_than_a_broken_request(self):
 		frappe.flags.error_message = None
@@ -3167,5 +3180,7 @@ class ABareRefusalStillSaysSomething(FarmOpsAPITestCase):
 		self.assertIn("isn't allowed", message)
 
 	def test_a_written_refusal_is_passed_through_untouched(self):
-		self.assertEqual(farmops_app._message_for(frappe.ValidationError("qty must be above 0."), 400),
-						 "qty must be above 0.")
+		self.assertEqual(
+			farmops_app._message_for(frappe.ValidationError("qty must be above 0."), 400),
+			"qty must be above 0.",
+		)

@@ -415,6 +415,9 @@ ROUTES = (
 	# Five direct fixes, and the one route every task-shaped fix shares.
 	Route("/mobile", mobile_api.renew_certification),
 	Route("/mobile", mobile_api.record_training),
+	# v0.193.0. A certificate that arrives after the record — the mailed card, the
+	# emailed ticket. `record_training` takes one only at filing time.
+	Route("/mobile", mobile_api.attach_training_certificate),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),
 	Route("/mobile", mobile_api.update_regulatory_filing),
 	Route("/mobile", mobile_api.advance_policy_review),
@@ -1060,6 +1063,11 @@ ROUTES = (
 	# bytes and the stored filename is composed from the docname, so there is
 	# nowhere for a caller-supplied name to land.
 	Route("/mobile", mobile_api.submit_app_feedback),
+	# v0.193.0. The return path (TELL_THE_FARM_AUDIT.md F5). A worker reads their
+	# own notes with the farm's replies (open on enrolment); a Farm Manager reads
+	# the entity's feed with scope=all and answers — see `FEEDBACK_ROLES`.
+	Route("/mobile", mobile_api.list_app_feedback),
+	Route("/mobile", mobile_api.reply_to_app_feedback),
 	# v0.106.0. The compliance-alert-to-task feature's three missing paths.
 	#
 	# `materialize_task_for_alert` IS THE ONE THE APP HAS BEEN CALLING SINCE THE
