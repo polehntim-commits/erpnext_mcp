@@ -1924,6 +1924,21 @@ def plausible_phone(digits: str) -> bool:
 	return len(set(digits)) > 1
 
 
+def placeholder_phone(value: str) -> bool:
+	"""Whether a phone field is filler rather than a number, at ANY length.
+
+	v0.190.0. `plausible_phone` only ever sees ten digits, so a short filler —
+	`0000000`, `000-0000`, `1234567` — never reached it: `normalize_phone` turned
+	it into "" and the capture then refused the whole receipt as "not a ten-digit
+	phone number". Filler is the absence of a number, and a receipt with no phone
+	is a receipt. One digit repeated, or a run counting up from 0 or 1.
+	"""
+	digits = re.sub(r"\D", "", str(value or ""))
+	if not digits:
+		return False
+	return len(set(digits)) == 1 or "0123456789".startswith(digits) or "1234567890".startswith(digits)
+
+
 def normalize_domain(value: str) -> str:
 	"""A URL or hostname as a bare lower-case domain, or "" if it is not one.
 

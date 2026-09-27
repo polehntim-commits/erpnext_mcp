@@ -824,8 +824,11 @@ def _receipt_intelligence(args: dict, merchant: str, ocr_raw_text: str) -> dict:
 	from . import receipts  # see submit_expense_receipt on why this is local
 
 	card = receipts.card_last_four(as_str(args, "card_last_four"))
-	phone = receipts.normalize_phone(as_str(args, "merchant_phone"))
-	if as_str(args, "merchant_phone") and not phone:
+	# v0.190.0. Filler (`0000000`) is no phone, not a bad one: it is dropped, and
+	# a ten-digit filler is dropped again by the cascade's plausibility check.
+	raw_phone = as_str(args, "merchant_phone")
+	phone = "" if receipts.placeholder_phone(raw_phone) else receipts.normalize_phone(raw_phone)
+	if raw_phone and not phone and not receipts.placeholder_phone(raw_phone):
 		raise ToolError(
 			f"merchant_phone {as_str(args, 'merchant_phone')!r} is not a ten-digit phone number. "
 			"Nothing was created."

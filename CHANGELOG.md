@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.190.0 — 2026-09-27 — a filler phone number is no phone number
+
+**910 tools** (unchanged).
+
+- **`receipts.placeholder_phone`** — filler at any length: one digit repeated
+  (`0000000`, `000-0000`, `1111111111`) or a run counting up (`1234567`, `0123456789`).
+  v0.183.0's `plausible_phone` already dropped ten-digit filler from the cascade
+  (EXR-2026-0015's `0000000000` → Sawyer's Hardware), but a SHORT filler never reached it:
+  `submit_expense_receipt` refused the whole receipt as "not a ten-digit phone number".
+  Filler is now treated as no phone at all; a real short number (`555-0134`) is still refused.
+- Filler no longer shadows the slip: with `merchant_phone` filler and `ocr_raw_text` given,
+  the number printed on the receipt is read and stored instead of nothing.
+- Deploy: an image rebuild. No migrate.
+
 ## 0.189.0 — 2026-09-26 — an inspection shows what it found
 
 **910 tools** (unchanged). Two read-only `/mobile` routes, open on enrolment.

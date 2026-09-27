@@ -976,17 +976,44 @@ Shop online at CoastalCountry.com"""
 		for junk in ("0000000000", "9999999999", "1234567890", "5410296961", "541296961"):
 			self.assertFalse(receipts.plausible_phone(junk), junk)
 
+	def test_placeholder_at_any_length(self):
+		"""v0.190.0. Filler is filler whether or not it has ten digits."""
+		for filler in (
+			"0000000",
+			"000-0000",
+			"0000000000",
+			"1111111111",
+			"(000) 000-0000",
+			"1234567",
+			"0123456789",
+			"1234567890",
+		):
+			self.assertTrue(receipts.placeholder_phone(filler), filler)
+		for real in ("", "555-0134", "(541), 296-9610", "5095550134", "3456789", "5550000"):
+			self.assertFalse(receipts.placeholder_phone(real), real)
+
+	def test_a_short_placeholder_phone_does_not_refuse_the_receipt(self):
+		"""v0.190.0. `0000000` used to be "not a ten-digit phone number" and the
+		whole capture was refused; a real short number (555-0134) still is."""
+		for filler in ("0000000", "000-0000", "1111111"):
+			data = self.capture(merchant="COASTAL FARM STORES", merchant_phone=filler)
+			self.assertNotEqual(data["resolution_method"], "Phone", filler)
+			self.assertIsNone(self.receipt_row(data["name"]).get("merchant_phone") or None, filler)
+
 	# ── the cascade ─────────────────────────────────────────────────────────
 	def test_a_placeholder_phone_is_dropped_not_matched_and_not_stored(self):
 		# The earlier receipt that taught the zeros a supplier.
 		first = self.capture(merchant="SAWYERS HDW", merchant_phone="0000000000")["name"]
 		self.tool_data("update_expense_receipt", {"name": first, "supplier": self.SAWYERS})
 
-		data = self.capture(merchant="COASTAL FARM STORES", merchant_phone="0000000000",
-		                    ocr_raw_text=self.SLIP)
+		data = self.capture(
+			merchant="COASTAL FARM STORES", merchant_phone="0000000000", ocr_raw_text=self.SLIP
+		)
 		self.assertNotEqual(data["resolution_method"], "Phone")
 		self.assertEqual(data["resolved_merchant"], self.COASTAL)
-		self.assertIsNone(self.receipt_row(data["name"]).get("merchant_phone") or None)
+		# v0.190.0. The zeros are never stored; filler is no argument at all, so
+		# the slip's own printed number is read instead of being shadowed by it.
+		self.assertEqual(self.receipt_row(data["name"]).get("merchant_phone"), "5412969610")
 
 	def test_a_phone_that_contradicts_the_printed_name_is_capped_and_flagged(self):
 		first = self.capture(merchant="SAWYERS HDW", merchant_phone="(541) 296-9610")["name"]
