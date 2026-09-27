@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.191.1 — 2026-09-27 — a Farm Manager can add a product from a phone
+
+**910 tools** (unchanged). No new routes.
+
+- **`/mobile/create_item` and `/mobile/link_item_barcode` no longer ask ERPNext's
+  `Item` DocPerm after their own dispatch gate.** `Item` create belongs to `Item Manager`
+  alone, a role no farm account holds, so a Farm Manager passed the wrapper's gate and
+  was refused by `doc.insert()` with a bare PermissionError. Tim hit it registering
+  PROWLER rodent bait. `masters.create_item` / `add_item_barcode` take a keyword-only
+  `ignore_permissions` that only the phone wrappers pass; the MCP registry calls tools
+  with `args` alone, so an MCP call still asks ERPNext.
+- **A bare refusal now says what it is.** `farmops_api.app._message_for` uses
+  `frappe.flags.error_message` (where Frappe's own permission check leaves its sentence)
+  and, failing that, names a permission on a 403 instead of "That request could not be
+  completed."
+
 ## 0.191.0 — 2026-09-27 — an asset's stock and documents go through a Farm Task
 
 **910 tools** (unchanged). Two mutating `/mobile` routes, open on enrolment (scope only).

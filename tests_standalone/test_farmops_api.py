@@ -3142,3 +3142,30 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 				response = self.post(f"{PREFIX}/mobile/{method}")
 				if response.status_code == 403:
 					self.assertNotIn(self.RESTRICTED, self.payload(response).get("error", ""), method)
+
+
+class ABareRefusalStillSaysSomething(FarmOpsAPITestCase):
+	"""v0.191.1. Frappe's own permission check raises a PermissionError with no text.
+
+	`Document.raise_no_permission_to` leaves its sentence in
+	`frappe.flags.error_message` and raises the class bare, so the phone read
+	"That request could not be completed." for what was a missing role.
+	"""
+
+	def tearDown(self):
+		frappe.flags.error_message = None
+		super().tearDown()
+
+	def test_frappes_flagged_sentence_is_used(self):
+		frappe.flags.error_message = "Insufficient Permission for Item"
+		self.assertEqual(farmops_app._message_for(frappe.PermissionError(), 403),
+						 "Insufficient Permission for Item. Nothing was changed.")
+
+	def test_a_bare_403_names_a_permission_rather_than_a_broken_request(self):
+		frappe.flags.error_message = None
+		message = farmops_app._message_for(frappe.PermissionError(), 403)
+		self.assertIn("isn't allowed", message)
+
+	def test_a_written_refusal_is_passed_through_untouched(self):
+		self.assertEqual(farmops_app._message_for(frappe.ValidationError("qty must be above 0."), 400),
+						 "qty must be above 0.")

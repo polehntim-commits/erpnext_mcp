@@ -281,7 +281,20 @@ def _message_for(exc: Exception, anticipated: int) -> str:
 	"""
 	if not anticipated:
 		return INTERNAL
-	return str(exc) or "That request could not be completed."
+	text = str(exc).strip()
+	if text:
+		return text
+	# v0.191.1. Frappe's own permission check (`Document.raise_no_permission_to`)
+	# raises a BARE PermissionError and leaves its sentence in
+	# `frappe.flags.error_message`. Without this a refusal reached the phone as
+	# "That request could not be completed." and nobody could tell it was a
+	# permission, let alone which one.
+	flagged = str(getattr(frappe.flags, "error_message", "") or "").strip()
+	if flagged:
+		return f"{flagged}. Nothing was changed."
+	if anticipated == 403:
+		return "This account isn't allowed to do that on this farm's server. Nothing was changed."
+	return "That request could not be completed."
 
 
 # ── the request ─────────────────────────────────────────────────────────────

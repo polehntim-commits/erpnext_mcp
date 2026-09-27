@@ -4034,6 +4034,60 @@ class TheStoreAisleReachesTheCatalogue(MobileAPITestCase):
 		answer = mobile_api.search_items(search="surround")
 		self.assertEqual([row["item_code"] for row in answer["items"]], [SPRAY])
 
+	# ── v0.191.1: ERPNext's own Item permission ─────────────────────────────
+	#
+	# THE HARNESS DOES NOT ENFORCE DOCPERM, WHICH IS HOW THIS SHIPPED BROKEN.
+	# Live, `Item` create is `Item Manager`'s alone and no farm account holds it,
+	# so a Farm Manager passed the dispatch gate and `doc.insert()` refused with
+	# a bare PermissionError — "That request could not be completed." on Tim's
+	# phone, 2026-09-27, registering PROWLER rodent bait. These tests put that
+	# DocPerm back for the length of one call.
+	def _item_docperm_enforced(self):
+		document = type(frappe.new_doc("Item"))
+		insert, save = document.insert, document.save
+
+		def strict_insert(doc, ignore_permissions=False, **kwargs):
+			if doc.doctype == "Item" and not ignore_permissions:
+				raise frappe.PermissionError()
+			return insert(doc, ignore_permissions=ignore_permissions, **kwargs)
+
+		def strict_save(doc, ignore_permissions=False, **kwargs):
+			if doc.doctype == "Item" and not ignore_permissions:
+				raise frappe.PermissionError()
+			return save(doc, ignore_permissions=ignore_permissions, **kwargs)
+
+		return mock.patch.multiple(document, insert=strict_insert, save=strict_save)
+
+	def test_a_farm_manager_without_item_manager_can_add_a_rodenticide(self):
+		self.foreman()
+		with self._item_docperm_enforced():
+			answer = mobile_api.create_item(
+				item_name="PROWLER\u2122",
+				barcode=self.UPC,
+				signal_word="Caution",
+				application_rate="Norway rats, roof rats and house mice: 1 or 2 blocks of bait",
+			)
+		self.assertEqual(answer["item_name"], "PROWLER\u2122")
+		self.assertNotIn("rei_hours", answer.get("pesticide_label", {}), "a bait block has no REI")
+
+	def test_linking_a_barcode_is_not_refused_by_the_item_docperm_either(self):
+		self.foreman()
+		with self._item_docperm_enforced():
+			linked = mobile_api.link_item_barcode(item_code=SPRAY, barcode=self.UPC)
+		self.assertFalse(linked["already_linked"])
+
+	def test_the_mcp_tool_still_asks_erpnext(self):
+		"""Only the phone wrapper, past its own gate, skips the DocPerm."""
+		from erpnext_mcp.tools import masters as master_tools
+
+		with self._item_docperm_enforced(), self.assertRaises(frappe.PermissionError):
+			master_tools.create_item({"item_code": "Direct Tub"})
+
+	def test_a_picker_still_cannot_add_a_product(self):
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.create_item(item_name="Picker Tub")
+
 
 class TheReceiptIsReviewedBeforeItIsFiled(MobileAPITestCase):
 	"""v0.182.0. The supplier a slip most likely is, and where each category is booked.

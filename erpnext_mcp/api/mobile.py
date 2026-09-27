@@ -19974,7 +19974,11 @@ def link_item_barcode(user: str, item_code=None, barcode=None) -> dict:
 	"""Put a scanned retail code on an existing product. Idempotent for the same one."""
 	guard.require_scope(user)
 	guard.require_dispatch_role(user, "Linking a barcode to a product")
-	return master_tools.add_item_barcode({"item_code": item_code, "barcode": barcode}).data
+	# Past the dispatch gate, the Item's own DocPerm is not asked: see
+	# `create_item` below for why.
+	return master_tools.add_item_barcode(
+		{"item_code": item_code, "barcode": barcode}, ignore_permissions=True
+	).data
 
 
 #: The label columns a phone may set when it adds a product. `label_scan_validation`
@@ -20049,7 +20053,15 @@ def create_item(
 	for key in _MOBILE_LABEL_FIELDS:
 		if label[key] not in (None, ""):
 			inner[key] = label[key]
-	return master_tools.create_item(inner).data
+	# v0.191.1. THE DISPATCH GATE ABOVE IS THE GATE, AND ERPNEXT'S IS NOT ASKED.
+	# `Item` is ERPNext's doctype and only `Item Manager` may create one — a role
+	# no farm account on this site holds. So a Farm Manager passed the check
+	# above and was then refused by `doc.insert()` with a bare PermissionError,
+	# which reached the phone as "That request could not be completed." (Tim,
+	# 2026-09-27, registering a rodenticide.) `roles.py` rule 1 forbids a
+	# Custom DocPerm on another app's doctype, so the wrapper's own gate
+	# decides, as `BROKERED_PARENTS` does for attachments.
+	return master_tools.create_item(inner, ignore_permissions=True).data
 
 
 # ── 124. get_expense_account_map ─────────────────────────────────────────────

@@ -712,7 +712,7 @@ def find_item_by_barcode(args: dict) -> ToolResult:
 	return ToolResult(data, summary)
 
 
-def add_item_barcode(args: dict) -> ToolResult:
+def add_item_barcode(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 	"""Put a retail barcode on an existing Item. Idempotent for the Item that already has it.
 
 	A CODE ALREADY ON ANOTHER ITEM IS REFUSED BY NAME. ERPNext keeps barcodes
@@ -732,7 +732,7 @@ def add_item_barcode(args: dict) -> ToolResult:
 	if not owner:
 		doc = frappe.get_doc(ITEM, item_code)
 		doc.append("barcodes", {"barcode": code, "barcode_type": kind})
-		doc.save()
+		doc.save(ignore_permissions=ignore_permissions)
 	data = {
 		"item_code": item_code,
 		"barcode": code,
@@ -744,11 +744,15 @@ def add_item_barcode(args: dict) -> ToolResult:
 	return ToolResult(data, f"barcode {code} {verb} Item {item_code}")
 
 
-def create_item(args: dict) -> ToolResult:
+def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 	"""Create one Item.
 
 	There is no draft to create it as — see the module docstring. `disabled` is
 	the only thing resembling one, and it is a real field the caller may set.
+
+	`ignore_permissions` IS KEYWORD-ONLY AND NOT AN ARGUMENT, so no MCP call can
+	set it: the registry passes `args` alone. Only the phone wrapper passes it,
+	after its own dispatch gate — see `api/mobile.create_item`.
 	"""
 	_require(ITEM)
 	item_code = as_str(args, "item_code", required=True)
@@ -809,7 +813,7 @@ def create_item(args: dict) -> ToolResult:
 	if warehouse:
 		default_note = _set_default_warehouse(doc, warehouse, as_str(args, "company"))
 
-	doc.insert()
+	doc.insert(ignore_permissions=ignore_permissions)
 
 	data = {
 		"name": doc.name,
