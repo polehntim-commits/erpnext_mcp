@@ -99,6 +99,7 @@ import json
 import frappe
 
 from .. import (
+	ag_uom,
 	bucket_bridge,
 	compat,
 	datetimes,
@@ -108,6 +109,7 @@ from .. import (
 	slope_aspect,
 	slope_grade,
 	timezones,
+	uom_resolve,
 	url_fetch,
 )
 from .. import roles as role_lib
@@ -20015,6 +20017,7 @@ def create_item(
 	phi_crop=None,
 	application_rate=None,
 	ppe_requirements=None,
+	application_rate_uom=None,
 ) -> dict:
 	"""Add a product, with its retail code and its label, from a phone.
 
@@ -20053,6 +20056,11 @@ def create_item(
 	for key in _MOBILE_LABEL_FIELDS:
 		if label[key] not in (None, ""):
 			inner[key] = label[key]
+	# v0.197.0. The unit the person picked for the rate, from `list_uoms`. When
+	# absent the tool reads it off the rate text; either way an unknown unit no
+	# longer refuses the product — `needs_review` in the answer says what to pick.
+	if str(application_rate_uom or "").strip():
+		inner["application_rate_uom"] = str(application_rate_uom).strip()
 	# v0.191.1. THE DISPATCH GATE ABOVE IS THE GATE, AND ERPNEXT'S IS NOT ASKED.
 	# `Item` is ERPNext's doctype and only `Item Manager` may create one — a role
 	# no farm account on this site holds. So a Farm Manager passed the check
@@ -20062,6 +20070,96 @@ def create_item(
 	# Custom DocPerm on another app's doctype, so the wrapper's own gate
 	# decides, as `BROKERED_PARENTS` does for attachments.
 	return master_tools.create_item(inner, ignore_permissions=True).data
+
+
+# ── 123a. list_uoms ──────────────────────────────────────────────────────────
+#
+# v0.197.0, AFB-2026-00023. THE PHONE PICKS A UNIT THE SITE HAS. The Add
+# product form's unit was a free-text box, and PROWLER bait arrived as 'Noi'.
+# This lists the site's ENABLED units for a picker and, given the rate text,
+# answers which of them it names — through the same resolver `create_item`
+# uses, so the suggestion on the screen and the unit the server stores cannot
+# disagree. Read-only; open on enrolment. Contract: docs/design/uom_registry.md §6.
+_MOBILE_UOM_CAP = 500
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_uoms", limit=guard.READ_LIMIT)
+def list_uoms(user: str, search=None, rate_text=None, unit_text=None, context=None) -> dict:
+	"""The site's enabled units, farm units first, and which one a rate names."""
+	guard.require_scope(user)
+	units = uom_resolve.site_uoms()
+	wanted = str(search or "").strip().lower()
+	if wanted:
+		units = [row for row in units if wanted in row["name"].lower()]
+	context = str(context or "").strip()
+	if context:
+		if not frappe.db.exists("Agricultural UOM Context", context):
+			frappe.throw(f"no unit context called {context!r}.", frappe.ValidationError)
+		offered = set(
+			frappe.db.get_all(
+				"Agricultural UOM Context Entry",
+				filters={"parenttype": "Agricultural UOM Context", "parent": context},
+				pluck="uom",
+				limit=500,
+			)
+		)
+		units = [row for row in units if row["name"] in offered]
+	# The farm's own units first: a picker that opens on "Abampere" is one
+	# nobody scrolls to Block in.
+	farm = {spec["uom_name"] for spec in ag_uom.SEED_UOMS} | {"Nos"}
+	units.sort(key=lambda row: (row["name"] not in farm, row["name"].lower()))
+	suggestion = None
+	if str(rate_text or "").strip():
+		suggestion = uom_resolve.resolve_rate(rate_text)
+	elif str(unit_text or "").strip():
+		suggestion = uom_resolve.resolve_unit(unit_text)
+	return {
+		"uoms": [
+			{
+				"name": row["name"],
+				"must_be_whole_number": row["must_be_whole_number"],
+				"measures": ag_uom.dimension_of(row["name"]) or None,
+			}
+			for row in units[:_MOBILE_UOM_CAP]
+		],
+		"count": min(len(units), _MOBILE_UOM_CAP),
+		"truncated": len(units) > _MOBILE_UOM_CAP,
+		"suggestion": suggestion,
+	}
+
+
+# ── 123b. update_item_units ──────────────────────────────────────────────────
+#
+# v0.197.0. HOW A PERSON ANSWERS `needs_review` FROM THE PHONE. Narrow, like
+# `link_asset_warehouse`: the signature names the Item and its two units and
+# nothing else, so no other Item column is reachable. The dispatch gate is the
+# same as `create_item`'s — whoever may add a product may say what it is
+# counted in — and, past it, ERPNext's Item DocPerm is not asked, for the
+# reason given there.
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_item_units", mutating=True, limit=guard.WRITE_LIMIT)
+def update_item_units(user: str, item_code=None, stock_uom=None, application_rate_uom=None) -> dict:
+	"""Set the stock unit and/or the rate unit of one product."""
+	guard.require_scope(user)
+	guard.require_dispatch_role(user, "Setting a product's units")
+	code = str(item_code or "").strip()
+	if not code:
+		frappe.throw("item_code is required.", frappe.ValidationError)
+	inner: dict = {"item_code": code}
+	if str(stock_uom or "").strip():
+		inner["stock_uom"] = str(stock_uom).strip()
+	if application_rate_uom is not None:
+		inner["application_rate_uom"] = str(application_rate_uom).strip()
+	if len(inner) == 1:
+		frappe.throw("Pass stock_uom or application_rate_uom.", frappe.ValidationError)
+	data = master_tools.update_item(inner, ignore_permissions=True).data
+	return {
+		"item_code": code,
+		"stock_uom": frappe.db.get_value("Item", code, "stock_uom"),
+		"application_rate_uom": frappe.db.get_value("Item", code, "application_rate_uom") or None,
+		"changed": data.get("changed") or {},
+	}
 
 
 # ── 124. get_expense_account_map ─────────────────────────────────────────────

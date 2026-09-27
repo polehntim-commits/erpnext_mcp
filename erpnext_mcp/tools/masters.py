@@ -57,7 +57,7 @@ import json
 
 import frappe
 
-from .. import compat
+from .. import compat, uom_resolve
 from ..args import (
 	as_bool,
 	as_choice,
@@ -758,7 +758,8 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 	item_code = as_str(args, "item_code", required=True)
 	item_name = as_str(args, "item_name") or item_code
 	label = _pesticide_values(args, "created")
-	stock_uom = _resolve_uom(as_str(args, "stock_uom") or "Nos")
+	units = _item_units(args, label)
+	stock_uom = units["stock_uom"]
 	is_stock_item = as_bool(args, "is_stock_item", True)
 	disabled = bool(as_bool(args, "disabled", False))
 	description = as_str(args, "description")
@@ -805,6 +806,9 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 		doc.disabled = 1
 	for key, value in label.items():
 		doc.set(key, value)
+	rate_uom_stored = bool(units["application_rate_uom"]) and compat.has_field(ITEM, RATE_UOM_FIELD)
+	if rate_uom_stored:
+		doc.set(RATE_UOM_FIELD, units["application_rate_uom"])
 	if barcode:
 		doc.append("barcodes", {"barcode": barcode[0], "barcode_type": barcode[1]})
 
@@ -831,6 +835,17 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 			"Pass disabled to keep it out of transactions."
 		),
 	}
+	# v0.197.0 (docs/design/uom_registry.md §4). ALWAYS PRESENT, so a phone can
+	# read `needs_review` without first asking whether the server is new enough.
+	data["application_rate_uom"] = units["application_rate_uom"] if rate_uom_stored else None
+	data["rate_uom"] = units["rate_uom"]
+	data["stock_uom_resolution"] = units["stock_uom_resolution"]
+	data["needs_review"] = units["needs_review"]
+	if units["application_rate_uom"] and not rate_uom_stored:
+		data["application_rate_uom_note"] = (
+			f"The rate reads as {units['application_rate_uom']}, but this site's Item has no "
+			f"{RATE_UOM_FIELD!r} column yet — install_compliance_fields (or bench migrate) adds it."
+		)
 	if default_note:
 		data["default_warehouse_stored_on"] = default_note
 	if barcode:
@@ -848,10 +863,110 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 			f"{CROP_PROTECTION_GROUP!r}. This site had no such group, so it was created "
 			f"under {ALL_ITEM_GROUPS!r}."
 		)
-	return ToolResult(
-		data,
-		f"created Item {doc.name} ({item_name}) in {item_group}, stocked in {stock_uom}",
-		docstatus_delta="none → created",
+	summary = f"created Item {doc.name} ({item_name}) in {item_group}, stocked in {stock_uom}"
+	if units["needs_review"]:
+		summary += f" — {' and '.join(units['needs_review'])} need a person to pick the unit"
+	return ToolResult(data, summary, docstatus_delta="none → created")
+
+
+#: v0.197.0. The Item column that says which unit `application_rate`'s numbers
+#: are in. Installed by `compliance_fields` beside the rate.
+RATE_UOM_FIELD = "application_rate_uom"
+
+
+def _whole(uom: str, uoms: list[dict]) -> bool:
+	return any(row["name"] == uom and row["must_be_whole_number"] for row in uoms)
+
+
+def _item_units(args: dict, label: dict) -> dict:
+	"""The stock unit and the rate unit a new Item gets, and what a person must still pick.
+
+	AN UNKNOWN UNIT NO LONGER REFUSES THE PRODUCT (AFB-2026-00023). PROWLER bait
+	was turned away because the phone sent 'Noi', and the tub on the shelf did
+	not stop existing because a unit was misread. So the Item is created on a
+	unit this site HAS — the rate's unit when that is a whole-number one like
+	Block, otherwise Nos — and `needs_review` names what a person must look at.
+	Only a site with no unit to fall back on at all refuses, because an Item
+	cannot be saved without a stock unit.
+	"""
+	if not compat.doctype_exists("UOM"):
+		# A Frappe bench with no ERPNext: nothing to resolve against.
+		stock = as_str(args, "stock_uom") or "Nos"
+		absent = uom_resolve.resolve_unit("", [])
+		return {
+			"stock_uom": stock,
+			"application_rate_uom": None,
+			"rate_uom": absent,
+			"stock_uom_resolution": {
+				"requested": as_str(args, "stock_uom") or None,
+				"uom": stock,
+				"matched_by": None,
+				"status": "resolved" if as_str(args, "stock_uom") else "defaulted",
+				"candidates": [],
+			},
+			"needs_review": [],
+		}
+
+	uoms = uom_resolve.site_uoms()
+	picked_rate = as_str(args, RATE_UOM_FIELD)
+	if picked_rate:
+		rate = uom_resolve.resolve_unit(picked_rate, uoms)
+	else:
+		rate = uom_resolve.resolve_rate(label.get("application_rate") or "", uoms)
+	rate_uom = rate["uom"]
+
+	requested = as_str(args, "stock_uom")
+	fallback = rate_uom if rate_uom and _whole(rate_uom, uoms) else None
+	if not fallback and any(row["name"] == "Nos" for row in uoms):
+		fallback = "Nos"
+	if requested:
+		stock = uom_resolve.resolve_unit(requested, uoms)
+		if stock["uom"]:
+			resolution = {**_trim(stock), "requested": requested, "status": "resolved"}
+		else:
+			resolution = {**_trim(stock), "requested": requested, "uom": fallback, "status": "fallback"}
+	else:
+		resolution = {
+			"requested": None,
+			"uom": fallback,
+			"matched_by": None,
+			"status": "defaulted",
+			"candidates": [],
+		}
+	if not resolution["uom"]:
+		known = [row["name"] for row in uoms][:40]
+		raise ToolError(
+			f"no UOM called {requested or 'Nos'!r} on this site, and no Nos to fall back on. Known "
+			f"units include: {', '.join(known) or '<none>'}. Nothing was created."
+		)
+
+	review = []
+	if resolution["status"] == "fallback":
+		review.append("stock_uom")
+	if rate["status"] == "unresolved" or rate.get("mixed"):
+		review.append(RATE_UOM_FIELD)
+	return {
+		"stock_uom": resolution["uom"],
+		"application_rate_uom": rate_uom,
+		"rate_uom": rate,
+		"stock_uom_resolution": resolution,
+		"needs_review": review,
+	}
+
+
+def _trim(resolution: dict) -> dict:
+	return {key: resolution.get(key) for key in ("uom", "matched_by", "candidates")}
+
+
+def _picked_uom(value: str, key: str) -> str:
+	"""A unit a person PICKED, as a site docname — refused, with the candidates, when it is not one."""
+	answer = uom_resolve.resolve_unit(value)
+	if answer["uom"]:
+		return answer["uom"]
+	raise ToolError(
+		f"{key}: no UOM on this site matches {value!r}. Did you mean one of: "
+		f"{', '.join(answer['candidates']) or '<none>'}? create_uom adds a unit the site is "
+		"missing. Nothing was changed."
 	)
 
 
@@ -1066,27 +1181,6 @@ def _stored_label_value(key: str, value):
 	return value or ""
 
 
-def _resolve_uom(uom: str) -> str:
-	"""A UOM docname, or a refusal naming what the site actually stocks.
-
-	ERPNext ships around a hundred UOMs and a farm uses six of them. A model
-	sending 'Lbs' where the site calls it 'Lb' should get the list, not a link
-	error raised from inside the insert.
-	"""
-	if not compat.doctype_exists("UOM"):
-		return uom
-	if _exists("UOM", uom):
-		return uom
-	match = frappe.db.get_all("UOM", filters={"name": ("like", uom)}, pluck="name", limit=5)
-	if len(match) == 1:
-		return match[0]
-	known = frappe.db.get_all("UOM", filters={"enabled": 1}, pluck="name", limit=40)
-	raise ToolError(
-		f"no UOM called {uom!r} on this site. Known units include: "
-		f"{', '.join(sorted(known)[:40]) or '<none>'}. Nothing was created."
-	)
-
-
 def _set_default_warehouse(doc, warehouse: str, company: str) -> str:
 	"""Point an Item at a default Warehouse, on whichever field this site uses.
 
@@ -1126,10 +1220,14 @@ def _set_default_warehouse(doc, warehouse: str, company: str) -> str:
 	return f"Item Default row for {company}"
 
 
-def update_item(args: dict) -> ToolResult:
+def update_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 	"""Change one Item's description, group, disabled flag, default warehouse,
-	reorder rule or pesticide label fields. Never renames it — the item_code is
-	the docname."""
+	reorder rule, units or pesticide label fields. Never renames it — the
+	item_code is the docname.
+
+	`ignore_permissions` is keyword-only, for the same reason as on
+	`create_item`: only the phone's `update_item_units` passes it, after its own
+	dispatch gate."""
 	_require(ITEM)
 	code = _require_item(args)
 	doc = frappe.get_doc(ITEM, code)
@@ -1143,6 +1241,8 @@ def update_item(args: dict) -> ToolResult:
 	reorder_qty = args.get("reorder_qty")
 	reorder_warehouse = as_str(args, "reorder_warehouse")
 	label = _pesticide_values(args, "changed")
+	stock_uom = as_str(args, "stock_uom")
+	rate_uom = args.get(RATE_UOM_FIELD)
 
 	touched = (
 		description is not None
@@ -1153,12 +1253,14 @@ def update_item(args: dict) -> ToolResult:
 		or reorder_level not in (None, "")
 		or reorder_qty not in (None, "")
 		or bool(label)
+		or bool(stock_uom)
+		or rate_uom is not None
 	)
 	if not touched:
 		raise ToolError(
 			"nothing to change. Pass at least one of description, item_name, item_group, "
-			"disabled, default_warehouse, reorder_level, reorder_qty, or a pesticide label "
-			f"field ({', '.join(PESTICIDE_FIELDS)})."
+			"disabled, default_warehouse, reorder_level, reorder_qty, stock_uom, "
+			f"application_rate_uom, or a pesticide label field ({', '.join(PESTICIDE_FIELDS)})."
 		)
 
 	changes: dict = {}
@@ -1192,6 +1294,34 @@ def update_item(args: dict) -> ToolResult:
 			changes[key] = [current, value]
 			doc.set(key, value)
 
+	if rate_uom is not None:
+		if not compat.has_field(ITEM, RATE_UOM_FIELD):
+			raise ToolError(
+				f"this site's Item has no {RATE_UOM_FIELD!r} column. install_compliance_fields adds "
+				"it, and so does every bench migrate. Nothing was changed."
+			)
+		wanted = _picked_uom(str(rate_uom).strip(), RATE_UOM_FIELD) if str(rate_uom).strip() else ""
+		if wanted != (doc.get(RATE_UOM_FIELD) or ""):
+			changes[RATE_UOM_FIELD] = [doc.get(RATE_UOM_FIELD) or None, wanted or None]
+			doc.set(RATE_UOM_FIELD, wanted)
+
+	if stock_uom:
+		wanted = _picked_uom(stock_uom, "stock_uom")
+		if wanted != (doc.get("stock_uom") or ""):
+			# ERPNext's own rule, asked first so the refusal says why: the stock
+			# unit is what every ledger row for this Item is counted in, so it is
+			# fixed once there is one.
+			if compat.doctype_exists("Stock Ledger Entry") and frappe.db.exists(
+				"Stock Ledger Entry", {"item_code": doc.name}
+			):
+				raise ToolError(
+					f"{doc.name} already has stock transactions in {doc.get('stock_uom')}, and ERPNext "
+					"fixes the stock unit after the first one. Add a UOM conversion on the Item "
+					f"instead (1 {doc.get('stock_uom')} = n {wanted}). Nothing was changed."
+				)
+			changes["stock_uom"] = [doc.get("stock_uom"), wanted]
+			doc.stock_uom = wanted
+
 	stored_on = ""
 	if warehouse:
 		stored_on = _set_default_warehouse(doc, warehouse, as_str(args, "company"))
@@ -1208,7 +1338,7 @@ def update_item(args: dict) -> ToolResult:
 			f"Item {doc.name} already matched; nothing changed",
 		)
 
-	doc.save()
+	doc.save(ignore_permissions=ignore_permissions)
 
 	data = {"name": doc.name, "item_code": doc.get("item_code"), "changed": changes}
 	if stored_on:

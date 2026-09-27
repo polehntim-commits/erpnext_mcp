@@ -676,6 +676,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"search_items",
 		"link_item_barcode",
 		"create_item",
+		"list_uoms",
+		"update_item_units",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",
@@ -4100,6 +4102,55 @@ class TheStoreAisleReachesTheCatalogue(MobileAPITestCase):
 		self.be()
 		with self.assertRaises(frappe.PermissionError):
 			mobile_api.create_item(item_name="Picker Tub")
+
+	# ── v0.197.0: AFB-2026-00023, the unit the phone sends ──────────────────
+	PROWLER_RATE = "Norway rats: 1 or 2 blocks of bait; roof rats: 2 blocks of bait"
+
+	def _with_block(self):
+		STORE.seed(
+			"UOM",
+			[{"name": "Block", "uom_name": "Block", "enabled": 1, "must_be_whole_number": 1}],
+		)
+
+	def test_the_unit_that_was_refused_now_registers_the_product_and_asks(self):
+		"""'Noi' is what reached the server. The tub still gets registered."""
+		self.foreman()
+		self._with_block()
+		with self._item_docperm_enforced():
+			answer = mobile_api.create_item(
+				item_name="PROWLER™", barcode=self.UPC, stock_uom="Noi", application_rate=self.PROWLER_RATE
+			)
+		self.assertEqual(answer["application_rate_uom"], "Block")
+		self.assertEqual(answer["stock_uom"], "Block")
+		self.assertEqual(answer["needs_review"], ["stock_uom"])
+
+	def test_the_picker_list_puts_farm_units_first_and_suggests_block(self):
+		self.be()
+		self._with_block()
+		answer = mobile_api.list_uoms(rate_text=self.PROWLER_RATE)
+		self.assertEqual(answer["suggestion"]["uom"], "Block")
+		self.assertEqual(answer["suggestion"]["quantity"], {"min": 1.0, "max": 2.0})
+		names = [row["name"] for row in answer["uoms"]]
+		self.assertIn("Block", names)
+		self.assertLess(names.index("Block"), names.index("Lb") if "Lb" in names else len(names))
+		self.assertIsNone(mobile_api.list_uoms()["suggestion"])
+
+	def test_needs_review_is_answered_from_the_phone(self):
+		self.foreman()
+		with self._item_docperm_enforced():
+			mobile_api.create_item(item_name="PROWLER™", application_rate=self.PROWLER_RATE)
+			self._with_block()
+			answer = mobile_api.update_item_units(
+				item_code="PROWLER™", stock_uom="Block", application_rate_uom="Block"
+			)
+		self.assertEqual(answer["stock_uom"], "Block")
+		self.assertEqual(answer["application_rate_uom"], "Block")
+		self.assertEqual(answer["changed"]["stock_uom"], ["Nos", "Block"])
+
+	def test_a_picker_cannot_set_a_products_units(self):
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.update_item_units(item_code=SPRAY, stock_uom="Nos")
 
 
 class TheReceiptIsReviewedBeforeItIsFiled(MobileAPITestCase):

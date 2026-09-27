@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 910 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 922 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 452 read tools are **on** by default and can be switched off individually. A
+All 455 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -16011,6 +16011,44 @@ there is how a settlement goes wrong by a factor nobody traces.
 *container* and a pound is a *weight*. A field crew hands in bins and the shed
 reports pounds — two measurements of one delivery, and a single list accepting
 either is a list that lets them be summed.
+
+### The unit register (v0.197.0)
+
+OML App Feedback AFB-2026-00023: PROWLER™ rodent bait could not be registered
+because the phone sent a unit called `Noi` — the first letters of "Norway rats",
+the *target* of the rate, read as its unit — and nothing on the site could add
+the unit it really is (Block). The contract is `docs/design/uom_registry.md`.
+
+| Tool | What it does |
+| --- | --- |
+| `list_uoms` | The site's units with whole-number/enabled flags, what each measures, and the contexts offering it. Read |
+| `get_uom` | One unit: flags, contexts, every factor touching it, how many Items are stocked or rated in it. Read |
+| `resolve_uom` | Which site unit some printed words mean. A rate's unit is the words AFTER the quantity. Read |
+| `create_uom` | Add a unit. Refuses a name the register already answers to (`Blocks` beside `Block`). Write |
+| `update_uom` | Change `must_be_whole_number` / `enabled`. Never renames. Write |
+| `disable_uom` | Take a unit out of use; refused while an active context offers it. Write |
+| `set_uom_conversion_factor` | Upsert one row of ERPNext's global factor table; refuses a disagreeing reverse row. Write |
+| `delete_uom_conversion_factor` | Delete one global factor row. Destructive, own switch. Write |
+| `create_ag_uom_context` | A new context — one measurement per context. Write |
+| `update_ag_uom_context` | Switch on/off, reword, change the default. Write |
+| `add_uom_to_context` / `remove_uom_from_context` | One unit in or out; never the last one. Write |
+
+Every write is off by default and also needs **System Manager, Stock Manager,
+Item Manager or Farm Manager** on the account this app acts as.
+
+`create_item` now **resolves units instead of refusing them**. The rate's unit
+is read from `application_rate` (`"1 or 2 blocks of bait"` → Block) and stored
+on the new Item column `application_rate_uom`; a missing `stock_uom` defaults to
+that unit when it is a whole-number one. A unit that matches nothing registers
+the product anyway (stocked in Nos, or the whole-number rate unit) and the answer
+carries `needs_review`, which `update_item`'s new `stock_uom` /
+`application_rate_uom` arguments answer.
+
+```json
+{"tool": "resolve_uom", "arguments": {"text": "Norway rats: 1 or 2 blocks of bait"}}
+→ {"phrase": "blocks of bait", "quantity": {"min": 1.0, "max": 2.0},
+   "uom": "Block", "matched_by": "alias", "status": "resolved", ...}
+```
 
 ### What is seeded, and what that is worth
 

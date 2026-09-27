@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.197.0 — 2026-09-27 — a unit register, and a label rate tied to a real unit
+
+**922 tools** (+12). Two new `/mobile` routes. One new Item compliance column. OML App
+Feedback **AFB-2026-00023**; fafo_ios SERVER_CHANGES §45. Contract:
+`docs/design/uom_registry.md`.
+
+PROWLER™ rodent bait (UPC-A 048745228174) was refused from the phone: *"no UOM called 'Noi'
+on this site … Nothing was created."* 'Noi' was the start of "Norway rats" — the target of the
+rate "Norway rats: 1 or 2 blocks of bait", read as its unit. The product is counted in blocks.
+
+- **`uom_resolve`** — one resolver for every caller. A rate's unit is the words AFTER the
+  quantity (never the crop or pest before it); "1 or 2", "1-2", "1 to 2" give a range; label
+  shorthand maps to the site's own spelling (`lbs` → Pound, `fl oz` → Fluid Ounce or Fluid Ounce
+  (US), `pt` → Pint, Liquid (US), `blocks of bait` → Block). Only enabled site units are ever an
+  answer; an unknown one is `status: "unresolved"` with candidates, never an exception.
+- **`create_item` registers instead of refusing.** The rate's unit is resolved and stored on the
+  new **`Item.application_rate_uom`** (Link → UOM). An omitted `stock_uom` defaults to that unit
+  when it is whole-number (Block), else Nos. A unit that matches nothing still creates the Item
+  (on the whole-number rate unit or Nos) and the answer's **`needs_review`** says what a person
+  must pick. New answer keys: `application_rate_uom`, `rate_uom`, `stock_uom_resolution`,
+  `needs_review`. The old "unknown unit is refused" behaviour is gone on purpose.
+- **`update_item`** takes `stock_uom` (refused once the Item has stock ledger entries) and
+  `application_rate_uom` (`""` clears). A picked unit that matches nothing is refused with
+  candidates.
+- **The unit register, over MCP.** Read (on): `list_uoms`, `get_uom`, `resolve_uom`. Write (off,
+  and gated to System Manager / Stock Manager / Item Manager / Farm Manager): `create_uom`,
+  `update_uom` (never renames), `disable_uom` (refused while an active context offers the unit),
+  `set_uom_conversion_factor` (upsert; refuses a disagreeing reverse row), `delete_uom_conversion_factor`
+  (destructive, own switch), `create_ag_uom_context`, `update_ag_uom_context`, `add_uom_to_context`,
+  `remove_uom_from_context` (never the last unit).
+- **Seeded (after_migrate, create-only):** UOMs **Block** (whole) and **Ounce**; contexts **Bait**
+  (Count: Block) and **Dry Product** (Weight: Pound, Ounce) — two contexts, not one "Crop
+  Protection" list, because a context measures one thing; Exact conversion Pound → Ounce = 16.
+  Existing contexts (Spray etc.) are not touched.
+- **Phone:** `/mobile/list_uoms` (read, open on enrolment; `search`, `rate_text`, `unit_text`,
+  `context`; farm units first; `suggestion` is the resolver's answer) and
+  `/mobile/update_item_units` (dispatch role; `item_code`, `stock_uom`, `application_rate_uom`).
+  `/mobile/create_item` gains `application_rate_uom`.
+- Deploy: **`bench migrate`** (the Item column, the seeded units and contexts, the new settings
+  switches), then an image rebuild. Turn on the write switches you want in ERPNext MCP Settings.
+
 ## 0.196.0 — 2026-09-27 — which model made the call
 
 **910 tools** (unchanged). No new routes. Two new MCP Action Log columns.

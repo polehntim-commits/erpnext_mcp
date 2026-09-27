@@ -168,6 +168,7 @@ from .tools import (
 	training_sessions,
 	translations,
 	universal_scan,
+	uoms,
 	uploads,
 	valves,
 	visits,
@@ -4373,8 +4374,12 @@ TOOLS = {
 		masters.create_item,
 		"MUTATING (default OFF). Create one Item. NOT A DRAFT: an ERPNext Item "
 		"has no docstatus, so it is live the moment it is created — pass disabled "
-		"to keep it out of transactions instead. The stock_uom is checked against "
-		"this site's UOM list and refused with the units it actually has, and the "
+		"to keep it out of transactions instead. UNITS ARE RESOLVED, NOT REFUSED: "
+		"stock_uom and the rate's unit are matched against this site's UOMs "
+		"('blocks of bait' is Block, 'lbs' is Pound). A unit that matches nothing "
+		"does not stop the product being registered — it is stocked in the rate's "
+		"whole-number unit or Nos, and `needs_review` names what a person must pick "
+		"(update_item sets it). The rate's unit is stored as application_rate_uom. The "
 		"item_group must already exist (create_item_group makes one). Also takes the "
 		"pesticide label fields (EPA number, signal word, restricted use, active "
 		"ingredients, REI, PHI, rate, PPE, label scan). An EPA number with no "
@@ -4389,7 +4394,17 @@ TOOLS = {
 				"group is the normal choice — unlike parent_item_group on "
 				"create_item_group, this is not required to be a branch.",
 			),
-			"stock_uom": _field(_STRING, "Stock unit of measure. Defaults to 'Nos'."),
+			"stock_uom": _field(
+				_STRING,
+				"Stock unit of measure, resolved against the site's UOMs. Omitted: the "
+				"rate's unit when it is a whole-number one (Block), otherwise 'Nos'.",
+			),
+			"application_rate_uom": _field(
+				_STRING,
+				"The unit the label rate's numbers are in. Omitted: read from "
+				"application_rate ('1 or 2 blocks of bait' → Block). Unresolvable: left "
+				"blank and flagged in needs_review.",
+			),
 			"is_stock_item": _field(_BOOLEAN, "Defaults to true. false for a service or a fee."),
 			"description": _field(_STRING, "Long description."),
 			"disabled": _field(_BOOLEAN, "Create it disabled. Defaults to false."),
@@ -4422,7 +4437,7 @@ TOOLS = {
 	"update_item": _tool(
 		masters.update_item,
 		"MUTATING (default OFF). Change one Item's description, name, group, "
-		"disabled flag, default warehouse, reorder rule or pesticide label fields "
+		"disabled flag, default warehouse, reorder rule, stock unit, rate unit or pesticide label fields "
 		"(EPA number, signal word, restricted use, active ingredients, REI, PHI, "
 		"rate, PPE, label scan) in place. Never renames "
 		"it — the item_code IS the docname. A reorder level needs a warehouse "
@@ -4446,6 +4461,17 @@ TOOLS = {
 				"default warehouse; required when it has none.",
 			),
 			"company": _field(_STRING, "Which company a default_warehouse row belongs to."),
+			"stock_uom": _field(
+				_STRING,
+				"Change the stock unit. Resolved against the site's UOMs and refused with "
+				"candidates when it matches none; refused once the Item has stock ledger "
+				"entries (ERPNext fixes the stock unit after the first).",
+			),
+			"application_rate_uom": _field(
+				_STRING,
+				"The unit the label rate is in, resolved against the site's UOMs. An empty "
+				"string clears it. This is how a create_item `needs_review` is answered.",
+			),
 			**_ITEM_LABEL_ARGS,
 		},
 		required=("item_code",),
@@ -28304,6 +28330,216 @@ TOOLS = {
 		requires=(
 			"the Agricultural UOM Conversion DocType, which ships with erpnext_mcp — run `bench migrate`"
 		),
+	),
+	# ── v0.197.0: the unit register (AFB-2026-00023) ────────────────────────
+	"list_uoms": _tool(
+		uoms.list_uoms,
+		"The site's units of measure — ERPNext's UOM register — with each unit's "
+		"enabled and must_be_whole_number flags, what it measures (Count, Weight, "
+		"Volume, Area, where this app knows) and which agricultural unit contexts "
+		"offer it. Filter by name, flags or one context. Read-only.",
+		{
+			"search": _field(_STRING, "Substring of the unit's name."),
+			"enabled": _field(_BOOLEAN, "true for live units only, false for disabled ones only."),
+			"must_be_whole_number": _field(_BOOLEAN, "true for counted units only (Block, Bin, Nos)."),
+			"context": _field(_STRING, "Only the units this Agricultural UOM Context offers."),
+			"limit": _LIMIT,
+		},
+		title="List units of measure",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"get_uom": _tool(
+		uoms.get_uom,
+		"One unit of measure in full: its flags, the contexts that offer it, every "
+		"ERPNext UOM Conversion Factor and Agricultural UOM Conversion touching it, "
+		"and how many Items are stocked or rated in it. Accepts a label spelling "
+		"('lbs', 'blocks') and answers for the unit it means. Read-only.",
+		{"uom": _field(_STRING, "The unit's name, or a spelling of it.")},
+		required=("uom",),
+		title="Get a unit of measure",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"resolve_uom": _tool(
+		uoms.resolve_uom,
+		"Which of THIS site's units some printed words mean. For a rate ('Norway "
+		"rats: 1 or 2 blocks of bait') it reads the unit from the words AFTER the "
+		"quantity — never from the crop or pest before it — and returns the quantity "
+		"range, the unit, how it matched and per-clause detail. For a bare unit "
+		"('lbs') it matches it. An unknown unit is an answer (status 'unresolved', "
+		"with candidates), not an error. Read-only.",
+		{
+			"text": _field(_STRING, "The rate or the unit, as printed or typed."),
+			"kind": _field(_STRING, "'rate' or 'unit'. Defaults to 'rate' when the text has a number in it."),
+		},
+		required=("text",),
+		title="Resolve a unit of measure",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"create_uom": _tool(
+		uoms.create_uom,
+		"MUTATING (default OFF). Add one unit of measure to ERPNext's register — "
+		"e.g. Block for bait counted by the piece. Refuses a name that already "
+		"exists in any casing, or one the resolver already reads as another unit "
+		"('Blocks' beside 'Block'). Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"uom_name": _field(_STRING, "The unit's name, which becomes its docname."),
+			"must_be_whole_number": _field(
+				_BOOLEAN, "true for a unit only ever counted whole (a block, a bin). Default false."
+			),
+			"enabled": _field(_BOOLEAN, "Default true."),
+		},
+		required=("uom_name",),
+		mutating=True,
+		title="Create a unit of measure",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"update_uom": _tool(
+		uoms.update_uom,
+		"MUTATING (default OFF). Change one unit's must_be_whole_number or enabled "
+		"flag. NEVER RENAMES — a unit is named after itself and is the value on every "
+		"row that counts in it; disable the wrong one and create the right one. Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"uom": _field(_STRING, "The unit."),
+			"must_be_whole_number": _field(_BOOLEAN, "Whether quantities in it must be whole."),
+			"enabled": _field(_BOOLEAN, "false takes it out of use; true brings it back."),
+			"uom_name": _field(_STRING, "Always refused when different — see above."),
+		},
+		required=("uom",),
+		mutating=True,
+		idempotent=True,
+		title="Update a unit of measure",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"disable_uom": _tool(
+		uoms.disable_uom,
+		"MUTATING (default OFF). Take one unit out of use. Disabled, not deleted: "
+		"every row that counts in it keeps it, and the answer says how many Items are "
+		"still stocked in it. Refused while an ACTIVE unit context offers it — remove it "
+		"from the context first. Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{"uom": _field(_STRING, "The unit.")},
+		required=("uom",),
+		mutating=True,
+		idempotent=True,
+		title="Disable a unit of measure",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"set_uom_conversion_factor": _tool(
+		uoms.set_uom_conversion_factor,
+		"MUTATING (default OFF). Record or correct one row of ERPNext's GLOBAL UOM "
+		"Conversion Factor table: how many to_uom are in one from_uom (Pound → Ounce "
+		"is 16). Upserts on the pair. Refuses a row that disagrees with one already "
+		"recorded the other way round, because ERPNext reads a pair either way. For a "
+		"factor that depends on the crop (a bin of cherries vs apples) this is the "
+		"wrong table — see get_uom_conversions. Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"from_uom": _field(_STRING, "The 'one' side: 1 from_uom = value to_uom."),
+			"to_uom": _field(_STRING, "The unit counted in the value."),
+			"value": _field(_NUMBER, "How many to_uom in one from_uom. Greater than 0."),
+			"category": _field(
+				_STRING,
+				"ERPNext's UOM Category for a NEW pair (e.g. 'Mass'). Omitted: taken from "
+				"a factor either unit already has. A new name is created.",
+			),
+		},
+		required=("from_uom", "to_uom", "value"),
+		mutating=True,
+		idempotent=True,
+		title="Set a unit conversion factor",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"delete_uom_conversion_factor": _tool(
+		uoms.delete_uom_conversion_factor,
+		"MUTATING and DESTRUCTIVE (default OFF). Delete one row of ERPNext's global "
+		"UOM Conversion Factor table, in the direction it was recorded. The units are "
+		"untouched. Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"from_uom": _field(_STRING, "As recorded."),
+			"to_uom": _field(_STRING, "As recorded."),
+		},
+		required=("from_uom", "to_uom"),
+		mutating=True,
+		destructive=True,
+		title="Delete a unit conversion factor",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"create_ag_uom_context": _tool(
+		uoms.create_ag_uom_context,
+		"MUTATING (default OFF). A new agricultural unit context: the list of units "
+		"one kind of work is measured in (Bait counts Blocks; Dry Product weighs "
+		"Pounds and Ounces). ONE MEASUREMENT PER CONTEXT — a list mixing a count and "
+		"a weight is refused, because it lets '2' mean either. At most one default. Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"context_name": _field(_STRING, "The context's name, which becomes its docname."),
+			"applies_to": _field(_STRING, "Weight, Volume, Area or Count."),
+			"description": _field(_STRING, "What work this list is for."),
+			"uoms": _field(
+				{"type": "array", "items": {"type": "object"}},
+				"[{uom, is_default, notes}] — at least one.",
+			),
+		},
+		required=("context_name", "applies_to", "uoms"),
+		mutating=True,
+		title="Create a unit context",
+		available=_needs_doctype("Agricultural UOM Context"),
+		requires="the Agricultural UOM Context DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"update_ag_uom_context": _tool(
+		uoms.update_ag_uom_context,
+		"MUTATING (default OFF). Switch a unit context on or off, change its "
+		"description, or change its default unit (one it already lists; '' for no "
+		"default). Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"context": _field(_STRING, "The context."),
+			"is_active": _field(_BOOLEAN, "false retires it; its units are untouched."),
+			"description": _field(_STRING, "New description."),
+			"default_uom": _field(_STRING, "One of its units, or '' for none."),
+		},
+		required=("context",),
+		mutating=True,
+		idempotent=True,
+		title="Update a unit context",
+		available=_needs_doctype("Agricultural UOM Context"),
+		requires="the Agricultural UOM Context DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"add_uom_to_context": _tool(
+		uoms.add_uom_to_context,
+		"MUTATING (default OFF). Offer one more unit in a context — e.g. add Block to "
+		"Bait. Refused when the unit measures something else than the context (a "
+		"weight in a count list) or is already listed. Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"context": _field(_STRING, "The context."),
+			"uom": _field(_STRING, "The unit to add."),
+			"is_default": _field(_BOOLEAN, "Make it the context's default. Default false."),
+			"notes": _field(_STRING, "What it is for in this work."),
+		},
+		required=("context", "uom"),
+		mutating=True,
+		title="Add a unit to a context",
+		available=_needs_doctype("Agricultural UOM Context"),
+		requires="the Agricultural UOM Context DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"remove_uom_from_context": _tool(
+		uoms.remove_uom_from_context,
+		"MUTATING (default OFF). Stop offering one unit in a context. The unit itself "
+		"is untouched. Refused for the context's LAST unit — switch the context off "
+		"instead. Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"context": _field(_STRING, "The context."),
+			"uom": _field(_STRING, "The unit to remove."),
+		},
+		required=("context", "uom"),
+		mutating=True,
+		title="Remove a unit from a context",
+		available=_needs_doctype("Agricultural UOM Context"),
+		requires="the Agricultural UOM Context DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── v0.88.0: the spray program ──────────────────────────────────────────
 	"create_spray_nozzle_config": _tool(

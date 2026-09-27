@@ -1061,6 +1061,26 @@ _ITEM_FIELDS = (
 		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
 	),
 	ComplianceField(
+		fieldname="application_rate_uom",
+		label="Application Rate Unit",
+		fieldtype="Link",
+		options="UOM",
+		insert_after="application_rate",
+		framework="FIFRA label use directions — 40 CFR 156.10(i)",
+		why=(
+			"The rate above is text, as printed, and stays the law. This says which unit its "
+			"numbers are in — '1 or 2 blocks of bait' is Block, '2.56 fl oz/acre' is Fluid "
+			"Ounce — so a rate can be tied to stock, to a tank mix and to a conversion instead "
+			"of being re-read by whoever fills the tank (v0.197.0, AFB-2026-00023)."
+		),
+		operational=(
+			"How much to take off the shelf. A rate in blocks against a product stocked in "
+			"blocks is a count somebody can check; a rate whose unit nobody recorded is a "
+			"guess made at the shed door."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
 		fieldname="ppe_requirements",
 		label="PPE Requirements",
 		fieldtype="Small Text",

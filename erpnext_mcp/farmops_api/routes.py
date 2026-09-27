@@ -796,6 +796,10 @@ ROUTES = (
 	Route("/mobile", mobile_api.search_items),
 	Route("/mobile", mobile_api.link_item_barcode),
 	Route("/mobile", mobile_api.create_item),
+	# v0.197.0, AFB-2026-00023. The unit picker's list and the answer to a
+	# product registered with `needs_review` — docs/design/uom_registry.md §6.
+	Route("/mobile", mobile_api.list_uoms),
+	Route("/mobile", mobile_api.update_item_units),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

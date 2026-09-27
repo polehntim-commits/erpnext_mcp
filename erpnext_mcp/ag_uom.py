@@ -52,6 +52,10 @@ DIMENSION = {
 	"Fluid Ounce": "Volume",
 	"Acre": "Area",
 	"Square Foot": "Area",
+	# v0.197.0. A bait block is counted, not weighed: the label says "1 or 2
+	# blocks", and a half block in a station is not a thing anybody places.
+	"Block": "Count",
+	"Ounce": "Weight",
 }
 
 #: The units the installer makes sure exist, with the `must_be_whole_number`
@@ -68,6 +72,11 @@ SEED_UOMS = (
 	{"uom_name": "Fluid Ounce", "must_be_whole_number": 0},
 	{"uom_name": "Acre", "must_be_whole_number": 0},
 	{"uom_name": "Square Foot", "must_be_whole_number": 0},
+	# v0.197.0, AFB-2026-00023. The crop-protection units a label rate is
+	# written in and ERPNext's own list does not reliably carry: Block for bait
+	# (whole), Ounce for a dry product's rate by weight.
+	{"uom_name": "Block", "must_be_whole_number": 1},
+	{"uom_name": "Ounce", "must_be_whole_number": 0},
 )
 
 #: The contexts, and which units each one accepts. NOTE WHAT IS *NOT* MIXED:
@@ -133,6 +142,31 @@ SEED_CONTEXTS = (
 			{"uom": "Ton", "is_default": 0, "notes": "Processing loads and orchard totals."},
 		),
 	},
+	# v0.197.0. TWO CONTEXTS AND NOT ONE "CROP PROTECTION" LIST, because the
+	# controller refuses a list that mixes measurements: a bait block is counted
+	# and a dry product is weighed, and one list offering both is a list that
+	# lets "2" mean either.
+	{
+		"context_name": "Bait",
+		"applies_to": "Count",
+		"description": (
+			"Rodent and insect bait placed by the piece. A bait label's rate is a count per "
+			'station or per placement — "1 or 2 blocks of bait" — and is stocked the same way.'
+		),
+		"uoms": ({"uom": "Block", "is_default": 1, "notes": "One bait block, as the label counts it."},),
+	},
+	{
+		"context_name": "Dry Product",
+		"applies_to": "Weight",
+		"description": (
+			"Dry crop-protection products measured by weight into the tank or the spreader — "
+			"wettable powders, granules, dusts. Liquids are the Spray context."
+		),
+		"uoms": (
+			{"uom": "Pound", "is_default": 1, "notes": "How dry product rates are usually printed."},
+			{"uom": "Ounce", "is_default": 0, "notes": "Sixteen to the pound; small-block rates."},
+		),
+	},
 )
 
 #: The starting book of factors. `factor` is always "how many `to_uom` in ONE
@@ -140,7 +174,7 @@ SEED_CONTEXTS = (
 #: than leaving to the reader — getting it backwards produces a number, not an
 #: error.
 #:
-#: THE THREE `Exact` ROWS ARE DEFINITIONS and carry no crop, because a quantity
+#: THE FOUR `Exact` ROWS ARE DEFINITIONS and carry no crop, because a quantity
 #: that varies by crop is not a definition. Everything else is `Nominal`: the
 #: trade's rule of thumb, right enough to plan with and not right enough to
 #: settle a dispute with. A farm that weighs its own containers should replace
@@ -161,6 +195,14 @@ SEED_CONVERSIONS = (
 		"factor": 2000.0,
 		"basis": "Exact",
 		"source": "US short ton definition",
+	},
+	{
+		"from_uom": "Pound",
+		"to_uom": "Ounce",
+		"crop": "",
+		"factor": 16.0,
+		"basis": "Exact",
+		"source": "US avoirdupois definition",
 	},
 	{
 		"from_uom": "Acre",

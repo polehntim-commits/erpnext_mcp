@@ -1291,7 +1291,11 @@ ERPNEXT_SCHEMA = {
 		"material_request_type",
 	],
 	"Item Group": ["name", "item_group_name", "parent_item_group", "is_group"],
-	"UOM": ["name", "enabled"],
+	"UOM": ["name", "uom_name", "enabled", "must_be_whole_number"],
+	# v0.197.0. ERPNext's global unit-pair factors and the category each belongs
+	# to, for `tools/uoms.py`'s conversion-factor tools.
+	"UOM Category": ["name", "category_name"],
+	"UOM Conversion Factor": ["name", "category", "from_uom", "to_uom", "value"],
 	"UOM Conversion Detail": [
 		"name",
 		"parent",
@@ -1472,6 +1476,10 @@ ERPNEXT_AUTONAME = {
 	# them is a docname a caller stores: `create_item_group` refuses a name that
 	# is taken, and it can only do that if the name is the key here too.
 	"Item Group": "field:item_group_name",
+	# v0.197.0. A unit IS its name on a stock install — the value on every row
+	# that counts in it — and so is the category a conversion factor files under.
+	"UOM": "field:uom_name",
+	"UOM Category": "field:category_name",
 	"Customer": "field:customer_name",
 	"Price List": "field:price_list_name",
 	# A Party Type IS its name, which is what makes `frappe.db.exists("Party
@@ -2173,6 +2181,11 @@ ERPNEXT_FIELD_LINKS = {
 	("Stock Entry Detail", "item_code"): ("Link", "Item"),
 	("Stock Entry Detail", "s_warehouse"): ("Link", "Warehouse"),
 	("Stock Entry Detail", "t_warehouse"): ("Link", "Warehouse"),
+	("UOM Conversion Factor", "category"): ("Link", "UOM Category"),
+	("UOM Conversion Factor", "from_uom"): ("Link", "UOM"),
+	("UOM Conversion Factor", "to_uom"): ("Link", "UOM"),
+	("UOM", "must_be_whole_number"): ("Check", None),
+	("UOM", "enabled"): ("Check", None),
 	("Stock Entry Detail", "uom"): ("Link", "UOM"),
 	("Stock Entry Detail", "stock_uom"): ("Link", "UOM"),
 	("UOM Conversion Detail", "uom"): ("Link", "UOM"),

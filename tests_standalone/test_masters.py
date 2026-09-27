@@ -269,11 +269,23 @@ class CreateItem(MastersTestCase):
 		data = self.tool_data("create_item", {"item_code": "FUEL-DIESEL"})
 		self.assertEqual(data["stock_uom"], "Nos")
 
-	def test_an_unknown_unit_is_refused_with_the_units_the_site_has(self):
-		message = self.tool_error("create_item", {"item_code": "X", "stock_uom": "Furlong"})
-		self.assertIn("no UOM called 'Furlong'", message)
-		self.assertIn("Lb", message)
-		self.assertIn("Nothing was created", message)
+	def test_an_unknown_unit_registers_the_product_and_flags_the_unit(self):
+		"""AFB-2026-00023. PROWLER bait was refused over a unit called 'Noi'. The
+		product exists whether or not the unit was read right, so it is registered
+		on a unit the site has, and the answer says a person must pick."""
+		data = self.tool_data("create_item", {"item_code": "X", "stock_uom": "Noi"})
+		self.assertEqual(data["stock_uom"], "Nos")
+		self.assertEqual(data["stock_uom_resolution"]["status"], "fallback")
+		self.assertEqual(data["stock_uom_resolution"]["requested"], "Noi")
+		self.assertIn("Nos", data["stock_uom_resolution"]["candidates"])
+		self.assertEqual(data["needs_review"], ["stock_uom"])
+		self.assertEqual(STORE.get_raw("Item", "X")["stock_uom"], "Nos")
+
+	def test_a_unit_is_resolved_through_its_label_spelling(self):
+		data = self.tool_data("create_item", {"item_code": "X", "stock_uom": "lbs"})
+		self.assertEqual(data["stock_uom"], "Lb")
+		self.assertEqual(data["stock_uom_resolution"]["status"], "resolved")
+		self.assertEqual(data["needs_review"], [])
 
 	def test_a_duplicate_item_code_is_refused(self):
 		message = self.tool_error("create_item", {"item_code": SPRAY})
@@ -410,8 +422,13 @@ class PesticideLabelFields(MastersTestCase):
 		for tool in ("create_item", "update_item"):
 			properties = registry.TOOLS[tool]["inputSchema"]["properties"]
 			self.assertLessEqual(set(masters.PESTICIDE_FIELDS), set(properties), tool)
+		# v0.197.0. The rate's unit is installed beside the label fields but is
+		# RESOLVED against the UOM register rather than stored as sent, so it is
+		# its own argument and not a PESTICIDE_FIELDS kind.
 		installed = {field.fieldname for field in compliance_fields._ITEM_FIELDS}
-		self.assertEqual(set(masters.PESTICIDE_FIELDS), installed)
+		self.assertEqual(set(masters.PESTICIDE_FIELDS) | {masters.RATE_UOM_FIELD}, installed)
+		for tool in ("create_item", "update_item"):
+			self.assertIn(masters.RATE_UOM_FIELD, registry.TOOLS[tool]["inputSchema"]["properties"])
 
 	def test_restricted_use_is_installed_on_item(self):
 		self.assertTrue(compat.has_field("Item", "restricted_use"))

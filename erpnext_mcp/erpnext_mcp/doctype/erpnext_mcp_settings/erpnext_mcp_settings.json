@@ -1016,11 +1016,23 @@
   "allow_get_market",
   "allow_list_ag_uom_contexts",
   "allow_get_uom_conversions",
+  "allow_list_uoms",
+  "allow_get_uom",
+  "allow_resolve_uom",
   "agronomy_tools_col",
   "allow_create_crop",
   "allow_update_crop",
   "allow_create_market",
   "allow_update_market",
+  "allow_create_uom",
+  "allow_update_uom",
+  "allow_disable_uom",
+  "allow_set_uom_conversion_factor",
+  "allow_delete_uom_conversion_factor",
+  "allow_create_ag_uom_context",
+  "allow_update_ag_uom_context",
+  "allow_add_uom_to_context",
+  "allow_remove_uom_from_context",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
   "allow_list_spray_applications",
@@ -7858,6 +7870,27 @@
    "label": "Get UoM Conversions"
   },
   {
+   "default": "1",
+   "description": "READ. The site's units of measure with their whole-number and enabled flags, what each measures and which unit contexts offer it.",
+   "fieldname": "allow_list_uoms",
+   "fieldtype": "Check",
+   "label": "List UoMs"
+  },
+  {
+   "default": "1",
+   "description": "READ. One unit in full: flags, contexts, every conversion factor touching it, and how many Items are stocked or rated in it.",
+   "fieldname": "allow_get_uom",
+   "fieldtype": "Check",
+   "label": "Get UoM"
+  },
+  {
+   "default": "1",
+   "description": "READ. Which site unit some printed words mean — reads a rate's unit from the words after the quantity ('1 or 2 blocks of bait' is Block). An unknown unit is an answer, not an error.",
+   "fieldname": "allow_resolve_uom",
+   "fieldtype": "Check",
+   "label": "Resolve UoM"
+  },
+  {
    "fieldname": "agronomy_tools_col",
    "fieldtype": "Column Break",
    "label": ""
@@ -7889,6 +7922,69 @@
    "fieldname": "allow_update_market",
    "fieldtype": "Check",
    "label": "Update Market"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Add a unit to ERPNext's UOM register (e.g. Block for bait). Refuses a name that already exists in any casing or that already means another unit. Also needs System Manager, Stock Manager, Item Manager or Farm Manager.",
+   "fieldname": "allow_create_uom",
+   "fieldtype": "Check",
+   "label": "Create UoM"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Change a unit's whole-number or enabled flag. Never renames it. Also needs one of the unit-register roles.",
+   "fieldname": "allow_update_uom",
+   "fieldtype": "Check",
+   "label": "Update UoM"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Take a unit out of use without deleting it. Refused while an active unit context offers it. Also needs one of the unit-register roles.",
+   "fieldname": "allow_disable_uom",
+   "fieldtype": "Check",
+   "label": "Disable UoM"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Record or correct a row of ERPNext's global UOM Conversion Factor table. Refuses a row that disagrees with the reverse pair. Also needs one of the unit-register roles.",
+   "fieldname": "allow_set_uom_conversion_factor",
+   "fieldtype": "Check",
+   "label": "Set UoM Conversion Factor"
+  },
+  {
+   "default": "0",
+   "description": "WRITE, DESTRUCTIVE. Delete one global UOM Conversion Factor row. The units are untouched. Also needs one of the unit-register roles.",
+   "fieldname": "allow_delete_uom_conversion_factor",
+   "fieldtype": "Check",
+   "label": "Delete UoM Conversion Factor"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. A new list of the units one kind of work is measured in. One measurement per context. Also needs one of the unit-register roles.",
+   "fieldname": "allow_create_ag_uom_context",
+   "fieldtype": "Check",
+   "label": "Create Agricultural UoM Context"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Switch a unit context on or off, reword it, or change its default unit. Also needs one of the unit-register roles.",
+   "fieldname": "allow_update_ag_uom_context",
+   "fieldtype": "Check",
+   "label": "Update Agricultural UoM Context"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Offer one more unit in a unit context. Refuses a unit that measures something else. Also needs one of the unit-register roles.",
+   "fieldname": "allow_add_uom_to_context",
+   "fieldtype": "Check",
+   "label": "Add UoM to Context"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Stop offering a unit in a unit context. Refuses the last one — switch the context off instead. Also needs one of the unit-register roles.",
+   "fieldname": "allow_remove_uom_from_context",
+   "fieldtype": "Check",
+   "label": "Remove UoM from Context"
   },
   {
    "fieldname": "spray_program_section",
