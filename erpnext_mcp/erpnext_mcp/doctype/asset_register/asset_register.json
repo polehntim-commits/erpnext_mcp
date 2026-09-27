@@ -53,6 +53,8 @@
   "last_service_hours",
   "current_hours",
   "hours_updated_at",
+  "storage_section",
+  "warehouse",
   "scan_section",
   "last_scan_at",
   "scan_col",
@@ -370,6 +372,19 @@
    "fieldtype": "Datetime",
    "label": "Hours Updated At",
    "read_only": 1
+  },
+  {
+   "fieldname": "storage_section",
+   "fieldtype": "Section Break",
+   "label": "Storage",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "options": "Warehouse",
+   "label": "Warehouse",
+   "description": "The ERPNext Warehouse whose stock is kept in this building or tank. What the asset screen's Inventory section reads, via get_warehouse_summary. Must belong to the asset's own company."
   },
   {
    "fieldname": "scan_section",

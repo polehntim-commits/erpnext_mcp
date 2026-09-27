@@ -68,6 +68,9 @@ _ASSET_FIELDS = (
 	"current_hours",
 	"hours_updated_at",
 	"irrigation_zone",
+	# v0.188.0 — the Warehouse a storage building or tank holds. What the phone's
+	# Inventory section follows to `get_warehouse_summary`.
+	"warehouse",
 	"creation",
 	"owner",
 )
@@ -89,7 +92,10 @@ _HISTORY_DOCTYPES = (
 	("Housing Inspection", "housing_unit", "name,unit,inspector,inspection_date,creation"),
 	("Detector Test", "housing_unit", "name,unit,test_type,result,test_date,creation"),
 	("Water Test", "water_source", "name,source_name,test_type,result,test_date,creation"),
-	("Inspection Session", "location", "name,template,status,creation"),
+	# v0.188.0. `state`, not `status` — the doctype has no `status` column, so
+	# `existing_fields` dropped it and every inspection reached the phone with no
+	# way to tell a submitted one from one still open. The two times say when.
+	("Inspection Session", "location", "name,template,state,started_at,submitted_at,creation"),
 	("Compliance Alert", "asset_register", "name,alert_type,severity,status,creation"),
 	("Asset State Log", "asset_name", "name,action,from_state,to_state,performed_by,performed_at,creation"),
 )
@@ -207,6 +213,7 @@ def _describe_asset(row: dict) -> dict:
 		"current_hours": _money(row.get("current_hours")),
 		"hours_updated_at": str(row.get("hours_updated_at") or "") or None,
 		"irrigation_zone": row.get("irrigation_zone") or None,
+		"warehouse": row.get("warehouse") or None,
 	}
 
 
@@ -1331,6 +1338,31 @@ def update_registered_asset(args: dict) -> ToolResult:
 				"minutes as gallons. Nothing was changed."
 			)
 		_stage(changes, doc, "irrigation_zone", zone or None)
+	# v0.188.0. The Warehouse this asset holds stock for. Checked against the
+	# asset's own company: a shed filed under one entity listing another's
+	# stock would put that entity's quantities on this one's screen.
+	if "warehouse" in args:
+		if not compat.has_field(ASSET_REGISTER, "warehouse"):
+			raise ToolError(
+				"this site's Asset Register has no warehouse column yet — it arrives with "
+				"erpnext_mcp v0.188.0. Run `bench migrate`. Nothing was changed."
+			)
+		warehouse = as_str(args, "warehouse")
+		if warehouse:
+			owner = frappe.db.get_value("Warehouse", warehouse, "company")
+			if not owner:
+				raise ToolError(
+					f"no Warehouse called {warehouse!r} on this site. list_warehouses has the "
+					"register — the docname carries the company abbreviation, e.g. 'Stores - OML'. "
+					"Nothing was changed."
+				)
+			asset_company = doc.get("company")
+			if asset_company and owner != asset_company:
+				raise ToolError(
+					f"Warehouse {warehouse!r} belongs to {owner}, and {row['name']} to "
+					f"{asset_company}. An asset lists only its own company's stock. Nothing was changed."
+				)
+		_stage(changes, doc, "warehouse", warehouse or None)
 	if "current_state" in args:
 		state = args.get("current_state")
 		if state and isinstance(state, str):

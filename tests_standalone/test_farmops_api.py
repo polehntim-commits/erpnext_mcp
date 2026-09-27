@@ -485,6 +485,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/create_item",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
+		"/mobile/link_asset_warehouse",
 		# v0.91.0. The fifth wizard submit target. The other four —
 		# `create_employee`, `register_asset`, `create_accident_report`,
 		# `create_discipline_record` — were already on this table; the
@@ -2879,6 +2880,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# at, and which product a retail code belongs to is the same decision.
 		"link_item_barcode",
 		"create_item",
+		# v0.188.0. Which stock a building answers for is a foreman's call.
+		"link_asset_warehouse",
 		"assign_soil_profile",
 		"create_corrective_action_record",
 		"create_food_safety_plan",
@@ -3081,7 +3084,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 112, "a method is named in two sets at once")
+		self.assertEqual(len(named), 113, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

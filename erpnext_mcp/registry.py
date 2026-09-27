@@ -21993,6 +21993,12 @@ TOOLS = {
 			"to_date": _field(
 				_STRING, "End of the window, YYYY-MM-DD, inclusive of the whole day. Default today."
 			),
+			"warehouse": _field(
+				_STRING,
+				"v0.188.0. The Warehouse docname this building or tank holds stock for "
+				"(e.g. 'Stores - OML'), or '' to unlink. Must belong to the asset's own "
+				"company. The phone's asset screen lists this warehouse's stock.",
+			),
 			"irrigation_zone": _field(
 				_STRING,
 				"Optional. An Irrigation Zone docname whose flow_rate_gpm and area_acres "

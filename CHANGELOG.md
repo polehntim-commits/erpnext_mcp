@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.188.0 — 2026-09-26 — a storage building knows which stock it holds
+
+**910 tools** (unchanged). One new column, one new `/mobile` route.
+
+- **`Asset Register.warehouse`** (Link → Warehouse, new "Storage" section). The phone's
+  asset screen follows it to `get_warehouse_summary` for its Inventory section. Before
+  this, the register's `40-5-MPH` and the ledger's `5 Mile Per Hour Shed - OML` had no
+  column in common.
+- `get_asset_detail` answers `warehouse`; `update_registered_asset` takes `warehouse`
+  (or `''` to unlink), refusing one that does not exist or belongs to another company.
+- **`/mobile/link_asset_warehouse`** (dispatch role) — asset and warehouse only, both
+  entity-checked. `update_registered_asset` stays off the mobile table.
+- Deploy: **`bench migrate`** (the column), then an image rebuild.
+
 ## 0.187.0 — 2026-09-26 — reimbursements match the phone's contract
 
 **910 tools** (unchanged). v0.186.0 was written before the iOS side committed; this

@@ -20113,3 +20113,43 @@ def normalize_merchant(
 			"confidence": resolution.get("confidence"),
 		},
 	}
+
+
+# ── 126. link_asset_warehouse ────────────────────────────────────────────────
+#
+# v0.188.0. WHICH STOCK A STORAGE BUILDING HOLDS, SET FROM IN FRONT OF IT. The
+# asset screen's Inventory section reads the Warehouse an Asset Register row is
+# linked to, and until this release there was no such link — the shed called
+# 40-5-MPH on the register and "5 Mile Per Hour Shed - OML" in the stock ledger
+# were two records nothing tied together.
+#
+# NARROW, LIKE `update_irrigation_valve`, AND FOR THE SAME REASON.
+# `update_registered_asset` stays off this table (rewriting a register is a desk
+# act); this route's signature names the asset and the warehouse and nothing
+# else, so `bind` drops every other column before the handler runs.
+#
+# THE DISPATCH ROLE, AND BOTH RECORDS SCOPED. Deciding which stock a building
+# answers for is a foreman's call; the asset must be the caller's entity's, and
+# the tool refuses a warehouse of another company — a shed listing another
+# entity's stock would put that entity's quantities on this one's screen.
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("link_asset_warehouse", mutating=True, limit=guard.WRITE_LIMIT)
+def link_asset_warehouse(user: str, asset_name=None, warehouse=None) -> dict:
+	"""Link a storage asset to the Warehouse it holds, or '' to unlink."""
+	allowed = guard.require_scope(user)
+	guard.require_dispatch_role(user, "Linking a building to a warehouse")
+	name = guard.require_scoped_doc("Asset Register", asset_name, "asset_name", allowed)
+	wanted = str(warehouse or "").strip()
+	if wanted:
+		owner = frappe.db.get_value("Warehouse", wanted, "company")
+		if owner and owner not in set(allowed):
+			raise frappe.PermissionError(
+				f"warehouse {wanted!r} belongs to {owner}, which is not one of this account's "
+				"entities. Nothing was changed."
+			)
+	asset_tags.update_registered_asset({"asset_name": name, "warehouse": wanted})
+	return {
+		"asset_name": name,
+		"warehouse": wanted or None,
+		"warehouse_name": (frappe.db.get_value("Warehouse", wanted, "warehouse_name") if wanted else None),
+	}

@@ -679,6 +679,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",
+		# v0.188.0 — the storage asset's warehouse.
+		"link_asset_warehouse",
 		"start_inspection",
 		# `submit_wizard_via_mobile` is here for `start_inspection`'s reason and
 		# then some: `MobileAPI.swift` will never name it either, because
@@ -4109,6 +4111,72 @@ class TheReceiptIsReviewedBeforeItIsFiled(MobileAPITestCase):
 		self.be()
 		with self.assertRaises(frappe.PermissionError):
 			mobile_api.get_expense_account_map(company=OTHER)
+
+
+class TheShedKnowsWhichStockItHolds(MobileAPITestCase):
+	"""v0.188.0. A storage asset linked to its Warehouse, and the asset read showing it.
+
+	THE LINK DID NOT EXIST. The asset screen's Inventory section follows
+	`Asset Register.warehouse` to `get_warehouse_summary`; before this release
+	the register and the stock ledger had no column in common.
+	"""
+
+	SHED = "40-5-MPH"
+
+	def setUp(self):
+		super().setUp()
+		seed_masters()
+		seed_stock()
+		self.configure(enabled=1, public_url="https://umbrel.tail4a2b.ts.net", **ON, allow_register_asset=1)
+		self.tool_data("register_asset", {"name": self.SHED, "asset_type": "Storage", "company": MAIN})
+
+	def foreman(self):
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		return self.be()
+
+	def test_a_foreman_links_the_shed_and_the_asset_read_shows_it(self):
+		self.foreman()
+		answer = mobile_api.link_asset_warehouse(asset_name=self.SHED, warehouse=STORES)
+		self.assertEqual(answer["warehouse"], STORES)
+		self.assertEqual(answer["warehouse_name"], "Stores")
+		self.assertEqual(mobile_api.get_asset_detail(asset_name=self.SHED)["warehouse"], STORES)
+
+	def test_an_empty_warehouse_unlinks(self):
+		self.foreman()
+		mobile_api.link_asset_warehouse(asset_name=self.SHED, warehouse=STORES)
+		mobile_api.link_asset_warehouse(asset_name=self.SHED, warehouse="")
+		self.assertIsNone(mobile_api.get_asset_detail(asset_name=self.SHED)["warehouse"])
+
+	def test_a_picker_may_read_it_and_may_not_set_it(self):
+		self.be()
+		self.assertIn("warehouse", mobile_api.get_asset_detail(asset_name=self.SHED))
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.link_asset_warehouse(asset_name=self.SHED, warehouse=STORES)
+
+	def test_another_entitys_warehouse_is_refused(self):
+		self.foreman()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.link_asset_warehouse(asset_name=self.SHED, warehouse=OTHER_STORES)
+
+	def test_the_history_says_what_state_an_inspection_is_in(self):
+		"""The history asked Inspection Session for `status`, which it has not got."""
+		STORE.seed("Inspection Session", [{
+			"name": "INSP-0001", "template": "Chemical storage monthly", "state": "Submitted",
+			"location_doctype": "Asset Register", "location": self.SHED, "company": MAIN,
+			"submitted_at": "2026-09-20 10:00:00", "creation": "2026-09-20 09:00:00",
+		}])
+		self.be()
+		rows = [e for e in mobile_api.get_asset_detail(asset_name=self.SHED)["history"]
+		        if e["doctype"] == "Inspection Session"]
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0]["state"], "Submitted")
+		self.assertEqual(rows[0]["template"], "Chemical storage monthly")
+
+	def test_a_warehouse_that_does_not_exist_is_refused_by_name(self):
+		self.foreman()
+		with self.assertRaises(Exception) as caught:
+			mobile_api.link_asset_warehouse(asset_name=self.SHED, warehouse="Stores")
+		self.assertIn("Stores - OML", str(caught.exception), "the refusal shows the docname shape")
 
 
 class TheWizardKnowsWhereToPostItsAnswers(MobileAPITestCase):
