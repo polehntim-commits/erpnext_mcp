@@ -108,6 +108,7 @@ from .. import (
 	slope_aspect,
 	slope_grade,
 	timezones,
+	url_fetch,
 )
 from .. import roles as role_lib
 from .. import shifts as shift_records
@@ -5745,10 +5746,18 @@ ATTACHMENT_PARENTS = {
 	# and `SHIFT_ROLES` is exactly the set already trusted to collect those
 	# signatures in the first place.
 	TRAINING_SESSION: SHIFT_GATE,
+	# v0.191.0. The operator's manual, the spec sheet and the parts diagram for
+	# a machine, readable by whoever is standing at it. `False` — no HR gate —
+	# because nothing filed against an asset is a fact about a person, and the
+	# tractor driver is exactly who the manual was written for.
+	# `attach_asset_document` is the write this read answers; `Asset Register`
+	# carries a `company` column, so `_attachment_parent` scopes it through
+	# `require_scoped_doc` like every other entry here.
+	"Asset Register": False,
 }
 
 #: The parents whose folder this surface opens on the strength of ITS OWN gates
-#: rather than on Frappe's DocPerm for the doctype. TWO ENTRIES, AND IT IS MEANT
+#: rather than on Frappe's DocPerm for the doctype. THREE ENTRIES, AND IT IS MEANT
 #: TO STAY THAT SHORT — each one is a doctype whose DocPerms do not reach the
 #: phone roles, and each had to be found on a farm before it was found here.
 #:
@@ -5801,7 +5810,7 @@ ATTACHMENT_PARENTS = {
 #: and write on it through this app's own permission table, which rule 1 permits
 #: because the I-9 Form doctype is THIS APP'S. There is nothing to broker.
 #:
-#: EVERY `False` PARENT — UNNECESSARY, and this is worth checking rather than
+#: EVERY OTHER `False` PARENT — UNNECESSARY, and this is worth checking rather than
 #: assuming. Farm Task, Farm Task Assignment, Housing Unit, Housing Inspection,
 #: Compliance Alert, Farm Shift and Farm Task Template are all doctypes `roles.py`
 #: grants the phone roles read on directly, so `_require_parent_read` already
@@ -5835,7 +5844,21 @@ ATTACHMENT_PARENTS = {
 #: the site, silently, during `bench migrate`. `Training Session` is this app's
 #: own doctype, so the rule permits it — and the cost is still worse than the
 #: door this set opens, which is narrow, reviewable and code.
-BROKERED_PARENTS = frozenset({EMPLOYEE, TRAINING_SESSION})
+#:
+#: v0.191.0 ADDS `Asset Register`, BEFORE A FARM FOUND IT RATHER THAN AFTER.
+#: `asset_register.json` grants `read` to System Manager, Accounts Manager, Farm
+#: Manager and Frappe's own `Employee` role, and `roles.py` grants the phone
+#: roles nothing on it. So a Field Worker enrolled without the `Employee`
+#: companion role — a bench with no `hrms`, or an account older than the
+#: companion — would open an asset's Documents section and be refused by
+#: `_require_parent_read` about a record `get_asset_detail` had just shown them.
+#: NOT A WIDENING, for the reason argued twice above: the asset is on
+#: `ATTACHMENT_PARENTS` and `require_scoped_doc` has placed it inside the
+#: caller's own entities, and every enrolled worker already reads the asset
+#: itself (`get_asset_detail`) and already WRITES its attachments through
+#: `files.attach_file_to_authorized_parent`, which v0.152.0 brokered for the
+#: same DocPerm.
+BROKERED_PARENTS = frozenset({EMPLOYEE, TRAINING_SESSION, "Asset Register"})
 
 
 def _attachment_parent(doctype, docname, allowed: list) -> tuple:
@@ -20249,3 +20272,405 @@ def get_inspection_evidence(user: str, inspection_session=None, file=None, max_b
 		"encoding": data.get("encoding"),
 		"content": data.get("content_base64"),
 	}
+
+
+# ── 129–130. An asset's own work, through a Farm Task ───────────────────────
+#
+# v0.191.0. TIM'S RULE: EVERY ACTION STARTED FROM AN ASSET'S SCREEN GOES THROUGH
+# A FARM TASK, the single audit trail for that asset. A Stock Entry or a File is
+# the OUTCOME of a task and is never created bare — so "who put ten gallons of
+# diesel into the shop tank, and when" and "who added this manual" are answered
+# by the asset's own task history rather than by a search across two registers
+# that do not name the asset at all.
+#
+# ONE REQUEST, ONE TRANSACTION. Each route raises the task (assigned to the
+# caller, so it is born Claimed), produces the outcome, and completes the task
+# with findings that name it. `guard.endpoint` rolls the database back on any
+# refusal before it writes its audit row, so a stock entry that will not insert
+# leaves no half-open task behind, and a task that will not close leaves no
+# draft. The one thing a rollback cannot reach is bytes already written to disk
+# by a File insert, which is why the attach happens after the task is raised.
+#
+# `task_type` IS "Other" ON BOTH, deliberately. The Select is a fixed list the
+# compliance rules key on, and neither a shed count nor a filed manual is one of
+# its kinds of work; the task's NAME says what it was, which is what a person
+# reading the asset's history reads.
+#
+# SCOPE-GATED ONLY, the same as `create_stock_entry` and `attach_file_to_document`
+# on this surface: any enrolled worker may log stock in or out of a shed, and may
+# file a manual against a machine they are standing at.
+ASSET_TASK_TYPE = "Other"
+#: The one contract an asset task carries. The findings ARE the outcome — the
+#: stock entry or the file, by name — so asking for them is asking for the record.
+ASSET_TASK_EVIDENCE = {"findings_text": True}
+#: What each `direction` becomes. Nothing else is accepted: a transfer between
+#: two sheds is `create_stock_entry`'s, because it is not one asset's movement.
+STOCK_DIRECTIONS = {"in": "Material Receipt", "out": "Material Issue"}
+
+
+def _asset_for_task(user: str, asset, company, allowed: list) -> dict:
+	"""One Asset Register row, scoped, with the company its task will carry.
+
+	A `company` in the body has to be one the caller reaches AND the asset's own:
+	an asset's work is booked to the entity that owns the asset, and a body that
+	named another would file a shed's stock on a different entity's books.
+	"""
+	name = guard.require_scoped_doc(asset_tags.ASSET_REGISTER, asset, "asset", allowed)
+	row = (
+		frappe.db.get_value(
+			asset_tags.ASSET_REGISTER,
+			name,
+			compat.existing_fields(asset_tags.ASSET_REGISTER, ["name", "company", "warehouse"]),
+			as_dict=True,
+		)
+		or {}
+	)
+	owner = str(row.get("company") or "") or (allowed[0] if allowed else "")
+	if str(company or "").strip():
+		wanted = guard.require_company(user, company, allowed)
+		if wanted and owner and wanted != owner:
+			frappe.throw(
+				f"asset {name} belongs to {owner}, not {wanted}. Its work is booked to the entity "
+				"that owns it. Nothing was recorded.",
+				frappe.ValidationError,
+			)
+	return {"name": name, "company": owner, "warehouse": str(row.get("warehouse") or "")}
+
+
+def _raise_asset_task(asset: dict, worker: str, task_name: str, notes: str) -> dict:
+	"""The Farm Task an asset action runs through, claimed by the caller. Returns its data."""
+	return dispatch.create_farm_task(
+		{
+			"task_name": task_name[:140],
+			"task_type": ASSET_TASK_TYPE,
+			"company": asset["company"],
+			"asset": asset["name"],
+			"assigned_to": worker,
+			"evidence_required": dict(ASSET_TASK_EVIDENCE),
+			"notes": notes,
+		}
+	).data
+
+
+def _close_asset_task(task: str, worker: str, findings: str, narrative: str) -> dict:
+	"""Complete it through `complete_farm_task`, so the completion is the ordinary one."""
+	data = dispatch.complete_farm_task(
+		{
+			"task": task,
+			"worker_id": worker,
+			"findings_text": findings,
+			"completion_narrative": narrative,
+		}
+	).data
+	return shape.task(data.get("task") or {}, data.get("assignment") or {})
+
+
+def _quantity(qty) -> float:
+	"""A positive, finite quantity, refused in a sentence rather than as a 500."""
+	try:
+		value = float(str(qty).strip())
+	except (TypeError, ValueError):
+		value = float("nan")
+	if not (value > 0) or value == float("inf"):
+		frappe.throw(
+			f"qty must be a number above zero, got {qty!r}. Nothing was recorded.",
+			frappe.ValidationError,
+		)
+	return value
+
+
+# ── 129. record_asset_stock_movement ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("record_asset_stock_movement", mutating=True, limit=guard.WRITE_LIMIT)
+def record_asset_stock_movement(
+	user: str,
+	asset=None,
+	direction=None,
+	item_code=None,
+	qty=None,
+	uom=None,
+	notes=None,
+	company=None,
+) -> dict:
+	"""Stock into or out of the warehouse a storage asset holds, as a Farm Task.
+
+	`direction` is "in" (a Material Receipt into the asset's warehouse) or "out"
+	(a Material Issue from it). THE WAREHOUSE IS NOT AN ARGUMENT: it is the one
+	`Asset Register.warehouse` names (v0.188.0), so a worker in front of the shop
+	tank cannot book diesel into a different shed by typing its name.
+
+	THE STOCK ENTRY IS A DRAFT, made by `stock_inventory.create_stock_entry` with
+	`source_doctype="Farm Task"` — so the entry points back at the task and the
+	task's findings name the entry. `submit_stock_entry` stays off this surface for
+	the reason `create_stock_entry` gives: submitting writes GL entries.
+	"""
+	allowed = guard.require_scope(user)
+	target = _asset_for_task(user, asset, company, allowed)
+
+	way = str(direction or "").strip().lower()
+	if way not in STOCK_DIRECTIONS:
+		frappe.throw(
+			f"direction must be 'in' (stock received into {target['name']}) or 'out' (stock "
+			f"taken from it), got {direction!r}. Nothing was recorded.",
+			frappe.ValidationError,
+		)
+	if not compat.has_field(asset_tags.ASSET_REGISTER, "warehouse"):
+		frappe.throw(
+			"this site's Asset Register has no warehouse column yet — run bench migrate. "
+			"Nothing was recorded.",
+			frappe.ValidationError,
+		)
+	warehouse = target["warehouse"]
+	if not warehouse:
+		frappe.throw(
+			f"{target['name']} is not linked to a warehouse, so there is no stock to move in or "
+			"out of it. A foreman links it with link_asset_warehouse. Nothing was recorded.",
+			frappe.ValidationError,
+		)
+
+	code = stock_tools._resolve_item(str(item_code or ""), "item_code")
+	amount = _quantity(qty)
+	unit = str(uom or "").strip()
+	worker = _employee(user)
+
+	item_name = str(frappe.db.get_value("Item", code, "item_name") or code)
+	shown_qty = f"{amount:g}" + (f" {unit}" if unit else "")
+	label = (
+		f"Stock in: {shown_qty} × {item_name} into {warehouse}"
+		if way == "in"
+		else f"Stock out: {shown_qty} × {item_name} out of {warehouse}"
+	)
+	remark = str(notes or "").strip()
+
+	task = _raise_asset_task(target, worker, label, label + (f"\n{remark}" if remark else ""))
+	line = {"item_code": code, "qty": amount, "warehouse": warehouse}
+	if unit:
+		line["uom"] = unit
+	entry = stock_tools.create_stock_entry(
+		{
+			"entry_type": STOCK_DIRECTIONS[way],
+			"company": target["company"],
+			"items": [line],
+			"source_doctype": FARM_TASK,
+			"source_name": task["name"],
+			"remarks": remark or label,
+		}
+	).data
+	first = (entry.get("items") or [{}])[0]
+	closed = _close_asset_task(
+		task["name"],
+		worker,
+		f"{label}. Stock Entry {entry.get('name')} ({entry.get('status') or 'Draft'}).",
+		f"Recorded from {target['name']}'s screen as draft Stock Entry {entry.get('name')}; "
+		"the balance moves when it is submitted in ERPNext.",
+	)
+	return {
+		"asset": target["name"],
+		"warehouse": warehouse,
+		"direction": way,
+		"task": closed,
+		"stock_entry": {
+			"name": entry.get("name"),
+			"status": entry.get("status"),
+			"entry_type": entry.get("entry_type"),
+			"item_code": first.get("item_code") or code,
+			"qty": first.get("qty") if first.get("qty") is not None else amount,
+			"uom": first.get("uom") or unit or None,
+		},
+	}
+
+
+def _task_filing(asset: str, file_docname: str) -> str:
+	"""The asset task that already filed this File, or "". The retry's answer."""
+	marker = f"File {file_docname}"
+	rows = frappe.db.get_all(
+		FARM_TASK, filters={"asset": asset, "task_type": ASSET_TASK_TYPE}, fields=["name", "notes"]
+	)
+	for row in rows or []:
+		if marker in str(row.get("notes") or ""):
+			return str(row.get("name"))
+	return ""
+
+
+def _staged_document(asset: str, token: str) -> dict:
+	"""A `finalize_staged_file` File, checked before it is pointed at the asset.
+
+	Refused when it is a folder, when it already hangs off some other record —
+	moving it would take evidence off the record it was filed against — and when
+	it is not a document this route files. Returns its row; `already` is True when
+	it is already on THIS asset, which is the retry of a call whose answer was lost.
+	"""
+	if not frappe.db.exists("File", token):
+		frappe.throw(
+			f"no File called {token!r} on this site. Upload it with stage_file_chunk and "
+			"finalize_staged_file first, then send the file_token that returns. Nothing was attached.",
+			frappe.ValidationError,
+		)
+	row = (
+		frappe.db.get_value(
+			"File",
+			token,
+			[
+				"name",
+				"file_name",
+				"file_url",
+				"file_size",
+				"is_folder",
+				"attached_to_doctype",
+				"attached_to_name",
+			],
+			as_dict=True,
+		)
+		or {}
+	)
+	if row.get("is_folder"):
+		frappe.throw(f"File {token} is a folder, not a document. Nothing was attached.", frappe.ValidationError)
+	parent = (str(row.get("attached_to_doctype") or ""), str(row.get("attached_to_name") or ""))
+	if parent == (asset_tags.ASSET_REGISTER, asset):
+		return {**row, "already": True}
+	if parent[0]:
+		frappe.throw(
+			f"File {token} is already attached to {parent[0]} {parent[1]}. Moving it would take it "
+			"off the record it was filed against. Upload it again. Nothing was attached.",
+			frappe.ValidationError,
+		)
+	stored = str(row.get("file_name") or "")
+	extension = stored.rsplit(".", 1)[-1].lower() if "." in stored else ""
+	if extension not in url_fetch.DOCUMENT_EXTENSIONS:
+		frappe.throw(
+			f"{stored or token!r} is not a document this files against an asset: "
+			f"{', '.join(url_fetch.DOCUMENT_EXTENSIONS)}. Nothing was attached.",
+			frappe.ValidationError,
+		)
+	return {**row, "already": False}
+
+
+def _attachment_out(doc_or_row, fallback_size=None, mime=None) -> dict:
+	"""The attachment block both answers carry, from a File doc or a File row."""
+	get = doc_or_row.get
+	name = get("file_name")
+	return {
+		"name": get("name"),
+		"file_name": name,
+		"file_url": get("file_url"),
+		"file_size": get("file_size") or fallback_size,
+		"mime_type": mime or file_tools._mime_type(name),
+	}
+
+
+# ── 130. attach_asset_document ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("attach_asset_document", mutating=True, limit=guard.UPLOAD_LIMIT)
+def attach_asset_document(
+	user: str,
+	asset=None,
+	url=None,
+	file_token=None,
+	title=None,
+	notes=None,
+	company=None,
+) -> dict:
+	"""File a manual, spec sheet or photograph against an asset, as a Farm Task.
+
+	EXACTLY ONE OF `url` AND `file_token`. A `file_token` is what
+	`finalize_staged_file` handed back — the same two-step upload every other
+	document on this surface takes — and the File is pointed at the asset. A `url`
+	is a link the worker pasted, usually a manufacturer's PDF, and THE SERVER
+	DOWNLOADS IT: a link rots when the manufacturer moves its site, and the bytes
+	do not. `url_fetch` is the whole of the defence that makes that safe on a bench
+	whose neighbours are a home network and a tailnet — read it before widening it.
+
+	THE FILE IS PRIVATE AND ONLY THIS ASSET'S. It is read back through
+	`list_attachments` / `get_attachment_content`, where `Asset Register` joined
+	`ATTACHMENT_PARENTS` in the same release, and the write permission is brokered
+	exactly as `attach_file_to_document` brokers it (v0.152.0).
+
+	A TOKEN SENT TWICE IS ONE DOCUMENT. A File already on this asset, filed by this
+	route, answers with the task that filed it and `already_attached: true` — the
+	phone that lost the first answer must not get a refusal about its own success.
+	A pasted URL sent twice is refused by the duplicate-name check instead, because
+	two downloads are two Files.
+	"""
+	allowed = guard.require_scope(user)
+	target = _asset_for_task(user, asset, company, allowed)
+
+	link = str(url or "").strip()
+	token = str(file_token or "").strip()
+	if bool(link) == bool(token):
+		frappe.throw(
+			"send exactly one of url (a link the server downloads) or file_token (a file uploaded "
+			"with stage_file_chunk and finalize_staged_file). Nothing was attached.",
+			frappe.ValidationError,
+		)
+	worker = _employee(user)
+	wanted_title = str(title or "").strip()
+	remark = str(notes or "").strip()
+
+	fetched = None
+	if token:
+		staged = _staged_document(target["name"], token)
+		if staged["already"]:
+			filed_by = _task_filing(target["name"], token)
+			if not filed_by:
+				frappe.throw(
+					f"File {token} is already filed against {target['name']}, by something other "
+					"than this route. Nothing was attached.",
+					frappe.ValidationError,
+				)
+			return {
+				"asset": target["name"],
+				"task": shape.task(dispatch.task_row(filed_by)),
+				"attachment": _attachment_out(staged),
+				"already_attached": True,
+			}
+		file_name = str(staged.get("file_name") or token)
+		source = "uploaded from phone"
+	else:
+		fetched = url_fetch.fetch(link)
+		file_name = url_fetch.safe_file_name(
+			wanted_title, fetched.final_url, fetched.disposition_name, fetched.extension
+		)
+		source = f"from {url_fetch.check_url(link)[1]}"
+	# The same site checks every other attach runs — docstatus, the site's own
+	# extension list, one name per record, the doctype's attachment limit — before
+	# the task is raised, so a refusal here leaves nothing to roll back.
+	file_tools.check_attachable(
+		asset_tags.ASSET_REGISTER, target["name"], file_name, require_parent_write=False
+	)
+
+	shown = wanted_title or file_name
+	# THE FILE DOCNAME IS KNOWN FOR A TOKEN AND NOT YET FOR A DOWNLOAD, so the
+	# notes name it where they can; `_task_filing` reads that marker on a retry.
+	marker = f" — File {token}" if token else ""
+	task = _raise_asset_task(
+		target,
+		worker,
+		f"Document: {shown}",
+		f"Document added: {shown} ({source}){marker}" + (f"\n{remark}" if remark else ""),
+	)
+
+	if token:
+		handle = frappe.get_doc("File", token)
+		handle.attached_to_doctype = asset_tags.ASSET_REGISTER
+		handle.attached_to_name = target["name"]
+		handle.is_private = 1
+		handle.flags.ignore_permissions = True
+		handle.save()
+		attachment = _attachment_out(handle)
+	else:
+		handle = file_tools.insert_attachment(
+			file_name,
+			fetched.content,
+			is_private=True,
+			doctype=asset_tags.ASSET_REGISTER,
+			name=target["name"],
+		)
+		attachment = _attachment_out(handle, len(fetched.content), fetched.mime_type)
+
+	closed = _close_asset_task(
+		task["name"],
+		worker,
+		f"Attached {attachment['file_name']} (File {attachment['name']}) to {target['name']}.",
+		f"Document added from {target['name']}'s screen ({source}).",
+	)
+	return {"asset": target["name"], "task": closed, "attachment": attachment}

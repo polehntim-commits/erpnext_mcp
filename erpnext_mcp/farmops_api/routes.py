@@ -636,6 +636,16 @@ ROUTES = (
 	# on that session's evidence. See `api/mobile._inspection_evidence`.
 	Route("/mobile", mobile_api.list_inspection_evidence),
 	Route("/mobile", mobile_api.get_inspection_evidence),
+	# v0.191.0. Two actions from an asset's screen, and each goes THROUGH A FARM
+	# TASK — the asset's one audit trail — rather than creating its outcome bare.
+	# Stock in or out of the warehouse the asset holds (a DRAFT entry, so the
+	# absence of `submit_stock_entry` above still holds), and a document filed
+	# against the asset from an upload or from a link the server downloads behind
+	# `url_fetch`'s SSRF checks. Both are scope-gated only, like
+	# `create_stock_entry` and `attach_file_to_document`; neither takes a
+	# warehouse, a worker or a task type from the body.
+	Route("/mobile", mobile_api.record_asset_stock_movement),
+	Route("/mobile", mobile_api.attach_asset_document),
 	# Sprint 9 (v0.79.0): what the day actually looks like. Nineteen routes in
 	# four groups, and the gate is different on each group for a stated reason.
 	#

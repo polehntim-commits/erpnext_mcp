@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.191.0 — 2026-09-27 — an asset's stock and documents go through a Farm Task
+
+**910 tools** (unchanged). Two mutating `/mobile` routes, open on enrolment (scope only).
+Every action started from an asset's screen is a Farm Task on that asset — `task_type`
+"Other", claimed by the caller and completed in the same request — and the Stock Entry
+or File is its outcome, named in the task's findings. One transaction: a refusal after
+the task is raised rolls the whole request back.
+
+- **`/mobile/record_asset_stock_movement`** (`asset`, `direction` in/out, `item_code`,
+  `qty`, `uom`, `notes`, `company`). Material Receipt into / Material Issue out of the
+  asset's own `Asset Register.warehouse`, never a warehouse from the body. The entry is
+  a DRAFT with `source_doctype="Farm Task"`; `submit_stock_entry` stays unrouted. An
+  asset with no warehouse is refused.
+- **`/mobile/attach_asset_document`** (`asset`, exactly one of `url` / `file_token`,
+  `title`, `notes`, `company`). A staged upload is pointed at the asset (a retry of the
+  same token answers `already_attached: true`); a pasted link is DOWNLOADED by the
+  server through the new **`url_fetch`** module: http/https only, every resolved
+  address must be public (no loopback, RFC 1918, link-local, tailnet 100.64/10,
+  multicast, reserved or unspecified, IPv4 or IPv6), the connection is pinned to the
+  checked address, at most 3 redirects each re-checked, 15 s timeouts, a 25 MB cap
+  enforced while streaming, and magic-byte sniffing (PDF, PNG, JPEG, HEIC, WebP, or
+  plain text).
+- **`Asset Register` joins `ATTACHMENT_PARENTS`** (no HR gate) **and
+  `BROKERED_PARENTS`**, so a phone can list and open what was filed — its DocPerms reach
+  a phone account only through Frappe's `Employee` companion role.
+- Deploy: an image rebuild. No migrate (the warehouse column is v0.188.0's).
+
 ## 0.190.0 — 2026-09-27 — a filler phone number is no phone number
 
 **910 tools** (unchanged).

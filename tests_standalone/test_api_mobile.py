@@ -684,6 +684,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# v0.189.0 — an inspection's photos.
 		"list_inspection_evidence",
 		"get_inspection_evidence",
+		# v0.191.0 — an asset's stock movement and documents, through a Farm Task.
+		"record_asset_stock_movement",
+		"attach_asset_document",
 		"start_inspection",
 		# `submit_wizard_via_mobile` is here for `start_inspection`'s reason and
 		# then some: `MobileAPI.swift` will never name it either, because
