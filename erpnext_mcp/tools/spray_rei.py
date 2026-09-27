@@ -465,6 +465,156 @@ def task_windows(
 	return out
 
 
+def _task_blocks(task: dict) -> tuple[list[tuple[str, str]], list[str]]:
+	"""`([(block, block_doctype)], warnings)` — the places one Spray task sprayed.
+
+	The task's `location`, in whatever register it names it: `Spray REI.block` is
+	a Dynamic Link and every reader matches on the docname alone, so a Parcel or
+	an Irrigation Zone restricts exactly as a Field does. A bare location with no
+	`location_doctype` is resolved against Field and Asset Register, the way a
+	scanned gate tag is. The task's `asset` is a block too WHEN it is a Block-type
+	tag — the phone raises a spray from a gate tag — and never when it is the
+	sprayer, which is recorded on the window as `sprayer` instead.
+	"""
+	out: list[tuple[str, str]] = []
+	warnings: list[str] = []
+	location = str(task.get("location") or "").strip()
+	doctype = str(task.get("location_doctype") or "").strip()
+	if location:
+		if doctype:
+			out.append((location, doctype))
+		else:
+			try:
+				out.append(_resolve_block(location, "", "restricted"))
+			except ToolError as exc:
+				warnings.append(str(exc))
+	asset = str(task.get("asset") or "").strip()
+	if asset and (asset, ASSET_REGISTER) not in out:
+		try:
+			if compat.doctype_exists(ASSET_REGISTER) and (
+				str(frappe.db.get_value(ASSET_REGISTER, asset, "asset_type") or "") == "Block"
+			):
+				out.append((asset, ASSET_REGISTER))
+		except Exception:  # pragma: no cover - an Asset Register shaped differently
+			pass
+	return out, warnings
+
+
+def _task_sprayer(task: dict) -> str:
+	"""The task's `asset` where it is the machine that sprayed, else ""."""
+	asset = str(task.get("asset") or "").strip()
+	if not asset or not compat.doctype_exists(ASSET_REGISTER):
+		return ""
+	try:
+		kind = str(frappe.db.get_value(ASSET_REGISTER, asset, "asset_type") or "")
+	except Exception:  # pragma: no cover
+		return ""
+	return asset if kind == "Sprayer" else ""
+
+
+def open_for_task(task: dict, window: dict, materials: list, applicator: str = "") -> dict:
+	"""Open a Spray REI per block for a completed Spray Farm Task. NEVER RAISES.
+
+	v0.192.0. THE PHONE'S SPRAY PATH NOW RESTRICTS THE BLOCK. `complete_farm_task`
+	stamped `rei_expires_at` on the task and nothing else, and every surface that
+	keeps a person out of a block — the scan, the map's red layer, the dispatch
+	warning, `active_for_blocks` — reads this register alone. `task_windows` let
+	`get_active_rei` see the stamp; nothing else could, so a block sprayed from a
+	handset read as open everywhere a worker actually looks.
+
+	THE WINDOW IS THE ONE ALREADY COMPUTED. `window` is `stock_bridge.spray_windows`
+	for this completion — the tank folded to its strictest product — and it is
+	stamped on the task in the same call, so the task and the register can never
+	name two different expiries. Nothing is opened where it carries no
+	`rei_hours`: a fertiliser restricts nobody, and a zero-hour row reads as
+	"cleared".
+
+	A BLOCK THE TASK ALREADY RESTRICTED IS LEFT ALONE. A row citing this task on
+	this block — `record_spray_application` with `source_task`, or a completion
+	replayed — is that block's record of this spray, including a cancellation
+	somebody made on purpose. A LATER spray on a block under an OLDER window gets
+	its own row: the readers take the latest expiry, so that is the extension,
+	and the earlier application keeps its own record of what went on.
+
+	Failures are itemised on the answer, never raised: the completion is the
+	compliance record and a window that would not save must not lose it — but
+	that block is then open, so it must not be silent either.
+	"""
+	report: dict = {"opened": [], "skipped": [], "errors": [], "warnings": []}
+	task_name = str(task.get("name") or "")
+	try:
+		rei_hours = float(window.get("rei_hours") or 0)
+		expires_at = str(window.get("rei_expires_at") or "")
+		started_at = str(window.get("spray_completed_at") or "")
+		if rei_hours <= 0 or not expires_at or not started_at:
+			return report
+		if not compat.doctype_exists(SPRAY_REI):
+			report["errors"].append(
+				{
+					"block": "*",
+					"reason": "the Spray REI DocType is not installed on this site, so no restricted-"
+					"entry window could be opened. Run `bench migrate`.",
+				}
+			)
+			return report
+		blocks, report["warnings"] = _task_blocks(task)
+		if not blocks:
+			report["warnings"].append(
+				f"{task_name} names no block, so its {rei_hours:g} h restricted-entry window "
+				"is on the task alone and no scan, map or dispatch will show it. Record the blocks "
+				f"with record_spray_application, passing source_task={task_name!r}."
+			)
+			return report
+
+		source_item = str(window.get("rei_source_item") or "")
+		detailed = []
+		product_name = ""
+		for line in materials or []:
+			code = str(line.get("item_code") or "")
+			if not code:
+				continue
+			hours, _days = stock_bridge.item_intervals(code)
+			try:
+				name = str(frappe.db.get_value(ITEM, code, "item_name") or "")
+			except Exception:  # pragma: no cover
+				name = ""
+			if code == source_item:
+				product_name = name
+			detailed.append(
+				{"item_code": code, "item_name": name or None, "qty": line.get("qty"), "rei_hours": hours}
+			)
+
+		for block, doctype in blocks:
+			try:
+				if frappe.db.exists(SPRAY_REI, {"source_task": task_name, "block": block}):
+					report["skipped"].append(block)
+					continue
+				doc = frappe.new_doc(SPRAY_REI)
+				doc.status = ACTIVE
+				doc.block_doctype = doctype
+				doc.block = block
+				doc.company = task.get("company") or None
+				doc.sprayer = _task_sprayer(task) or None
+				doc.applicator = applicator or None
+				doc.source_task = task_name or None
+				doc.product = source_item or None
+				doc.product_name = product_name or source_item or None
+				doc.rei_hours = rei_hours
+				doc.all_products = json.dumps(detailed)
+				doc.started_at = started_at
+				doc.expires_at = expires_at
+				doc.notes = f"Opened by the completion of Farm Task {task_name}."
+				doc.insert(ignore_permissions=True)
+				report["opened"].append(
+					{"name": doc.name, "block": block, "block_doctype": doctype, "expires_at": expires_at}
+				)
+			except Exception as exc:  # reported, never raised
+				report["errors"].append({"block": block, "reason": f"{type(exc).__name__}: {exc}"})
+	except Exception as exc:  # pragma: no cover - the completion is never lost to this
+		report["errors"].append({"block": "*", "reason": f"{type(exc).__name__}: {exc}"})
+	return report
+
+
 def _describe_window(row: dict, now: str) -> dict:
 	"""`_describe`, plus which register the window came from."""
 	window = _describe(row, now)

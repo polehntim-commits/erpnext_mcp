@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.192.0 — 2026-09-27 — a spray finished on a phone closes the block
+
+**910 tools** (unchanged). No new routes. **Safety fix.**
+
+- **Completing a Spray Farm Task now opens a Spray REI row per block** (`spray_rei.open_for_task`,
+  called from `complete_farm_task`, so the phone's `complete_task_via_mobile` and every
+  other completion path get it). Before this, the completion stamped `rei_expires_at` on the
+  task only. `get_active_rei`/`list_active_reis` saw that stamp (v0.176.7), but the asset and
+  universal scans, the Farm Overview map's REI layer, the dispatch REI warning and
+  `get_spray_application`'s live-window section all read `active_for_blocks` — the register alone — so a block sprayed from a
+  handset read as open on every one of them.
+- The window is the one `stock_bridge.spray_windows` already stamped on the task (the
+  strictest product in the tank), so the task and the register cannot disagree. The block
+  is the task's `location` in whatever register it names, plus its `asset` when that is a
+  Block-type tag; a Sprayer-type `asset` is recorded as the window's `sprayer`. The
+  applicator is the worker's User.
+- Nothing is opened for a tank with no `rei_hours`, for a non-spray task, or for a block a
+  Spray REI already restricts for this same task (an office `record_spray_application`
+  with `source_task`, including a cancelled one). A later spray on a block under an older
+  window adds its own row; the readers take the latest expiry.
+- A spray task that names no block, or a window that will not save, is reported on the new
+  **`spray_reis`** key of the completion (`{opened, skipped, errors, warnings}`, or null) and
+  never fails the completion. Additive — no existing key changed.
+- Deploy: an image rebuild. No migrate. Tasks completed before this release are still seen
+  by `get_active_rei` through `task_windows`, but not by the scan/map/dispatch readers.
+
 ## 0.191.1 — 2026-09-27 — a Farm Manager can add a product from a phone
 
 **910 tools** (unchanged). No new routes.

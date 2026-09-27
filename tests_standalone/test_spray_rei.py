@@ -632,3 +632,183 @@ class ThePhonesSprayTaskIsARestriction(REITestCase):
 		self.assertEqual([window["source_task"] for window in data["reis"]], [self.TASK])
 		self.assertIs(data["reis"][0]["active"], False)
 		self.assertEqual(data["active_count"], 0)
+
+
+# ── v0.192.0 ────────────────────────────────────────────────────────────────
+class ACompletedSprayTaskOpensTheRegister(REITestCase):
+	"""Completing a Spray task writes a Spray REI row per block.
+
+	`task_windows` let `get_active_rei` see a phone spray's stamp; the scan, the
+	map's red layer and the dispatch warning read `active_for_blocks`, which is
+	the register alone — so a block sprayed from a handset read as open to every
+	one of them. These go through the completion itself, not a seeded stamp.
+	"""
+
+	WORKER = "EMP-001"
+	USER = "ana@example.test"
+
+	def setUp(self):
+		super().setUp()
+		self.configure(
+			enabled=1, **ALL_ON, allow_claim_farm_task=1, allow_complete_farm_task=1, allow_get_farm_task=1
+		)
+		STORE.seed("User", [{"name": self.USER, "full_name": "Ana Ramos", "enabled": 1}])
+		STORE.seed(
+			"Employee",
+			[
+				{
+					"name": self.WORKER,
+					"employee_name": "Ana Ramos",
+					"user_id": self.USER,
+					"company": MAIN,
+					"status": "Active",
+				}
+			],
+		)
+
+	def a_claimed_spray(self, materials=None, **overrides):
+		payload = {
+			"task_name": "Spray block 3",
+			"task_type": "Spray",
+			"evidence_required": {"findings_text": True},
+			"company": MAIN,
+			"location_doctype": "Field",
+			"location": BLOCK,
+			"materials_used": materials if materials is not None else [{"item_code": SPRAY, "qty": 5}],
+		}
+		payload.update(overrides)
+		task = self.tool_data("create_farm_task", payload)["name"]
+		self.tool_data("claim_farm_task", {"task": task, "worker_id": self.WORKER, "worker_name": "Ana"})
+		return task
+
+	def complete(self, task, **overrides):
+		payload = {
+			"task": task,
+			"worker_id": self.WORKER,
+			"findings_text": "",
+			"completion_narrative": "sprayed",
+		}
+		payload.update(overrides)
+		return self.tool_data("complete_farm_task", payload)
+
+	def test_the_block_is_restricted_where_the_scan_and_the_map_look(self):
+		from erpnext_mcp.tools import spray_rei
+
+		task = self.a_claimed_spray()
+		data = self.complete(task)
+		windows = spray_rei.active_for_blocks([BLOCK], MAIN)
+		self.assertEqual(len(windows), 1)
+		window = windows[0]
+		self.assertEqual(window["source_task"], task)
+		self.assertEqual(window["block_doctype"], "Field")
+		self.assertEqual(window["product"], SPRAY)
+		self.assertEqual(window["rei_hours"], 4.0)
+		self.assertEqual(window["applicator"], self.USER)
+		self.assertEqual(window["expires_at"], str(STORE.get_raw("Farm Task", task)["rei_expires_at"]))
+		self.assertEqual([row["block"] for row in data["spray_reis"]["opened"]], [BLOCK])
+
+	def test_the_phone_route_restricts_the_block(self):
+		from erpnext_mcp.tools import fieldwork, spray_rei
+
+		task = self.a_claimed_spray()
+		fieldwork.complete_task_via_mobile({"task": task, "user": self.USER, "findings_text": ""})
+		self.assertEqual(len(spray_rei.active_for_blocks([BLOCK], MAIN)), 1)
+
+	def test_get_active_rei_counts_the_task_once(self):
+		task = self.a_claimed_spray()
+		self.complete(task)
+		data = self.tool_data("get_active_rei", {"block": BLOCK, "company": MAIN})
+		self.assertEqual(data["active_rei_count"], 1)
+		self.assertEqual(data["active_reis"][0]["source_doctype"], "Spray REI")
+
+	def test_the_dispatch_warning_names_the_block(self):
+		self.complete(self.a_claimed_spray())
+		later = self.tool_data(
+			"create_farm_task",
+			{
+				"task_name": "Thin block 3",
+				"task_type": "Other",
+				"evidence_required": {"findings_text": True},
+				"company": MAIN,
+				"location_doctype": "Field",
+				"location": BLOCK,
+			},
+		)["name"]
+		data = self.tool_data(
+			"assign_farm_task", {"task": later, "assigned_to": self.WORKER, "worker_name": "Ana"}
+		)
+		self.assertTrue(any("REI active" in line for line in data.get("warnings") or []))
+
+	def test_a_tank_that_restricts_nobody_opens_nothing(self):
+		data = self.complete(self.a_claimed_spray(materials=[{"item_code": NUTRIENT, "qty": 20}]))
+		self.assertIsNone(data["spray_reis"])
+		self.assertEqual(self.rei_rows(), [])
+
+	def test_a_task_that_is_not_a_spray_opens_nothing(self):
+		data = self.complete(self.a_claimed_spray(task_type="Repair"))
+		self.assertIsNone(data["spray_reis"])
+		self.assertEqual(self.rei_rows(), [])
+
+	def test_a_spray_with_no_block_says_the_window_is_on_the_task_alone(self):
+		data = self.complete(self.a_claimed_spray(location_doctype="", location=""))
+		self.assertEqual(self.rei_rows(), [])
+		self.assertIn("names no block", data["spray_reis"]["warnings"][0])
+
+	def test_a_resubmitted_completion_opens_one_window(self):
+		task = self.a_claimed_spray()
+		self.complete(task, completed_at="2026-07-24 14:00:00")
+		self.complete(task, completed_at="2026-07-24 14:00:00")
+		self.assertEqual(len(self.rei_rows()), 1)
+
+	def test_a_block_the_register_already_restricted_for_this_task_is_left_alone(self):
+		"""An office `record_spray_application` citing the task got there first;
+		that row — including a cancellation — is the block's record of it."""
+		task = self.a_claimed_spray()
+		self.spray(blocks=(BLOCK,), source_task=task)
+		data = self.complete(task)
+		self.assertEqual(len(self.rei_rows()), 1)
+		self.assertEqual(data["spray_reis"]["skipped"], [BLOCK])
+
+	def test_a_later_spray_extends_an_older_window(self):
+		from erpnext_mcp.tools import spray_rei
+
+		self.spray(blocks=(BLOCK,))
+		self.complete(self.a_claimed_spray(materials=[{"item_code": SULFUR, "qty": 10}]))
+		windows = spray_rei.active_for_blocks([BLOCK], MAIN)
+		self.assertEqual(len(windows), 2)
+		self.assertEqual(max(float(w["hours_remaining"]) for w in windows) > 20, True)
+
+	def test_a_legacy_task_with_a_bare_location_is_resolved(self):
+		from erpnext_mcp.tools import spray_rei
+
+		STORE.seed("Farm Task", [{"name": "FT-LEGACY", "task_type": "Spray", "state": "Completed"}])
+		report = spray_rei.open_for_task(
+			{"name": "FT-LEGACY", "company": MAIN, "location": BLOCK},
+			{
+				"rei_hours": 4,
+				"rei_source_item": SPRAY,
+				"spray_completed_at": frappe.utils.now(),
+				"rei_expires_at": str(frappe.utils.add_to_date(frappe.utils.now(), hours=4)),
+			},
+			[{"item_code": SPRAY, "qty": 5}],
+		)
+		self.assertEqual([row["block_doctype"] for row in report["opened"]], ["Field"])
+
+	def test_a_block_that_will_not_save_is_reported_and_the_completion_stands(self):
+		from erpnext_mcp.tools import spray_rei
+
+		original = frappe.new_doc
+
+		def refusing(doctype, *a, **kw):
+			if doctype == spray_rei.SPRAY_REI:
+				raise frappe.ValidationError("disk full")
+			return original(doctype, *a, **kw)
+
+		task = self.a_claimed_spray()
+		frappe.new_doc = refusing
+		try:
+			data = self.complete(task)
+		finally:
+			frappe.new_doc = original
+		self.assertEqual(data["final_state"], "Completed")
+		self.assertEqual(data["spray_reis"]["errors"][0]["block"], BLOCK)

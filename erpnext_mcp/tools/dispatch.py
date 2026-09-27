@@ -1723,6 +1723,17 @@ def assign_farm_task(args: dict) -> ToolResult:
 	)
 
 
+def _worker_user(worker: str) -> str:
+	"""The User an Employee signs in as, or "" — `Spray REI.applicator` links User. Never raises."""
+	if not (worker and compat.doctype_exists(EMPLOYEE) and compat.has_field(EMPLOYEE, "user_id")):
+		return ""
+	try:
+		user = str(frappe.db.get_value(EMPLOYEE, worker, "user_id") or "").strip()
+		return user if user and frappe.db.exists("User", user) else ""
+	except Exception:  # pragma: no cover
+		return ""
+
+
 def _rei_warnings(task: dict) -> list[str]:
 	"""Live restricted-entry windows on the place this task sends somebody.
 
@@ -2378,6 +2389,16 @@ def complete_farm_task(args: dict) -> ToolResult:
 			task_fields[column] = spray_window[column]
 	_set_task_state(assignment["task"], final_state, **task_fields)
 
+	# v0.192.0. AND THE BLOCK IS RESTRICTED WHERE EVERY READER LOOKS. The stamp
+	# above is on the task; the scan, the map and the dispatch warning read the
+	# Spray REI register alone, so a phone-completed spray left its block open
+	# everywhere a worker checks. `open_for_task` never raises.
+	from . import spray_rei
+
+	spray_reis = spray_rei.open_for_task(
+		task, spray_window, materials_consumed["materials"], applicator=_worker_user(worker)
+	)
+
 	# AND THEN ASK THE TWO INTERVAL RULES, in the same call and for the same
 	# reason the narrowed sweep above exists: the applicator who has just shut
 	# the sprayer is the person who needs to see the block posted, and "it will
@@ -2419,6 +2440,9 @@ def complete_farm_task(args: dict) -> ToolResult:
 		# tank restricts entry or harvest. A fertiliser opens no window, and
 		# saying so is different from silence.
 		"spray_windows": _describe_windows(spray_window, spray_window_eval),
+		# v0.192.0. ALWAYS PRESENT, null where no window was opened and nothing
+		# went wrong trying — same convention as the keys above.
+		"spray_reis": spray_reis if any(spray_reis.values()) else None,
 	}
 	if record_note:
 		data["record_note"] = record_note
@@ -4961,6 +4985,7 @@ _DISPATCHABLE_LOCATIONS = ("Housing Unit", "Field", "Irrigation Zone", "Parcel")
 #: the Desk. A Training Session is also the record the compliance side reads —
 #: `complete_training_session` writes the Employee Training Records an auditor
 #: asks for — so it is not a doctype this app could stop keeping.
+
 
 def _training_session_for_task(task: dict) -> str:
 	"""The session a task is about, or "" — the one place that comparison lives."""
