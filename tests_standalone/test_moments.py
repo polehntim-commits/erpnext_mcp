@@ -133,6 +133,17 @@ class TheBuiltinReproducesV0202(unittest.TestCase):
 		self.assertTrue(self.drop({"field": "", "message": "A mouse bait needs an REI"}, scope))
 		self.assertFalse(self.drop({"field": "rei_hours", "message": "x"}, {"pesticide_use_scope": "Crop"}))
 
+	def test_a_not_applicable_rule_drops_findings_on_its_fields(self):
+		body = copy.deepcopy(LABEL)
+		body["advisory_drop"] = []
+		scope = {"pesticide_use_scope": "Non-crop", "issues": []}
+		self.assertTrue(extraction_config.drop_reason({"field": "phi_days", "message": "x"}, body, scope))
+		self.assertFalse(
+			extraction_config.drop_reason(
+				{"field": "phi_days", "message": "x"}, body, {"pesticide_use_scope": "Crop"}
+			)
+		)
+
 	def test_ingredients_totalling_100_percent(self):
 		self.assertTrue(
 			self.drop({"field": "active_ingredients", "message": "total of 100% is implausible"}, {})

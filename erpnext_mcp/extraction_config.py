@@ -405,6 +405,15 @@ def drop_reason(entry: dict, config, deterministic=None, values=None) -> str:
 	field = str(entry.get("field") or "")
 	message = str(entry.get("message") or "")
 	evaluated = evaluate_rules(config, values, deterministic) if values else None
+	# §1.2: a `not_applicable` rule's fields are ignored, and any finding on them dropped.
+	for index, rule in enumerate(config.get("rules") or ()):
+		if (
+			rule.get("kind") == "not_applicable"
+			and field
+			and field in (rule.get("fields") or ())
+			and when_holds(rule.get("when"), values, deterministic)
+		):
+			return f"rules[{index}] ({field} is not applicable)"
 	for index, row in enumerate(config.get("advisory_drop") or ()):
 		wanted = list(row.get("fields") or ()) + ([row["field"]] if row.get("field") else [])
 		if wanted and field not in wanted:
