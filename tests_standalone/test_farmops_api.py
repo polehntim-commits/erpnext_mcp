@@ -487,6 +487,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/update_item_units",
 		"/mobile/list_task_evidence",
 		"/mobile/get_task_evidence",
+		"/mobile/register_product_label",
+		"/mobile/list_item_groups",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2900,6 +2902,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# v0.197.0. Answering a registration's `needs_review` is the same
 		# decision as the registration.
 		"update_item_units",
+		# v0.201.0. Filing a label moves photos onto an Item and files a
+		# validation — the same decision as registering the product.
+		"register_product_label",
 		# v0.188.0. Which stock a building answers for is a foreman's call.
 		"link_asset_warehouse",
 		"assign_soil_profile",
@@ -2992,6 +2997,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# like `list_inspection_evidence` / `get_inspection_evidence`.
 		"list_task_evidence",
 		"get_task_evidence",
+		# v0.201.0. The item-group picker: a vocabulary, like `list_uoms`.
+		"list_item_groups",
 		# v0.165.0. Filing a title on a truck, both docnames scoped. Open like
 		# `create_expense_receipt`, which makes the same link by VIN at capture.
 		"link_title_to_asset",
@@ -3132,7 +3139,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 128, "a method is named in two sets at once")
+		self.assertEqual(len(named), 130, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

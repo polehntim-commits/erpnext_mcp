@@ -252,6 +252,13 @@ _ITEM_LABEL_ARGS = {
 	"phi_crop": _field(_STRING, "The crop the PHI above applies to."),
 	"application_rate": _field(_STRING, "The labeled rate as written, e.g. '2-4 lb/acre'."),
 	"ppe_requirements": _field(_STRING, "The label's PPE statement for handlers and early entry."),
+	"pesticide_use_scope": _field(
+		_STRING,
+		"v0.201.0. 'Crop' (applied to crops: REI, PHI, rate per acre) or 'Non-crop' (rodenticides, "
+		"structural pest control). With an EPA number and no item_group, Non-crop files the product "
+		"under 'Pest Control Products' and Crop under 'Crop Protection Products'. '' clears it.",
+	),
+	"storage_disposal": _field(_STRING, "The label's storage and disposal statement. '' clears it."),
 	"label_scan_validation": _field(
 		_STRING,
 		"The Document Validation (a scanned label) these values were read from. "
@@ -4477,6 +4484,28 @@ TOOLS = {
 		required=("item_code",),
 		mutating=True,
 		title="Update item",
+		available=_app_installed("erpnext"),
+		requires="the ERPNext app",
+	),
+	"attach_epa_label": _tool(
+		masters.attach_epa_label,
+		"MUTATING (default OFF). Look a product up in EPA's Pesticide Product Label System and "
+		"attach EPA's newest accepted label PDF to the Item. A distributor number "
+		"(12455-97-3240) is looked up by its registration (12455-97), because that is where EPA "
+		"files the label — so the product name EPA returns may differ from the tub's. EPA's "
+		"signal word, active ingredients and restricted-use flag fill only the Item's EMPTY "
+		"label fields. A PDF already attached under the same name is reused, not duplicated. "
+		"Gated to System Manager, Stock Manager, Item Manager or Farm Manager.",
+		{
+			"item_code": _field(_STRING, "The Item docname."),
+			"epa_registration_number": _field(
+				_STRING, "Optional. Defaults to the Item's own epa_registration_number."
+			),
+		},
+		required=("item_code",),
+		mutating=True,
+		idempotent=True,
+		title="Attach the EPA label",
 		available=_app_installed("erpnext"),
 		requires="the ERPNext app",
 	),

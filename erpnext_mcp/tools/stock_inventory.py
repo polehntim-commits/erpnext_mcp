@@ -304,6 +304,17 @@ def _entry_lines(raw, entry_type: str, company: str) -> list[dict]:
 				raise ToolError(f"{label}.basic_rate cannot be negative, got {rate}")
 			line["basic_rate"] = rate
 			line["basic_amount"] = round(qty * factor * rate, 2)
+		elif entry_type == "Material Receipt" and _unvalued(item_code):
+			# v0.201.0. A RECEIPT WITH NO COST, OF A PRODUCT THAT HAS NEVER HAD ONE.
+			# PROWLER™ was registered from a store shelf with valuation_rate 0, and
+			# a receipt of it with no rate files as a draft that ERPNext then refuses
+			# to submit ("Valuation Rate for the Item … is required"). Marked as a
+			# zero-valuation receipt instead — a bait block given away by a
+			# supplier, or one whose cost is on a bill filed elsewhere, is a real
+			# thing — and the answer names it, so nobody reads a zero as a price.
+			if compat.has_field(STOCK_ENTRY_DETAIL, "allow_zero_valuation_rate"):
+				line["allow_zero_valuation_rate"] = 1
+			line["_zero_valued"] = True
 
 		batch_no = as_str(entry, "batch_no")
 		if batch_no:
@@ -404,6 +415,16 @@ def _entry_value(doc, items: list[dict]) -> float:
 	if compat.has_field(STOCK_ENTRY, "total_amount") and doc.get("total_amount") not in (None, ""):
 		return round(float(doc.get("total_amount") or 0), 2)
 	return round(sum(float(row.get("basic_amount") or 0) for row in items), 2)
+
+
+def _unvalued(item_code: str) -> bool:
+	"""True when the Item has no valuation of its own to fall back on."""
+	if not compat.has_field(ITEM, "valuation_rate"):
+		return False
+	try:
+		return float(frappe.db.get_value(ITEM, item_code, "valuation_rate") or 0) <= 0
+	except (TypeError, ValueError):
+		return True
 
 
 #: The purposes that post a DIFFERENCE — stock arriving from, or leaving to,
@@ -523,7 +544,10 @@ def create_stock_entry(args: dict) -> ToolResult:
 	if remarks:
 		doc.set("remarks", remarks)
 
+	zero_valued = []
 	for line in lines:
+		if line.pop("_zero_valued", False):
+			zero_valued.append(line["item_code"])
 		doc.append("items", line)
 	doc.flags.ignore_permissions = True
 	doc.insert()
@@ -542,6 +566,15 @@ def create_stock_entry(args: dict) -> ToolResult:
 		"total_value": _entry_value(doc, items),
 		"source": source,
 		"remarks": doc.get("remarks"),
+		# v0.201.0. Always present: the items received at zero value because no
+		# cost was sent and the product has none on file.
+		"zero_valued_items": zero_valued,
+		"zero_valued_note": (
+			f"{', '.join(zero_valued)} {'was' if len(zero_valued) == 1 else 'were'} received at zero "
+			"value: no cost was sent and the product has none on file. Send basic_rate to value it."
+		)
+		if zero_valued
+		else None,
 		"next_step": (
 			"This is a draft: no Stock Ledger Entry was written and no balance moved. Submit it "
 			"in ERPNext, or via submit_stock_entry if that tool is enabled."

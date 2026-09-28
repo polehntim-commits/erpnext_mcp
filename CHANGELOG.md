@@ -3,6 +3,47 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.201.0 — 2026-09-27 — a product's label, stored; EPA's label attached; a mouse bait judged as one
+
+**923 tools** (+1: `attach_epa_label`). Two new `/mobile` routes. Two new Item compliance fields; one
+patch. Tim on PROWLER™: "when we added the label it is not storing", "the PDF is not getting attached
+to the item", "Its not a Crop Protection Product". fafo_ios SERVER_CHANGES §48. Contract:
+`docs/design/product_label_capture.md`.
+
+- **Why nothing was stored.** OML's audit log: on Sep 27 the phone called `find_item_by_barcode` and
+  `create_item` and nothing else — the New product form read the label on the phone and discarded the
+  photos. On Sep 24 the older scan screen sent `validate_document` four times with OCR text only (no
+  image, no Item): DVAL-2026-0001..0004, one of them PROWLER itself. No error was swallowed.
+- **`/mobile/register_product_label`** (dispatch role): staged label photos move onto the Item; a
+  Document Validation is filed AGAINST the Item (`source_name`, `scan_file_url`, the phone's OCR,
+  extraction and on-device assessment) and set as `Item.label_scan_validation`; EPA's record is looked
+  up (`epa_ppls`, base registration — 12455-97-3240 → 12455-97) and its newest accepted label PDF
+  attached; the label's facts fill the Item's blank fields only. EPA failing never loses the label.
+  A photo another account uploaded, or one filed elsewhere, is refused.
+- **`attach_epa_label`** (MCP, mutating, default off): the same EPA step for an existing Item — the
+  back-fill for PROWLER.
+- **A non-crop pesticide is judged as one.** `document_intel.pesticide_scope` (stated, or inferred
+  from rodent/bait-station/building wording with no crop wording): a `Non-crop` label is not asked for
+  REI, PHI, crop or rate per acre — which floored every rodenticide at 0.05 confidence — and its
+  coverage is EPA number, signal word, actives, PPE, rate and storage/disposal. EPA's registered
+  signal word and actives are checked against the reading as warnings.
+- **Item group.** New Item fields `pesticide_use_scope` (Crop / Non-crop) and `storage_disposal`.
+  With an EPA number and no group, Non-crop files under **Pest Control Products**, Crop under Crop
+  Protection Products (each made on first use); `/mobile/create_item` now takes `item_group` and
+  `pesticide_use_scope`; `/mobile/list_item_groups` feeds the picker. The Desk's label-field rule
+  now matches `pest control` and `rodent` — patch `widen_pesticide_field_visibility` moves the
+  existing fields that still carry the old rule.
+- **A receipt with no cost.** A Material Receipt line with no `basic_rate`, for an Item with no
+  valuation, is marked `allow_zero_valuation_rate` and named in `zero_valued_items`, so the draft can
+  be submitted. (AFB-2026-00025's two refusals were the missing Stock Adjustment Account — v0.200.0;
+  PROWLER's zero valuation was the next wall.)
+- `url_fetch.fetch_json`: the same public-address and size checks for a JSON API answer. **And a
+  fix that also reaches `attach_asset_document`:** `url_fetch` pinned the FIRST resolved address, which
+  for EPA is IPv6 — on a network with no IPv6 route that timed out where curl (which falls back)
+  answered in a second. Addresses are now tried IPv4 first, then the next checked address on a
+  connection failure; every address is still checked as public before any is tried.
+- Deploy: **`bench migrate`** (the two Item fields and the patch), then an image rebuild.
+
 ## 0.200.0 — 2026-09-27 — a finished task's evidence, and a stock entry the books can take
 
 **922 tools** (unchanged). Two new `/mobile` routes. No schema change, no patch. OML App Feedback

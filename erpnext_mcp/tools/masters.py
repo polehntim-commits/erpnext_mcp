@@ -119,6 +119,15 @@ ALL_ITEM_GROUPS = "All Item Groups"
 #: label fields on everything filed here.
 CROP_PROTECTION_GROUP = "Crop Protection Products"
 
+#: v0.201.0. Where a NON-CROP pesticide goes — a rodenticide, a structural bait.
+#: Tim: "Its not a Crop Protection Product is a control product for field mice
+#: etc." Still an EPA-registered pesticide, so the label fields still show: the
+#: Desk rule matches `pest control` (see `compliance_fields`).
+PEST_CONTROL_GROUP = "Pest Control Products"
+
+#: The groups this app will make on first use, and the scope each one is for.
+GROUP_FOR_SCOPE = {"Crop": CROP_PROTECTION_GROUP, "Non-crop": PEST_CONTROL_GROUP}
+
 #: The pesticide label columns `compliance_fields._ITEM_FIELDS` installs on
 #: Item, as `create_item` / `update_item` accept them: argument name → kind.
 #: The argument IS the fieldname, so nothing here renames anything.
@@ -133,7 +142,12 @@ PESTICIDE_FIELDS = {
 	"application_rate": "text",
 	"ppe_requirements": "text",
 	"label_scan_validation": "validation",
+	# v0.201.0. Crop or Non-crop — which label rules apply — and the label's
+	# storage and disposal statement. See `compliance_fields`.
+	"pesticide_use_scope": "use_scope",
+	"storage_disposal": "text",
 }
+USE_SCOPES = ("Crop", "Non-crop")
 SIGNAL_WORDS = ("Danger", "Warning", "Caution", "None")
 _INGREDIENT_KEYS = ("name", "concentration", "unit")
 
@@ -789,10 +803,17 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 	# after every refusal above, because the crop-protection group is created on
 	# first use and a refused call should leave nothing behind.
 	group_created = False
-	if not as_str(args, "item_group") and label.get("epa_registration_number"):
-		item_group, group_created = _crop_protection_group()
+	wanted_group = as_str(args, "item_group")
+	if not wanted_group and label.get("epa_registration_number"):
+		# v0.201.0. The scope decides the group: a mouse bait is not a
+		# crop-protection product. Unknown scope keeps the old default.
+		item_group, group_created = _crop_protection_group(
+			GROUP_FOR_SCOPE.get(label.get("pesticide_use_scope") or "", CROP_PROTECTION_GROUP)
+		)
+	elif wanted_group in GROUP_FOR_SCOPE.values() and not _exists(ITEM_GROUP, wanted_group):
+		item_group, group_created = _crop_protection_group(wanted_group)
 	else:
-		item_group = _item_group_for(as_str(args, "item_group"))
+		item_group = _item_group_for(wanted_group)
 
 	doc = frappe.new_doc(ITEM)
 	doc.item_code = item_code
@@ -859,9 +880,8 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 	if group_created:
 		data["item_group_created"] = True
 		data["item_group_note"] = (
-			f"An EPA registration number with no item_group files the product under "
-			f"{CROP_PROTECTION_GROUP!r}. This site had no such group, so it was created "
-			f"under {ALL_ITEM_GROUPS!r}."
+			f"The product was filed under {item_group!r}, which this site did not have, so it "
+			f"was created under {ALL_ITEM_GROUPS!r}."
 		)
 	summary = f"created Item {doc.name} ({item_name}) in {item_group}, stocked in {stock_uom}"
 	if units["needs_review"]:
@@ -993,18 +1013,18 @@ def _item_group_for(given: str) -> str:
 	)
 
 
-def _crop_protection_group() -> tuple[str, bool]:
-	"""`(group, created)` for an Item that arrived with an EPA number and no group."""
-	if _exists(ITEM_GROUP, CROP_PROTECTION_GROUP):
-		return CROP_PROTECTION_GROUP, False
+def _crop_protection_group(name: str = CROP_PROTECTION_GROUP) -> tuple[str, bool]:
+	"""`(group, created)` for a pesticide: one of `GROUP_FOR_SCOPE`, made on first use."""
+	if _exists(ITEM_GROUP, name):
+		return name, False
 	if not _exists(ITEM_GROUP, ALL_ITEM_GROUPS):
 		raise ToolError(
-			f"an EPA registration number files a product under {CROP_PROTECTION_GROUP!r}, and this "
-			f"site has neither that group nor {ALL_ITEM_GROUPS!r} to make it under. Pass item_group, "
-			"or create the group with create_item_group. Nothing was created."
+			f"a pesticide is filed under {name!r}, and this site has neither that group nor "
+			f"{ALL_ITEM_GROUPS!r} to make it under. Pass item_group, or create the group with "
+			"create_item_group. Nothing was created."
 		)
 	group = frappe.new_doc(ITEM_GROUP)
-	group.item_group_name = CROP_PROTECTION_GROUP
+	group.item_group_name = name
 	group.parent_item_group = ALL_ITEM_GROUPS
 	group.is_group = 0
 	group.insert()
@@ -1037,6 +1057,8 @@ def _pesticide_values(args: dict, verb: str) -> dict:
 			values[key] = _ingredients(raw, verb)
 		elif kind == "validation":
 			values[key] = _label_validation(str(raw).strip(), verb)
+		elif kind == "use_scope":
+			values[key] = _use_scope(raw, verb)
 
 	for key in values:
 		if not compat.has_field(ITEM, key):
@@ -1071,6 +1093,21 @@ def _whole_non_negative(raw, key: str, verb: str) -> int:
 			f"Nothing was {verb}."
 		)
 	return int(number)
+
+
+def _use_scope(raw, verb: str) -> str:
+	"""`Crop`, `Non-crop` or "" to clear, matched loosely ("non crop", "noncrop")."""
+	wanted = str(raw or "").strip().lower().replace(" ", "").replace("-", "")
+	if not wanted:
+		return ""
+	for scope in USE_SCOPES:
+		if scope.lower().replace("-", "") == wanted:
+			return scope
+	raise ToolError(
+		f"pesticide_use_scope must be Crop or Non-crop, got {raw!r}. Crop is for products applied "
+		f"to crops (REI, PHI, rate per acre); Non-crop is for rodenticides and structural pest "
+		f"control. Nothing was {verb}."
+	)
 
 
 def _signal_word(raw, verb: str) -> str:
@@ -2468,3 +2505,56 @@ def set_item_price(args: dict) -> ToolResult:
 		f"created Item Price {doc.name}: {code} on {price_list} at {rate}",
 		docstatus_delta="none → created",
 	)
+
+
+def attach_epa_label(args: dict) -> ToolResult:
+	"""Look an Item's EPA registration up and attach EPA's accepted label PDF to it.
+
+	v0.201.0. The back-fill for a product registered before `register_product_label`
+	existed — PROWLER™ among them. The registration comes from the argument, else
+	from the Item. EPA's record fills only the Item's EMPTY label columns (signal
+	word, active ingredients, restricted use); it never overwrites what a person
+	or a label scan recorded.
+	"""
+	from .. import epa_ppls
+	from . import uoms
+
+	_require(ITEM)
+	tail = "Nothing was changed."
+	uoms.require_uom_role("attach an EPA label to a product", tail)
+	item_code = _require_item(args)
+	number = as_str(args, "epa_registration_number")
+	if not number and compat.has_field(ITEM, "epa_registration_number"):
+		number = str(frappe.db.get_value(ITEM, item_code, "epa_registration_number") or "")
+	if not epa_ppls.base_registration(number):
+		raise ToolError(
+			f"{item_code} has no EPA registration number to look up. Pass epa_registration_number "
+			f"(e.g. 12455-97-3240). {tail}"
+		)
+	answer = epa_ppls.label_for_item(item_code, number, attach=True)
+	record = answer.pop("record", None) or {}
+	filled = {}
+	if record:
+		candidates = {
+			"epa_registration_number": number,
+			"signal_word": record.get("signal_word"),
+			"restricted_use": 1 if record.get("restricted_use") else None,
+			"active_ingredients": [
+				{"name": row["name"], "concentration": row.get("percent"), "unit": "%"}
+				for row in record.get("active_ingredients") or []
+			]
+			or None,
+		}
+		for key, value in candidates.items():
+			if value in (None, "", []) or not compat.has_field(ITEM, key):
+				continue
+			if frappe.db.get_value(ITEM, item_code, key) in (None, "", 0, "[]"):
+				filled[key] = value
+		if filled:
+			update_item({"item_code": item_code, **filled})
+	answer["item_updates"] = filled
+	summary = {
+		"attached": f"attached EPA label {answer['registration']} to {item_code}",
+		"found": f"EPA record {answer['registration']} found for {item_code}; no PDF attached",
+	}.get(answer["status"], f"EPA label for {item_code}: {answer['status']} — {answer.get('reason')}")
+	return ToolResult({"item_code": item_code, **answer}, summary)

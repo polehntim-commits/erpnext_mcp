@@ -890,6 +890,16 @@ _ASSET_FIELDS = (
 #: `rei_hours` and `phi_days` do NOT carry it. See `_ITEM_FIELDS`.
 CHEMICAL_ITEM_DEPENDS_ON = (
 	"eval:(doc.item_group && "
+	"/chemical|pesticide|spray|agrochem|crop protection|pest control|rodent|fungicide|herbicide|insecticide/i"
+	".test(doc.item_group)) || doc.epa_registration_number || doc.signal_word"
+)
+
+#: v0.201.0. What every site installed before `pest control` and `rodent` joined
+#: the expression above — read by `patches/widen_pesticide_field_visibility`,
+#: which moves only the fields still carrying exactly this, so a rule somebody
+#: edited in the Desk is theirs and stays.
+PREVIOUS_CHEMICAL_ITEM_DEPENDS_ON = (
+	"eval:(doc.item_group && "
 	"/chemical|pesticide|spray|agrochem|crop protection|fungicide|herbicide|insecticide/i"
 	".test(doc.item_group)) || doc.epa_registration_number || doc.signal_word"
 )
@@ -1094,6 +1104,44 @@ _ITEM_FIELDS = (
 			"What has to be in the shed before the spray can happen. A respirator nobody stocked "
 			"is a spray that does not go out, and this is the field that says so a week early "
 			"instead of on the morning."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	# v0.201.0. Tim: "Its not a Crop Protection Product is a control product for
+	# field mice etc." A rodenticide is an EPA-registered pesticide with a signal
+	# word, actives, PPE and a storage statement — and no REI, PHI, crop or rate
+	# per acre. These two columns are what let a record say so.
+	ComplianceField(
+		fieldname="pesticide_use_scope",
+		label="Pesticide Use Scope",
+		fieldtype="Select",
+		options="\nCrop\nNon-crop",
+		framework="FIFRA label use directions — 40 CFR 156.10(i); WPS applies to agricultural use (40 CFR 170)",
+		why=(
+			"A crop product's label is where the restricted-entry and pre-harvest intervals, the crop "
+			"and the rate per acre live; a non-crop product — a rodenticide, a structural bait — has "
+			"none of them and is used in and around buildings and burrows. Recording which is what "
+			"lets the validation ask each product only the questions its label can answer."
+		),
+		operational=(
+			"Which rules a spray, a harvest and a stock check apply. A mouse bait judged as a crop "
+			"product fails for having no PHI; a crop product judged as a bait passes without one."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="storage_disposal",
+		label="Storage and Disposal",
+		fieldtype="Small Text",
+		framework="FIFRA label storage and disposal statement — 40 CFR 156.140–156.159",
+		why=(
+			"Every registered pesticide's label carries a storage and disposal statement, and it is "
+			"as binding as the rate: where the product may be kept, and what may be done with the "
+			"empty container and the leftovers."
+		),
+		operational=(
+			"What the shed has to be and where the empties go. Read off the label once, it is on "
+			"the product for whoever stocks it next — not remembered by whoever read the tub."
 		),
 		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
 	),

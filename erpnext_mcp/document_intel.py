@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import datetime
 import difflib
+import json
 import re
 
 # ── the vocabulary ──────────────────────────────────────────────────────────
@@ -449,20 +450,122 @@ def repair_epa_number(raw: str) -> str:
 # either.
 
 
+#: v0.201.0. The two kinds of registered pesticide this app holds. A CROP
+#: product is applied to a crop, and its label is where the REI, the PHI, the
+#: crop and the rate per acre live. A NON-CROP product — a rodenticide, a bait
+#: station, a structural insecticide — is used in and around buildings and
+#: burrows, and has none of them. Both carry an EPA number, a signal word,
+#: active ingredients, PPE and a storage and disposal statement.
+SCOPE_CROP = "Crop"
+SCOPE_NON_CROP = "Non-crop"
+PESTICIDE_SCOPES = (SCOPE_CROP, SCOPE_NON_CROP)
+
+_NON_CROP_WORDS = re.compile(
+	r"\b(rats?|mice|mouse|rodents?|rodenticide|voles?|gophers?|bait stations?|burrows?|"
+	r"in and around (?:homes|buildings)|structural|place pacs?)\b",
+	re.IGNORECASE,
+)
+_CROP_WORDS = re.compile(
+	r"\b(agricultural use requirements|restricted[- ]entry interval|pre-?harvest|per acre|/\s*a(?:cre)?\b|"
+	r"orchards?|apples?|pears?|cherr(?:y|ies)|grapes?|crops?)",
+	re.IGNORECASE,
+)
+
+
+def pesticide_scope(fields: dict, ocr_text: str) -> str:
+	"""`Crop` or `Non-crop`: what the extraction says, else what the label's words say.
+
+	PROWLER (a bromethalin bait, "KILLS RATS, MICE & MEADOW VOLES", "Tamper-
+	resistant bait stations") scored 0.05 because it has no REI, no PHI and no
+	crop — three errors each — which is every rodenticide on the market. A label
+	whose words are about rodents and buildings and none about crops is a
+	non-crop product; anything else is judged as a crop label, which is the
+	stricter reading and the one that was always applied.
+	"""
+	stated = _text((fields or {}).get("pesticide_use_scope"))
+	for scope in PESTICIDE_SCOPES:
+		if stated.lower().replace(" ", "-") == scope.lower():
+			return scope
+	text = str(ocr_text or "")
+	if _NON_CROP_WORDS.search(text) and not _CROP_WORDS.search(text):
+		return SCOPE_NON_CROP
+	return SCOPE_CROP
+
+
 def _check_pesticide_label(
 	fields: dict, ocr_text: str, context: dict, issues: list, corrections: dict
 ) -> None:
 	"""FIFRA label fields: the registration number, the two intervals, and
-	whether the two intervals can both be true at once."""
+	whether the two intervals can both be true at once.
+
+	v0.201.0. The intervals, the crop and the per-acre rate are asked of a CROP
+	product only — see `pesticide_scope`. What EPA itself holds for the
+	registration, when the caller looked it up, is checked against last."""
 	_check_epa_number(fields, ocr_text, issues, corrections)
 	_check_signal_word(fields, ocr_text, issues)
-	rei = _check_rei(fields, ocr_text, issues)
-	phi = _check_phi(fields, ocr_text, issues)
-	_check_rei_against_phi(rei, phi, issues)
-	_check_rei_against_ingredients(fields, rei, issues)
+	if pesticide_scope(fields, ocr_text) == SCOPE_CROP:
+		rei = _check_rei(fields, ocr_text, issues)
+		phi = _check_phi(fields, ocr_text, issues)
+		_check_rei_against_phi(rei, phi, issues)
+		_check_rei_against_ingredients(fields, rei, issues)
+		_check_application_rate(fields, issues)
 	_check_active_ingredients(fields, issues)
-	_check_application_rate(fields, issues)
 	_check_ppe(fields, issues)
+	_check_against_epa_record(fields, context.get("epa_record"), issues)
+
+
+def _check_against_epa_record(fields: dict, record, issues: list) -> None:
+	"""What the phone read, against what EPA registered. WARNINGS, never errors.
+
+	A distributor's label (PROWLER, 12455-97-3240) is printed under its own name
+	on the base registration (12455-97, F-TRAC PLACE PACS), so a different
+	product name is expected and not checked. A different signal word or active
+	ingredient is not expected: one of the two is misread, and a person should
+	look.
+	"""
+	if not isinstance(record, dict) or not record:
+		return
+	registered = _text(record.get("signal_word"))
+	read = _text(fields.get("signal_word"))
+	if registered and read and registered.lower() != read.lower():
+		issues.append(
+			issue(
+				"signal_word_differs_from_epa",
+				WARNING,
+				"signal_word",
+				f"The label reads {read!r}; EPA registers {record.get('registration') or 'it'} as "
+				f"{registered!r}. Check the tub.",
+			)
+		)
+	registered_names = {
+		_text(entry.get("name")).lower()
+		for entry in record.get("active_ingredients") or []
+		if entry.get("name")
+	}
+	read_names = {
+		_text(entry.get("name")).lower()
+		for entry in _ingredient_list(fields.get("active_ingredients"))
+		if isinstance(entry, dict) and entry.get("name")
+	}
+	if registered_names and read_names and not (registered_names & read_names):
+		issues.append(
+			issue(
+				"active_ingredients_differ_from_epa",
+				WARNING,
+				"active_ingredients",
+				f"Read {', '.join(sorted(read_names))}; EPA registers "
+				f"{', '.join(sorted(registered_names))}. One of the two is wrong.",
+			)
+		)
+
+
+def _ingredient_list(raw) -> list:
+	if isinstance(raw, str):
+		try:
+			raw = json.loads(raw)
+		except ValueError:
+			return []
+	return raw if isinstance(raw, list) else []
 
 
 def _check_epa_number(fields: dict, ocr_text: str, issues: list, corrections: dict) -> None:
@@ -1622,10 +1725,23 @@ def normalise_document_type(raw: str) -> str:
 	return ""
 
 
-def extraction_coverage(document_type: str, fields: dict) -> float:
+#: v0.201.0. What a NON-CROP pesticide label carries — no intervals, no crop.
+NON_CROP_EXPECTED_FIELDS = (
+	"epa_registration_number",
+	"signal_word",
+	"active_ingredients",
+	"ppe_requirements",
+	"application_rate",
+	"storage_disposal",
+)
+
+
+def extraction_coverage(document_type: str, fields: dict, ocr_text: str = "") -> float:
 	"""How much of what this document type carries the extraction actually got,
 	0–1. 1.0 for a type with no expected fields declared."""
 	expected = EXPECTED_FIELDS.get(document_type, ())
+	if document_type == "Pesticide Label" and pesticide_scope(fields, ocr_text) == SCOPE_NON_CROP:
+		expected = NON_CROP_EXPECTED_FIELDS
 	if not expected:
 		return 1.0
 	present = sum(1 for name in expected if (fields or {}).get(name) not in (None, "", [], {}))
@@ -1735,11 +1851,17 @@ def validate_extraction(document_type: str, ocr_text: str, extracted_fields: dic
 			)
 		)
 
-	coverage = extraction_coverage(document_type, fields)
+	coverage = extraction_coverage(document_type, fields, ocr_text)
 	confidence = score_confidence(issues, coverage)
 	errors = [entry for entry in issues if entry["severity"] == ERROR]
 
+	scope = (
+		{"pesticide_use_scope": pesticide_scope(fields, ocr_text)}
+		if document_type == "Pesticide Label"
+		else {}
+	)
 	return {
+		**scope,
 		"document_type": document_type,
 		"status": STATUS_FLAGGED if errors else STATUS_PENDING,
 		"confidence": confidence,

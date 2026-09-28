@@ -128,11 +128,22 @@ def check_url(url: str) -> tuple[str, str, int, str]:
 
 
 def resolve_public(host: str, port: int) -> str:
-	"""The address to connect to, when EVERY address `host` resolves to is public.
+	"""The first address to connect to, when EVERY address `host` resolves to is public."""
+	return public_addresses(host, port)[0]
+
+
+def public_addresses(host: str, port: int) -> list:
+	"""Every address `host` resolves to, IPv4 first, when every one of them is public.
 
 	Every one and not the first, because a name that answers one public and one
 	private address is a name whose owner chooses which one a client uses — and
 	refusing only when the first is private is a coin toss an attacker can load.
+
+	v0.201.0. IPV4 FIRST, AND THE REST KEPT FOR A RETRY. EPA's label service
+	answers an IPv6 address first, and a bench on a Docker bridge (or a Mac on a
+	home network) with no IPv6 route timed out on it where curl, which falls
+	back, got the page in a second. Every address here is already checked, so
+	trying the next one costs nothing the check was for.
 	"""
 	try:
 		infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
@@ -151,7 +162,7 @@ def resolve_public(host: str, port: int) -> str:
 			f"{host} points at {', '.join(refused)}, which is not on the public internet. This "
 			f"only fetches documents from public web servers. {TAIL}"
 		)
-	return addresses[0]
+	return sorted(addresses, key=lambda address: ":" in address)
 
 
 # ── the connection ───────────────────────────────────────────────────────────
@@ -200,19 +211,59 @@ def _open(scheme: str, host: str, port: int, address: str, target: str, timeout:
 
 
 # ── the fetch ────────────────────────────────────────────────────────────────
-def fetch(url: str, *, max_bytes: int = MAX_BYTES, max_redirects: int = MAX_REDIRECTS, timeout: float = TIMEOUT) -> Fetched:
+def fetch(
+	url: str, *, max_bytes: int = MAX_BYTES, max_redirects: int = MAX_REDIRECTS, timeout: float = TIMEOUT
+) -> Fetched:
 	"""Download one document. Raises `ToolError`, in a sentence, for every refusal."""
+	content, content_type, disposition, final_url = _download(url, max_bytes, max_redirects, timeout)
+	extension, mime = sniff(content, content_type)
+	return Fetched(
+		content=content,
+		extension=extension,
+		mime_type=mime,
+		final_url=final_url,
+		content_type=content_type,
+		disposition_name=disposition_file_name(disposition),
+	)
+
+
+def fetch_json(url: str, *, max_bytes: int = 2 * 1024 * 1024, timeout: float = TIMEOUT):
+	"""One JSON answer from a public API, through every check `fetch` makes but the
+	document sniff — a JSON body is not a document and `sniff` rightly refuses it.
+
+	v0.201.0, for EPA's pesticide product label system (`epa_ppls`). Capped at
+	2 MB: an API answer larger than that is not the answer that was asked for.
+	"""
+	import json
+
+	content, _type, _disposition, final_url = _download(url, max_bytes, MAX_REDIRECTS, timeout)
+	try:
+		return json.loads(content.decode("utf-8"))
+	except (UnicodeDecodeError, ValueError):
+		host = urlsplit(final_url).hostname or "that server"
+		raise ToolError(f"{host} did not answer with JSON. {TAIL}") from None
+
+
+def _download(url: str, max_bytes: int, max_redirects: int, timeout: float) -> tuple:
+	"""`(content, content_type, disposition, final_url)`, every hop checked and pinned."""
 	current = str(url or "").strip()
 	deadline = time.monotonic() + TOTAL_DEADLINE
 	for _hop in range(max_redirects + 1):
 		scheme, host, port, target = check_url(current)
-		address = resolve_public(host, port)
-		try:
-			response = _open(scheme, host, port, address, target, timeout)
-		except ToolError:
-			raise
-		except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
-			raise ToolError(f"{host} could not be reached ({type(exc).__name__}). {TAIL}") from None
+		response = None
+		failure = None
+		for address in public_addresses(host, port):
+			try:
+				response = _open(scheme, host, port, address, target, timeout)
+				break
+			except ToolError:
+				raise
+			except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
+				failure = exc
+				if time.monotonic() > deadline:
+					break
+		if response is None:
+			raise ToolError(f"{host} could not be reached ({type(failure).__name__}). {TAIL}") from None
 		try:
 			status = int(getattr(response, "status", 0) or 0)
 			if status in REDIRECTS:
@@ -233,15 +284,7 @@ def fetch(url: str, *, max_bytes: int = MAX_BYTES, max_redirects: int = MAX_REDI
 			close = getattr(response, "close", None)
 			if callable(close):
 				close()
-		extension, mime = sniff(content, content_type)
-		return Fetched(
-			content=content,
-			extension=extension,
-			mime_type=mime,
-			final_url=current,
-			content_type=content_type,
-			disposition_name=disposition_file_name(disposition),
-		)
+		return content, content_type, disposition, current
 	raise ToolError(f"that link redirected more than {max_redirects} times. {TAIL}")
 
 
@@ -265,9 +308,7 @@ def _read_capped(response, max_bytes: int, deadline: float) -> bytes:
 			break
 		received.extend(chunk)
 		if len(received) > max_bytes:
-			raise ToolError(
-				f"that document is larger than the {_size(max_bytes)} this will fetch. {TAIL}"
-			)
+			raise ToolError(f"that document is larger than the {_size(max_bytes)} this will fetch. {TAIL}")
 	if not received:
 		raise ToolError(f"that link returned an empty document. {TAIL}")
 	return bytes(received)

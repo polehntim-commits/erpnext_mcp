@@ -681,6 +681,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# v0.200.0 — a finished task's evidence.
 		"list_task_evidence",
 		"get_task_evidence",
+		# v0.201.0 — a product's label, stored, and the group picker.
+		"register_product_label",
+		"list_item_groups",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

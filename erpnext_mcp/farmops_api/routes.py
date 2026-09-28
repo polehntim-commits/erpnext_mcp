@@ -804,6 +804,10 @@ ROUTES = (
 	# product registered with `needs_review` — docs/design/uom_registry.md §6.
 	Route("/mobile", mobile_api.list_uoms),
 	Route("/mobile", mobile_api.update_item_units),
+	# v0.201.0. A product's label, stored: photos on the Item, a validation,
+	# EPA's record and PDF — and the group picker a mouse bait needed.
+	Route("/mobile", mobile_api.register_product_label),
+	Route("/mobile", mobile_api.list_item_groups),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

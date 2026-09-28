@@ -20018,6 +20018,9 @@ _MOBILE_LABEL_FIELDS = (
 	"phi_crop",
 	"application_rate",
 	"ppe_requirements",
+	# v0.201.0. Crop or Non-crop, and the storage and disposal statement.
+	"pesticide_use_scope",
+	"storage_disposal",
 )
 
 
@@ -20040,6 +20043,9 @@ def create_item(
 	application_rate=None,
 	ppe_requirements=None,
 	application_rate_uom=None,
+	item_group=None,
+	pesticide_use_scope=None,
+	storage_disposal=None,
 ) -> dict:
 	"""Add a product, with its retail code and its label, from a phone.
 
@@ -20074,7 +20080,15 @@ def create_item(
 		"phi_crop": phi_crop,
 		"application_rate": application_rate,
 		"ppe_requirements": ppe_requirements,
+		"pesticide_use_scope": pesticide_use_scope,
+		"storage_disposal": storage_disposal,
 	}
+	# v0.201.0. THE PHONE MAY NOW NAME THE GROUP, from `list_item_groups`, because
+	# the default was wrong for a mouse bait: an EPA number used to mean Crop
+	# Protection Products whatever the product was. With none named the scope
+	# decides — see `masters.GROUP_FOR_SCOPE`.
+	if str(item_group or "").strip():
+		inner["item_group"] = str(item_group).strip()
 	for key in _MOBILE_LABEL_FIELDS:
 		if label[key] not in (None, ""):
 			inner[key] = label[key]
@@ -20182,6 +20196,254 @@ def update_item_units(user: str, item_code=None, stock_uom=None, application_rat
 		"application_rate_uom": frappe.db.get_value("Item", code, "application_rate_uom") or None,
 		"changed": data.get("changed") or {},
 	}
+
+
+# ── 123c. list_item_groups ───────────────────────────────────────────────────
+#
+# v0.201.0. The picker a product's group is chosen from, and the two groups a
+# pesticide's scope suggests. Leaf groups only: an Item belongs to a leaf.
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_item_groups", limit=guard.READ_LIMIT)
+def list_item_groups(user: str) -> dict:
+	"""The leaf item groups, and which one each pesticide scope suggests."""
+	guard.require_scope(user)
+	fields = compat.existing_fields("Item Group", ("name", "is_group", "parent_item_group"))
+	rows = frappe.db.get_all("Item Group", fields=fields, order_by="name asc", limit=500)
+	return {
+		"groups": [
+			{"name": row["name"], "is_group": False, "parent": row.get("parent_item_group") or None}
+			for row in rows
+			if not compat.checked(row.get("is_group"))
+		],
+		"suggested": dict(master_tools.GROUP_FOR_SCOPE),
+	}
+
+
+# ── 123d. register_product_label ─────────────────────────────────────────────
+#
+# v0.201.0. Tim, on PROWLER: "For some reason when we added the label it is not
+# storing" and "the PDF is not getting attached to the item." Nothing stored it:
+# the New product form read the label on the phone and threw the photographs
+# away, and the older scan screen sent OCR text alone with no Item. This is the
+# one call a registration makes after `create_item` (or on a product found by
+# its barcode, whose packaging may not be the one on file): the photos go onto
+# the Item, a Document Validation is filed AGAINST the Item, EPA's own record is
+# looked up and its label PDF attached, and the label's facts fill the Item's
+# blanks. Each step is reported on its own; only the first two can refuse.
+# Contract: `docs/design/product_label_capture.md` §3.
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("register_product_label", mutating=True, limit=guard.UPLOAD_LIMIT)
+def register_product_label(
+	user: str,
+	item_code=None,
+	file_tokens=None,
+	ocr_text=None,
+	extracted_fields=None,
+	llm_assessment=None,
+	llm_model=None,
+	fetch_epa_label=None,
+	company=None,
+) -> dict:
+	"""File a product's label: photos on the Item, a validation, EPA's record and PDF."""
+	from .. import epa_ppls
+
+	allowed = guard.require_scope(user)
+	guard.require_dispatch_role(user, "Registering a product label")
+	code = str(item_code or "").strip()
+	if not code or not frappe.db.exists("Item", code):
+		frappe.throw(
+			f"no Item called {code or '(none)'!r} on this site. Nothing was filed.", frappe.ValidationError
+		)
+	tokens = _label_tokens(file_tokens)
+	text = str(ocr_text or "").strip()
+	fields = _json_argument(extracted_fields, "extracted_fields") or {}
+	if not tokens and not text:
+		frappe.throw(
+			"send the label: file_tokens (the photos, uploaded with stage_file_chunk and "
+			"finalize_staged_file) or ocr_text. Nothing was filed.",
+			frappe.ValidationError,
+		)
+	staged = [_staged_label_file(code, token, user) for token in tokens]
+	entity = guard.require_company(user, company, allowed) if company else (allowed[0] if allowed else "")
+
+	# 1. The photographs, onto the Item.
+	photos = []
+	for row in staged:
+		if not row["already"]:
+			handle = frappe.get_doc("File", row["name"])
+			handle.attached_to_doctype = "Item"
+			handle.attached_to_name = code
+			handle.is_private = 1
+			handle.flags.ignore_permissions = True
+			handle.save()
+		photos.append(
+			{"file": row["name"], "file_name": row.get("file_name"), "file_url": row.get("file_url")}
+		)
+
+	# 2. EPA first, so the validation can be checked against what EPA registers.
+	number = str(fields.get("epa_registration_number") or "").strip()
+	if not number and compat.has_field("Item", "epa_registration_number"):
+		number = str(frappe.db.get_value("Item", code, "epa_registration_number") or "").strip()
+	attach = fetch_epa_label in (None, "") or compat.checked(fetch_epa_label)
+	epa = epa_ppls.label_for_item(code, number, attach=attach)
+	record = epa.pop("record", None)
+
+	# 3. The validation, filed against the Item.
+	validation_args = {
+		"document_type": "Pesticide Label",
+		"ocr_text": text,
+		"extracted_fields": fields or {"product_name": code},
+		"source_doctype": "Item",
+		"source_name": code,
+		"scan_file_url": photos[0]["file_url"] if photos else "",
+		"company": entity,
+	}
+	if record:
+		validation_args["epa_record"] = record
+	if llm_assessment not in (None, "", {}):
+		validation_args["llm_assessment"] = _json_argument(llm_assessment, "llm_assessment")
+	if str(llm_model or "").strip():
+		validation_args["llm_model"] = str(llm_model).strip()
+	result = docvalidation.validate_document_extraction(validation_args).data
+	validation_name = result.get("name") or result.get("validation_id")
+	if validation_name and compat.has_field("Item", "label_scan_validation"):
+		frappe.db.set_value("Item", code, "label_scan_validation", validation_name, update_modified=False)
+
+	# 4. The label's facts, into the Item's blanks only.
+	updates, warnings = _label_blanks(code, fields, record, result)
+	return {
+		"item_code": code,
+		"photos": photos,
+		"validation": {
+			"name": validation_name,
+			"status": result.get("status") or result.get("validation_status"),
+			"confidence": result.get("confidence") or result.get("overall_confidence"),
+			"issues": result.get("issues") or [],
+			"llm_model": validation_args.get("llm_model"),
+			"pesticide_use_scope": result.get("pesticide_use_scope"),
+		},
+		"epa_label": epa,
+		"item_updates": updates,
+		"warnings": warnings,
+	}
+
+
+def _label_tokens(raw) -> list:
+	"""`file_tokens` as a list of distinct docnames, from a list or a JSON string."""
+	value = (
+		_json_argument(raw, "file_tokens") if isinstance(raw, str) and raw.strip().startswith("[") else raw
+	)
+	if value in (None, ""):
+		return []
+	if isinstance(value, str):
+		value = [value]
+	if not isinstance(value, list):
+		frappe.throw(
+			"file_tokens must be a list of File docnames. Nothing was filed.", frappe.ValidationError
+		)
+	out = []
+	for token in value:
+		token = str(token or "").strip()
+		if token and token not in out:
+			out.append(token)
+	if len(out) > 12:
+		frappe.throw("file_tokens: at most 12 label photos. Nothing was filed.", frappe.ValidationError)
+	return out
+
+
+def _staged_label_file(item_code: str, token: str, user: str) -> dict:
+	"""A label photo this caller uploaded and nothing else holds, or a refusal.
+
+	Already on THIS Item is a retry, not an error. On any other record it is
+	somebody else's evidence; uploaded by somebody else, it is not this caller's
+	to move.
+	"""
+	row = (
+		frappe.db.get_value(
+			"File",
+			token,
+			[
+				"name",
+				"file_name",
+				"file_url",
+				"is_folder",
+				"attached_to_doctype",
+				"attached_to_name",
+				"owner",
+			],
+			as_dict=True,
+		)
+		if frappe.db.exists("File", token)
+		else None
+	)
+	if not row:
+		frappe.throw(
+			f"no File called {token!r} on this site. Upload it with stage_file_chunk and "
+			"finalize_staged_file first. Nothing was filed.",
+			frappe.ValidationError,
+		)
+	row = dict(row)
+	if row.get("is_folder"):
+		frappe.throw(f"File {token} is a folder, not a photo. Nothing was filed.", frappe.ValidationError)
+	parent = (str(row.get("attached_to_doctype") or ""), str(row.get("attached_to_name") or ""))
+	if parent == ("Item", item_code):
+		return {**row, "already": True}
+	if parent[0]:
+		frappe.throw(
+			f"File {token} is already attached to {parent[0]} {parent[1]}. Nothing was filed.",
+			frappe.PermissionError,
+		)
+	if row.get("owner") and row["owner"] != user:
+		frappe.throw(
+			f"File {token} was uploaded by another account. Nothing was filed.", frappe.PermissionError
+		)
+	return {**row, "already": False}
+
+
+def _json_argument(raw, label: str):
+	if isinstance(raw, (dict, list)) or raw in (None, ""):
+		return raw
+	try:
+		return json.loads(raw)
+	except (TypeError, ValueError):
+		frappe.throw(f"{label} must be JSON. Nothing was filed.", frappe.ValidationError)
+
+
+def _label_blanks(item_code: str, fields: dict, record, result: dict) -> tuple:
+	"""Fill the Item's empty label columns from the reading, then from EPA. Never overwrites."""
+	record = record or {}
+	warnings = []
+	candidates = {
+		"epa_registration_number": fields.get("epa_registration_number"),
+		"signal_word": fields.get("signal_word") or record.get("signal_word"),
+		"ppe_requirements": fields.get("ppe_requirements"),
+		"pesticide_use_scope": fields.get("pesticide_use_scope") or result.get("pesticide_use_scope"),
+		"storage_disposal": fields.get("storage_disposal"),
+		"restricted_use": 1 if record.get("restricted_use") else None,
+	}
+	ingredients = fields.get("active_ingredients")
+	if not ingredients and record.get("active_ingredients"):
+		ingredients = [
+			{"name": row["name"], "concentration": row.get("percent"), "unit": "%"}
+			for row in record["active_ingredients"]
+		]
+	candidates["active_ingredients"] = ingredients
+	wanted = {}
+	for key, value in candidates.items():
+		if value in (None, "", [], {}) or not compat.has_field("Item", key):
+			continue
+		current = frappe.db.get_value("Item", item_code, key)
+		if current not in (None, "", 0, "[]", "{}"):
+			continue
+		wanted[key] = value
+	if not wanted:
+		return {}, warnings
+	try:
+		master_tools.update_item({"item_code": item_code, **wanted}, ignore_permissions=True)
+	except Exception as exc:  # the label is filed either way; say what did not land
+		warnings.append(f"The Item's label fields were not updated: {exc}")
+		return {}, warnings
+	return {key: wanted[key] for key in wanted}, warnings
 
 
 # ── 124. get_expense_account_map ─────────────────────────────────────────────

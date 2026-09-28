@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 922 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 923 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -9949,6 +9949,22 @@ this one.
 
 Worker scans an asset's QR tag and taps "Flag needs repair" to create a Farm Task
 linked to the asset, with skill and location auto-filled from the asset type.
+
+### `attach_epa_label`
+
+**MUTATING (default OFF).** v0.201.0. Look a product up in EPA's Pesticide Product
+Label System and attach EPA's newest accepted label PDF to the Item. A distributor
+number (`12455-97-3240`) is looked up by its registration (`12455-97`), which is
+where EPA files the label, so the product name EPA returns (F-TRAC PLACE PACS) can
+differ from the tub's (PROWLER™). EPA's signal word, active ingredients and
+restricted-use flag fill only the Item's **empty** label fields. Gated to System
+Manager, Stock Manager, Item Manager or Farm Manager. From a phone, the same step runs
+inside `/mobile/register_product_label` (see `docs/design/product_label_capture.md`).
+
+| Parameter | Required | Description |
+|---|---|---|
+| `item_code` | yes | The Item |
+| `epa_registration_number` | | Defaults to the Item's own |
 
 ### `report_asset_issue`
 

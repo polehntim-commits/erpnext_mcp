@@ -47,6 +47,7 @@ from erpnext_mcp.patches import (
 	repoint_producer_task_template,
 	set_default_tool_switches,
 	widen_i9_attestation_filters,
+	widen_pesticide_field_visibility,
 )
 from erpnext_mcp.tools import company
 
@@ -81,6 +82,7 @@ PATCHES = (
 	("erpnext_mcp.patches.migrate_asset_types", migrate_asset_types),
 	("erpnext_mcp.patches.move_mobile_credentials_to_devices", move_mobile_credentials_to_devices),
 	("erpnext_mcp.patches.normalize_app_feedback_timestamps", normalize_app_feedback_timestamps),
+	("erpnext_mcp.patches.widen_pesticide_field_visibility", widen_pesticide_field_visibility),
 	("erpnext_mcp.patches.normalize_phone_timestamps", normalize_phone_timestamps),
 )
 

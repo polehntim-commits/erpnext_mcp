@@ -267,6 +267,13 @@ def _context_for(args: dict, source_doctype: str, source_name: str) -> tuple:
 	if as_of:
 		context["as_of"] = as_of
 
+	# v0.201.0. What EPA registers for this product, when the caller looked it
+	# up (`/mobile/register_product_label`): checked against the reading as
+	# warnings. Internal — no tool schema declares it.
+	record = args.get("epa_record")
+	if isinstance(record, dict) and record:
+		context["epa_record"] = record
+
 	expected = as_str(args, "expected_name")
 	if expected:
 		context["expected_name"] = expected
@@ -437,6 +444,8 @@ def _payload(result: dict, validation_id: str, stored: bool) -> dict:
 		"llm_model": result.get("llm_model") or "",
 		"revalidation_due": result.get("revalidation_due") or "",
 		"stored": stored,
+		# v0.201.0. Crop or Non-crop, for a pesticide label — which rules it was held to.
+		"pesticide_use_scope": result.get("pesticide_use_scope"),
 	}
 
 
