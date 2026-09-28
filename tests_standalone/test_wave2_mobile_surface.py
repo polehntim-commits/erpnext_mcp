@@ -1336,3 +1336,81 @@ class ThePickerHasSomethingToShow(Wave2TestCase):
 			"create_housing_unit",
 			{"parcel": self.a_parcel(), "unit_name": unit_name, "unit_type": "Cabin", "capacity": 4},
 		)["name"]
+
+
+# ── v0.199.0: an observation is seen before it is filed, in one zone ─────────
+class ObservedAtIsSiteLocal(Wave2TestCase):
+	"""On a Pacific site a `…Z` `observed_at` landed in UTC beside a `reported_at`
+	that `frappe.utils.now()` writes site-local, so a report read as seen seven
+	hours after it was filed — App Feedback's v0.198.0 bug in a second register."""
+
+	def setUp(self):
+		super().setUp()
+		STORE.singles["System Settings"] = {"time_zone": "America/Los_Angeles"}
+
+	def test_the_handsets_utc_stamp_lands_in_the_sites_zone(self):
+		self.be(MANAGER)
+		data = mobile_api.create_farm_task(
+			task_name="Split riser",
+			task_type="Repair",
+			evidence_required={"photos": True},
+			observed_at="2026-08-18T14:12:00Z",
+			company=MAIN,
+		)
+		self.assertEqual(str(STORE.get_raw("Farm Task", data["name"])["observed_at"]), "2026-08-18 07:12:00")
+
+	def test_a_field_report_lands_in_the_sites_zone_too(self):
+		STORE.seed("File", [{"name": "FILE-PHOTO-9", "file_name": "riser.jpg", "is_private": 1}])
+		self.be(WORKER)
+		data = mobile_api.report_field_task(
+			description="Riser split.", photo_file_token="FILE-PHOTO-9", observed_at="2026-01-18T16:00:00Z"
+		)
+		# January: Pacific is -08:00, not -07:00. The offset is the one in force
+		# at the instant, never a constant.
+		self.assertEqual(str(STORE.get_raw("Farm Task", data["name"])["observed_at"]), "2026-01-18 08:00:00")
+
+	def test_a_naive_stamp_is_already_site_local(self):
+		self.be(MANAGER)
+		data = mobile_api.create_farm_task(
+			task_name="Split riser",
+			task_type="Repair",
+			evidence_required={"photos": True},
+			observed_at="2026-08-18 07:12:00",
+			company=MAIN,
+		)
+		self.assertEqual(str(STORE.get_raw("Farm Task", data["name"])["observed_at"]), "2026-08-18 07:12:00")
+
+	def test_the_patch_moves_old_utc_rows_once_and_leaves_good_ones(self):
+		from erpnext_mcp.patches import normalize_phone_timestamps as patch
+
+		STORE.seed(
+			"Farm Task",
+			[
+				{
+					"name": "FT-OLD",
+					"observed_at": "2026-08-18 14:12:00",
+					"reported_at": "2026-08-18 07:15:00",
+				},
+				{
+					"name": "FT-LATE",
+					"observed_at": "2026-08-17 09:00:00",
+					"reported_at": "2026-08-18 07:15:00",
+				},
+				{
+					"name": "FT-SKEW",
+					"observed_at": "2026-08-18 07:20:00",
+					"reported_at": "2026-08-18 07:15:00",
+				},
+				{"name": "FT-NONE", "observed_at": None, "reported_at": "2026-08-18 07:15:00"},
+			],
+		)
+		first = patch.normalize_phone_timestamps()
+		self.assertEqual(first["observed_at"], 1)
+		self.assertEqual(first["zone"], "America/Los_Angeles")
+		raw = {
+			name: STORE.get_raw("Farm Task", name)["observed_at"] for name in ("FT-OLD", "FT-LATE", "FT-SKEW")
+		}
+		self.assertEqual(str(raw["FT-OLD"]), "2026-08-18 07:12:00")
+		self.assertEqual(str(raw["FT-LATE"]), "2026-08-17 09:00:00")
+		self.assertEqual(str(raw["FT-SKEW"]), "2026-08-18 07:20:00")
+		self.assertEqual(patch.normalize_phone_timestamps()["observed_at"], 0, "idempotent")

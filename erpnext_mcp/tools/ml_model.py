@@ -151,7 +151,7 @@ import os
 
 import frappe
 
-from .. import compat, model_registry
+from .. import compat, model_registry, timezones
 from ..args import as_bool, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -740,7 +740,9 @@ def _apply_bundle(doc, bundle: dict, file_name: str, force: bool) -> dict:
 	Nothing is saved here — the caller saves once, after the File is attached,
 	so a conflict refuses before either the record or the attachment moves.
 	"""
-	reconciled = model_registry.reconcile_bundle_manifest(doc.as_dict(), bundle["manifest"], file_name)
+	reconciled = model_registry.reconcile_bundle_manifest(
+		doc.as_dict(), bundle["manifest"], file_name, tz_name=timezones.site_timezone()[0]
+	)
 	if reconciled["conflicts"] and not force:
 		raise ToolError(
 			"; ".join(reconciled["conflicts"])

@@ -4739,6 +4739,101 @@ class TheMirrorsAreStrictEnough(ContractTestCase):
 		)
 
 
+# ── v0.199.0: a bucket is paid on the day it was picked ────────────────────
+class BucketCapturesAreSiteLocal(ContractTestCase):
+	"""`reconcile_bucket_payroll` slices Bucket Log Entry by `00:00:00`–`23:59:59`
+	and the Farm Shift it is paid against is site-local. In UTC, a bucket picked
+	at 17:30 on a Pacific site landed at 00:30 the NEXT day."""
+
+	def setUp(self):
+		super().setUp()
+		STORE.singles["System Settings"] = {"time_zone": "America/Los_Angeles"}
+
+	def sync(self, *stamps):
+		self.the_hr_furniture()
+		self.wire("link_badge_to_employee", badge_id="QR-0042", employee=self.NEW_HIRE, company=MAIN)
+		return self.wire(
+			"sync_bucket_entries",
+			company=MAIN,
+			entries=[
+				{
+					"id": f"1E4A0C7A-10{index}",
+					"session_id": "SESSION-PM",
+					"badge_id": "QR-0042",
+					"timestamp": stamp,
+					"accepted": True,
+					"device_id": "iPad-7",
+				}
+				for index, stamp in enumerate(stamps)
+			],
+		)
+
+	def test_an_evening_bucket_stays_on_its_own_day(self):
+		row = self.sync("2026-08-12T00:30:00Z", "2026-08-12T00:41:10Z")
+		self.assertEqual(row["invalid_count"], 0, row["invalid"])
+		filed = sorted(entry["timestamp"] for entry in STORE.rows("Bucket Log Entry"))
+		self.assertEqual(filed, ["2026-08-11 17:30:00", "2026-08-11 17:41:10"])
+		session = STORE.rows("Bucket Log Session")[0]
+		self.assertEqual(session["started_at"], "2026-08-11 17:30:00")
+		self.assertEqual(session["ended_at"], "2026-08-11 17:41:10")
+
+	def test_a_naive_stamp_is_already_site_local(self):
+		self.sync("2026-08-11 17:30:00")
+		self.assertEqual(STORE.rows("Bucket Log Entry")[0]["timestamp"], "2026-08-11 17:30:00")
+
+	def test_the_patch_moves_old_utc_entries_and_rederives_their_session(self):
+		from erpnext_mcp.patches import normalize_phone_timestamps as patch
+
+		STORE.seed(
+			"Bucket Log Session",
+			[
+				{
+					"name": "BLS-OLD",
+					"session_uuid": "SESSION-OLD",
+					"started_at": "2026-08-12 00:30:00",
+					"ended_at": "2026-08-12 00:41:10",
+				}
+			],
+		)
+		STORE.seed(
+			"Bucket Log Entry",
+			[
+				{
+					"name": "BLE-1",
+					"session_uuid": "SESSION-OLD",
+					"verdict": "Accepted",
+					"timestamp": "2026-08-12 00:30:00",
+					"creation": "2026-08-11 17:45:00",
+				},
+				{
+					"name": "BLE-2",
+					"session_uuid": "SESSION-OLD",
+					"verdict": "Accepted",
+					"timestamp": "2026-08-12 00:41:10",
+					"creation": "2026-08-11 17:45:00",
+				},
+				{
+					"name": "BLE-GOOD",
+					"session_uuid": "SESSION-GOOD",
+					"verdict": "Accepted",
+					"timestamp": "2026-08-11 09:00:00",
+					"creation": "2026-08-11 17:45:00",
+				},
+			],
+		)
+		first = patch.normalize_phone_timestamps()
+		self.assertEqual((first["bucket_entries"], first["sessions"]), (2, 1))
+		self.assertEqual(STORE.get_raw("Bucket Log Entry", "BLE-1")["timestamp"], "2026-08-11 17:30:00")
+		self.assertEqual(STORE.get_raw("Bucket Log Entry", "BLE-2")["timestamp"], "2026-08-11 17:41:10")
+		self.assertEqual(STORE.get_raw("Bucket Log Entry", "BLE-GOOD")["timestamp"], "2026-08-11 09:00:00")
+		session = STORE.get_raw("Bucket Log Session", "BLS-OLD")
+		self.assertEqual(
+			(session["started_at"], session["ended_at"]), ("2026-08-11 17:30:00", "2026-08-11 17:41:10")
+		)
+		again = patch.normalize_phone_timestamps()
+		self.assertEqual((again["bucket_entries"], again["sessions"]), (0, 0), "idempotent")
+
+
 # ── 3. the mirrors cover the surface, and keep covering it ──────────────────
 class TheContractIsComplete(ContractTestCase):
 	"""The test that fails when somebody adds a thirteenth method and no mirror.

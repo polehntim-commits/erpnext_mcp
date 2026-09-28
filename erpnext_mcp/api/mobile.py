@@ -718,6 +718,14 @@ def _bucket_entries(raw, company: str) -> list:
 	phone the field was missing when in fact it was unreadable. Passing the
 	original through gets the entry the message that names the value.
 
+	v0.199.0: THE INSTANT LANDS IN THE SITE'S ZONE, NOT UTC. Every read of this
+	register slices it by day — `reconcile_bucket_payroll` and
+	`list_bucket_entries` filter `timestamp` between `00:00:00` and `23:59:59` —
+	and the Farm Shift a session is paid against is written site-local. In UTC,
+	every bucket picked after five in the afternoon on a Pacific site counted
+	toward TOMORROW's pay window. `as_site_datetime` is the same conversion App
+	Feedback has used since v0.198.0; a naive stamp is still taken as written.
+
 	`capture_mode` AND `auto_verdict` ARE SENT AND ARE DROPPED HERE, KNOWINGLY.
 	`BadgeAPI.payload` writes both on every row so the farm can answer "how many
 	of this season's buckets did a model actually look at" — `auto_verdict` is
@@ -754,6 +762,7 @@ def _bucket_entries(raw, company: str) -> list:
 			"queue in slices. Nothing was changed."
 		)
 
+	zone = timezones.site_timezone()[0]
 	out = []
 	for index, entry in enumerate(raw):
 		if not isinstance(entry, dict):
@@ -770,7 +779,7 @@ def _bucket_entries(raw, company: str) -> list:
 			"entry_uuid": str(entry.get("entry_uuid") or entry.get("id") or "").strip(),
 			"session_uuid": str(entry.get("session_uuid") or entry.get("session_id") or "").strip(),
 			"worker_badge": str(entry.get("worker_badge") or entry.get("badge_id") or "").strip(),
-			"timestamp": datetimes.as_mariadb_datetime(timestamp) or timestamp,
+			"timestamp": datetimes.as_site_datetime(timestamp, zone) or timestamp,
 			"verdict": verdict,
 		}
 		for key in ("coverage_percent", "gps_lat", "gps_lon"):

@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.199.0 — 2026-09-27 — every phone stamp in the site's zone
+
+**922 tools** (unchanged). No new routes, no schema change; one patch. Follows v0.198.0's App
+Feedback fix to the other registers that still stored an iPhone's `…Z` in UTC beside columns
+Frappe writes site-local (`timezones.py`; `TheStorageIsNotUTC`).
+
+- **`Farm Task.observed_at`** (`report_field_task`, `report_asset_issue`, `create_farm_task`, MCP
+  and `/mobile`) now goes through `datetimes.as_site_datetime`. It sits beside `reported_at`
+  (`frappe.utils.now()`); on a Pacific site a report used to read as seen seven hours after it
+  was filed.
+- **`Bucket Log Entry.timestamp`** (`/mobile/sync_bucket_entries`, `api/mobile._bucket_entries`)
+  likewise. Every payroll read slices this register by day (`00:00:00`–`23:59:59`), so in UTC a
+  bucket picked after 17:00 Pacific counted toward the NEXT day's window; the session's
+  `started_at`/`ended_at` followed it.
+- **`ML Model.training_completed_at`** from a bundle manifest (`pull_model_from_vv`,
+  `attach_model_file`) lands in the site's zone too, beside `deployed_at` (`frappe.utils.now()`).
+  `model_registry.reconcile_bundle_manifest` takes the zone as `tz_name=` (default `UTC`, the old
+  behaviour) so the module stays pure. Existing ML Model rows are NOT patched: nothing on the row
+  distinguishes a UTC stamp from a site-local one.
+- A naive stamp is still taken as already site-local. A site with no `System Settings.time_zone`
+  falls back to UTC, where nothing changes.
+- Patch **`normalize_phone_timestamps`** moves existing rows whose stamp is impossibly later than
+  its own filing — `observed_at` past `reported_at` (else `creation`), a capture past its row's
+  `creation` — by more than ten minutes, and re-derives `started_at`/`ended_at` on every Bucket
+  Log Session it touched. Idempotent; `update_modified=False`. **It cannot see** a capture that
+  sat on the phone longer than the site's offset (7–8 h on Pacific) before syncing — that row
+  reads earlier than its `creation` either way and is left alone. Entries already marked Paid
+  are moved too: the pay was attached by session, not by timestamp, but a
+  `reconcile_bucket_payroll` re-run over an old window may now count evening buckets on their
+  real day.
+- Deploy: **`bench migrate`** (the patch), then an image rebuild.
+
 ## 0.198.0 — 2026-09-27 — starting work needs no photo; the hour meter; what a photo knows
 
 **922 tools** (unchanged). No new routes. Two new Farm Task Evidence columns; one patch. OML App

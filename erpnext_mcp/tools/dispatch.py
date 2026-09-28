@@ -61,7 +61,17 @@ import json
 
 import frappe
 
-from .. import alerts, compat, completions, datetimes, minors, records, sessions, training_sessions
+from .. import (
+	alerts,
+	compat,
+	completions,
+	datetimes,
+	minors,
+	records,
+	sessions,
+	timezones,
+	training_sessions,
+)
 from ..args import as_bool, as_choice, as_int, as_limit, as_str, as_visit_id, resolve_company
 from ..erpnext_mcp.doctype.farm_task.farm_task import (
 	AVAILABLE,
@@ -1181,7 +1191,12 @@ def _structured_report(args: dict, doc, location_doctype: str, location: str) ->
 		# and the reason that conversion is its own module. Unreadable is refused
 		# HERE, by name, rather than left to surface as a framework error from
 		# `doc.insert()` with a task half built behind it.
-		stamp = datetimes.as_mariadb_datetime(seen)
+		#
+		# v0.199.0: INTO THE SITE'S ZONE, NOT UTC. `reported_at` two columns
+		# along is `frappe.utils.now()`, site-local, and on a Pacific site a
+		# `…Z` landed in UTC read as seen seven hours after it was filed — the
+		# App Feedback bug of v0.198.0 in a second register.
+		stamp = datetimes.as_site_datetime(seen, timezones.site_timezone()[0])
 		if not stamp:
 			raise ToolError(
 				f"observed_at {seen!r} is not a timestamp this can read. Send ISO 8601 — "

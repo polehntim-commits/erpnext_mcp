@@ -428,6 +428,16 @@ class ReadingABundle(unittest.TestCase):
 		self.assertEqual(result["updates"]["training_completed_at"], "2026-07-08 02:38:43")
 		self.assertEqual(result["warnings"], [])
 
+	def test_on_a_pacific_site_the_training_date_lands_in_the_sites_zone(self):
+		"""v0.199.0. `deployed_at` beside it is `frappe.utils.now()`, site-local;
+		the zone is passed in so this module stays pure."""
+		manifest = dict(MANIFEST, training_completed_at="2026-07-08T02:38:43Z")
+		result = engine.reconcile_bundle_manifest(model(), manifest, tz_name="America/Los_Angeles")
+		self.assertEqual(result["updates"]["training_completed_at"], "2026-07-07 19:38:43")
+		# A naive stamp is taken as already site-local, exactly as written.
+		result = engine.reconcile_bundle_manifest(model(), MANIFEST, tz_name="America/Los_Angeles")
+		self.assertEqual(result["updates"]["training_completed_at"], MANIFEST["training_completed_at"])
+
 	def test_an_unreadable_training_date_warns_instead_of_failing_the_attach(self):
 		result = engine.reconcile_bundle_manifest(
 			model(), dict(MANIFEST, training_completed_at="last Tuesday")

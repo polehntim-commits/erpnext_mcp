@@ -108,7 +108,7 @@ import zipfile
 # because `reconcile_bundle_manifest` below and `tools/ml_model.py` already
 # call it, and because `MARIADB_DATETIME_FORMAT` is this module's own answer to
 # "what shape does a Datetime column want".
-from .datetimes import MARIADB_DATETIME_FORMAT, as_mariadb_datetime  # noqa: F401
+from .datetimes import MARIADB_DATETIME_FORMAT, as_mariadb_datetime, as_site_datetime  # noqa: F401
 
 STATUS_DRAFT = "Draft"
 STATUS_ACTIVE = "Active"
@@ -459,7 +459,9 @@ def manifest_source_note(manifest: dict, file_name: str = "") -> str:
 	return MANIFEST_SOURCE_BUNDLE + (f" ({', '.join(detail)})" if detail else "")
 
 
-def reconcile_bundle_manifest(model_doc: dict, manifest: dict, file_name: str = "") -> dict:
+def reconcile_bundle_manifest(
+	model_doc: dict, manifest: dict, file_name: str = "", *, tz_name: str = "UTC"
+) -> dict:
 	"""What attaching this bundle changes on this record, and what it refuses to.
 
 	Returns `updates` (field → new value, ready to set), `warnings` (every place
@@ -471,6 +473,11 @@ def reconcile_bundle_manifest(model_doc: dict, manifest: dict, file_name: str = 
 
 	`file_size_bytes` is deliberately not set here: this function sees a
 	manifest, not the zip, and the size that matters is the stored file's.
+
+	`tz_name` is the site's zone, passed in rather than read so this module
+	stays pure. v0.199.0: `training_completed_at` lands in it, beside a
+	`deployed_at` that `activate_model` writes with `frappe.utils.now()` —
+	site-local. The default, UTC, is the old behaviour exactly.
 	"""
 	model_doc = model_doc or {}
 	manifest = manifest or {}
@@ -542,7 +549,7 @@ def reconcile_bundle_manifest(model_doc: dict, manifest: dict, file_name: str = 
 	# down the wire.
 	completed = _clean(manifest.get("training_completed_at"))
 	if completed and not _clean(model_doc.get("training_completed_at")):
-		converted = as_mariadb_datetime(completed)
+		converted = as_site_datetime(completed, tz_name)
 		if converted:
 			updates["training_completed_at"] = converted
 		else:

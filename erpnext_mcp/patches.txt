@@ -25,3 +25,4 @@ erpnext_mcp.patches.backfill_valve_rank
 erpnext_mcp.patches.migrate_asset_types
 erpnext_mcp.patches.move_mobile_credentials_to_devices
 erpnext_mcp.patches.normalize_app_feedback_timestamps
+erpnext_mcp.patches.normalize_phone_timestamps

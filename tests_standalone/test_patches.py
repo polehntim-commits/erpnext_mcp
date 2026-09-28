@@ -40,6 +40,7 @@ from erpnext_mcp.patches import (
 	migrate_training_types,
 	move_mobile_credentials_to_devices,
 	normalize_app_feedback_timestamps,
+	normalize_phone_timestamps,
 	recompute_2026_dependents_credit,
 	register_custom_party_types,
 	rename_discipline_record,
@@ -80,6 +81,7 @@ PATCHES = (
 	("erpnext_mcp.patches.migrate_asset_types", migrate_asset_types),
 	("erpnext_mcp.patches.move_mobile_credentials_to_devices", move_mobile_credentials_to_devices),
 	("erpnext_mcp.patches.normalize_app_feedback_timestamps", normalize_app_feedback_timestamps),
+	("erpnext_mcp.patches.normalize_phone_timestamps", normalize_phone_timestamps),
 )
 
 
@@ -1208,3 +1210,13 @@ class AppFeedbackStampsPatch(MCPTestCase):
 	def test_a_site_with_no_notes_reports_nothing_moved(self):
 		report = normalize_app_feedback_timestamps.normalize_app_feedback_timestamps()
 		self.assertEqual(report["converted"], 0)
+
+
+class PhoneStampsPatch(MCPTestCase):
+	"""v0.199.0. The behaviour is tested beside the tools — `ObservedAtIsSiteLocal`
+	in `test_wave2_mobile_surface`, `BucketCapturesAreSiteLocal` in
+	`test_ios_contract`; this is the fresh-site half."""
+
+	def test_a_site_with_nothing_to_move_reports_nothing_moved(self):
+		report = normalize_phone_timestamps.normalize_phone_timestamps()
+		self.assertEqual((report["observed_at"], report["bucket_entries"], report["sessions"]), (0, 0, 0))
