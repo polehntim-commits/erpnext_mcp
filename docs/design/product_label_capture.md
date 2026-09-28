@@ -159,3 +159,27 @@ used as sent. The phone's Log stock form gains an optional **Cost each** field f
 - **New MCP tool:** `attach_epa_label`.
 - **New Item fields:** `pesticide_use_scope` and `storage_disposal`.
 - **Deploy:** `bench migrate`, then an image rebuild. fafo_ios SERVER_CHANGES §48.
+
+## 7. Amendment for v0.202.0, after the first live registration on OML (frozen)
+
+Tim's iPhone (fafo_ios df18906 against OML v0.201.0) was refused three times with *"No permission for
+Item Group. Nothing was changed."* `create_item` tried to **insert** the missing "Pest Control
+Products" group as the phone user. The same screen showed "Rates by crop: As labelled: ly from other
+laundry. Remove PPE imnest". The parser's `rate:` pattern matched the "rate" inside "sepa**rate**ly".
+"Counted in" ended up Box rather than Block.
+
+- **The groups always exist.** `after_migrate` seeds **Crop Protection Products** and **Pest
+  Control Products** (create-only, by name, as leaves under All Item Groups). A group an operator
+  already made, wherever it is in the tree, is left where it is.
+- **Registration never creates master data.** `create_item` no longer inserts an Item Group, on any
+  path. When the wanted group (named, or chosen by scope) is missing, the Item is created in the
+  site's default group, `needs_review` gains **`"item_group"`**, and `item_group_note` names the
+  missing group. `item_group_created` is always false.
+- **`list_uoms` names a context's default.** With `context` sent, the answer carries
+  **`default_uom`** (that context's default unit, or null). The phone uses
+  `list_uoms(context: "Bait")` to default a non-crop bait's "Counted in" to **Block**.
+- **Phone, non-crop rate.** `rate` is matched as a word only, never inside another word. For a
+  Non-crop product the rate is read from the directions/application section: a count of blocks,
+  place pacs, pellets or baits per placement, station or burrow ("Place 1 to 2 blocks per
+  placement"). Text that isn't a rate is left blank rather than guessed. The heading is **"Rate"**,
+  not "Rates by crop", for a Non-crop product.
