@@ -45,7 +45,7 @@ import json
 
 import frappe
 
-from .. import compat, task_templates
+from .. import compat, form_schema, task_templates
 from .. import training as regimes_vocabulary
 from ..args import as_bool, as_choice, as_int, as_limit, as_str, resolve_company
 from ..erpnext_mcp.doctype.farm_task.farm_task import (
@@ -134,7 +134,7 @@ def _creates_record_warning(creates_record: str) -> str:
 			"until it exists, because a task promising a record nobody can write is a promise "
 			"that fails in front of a worker stood in a cabin."
 		)
-	if creates_record not in inspections.BUILDERS:
+	if creates_record not in inspections.BUILDERS and creates_record not in inspections.TASK_BUILT:
 		return (
 			f"{creates_record} exists on this site but erpnext_mcp has no completion builder for "
 			"it, so completing a task from this template will file the evidence against the "
@@ -189,6 +189,11 @@ def create_farm_task_template(args: dict) -> ToolResult:
 		"company": resolve_company(as_str(args, "company")) if args.get("company") else None,
 		"enabled": as_bool(args, "enabled", True),
 		"compliance_regimes": _regimes_argument(args.get("compliance_regimes")),
+		# v0.204.0. The form the phone renders — refused here if it cannot.
+		"form_schema": _form_argument(args.get("form_schema")),
+		"applies_to_asset_types": _asset_types_argument(args.get("applies_to_asset_types")),
+		"title_es": as_str(args, "title_es"),
+		"instructions_es": as_str(args, "instructions_es"),
 	}
 
 	doc = task_templates.build_template(spec)
@@ -196,7 +201,8 @@ def create_farm_task_template(args: dict) -> ToolResult:
 	described = task_templates.describe(doc.name, with_checklist=True)
 
 	warnings = [line for line in (_creates_record_warning(spec["creates_record"]),) if line]
-	if not spec["checklist"]:
+	warnings.extend(render_problems(name))
+	if not spec["checklist"] and not spec["form_schema"]:
 		warnings.append(
 			"This template has no checklist, which is the ordinary case and usually right — a "
 			"one-item list saying 'do the task' is a form people learn to tick without reading. "
@@ -228,7 +234,14 @@ def create_farm_task_template(args: dict) -> ToolResult:
 #: Fields `update` reads straight off the arguments, and the reader each one goes
 #: through. ONE TABLE so `create` and `update` cannot drift into accepting
 #: different spellings of the same template.
-_TEXT_FIELDS = ("description", "skill_required", "creates_record", "instructions")
+_TEXT_FIELDS = (
+	"description",
+	"skill_required",
+	"creates_record",
+	"instructions",
+	"title_es",
+	"instructions_es",
+)
 _CHOICE_FIELDS = (("task_type", FARM_TASK), ("dispatch_mode", TEMPLATE), ("default_urgency", TEMPLATE))
 
 
@@ -294,6 +307,18 @@ def update_farm_task_template(args: dict) -> ToolResult:
 		for regime in regimes_vocabulary.to_rows(value):
 			doc.append("compliance_regimes", dict(regime))
 
+	# v0.204.0. The form is REPLACED WHOLE, like the checklist; [] clears it.
+	if "form_schema" in args:
+		value = _form_argument(args.get("form_schema"))
+		if (before.get("form_schema") or []) != value:
+			changes["form_schema"] = {"from": before.get("form_schema") or [], "to": value}
+		doc.form_schema = json.dumps(value) if value else None
+	if "applies_to_asset_types" in args:
+		value = _asset_types_argument(args.get("applies_to_asset_types"))
+		if before.get("applies_to_asset_types") != value:
+			changes["applies_to_asset_types"] = {"from": before.get("applies_to_asset_types"), "to": value}
+		doc.applies_to_asset_types = "\n".join(value)
+
 	# THE CHECKLIST IS REPLACED WHOLE, never edited one row at a time by index —
 	# the same doctrine `update_compliance_rule` applies to its ordered heuristic
 	# tables, and for the same reason: a list edited by index is one somebody
@@ -321,6 +346,7 @@ def update_farm_task_template(args: dict) -> ToolResult:
 	described = task_templates.describe(name, with_checklist=True)
 	raised = _tasks_raised(name)
 	warnings = [line for line in (_creates_record_warning(described["creates_record"] or ""),) if line]
+	warnings.extend(render_problems(name))
 	data = {
 		**described,
 		"changed": changes,
@@ -417,6 +443,8 @@ def get_farm_task_template(args: dict) -> ToolResult:
 			"This template has no readable evidence contract, so create_task_from_template will "
 			"refuse. Fix it with update_farm_task_template."
 		)
+	# v0.204.0. What the phone would get wrong or cannot render.
+	problems.extend(render_problems(name))
 	rules = _rules_producing(name)
 	data = {
 		**described,
@@ -438,6 +466,125 @@ def get_farm_task_template(args: dict) -> ToolResult:
 			f"{described['template_name']} — {described['task_type']}, "
 			f"{described['checklist_item_count']} checklist item(s), {raised} task(s) raised"
 		),
+	)
+
+
+def _form_argument(raw) -> list:
+	"""A `form_schema` argument, validated — refused with every error the phone would hit."""
+	if raw in (None, "", []):
+		return []
+	try:
+		return form_schema.require_valid(raw)
+	except form_schema.SchemaError as exc:
+		raise ToolError(
+			"form_schema cannot be rendered on the phone:\n"
+			+ "\n".join(f"  - {row['path']}: {row['message']}" for row in exc.findings)
+			+ "\nThe vocabulary is docs/design/form_schema_and_labels.md §1; preview_farm_task_template "
+			"shows what the phone will render. Nothing was written."
+		) from None
+
+
+def _asset_types_argument(raw) -> list:
+	if raw in (None, ""):
+		return []
+	values = raw if isinstance(raw, list) else str(raw).replace(",", "\n").splitlines()
+	values = [str(value).strip() for value in values if str(value).strip()]
+	if compat.doctype_exists("Farm Asset Type"):
+		unknown = [value for value in values if not frappe.db.exists("Farm Asset Type", value)]
+		if unknown:
+			raise ToolError(
+				f"no asset type called {', '.join(map(repr, unknown))}. list_asset_types has the register. "
+				"Nothing was written."
+			)
+	return values
+
+
+def render_problems(name: str, row: dict | None = None) -> list:
+	"""Sentences for everything the phone would render badly. §1.4 warnings, plus metadata."""
+	row = row if row is not None else task_templates.template_row(name)
+	fields = task_templates.form_of(row)
+	if not fields:
+		fields = form_schema.legacy_fields(task_templates.checklist_of(name) if name else [])
+	report = form_schema.validate(fields)
+	out = [
+		f"form {finding['path']}: {finding['message']}" for finding in report["errors"] + report["warnings"]
+	]
+	if str(row.get("task_type") or "") == "Other":
+		out.append("task_type is Other — pick the kind of work (Pest Control, Maintenance, Inspection …).")
+	if str(row.get("task_type") or "") in ("Pest Control", "Spray") and not str(
+		row.get("creates_record") or ""
+	):
+		out.append(
+			f"a {row.get('task_type')} task produces a regulated application record — set creates_record "
+			"(Pest Control Application)."
+		)
+	if not str(row.get("title_es") or "").strip():
+		out.append("no Spanish title (title_es).")
+	return out
+
+
+def preview_farm_task_template(args: dict) -> ToolResult:
+	"""Exactly what the phone receives for a task raised from a template, and its problems. §6."""
+	language = (as_str(args, "language") or "en").lower()[:2]
+	context = task_templates.as_object(args.get("context"), "context") if args.get("context") else {}
+	answers = task_templates.as_object(args.get("answers"), "answers") if args.get("answers") else {}
+	body = args.get("template_body")
+	if body not in (None, "", {}):
+		spec = task_templates.as_object(body, "template_body")
+		row = {
+			"name": "",
+			"template_name": spec.get("template_name") or "(unsaved)",
+			"task_type": spec.get("task_type") or "",
+			"creates_record": spec.get("creates_record") or "",
+			"instructions": spec.get("instructions") or "",
+			"instructions_es": spec.get("instructions_es") or "",
+			"title_es": spec.get("title_es") or "",
+			"form_schema": spec.get("form_schema"),
+		}
+		report = form_schema.validate(spec.get("form_schema"))
+		fields = report["fields"] or form_schema.legacy_fields(
+			[
+				entry if isinstance(entry, dict) else {"item_name": entry}
+				for entry in spec.get("checklist") or []
+			]
+		)
+		problems = render_problems("", row) if not report["errors"] else []
+		name = row["template_name"]
+	else:
+		name = _template_or_refuse(as_str(args, "template", required=True))
+		row = task_templates.template_row(name)
+		fields = task_templates.form_of(row) or form_schema.legacy_fields(task_templates.checklist_of(name))
+		report = form_schema.validate(fields)
+		problems = render_problems(name, row)
+	context = {"language": language, "task_type": row.get("task_type") or "", "template": name, **context}
+	phone = form_schema.for_phone(fields, answers)
+	shown = form_schema.visible(fields, answers, context)
+	return ToolResult(
+		data={
+			"template": name,
+			"title": row.get("title_es")
+			if language == "es" and row.get("title_es")
+			else row.get("template_name"),
+			"instructions": (
+				row.get("instructions_es")
+				if language == "es" and row.get("instructions_es")
+				else row.get("instructions")
+			),
+			"task_type": row.get("task_type"),
+			"form": phone,
+			"form_is_legacy_checklist": not task_templates.form_of(row),
+			"rendered": form_schema.resolve_language(shown, language),
+			"hidden_by_conditions": [field["key"] for field in fields if field not in shown],
+			"context": context,
+			"errors": report["errors"],
+			"problems": problems,
+			"note": (
+				"`form` is byte-for-byte what get_task sends the phone for a task raised from this "
+				"template; `rendered` is what a worker sees right now in this language with this "
+				"context — pass context {occupancy_at_creation: 'Unoccupied'} to see the other branch."
+			),
+		},
+		summary=f"preview of {name}: {len(shown)} field(s) shown, {len(problems)} problem(s)",
 	)
 
 
@@ -559,6 +706,8 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 	)
 	doc.evidence_required = json.dumps(shape["evidence_required"])
 	doc.checklist_status = json.dumps(shape["checklist_status"])
+	if shape.get("form_schema") and compat.has_field(FARM_TASK, "form_schema"):
+		doc.form_schema = json.dumps(shape["form_schema"])
 	# The template's instructions first, then anything true of THIS case. The
 	# order is the point: a worker reads the standing instruction and then the
 	# note about the particular cabin, which is the order they need them in.
@@ -577,7 +726,11 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 
 	described = dispatch._describe_task(dict(doc.as_dict()))
 	warnings = []
-	if creates_record and creates_record not in inspections.BUILDERS:
+	if (
+		creates_record
+		and creates_record not in inspections.BUILDERS
+		and creates_record not in inspections.TASK_BUILT
+	):
 		warnings.append(
 			f"{creates_record} exists on this site but erpnext_mcp has no builder for it, so "
 			"completing this task will file the evidence against the assignment and report that "

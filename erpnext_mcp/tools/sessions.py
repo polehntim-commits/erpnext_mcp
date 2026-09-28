@@ -47,7 +47,7 @@ import json
 
 import frappe
 
-from .. import compat, proposals, rodent_bait, sessions
+from .. import compat, form_schema, proposals, rodent_bait, sessions
 from .. import training as regimes_vocabulary
 from ..args import as_bool, as_date, as_int, as_limit, as_str, as_visit_id, resolve_company
 from ..errors import ToolError
@@ -584,7 +584,7 @@ def _sections_from_args(raw) -> list:
 				entry.get("produces_record_data", entry.get("produces_record_data_json")),
 				f"sections[{index}].produces_record_data",
 			)
-			prompts = sessions.as_object(
+			prompts = sessions.as_prompts(
 				entry.get("field_prompts", entry.get("field_prompts_json")),
 				f"sections[{index}].field_prompts",
 			)
@@ -761,6 +761,38 @@ def get_inspection_session(args: dict) -> ToolResult:
 
 
 # ── the one with teeth ──────────────────────────────────────────────────────
+def preview_inspection_template(args: dict) -> ToolResult:
+	"""What the phone renders for each section of a template, and what it cannot. v0.204.0 §6."""
+	reference = as_str(args, "template") or as_str(args, "name", required=True)
+	name = sessions.resolve_template(reference) if hasattr(sessions, "resolve_template") else reference
+	if not name or not frappe.db.exists(sessions.TEMPLATE_DOCTYPE, name):
+		raise ToolError(f"no Inspection Template called {reference!r} on this site.")
+	language = (as_str(args, "language") or "en").lower()[:2]
+	out = []
+	problems = []
+	for section in sessions.sections_of(name):
+		described = sessions.describe_section(section)
+		fields = sessions.section_fields(described)
+		report = form_schema.validate(fields)
+		for finding in report["errors"] + report["warnings"]:
+			problems.append(f"{described['section_name']} › {finding['path']}: {finding['message']}")
+		out.append(
+			{
+				"section_name": described["section_name"],
+				"required": described["required"],
+				"renderer_hint": described["renderer_hint"],
+				"evidence_contract": described["evidence_contract"],
+				"form": fields,
+				"rendered": form_schema.resolve_language(fields, language),
+				"form_is_legacy_prompts": not isinstance(described.get("field_prompts"), list),
+			}
+		)
+	return ToolResult(
+		data={"template": name, "language": language, "sections": out, "problems": problems},
+		summary=f"preview of {name}: {len(out)} section(s), {len(problems)} problem(s)",
+	)
+
+
 def submit_inspection_session(args: dict) -> ToolResult:
 	"""File every section, and write the compliance records the sections promise."""
 	row = _session_row(as_str(args, "name") or as_str(args, "session", required=True))
@@ -783,6 +815,10 @@ def submit_inspection_session(args: dict) -> ToolResult:
 			f"Inspection Template {row['template']} has no sections on this site. Nothing was written."
 		)
 
+	args["_session_context"] = {
+		"location_doctype": row.get("location_doctype") or "",
+		"template": row.get("template") or "",
+	}
 	submitted = _submitted_sections(args, template_sections)
 	_refuse_missing_required(template_sections, submitted)
 	_refuse_incomplete(template_sections, submitted)
@@ -1006,6 +1042,22 @@ def _submitted_sections(args: dict, template_sections: dict) -> dict:
 			)
 		except ValueError as exc:
 			raise ToolError(str(exc)) from exc
+
+		# v0.204.0. `answers` to a section whose prompts are form fields: validated
+		# like a task's form, and each answer also counts as a checklist value, so
+		# the evidence contract's `checklist_items` keys are met by them (§1.7).
+		fields = sessions.section_fields(template_sections[name])
+		if entry.get("answers") not in (None, "", {}) and fields and not entry.get("skipped"):
+			report = form_schema.check_answers(
+				fields, entry.get("answers"), dict(args.get("_session_context") or {})
+			)
+			if report["problems"]:
+				raise ToolError(
+					f"section {name!r} is not finished:\n"
+					+ "\n".join(f"  - {problem}" for problem in report["problems"])
+					+ "\nNothing was written."
+				)
+			checklist = {**checklist, **report["answers"]}
 
 		out[name] = {
 			"section_name": name,

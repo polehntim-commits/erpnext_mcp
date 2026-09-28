@@ -44,6 +44,7 @@ from erpnext_mcp.patches import (
 	move_mobile_credentials_to_devices,
 	normalize_app_feedback_timestamps,
 	normalize_phone_timestamps,
+	rebuild_rodent_templates,
 	recompute_2026_dependents_credit,
 	register_custom_party_types,
 	rename_discipline_record,
@@ -93,6 +94,7 @@ PATCHES = (
 		"erpnext_mcp.patches.add_rodent_sections_to_inspection_templates",
 		add_rodent_sections_to_inspection_templates,
 	),
+	("erpnext_mcp.patches.rebuild_rodent_templates", rebuild_rodent_templates),
 )
 
 

@@ -1290,6 +1290,16 @@ def get_task(user: str, task=None, timezone=None) -> dict:
 	out["evidence_contract"] = data.get("evidence_contract")
 	out["evidence_outstanding"] = data.get("evidence_outstanding")
 	out["evidence_complete"] = data.get("evidence_complete")
+	# v0.204.0. The form the phone renders, its saved answers, approval steps,
+	# the products the task handles (each with "View label") and the SOPs —
+	# docs/design/form_schema_and_labels.md §3.1. Never fails the read.
+	try:
+		from .. import task_forms
+		from ..tools.dispatch import task_row
+
+		out.update(task_forms.phone_block(task_row(name)))
+	except Exception:  # pragma: no cover - an older site mid-migrate
+		frappe.log_error(title="erpnext_mcp: task form block", message=compat.traceback_text())
 	return out
 
 
@@ -1372,6 +1382,9 @@ def complete_task_via_mobile(
 	hours_reading=None,
 	allow_meter_reset=None,
 	bait_activity=None,
+	form_answers=None,
+	checklist=None,
+	language=None,
 ) -> dict:
 	"""Finish one task: file the evidence, write the compliance record.
 
@@ -1449,6 +1462,15 @@ def complete_task_via_mobile(
 		# v0.203.0. Rodent Bait Check: consumption, fresh feeding signs or
 		# carcasses found (true) or not (false). §7 of the bait contract.
 		("bait_activity", bait_activity),
+		# v0.204.0. The form's answers (validated one layer down) and, at last,
+		# the legacy checklist ticks — this route used to drop them, so a template
+		# with a required checklist item could not be completed from a phone.
+		(
+			"form_answers",
+			_json_argument(form_answers, "form_answers") if isinstance(form_answers, str) else form_answers,
+		),
+		("checklist", _json_argument(checklist, "checklist") if isinstance(checklist, str) else checklist),
+		("language", language),
 	):
 		if value is not None:
 			inner[key] = value
@@ -10526,6 +10548,15 @@ def _ios_wizard_step(step: dict, spanish: dict | None = None) -> dict:
 	# same place on the screen — under the step title.
 	_ios_bilingual(row, "help", row.get("description") or "", es.get("description") or "")
 
+	# v0.204.0. The same fields in the one form vocabulary the phone renders
+	# everywhere (docs/design/form_schema_and_labels.md §1.6) — WITH their
+	# conditions, which the legacy shape below has to drop.
+	from .. import form_schema
+
+	row["form"] = form_schema.from_wizard_fields(
+		[dict(field) for field in (row.get("fields") or [])],
+		[dict(field) for field in (es.get("fields") or [])],
+	)
 	es_fields = _ios_by_key(es.get("fields"), "fieldname")
 	row["fields"] = [
 		_ios_wizard_field(dict(field), es_fields.get(str(field.get("fieldname") or "")))
@@ -20798,6 +20829,72 @@ def set_building_occupancy(user: str, asset_name=None, occupied=None, people_wor
 		"people_work_here": compat.checked(row.get("people_work_here")),
 		"occupancy": rodent_bait.occupancy("Asset Register", name),
 	}
+
+
+# ── 126b–126e. Product labels and approval steps ────────────────────────────
+#
+# v0.204.0. docs/design/form_schema_and_labels.md §3.3–§4. Tim: "So an
+# applicator can look at the label of the product they are handling. This would
+# allso work when we are spraying as well." The label is one tap away wherever a
+# worker handles a product; the phone caches it for the field.
+#
+# THE LABEL READS ARE OPEN ON ENROLMENT: an Item is catalogue data, not an
+# entity's record, and the label is exactly what every handler must be able to
+# read. Only files attached to THAT Item are served.
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_item_label", limit=guard.READ_LIMIT)
+def get_item_label(user: str, item_code=None) -> dict:
+	"""A product's label: the key fields, the EPA label PDF and the label photos."""
+	from .. import product_labels
+
+	guard.require_scope(user)
+	try:
+		return product_labels.item_label(str(item_code or ""))
+	except ToolError as exc:
+		frappe.throw(str(exc), frappe.DoesNotExistError)
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_item_label_file", limit=guard.READ_LIMIT)
+def get_item_label_file(user: str, item_code=None, file=None, max_bytes=None) -> dict:
+	"""One of a product's label files, base64. Refuses a file not attached to that product."""
+	from .. import product_labels
+
+	guard.require_scope(user)
+	try:
+		return product_labels.item_label_file(str(item_code or ""), str(file or ""), max_bytes)
+	except ToolError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("record_label_viewed", mutating=True, limit=guard.WRITE_LIMIT)
+def record_label_viewed(user: str, task=None, item_code=None) -> dict:
+	"""The label of a product this task handles was opened on the phone."""
+	from .. import task_forms
+
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+	code = str(item_code or "").strip()
+	if not code or not frappe.db.exists("Item", code):
+		frappe.throw(f"no Item called {code or '(none)'!r}.", frappe.ValidationError)
+	return task_forms.record_label_viewed(name, code, user)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("approve_task_step", mutating=True, limit=guard.WRITE_LIMIT)
+def approve_task_step(user: str, task=None, key=None, signature=None) -> dict:
+	"""Sign one approval step on a task — only somebody holding its role may."""
+	from .. import task_forms
+
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+	try:
+		return task_forms.approve_step(name, str(key or "").strip(), user, str(signature or "").strip())
+	except ToolError as exc:
+		frappe.throw(
+			str(exc), frappe.PermissionError if "does not hold" in str(exc) else frappe.ValidationError
+		)
 
 
 # ── 127–128. An inspection's photographs ────────────────────────────────────

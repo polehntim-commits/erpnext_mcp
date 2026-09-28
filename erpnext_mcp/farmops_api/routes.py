@@ -814,6 +814,12 @@ ROUTES = (
 	# v0.203.0. A building occupied without an assignment behind it (Mill Creek's
 	# houses at takeover) — docs/design/rodent_bait_program.md §2.
 	Route("/mobile", mobile_api.set_building_occupancy),
+	# v0.204.0. The label wherever a product is handled, and approval steps —
+	# docs/design/form_schema_and_labels.md §3.3–§4.
+	Route("/mobile", mobile_api.get_item_label),
+	Route("/mobile", mobile_api.get_item_label_file),
+	Route("/mobile", mobile_api.record_label_viewed),
+	Route("/mobile", mobile_api.approve_task_step),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

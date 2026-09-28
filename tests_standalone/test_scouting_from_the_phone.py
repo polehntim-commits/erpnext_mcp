@@ -263,26 +263,27 @@ class ARoundWalkedFromThePhoneReachesTheRegister(PhoneScoutingTestCase):
 		self.assertTrue(json.loads(row["evidence_required"])["gps"])
 		self.assertEqual(json.loads(row["creates_record_data"]), TEMPLATE_DEFAULTS)
 
-	def test_the_shipped_templates_round_still_cannot_be_CLOSED_from_a_phone(self):
-		"""AND THAT IS A SECOND GAP, NOT THIS ONE. `Field Scouting` snapshots
-		four REQUIRED checklist items onto every round it raises, and
-		`complete_farm_task` refuses a completion that leaves them unticked. The
-		mobile surface has no `checklist` argument and no route that ticks an
-		item, so the round a foreman raises from the phone — `create_task_from_
-		template` IS published — is one no phone can close.
-
-		Asserted rather than left to be discovered: this test fails the day the
-		checklist reaches the handset, which is the day somebody should also
-		delete it. The four measurement arguments are what §26 asked for and
-		they work on every other door onto a scouting round; they cannot make
-		the checklist reachable, and pretending otherwise by testing this path
-		with a checklist-free template would have hidden the wall entirely.
-		"""
+	def test_the_shipped_templates_round_can_now_be_CLOSED_from_a_phone(self):
+		"""v0.204.0: THE SECOND GAP IS CLOSED. `Field Scouting` snapshots four
+		REQUIRED checklist items, and the mobile complete route used to drop
+		`checklist`, so a round a foreman raised from the phone could not be
+		closed from one. The route now forwards it (and `form_answers`, which a
+		legacy checklist renders from) — docs/design/form_schema_and_labels.md
+		§3.2. Unticked is still refused; ticked closes."""
 		task = self.a_template_round()
 		with self.assertRaises(frappe.ValidationError) as caught:
 			self.walk(task=task, growth_stage_code="87", brix_reading=18.0, brix_method="Refractometer")
 		self.assertIn("checklist item(s) are not marked done", str(caught.exception))
-		self.assertNotIn("checklist", self.accepts(mobile_api.complete_task_via_mobile))
+		self.assertIn("checklist", self.accepts(mobile_api.complete_task_via_mobile))
+		names = [
+			item["item_name"]
+			for item in json.loads(frappe.db.get_value("Farm Task", task, "checklist_status"))["items"]
+			if item.get("required")
+		]
+		data = self.walk(
+			task=task, growth_stage_code="87", brix_reading=18.0, brix_method="Refractometer", checklist=names
+		)
+		self.assertTrue(data)
 
 
 # ── 2. nothing else became writable ─────────────────────────────────────────

@@ -1035,6 +1035,10 @@
   "allow_add_uom_to_context",
   "allow_remove_uom_from_context",
   "allow_set_uom_aliases",
+  "allow_preview_farm_task_template",
+  "allow_preview_inspection_template",
+  "allow_list_pest_control_applications",
+  "allow_approve_task_step",
   "pest_program_section",
   "pest_applicator_skill",
   "pest_applicator_certification",
@@ -8009,6 +8013,34 @@
    "fieldname": "allow_set_uom_aliases",
    "fieldtype": "Check",
    "label": "Set UoM Aliases"
+  },
+  {
+   "default": "1",
+   "description": "READ. Exactly what the phone renders for a task raised from a template, with every render problem.",
+   "fieldname": "allow_preview_farm_task_template",
+   "fieldtype": "Check",
+   "label": "Preview Farm Task Template"
+  },
+  {
+   "default": "1",
+   "description": "READ. What the phone renders for each section of an inspection template.",
+   "fieldname": "allow_preview_inspection_template",
+   "fieldtype": "Check",
+   "label": "Preview Inspection Template"
+  },
+  {
+   "default": "1",
+   "description": "READ. The pest control application records (rodent bait and structural pest control).",
+   "fieldname": "allow_list_pest_control_applications",
+   "fieldtype": "Check",
+   "label": "List Pest Control Applications"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Sign an approval step on a Farm Task; the account this app acts as must hold the step's role.",
+   "fieldname": "allow_approve_task_step",
+   "fieldtype": "Check",
+   "label": "Approve Task Step"
   },
   {
    "description": "Rodent bait at housing and buildings (docs/design/rodent_bait_program.md). Tim's open decisions live here with defaults; every one can be changed without a release.",

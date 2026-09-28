@@ -36,6 +36,12 @@
   "sop_document_es",
   "checklist_section",
   "checklist",
+  "form_section",
+  "form_schema",
+  "form_col",
+  "applies_to_asset_types",
+  "title_es",
+  "instructions_es",
   "regime_section",
   "compliance_regimes"
  ],
@@ -56,7 +62,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Task Type",
-   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nScouting\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nOther",
+   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nScouting\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nPest Control\nMaintenance\nOther",
    "reqd": 1,
    "search_index": 1
   },
@@ -226,6 +232,41 @@
    "fieldtype": "Table",
    "label": "Checklist",
    "options": "Farm Task Template Checklist Item"
+  },
+  {
+   "fieldname": "form_section",
+   "fieldtype": "Section Break",
+   "label": "Form (what the phone renders)",
+   "collapsible": 1
+  },
+  {
+   "description": "v0.204.0. The fields a worker fills in, in the form vocabulary the phone renders generically (docs/design/form_schema_and_labels.md §1): select, check, attestation, text, number, measurement (with a unit, fixed or from a linked Item), date, photo, signature, gps, link (Item, Asset Register, Housing Unit, Employee), repeatable group, approval step, info — with show_if / required_if and English/Spanish labels. Validated on save. Empty means the checklist above is rendered.",
+   "fieldname": "form_schema",
+   "fieldtype": "Code",
+   "label": "Form Schema",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "form_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Asset types whose scan screen offers this template, one per line (e.g. Cabin, House, Housing Unit).",
+   "fieldname": "applies_to_asset_types",
+   "fieldtype": "Small Text",
+   "label": "Applies To Asset Types"
+  },
+  {
+   "description": "The title in Spanish.",
+   "fieldname": "title_es",
+   "fieldtype": "Data",
+   "label": "Title (Spanish)"
+  },
+  {
+   "description": "The instructions in Spanish.",
+   "fieldname": "instructions_es",
+   "fieldtype": "Small Text",
+   "label": "Instructions (Spanish)"
   },
   {
    "fieldname": "regime_section",

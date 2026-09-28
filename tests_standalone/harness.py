@@ -1572,6 +1572,8 @@ APP_DOCTYPES = {
 	"Irrigation Zone": "irrigation_zone",
 	"Housing Unit": "housing_unit",
 	"Housing Assignment": "housing_assignment",
+	# v0.204.0. The non-crop pesticide application record.
+	"Pest Control Application": "pest_control_application",
 	"Family": "family",
 	"Staged File Upload Session": "staged_file_upload_session",
 	"Staged File Chunk": "staged_file_chunk",

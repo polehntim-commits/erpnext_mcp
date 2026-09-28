@@ -114,6 +114,13 @@ TEMPLATE_FIELDS = (
 	"instructions",
 	"company",
 	"enabled",
+	# v0.204.0. The form the phone renders, the asset types that offer the
+	# template, and the Spanish title and instructions. Read through
+	# `compat.existing_fields`, so a site mid-migrate still reads a template.
+	"form_schema",
+	"applies_to_asset_types",
+	"title_es",
+	"instructions_es",
 	"creation",
 	"modified",
 	"owner",
@@ -167,8 +174,28 @@ def template_row(name: str) -> dict:
 	"""One template as a plain dict, or {}."""
 	if not compat.doctype_exists(TEMPLATE_DOCTYPE) or not name:
 		return {}
-	row = frappe.db.get_value(TEMPLATE_DOCTYPE, name, TEMPLATE_FIELDS, as_dict=True)
+	row = frappe.db.get_value(
+		TEMPLATE_DOCTYPE, name, compat.existing_fields(TEMPLATE_DOCTYPE, TEMPLATE_FIELDS), as_dict=True
+	)
 	return dict(row) if row else {}
+
+
+def form_of(row: dict) -> list:
+	"""The template's `form_schema` as a list; [] when it has none or it cannot be read."""
+	from . import form_schema
+
+	try:
+		return form_schema.as_fields(row.get("form_schema"))
+	except form_schema.SchemaError:
+		return []
+
+
+def asset_types_of(row: dict) -> list:
+	return [
+		line.strip()
+		for line in str(row.get("applies_to_asset_types") or "").replace(",", "\n").splitlines()
+		if line.strip()
+	]
 
 
 def resolve(reference: str) -> str | None:
@@ -258,6 +285,11 @@ def describe(name: str, with_checklist: bool = False) -> dict:
 		"company": row.get("company") or None,
 		"enabled": compat.checked(row.get("enabled")),
 		"compliance_regimes": regimes_of(name),
+		# v0.204.0. docs/design/form_schema_and_labels.md §1–§2.
+		"form_schema": form_of(row) or None,
+		"applies_to_asset_types": asset_types_of(row),
+		"title_es": str(row.get("title_es") or "") or None,
+		"instructions_es": str(row.get("instructions_es") or "") or None,
 		"checklist_item_count": len(checklist),
 		"required_checklist_item_count": len([item for item in checklist if item.get("required")]),
 	}
@@ -308,6 +340,8 @@ def snapshot(name: str) -> dict:
 		"creates_record_data": record_data_of(row),
 		"notes": str(row.get("instructions") or ""),
 		"company": row.get("company") or None,
+		# v0.204.0. The form, COPIED — editing the template never reaches a task.
+		"form_schema": form_of(row),
 		"checklist_status": {
 			"items": [
 				{
@@ -346,6 +380,15 @@ def build_template(spec: dict):
 	doc.creates_record_data = json.dumps(as_object(spec.get("creates_record_data"), "creates_record_data"))
 	doc.instructions = str(spec.get("instructions") or "").strip()
 	doc.company = spec.get("company") or None
+	# v0.204.0. Validated by the caller (`form_schema.require_valid`); stored as JSON.
+	if spec.get("form_schema"):
+		doc.form_schema = json.dumps(spec["form_schema"])
+	if spec.get("applies_to_asset_types"):
+		types = spec["applies_to_asset_types"]
+		doc.applies_to_asset_types = "\n".join(types) if isinstance(types, (list, tuple)) else str(types)
+	for key in ("title_es", "instructions_es"):
+		if spec.get(key):
+			doc.set(key, str(spec[key]).strip())
 	doc.enabled = 1 if spec.get("enabled", 1) else 0
 	for regime in regimes_vocabulary.to_rows(spec.get("compliance_regimes") or spec.get("regimes") or []):
 		doc.append("compliance_regimes", dict(regime))
@@ -605,10 +648,11 @@ def seed_farm_task_templates() -> dict:
 	report = {"created": [], "present": [], "failed": []}
 	if not compat.doctype_exists(TEMPLATE_DOCTYPE):
 		return report
-	from .rodent_bait import SEED_TASK_TEMPLATES
+	from .rodent_bait import SEED_TASK_TEMPLATES_V204
 
 	# v0.203.0. The five rodent bait templates arrive DISABLED; see rodent_bait.
-	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES):
+	# v0.204.0. In their form-schema shape (docs/design/form_schema_and_labels.md §7).
+	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204):
 		name = spec["template_name"]
 		try:
 			if frappe.db.exists(TEMPLATE_DOCTYPE, {"template_name": name}):

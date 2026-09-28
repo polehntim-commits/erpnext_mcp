@@ -44,7 +44,8 @@
   "idempotency_section",
   "visit_id",
   "idempotency_col",
-  "completion_signature"
+  "completion_signature",
+  "form_answers"
  ],
  "fields": [
   {
@@ -236,6 +237,14 @@
    "fieldname": "completion_signature",
    "fieldtype": "Data",
    "label": "Completion Signature",
+   "read_only": 1
+  },
+  {
+   "description": "v0.204.0. This completion's form answers.",
+   "fieldname": "form_answers",
+   "fieldtype": "Code",
+   "label": "Form Answers",
+   "options": "JSON",
    "read_only": 1
   },
   {

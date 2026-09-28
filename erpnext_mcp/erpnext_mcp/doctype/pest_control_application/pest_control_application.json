@@ -1,0 +1,215 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:PCA-{YYYY}-{#####}",
+ "creation": "2026-09-28 12:00:00.000000",
+ "description": "A pesticide application at a building or housing unit — rodent bait and structural pest control. Who applied which registered product, where, how much, under which licence, and whether the label was on hand. Written by the task that did the work.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "source_task",
+  "applied_at",
+  "where_col",
+  "location_doctype",
+  "location",
+  "placement",
+  "occupancy",
+  "product_section",
+  "product",
+  "epa_registration_number",
+  "product_col",
+  "quantity",
+  "uom",
+  "stations",
+  "people_section",
+  "applicator",
+  "applicator_name",
+  "applicator_certification",
+  "people_col",
+  "label_available",
+  "label_viewed",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 0,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "source_task",
+   "fieldtype": "Link",
+   "label": "Source Task",
+   "options": "Farm Task",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "applied_at",
+   "fieldtype": "Datetime",
+   "label": "Applied At",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "where_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "location_doctype",
+   "fieldtype": "Link",
+   "label": "Location DocType",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Dynamic Link",
+   "label": "Location",
+   "options": "location_doctype",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "placement",
+   "fieldtype": "Select",
+   "label": "Placement",
+   "options": "\nExterior\nInterior"
+  },
+  {
+   "fieldname": "occupancy",
+   "fieldtype": "Select",
+   "label": "Occupancy",
+   "options": "\nOccupied\nUnoccupied"
+  },
+  {
+   "fieldname": "product_section",
+   "fieldtype": "Section Break",
+   "label": "Product"
+  },
+  {
+   "fieldname": "product",
+   "fieldtype": "Link",
+   "label": "Product",
+   "options": "Item",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "epa_registration_number",
+   "fieldtype": "Data",
+   "label": "EPA Reg. No."
+  },
+  {
+   "fieldname": "product_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "label": "Quantity"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "stations",
+   "fieldtype": "Int",
+   "label": "Stations"
+  },
+  {
+   "fieldname": "people_section",
+   "fieldtype": "Section Break",
+   "label": "Applicator and Label"
+  },
+  {
+   "fieldname": "applicator",
+   "fieldtype": "Data",
+   "label": "Applicator (Employee)",
+   "description": "Employee docname. Data, not Link, so the doctype migrates on a site without HR."
+  },
+  {
+   "fieldname": "applicator_name",
+   "fieldtype": "Data",
+   "label": "Applicator Name"
+  },
+  {
+   "fieldname": "applicator_certification",
+   "fieldtype": "Link",
+   "label": "Applicator Certification",
+   "options": "Certification"
+  },
+  {
+   "fieldname": "people_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "label_available",
+   "fieldtype": "Check",
+   "label": "Label Available",
+   "default": "0",
+   "description": "The product's EPA label was on file when the work was done."
+  },
+  {
+   "fieldname": "label_viewed",
+   "fieldtype": "Check",
+   "label": "Label Viewed",
+   "default": "0",
+   "description": "The label was opened on the phone during the task."
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-28 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Pest Control Application",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "location,product,applicator_name",
+ "sort_field": "applied_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "location",
+ "track_changes": 1
+}

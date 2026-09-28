@@ -226,6 +226,32 @@ def _describe_asset(row: dict) -> dict:
 	}
 
 
+def available_templates(asset_type: str) -> list:
+	"""v0.204.0 §2. Enabled Farm Task Templates whose `applies_to_asset_types` names this type."""
+	from .. import task_templates
+
+	if not asset_type or not compat.has_field("Farm Task Template", "applies_to_asset_types"):
+		return []
+	out = []
+	for row in frappe.db.get_all(
+		"Farm Task Template",
+		filters={"enabled": 1},
+		fields=compat.existing_fields(
+			"Farm Task Template", ("name", "template_name", "title_es", "task_type", "applies_to_asset_types")
+		),
+		limit=500,
+	):
+		if asset_type in task_templates.asset_types_of(row):
+			out.append(
+				{
+					"template": row["name"],
+					"title": {"en": row.get("template_name") or row["name"], "es": row.get("title_es") or ""},
+					"task_type": row.get("task_type") or None,
+				}
+			)
+	return sorted(out, key=lambda entry: entry["title"]["en"])
+
+
 def _occupancy_block(row: dict) -> dict:
 	"""v0.203.0. For a building: its manual flags, today's occupancy and its bait state.
 
@@ -836,6 +862,8 @@ def get_asset_detail(args: dict) -> ToolResult:
 			"erpnext_asset": asset_mirror.mirror_of(row["name"]) or None,
 			"open_tasks": open_tasks,
 			"open_task_count": len(open_tasks),
+			# v0.204.0. Templates bound to this asset type (applies_to_asset_types).
+			"available_templates": available_templates(described.get("asset_type") or ""),
 			"children": child_list,
 			"child_count": len(child_list),
 			"history": history,
@@ -984,6 +1012,8 @@ def scan_asset(args: dict) -> ToolResult:
 			"can_report": can_report,
 			"suggested_skill": suggested_skill,
 			"state": effective or None,
+			# v0.204.0. Templates bound to this asset type (applies_to_asset_types).
+			"available_templates": available_templates(asset_type or ""),
 			"state_actions": _actions_for(asset_type, effective) if effective else [],
 			"action_menu": asset_actions.menu_for(asset_type, effective),
 			# SPREAD LAST AND DELIBERATELY. `status_report` re-answers `state`

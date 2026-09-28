@@ -851,6 +851,10 @@ BUILDERS = {
 	WATER_TEST: build_water_test,
 }
 
+#: v0.204.0. Records the completion builds from the TASK and its form answers
+#: (`pest_control.build_application`) rather than from a record_data payload.
+TASK_BUILT = ("Pest Control Application",)
+
 
 # ── Housing Inspection ──────────────────────────────────────────────────────
 def list_housing_inspections(args: dict) -> ToolResult:

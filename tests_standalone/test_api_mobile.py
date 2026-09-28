@@ -688,6 +688,11 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"match_product",
 		# v0.203.0 — a building occupied without an assignment behind it.
 		"set_building_occupancy",
+		# v0.204.0 — product labels and approval steps.
+		"get_item_label",
+		"get_item_label_file",
+		"record_label_viewed",
+		"approve_task_step",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

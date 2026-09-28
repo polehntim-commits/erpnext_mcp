@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.204.0 — 2026-09-28 — templates the phone renders; the product label one tap away
+
+**928 tools** (458 read, 470 write): `preview_farm_task_template`, `preview_inspection_template`,
+`list_pest_control_applications` (read) and `approve_task_step` (write, default off). **Four new
+routes** (136 mobile methods): `get_item_label`, `get_item_label_file`, `record_label_viewed`,
+`approve_task_step`. Contract `docs/design/form_schema_and_labels.md`.
+
+- **One form vocabulary** (`form_schema.py`): select, multi_select, check, attestation, text,
+  long_text, number, measurement (unit fixed or from a linked Item), date, datetime, photo
+  (min/max), signature, gps, link (Item filtered by group, Asset Register, Housing Unit, Employee),
+  repeatable group, approval (role-gated, before_start), info — with `show_if` / `required_if` on
+  answers or task context, EN/ES labels and help. Farm Task Template `form_schema` (snapshotted onto
+  the task), Inspection Template `field_prompts` as a list, and the mobile wizard spec's `form` per
+  step all use it. A template with no form renders from its legacy checklist, and answers become the
+  legacy ticks.
+- **The server refuses what the phone cannot render** (create/update template tools) and warns
+  about what it would render badly (`get_farm_task_template.problems`, the previews): English only,
+  branching written as prose, a free-text product, one photo for many stations, an approval typed as
+  text, a safety statement with no attestation, `task_type` Other, a regulated task with no record.
+- **Completion**: `form_answers` validated with the same conditions the phone applies, stored on the
+  assignment and the task; the mobile complete route now forwards `checklist` (it used to drop it,
+  so a template with a required item could not be completed from a phone). Approval steps block
+  start (`before_start`) and completion until signed.
+- **Labels on the phone** (Tim: "an applicator can look at the label of the product they are
+  handling"): `get_item_label` (key fields + EPA PDF + label photos), `get_item_label_file` (only
+  that Item's files), `record_label_viewed`. `get_task` lists the task's `products`; Farm Task
+  records `label_available` / `label_snapshot` at start and completion and `label_views`; seeded
+  rule `pesticide_label_unavailable` (disabled).
+- **`Pest Control Application`** — the non-crop sibling of Spray Application (who applied which
+  product, where, how much, under which licence, label on hand), written by a task whose
+  `creates_record` names it; in the audit packet's housing section.
+- **Templates**: task types `Pest Control` and `Maintenance`; `applies_to_asset_types` (the asset
+  scan returns `available_templates`); `title_es` / `instructions_es`.
+- **The five rodent templates rebuilt** on the form (still disabled): EN/ES, product link with its
+  label, quantities in the product's unit, occupied-only branches, station groups, the Farm
+  Manager's approval before interior bait, safety attestations, Pest Control Application records.
+  Patch `rebuild_rodent_templates` updates only unedited v0.203.0 seeds — OML's drafts are untouched.
+- Deploy: **`bench migrate`**, then an image rebuild. iOS: fafo_ios §51.
+
 ## 0.203.0 — 2026-09-27 — rodent bait at housing and buildings, as camp maintenance
 
 **924 tools** (unchanged; new arguments only). **One new route, `/mobile/set_building_occupancy`**

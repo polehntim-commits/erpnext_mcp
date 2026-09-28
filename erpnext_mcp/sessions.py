@@ -343,6 +343,38 @@ def sections_of(name: str) -> list:
 	return [dict(row) for row in rows or []]
 
 
+def as_prompts(raw, label: str):
+	"""`field_prompts`: a list of form fields (v0.204.0, validated) or the legacy dict.
+
+	docs/design/form_schema_and_labels.md §1.7. A list the phone cannot render is
+	refused with every error; the legacy `{key: {type, label, label_es}}` dict is
+	still read.
+	"""
+	from . import form_schema
+
+	if isinstance(raw, str) and raw.strip().startswith("["):
+		try:
+			raw = json.loads(raw)
+		except ValueError as exc:
+			raise ValueError(f"{label} is not valid JSON: {str(raw)[:200]}") from exc
+	if isinstance(raw, list):
+		try:
+			return form_schema.require_valid(raw)
+		except form_schema.SchemaError as exc:
+			raise ValueError(f"{label} cannot be rendered on the phone: {exc}") from exc
+	return as_object(raw, label)
+
+
+def section_fields(section: dict) -> list:
+	"""A section's prompts as form fields, whichever shape they were stored in."""
+	from . import form_schema
+
+	try:
+		return form_schema.as_fields(section.get("field_prompts"))
+	except form_schema.SchemaError:
+		return []
+
+
 def describe_section(row: dict) -> dict:
 	"""One section as a client reads it, with both blobs already parsed."""
 	try:
@@ -350,7 +382,7 @@ def describe_section(row: dict) -> dict:
 	except ValueError:
 		contract = {}
 	try:
-		prompts = as_object(row.get("field_prompts_json"), "field_prompts")
+		prompts = as_prompts(row.get("field_prompts_json"), "field_prompts")
 	except ValueError:
 		prompts = {}
 	try:
@@ -966,7 +998,7 @@ def _section_row(section: dict, index: int) -> dict:
 		contract = as_object(section.get("evidence_contract_json"), "evidence_contract")
 	prompts = section.get("field_prompts")
 	if prompts is None:
-		prompts = as_object(section.get("field_prompts_json"), "field_prompts")
+		prompts = as_prompts(section.get("field_prompts_json"), "field_prompts")
 	defaults = section.get("produces_record_data")
 	if defaults is None:
 		defaults = as_object(section.get("produces_record_data_json"), "produces_record_data")

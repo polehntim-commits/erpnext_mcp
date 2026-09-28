@@ -70,6 +70,7 @@ from .. import (
 	records,
 	rodent_bait,
 	sessions,
+	task_forms,
 	timezones,
 	training_sessions,
 )
@@ -194,6 +195,13 @@ _TASK_FIELDS = (
 	"bait_placement",
 	"bait_product",
 	"bait_activity",
+	# v0.204.0. The form snapshot, its answers, approvals and the label record.
+	"form_schema",
+	"form_answers",
+	"approvals",
+	"label_available",
+	"label_snapshot",
+	"label_views",
 	"creation",
 	"modified",
 	"owner",
@@ -1392,7 +1400,11 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 			"together with the assignment's location fix, photographs and findings. Run the sweep "
 			"over the completion date to file the record immediately."
 		)
-	elif creates_record and creates_record not in inspections.BUILDERS:
+	elif (
+		creates_record
+		and creates_record not in inspections.BUILDERS
+		and creates_record not in inspections.TASK_BUILT
+	):
 		warnings.append(
 			f"{creates_record} exists on this site but erpnext_mcp has no builder for it, so "
 			"completing this task will file the evidence against the assignment and report that it "
@@ -2169,6 +2181,10 @@ def start_farm_task(args: dict) -> ToolResult:
 	# the phone start here. docs/design/rodent_bait_program.md §5–§6.
 	rodent_bait.refuse_unqualified(task, str(assignment.get("assigned_to") or ""), "started")
 	rodent_bait.refuse_start_without_notice(task)
+	# v0.204.0. A `before_start` approval step (e.g. the Farm Manager's sign-off
+	# on interior bait) must be signed first.
+	task_forms.refuse_start_while_unapproved(task)
+	task_forms.stamp_label(task)
 
 	farm_shift = _shift_argument(args, str(task.get("company") or ""))
 
@@ -2324,6 +2340,12 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# evidence contract is about what the work PRODUCED — telling somebody their
 	# photograph is missing when the real answer is that they never tested the CO
 	# detector sends them back for the wrong thing.
+	# v0.204.0. THE FORM, BEFORE THE CHECKLIST — its answers ARE the ticks. A
+	# form with a required answer missing, a value out of range or an approval
+	# still pending is refused here, naming every field, before anything is
+	# written (docs/design/form_schema_and_labels.md §3.2).
+	form_answers = task_forms.check_completion(task, args)
+	args["_form_answers"] = form_answers
 	checklist_state = _marked_checklist(task, args)
 	outstanding = unmet_checklist(checklist_state)
 	if outstanding:
@@ -2373,6 +2395,8 @@ def complete_farm_task(args: dict) -> ToolResult:
 	doc = frappe.get_doc(FARM_TASK_ASSIGNMENT, assignment["name"])
 	doc.state = COMPLETED
 	doc.completed_at = as_str(args, "completed_at") or now
+	if form_answers is not None and compat.has_field(FARM_TASK_ASSIGNMENT, "form_answers"):
+		doc.form_answers = json.dumps(form_answers)
 	doc.completion_narrative = narrative
 	doc.findings_text = findings
 	doc.witness = witness
@@ -2569,6 +2593,15 @@ def complete_farm_task(args: dict) -> ToolResult:
 	):
 		if spray_window.get(column):
 			task_fields[column] = spray_window[column]
+	# v0.204.0. The answers, the product a form linked, and whether every
+	# product's label was on file — the label in possession at application.
+	task_fields.update(
+		{
+			key: value
+			for key, value in task_forms.task_fields_after({**task, **task_fields}, form_answers).items()
+			if compat.has_field(FARM_TASK, key)
+		}
+	)
 	_set_task_state(assignment["task"], final_state, **task_fields)
 
 	# v0.192.0. AND THE BLOCK IS RESTRICTED WHERE EVERY READER LOOKS. The stamp
@@ -3002,7 +3035,7 @@ def _marked_checklist(task: dict, args: dict) -> dict:
 	"""
 	items = checklist_items(task.get("checklist_status"))
 	raw = args.get("checklist")
-	if raw in (None, ""):
+	if raw in (None, "", []):
 		return {"items": items}
 	if not isinstance(raw, list):
 		raise ToolError(
@@ -3182,6 +3215,13 @@ def _produce_record(task: dict, assignment_doc, evidence: list, signature: str, 
 			None,
 			payload,
 		)
+
+	# v0.204.0. The pest control application record is built from the task and
+	# its form answers rather than from a record_data payload.
+	if doctype == "Pest Control Application" and compat.doctype_exists(doctype):
+		from .. import pest_control
+
+		return pest_control.build_application(task, assignment_doc, args.get("_form_answers")), None, "", None
 
 	builder = inspections.BUILDERS.get(doctype)
 	if builder is None:
@@ -4055,6 +4095,7 @@ def _recipe_from_template(template: str, row: dict) -> dict | None:
 		"assigned_to_expression": expression,
 		"template": shape["template"],
 		"checklist_status": shape["checklist_status"],
+		"form_schema": list(shape.get("form_schema") or []),
 		"creates_record_data": dict(shape["creates_record_data"]),
 		"instructions": shape["notes"],
 	}
@@ -5109,6 +5150,8 @@ def _task_from_alert(row: dict, recipe: dict, dry_run: bool, overrides: dict | N
 	if recipe.get("template"):
 		doc.template = recipe["template"]
 		doc.checklist_status = json.dumps(recipe.get("checklist_status") or {"items": []})
+		if recipe.get("form_schema") and compat.has_field(FARM_TASK, "form_schema"):
+			doc.form_schema = json.dumps(recipe["form_schema"])
 	if assignee:
 		doc.assigned_to = assignee
 		doc.assigned_to_name = _worker_name(assignee, "")

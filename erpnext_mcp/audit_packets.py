@@ -1512,6 +1512,20 @@ def _housing(spec: AuditPacketType, company: str, start: str, end: str) -> dict:
 		pest = []
 	if pest:
 		section["pest_control"] = pest[:SECTION_CAP]
+	# v0.204.0. The application records themselves (docs/design/form_schema_and_labels.md §5).
+	try:
+		from . import pest_control
+
+		applications = [
+			row
+			for row in pest_control.list_applications(company or "", "", SECTION_CAP)
+			if (not start or str(row.get("applied_at") or "")[:10] >= start)
+			and (not end or str(row.get("applied_at") or "")[:10] <= end)
+		]
+	except Exception:  # pragma: no cover
+		applications = []
+	if applications:
+		section["pest_control_applications"] = applications
 	return section
 
 

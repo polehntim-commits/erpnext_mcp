@@ -413,7 +413,9 @@ class ReadToolsDoNotWrite(SeededTestCase):
 		own no-write coverage in their own test modules."""
 		from erpnext_mcp import registry
 
-		self.assertEqual(len(registry.READ_TOOLS), 455)
+		# v0.204.0 adds preview_farm_task_template, preview_inspection_template and
+		# list_pest_control_applications.
+		self.assertEqual(len(registry.READ_TOOLS), 458)
 		self.assertTrue(set(ACCOUNTING_READ_TOOLS) <= set(registry.READ_TOOLS))
 
 

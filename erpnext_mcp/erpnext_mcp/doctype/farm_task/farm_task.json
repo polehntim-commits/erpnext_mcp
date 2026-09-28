@@ -72,6 +72,14 @@
   "bait_placement",
   "bait_product",
   "bait_activity",
+  "form_task_section",
+  "form_schema",
+  "form_answers",
+  "approvals",
+  "label_col",
+  "label_available",
+  "label_snapshot",
+  "label_views",
   "notes_section",
   "notes",
   "narrative_section",
@@ -93,7 +101,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Task Type",
-   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nScouting\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nOther",
+   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nScouting\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nPest Control\nMaintenance\nOther",
    "reqd": 1,
    "search_index": 1
   },
@@ -487,6 +495,64 @@
    "fieldtype": "Select",
    "label": "Bait Activity",
    "options": "\nActivity\nNo activity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "form_task_section",
+   "fieldtype": "Section Break",
+   "label": "Form and Label",
+   "collapsible": 1
+  },
+  {
+   "description": "The template's form, COPIED at creation. Editing the template never changes it.",
+   "fieldname": "form_schema",
+   "fieldtype": "Code",
+   "label": "Form Schema",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "description": "What the worker answered, validated against the form.",
+   "fieldname": "form_answers",
+   "fieldtype": "Code",
+   "label": "Form Answers",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "description": "Approval steps signed so far: {key: {approved_by, approved_at, signature, role}}.",
+   "fieldname": "approvals",
+   "fieldtype": "Code",
+   "label": "Approvals",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "label_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Every product this task handles had its EPA label on file when it was started or completed — the label in possession at application.",
+   "fieldname": "label_available",
+   "fieldtype": "Check",
+   "label": "Label Available",
+   "read_only": 1
+  },
+  {
+   "description": "Per product: EPA registration number and the label PDF on file at completion.",
+   "fieldname": "label_snapshot",
+   "fieldtype": "Code",
+   "label": "Label Snapshot",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "description": "Who opened which product's label on the phone, and when.",
+   "fieldname": "label_views",
+   "fieldtype": "Code",
+   "label": "Label Views",
+   "options": "JSON",
    "read_only": 1
   },
   {

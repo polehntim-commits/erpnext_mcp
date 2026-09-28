@@ -179,6 +179,7 @@ from .tools import (
 	wizards,
 	workflow,
 )
+from .tools import pest_control as pest_control_tools
 
 _STRING = {"type": "string"}
 _NUMBER = {"type": "number"}
@@ -11599,6 +11600,23 @@ TOOLS = {
 			"compliance_regimes": _field(
 				_STRING_ARRAY, "The audits this work is evidence for: OR-OSHA, FSMA, WPS, NOP …"
 			),
+			"form_schema": _field(
+				{"type": "array", "items": _OBJECT},
+				"v0.204.0. The form the phone renders — a list of fields: {key, type, label:{en,es}, "
+				"help, required, show_if, required_if, options, min, max, step, uom:{fixed|from_field}, "
+				"min_count, max_count, link:{doctype, filters}, fields (group), role (approval), "
+				"before_start, statement (attestation)}. Types: select, multi_select, check, attestation, "
+				"text, long_text, number, measurement, date, datetime, photo, signature, gps, link (Item, "
+				"Asset Register, Housing Unit, Employee), group (repeatable), approval, info. Conditions: "
+				"{field|context, equals|not_equals|in|not_in|truthy|falsy} and all/any/not. Refused if the "
+				"phone cannot render it; preview_farm_task_template shows the result. [] clears it.",
+			),
+			"applies_to_asset_types": _field(
+				_STRING_ARRAY,
+				"v0.204.0. Asset types whose scan screen offers this template (Cabin, House …).",
+			),
+			"title_es": _field(_STRING, "v0.204.0. The title in Spanish."),
+			"instructions_es": _field(_STRING, "v0.204.0. The instructions in Spanish."),
 		},
 		required=("template_name", "task_type", "evidence_required"),
 		mutating=True,
@@ -11651,6 +11669,23 @@ TOOLS = {
 				"they produced stays in the register. It stops NEW work being raised.",
 			),
 			"compliance_regimes": _field(_STRING_ARRAY, "Replace the regime tags."),
+			"form_schema": _field(
+				{"type": "array", "items": _OBJECT},
+				"v0.204.0. The form the phone renders — a list of fields: {key, type, label:{en,es}, "
+				"help, required, show_if, required_if, options, min, max, step, uom:{fixed|from_field}, "
+				"min_count, max_count, link:{doctype, filters}, fields (group), role (approval), "
+				"before_start, statement (attestation)}. Types: select, multi_select, check, attestation, "
+				"text, long_text, number, measurement, date, datetime, photo, signature, gps, link (Item, "
+				"Asset Register, Housing Unit, Employee), group (repeatable), approval, info. Conditions: "
+				"{field|context, equals|not_equals|in|not_in|truthy|falsy} and all/any/not. Refused if the "
+				"phone cannot render it; preview_farm_task_template shows the result. [] clears it.",
+			),
+			"applies_to_asset_types": _field(
+				_STRING_ARRAY,
+				"v0.204.0. Asset types whose scan screen offers this template (Cabin, House …).",
+			),
+			"title_es": _field(_STRING, "v0.204.0. The title in Spanish."),
+			"instructions_es": _field(_STRING, "v0.204.0. The instructions in Spanish."),
 		},
 		required=("template",),
 		mutating=True,
@@ -11706,6 +11741,62 @@ TOOLS = {
 		title="Get a farm task template",
 		available=_needs_doctype("Farm Task Template"),
 		requires="the Farm Task Template DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"preview_farm_task_template": _tool(
+		tasktemplates.preview_farm_task_template,
+		"v0.204.0. EXACTLY WHAT THE PHONE WILL SHOW for a task raised from a template — "
+		"`form` is byte-for-byte what get_task sends, `rendered` is what a worker sees now in "
+		"`language` (en/es) with `context` (e.g. {occupancy_at_creation: 'Unoccupied'} to see the "
+		"other branch) and `answers` — plus every render error and warning (English only, "
+		"branching written as prose, a free-text product, one photo for many stations, an "
+		"approval typed as text …). Pass `template_body` (an unsaved template) to preview before "
+		"creating one. Read-only.",
+		{
+			"template": _field(_STRING, "A saved template, by name."),
+			"template_body": _field(
+				_OBJECT, "An unsaved template body instead (as create_farm_task_template takes)."
+			),
+			"language": _field(_STRING, "en or es. Default en."),
+			"context": _field(
+				_OBJECT, "Task facts conditions read: occupancy_at_creation, bait_placement, asset_type …"
+			),
+			"answers": _field(_OBJECT, "Answers so far, to see what show_if reveals."),
+		},
+		title="Preview a farm task template on the phone",
+		available=_needs_doctype("Farm Task Template"),
+		requires="the Farm Task Template DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"approve_task_step": _tool(
+		pest_control_tools.approve_task_step,
+		"MUTATING (default OFF). Sign one approval step on a Farm Task (a form field of type "
+		"`approval`, e.g. the Farm Manager's sign-off before interior rodent bait). The account "
+		"this app acts as must hold the step's role. A `before_start` step must be signed before "
+		"the task can start; every step before it can complete.",
+		{
+			"task": _field(_STRING, "The Farm Task."),
+			"key": _field(_STRING, "The approval field's key."),
+			"signature": _field(_STRING, "A signature file reference, optional."),
+		},
+		required=("task", "key"),
+		mutating=True,
+		title="Approve a task step",
+		available=_needs_doctype("Farm Task"),
+		requires="the Farm Task DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_pest_control_applications": _tool(
+		pest_control_tools.list_pest_control_applications,
+		"v0.204.0. The pest control application records — who applied which registered product, "
+		"where, how much, under which licence, and whether its label was on hand — newest first. "
+		"Written by the completion of a task whose template creates them (rodent bait placement "
+		"and removal). Read-only.",
+		{
+			"company": _field(_STRING, "Only this company."),
+			"location": _field(_STRING, "Only this housing unit or building."),
+			"limit": _field(_INTEGER, "Maximum rows. Default 100, hard maximum 500."),
+		},
+		title="List pest control applications",
+		available=_needs_doctype("Pest Control Application"),
+		requires="the Pest Control Application DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	"create_task_from_template": _tool(
 		tasktemplates.create_task_from_template,
@@ -21275,6 +21366,20 @@ TOOLS = {
 			"limit": _LIMIT,
 		},
 		title="List inspection templates",
+		available=_needs_doctype("Inspection Template"),
+		requires="the Inspection Template DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"preview_inspection_template": _tool(
+		sessions.preview_inspection_template,
+		"v0.204.0. What the phone renders for each section of an Inspection Template: each "
+		"section's `form` (its field_prompts as form fields — the vocabulary of "
+		"preview_farm_task_template), rendered in `language`, and every render problem. Read-only.",
+		{
+			"template": _field(_STRING, "Template docname or name."),
+			"language": _field(_STRING, "en or es. Default en."),
+		},
+		required=("template",),
+		title="Preview an inspection template on the phone",
 		available=_needs_doctype("Inspection Template"),
 		requires="the Inspection Template DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),

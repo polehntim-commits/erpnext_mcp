@@ -700,6 +700,10 @@ def complete_task_via_mobile(args: dict) -> ToolResult:
 		"allow_meter_reset",
 		# v0.203.0. What a rodent bait check found.
 		"bait_activity",
+		# v0.204.0. The form's answers, the checklist ticks, and the worker's language.
+		"form_answers",
+		"checklist",
+		"language",
 	):
 		if args.get(key) is not None:
 			inner[key] = args.get(key)

@@ -55,6 +55,35 @@ A_SIGNED_PHOTO = [
 ]
 
 
+def answers_for(fields, overrides=None):
+	"""A complete, valid set of answers for a form — every field filled the simplest way."""
+	out = {}
+	for field in fields:
+		kind = field["type"]
+		if kind in ("approval", "info"):
+			continue
+		if kind in ("check", "attestation"):
+			out[field["key"]] = True
+		elif kind == "select":
+			out[field["key"]] = field["options"][-1]["value"]
+		elif kind in ("number",):
+			out[field["key"]] = 0
+		elif kind == "measurement":
+			out[field["key"]] = {"value": 1, "uom": "Nos"}
+		elif kind == "photo":
+			out[field["key"]] = ["/files/station.jpg"]
+		elif kind == "date":
+			out[field["key"]] = "2026-10-01"
+		elif kind == "link":
+			out[field["key"]] = "BAIT-1"
+		elif kind == "group":
+			out[field["key"]] = [answers_for(field["fields"])]
+		else:
+			out[field["key"]] = "x"
+	out.update(overrides or {})
+	return out
+
+
 class BaitTestCase(V12TestCase):
 	def setUp(self):
 		super().setUp()
@@ -65,6 +94,18 @@ class BaitTestCase(V12TestCase):
 			frappe.db.set_value("Farm Task Template", name, "enabled", 1)
 		# Every worker in these tests is a licensed applicator unless a test says otherwise.
 		self.licence("EMP-001")
+		STORE.seed(
+			"Item",
+			[
+				{
+					"name": "BAIT-1",
+					"item_code": "BAIT-1",
+					"item_name": "Bait",
+					"item_group": "Pest Control Products",
+					"stock_uom": "Nos",
+				}
+			],
+		)
 
 	# -- fixtures ------------------------------------------------------------
 	def licence(self, holder):
@@ -100,11 +141,6 @@ class BaitTestCase(V12TestCase):
 		"""Assign, start and complete a task with every required checklist item ticked."""
 		self.tool_data("assign_farm_task", {"task": task, "assigned_to": worker, "assigned_to_name": "Ana"})
 		self.tool_data("start_farm_task", {"task": task, "worker_id": worker})
-		items = [
-			row["item_name"]
-			for row in self.tool_data("get_farm_task", {"task": task}).get("checklist") or []
-			if row.get("required", True)
-		]
 		payload = {
 			"task": task,
 			"worker_id": worker,
@@ -112,7 +148,17 @@ class BaitTestCase(V12TestCase):
 			"findings_text": "done",
 			"completion_narrative": "done",
 			"farm_location_gps": "45.1,-122.1",
-			"checklist": items,
+			"form_answers": answers_for(
+				json.loads(self.task(task).get("form_schema") or "[]"),
+				{
+					**(
+						{"rodent_activity_found": "yes" if extra["bait_activity"] else "no"}
+						if "bait_activity" in extra
+						else {}
+					),
+					**extra.pop("answers", {}),
+				},
+			),
 		}
 		payload.update(extra)
 		return self.tool_data("complete_farm_task", payload)

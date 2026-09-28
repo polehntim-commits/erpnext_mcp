@@ -48,7 +48,7 @@ SWEPT_RULES = 31
 GATE_RULES = len(enforcement.CONTROL_POINTS)
 
 #: v0.203.0. The four rodent bait rules, seeded DISABLED (Tim switches the program on).
-RODENT_RULES = 4
+RODENT_RULES = 5
 
 #: What the seeder writes on a fresh site, all told.
 ALL_RULES = SWEPT_RULES + GATE_RULES + RODENT_RULES

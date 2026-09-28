@@ -1540,6 +1540,43 @@ def rule_seed_specs() -> list:
 			),
 			"authored_by": "System",
 		},
+		{
+			"rule_id": "pesticide_label_unavailable",
+			"title": "A pesticide was applied with no label on file",
+			"category": "Spray and Pesticides",
+			"target_doctype": FARM_TASK,
+			"requires_doctypes": FARM_TASK,
+			"requires_fields": ["label_available", "label_snapshot"],
+			"enabled": 0,
+			"date_field": "completed_at",
+			"date_field_role": "Timestamp",
+			"due_date_mode": "None",
+			"missing_date_behaviour": "Raise",
+			"threshold_critical_days": -1,
+			"threshold_warning_days": -1,
+			"severity_expired": "Warning",
+			"default_severity": "Warning",
+			"scope_filters": [
+				{"field": "state", "op": "eq", "value": COMPLETED},
+				{"field": "label_available", "op": "isfalse"},
+				{"field": "label_snapshot", "op": "isnotnull"},
+			],
+			"message_template": (
+				"{{ row.name }} ({{ row.task_name }}) handled a product with no EPA label on file when "
+				"the work was done. Attach the label (attach_epa_label, or 'Add label photos' on the "
+				"product) so the next applicator has it in hand."
+			),
+			"regimes": ["WPS", "Internal"],
+			"regulation_citations": "FIFRA §12(a)(2)(G) (use consistent with the label); 40 CFR 170.311 (labeling information available to handlers)",
+			"retention_years": 3,
+			"purpose": "The label is the law, and the applicator must be able to read it where the work is done.",
+			"kairotic_gate_description": (
+				"Fires on a COMPLETED task that handled a product (bait, a form's product, or its "
+				"materials) whose EPA label PDF was not on file at completion. Informational: the "
+				"completion itself is never refused."
+			),
+			"authored_by": "System",
+		},
 	]
 
 
@@ -1615,3 +1652,427 @@ def audit_rows(company: str, start: str, end: str) -> list:
 		if tasks:
 			out.append({"location_doctype": location_doctype, "location": location, "tasks": tasks})
 	return out
+
+
+# ── v0.204.0: the five templates, rebuilt on the form schema ────────────────
+#: The v0.203.0 descriptions, so `patches/rebuild_rodent_templates` can tell a
+#: template this app seeded (and nobody edited) from anybody else's — OML's own
+#: drafts carry different words and are never touched.
+V203_DESCRIPTIONS = {spec["template_name"]: spec["description"] for spec in SEED_TASK_TEMPLATES}
+
+BUILDING_TYPES = ("Cabin", "House", "Housing Unit", "Storage", "Cold Storage")
+_OCCUPIED = {"context": "occupancy_at_creation", "equals": OCCUPIED}
+
+
+def _t(en: str, es: str) -> dict:
+	return {"en": en, "es": es}
+
+
+def _product(required: bool = True) -> dict:
+	return {
+		"key": "product",
+		"type": "link",
+		"label": _t("Product", "Producto"),
+		"help": _t(
+			"Scan or pick the bait. Its label opens from here.",
+			"Escanee o elija el cebo. Su etiqueta se abre aquí.",
+		),
+		"required": required,
+		"link": {"doctype": "Item", "filters": {"item_group": PEST_CONTROL_GROUP}},
+	}
+
+
+def _gloves() -> dict:
+	return {
+		"key": "ppe_gloves",
+		"type": "attestation",
+		"label": _t("PPE", "EPP"),
+		"statement": _t(
+			"I am wearing waterproof gloves and any other PPE the label requires.",
+			"Llevo guantes impermeables y cualquier otro EPP que exija la etiqueta.",
+		),
+		"required": True,
+	}
+
+
+def _notice_posted() -> dict:
+	return {
+		"key": "notice_posted",
+		"type": "attestation",
+		"label": _t("Occupant notice", "Aviso a ocupantes"),
+		"statement": _t(
+			"The English/Spanish occupant notice is posted and occupants were told before placement.",
+			"El aviso en inglés/español está colocado y se informó a los ocupantes antes de colocar el cebo.",
+		),
+		"required": True,
+		"show_if": _OCCUPIED,
+	}
+
+
+def _stations(where_label: dict, interior: bool) -> dict:
+	fields = [
+		{
+			"key": "photo",
+			"type": "photo",
+			"label": _t("Station, lid closed and locked", "Estación, tapa cerrada y con llave"),
+			"min_count": 1,
+			"max_count": 3,
+			"required": True,
+		},
+		{"key": "where", "type": "text", "label": where_label, "required": True},
+		{
+			"key": "count",
+			"type": "measurement",
+			"label": _t("Bait placed in this station", "Cebo colocado en esta estación"),
+			"uom": {"from_field": "product"},
+			"min": 0,
+			"required": True,
+		},
+	]
+	if not interior:
+		fields.insert(
+			2,
+			{
+				"key": "distance_ft",
+				"type": "number",
+				"label": _t("Distance from the building (ft)", "Distancia al edificio (pies)"),
+				"min": 0,
+				"required": False,
+			},
+		)
+	return {
+		"key": "stations",
+		"type": "group",
+		"label": _t("Stations", "Estaciones"),
+		"help": _t("One entry per station.", "Una entrada por estación."),
+		"min_count": 1,
+		"max_count": 50,
+		"required": True,
+		"fields": fields,
+	}
+
+
+def _locked_only() -> dict:
+	return {
+		"key": "tamper_resistant",
+		"type": "attestation",
+		"label": _t("Tamper-resistant stations", "Estaciones a prueba de manipulación"),
+		"statement": _t(
+			"Every placement is inside a locked tamper-resistant station; no loose pacs or blocks.",
+			"Cada colocación está dentro de una estación con llave a prueba de manipulación; sin paquetes ni bloques sueltos.",
+		),
+		"required": True,
+		"required_if": _OCCUPIED,
+	}
+
+
+_COMMON = {
+	"enabled": 0,
+	"task_type": "Pest Control",
+	"applies_to_asset_types": list(BUILDING_TYPES),
+	"regimes": ["OR-OSHA", "Internal"],
+}
+
+SEED_TASK_TEMPLATES_V204 = (
+	{
+		**_COMMON,
+		"template_name": EXTERIOR,
+		"title_es": "Colocación de cebo para roedores - Exterior",
+		"description": "Rodent bait outside a housing unit or building, from Pest Control Products. Occupied: locked tamper-resistant stations only, occupant notice first.",
+		"skill_required": "applicator",
+		"estimated_duration_minutes": 45,
+		"dispatch_mode": "Dispatched",
+		"default_urgency": "Normal",
+		"evidence_required": {"signature": True, "gps": True},
+		"creates_record": "Pest Control Application",
+		"instructions": "Read the label before you start — the label is the law. Stay within the label's distance of the building. Keep bait away from vents, food and food-contact surfaces. No place pacs in burrows.",
+		"instructions_es": "Lea la etiqueta antes de empezar: la etiqueta es la ley. Manténgase dentro de la distancia al edificio que indica la etiqueta. Mantenga el cebo lejos de ventilaciones, alimentos y superficies en contacto con alimentos. No ponga paquetes en madrigueras.",
+		"form_schema": [
+			_product(),
+			_notice_posted(),
+			_gloves(),
+			_locked_only(),
+			_stations(_t("Where (side of building, tag)", "Dónde (lado del edificio, etiqueta)"), False),
+			{
+				"key": "away_from_food",
+				"type": "attestation",
+				"label": _t("Placement", "Colocación"),
+				"statement": _t(
+					"Not in burrows (unless the label allows), not near vents, food or food-contact surfaces.",
+					"No en madrigueras (salvo que la etiqueta lo permita), ni cerca de ventilaciones, alimentos o superficies en contacto con alimentos.",
+				),
+				"required": True,
+			},
+		],
+	},
+	{
+		**_COMMON,
+		"template_name": INTERIOR,
+		"title_es": "Colocación de cebo para roedores - Interior",
+		"description": "Rodent bait INSIDE a housing unit or building — the highest-exposure use. Farm Manager approval first; locked tamper-resistant stations only; nobody is assigned to the unit until a Removal and Clearance is completed.",
+		"skill_required": "applicator",
+		"estimated_duration_minutes": 45,
+		"dispatch_mode": "Dispatched",
+		"default_urgency": "High",
+		"evidence_required": {"signature": True, "gps": True},
+		"creates_record": "Pest Control Application",
+		"instructions": "Only with the Farm Manager's approval. Every placement in a locked station, out of reach of children and pets, never near vents, food, dishes or counters. Photograph each station with the room visible.",
+		"instructions_es": "Solo con la aprobación del gerente. Cada colocación en una estación con llave, fuera del alcance de niños y mascotas, nunca cerca de ventilaciones, alimentos, platos o mostradores. Fotografíe cada estación con la habitación visible.",
+		"form_schema": [
+			{
+				"key": "manager_approval",
+				"type": "approval",
+				"label": _t(
+					"Farm Manager approval for interior bait", "Aprobación del gerente para cebo interior"
+				),
+				"role": "Farm Manager",
+				"before_start": True,
+				"required": True,
+			},
+			_product(),
+			_notice_posted(),
+			_gloves(),
+			{
+				**_locked_only(),
+				"required": True,
+			},
+			_stations(_t("Room", "Habitación"), True),
+			{
+				"key": "out_of_reach",
+				"type": "attestation",
+				"label": _t("Placement", "Colocación"),
+				"statement": _t(
+					"Out of reach of children and pets; not near vents, food, dishes or food-contact surfaces.",
+					"Fuera del alcance de niños y mascotas; no cerca de ventilaciones, alimentos, platos o superficies en contacto con alimentos.",
+				),
+				"required": True,
+			},
+		],
+	},
+	{
+		**_COMMON,
+		"template_name": CHECK,
+		"title_es": "Revisión de cebo para roedores",
+		"description": "Check every active bait station at one place. Every 7 days while active or in season; every 30 days off season for maintenance stations with no activity.",
+		"skill_required": "camp_maintenance",
+		"estimated_duration_minutes": 30,
+		"dispatch_mode": "Dispatched",
+		"default_urgency": "Normal",
+		"evidence_required": {"gps": True},
+		"creates_record": "",
+		"instructions": "Visit every station, not a sample. Bag every carcass and dispose of it as the label says.",
+		"instructions_es": "Visite todas las estaciones, no una muestra. Embolse cada cadáver y deséchelo como indica la etiqueta.",
+		"form_schema": [
+			_product(required=False),
+			_gloves(),
+			{
+				"key": "stations",
+				"type": "group",
+				"label": _t("Stations checked", "Estaciones revisadas"),
+				"min_count": 1,
+				"max_count": 50,
+				"required": True,
+				"fields": [
+					{
+						"key": "photo",
+						"type": "photo",
+						"label": _t("Station, open then locked", "Estación, abierta y luego con llave"),
+						"min_count": 1,
+						"max_count": 3,
+						"required": True,
+					},
+					{
+						"key": "where",
+						"type": "text",
+						"label": _t("Station (room/side, tag)", "Estación (habitación/lado, etiqueta)"),
+						"required": True,
+					},
+					{
+						"key": "consumption",
+						"type": "select",
+						"label": _t("Bait eaten", "Cebo consumido"),
+						"options": [
+							{"value": "none", "label": _t("None", "Nada")},
+							{"value": "partial", "label": _t("Some", "Algo")},
+							{"value": "all", "label": _t("All", "Todo")},
+						],
+						"required": True,
+					},
+					{
+						"key": "replenished",
+						"type": "measurement",
+						"label": _t("Bait added", "Cebo añadido"),
+						"uom": {"from_field": "product"},
+						"min": 0,
+					},
+					{
+						"key": "intact",
+						"type": "check",
+						"label": _t(
+							"Station intact, locked, not moved", "Estación intacta, con llave, sin mover"
+						),
+						"required": True,
+					},
+				],
+			},
+			{
+				"key": "carcasses",
+				"type": "number",
+				"label": _t("Carcasses collected", "Cadáveres recogidos"),
+				"min": 0,
+				"required": True,
+			},
+			{
+				"key": "rodent_activity_found",
+				"type": "select",
+				"label": _t(
+					"Rodent activity found? (bait eaten, fresh signs of feeding, or carcasses)",
+					"¿Actividad de roedores? (cebo consumido, señales frescas o cadáveres)",
+				),
+				"options": [
+					{"value": "yes", "label": _t("Yes", "Sí")},
+					{"value": "no", "label": _t("No", "No")},
+				],
+				"required": True,
+			},
+			{
+				"key": "notice_still_posted",
+				"type": "check",
+				"label": _t("Occupant notice still posted", "El aviso a ocupantes sigue colocado"),
+				"show_if": _OCCUPIED,
+				"required_if": _OCCUPIED,
+			},
+		],
+	},
+	{
+		**_COMMON,
+		"template_name": REMOVAL,
+		"title_es": "Retiro y limpieza de cebo para roedores",
+		"description": "End a baiting round: every station removed, leftover bait and carcasses collected and disposed per label. For interior bait at a housing unit this is the PRE-OCCUPANCY CLEARANCE.",
+		"skill_required": "applicator",
+		"estimated_duration_minutes": 45,
+		"dispatch_mode": "Dispatched",
+		"default_urgency": "High",
+		"evidence_required": {"signature": True, "gps": True},
+		"creates_record": "Pest Control Application",
+		"instructions": "The number removed must match the number placed. Dispose of bait, carcasses and packaging as the label's Storage and Disposal section says.",
+		"instructions_es": "El número retirado debe coincidir con el colocado. Deseche el cebo, los cadáveres y el empaque como indica la sección de Almacenamiento y Eliminación de la etiqueta.",
+		"form_schema": [
+			_product(required=False),
+			_gloves(),
+			{
+				"key": "preoccupancy",
+				"type": "select",
+				"label": _t("Is this a pre-occupancy clearance?", "¿Es una limpieza antes de ocupar?"),
+				"options": [
+					{"value": "yes", "label": _t("Yes", "Sí")},
+					{"value": "no", "label": _t("No", "No")},
+				],
+				"required": True,
+			},
+			{
+				"key": "stations",
+				"type": "group",
+				"label": _t("Stations removed", "Estaciones retiradas"),
+				"min_count": 1,
+				"max_count": 50,
+				"required": True,
+				"fields": [
+					{
+						"key": "photo",
+						"type": "photo",
+						"label": _t("Former location, empty", "Ubicación anterior, vacía"),
+						"min_count": 1,
+						"max_count": 2,
+						"required": True,
+					},
+					{
+						"key": "where",
+						"type": "text",
+						"label": _t("Station (room/side, tag)", "Estación (habitación/lado, etiqueta)"),
+						"required": True,
+					},
+					{
+						"key": "count",
+						"type": "measurement",
+						"label": _t("Leftover bait collected", "Cebo sobrante recogido"),
+						"uom": {"from_field": "product"},
+						"min": 0,
+					},
+				],
+			},
+			{
+				"key": "carcasses",
+				"type": "number",
+				"label": _t("Carcasses collected", "Cadáveres recogidos"),
+				"min": 0,
+				"required": True,
+			},
+			{
+				"key": "residue_free",
+				"type": "photo",
+				"label": _t("Surfaces free of bait residue", "Superficies sin residuos de cebo"),
+				"min_count": 1,
+				"required_if": {"context": "bait_placement", "equals": "Interior"},
+			},
+			{
+				"key": "disposed_per_label",
+				"type": "attestation",
+				"label": _t("Disposal", "Eliminación"),
+				"statement": _t(
+					"Leftover bait, carcasses and packaging were disposed of as the label says; sealed product returned to the chemical store.",
+					"El cebo sobrante, los cadáveres y el empaque se desecharon según la etiqueta; el producto sellado volvió al almacén de químicos.",
+				),
+				"required": True,
+			},
+		],
+	},
+	{
+		**_COMMON,
+		"template_name": NOTICE,
+		"title_es": "Aviso a ocupantes sobre cebo para roedores (EN/ES)",
+		"description": "Post and hand out the English/Spanish notice BEFORE rodent bait is placed at an occupied unit or building. Placement cannot start until this is completed for the round.",
+		"skill_required": "camp_maintenance",
+		"estimated_duration_minutes": 15,
+		"dispatch_mode": "Dispatched",
+		"default_urgency": "High",
+		"evidence_required": {"gps": True},
+		"creates_record": "",
+		"instructions": "Post the notice at every entrance and near each outside station group: bait in locked stations; do not touch them; keep children and pets away; report dead rodents; who to call; start and removal dates; product and EPA Reg. No.",
+		"instructions_es": "Coloque el aviso en cada entrada y cerca de cada grupo de estaciones exteriores: cebo en estaciones con llave; no tocarlas; mantener alejados a niños y mascotas; reportar roedores muertos; a quién llamar; fechas de inicio y retiro; producto y No. de Reg. EPA.",
+		"form_schema": [
+			_product(),
+			{
+				"key": "notice_en",
+				"type": "photo",
+				"label": _t("English notice at each entrance", "Aviso en inglés en cada entrada"),
+				"min_count": 1,
+				"max_count": 10,
+				"required": True,
+			},
+			{
+				"key": "notice_es",
+				"type": "photo",
+				"label": _t("Spanish notice at each entrance", "Aviso en español en cada entrada"),
+				"min_count": 1,
+				"max_count": 10,
+				"required": True,
+			},
+			{
+				"key": "removal_date",
+				"type": "date",
+				"label": _t("Expected removal date on the notice", "Fecha de retiro prevista en el aviso"),
+				"required": True,
+			},
+			{
+				"key": "occupants_told",
+				"type": "text",
+				"label": _t(
+					"Occupants told in person (names, or 'none present')",
+					"Ocupantes informados en persona (nombres, o 'nadie presente')",
+				),
+				"required": True,
+			},
+		],
+	},
+)

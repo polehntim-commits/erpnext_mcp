@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: MIT
+"""The Pest Control Application record, written by the task that did the work. v0.204.0.
+
+docs/design/form_schema_and_labels.md §5. The non-crop sibling of Spray
+Application: who applied which registered product, where, how much, under
+which licence, and whether its label was on hand.
+"""
+
+from __future__ import annotations
+
+import frappe
+
+from . import compat, form_schema
+
+DOCTYPE = "Pest Control Application"
+
+
+def _quantity(fields: list, answers: dict) -> tuple:
+	"""`(quantity, uom, stations)` from the answers: a `quantity` measurement, else a `stations` group."""
+	value = answers.get("quantity")
+	if isinstance(value, dict) and value.get("value") not in (None, ""):
+		return float(value["value"]), str(value.get("uom") or ""), None
+	for field in fields:
+		if field.get("type") != "group":
+			continue
+		rows = answers.get(field["key"])
+		if not isinstance(rows, list):
+			continue
+		total, unit = 0.0, ""
+		for row in rows:
+			count = (row or {}).get("count")
+			if isinstance(count, dict):
+				unit = unit or str(count.get("uom") or "")
+				count = count.get("value")
+			try:
+				total += float(count or 0)
+			except (TypeError, ValueError):
+				continue
+		return (total or None), unit, len(rows)
+	return None, "", None
+
+
+def build_application(task: dict, assignment_doc, answers: dict | None) -> str:
+	"""Write the record for a completed task. Returns its name."""
+	from . import rodent_bait, task_forms
+
+	fields, _legacy = task_forms.fields_of(task)
+	answers = answers or {}
+	quantity, uom, stations = _quantity(fields, answers)
+	product = task.get("bait_product") or next(iter(form_schema.link_values(fields, answers, "Item")), "")
+	if not product:
+		product = rodent_bait.product_of(task)
+	worker = str(getattr(assignment_doc, "assigned_to", "") or "")
+	doc = frappe.new_doc(DOCTYPE)
+	doc.company = task.get("company") or None
+	doc.source_task = task.get("name")
+	doc.applied_at = getattr(assignment_doc, "completed_at", None) or frappe.utils.now()
+	doc.location_doctype = task.get("location_doctype") or None
+	doc.location = task.get("location") or None
+	doc.placement = task.get("bait_placement") or rodent_bait.placement_side(task.get("template")) or None
+	doc.occupancy = task.get("occupancy_at_creation") or None
+	doc.product = product or None
+	doc.quantity = quantity
+	if uom and frappe.db.exists("UOM", uom):
+		doc.uom = uom
+	elif product:
+		doc.uom = frappe.db.get_value("Item", product, "stock_uom") or None
+	doc.stations = stations or 0
+	doc.applicator = worker
+	doc.applicator_name = str(getattr(assignment_doc, "assigned_to_name", "") or worker)
+	cert = rodent_bait.applicator_qualification(worker) if worker else ""
+	if cert.startswith("Certification "):
+		doc.applicator_certification = cert.split(" ")[1]
+	available, _snapshot = task_forms.label_state({**task, "bait_product": product})
+	doc.label_available = 1 if available else 0
+	views = task_forms._json(task.get("label_views"), [])
+	doc.label_viewed = 1 if any(row.get("item_code") == product for row in views) else 0
+	doc.notes = str(getattr(assignment_doc, "findings_text", "") or "")[:1000]
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+def list_applications(company: str = "", location: str = "", limit: int = 100) -> list:
+	if not compat.doctype_exists(DOCTYPE):
+		return []
+	filters = {}
+	if company:
+		filters["company"] = company
+	if location:
+		filters["location"] = location
+	return [
+		dict(row)
+		for row in frappe.db.get_all(
+			DOCTYPE,
+			filters=filters,
+			fields=compat.existing_fields(
+				DOCTYPE,
+				(
+					"name",
+					"applied_at",
+					"company",
+					"location_doctype",
+					"location",
+					"placement",
+					"occupancy",
+					"product",
+					"epa_registration_number",
+					"quantity",
+					"uom",
+					"stations",
+					"applicator",
+					"applicator_name",
+					"applicator_certification",
+					"label_available",
+					"label_viewed",
+					"source_task",
+				),
+			),
+			order_by="applied_at desc",
+			limit=limit,
+		)
+		or []
+	]

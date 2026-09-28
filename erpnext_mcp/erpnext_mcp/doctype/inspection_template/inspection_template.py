@@ -129,7 +129,11 @@ class InspectionTemplate(Document):
 				("field_prompts_json", "field_prompts_json"),
 			):
 				try:
-					parsed = sessions.as_object(row.get(fieldname), f"{name}.{label}")
+					parsed = (
+						sessions.as_prompts(row.get(fieldname), f"{name}.{label}")
+						if fieldname == "field_prompts_json"
+						else sessions.as_object(row.get(fieldname), f"{name}.{label}")
+					)
 				except ValueError as exc:
 					frappe.throw(str(exc), title=_("Malformed JSON"))
 				if fieldname == "evidence_contract_json":
