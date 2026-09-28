@@ -123,6 +123,10 @@ EVIDENCE_KEYS = {
 	"findings_text": "what they actually saw, in words, whether or not anything was wrong",
 	"witness": "the name of somebody else who was there and saw the same thing",
 	"gps": 'a location fix taken where the work was done, as "lat,lon"',
+	# v0.198.0. ADDITIVE, LIKE `gps` BELOW: no stored contract names it, so no
+	# task on a board tightened. It is checked only where the task's asset
+	# actually has an hour meter — see `dispatch._unmet_evidence`.
+	"hours": "the asset's hour-meter reading, taken at the machine when the work was done",
 }
 
 #: v0.115.0. `gps` IS ADDITIVE AND NOTHING EXISTING ASKS FOR IT. Every contract

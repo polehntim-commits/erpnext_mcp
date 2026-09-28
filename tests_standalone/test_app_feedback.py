@@ -820,3 +820,40 @@ class TheNoteNamesItsRecord(AppFeedbackTestCase):
 		)
 		self.assertEqual([row["entry_uuid"] for row in rows], ["A-1"])
 		self.assertEqual(rows[0]["reference_doctype"], "Item")
+
+
+# ── v0.198.0: both stamps in the site's zone ─────────────────────────────────
+class BothStampsAreSiteLocal(AppFeedbackTestCase):
+	"""AFB-2026-00022 read `submitted_at` 19:53 against `received_at` 12:53 on a
+	Pacific site, and `queued_days` -0.29: the handset's `…Z` landed in UTC
+	beside a `received_at` that `frappe.utils.now()` writes site-local."""
+
+	def setUp(self):
+		super().setUp()
+		STORE.singles["System Settings"] = {"time_zone": "America/Los_Angeles"}
+
+	def test_the_handsets_utc_stamp_lands_in_the_sites_zone(self):
+		self.file({"submitted_at": "2026-09-27T19:53:43Z"})
+		self.assertEqual(str(self.only()["timestamp"]), "2026-09-27 12:53:43")
+
+	def test_a_naive_stamp_is_already_site_local(self):
+		self.file({"submitted_at": "2026-09-27 12:53:43"})
+		self.assertEqual(str(self.only()["timestamp"]), "2026-09-27 12:53:43")
+
+	def test_the_patch_moves_old_utc_rows_once_and_leaves_good_ones(self):
+		from erpnext_mcp.patches import normalize_app_feedback_timestamps as patch
+
+		STORE.seed(
+			APP_FEEDBACK,
+			[
+				{"name": "AFB-OLD", "timestamp": "2026-09-27 19:53:43", "received_at": "2026-09-27 12:53:44"},
+				{"name": "AFB-QUEUED", "timestamp": "2026-09-25 08:00:00", "received_at": "2026-09-27 12:00:00"},
+				{"name": "AFB-SKEW", "timestamp": "2026-09-27 12:58:00", "received_at": "2026-09-27 12:53:44"},
+			],
+		)
+		first = patch.normalize_app_feedback_timestamps()
+		self.assertEqual(first["converted"], 1)
+		self.assertEqual(str(STORE.get_raw(APP_FEEDBACK, "AFB-OLD")["timestamp"]), "2026-09-27 12:53:43")
+		self.assertEqual(str(STORE.get_raw(APP_FEEDBACK, "AFB-QUEUED")["timestamp"]), "2026-09-25 08:00:00")
+		self.assertEqual(str(STORE.get_raw(APP_FEEDBACK, "AFB-SKEW")["timestamp"]), "2026-09-27 12:58:00")
+		self.assertEqual(patch.normalize_app_feedback_timestamps()["converted"], 0, "idempotent")

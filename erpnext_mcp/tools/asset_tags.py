@@ -1800,7 +1800,7 @@ def report_asset_issue(args: dict) -> ToolResult:
 
 	inner = {
 		"reported_by": as_str(args, "reported_by", required=True),
-		"photo_file_token": as_str(args, "photo_file_token", required=True),
+		"photo_file_token": as_str(args, "photo_file_token"),
 		"asset": row["name"],
 		"task_type": as_str(args, "task_type") or "Repair",
 		"skill_required": as_str(args, "skill_required")

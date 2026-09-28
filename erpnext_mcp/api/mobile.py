@@ -454,6 +454,13 @@ def _evidence(raw) -> list:
 		phase = str(entry.get("phase") or "").strip().lower()
 		if phase in ("before", "after"):
 			row["phase"] = phase
+		# v0.198.0. WHEN AND WHERE THIS FRAME WAS TAKEN, forwarded as sent; the
+		# tool moves the stamp into the site's zone and drops a coordinate that
+		# will not parse. A build that sends neither keeps its phase from the
+		# file name — `inspections._phase_from_name`.
+		for key in ("captured_at", "latitude", "longitude"):
+			if entry.get(key) not in (None, ""):
+				row[key] = entry[key]
 		out.append(row)
 	return out
 
@@ -1353,6 +1360,8 @@ def complete_task_via_mobile(
 	growth_stage_code=None,
 	brix_reading=None,
 	brix_method=None,
+	hours_reading=None,
+	allow_meter_reset=None,
 ) -> dict:
 	"""Finish one task: file the evidence, write the compliance record.
 
@@ -1423,6 +1432,10 @@ def complete_task_via_mobile(
 		("completed_at", completed_at),
 		("actual_duration_minutes", actual_duration_minutes),
 		("visit_id", visit_id),
+		# v0.198.0. The hour meter, read at the machine. Parsed one layer
+		# down, so a bad value is refused in a sentence rather than a 500.
+		("hours_reading", hours_reading),
+		("allow_meter_reset", allow_meter_reset),
 	):
 		if value is not None:
 			inner[key] = value
@@ -20468,7 +20481,11 @@ def _raise_asset_task(asset: dict, worker: str, task_name: str, notes: str) -> d
 			"assigned_to": worker,
 			"evidence_required": dict(ASSET_TASK_EVIDENCE),
 			"notes": notes,
-		}
+			# v0.198.0. The worker at the asset asked for this, so they are its
+			# reporter — `create_farm_task` stamps `reported_at` with it.
+			"reported_by": worker,
+		},
+		origin=dispatch.ORIGIN_FIELD_REPORTED,
 	).data
 
 

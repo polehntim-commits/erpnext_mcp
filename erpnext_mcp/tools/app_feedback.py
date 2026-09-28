@@ -69,7 +69,7 @@ sends `screenshot_omitted: "too_large"` rather than holding the note back.
 
 import frappe
 
-from .. import compat, datetimes, security
+from .. import compat, datetimes, security, timezones
 from ..args import as_bool, as_date, as_limit, as_str
 from ..erpnext_mcp.doctype.app_feedback import app_feedback as feedback_doctype
 from ..errors import ToolError
@@ -172,7 +172,11 @@ def _submitted_at(args: dict) -> str:
 	already what the controller substitutes for a blank.
 	"""
 	sent = as_str(args, "submitted_at") or as_str(args, "timestamp")
-	return datetimes.as_mariadb_datetime(sent) or frappe.utils.now()
+	# v0.198.0. INTO THE SITE'S ZONE, the one `received_at` is written in two
+	# fields along. Until now this landed the phone's `…Z` in UTC and the row
+	# claimed it was written seven hours after it arrived — see
+	# `datetimes.as_site_datetime` and the patch that repairs the old rows.
+	return datetimes.as_site_datetime(sent, timezones.site_timezone()[0]) or frappe.utils.now()
 
 
 def _row(name: str) -> dict:

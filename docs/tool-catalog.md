@@ -9956,15 +9956,16 @@ asset. Looks up the asset, auto-fills `skill_required` from the asset type
 (Housing Unit → camp_maintenance, Irrigation Valve → irrigation, etc.), then
 creates a Farm Task linked to the asset.
 
-Delegates to `report_field_task` under the hood — same anti-spam, same photo
-requirement, same urgency cap. The difference is the caller names an asset
+Delegates to `report_field_task` under the hood — same anti-spam, same optional
+photo (v0.198.0: the photo is asked for at completion, not when the work is
+raised), same urgency cap. The difference is the caller names an asset
 instead of manually providing location and skill.
 
 | Parameter | Required | Description |
 |---|---|---|
 | `asset_name` | yes | Asset Register docname from the QR/NFC tag |
 | `reported_by` | yes | Employee id of the reporting worker |
-| `photo_file_token` | yes | File docname from `finalize_staged_file` |
+| `photo_file_token` | | File docname from `finalize_staged_file`. Optional since v0.198.0 |
 | `description` | | What the problem is |
 | `urgency` | | Normal or High (Critical restricted to Foreman/Manager) |
 | `task_type` | | Default Repair |

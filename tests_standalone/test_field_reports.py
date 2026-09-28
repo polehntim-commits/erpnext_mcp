@@ -142,12 +142,17 @@ class FieldReportCreatesATask(FieldReportTestCase):
 class AntiSpamIsEnforced(FieldReportTestCase):
 	"""Rate limiting prevents spam: 5 per hour, photo required, penalty for dismissed."""
 
-	def test_photo_is_required(self):
-		message = self.tool_error(
+	def test_a_photo_is_not_needed_to_raise_the_work(self):
+		"""AFB-2026-00022: "For some reason initiating a task requires a photo."
+		The photograph is taken when the work is done, and the completion
+		contract still asks for it."""
+		data = self.tool_data(
 			"report_field_task",
 			{"reported_by": WORKER, "description": "Something broken"},
 		)
-		self.assertIn("photo_file_token is required", message)
+		self.assertIsNone(data["report_photo"])
+		self.assertEqual(data["origin"], "field_reported")
+		self.assertTrue(data["evidence_required"]["photos"])
 
 	def test_invalid_photo_refused(self):
 		message = self.tool_error(

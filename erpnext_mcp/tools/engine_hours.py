@@ -109,6 +109,151 @@ def is_metered(asset_type: str) -> bool:
 	return str(asset_type or "") in metered_types()
 
 
+#: v0.198.0. MACHINES WITH AN HOUR METER THAT NOBODY CHECKS OUT. A wind machine
+#: runs on cold nights with nobody in it and a pump runs when the zone is open;
+#: both have a meter on the housing and both are serviced on hours, but neither
+#: has a check-out/check-in pair, so `metered_types` never counted them and the
+#: reading asked for on 40-WM-SE's inspection (FT-2026-09-00004) had nowhere to
+#: go. Named here rather than grown as a column on Farm Asset Type: five types,
+#: all named the way the seeded register names them, and a site with a type of
+#: its own that has a meter adds it in one line.
+READING_TYPES = ("Wind Machine", "Pump", "Irrigation Pump", "Well Pump", "Generator")
+
+#: The action a reading taken at a task's completion is filed under. It is the
+#: `log_hours` entry `asset_actions` has described since v0.77.0: a reading on
+#: its own, with the state unchanged.
+READING_ACTION = "log_hours"
+
+
+def hour_meter_types() -> tuple[str, ...]:
+	"""Every asset type with an hour meter: the checked-out ones and `READING_TYPES`."""
+	return tuple(dict.fromkeys((*metered_types(), *READING_TYPES)))
+
+
+def has_hour_meter(asset_type: str) -> bool:
+	return str(asset_type or "") in hour_meter_types()
+
+
+def asset_hours(asset_name: str) -> dict | None:
+	"""What a phone needs to ask for a reading: whether there is a meter, and the last figure.
+
+	None for no asset. The register's `current_hours` is the CACHE — right for a
+	screen showing "last read 1,240 h", which is all this is for.
+	"""
+	name = str(asset_name or "").strip()
+	if not name or not compat.doctype_exists(ASSET_REGISTER):
+		return None
+	fields = compat.existing_fields(
+		ASSET_REGISTER, ("name", "asset_type", "current_hours", "hours_updated_at")
+	)
+	row = frappe.db.get_value(ASSET_REGISTER, name, fields, as_dict=True)
+	if not row:
+		return None
+	asset_type = str(row.get("asset_type") or "")
+	return {
+		"asset": row["name"],
+		"asset_type": asset_type or None,
+		"has_hour_meter": has_hour_meter(asset_type),
+		"current_hours": float(row.get("current_hours") or 0),
+		"hours_updated_at": str(row["hours_updated_at"]) if row.get("hours_updated_at") else None,
+	}
+
+
+def record_completion_reading(
+	asset_name: str,
+	value,
+	*,
+	performed_by: str,
+	task: str,
+	allow_meter_reset: bool = False,
+	latitude=None,
+	longitude=None,
+) -> dict:
+	"""File a reading taken when a task on this machine was completed.
+
+	THE SAME PATH AS A CHECK-IN'S READING, NOT A SECOND ONE: `apply_reading`
+	validates it, an Asset State Log row carries it (the series is the record),
+	and `cache_reading` moves `current_hours` / `hours_updated_at`. The row's
+	action is `log_hours` and its state is unchanged — reading a meter does not
+	move a machine.
+
+	A READING BELOW THE LAST ONE DOES NOT RAISE HERE. This runs inside a
+	completion that may have sat in a handset's queue since last night, and a
+	typo must not strand the work: the refusal `apply_reading` would give is
+	returned as `recorded: false` with its sentence, and the completion goes on.
+	A value that is not a number at all was refused before anything was written
+	— see `dispatch.complete_farm_task`.
+	"""
+	answer = {
+		"recorded": False,
+		"asset": asset_name,
+		"engine_hours": _reading(value),
+		"previous_reading": None,
+		"state_log": None,
+		"reason": None,
+	}
+	row = asset_tags.asset_row(asset_name)
+	asset_type = str(row.get("asset_type") or "")
+	try:
+		meter = apply_reading(
+			dict(row),
+			asset_type,
+			READING_ACTION,
+			{"engine_hours": value, "allow_meter_reset": allow_meter_reset},
+		)
+	except ToolError as exc:
+		answer["reason"] = str(exc).replace(" Nothing was recorded.", "") + (
+			" The completion was filed; the reading was not."
+		)
+		return answer
+	if not meter:
+		return answer
+
+	state = _current_state(row)
+	log = frappe.new_doc(ASSET_STATE_LOG)
+	log.asset_name = row["name"]
+	log.asset_type = asset_type
+	log.action = READING_ACTION
+	log.from_state = state
+	log.to_state = state
+	log.performed_by = performed_by or frappe.session.user
+	log.performed_at = frappe.utils.now()
+	log.engine_hours = meter["engine_hours"]
+	notes = f"Hour meter read at completion of {task}."
+	if meter.get("meter_note"):
+		notes += " " + meter["meter_note"]
+	log.notes = notes
+	for column, raw in (("gps_latitude", latitude), ("gps_longitude", longitude)):
+		if raw not in (None, "") and compat.has_field(ASSET_STATE_LOG, column):
+			try:
+				log.set(column, float(raw))
+			except (TypeError, ValueError):
+				pass
+	log.insert(ignore_permissions=True)
+	cache_reading(row["name"], meter["engine_hours"], reset=meter["meter_reset"])
+	answer.update(
+		recorded=True,
+		engine_hours=meter["engine_hours"],
+		previous_reading=meter.get("previous_reading"),
+		state_log=log.name,
+	)
+	return answer
+
+
+def _current_state(row: dict) -> str:
+	"""The asset's state as its register row stores it, or ""."""
+	raw = row.get("current_state")
+	if isinstance(raw, dict):
+		return str(raw.get("state") or "")
+	try:
+		import json
+
+		value = json.loads(raw) if isinstance(raw, str) and raw.strip() else {}
+	except ValueError:
+		return ""
+	return str(value.get("state") or "") if isinstance(value, dict) else ""
+
+
 def _stamp(row: dict) -> str:
 	"""When the event happened — `performed_at`, or the row's own creation.
 
@@ -231,11 +376,10 @@ def apply_reading(row: dict, asset_type: str, action: str, args: dict) -> dict:
 			"nowhere to go — run `bench --site <site> migrate` after upgrading the app. Nothing "
 			"was recorded."
 		)
-	if not is_metered(asset_type):
+	if not has_hour_meter(asset_type):
 		raise ToolError(
 			f"{row['name']} is a {asset_type!r}, which has no hour meter — engine_hours is "
-			f"accepted on the types that are checked out and back in: {', '.join(metered_types())}. "
-			"Nothing was recorded."
+			f"accepted on: {', '.join(hour_meter_types())}. Nothing was recorded."
 		)
 	if value < 0:
 		raise ToolError(f"engine_hours cannot be negative, got {value}. Nothing was recorded.")
@@ -425,14 +569,13 @@ def summary_for(asset_name: str, args: dict | None = None) -> dict:
 	asset_type = str(row.get("asset_type") or "") or "General"
 	season = _season_start(args)
 
-	if not is_metered(asset_type):
+	if not has_hour_meter(asset_type):
 		return {
 			"asset_name": row["name"],
 			"asset_type": asset_type,
 			"metered": False,
 			"note": (
-				f"{asset_type} has no hour meter — hours are recorded on the types that are "
-				f"checked out and back in: {', '.join(metered_types())}."
+				f"{asset_type} has no hour meter — hours are recorded on: {', '.join(hour_meter_types())}."
 			),
 			"current_hours": None,
 			"season_start": season,

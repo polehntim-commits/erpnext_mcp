@@ -110,3 +110,49 @@ def as_mariadb_datetime(value) -> str:
 		digits = offset[1:].replace(":", "")
 		stamp -= sign * datetime.timedelta(hours=int(digits[:2]), minutes=int(digits[2:4]))
 	return stamp.strftime(MARIADB_DATETIME_FORMAT)
+
+
+def as_site_datetime(value, tz_name: str) -> str:
+	"""`value` as `YYYY-MM-DD HH:MM:SS` in the zone `tz_name`, or `""` when unreadable.
+
+	v0.198.0. THE SITE'S ZONE, NOT UTC, BECAUSE THAT IS WHAT EVERY OTHER COLUMN
+	BESIDE IT HOLDS. `as_mariadb_datetime` above lands an offset in UTC, and
+	`timezones.py` explains why Frappe's own columns are site-local — so a stamp
+	converted by the one and a `received_at` written by `frappe.utils.now()` sit
+	in the same row seven hours apart. App Feedback did exactly that: every
+	note's `submitted_at` was later than its own `received_at`, and `queued_days`
+	came out negative on every row (AFB-2026-00022's own note among them).
+
+	An offset or `Z` is converted into `tz_name`. A value with NO offset is taken
+	as already site-local, as written — the naive shape `FrappeDate.format`
+	sends is a site-local wall clock, and shifting it would be the mirror bug.
+	An unknown zone name is treated as UTC rather than raising: this is a
+	boundary helper, and its callers already fall back on `""`.
+	"""
+	from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+	try:
+		zone = ZoneInfo(str(tz_name or "UTC"))
+	except (ZoneInfoNotFoundError, ValueError):
+		zone = datetime.timezone.utc
+
+	if isinstance(value, datetime.datetime):
+		value = value.replace(microsecond=0)
+		if value.tzinfo:
+			value = value.astimezone(zone).replace(tzinfo=None)
+		return value.strftime(MARIADB_DATETIME_FORMAT)
+
+	text = str(value or "").strip()
+	match = _ISO_DATETIME_PATTERN.match(text) if text else None
+	if not match:
+		return as_mariadb_datetime(value)
+	offset = match.group("offset") or ""
+	if not offset:
+		return as_mariadb_datetime(text)
+	# `as_mariadb_datetime` has already applied the offset, so what it returns
+	# is the same instant in UTC; this only moves it into the site's zone.
+	utc = as_mariadb_datetime(text)
+	if not utc:
+		return ""
+	stamp = datetime.datetime.strptime(utc, MARIADB_DATETIME_FORMAT).replace(tzinfo=datetime.timezone.utc)
+	return stamp.astimezone(zone).replace(tzinfo=None).strftime(MARIADB_DATETIME_FORMAT)

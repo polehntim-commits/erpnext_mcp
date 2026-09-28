@@ -152,6 +152,16 @@ _TASK_FIELDS = (
 	"creates_record_data",
 	"produced_record",
 	"notes",
+	# v0.198.0. HOW THE TASK CAME TO EXIST, AND WHO SAID SO. `_describe_task`
+	# has reported all five since v0.23.0 and nothing ever selected them, so every
+	# task read back as `origin: compliance_rule` with no reporter — FT-2026-09-
+	# 00004 among them, stored correctly as `field_reported` by HR-EMP-00001.
+	# `compat.existing_fields` drops any a site has not migrated.
+	"origin",
+	"reported_by",
+	"reported_at",
+	"observed_at",
+	"report_photo",
 	"asset",
 	"template",
 	"checklist_status",
@@ -860,18 +870,20 @@ def _describe_task(row: dict) -> dict:
 		out["checklist_outstanding_required"] = outstanding
 	if row.get("asset"):
 		out["asset"] = row["asset"]
-	if row.get("reported_by"):
-		out["reported_by"] = row["reported_by"]
-	if row.get("reported_at"):
-		out["reported_at"] = str(row["reported_at"])
+	# v0.198.0 (docs/design/task_workflow.md §2–3). ALWAYS PRESENT, null when
+	# absent, so a reader can tell "nobody reported this" from "this server does
+	# not say". `asset_hours` is what lets a phone ask for the hour meter.
+	out["reported_by"] = row.get("reported_by") or None
+	out["reported_by_name"] = _employee_name(row.get("reported_by"))
+	out["reported_at"] = str(row["reported_at"]) if row.get("reported_at") else None
+	out["report_photo"] = row.get("report_photo") or None
+	out["asset_hours"] = _asset_hours(row.get("asset"))
 	# v0.98.0, item 5. WHEN IT WAS SEEN, where that is not when it was filed.
 	# Present only where somebody said so, on the same rule as every key around
 	# it — a task nobody gave an observation time for reports none rather than
 	# echoing `reported_at` and inventing a precision that was never claimed.
 	if row.get("observed_at"):
 		out["observed_at"] = str(row["observed_at"])
-	if row.get("report_photo"):
-		out["report_photo"] = row["report_photo"]
 	# v0.64.0. Reported only when there is one, so the payload of a task raised
 	# before shifts existed is exactly the shape it has always been.
 	if row.get("farm_shift"):
@@ -890,6 +902,25 @@ def _describe_task(row: dict) -> dict:
 		if row.get(column):
 			out[column] = row[column]
 	return out
+
+
+def _asset_hours(asset) -> dict | None:
+	"""`engine_hours.asset_hours`, imported here because `engine_hours` imports `asset_tags`."""
+	if not asset:
+		return None
+	from . import engine_hours
+
+	return engine_hours.asset_hours(asset)
+
+
+def _employee_name(employee) -> str | None:
+	"""The reporter's name for a screen, or None. Never raises on a stale docname."""
+	if not employee or not compat.doctype_exists("Employee"):
+		return None
+	try:
+		return frappe.db.get_value("Employee", employee, "employee_name") or None
+	except Exception:  # pragma: no cover - a site with an unreadable Employee
+		return None
 
 
 def _safe_json(raw) -> dict:
@@ -1161,8 +1192,14 @@ def _structured_report(args: dict, doc, location_doctype: str, location: str) ->
 	return location_doctype, location
 
 
-def create_farm_task(args: dict) -> ToolResult:
-	"""Raise one piece of work, with the evidence closing it requires stated up front."""
+def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
+	"""Raise one piece of work, with the evidence closing it requires stated up front.
+
+	`origin` IS KEYWORD-ONLY AND NOT AN ARGUMENT, so no MCP call can set it: the
+	registry passes `args` alone, and an MCP-raised task keeps the default it has
+	always had. v0.198.0: the phone's asset-screen actions pass `field_reported`,
+	because the worker standing at the asset is who asked for the work.
+	"""
 	_require()
 	company = _company(args)
 
@@ -1274,6 +1311,8 @@ def create_farm_task(args: dict) -> ToolResult:
 	if observer:
 		doc.reported_by = observer
 		doc.reported_at = frappe.utils.now()
+	if origin:
+		doc.origin = origin
 	# v0.79.0. A step of a longer piece of work — see the multi-day block below.
 	parent_doctype, parent = _parent_argument(args, "created")
 	if parent:
@@ -2210,7 +2249,11 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# `_draw_down_materials` re-reads it — because this is a validation and not a
 	# computation, and doing it twice costs nothing next to a partial write.
 	_materials_argument(args)
-	evidence = inspections.normalise_evidence(args.get("evidence_files"), "evidence_files")
+	evidence = inspections.normalise_evidence(args.get("evidence_files"), "evidence_files", enrich=True)
+	# v0.198.0. THE HOUR METER, READ WHILE THE WORKER IS AT THE MACHINE. A value
+	# that is not a number is refused here, before anything is written; one that
+	# is merely lower than the last is not — see `engine_hours.record_completion_reading`.
+	hours_reading = _hours_argument(args)
 	signature = as_str(args, "signature_file")
 	narrative = as_str(args, "completion_narrative")
 	witness = as_str(args, "witness")
@@ -2257,8 +2300,21 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# A worker who sent their coordinates when they claimed the job has met a
 	# `gps` contract without sending them twice, and demanding a second copy at
 	# completion would refuse a submission whose evidence is already on file.
-	location_gps = as_str(args, "farm_location_gps") or str(assignment.get("farm_location_gps") or "")
+	location_gps = (
+		as_str(args, "farm_location_gps")
+		or str(assignment.get("farm_location_gps") or "")
+		or _photo_location(evidence)
+	)
 	unmet = _unmet_evidence(contract, evidence, signature, findings_given, witness, location_gps)
+	# v0.198.0. `hours` asks for a reading only where there is a meter to read:
+	# a contract copied onto a task about a shed must not refuse its completion.
+	task_hours = _asset_hours(task.get("asset"))
+	if contract.get("hours") and task_hours and task_hours["has_hour_meter"] and hours_reading is None:
+		unmet.append(
+			f"hours: the task requires the hour-meter reading on {task_hours['asset']} "
+			f"(last on record: {task_hours['current_hours']} h). Pass hours_reading as the "
+			"number on the meter, e.g. 1240.5."
+		)
 	if unmet:
 		raise ToolError(
 			f"{assignment['task']} cannot be completed: its evidence contract is not met.\n"
@@ -2281,7 +2337,12 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# it. Written only when given: a blank is "nobody recorded it", and overwriting
 	# a location somebody already put on the assignment with an empty string would
 	# turn a recorded fact into a missing one.
-	location_gps = as_str(args, "farm_location_gps")
+	# v0.198.0. AND WHEN THE COMPLETION CARRIED NO FIX, THE PHOTOGRAPHS MIGHT.
+	# A photo taken at the machine is a better "where was this done" than
+	# nothing, and FT-2026-09-00004's six photos left the column null.
+	location_gps = as_str(args, "farm_location_gps") or (
+		"" if doc.get("farm_location_gps") else _photo_location(evidence)
+	)
 	if location_gps:
 		doc.farm_location_gps = location_gps
 	# v0.64.0. THE LAST CHANCE TO SAY WHICH SHIFT THIS WAS DONE ON, and the one
@@ -2352,6 +2413,38 @@ def complete_farm_task(args: dict) -> ToolResult:
 	if produced:
 		doc.produced_record = produced
 	doc.save(ignore_permissions=True)
+
+	# v0.198.0. THE READING IS FILED AFTER THE COMPLETION, on the rule every
+	# consequence below follows: the completion is the record, and a reading
+	# that could not be kept must never travel back up and undo it.
+	hours_filed = None
+	if hours_reading is not None and task_hours and task_hours["has_hour_meter"]:
+		from . import engine_hours
+
+		lat, _, lon = str(doc.get("farm_location_gps") or "").partition(",")
+		hours_filed = engine_hours.record_completion_reading(
+			task_hours["asset"],
+			hours_reading,
+			performed_by=_user_of(worker),
+			task=str(task["name"]),
+			allow_meter_reset=bool(as_bool(args, "allow_meter_reset", False)),
+			latitude=lat.strip() or None,
+			longitude=lon.strip() or None,
+		)
+	elif hours_reading is not None:
+		hours_filed = {
+			"recorded": False,
+			"asset": task.get("asset") or None,
+			"engine_hours": hours_reading,
+			"previous_reading": None,
+			"state_log": None,
+			"reason": (
+				"this task's asset has no hour meter"
+				if task.get("asset")
+				else "this task names no asset to read a meter on"
+			)
+			+ ". The completion was filed; the reading was not.",
+		}
 
 	# v0.64.0. THE EVIDENCE FLOWS ONTO THE SHIFT AFTER THE ASSIGNMENT IS SAVED
 	# AND NEVER BEFORE. The assignment is the record of what was produced; the
@@ -2456,6 +2549,8 @@ def complete_farm_task(args: dict) -> ToolResult:
 		# needs one, and the one it exercises least is the one that breaks — this
 		# whole release is about a retry path nobody ran until an orchard did.
 		"x_idempotent": False,
+		# v0.198.0. ALWAYS PRESENT, null when no reading was sent.
+		"hours_reading": hours_filed,
 		"completion_signature": doc.completion_signature,
 		"visit_id": doc.visit_id or None,
 		# ALWAYS PRESENT, null where this work was not anchored to a shift. A
@@ -2892,6 +2987,46 @@ def _marked_checklist(task: dict, args: dict) -> dict:
 		if note:
 			item["note"] = note
 	return {"items": items}
+
+
+def _user_of(employee: str) -> str:
+	"""The login behind an Employee, for a `performed_by` Link to User; the session user otherwise."""
+	user = ""
+	if employee and compat.doctype_exists("Employee") and compat.has_field("Employee", "user_id"):
+		user = str(frappe.db.get_value("Employee", employee, "user_id") or "")
+	return user or str(frappe.session.user or "")
+
+
+def _hours_argument(args: dict) -> float | None:
+	"""`hours_reading` as a number, None when absent, or a refusal naming it."""
+	raw = args.get("hours_reading")
+	if raw in (None, ""):
+		return None
+	if isinstance(raw, bool):
+		raw = "not a number"
+	try:
+		value = float(raw)
+	except (TypeError, ValueError):
+		raise ToolError(
+			f"hours_reading must be the number on the hour meter, e.g. 1240.5 — got {raw!r}. "
+			"Nothing was changed."
+		) from None
+	if value != value or value < 0:
+		raise ToolError(f"hours_reading cannot be negative, got {raw!r}. Nothing was changed.")
+	return round(value, 1)
+
+
+def _photo_location(evidence: list) -> str:
+	"""`"lat,lon"` from the first photo that carries one, `after` photos first, or ""."""
+	located = [
+		row
+		for row in evidence
+		if row.get("gps_latitude") is not None and row.get("gps_longitude") is not None
+	]
+	located.sort(key=lambda row: 0 if row.get("phase") == "after" else 1)
+	if not located:
+		return ""
+	return f"{float(located[0]['gps_latitude']):.7f},{float(located[0]['gps_longitude']):.7f}"
 
 
 def _unmet_evidence(
@@ -5345,16 +5480,15 @@ def report_field_task(args: dict) -> ToolResult:
 			f"The limit is {FIELD_REPORT_LIMIT}. Nothing was created."
 		)
 
-	# ── photo required ─────────────────────────────────────────────────────
+	# ── photo, when there is one ───────────────────────────────────────────
+	# v0.198.0, AFB-2026-00022: "For some reason initiating a task requires a
+	# photo." It did, here and nowhere else, and it was the wrong moment to ask.
+	# Somebody raising an inspection from an asset's screen is asking for work,
+	# and the photograph that proves the work is taken when it is DONE — which
+	# is what the completion contract below already demands. A photo sent now is
+	# still checked and kept as `report_photo`, the before-picture of a problem.
 	photo = as_str(args, "photo_file_token")
-	if not photo:
-		raise ToolError(
-			"photo_file_token is required. A field report without a photograph is a rumour — the "
-			"photo is what turns 'there is a problem' into evidence somebody can act on. Upload "
-			"the photo first with stage_file_chunk / finalize_staged_file, then pass the file "
-			"token here. Nothing was created."
-		)
-	if not frappe.db.exists("File", photo):
+	if photo and not frappe.db.exists("File", photo):
 		raise ToolError(
 			f"no File {photo!r} on this site. Upload the photo first with stage_file_chunk / "
 			"finalize_staged_file, then pass the file token here. Nothing was created."
@@ -5423,7 +5557,13 @@ def report_field_task(args: dict) -> ToolResult:
 	doc.dispatch_mode = "Either"
 	doc.state = AVAILABLE
 	doc.notes = description
-	doc.evidence_required = json.dumps({"photos": True, "findings_text": True})
+	# v0.198.0. A MACHINE WITH AN HOUR METER GETS ITS READING TAKEN when the
+	# work is done — FT-2026-09-00004 said "document hours" in prose and nothing
+	# asked for the number, so 40-WM-SE still reads 0 h. See `engine_hours`.
+	contract = {"photos": True, "findings_text": True}
+	if asset_doc and _asset_hours(asset_doc["name"]) and _asset_hours(asset_doc["name"])["has_hour_meter"]:
+		contract["hours"] = True
+	doc.evidence_required = json.dumps(contract)
 	# `reported_by` AND `reported_at` ARE THE SERVER'S, NOT THE BODY'S. The
 	# reporter is the authenticated worker — `_worker(args, "reported_by")` above
 	# resolves them, and the wrapper does not declare the argument — and the
@@ -5433,7 +5573,7 @@ def report_field_task(args: dict) -> ToolResult:
 	# is the settable one, and it is a different fact: see `_structured_report`.
 	doc.reported_by = worker
 	doc.reported_at = frappe.utils.now()
-	doc.report_photo = photo
+	doc.report_photo = photo or None
 	# v0.98.0, item 5. THE ESTIMATE A FIELD REPORT COULD NOT CARRY. Every task
 	# raised from a template arrives with a duration and an ad-hoc report arrived
 	# with none, so it sorted last against templated work on a board that orders
@@ -5454,7 +5594,7 @@ def report_field_task(args: dict) -> ToolResult:
 			"reported_by": worker,
 			"reported_by_name": worker_name,
 			"reported_at": str(doc.reported_at),
-			"report_photo": photo,
+			"report_photo": photo or None,
 		},
 		summary=(
 			f"field report {doc.name} ({doc.task_type}, {urgency}) "

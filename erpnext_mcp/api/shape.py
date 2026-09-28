@@ -202,6 +202,18 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 	# the server ignored it. Present only where somebody said so.
 	if row.get("observed_at"):
 		out["observed_at"] = str(row["observed_at"])
+	# v0.198.0 (docs/design/task_workflow.md §2–3). How the task came to exist
+	# and who said so, and what the phone needs to ask for an hour meter. Always
+	# present, null when absent — `dispatch._describe_task` computes them, and
+	# this shaper rebuilds key by key, so naming them here is what gets them to
+	# the handset.
+	out["origin"] = row.get("origin") or "compliance_rule"
+	for key in ("reported_by", "reported_by_name", "reported_at", "report_photo", "asset_hours"):
+		out[key] = row.get(key) if row.get(key) not in ("",) else None
+	if out["reported_at"] is not None:
+		out["reported_at"] = str(out["reported_at"])
+	if row.get("asset"):
+		out["asset"] = row["asset"]
 
 	# v0.96.0. THE TEMPLATE A TASK CAME FROM, AND THE CHECKLIST IT SNAPSHOTTED.
 	# `dispatch._describe_task` has reported both since v0.41.0 and this shaper
@@ -695,6 +707,9 @@ def completion(data: dict) -> dict:
 		# hold the server's own identifier for the submission it filed.
 		"x_idempotent": bool(data.get("x_idempotent")),
 		"idempotent_note": data.get("idempotent_note"),
+		# v0.198.0. Whether the hour-meter reading was kept, and if not, why —
+		# null when none was sent. See `docs/design/task_workflow.md` §3.
+		"hours_reading": data.get("hours_reading"),
 		"visit_id": data.get("visit_id"),
 		"completion_signature": data.get("completion_signature"),
 		# v0.176.0. WHAT HAPPENED TO THE CLASS THIS TASK WAS RAISED FOR, and the

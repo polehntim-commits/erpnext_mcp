@@ -10894,8 +10894,9 @@ TOOLS = {
 			),
 			"evidence_required": _field(
 				_OBJECT,
-				"JSON object. Keys: photos, signature, findings_text, witness, gps. REQUIRED — at "
-				"least one must be true. `gps` (v0.115.0) asks for a location fix on the "
+				"JSON object. Keys: photos, signature, findings_text, witness, gps, hours. REQUIRED — at "
+				"least one must be true. `hours` (v0.198.0) asks for the asset's hour-meter "
+				"reading at completion, where the asset has a meter. `gps` (v0.115.0) asks for a location fix on the "
 				"completion — the one requirement nobody types, which is why a contract has "
 				"to ask for it.",
 			),
@@ -10967,12 +10968,14 @@ TOOLS = {
 	"report_field_task": _tool(
 		dispatch.report_field_task,
 		"MUTATING (default OFF). A worker in the field reports a problem on the "
-		"spot — tap, snap a photo, describe, and the task is in the pool.\n\n"
+		"spot — tap, describe, and the task is in the pool.\n\n"
 		"THE FIELD REPORT IS THE WORK ORDER. No separate Issue or Ticket doctype. "
 		"Photo-taking IS ticket-creation IS dispatch entry, all one act. Every "
 		"worker becomes a compliance sensor.\n\n"
-		"ANTI-SPAM: 5 field reports per worker per hour. Photo required — a report "
-		"without evidence is a rumour. A foreman who dismisses a report as 'not a "
+		"ANTI-SPAM: 5 field reports per worker per hour. A photo is OPTIONAL when the "
+		"report is filed (v0.198.0): the task's completion contract asks for photos, "
+		"so the evidence is taken when the work is done. On an asset with an hour "
+		"meter the contract also asks for the reading. A foreman who dismisses a report as 'not a "
 		"real issue' counts that against the reporter's limit for 24 hours.\n\n"
 		"URGENCY IS CAPPED for field workers: Normal or High only. Critical is "
 		"restricted to Foreman and Farm Manager roles — every worker believing "
@@ -10996,7 +10999,8 @@ TOOLS = {
 			"description": _field(_STRING, "What the problem is, in the worker's words."),
 			"photo_file_token": _field(
 				_STRING,
-				"REQUIRED. The File docname from finalize_staged_file — the 'before' photo of the problem.",
+				"Optional. The File docname from finalize_staged_file — a 'before' photo of the "
+				"problem, kept as report_photo.",
 			),
 			"reported_by": _field(_STRING, "The Employee id of the worker reporting. REQUIRED."),
 			"asset": _field(
@@ -11006,7 +11010,7 @@ TOOLS = {
 			),
 			"company": _COMPANY,
 		},
-		required=("reported_by", "photo_file_token"),
+		required=("reported_by",),
 		mutating=True,
 		title="Report a field task",
 		available=_needs_doctype("Farm Task"),
@@ -11020,7 +11024,7 @@ TOOLS = {
 		"skill_required from the asset type, then creates a Farm Task linked "
 		"to the asset.\n\n"
 		"DELEGATES TO report_field_task under the hood — same anti-spam, "
-		"same photo requirement, same urgency cap. The difference is that the "
+		"same optional photo, same urgency cap. The difference is that the "
 		"caller names an asset instead of manually providing location and skill.",
 		{
 			"asset_name": _field(_STRING, "The Asset Register docname (from the QR/NFC tag). REQUIRED."),
@@ -11031,7 +11035,7 @@ TOOLS = {
 			),
 			"photo_file_token": _field(
 				_STRING,
-				"REQUIRED. The File docname from finalize_staged_file — the 'before' photo of the problem.",
+				"Optional. The File docname from finalize_staged_file — a 'before' photo of the problem.",
 			),
 			"reported_by": _field(_STRING, "The Employee id of the worker reporting. REQUIRED."),
 			"task_type": _field(
@@ -11047,7 +11051,7 @@ TOOLS = {
 			"gps_lon": _field(_NUMBER, "Longitude from the scanner's GPS fix."),
 			"company": _COMPANY,
 		},
-		required=("asset_name", "reported_by", "photo_file_token"),
+		required=("asset_name", "reported_by"),
 		mutating=True,
 		title="Report an asset issue",
 		available=_needs_doctype("Farm Task", "Asset Register"),
@@ -11209,7 +11213,11 @@ TOOLS = {
 				'{"file": "...", "evidence_type": "Photo", "caption": "north wall", '
 				'"phase": "before"}. Max 40. `phase` is `before`, `after`, or omitted — '
 				"omitted is the ordinary case, because most completions have no before "
-				"frame and a required one would refuse the submission a worker cannot redo.",
+				"frame and a required one would refuse the submission a worker cannot redo. "
+				"v0.198.0: an omitted phase is read off a `_before_` / `_after_` token in the "
+				"file name; `captured_at` (ISO 8601, moved into the site's zone) and "
+				"`latitude` / `longitude` are kept per photo, and a completion with no "
+				"farm_location_gps takes the first located photo's.",
 			),
 			"signature_file": _field(_STRING, "The signature capture's file URL or File docname."),
 			"completion_narrative": _field(_STRING, "What the worker did, in their words."),
@@ -11245,6 +11253,17 @@ TOOLS = {
 				"part of what makes a resubmission identical.",
 			),
 			"materials_used": _MATERIALS_USED_FIELD,
+			"hours_reading": _field(
+				_NUMBER,
+				"v0.198.0. The number on the task asset's hour meter, read at the machine. Filed "
+				"as an Asset State Log `log_hours` row and cached on current_hours / "
+				"hours_updated_at. Required when the contract asks for `hours` and the asset has a "
+				"meter. A figure below the last on record is NOT a refusal: the completion is "
+				"filed and `hours_reading.recorded` says false and why.",
+			),
+			"allow_meter_reset": _field(
+				_BOOLEAN, "true when the meter was replaced or reset, so a lower reading is kept."
+			),
 		},
 		required=("worker_id",),
 		mutating=True,
@@ -11406,8 +11425,9 @@ TOOLS = {
 			),
 			"evidence_required": _field(
 				_OBJECT,
-				"REQUIRED. JSON object. Keys: photos, signature, findings_text, witness, gps. At "
-				"least one must be true. `gps` (v0.115.0) asks for a location fix on the "
+				"REQUIRED. JSON object. Keys: photos, signature, findings_text, witness, gps, hours. At "
+				"least one must be true. `hours` (v0.198.0) asks for the asset's hour-meter "
+				"reading at completion, where the asset has a meter. `gps` (v0.115.0) asks for a location fix on the "
 				"completion — the one requirement nobody types, which is why a contract has to "
 				"ask for it.",
 			),
@@ -20991,7 +21011,11 @@ TOOLS = {
 				'{"file": "...", "evidence_type": "Photo", "caption": "north wall", '
 				'"phase": "before"}. Max 40. `phase` is `before`, `after`, or omitted — '
 				"omitted is the ordinary case, because most completions have no before "
-				"frame and a required one would refuse the submission a worker cannot redo.",
+				"frame and a required one would refuse the submission a worker cannot redo. "
+				"v0.198.0: an omitted phase is read off a `_before_` / `_after_` token in the "
+				"file name; `captured_at` (ISO 8601, moved into the site's zone) and "
+				"`latitude` / `longitude` are kept per photo, and a completion with no "
+				"farm_location_gps takes the first located photo's.",
 			),
 			"evidence_files": _field(
 				{"type": "array", "items": {"type": ["string", "object"]}}, "Alias for evidence."
@@ -21022,6 +21046,17 @@ TOOLS = {
 				"rollup.",
 			),
 			"materials_used": _MATERIALS_USED_FIELD,
+			"hours_reading": _field(
+				_NUMBER,
+				"v0.198.0. The number on the task asset's hour meter, read at the machine. Filed "
+				"as an Asset State Log `log_hours` row and cached on current_hours / "
+				"hours_updated_at. Required when the contract asks for `hours` and the asset has a "
+				"meter. A figure below the last on record is NOT a refusal: the completion is "
+				"filed and `hours_reading.recorded` says false and why.",
+			),
+			"allow_meter_reset": _field(
+				_BOOLEAN, "true when the meter was replaced or reset, so a lower reading is kept."
+			),
 			"user": _field(_STRING, "Only when the request carries no per-user credential."),
 		},
 		mutating=True,

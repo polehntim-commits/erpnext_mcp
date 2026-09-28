@@ -695,6 +695,9 @@ def complete_task_via_mobile(args: dict) -> ToolResult:
 		"record_data",
 		"visit_id",
 		"materials_used",
+		# v0.198.0. The hour meter and whether a lower figure is a new meter.
+		"hours_reading",
+		"allow_meter_reset",
 	):
 		if args.get(key) is not None:
 			inner[key] = args.get(key)

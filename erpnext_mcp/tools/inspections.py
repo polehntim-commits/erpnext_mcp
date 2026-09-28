@@ -231,7 +231,7 @@ def _evidence_of(doctype: str, name: str, photo_field: str) -> list:
 	]
 
 
-def normalise_evidence(raw, label: str = "evidence_files") -> list:
+def normalise_evidence(raw, label: str = "evidence_files", *, enrich: bool = False) -> list:
 	"""Turn whatever a caller sent into evidence rows, or refuse saying why.
 
 	Three shapes are accepted because three are what a caller genuinely has: a
@@ -319,13 +319,69 @@ def normalise_evidence(raw, label: str = "evidence_files") -> list:
 			"file": file_name or None,
 			"file_url": file_url or None,
 			"caption": str(entry.get("caption") or "").strip() or None,
-			"captured_on": str(entry.get("captured_on") or "").strip() or None,
+			"captured_on": _captured_on(entry),
 		}
 		phase = str(entry.get("phase") or "").strip().lower()
+		if not phase and enrich:
+			phase = _phase_from_name(entry.get("file_name") or entry.get("caption") or file_url)
 		if phase:
 			row["phase"] = as_choice(EVIDENCE_CHILD, "phase", phase, f"{label}[{index}].phase")
+		if enrich:
+			for key, column in (("latitude", "gps_latitude"), ("longitude", "gps_longitude")):
+				value = _coordinate(entry.get(key) if entry.get(key) is not None else entry.get(column))
+				if value is not None and compat.has_field(EVIDENCE_CHILD, column):
+					row[column] = value
 		out.append(row)
 	return out
+
+
+def _captured_on(entry: dict) -> str | None:
+	"""When the photo was taken, in the SITE'S zone, from either spelling.
+
+	v0.198.0. `captured_at` is the handset's name for it; `captured_on` is the
+	column's. An ISO stamp with an offset is moved into the site's zone — the
+	column sits beside `completed_at` and every other site-local stamp — and an
+	unreadable one is dropped rather than failing a completion over its least
+	important field (MariaDB 1292 is what a raw `…Z` used to earn here).
+	"""
+	raw = entry.get("captured_at") or entry.get("captured_on")
+	if raw in (None, ""):
+		return None
+	from .. import datetimes, timezones
+
+	return datetimes.as_site_datetime(raw, timezones.site_timezone()[0]) or None
+
+
+#: The token every shipped build of the phone writes into a photo's file name —
+#: `FT-…_photo_before_<uuid>.jpg` — because it named the phase that way before
+#: the column existed. See `api/mobile._evidence`.
+_PHASE_TOKENS = {"_before_": "before", "_after_": "after"}
+
+
+def _phase_from_name(name) -> str:
+	"""`before` / `after` off a file name the phone wrote, or "" when it says neither.
+
+	v0.198.0. FT-2026-09-00004's six photos said before and after in their names
+	and nothing in their `phase` column, because the build that took them never
+	sent the key. A name that says it is the answer; one that does not is left
+	unset, as a phase always has been when nobody knew.
+	"""
+	text = str(name or "").lower()
+	for token, phase in _PHASE_TOKENS.items():
+		if token in text:
+			return phase
+	return ""
+
+
+def _coordinate(value) -> float | None:
+	"""A latitude or longitude as a float, or None — never a refusal, for `_captured_on`'s reason."""
+	if value in (None, ""):
+		return None
+	try:
+		number = float(value)
+	except (TypeError, ValueError):
+		return None
+	return number if -180.0 <= number <= 180.0 else None
 
 
 def _looks_like_url(value: str) -> bool:

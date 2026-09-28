@@ -286,7 +286,7 @@ def check_maintenance_due(args: dict) -> ToolResult:
 	if named:
 		row = asset_tags.asset_row(named, company or "")
 		hours = None
-		if engine_hours.is_metered(str(row.get("asset_type") or "")):
+		if engine_hours.has_hour_meter(str(row.get("asset_type") or "")):
 			hours = engine_hours.summary_for(row["name"], args).get("current_hours")
 		status = status_for(row, today, hours_reading=hours)
 		data = {**status, "company": row.get("company") or None, "checked_on": today, **clock.block()}

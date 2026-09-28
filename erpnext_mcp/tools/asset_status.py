@@ -533,7 +533,7 @@ def status_report(row: dict, args: dict | None = None) -> dict:
 
 	hours = _section(
 		"engine_hours",
-		lambda: engine_hours.summary_for(name, args) if engine_hours.is_metered(asset_type) else {},
+		lambda: engine_hours.summary_for(name, args) if engine_hours.has_hour_meter(asset_type) else {},
 		{},
 	)
 	service = _section(

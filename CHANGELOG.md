@@ -3,6 +3,42 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.198.0 — 2026-09-27 — starting work needs no photo; the hour meter; what a photo knows
+
+**922 tools** (unchanged). No new routes. Two new Farm Task Evidence columns; one patch. OML App
+Feedback **AFB-2026-00022**; fafo_ios SERVER_CHANGES §46. Contract: `docs/design/task_workflow.md`.
+
+- **A photo is no longer needed to raise work.** `report_field_task` and `report_asset_issue`
+  (MCP and `/mobile`) take `photo_file_token` as optional; a photo that is sent is still checked
+  and kept as `report_photo`. The task's COMPLETION contract still asks for photos, which is
+  where the evidence belongs. ("For some reason initiating a task requires a photo.")
+- **A task reads back as it was stored.** `_TASK_FIELDS` never selected `origin`, `reported_by`,
+  `reported_at`, `observed_at` or `report_photo`, so every task — FT-2026-09-00004 included,
+  stored `field_reported` by HR-EMP-00001 — read back as `compliance_rule` with no reporter.
+  Every task payload (MCP and the phone's shape) now carries `origin`, `reported_by`,
+  `reported_by_name`, `reported_at`, `report_photo` (null when absent). The phone's asset-screen
+  actions (`record_asset_stock_movement`, `attach_asset_document`) now store `field_reported`
+  with the caller as reporter; an MCP `create_farm_task` keeps its old default.
+- **The hour meter.** Wind Machine, Pump, Irrigation Pump, Well Pump and Generator join Tractor
+  and Vehicle as hour-meter types (`engine_hours.hour_meter_types`). The evidence contract gains
+  `hours`; a field report on a metered asset asks for it. `complete_farm_task` /
+  `/mobile/complete_task_via_mobile` take `hours_reading` (+ `allow_meter_reset`) and file it
+  through the existing engine-hours path — an Asset State Log `log_hours` row, then
+  `current_hours` / `hours_updated_at`. A lower-than-last reading does not strand a queued
+  completion: the work is filed and `hours_reading.recorded` is false with the reason. Tasks carry
+  `asset_hours` so the phone can ask. `get_engine_hours_summary` and the service-due check now
+  cover the new types.
+- **What a photo knows.** Evidence entries keep `phase` (read off the `_before_`/`_after_` token
+  in the file name when a build did not send it — every shipped build), `captured_at` →
+  `captured_on` in the site's zone, and `latitude`/`longitude` → new
+  **`Farm Task Evidence.gps_latitude` / `gps_longitude`**. A completion with no
+  `farm_location_gps` takes the first located photo's.
+- **App Feedback stamps.** `submitted_at` is converted into the site's zone
+  (`datetimes.as_site_datetime`), the zone `received_at` is written in; it used to land in UTC, so
+  `queued_days` was negative on every row. Patch **`normalize_app_feedback_timestamps`** moves
+  existing rows whose `timestamp` is impossibly later than `received_at`; idempotent.
+- Deploy: **`bench migrate`** (the two evidence columns and the patch), then an image rebuild.
+
 ## 0.197.0 — 2026-09-27 — a unit register, and a label rate tied to a real unit
 
 **922 tools** (+12). Two new `/mobile` routes. One new Item compliance column. OML App

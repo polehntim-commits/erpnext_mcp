@@ -39,6 +39,7 @@ from erpnext_mcp.patches import (
 	migrate_incident_tool_switches,
 	migrate_training_types,
 	move_mobile_credentials_to_devices,
+	normalize_app_feedback_timestamps,
 	recompute_2026_dependents_credit,
 	register_custom_party_types,
 	rename_discipline_record,
@@ -78,6 +79,7 @@ PATCHES = (
 	("erpnext_mcp.patches.backfill_valve_rank", backfill_valve_rank),
 	("erpnext_mcp.patches.migrate_asset_types", migrate_asset_types),
 	("erpnext_mcp.patches.move_mobile_credentials_to_devices", move_mobile_credentials_to_devices),
+	("erpnext_mcp.patches.normalize_app_feedback_timestamps", normalize_app_feedback_timestamps),
 )
 
 
@@ -1196,3 +1198,13 @@ class BackfillValveRank(FreshSite):
 		self.assertEqual(report["scanned"], 0)
 		self.assertEqual(report["filled"], 0)
 		self.assertFalse(backfill_valve_rank.report_lines(report))
+
+
+class AppFeedbackStampsPatch(MCPTestCase):
+	"""v0.198.0. The behaviour is tested beside the tool in `test_app_feedback`
+	(`BothStampsAreSiteLocal`); this is the fresh-site half — nothing to move,
+	and nothing raised."""
+
+	def test_a_site_with_no_notes_reports_nothing_moved(self):
+		report = normalize_app_feedback_timestamps.normalize_app_feedback_timestamps()
+		self.assertEqual(report["converted"], 0)

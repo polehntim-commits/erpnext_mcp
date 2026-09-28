@@ -13,6 +13,8 @@
   "file_url",
   "captured_on",
   "phase",
+  "gps_latitude",
+  "gps_longitude",
   "detail_section",
   "caption"
  ],
@@ -60,6 +62,19 @@
    "options": "\nbefore\nafter"
   },
   {
+   "description": "Where this photograph was taken — the handset's fix at the moment of capture (v0.198.0). Blank from an older phone.",
+   "fieldname": "gps_latitude",
+   "fieldtype": "Float",
+   "label": "GPS Latitude",
+   "precision": "7"
+  },
+  {
+   "fieldname": "gps_longitude",
+   "fieldtype": "Float",
+   "label": "GPS Longitude",
+   "precision": "7"
+  },
+  {
    "fieldname": "detail_section",
    "fieldtype": "Section Break",
    "label": ""
@@ -74,7 +89,7 @@
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-07-31 18:00:00.000000",
+ "modified": "2026-09-27 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Evidence",
