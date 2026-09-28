@@ -28605,6 +28605,25 @@ TOOLS = {
 		available=_needs_doctype("Agricultural UOM Context"),
 		requires="the Agricultural UOM Context DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
+	"set_uom_aliases": _tool(
+		uoms.set_uom_aliases,
+		"MUTATING (default OFF). The other spellings a unit is printed as — 'pacs' "
+		"for Place Pac — stored on the unit, read by every resolution (resolve_uom, "
+		"create_item, the phone's label reader). No deploy needed for a new spelling. "
+		"Pass add and/or remove, or replace alone. A plural of a spelling is read too. "
+		"Refuses a spelling another unit already answers to (its name, its aliases, or "
+		"the built-in table). Gated to System Manager, Stock Manager, Item Manager or Farm Manager on the account this app acts as.",
+		{
+			"uom": _field(_STRING, "The unit, e.g. Place Pac."),
+			"add": _field(_STRING_ARRAY, 'Spellings to add, e.g. ["pacs", "packs"].'),
+			"remove": _field(_STRING_ARRAY, "Spellings to drop."),
+			"replace": _field(_STRING_ARRAY, "The whole list; [] clears it. Alone."),
+		},
+		required=("uom",),
+		mutating=True,
+		idempotent=True,
+		title="Set a unit's other spellings",
+	),
 	# ── v0.88.0: the spray program ──────────────────────────────────────────
 	"create_spray_nozzle_config": _tool(
 		spray.create_spray_nozzle_config,

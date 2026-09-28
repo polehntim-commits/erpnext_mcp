@@ -43,6 +43,15 @@ CANDIDATE_CAP = 10
 ALIASES: dict[str, tuple[str, ...]] = {
 	"block": ("Block",),
 	"bait block": ("Block",),
+	# v0.202.0. The other bait forms (see `ag_uom.BAIT_UNITS`). "pack" is here
+	# because Tim asked for it: on a bait label a "pack" is the place pac.
+	"place pac": ("Place Pac",),
+	"pac": ("Place Pac",),
+	"pack": ("Place Pac",),
+	"pouch": ("Pouch",),
+	"packet": ("Pouch",),
+	"bait station": ("Bait Station",),
+	"station": ("Bait Station",),
 	"blocks of bait": ("Block",),
 	"block of bait": ("Block",),
 	"oz": ("Ounce",),
@@ -112,12 +121,35 @@ def site_uoms() -> list[dict]:
 	"""Every ENABLED UOM on this site as `{name, must_be_whole_number}`."""
 	if not doctype_exists(UOM):
 		return []
-	fields = ["name", "must_be_whole_number"]
+	from .compat import has_field
+
+	with_aliases = has_field(UOM, ALIAS_FIELD)
+	fields = ["name", "must_be_whole_number", *([ALIAS_FIELD] if with_aliases else [])]
 	rows = frappe.db.get_all(UOM, filters={"enabled": 1}, fields=fields, order_by="name asc", limit=5000)
 	return [
-		{"name": row["name"], "must_be_whole_number": bool(int(row.get("must_be_whole_number") or 0))}
+		{
+			"name": row["name"],
+			"must_be_whole_number": bool(int(row.get("must_be_whole_number") or 0)),
+			"aliases": parse_aliases(row.get(ALIAS_FIELD)) if with_aliases else [],
+		}
 		for row in rows
 	]
+
+
+#: v0.202.0. The UOM column a site keeps its own spellings in, one per line —
+#: "pacs" for Place Pac was the first. Read by every resolution, written by
+#: `tools/uoms.set_uom_aliases`, so a new spelling on a label needs no deploy.
+ALIAS_FIELD = "uom_aliases"
+
+
+def parse_aliases(raw) -> list[str]:
+	"""A `uom_aliases` value as a list of distinct spellings, in the order written."""
+	out: list[str] = []
+	for line in str(raw or "").replace(",", "\n").splitlines():
+		spelling = " ".join(line.split())
+		if spelling and spelling.lower() not in {entry.lower() for entry in out}:
+			out.append(spelling)
+	return out
 
 
 def _phrase_after_quantity(clause: str) -> tuple[str, dict | None]:
@@ -140,15 +172,26 @@ def _phrase_after_quantity(clause: str) -> tuple[str, dict | None]:
 	return " ".join(w for w in words if w), quantity
 
 
-def _index(uoms: list[dict]) -> tuple[dict, dict]:
+def _index(uoms: list[dict]) -> tuple[dict, dict, dict]:
 	exact = {row["name"]: row["name"] for row in uoms}
 	folded = {}
 	for row in uoms:
 		folded.setdefault(_norm(row["name"]), row["name"])
-	return exact, folded
+	# A site's own spellings, singular and as written. A name always beats an
+	# alias: `folded` is consulted first in `_match`.
+	site_aliases: dict = {}
+	for row in uoms:
+		for spelling in row.get("aliases") or ():
+			key = _norm(spelling)
+			parts = key.split()
+			for variant in (key, " ".join([*parts[:-1], _singular(parts[-1])]) if parts else key):
+				site_aliases.setdefault(variant, row["name"])
+	return exact, folded, site_aliases
 
 
-def _match(phrase: str, exact: dict, folded: dict) -> tuple[str | None, str | None]:
+def _match(
+	phrase: str, exact: dict, folded: dict, site_aliases: dict | None = None
+) -> tuple[str | None, str | None]:
 	"""The site UOM `phrase` names, trying the longest reading first.
 
 	"blocks of bait" is tried whole, then "blocks of", then "blocks" — so an
@@ -163,6 +206,8 @@ def _match(phrase: str, exact: dict, folded: dict) -> tuple[str | None, str | No
 			return exact[part], "exact"
 		if key in folded:
 			return folded[key], "case"
+		if site_aliases and key in site_aliases:
+			return site_aliases[key], "site_alias"
 		for name in ALIASES.get(key, ()):
 			if name in exact:
 				return name, "alias"
@@ -171,6 +216,8 @@ def _match(phrase: str, exact: dict, folded: dict) -> tuple[str | None, str | No
 		if singular != key:
 			if singular in folded:
 				return folded[singular], "plural"
+			if site_aliases and singular in site_aliases:
+				return site_aliases[singular], "site_alias"
 			for name in ALIASES.get(singular, ()):
 				if name in exact:
 					return name, "plural"
@@ -223,8 +270,8 @@ def resolve_unit(text, uoms: list[dict] | None = None) -> dict:
 	"""A unit NAMED on its own — a stock unit, a picked rate unit — as a Resolution."""
 	uoms = site_uoms() if uoms is None else uoms
 	phrase = " ".join(str(text or "").split())
-	exact, folded = _index(uoms)
-	uom, how = _match(phrase, exact, folded) if phrase else (None, None)
+	exact, folded, site_aliases = _index(uoms)
+	uom, how = _match(phrase, exact, folded, site_aliases) if phrase else (None, None)
 	return _answer(phrase, phrase, None, uom, how, uoms)
 
 
@@ -238,7 +285,7 @@ def resolve_rate(text, uoms: list[dict] | None = None) -> dict:
 	"""
 	uoms = site_uoms() if uoms is None else uoms
 	raw = str(text or "").strip()
-	exact, folded = _index(uoms)
+	exact, folded, site_aliases = _index(uoms)
 	clauses = []
 	for piece in re.split(r"[;\n]+", raw):
 		piece = piece.strip()
@@ -247,7 +294,7 @@ def resolve_rate(text, uoms: list[dict] | None = None) -> dict:
 		target, _, rest = piece.rpartition(":")
 		body = rest if target else piece
 		phrase, quantity = _phrase_after_quantity(body)
-		uom, how = _match(phrase, exact, folded) if phrase else (None, None)
+		uom, how = _match(phrase, exact, folded, site_aliases) if phrase else (None, None)
 		clauses.append(
 			{
 				"target": target.strip() or None,

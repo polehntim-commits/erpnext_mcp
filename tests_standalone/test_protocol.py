@@ -1149,9 +1149,10 @@ class Catalogue(SeededTestCase):
 		member writes to pay back their share of an expense the farm fronted,
 		booked once approved as a draft Journal Entry into the bank.
 		"""
-		self.assertEqual(len(registry.TOOLS), 923)
+		# v0.202.0 adds one write, `set_uom_aliases`.
+		self.assertEqual(len(registry.TOOLS), 924)
 		self.assertEqual(len(registry.READ_TOOLS), 455)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 468)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 469)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 923 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 924 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -16050,6 +16050,7 @@ the unit it really is (Block). The contract is `docs/design/uom_registry.md`.
 | `create_ag_uom_context` | A new context — one measurement per context. Write |
 | `update_ag_uom_context` | Switch on/off, reword, change the default. Write |
 | `add_uom_to_context` / `remove_uom_from_context` | One unit in or out; never the last one. Write |
+| `set_uom_aliases` | (v0.202.0) The other spellings of a unit — `pacs` for Place Pac — read by every resolution, so a new spelling needs no deploy. Refuses a spelling another unit answers to. Write |
 
 Every write is off by default and also needs **System Manager, Stock Manager,
 Item Manager or Farm Manager** on the account this app acts as.

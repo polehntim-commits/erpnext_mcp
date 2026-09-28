@@ -1034,6 +1034,7 @@
   "allow_update_ag_uom_context",
   "allow_add_uom_to_context",
   "allow_remove_uom_from_context",
+  "allow_set_uom_aliases",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
   "allow_list_spray_applications",
@@ -7993,6 +7994,13 @@
    "fieldname": "allow_remove_uom_from_context",
    "fieldtype": "Check",
    "label": "Remove UoM from Context"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. The other spellings of a unit ('pacs' for Place Pac), read by every unit resolution. Refuses a spelling another unit answers to. Also needs one of the unit-register roles.",
+   "fieldname": "allow_set_uom_aliases",
+   "fieldtype": "Check",
+   "label": "Set UoM Aliases"
   },
   {
    "fieldname": "spray_program_section",

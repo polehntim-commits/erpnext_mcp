@@ -56,6 +56,12 @@ DIMENSION = {
 	# blocks", and a half block in a station is not a thing anybody places.
 	"Block": "Count",
 	"Ounce": "Weight",
+	# v0.202.0. The other forms bait is sold and placed in. PROWLER® is "22 x 3 oz
+	# Place Pacs" and its rate is "1 place pac per bait placement": counted by
+	# the pac, as a bait station is by the station and a pouch by the pouch.
+	"Place Pac": "Count",
+	"Pouch": "Count",
+	"Bait Station": "Count",
 }
 
 #: The units the installer makes sure exist, with the `must_be_whole_number`
@@ -77,6 +83,22 @@ SEED_UOMS = (
 	# (whole), Ounce for a dry product's rate by weight.
 	{"uom_name": "Block", "must_be_whole_number": 1},
 	{"uom_name": "Ounce", "must_be_whole_number": 0},
+	{"uom_name": "Place Pac", "must_be_whole_number": 1},
+	{"uom_name": "Pouch", "must_be_whole_number": 1},
+	{"uom_name": "Bait Station", "must_be_whole_number": 1},
+)
+
+#: v0.202.0. What the Bait context offers beyond its default. Kept apart so
+#: `patches/add_bait_units_to_context` can add them to a Bait context a site
+#: already has — the seed only ever creates a missing context, never edits one.
+BAIT_UNITS = (
+	{
+		"uom": "Place Pac",
+		"is_default": 0,
+		"notes": 'A pre-measured pouch of bait placed whole — "1 place pac per bait placement".',
+	},
+	{"uom": "Pouch", "is_default": 0, "notes": "Soft-bait pouches and packets placed unopened."},
+	{"uom": "Bait Station", "is_default": 0, "notes": "A tamper-resistant station, counted as placed."},
 )
 
 #: The contexts, and which units each one accepts. NOTE WHAT IS *NOT* MIXED:
@@ -153,7 +175,10 @@ SEED_CONTEXTS = (
 			"Rodent and insect bait placed by the piece. A bait label's rate is a count per "
 			'station or per placement — "1 or 2 blocks of bait" — and is stocked the same way.'
 		),
-		"uoms": ({"uom": "Block", "is_default": 1, "notes": "One bait block, as the label counts it."},),
+		"uoms": (
+			{"uom": "Block", "is_default": 1, "notes": "One bait block, as the label counts it."},
+			*BAIT_UNITS,
+		),
 	},
 	{
 		"context_name": "Dry Product",

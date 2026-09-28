@@ -27,6 +27,7 @@ import unittest
 
 from erpnext_mcp import install, settings
 from erpnext_mcp.patches import (
+	add_bait_units_to_context,
 	backfill_alert_subject_employee,
 	backfill_completion_signatures,
 	backfill_field_varieties,
@@ -84,6 +85,7 @@ PATCHES = (
 	("erpnext_mcp.patches.normalize_app_feedback_timestamps", normalize_app_feedback_timestamps),
 	("erpnext_mcp.patches.widen_pesticide_field_visibility", widen_pesticide_field_visibility),
 	("erpnext_mcp.patches.normalize_phone_timestamps", normalize_phone_timestamps),
+	("erpnext_mcp.patches.add_bait_units_to_context", add_bait_units_to_context),
 )
 
 

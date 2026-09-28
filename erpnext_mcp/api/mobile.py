@@ -20127,7 +20127,12 @@ def list_uoms(user: str, search=None, rate_text=None, unit_text=None, context=No
 	units = uom_resolve.site_uoms()
 	wanted = str(search or "").strip().lower()
 	if wanted:
-		units = [row for row in units if wanted in row["name"].lower()]
+		units = [
+			row
+			for row in units
+			if wanted in row["name"].lower()
+			or any(wanted in alias.lower() for alias in row.get("aliases") or ())
+		]
 	context = str(context or "").strip()
 	default_uom = None
 	if context:
@@ -20166,6 +20171,7 @@ def list_uoms(user: str, search=None, rate_text=None, unit_text=None, context=No
 				"name": row["name"],
 				"must_be_whole_number": row["must_be_whole_number"],
 				"measures": ag_uom.dimension_of(row["name"]) or None,
+				"aliases": list(row.get("aliases") or ()),
 			}
 			for row in units[:_MOBILE_UOM_CAP]
 		],

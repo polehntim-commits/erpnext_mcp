@@ -30,6 +30,7 @@ WRITE_TOOLS = (
 	"update_ag_uom_context",
 	"add_uom_to_context",
 	"remove_uom_from_context",
+	"set_uom_aliases",
 )
 ALL_ON = {f"allow_{name}": 1 for name in (*READ_TOOLS, *WRITE_TOOLS, "create_item", "update_item")}
 
@@ -329,7 +330,77 @@ class Contexts(UnitTestCase):
 		)
 
 
+class Aliases(UnitTestCase):
+	"""v0.202.0. Tim: "pacs" did not resolve to the Place Pac he had just created."""
+
+	def setUp(self):
+		super().setUp()
+		self.tool_data("create_uom", {"uom_name": "Place Pac", "must_be_whole_number": True})
+
+	def test_the_built_in_spellings_of_a_place_pac_and_a_block(self):
+		for text in ("pac", "pacs", "place pacs", "packs", "Place Pacs"):
+			self.assertEqual(uom_resolve.resolve_unit(text)["uom"], "Place Pac", text)
+		self.assertEqual(uom_resolve.resolve_unit("blocks")["uom"], "Block")
+		rate = uom_resolve.resolve_rate("Mice: Place 1 place pac per bait placement")
+		self.assertEqual(rate["uom"], "Place Pac")
+
+	def test_a_site_spelling_resolves_without_a_deploy(self):
+		self.assertIsNone(uom_resolve.resolve_unit("sachets")["uom"])
+		data = self.tool_data("set_uom_aliases", {"uom": "Place Pac", "add": ["sachet", "Sachet", "pp"]})
+		self.assertEqual(data["aliases"], ["sachet", "pp"])
+		answer = uom_resolve.resolve_unit("sachets")
+		self.assertEqual((answer["uom"], answer["matched_by"]), ("Place Pac", "site_alias"))
+		self.assertEqual(self.tool_data("get_uom", {"uom": "Place Pac"})["aliases"], ["sachet", "pp"])
+		listed = {row["name"]: row["aliases"] for row in self.tool_data("list_uoms", {})["uoms"]}
+		self.assertEqual(listed["Place Pac"], ["sachet", "pp"])
+
+	def test_remove_and_replace(self):
+		self.tool_data("set_uom_aliases", {"uom": "Place Pac", "add": ["sachet", "pp"]})
+		self.assertEqual(
+			self.tool_data("set_uom_aliases", {"uom": "Place Pac", "remove": ["PP"]})["aliases"], ["sachet"]
+		)
+		self.assertEqual(
+			self.tool_data("set_uom_aliases", {"uom": "Place Pac", "replace": []})["aliases"], []
+		)
+		self.assertIn(
+			"alone", self.tool_error("set_uom_aliases", {"uom": "Place Pac", "replace": ["a"], "add": ["b"]})
+		)
+
+	def test_a_spelling_another_unit_answers_to_is_refused(self):
+		message = self.tool_error("set_uom_aliases", {"uom": "Place Pac", "add": ["blocks"]})
+		self.assertIn("already means Block", message)
+		self.tool_data("set_uom_aliases", {"uom": "Place Pac", "add": ["sachet"]})
+		self.assertIn(
+			"already means Place Pac",
+			self.tool_error("set_uom_aliases", {"uom": "Block", "add": ["sachets"]}),
+		)
+
+	def test_off_by_default_and_role_gated(self):
+		self.configure(allow_set_uom_aliases=0)
+		self.tool_error("set_uom_aliases", {"uom": "Place Pac", "add": ["x"]})
+
+
 class TheSeed(UnitTestCase):
+	def test_place_pac_pouch_and_bait_station_join_the_bait_context(self):
+		STORE.rows("UOM").clear()
+		agronomy_seed.seed_agricultural_masters()
+		units = [row["uom"] for row in STORE.get_raw("Agricultural UOM Context", "Bait")["uoms"]]
+		self.assertEqual(units, ["Block", "Place Pac", "Pouch", "Bait Station"])
+		self.assertEqual(STORE.get_raw("UOM", "Place Pac")["must_be_whole_number"], 1)
+		self.assertEqual(ag_uom.dimension_of("Place Pac"), "Count")
+
+	def test_the_patch_adds_the_missing_bait_units_to_an_existing_context(self):
+		from erpnext_mcp.patches import add_bait_units_to_context as patch
+
+		self.a_context()  # Block alone, as v0.197.0 seeded it
+		self.tool_data("create_uom", {"uom_name": "Place Pac", "must_be_whole_number": True})
+		self.tool_data("add_uom_to_context", {"context": "Bait", "uom": "Place Pac"})  # what Tim did on OML
+		report = patch.add_bait_units_to_context()
+		self.assertEqual(report["added"], ["Pouch", "Bait Station"])
+		rows = STORE.get_raw("Agricultural UOM Context", "Bait")["uoms"]
+		self.assertEqual([row["uom"] for row in rows if row.get("is_default")], ["Block"])
+		self.assertEqual(patch.add_bait_units_to_context()["added"], [])
+
 	def test_block_and_ounce_are_seeded_with_their_contexts(self):
 		STORE.rows("UOM").clear()
 		agronomy_seed.seed_agricultural_masters()

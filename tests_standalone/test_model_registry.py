@@ -904,9 +904,10 @@ class ToolRegistration(unittest.TestCase):
 		# tools of their own — no existing signature changed.
 		# v0.186.0 adds one write, `post_reimbursement_receipt`: an approved check
 		# paying back a share of an expense, booked as a draft Journal Entry.
-		self.assertEqual(len(self.registry.TOOLS), 923)
+		# v0.202.0 adds one write, `set_uom_aliases`: "pacs" for Place Pac without a deploy.
+		self.assertEqual(len(self.registry.TOOLS), 924)
 		self.assertEqual(len(self.registry.READ_TOOLS), 455)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 468)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 469)
 
 
 if __name__ == "__main__":

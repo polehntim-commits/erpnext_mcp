@@ -45,6 +45,8 @@ CONTEXT_ENTRY = "Agricultural UOM Context Entry"
 AG_CONVERSION = "Agricultural UOM Conversion"
 ITEM = "Item"
 RATE_UOM_FIELD = "application_rate_uom"
+CUSTOM_FIELD = "Custom Field"
+ALIAS_FIELD = uom_resolve.ALIAS_FIELD
 
 #: Who may change the unit register. The item-master owners ERPNext itself
 #: names (Stock Manager, Item Manager), the site administrator, and the farm's
@@ -108,6 +110,64 @@ def _existing_uom(value, label: str, tail: str) -> str:
 
 def _checked(value) -> bool:
 	return compat.checked(value)
+
+
+def ensure_uom_alias_field() -> bool:
+	"""Give UOM the column a site keeps its own spellings of a unit in. v0.202.0.
+
+	Tim, on PROWLER® Place Pacs: "pacs" did not resolve, and the fix should not
+	need a deploy. One Small Text on the unit — one spelling per line — read by
+	every resolution (`uom_resolve._index`) and written by `set_uom_aliases`.
+
+	Same arrangement as `masters.ensure_sales_channel_field`: created at migrate
+	time by `install.py` and here on first use. NEVER RAISES — a site that will
+	not take the field resolves with the built-in table alone.
+	"""
+	try:
+		if compat.has_field(UOM, ALIAS_FIELD):
+			return True
+		if not compat.doctype_exists(CUSTOM_FIELD) or not compat.doctype_exists(UOM):
+			return False
+		if frappe.db.exists(CUSTOM_FIELD, {"dt": UOM, "fieldname": ALIAS_FIELD}):
+			return True
+	except Exception:
+		return False
+	try:
+		doc = frappe.new_doc(CUSTOM_FIELD)
+		doc.dt = UOM
+		doc.fieldname = ALIAS_FIELD
+		doc.label = "Also Written As"
+		doc.fieldtype = "Small Text"
+		doc.insert_after = "must_be_whole_number"
+		doc.module = "ERPNext MCP"
+		doc.description = (
+			"Other spellings of this unit on labels, receipts and the phone, one per line — "
+			"'pacs' for Place Pac. A plural of a line is read too. Managed by set_uom_aliases, "
+			"which refuses a spelling another unit already answers to."
+		)
+		doc.insert(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(
+			title=f"erpnext_mcp: could not add {ALIAS_FIELD} to UOM", message=compat.traceback_text()
+		)
+		return False
+	try:
+		frappe.clear_cache(doctype=UOM)
+	except Exception:
+		pass
+	return compat.has_field(UOM, ALIAS_FIELD)
+
+
+def _aliases_by_uom() -> dict:
+	"""`{uom: [spelling, ...]}` for every unit with any, or {} before the field exists."""
+	if not compat.has_field(UOM, ALIAS_FIELD):
+		return {}
+	out = {}
+	for row in frappe.db.get_all(UOM, fields=["name", ALIAS_FIELD], limit=5000):
+		spellings = uom_resolve.parse_aliases(row.get(ALIAS_FIELD))
+		if spellings:
+			out[row["name"]] = spellings
+	return out
 
 
 def _contexts_by_uom() -> dict:
@@ -175,6 +235,7 @@ def list_uoms(args: dict) -> ToolResult:
 	if only is not None:
 		rows = [row for row in rows if row["name"] in only]
 	truncated = len(rows) > limit
+	aliases = _aliases_by_uom()
 	uoms = [
 		{
 			"name": row["name"],
@@ -182,6 +243,7 @@ def list_uoms(args: dict) -> ToolResult:
 			"must_be_whole_number": _checked(row.get("must_be_whole_number")),
 			"measures": ag_uom.dimension_of(row["name"]) or None,
 			"contexts": [entry["context"] for entry in contexts.get(row["name"], [])],
+			"aliases": aliases.get(row["name"], []),
 		}
 		for row in rows[:limit]
 	]
@@ -247,6 +309,7 @@ def get_uom(args: dict) -> ToolResult:
 		"must_be_whole_number": _checked(row.get("must_be_whole_number")),
 		"measures": ag_uom.dimension_of(name) or None,
 		"contexts": _contexts_by_uom().get(name, []),
+		"aliases": _aliases_by_uom().get(name, []),
 		"conversion_factors": factors,
 		"agricultural_conversions": ag_rows,
 		"usage": usage,
@@ -709,3 +772,87 @@ def remove_uom_from_context(args: dict) -> ToolResult:
 	doc.set("uoms", kept)
 	_save_context(doc, tail)
 	return ToolResult(_context_answer(doc), f"{doc.name} no longer offers {uom}")
+
+
+# ── 12. set_uom_aliases ─────────────────────────────────────────────────────
+def _spellings(args: dict, key: str) -> list[str] | None:
+	value = args.get(key)
+	if value is None:
+		return None
+	if isinstance(value, str):
+		value = [value]
+	if not isinstance(value, (list, tuple)):
+		raise ToolError(f"{key} must be a list of spellings, got {type(value).__name__}.")
+	return uom_resolve.parse_aliases("\n".join(str(item) for item in value))
+
+
+def set_uom_aliases(args: dict) -> ToolResult:
+	"""Add, remove or replace the spellings a site accepts for one unit. No deploy needed.
+
+	REFUSES A SPELLING ANOTHER UNIT ANSWERS TO — its name, one of its aliases, or
+	what the built-in table sends there — because the resolver would then read
+	the same printed word two ways depending on which it tried first.
+	"""
+	_require_uom()
+	tail = "Nothing was changed."
+	require_uom_role("change a unit's spellings", tail)
+	name = _existing_uom(as_str(args, "uom"), "uom", tail)
+	add, remove, replace = (_spellings(args, key) for key in ("add", "remove", "replace"))
+	if add is None and remove is None and replace is None:
+		raise ToolError(f"nothing to change. Pass add, remove or replace (a list of spellings). {tail}")
+	if replace is not None and (add or remove):
+		raise ToolError(f"replace sets the whole list; pass it alone, not with add or remove. {tail}")
+	if not ensure_uom_alias_field():
+		raise ToolError(
+			f"this site's UOM has no {ALIAS_FIELD} column and would not take one. {_APP_HINT} {tail}"
+		)
+
+	doc = frappe.get_doc(UOM, name)
+	before = uom_resolve.parse_aliases(doc.get(ALIAS_FIELD))
+	if replace is not None:
+		after = list(replace)
+	else:
+		dropping = {spelling.lower() for spelling in remove or ()}
+		after = [spelling for spelling in before if spelling.lower() not in dropping]
+		for spelling in add or ():
+			if spelling.lower() not in {entry.lower() for entry in after}:
+				after.append(spelling)
+
+	others = [
+		dict(row, aliases=spellings if row["name"] != name else [])
+		for row in uom_resolve.site_uoms()
+		for spellings in [row.get("aliases") or []]
+	]
+	if not any(row["name"] == name for row in others):  # a disabled unit is still its own
+		others.append({"name": name, "must_be_whole_number": False, "aliases": []})
+	conflicts = []
+	for spelling in after:
+		if spelling.lower() == name.lower():
+			continue
+		answer = uom_resolve.resolve_unit(spelling, others)
+		if answer["uom"] and answer["uom"] != name:
+			conflicts.append(f"{spelling!r} already means {answer['uom']} ({answer['matched_by']})")
+	if conflicts:
+		raise ToolError(
+			f"{'; '.join(conflicts)}. A printed word may mean one unit only — remove it from the "
+			f"other unit first (set_uom_aliases remove), or use that unit. {tail}"
+		)
+
+	after = [spelling for spelling in after if spelling.lower() != name.lower()]
+	if after == before:
+		return ToolResult(
+			{"name": name, "aliases": after, "changed": False}, f"{name}'s spellings already matched"
+		)
+	doc.set(ALIAS_FIELD, "\n".join(after))
+	doc.save()
+	return ToolResult(
+		{
+			"name": name,
+			"aliases": after,
+			"added": [s for s in after if s.lower() not in {b.lower() for b in before}],
+			"removed": [s for s in before if s.lower() not in {a.lower() for a in after}],
+			"changed": True,
+		},
+		f"{name} is also written as: {', '.join(after) or '<nothing>'}",
+		docstatus_delta="unchanged (UOM has no docstatus)",
+	)

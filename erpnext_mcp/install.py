@@ -170,6 +170,7 @@ def after_install() -> None:
 	_translations()
 	_breakeven_account_fields()
 	_sales_channel_field()
+	_uom_alias_field()
 	_pest_provider_field()
 	_agricultural_masters()
 	_soil_compaction_profiles()
@@ -223,6 +224,7 @@ def after_migrate() -> None:
 	_translations()
 	_breakeven_account_fields()
 	_sales_channel_field()
+	_uom_alias_field()
 	_pest_provider_field()
 	_agricultural_masters()
 	_soil_compaction_profiles()
@@ -298,6 +300,24 @@ def _pest_provider_field() -> None:
 			"erpnext_mcp: the Company pest management provider table was not installed — "
 			f"{type(exc).__name__}: {exc}"
 		)
+
+
+def _uom_alias_field() -> None:
+	"""Give UOM the column a site keeps its own spellings of a unit in. v0.202.0.
+
+	"pacs" for Place Pac: `tools/uoms.ensure_uom_alias_field` creates it here and
+	lazily on first `set_uom_aliases`. Never raises.
+	"""
+	try:
+		from .tools import uoms
+
+		if frappe.db.exists("DocType", "UOM") and not uoms.ensure_uom_alias_field():
+			print(
+				"erpnext_mcp: UOM did not take the uom_aliases Custom Field. Units still resolve "
+				"from their names and the built-in spellings; set_uom_aliases will refuse."
+			)
+	except Exception as exc:  # pragma: no cover - a site mid-migrate
+		print(f"erpnext_mcp: the UOM alias field was not installed — {type(exc).__name__}: {exc}")
 
 
 def _sales_channel_field() -> None:
