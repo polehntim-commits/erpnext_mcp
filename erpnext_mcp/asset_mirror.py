@@ -153,6 +153,9 @@ CATEGORY_BY_TYPE = {
 	"Tractor": "Tractor",
 	"Wind Machine": "Wind Machine",
 	"Housing Unit": "Housing Unit",
+	# v0.203.0. A cabin or a house somebody lives in is housing.
+	"Cabin": "Housing Unit",
+	"House": "Housing Unit",
 	"Storage": "Structure",
 	"Cold Storage": "Structure",
 	"Water Source": "Structure",

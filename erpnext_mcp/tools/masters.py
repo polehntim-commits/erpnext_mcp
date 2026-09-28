@@ -149,6 +149,13 @@ PESTICIDE_FIELDS = {
 	# v0.202.0. What the product is on the shelf, and its net contents as printed.
 	"product_form": "text",
 	"package_size": "text",
+	# v0.203.0. The five label facts a rodent bait placement is checked against.
+	# See `compliance_fields` and docs/design/rodent_bait_program.md §10.
+	"tamper_resistant_station_required": "check",
+	"max_distance_from_structure_ft": "number",
+	"burrow_baiting_allowed": "yes_no",
+	"min_bait_days": "whole",
+	"interior_use_allowed": "yes_no",
 }
 USE_SCOPES = ("Crop", "Non-crop")
 SIGNAL_WORDS = ("Danger", "Warning", "Caution", "None")
@@ -1055,6 +1062,10 @@ def _pesticide_values(args: dict, verb: str) -> dict:
 			values[key] = _label_validation(str(raw).strip(), verb)
 		elif kind == "use_scope":
 			values[key] = _use_scope(raw, verb)
+		elif kind == "number":
+			values[key] = _number_non_negative(raw, key, verb)
+		elif kind == "yes_no":
+			values[key] = _yes_no(raw, key, verb)
 
 	for key in values:
 		if not compat.has_field(ITEM, key):
@@ -1089,6 +1100,35 @@ def _whole_non_negative(raw, key: str, verb: str) -> int:
 			f"Nothing was {verb}."
 		)
 	return int(number)
+
+
+def _number_non_negative(raw, key: str, verb: str):
+	"""A label distance as a number of at least zero, or None to clear."""
+	if raw in ("", None):
+		return None
+	if isinstance(raw, bool):
+		raise ToolError(f"{key} must be a number of at least 0, got {raw!r}. Nothing was {verb}.")
+	try:
+		number = float(raw)
+	except (TypeError, ValueError):
+		raise ToolError(f"{key} must be a number of at least 0, got {raw!r}. Nothing was {verb}.") from None
+	if number != number or number < 0:
+		raise ToolError(f"{key} must be at least 0, got {raw!r}. Nothing was {verb}.")
+	return number
+
+
+def _yes_no(raw, key: str, verb: str) -> str:
+	"""`Yes`, `No`, or "" for "the label does not say". A bool is accepted."""
+	if isinstance(raw, bool):
+		return "Yes" if raw else "No"
+	word = str(raw or "").strip().lower()
+	if not word:
+		return ""
+	if word in ("yes", "y", "true", "1", "allowed"):
+		return "Yes"
+	if word in ("no", "n", "false", "0", "prohibited", "not allowed"):
+		return "No"
+	raise ToolError(f"{key} must be Yes, No or '' (the label does not say), got {raw!r}. Nothing was {verb}.")
 
 
 def _use_scope(raw, verb: str) -> str:
@@ -1202,6 +1242,8 @@ def _stored_label_value(key: str, value):
 		return 1 if _checked(value) else 0
 	if kind == "whole":
 		return int(value or 0)
+	if kind == "number":
+		return None if value in (None, "") else float(value)
 	if kind == "ingredients":
 		if value in (None, "", []):
 			return None

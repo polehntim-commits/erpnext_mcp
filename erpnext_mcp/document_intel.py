@@ -472,6 +472,76 @@ _CROP_WORDS = re.compile(
 )
 
 
+_WORD_NUMBERS = {
+	"one": 1,
+	"two": 2,
+	"three": 3,
+	"four": 4,
+	"five": 5,
+	"six": 6,
+	"seven": 7,
+	"ten": 10,
+	"fourteen": 14,
+	"fifteen": 15,
+}
+
+
+def _count(token: str) -> int:
+	token = token.strip().lower()
+	return int(token) if token.isdigit() else _WORD_NUMBERS.get(token, 0)
+
+
+def bait_label_facts(ocr_text: str) -> dict:
+	"""v0.203.0. The five label facts a rodent bait placement is checked against.
+
+	docs/design/rodent_bait_program.md §10. Read off the words a rodenticide label
+	uses, and ONLY what the label says: a fact the text does not state is absent
+	from the answer, never a guessed "allowed". The phone may send the same keys
+	in `extracted_fields`; those win.
+	"""
+	text = " ".join(str(ocr_text or "").split())
+	low = text.lower()
+	out: dict = {}
+	if re.search(r"tamper[\s-]*resistant\s+(?:bait\s+)?stations?", low) and re.search(
+		r"(must|shall|required|only|children|pets|nontarget|non-target)", low
+	):
+		out["tamper_resistant_station_required"] = 1
+	distances = [
+		float(match.group(1))
+		for match in re.finditer(
+			r"within\s+(\d+(?:\.\d+)?)\s*(?:-\s*)?(?:feet|foot|ft)\b[^.]{0,60}?(?:building|structure)", low
+		)
+	]
+	if distances:
+		out["max_distance_from_structure_ft"] = min(distances)
+	if re.search(r"(do not|don't|never)\s+(?:place|put|use|apply)[^.]{0,60}?burrows?", low) or re.search(
+		r"burrow\s+baiting\s+(?:is\s+)?(?:prohibited|not\s+permitted|not\s+allowed)", low
+	):
+		out["burrow_baiting_allowed"] = "No"
+	elif re.search(r"(?:place|apply|insert)[^.]{0,40}?(?:in|into)\s+(?:active\s+)?burrows?", low):
+		out["burrow_baiting_allowed"] = "Yes"
+	days = []
+	for match in re.finditer(
+		r"(?:at least|minimum of|for)\s+(\d+|one|two|three|four|five|six|seven|ten|fourteen|fifteen)\s*(days?|weeks?)",
+		low,
+	):
+		around = low[max(0, match.start() - 80) : match.end() + 40]
+		if "bait" not in around:
+			continue
+		number = _count(match.group(1))
+		if number:
+			days.append(number * (7 if match.group(2).startswith("week") else 1))
+	if days:
+		out["min_bait_days"] = min(days)
+	if re.search(
+		r"(outdoor use only|exterior use only|for outdoor use only|not for (?:indoor|interior) use)", low
+	):
+		out["interior_use_allowed"] = "No"
+	elif re.search(r"(indoor|inside|in and around|interior)[^.]{0,30}?(use|building|structure|home)", low):
+		out["interior_use_allowed"] = "Yes"
+	return out
+
+
 def pesticide_scope(fields: dict, ocr_text: str) -> str:
 	"""`Crop` or `Non-crop`: what the extraction says, else what the label's words say.
 

@@ -3,6 +3,56 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.203.0 — 2026-09-27 — rodent bait at housing and buildings, as camp maintenance
+
+**924 tools** (unchanged; new arguments only). **One new route, `/mobile/set_building_occupancy`**
+(132 mobile methods). Tim approved the program on 2026-09-27; contract
+`docs/design/rodent_bait_program.md`. **Nothing is switched on**: the five templates, the four
+rules and the pre-occupancy gate all arrive disabled, and OML's drafts (CRULE-2026-0045..0047 and
+the five templates) are left as they are.
+
+- **Occupancy** (`rodent_bait.occupancy`): an active Housing Assignment, the place's own
+  **`occupied`** flag (new on Housing Unit and Asset Register — first-class, for Mill Creek's houses
+  occupied at takeover), an asset whose state is `occupied`, or **`people_work_here`** (new flag,
+  plus a configurable list of types). Farm Task snapshots **`occupancy_at_creation`** /
+  `occupancy_source` on every bait task.
+- **`completed_at` on Farm Task**, set once on completion from the assignment's time; patch
+  `backfill_farm_task_completed_at` fills existing Completed tasks. Bait rules time from it, not `modified`.
+- **Triggers.** `create_stock_entry` (MCP and phone) with `bait_location` (+ `bait_placement`), or a
+  Pest Control line into a warehouse linked to a building asset, raises the placement task
+  (`field_reported`, `bait_product`, the label's rules on the task) and, where occupied, the Occupant
+  Notice; answer `bait_tasks`. Interior of a product whose label forbids indoor use is refused.
+  "Rodent activity seen?" on a routine housing inspection raises an exterior placement.
+- **Refusals.** A placement at an occupied place will not start (or resume) before the round's
+  Occupant Notice is completed. Placement and Removal need the applicator qualification (a current
+  `Applicator License` Certification, or the skill on the Employee) — on assign, claim and start.
+- **Bait state per place** (`rodent_bait_state` Active / Maintenance / Cleared on Housing Unit and
+  Asset Register), moved by completions; a check records **`bait_activity`** (completion argument,
+  or the checklist). **Check interval** (Tim): 7 days while active (a new placement's 10-day
+  knockdown, or a check that found activity), in season and off; a quiet maintenance station 7 days
+  in season, **30 off season**. Season per company: **`pest_season_start` / `pest_season_end`**
+  (MM-DD, `update_company`; default 03-01..10-31). All intervals are the rule's `extra_parameters`.
+- **Rules** (seeded disabled, unapproved): `rodent_bait_interior_placement` (declarative; Critical
+  occupied / Warning unoccupied; only a COMPLETED removal clears), `rodent_bait_check_overdue`
+  (builtin scanner), `pest_control_label_fields_missing`, `rodent_bait_label_conformance`.
+- **Engine, for any rule:** `superseded_by_later_clean.clean_filters` + `finding_date_fields`;
+  `extra_parameters.severity_by_field`; `extra_parameters.notify_roles` / `notify_severities` route
+  an alert's push to a role (Farm Manager on the bait rules).
+- **Pre-occupancy gate** `housing_preoccupancy_bait_clearance` on `create_housing_assignment`
+  (seeded Off; Advisory alerts, Enforced refuses). `propose_compliance_rule`, `create_compliance_rule`
+  and `update_compliance_rule` now declare `control_point` and `enforcement_mode`.
+- **Label facts** on Item: `tamper_resistant_station_required`, `max_distance_from_structure_ft`,
+  `burrow_baiting_allowed`, `min_bait_days`, `interior_use_allowed` — read from the label's OCR
+  (`document_intel.bait_label_facts`) into blanks on `register_product_label`.
+- **Camp maintenance.** Pre-season Cabin Opening gains "Rodent bait cleared" (the server fails it
+  while interior bait is uncleared) and Mid-season Habitability "Rodent activity" (patch
+  `add_rodent_sections_to_inspection_templates` for existing System templates; both optional so older
+  phones still file). `get_compliance_calendar` returns `camp_maintenance`; the audit packet's
+  housing section carries `pest_control`. Cabin and House asset types seeded.
+- **Settings** (ERPNext MCP Settings › Rodent Bait Program): applicator skill and certification type,
+  require-applicator switch, crew skill, alert role, people-work-here types.
+- Deploy: **`bench migrate`** (fields, patches, seeds), then an image rebuild. iOS: fafo_ios §50.
+
 ## 0.202.0 — 2026-09-27 — registration never makes master data; a bait counts in blocks
 
 **924 tools** (455 read, 469 write: one new write, `set_uom_aliases`). **One new route,

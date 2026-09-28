@@ -450,6 +450,7 @@ def _scan_one_target(
 		)
 		if severity is None:
 			continue
+		severity = _severity_by_field(row, candidate, severity)
 		stale = [entry for entry in dates["per_field"] if entry["stale"]]
 		if dates["per_field"] and not stale:
 			# Plural anchors: the fold said something raises, but no INDIVIDUAL
@@ -718,6 +719,41 @@ def _child_gate(candidate: dict, config: dict, index: dict, company_field: str, 
 	return row, crossed, bool(crossed)
 
 
+def _filter_fieldnames(filters: list) -> list:
+	"""Every column a scope-filter list reads, one level of `any` included."""
+	out = []
+	for entry in filters or []:
+		if entry.get("field"):
+			out.append(entry["field"])
+		if entry.get("op") == "any":
+			out.extend(
+				inner["field"]
+				for inner in entry.get("value") or []
+				if isinstance(inner, dict) and inner.get("field")
+			)
+	return out
+
+
+def _severity_by_field(row: dict, candidate: dict, severity: str) -> str:
+	"""v0.203.0. `extra_parameters.severity_by_field` — the tier decides the severity.
+
+	`{"field": "occupancy_at_creation", "map": {"Unoccupied": "Warning"}}`: interior
+	bait in an empty cabin is a Warning; in an occupied one it stays what the
+	record says (Critical). A value the map does not name keeps the severity.
+	"""
+	try:
+		extra = compliance_rules.as_object(row.get("extra_parameters_json"), "extra_parameters")
+	except ValueError:
+		return severity
+	config = extra.get("severity_by_field")
+	if not isinstance(config, dict) or not config.get("field"):
+		return severity
+	mapped = (config.get("map") or {}).get(str(candidate.get(config["field"]) or ""))
+	if mapped in (SEVERITY_CRITICAL, SEVERITY_WARNING, SEVERITY_INFO):
+		return mapped
+	return severity
+
+
 # ── primitive 1: superseded by a later clean record ─────────────────────────
 def _clean_index(doctype: str, date_field: str, config: dict, company: str, warnings: list) -> dict:
 	"""subject → every date on which a CLEAN record was written for it.
@@ -739,7 +775,9 @@ def _clean_index(doctype: str, date_field: str, config: dict, company: str, warn
 	subject_field = config["subject_field"]
 	date_field = config.get("date_field") or date_field
 	state_field = config["clean_state_field"]
-	fields = compat.existing_fields(target, dict.fromkeys(["name", subject_field, date_field, state_field]))
+	clean_filters = config.get("clean_filters") or []
+	wanted = ["name", subject_field, date_field, *([state_field] if state_field else [])]
+	fields = compat.existing_fields(target, dict.fromkeys([*wanted, *_filter_fieldnames(clean_filters)]))
 	for fieldname in (subject_field, date_field, state_field):
 		if fieldname and fieldname not in fields:
 			warnings.append(
@@ -755,14 +793,21 @@ def _clean_index(doctype: str, date_field: str, config: dict, company: str, warn
 		limit=SCAN_CAP,
 	)
 	clean_values = config["clean_state_values"]
+	present = set(fields)
 	out: dict = {}
 	for entry in rows or []:
-		state = str(entry.get(state_field) or "").strip()
-		if not state:
-			if config.get("unreadable_counts_as_dirty", True):
+		entry = dict(entry)
+		if clean_filters:
+			matched, _ignored = compliance_rules.row_matches(entry, clean_filters, present)
+			if not matched:
 				continue
-		elif state not in clean_values:
-			continue
+		if state_field:
+			state = str(entry.get(state_field) or "").strip()
+			if not state:
+				if config.get("unreadable_counts_as_dirty", True):
+					continue
+			elif state not in clean_values:
+				continue
 		out.setdefault(str(entry.get(subject_field) or ""), []).append(str(entry.get(date_field) or ""))
 	return out
 
@@ -775,7 +820,11 @@ def _superseded(candidate: dict, config: dict, clean: dict, date_field: str) -> 
 	with no date supersedes nothing, because `"" > ""` is false and any real date
 	is greater than none — the finding stays standing, which is the safe answer.
 	"""
-	found_on = str(candidate.get(config.get("date_field") or date_field) or "")
+	found_on = ""
+	for fieldname in config.get("finding_date_fields") or [config.get("date_field") or date_field]:
+		found_on = str(candidate.get(fieldname) or "")
+		if found_on:
+			break
 	subject = str(candidate.get(config["subject_field"]) or "")
 	return any(date > found_on for date in clean.get(subject, ()))
 

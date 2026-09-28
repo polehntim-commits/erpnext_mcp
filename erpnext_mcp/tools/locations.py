@@ -307,6 +307,9 @@ REGISTERS = {
 			"capacity": "capacity",
 			"condition": "condition",
 			"notes": "notes",
+			# v0.203.0. Rodent bait occupancy (docs/design/rodent_bait_program.md §2).
+			"occupied": "occupied",
+			"people_work_here": "people_work_here",
 		},
 	),
 }

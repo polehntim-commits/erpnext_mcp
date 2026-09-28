@@ -1061,13 +1061,14 @@ def _push_alert(doc, phase: str) -> dict:
 	"""
 	try:
 		severity = str(getattr(doc, "severity", "") or "")
-		if severity not in PUSH_SEVERITIES:
+		notify_roles, notify_severities = _notify_routing(str(getattr(doc, "alert_type", "") or ""))
+		if severity not in (notify_severities or PUSH_SEVERITIES):
 			return {"reason": "severity_below_threshold", "severity": severity, "sent": 0}
 
 		from ..services import push as push_service
 
 		company = str(getattr(doc, "company", "") or "")
-		recipients = push_service.supervisor_employees(company)
+		recipients = push_service.supervisor_employees(company, notify_roles or None)
 		payload = push_service.alert_payload(
 			alert=str(doc.name or ""),
 			severity=severity,
@@ -1091,6 +1092,30 @@ def _push_alert(doc, phase: str) -> dict:
 		return report
 	except Exception:  # pragma: no cover - the sweep must survive anything
 		return {"reason": "error", "sent": 0}
+
+
+def _notify_routing(alert_type: str) -> tuple:
+	"""`(notify_roles, notify_severities)` off the live rule's `extra_parameters`. v0.203.0.
+
+	Item 8 of the rodent-bait batch: there is no per-task or per-alert recipient
+	field, and adding one would be a column nobody fills. The rule already is the
+	place its tunables live, so the audience is one too — `["Farm Manager"]` on
+	the bait rules. Absent means the shipped behaviour: every dispatch role, and
+	Critical only. Never raises.
+	"""
+	try:
+		from .. import compliance_rules
+
+		name = compliance_rules.resolve(alert_type)
+		if not name:
+			return [], []
+		raw = frappe.db.get_value(compliance_rules.DOCTYPE, name, "extra_parameters_json")
+		extra = compliance_rules.as_object(raw, "extra_parameters")
+	except Exception:
+		return [], []
+	names = [str(entry).strip() for entry in extra.get("notify_roles") or [] if str(entry).strip()]
+	severities = [str(entry).strip() for entry in extra.get("notify_severities") or [] if str(entry).strip()]
+	return names, severities
 
 
 def regimes_for_alerts(names) -> dict:

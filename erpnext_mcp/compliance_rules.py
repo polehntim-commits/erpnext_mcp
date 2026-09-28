@@ -634,6 +634,16 @@ def parse_supersession(raw, label: str = "superseded_by_later_clean") -> dict:
 	                            interpret is not evidence that the water is safe,
 	                            and treating it as clean is how a compliance file
 	                            becomes a clean record of nothing.
+	  clean_filters             v0.203.0. A scope-filter list a clean record must ALSO
+	                            pass. One field was not enough for rodent bait: a
+	                            Removal and Clearance task clears a placement only
+	                            when it is COMPLETED — `template` AND `state`. With
+	                            `clean_filters`, `clean_state_field` is optional.
+	  finding_date_fields       v0.203.0. The finding's own date, first non-empty of
+	                            these; defaults to `date_field`. An in-progress
+	                            placement has no `completed_at` yet, and a finding
+	                            with no date would be superseded by ANY earlier
+	                            clearance — the unsafe direction.
 	"""
 	config = as_object(raw, label)
 	if not config:
@@ -645,15 +655,27 @@ def parse_supersession(raw, label: str = "superseded_by_later_clean") -> dict:
 			"'about the same thing' as. It is the column the finding and the clean record share — "
 			"`unit` on a camp record, `source` on a water test."
 		)
+	clean_filters = (
+		parse_filters(config.get("clean_filters"), f"{label}.clean_filters")
+		if config.get("clean_filters") not in (None, "", [])
+		else []
+	)
+	finding_dates = [
+		str(entry or "").strip()
+		for entry in as_list(config.get("finding_date_fields"), f"{label}.finding_date_fields")
+		if str(entry or "").strip()
+	]
 	state_field = str(config.get("clean_state_field") or "").strip()
-	if not state_field:
-		raise ValueError(f"{label} names no `clean_state_field`, so no record can be read as clean.")
+	if not state_field and not clean_filters:
+		raise ValueError(
+			f"{label} names no `clean_state_field` and no `clean_filters`, so no record can be read as clean."
+		)
 	values = [
 		str(entry or "").strip()
 		for entry in as_list(config.get("clean_state_values"), f"{label}.clean_state_values")
 	]
 	values = [entry for entry in values if entry]
-	if not values:
+	if state_field and not values:
 		raise ValueError(
 			f"{label} lists no `clean_state_values`. With none, NOTHING supersedes and the rule can "
 			"only ever be silenced by hand — which is the behaviour this primitive exists to remove."
@@ -665,6 +687,8 @@ def parse_supersession(raw, label: str = "superseded_by_later_clean") -> dict:
 		"clean_state_field": state_field,
 		"clean_state_values": values,
 		"unreadable_counts_as_dirty": bool(config.get("unreadable_counts_as_dirty", True)),
+		"clean_filters": clean_filters,
+		"finding_date_fields": finding_dates,
 	}
 
 
@@ -2628,7 +2652,9 @@ def seed_compliance_rules(approver: str = "") -> dict:
 	approver = approver or _seed_approver()
 	stamped = frappe.utils.now()
 	try:
-		specs = seed_specs() + declarative_seed_specs() + _gate_seed_specs()
+		from .rodent_bait import rule_seed_specs
+
+		specs = seed_specs() + declarative_seed_specs() + _gate_seed_specs() + rule_seed_specs()
 	except Exception as exc:  # pragma: no cover - a site mid-import
 		report["failed"].append({"name": "declarative_seed_specs", "reason": f"{type(exc).__name__}: {exc}"})
 		specs = seed_specs()
@@ -2638,13 +2664,14 @@ def seed_compliance_rules(approver: str = "") -> dict:
 			if frappe.db.exists(DOCTYPE, {"rule_id": rule_id}):
 				report["present"].append(rule_id)
 				continue
-			doc = build_rule(
-				{
-					**spec,
-					"human_approved_by": approver,
-					"human_approved_on": stamped,
-				}
+			# v0.203.0. A rule seeded DISABLED is not approved by anybody: the
+			# approval is the switching-on, and it is somebody's to give.
+			approved = (
+				{"human_approved_by": approver, "human_approved_on": stamped}
+				if spec.get("enabled", 1)
+				else {}
 			)
+			doc = build_rule({**spec, **approved})
 			doc.insert(ignore_permissions=True)
 			report["created"].append(rule_id)
 		except Exception as exc:  # pragma: no cover - reported, never raised

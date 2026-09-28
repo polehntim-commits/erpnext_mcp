@@ -323,6 +323,25 @@ CONTROL_POINTS = {
 		blocks="booking a related-party transaction with no transfer pricing documentation covering it",
 		target_doctype="GL Entry",
 	),
+	# v0.203.0. The first control point that is not about money. Rodent bait
+	# INSIDE a housing unit is the highest-exposure use of a rodenticide, and a
+	# unit carrying it must not be assigned to anyone until a Rodent Bait Removal
+	# and Clearance is COMPLETED there (docs/design/rodent_bait_program.md §8).
+	"housing_preoccupancy_bait_clearance": ControlPoint(
+		key="housing_preoccupancy_bait_clearance",
+		title="A housing unit is being assigned while interior rodent bait there is not cleared",
+		purpose=(
+			"Interior bait where people sleep is within reach of children, pets and food. The "
+			"pre-occupancy clearance — every station removed, leftover bait and carcasses "
+			"collected, surfaces photographed clean — is what makes the unit fit to hand over."
+		),
+		citation=(
+			"Product label directions (FIFRA §12(a)(2)(G)); 29 CFR 1910.142(j) insect and rodent "
+			"control in temporary labor camps; OAR 437-004-1120"
+		),
+		blocks="assigning a housing unit that still has uncleared interior rodent bait",
+		target_doctype="Farm Task",
+	),
 }
 
 
@@ -708,7 +727,22 @@ def seed_specs() -> list:
 				"retention_years": 7,
 			}
 		)
+		if key in _NON_FINANCE:
+			# v0.203.0. Seeded OFF: the rodent bait program is Tim's to switch on,
+			# with the templates it depends on. Housing, not Finance.
+			specs[-1].update(_NON_FINANCE[key])
 	return specs
+
+
+#: Control points outside the finance/ITGC set, and what their seeded rule differs in.
+_NON_FINANCE = {
+	"housing_preoccupancy_bait_clearance": {
+		"category": "Housing",
+		"enabled": 0,
+		"regimes": ["OR-OSHA", "Internal"],
+		"retention_years": 3,
+	},
+}
 
 
 def describe_all() -> list:

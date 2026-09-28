@@ -359,3 +359,30 @@ New Item compliance fields, shown for pesticide groups:
   per-station evidence.
 - Changing OML's drafted templates. Their Check template still says `applicator`; Tim or the office
   changes it to `camp_maintenance` with `update_farm_task_template`.
+
+## 14. Settled during implementation (v0.203.0)
+
+These points were decided while building and are recorded here so the contract matches the code.
+
+- **§2 Occupancy.** An Asset Register row whose `current_state` is `occupied` (the asset's existing
+  `mark_occupied` action) also counts, reported as source `manual_flag`. Cabin and House assets get
+  the Housing Unit state machine.
+- **§2 Editing the flags on a building asset.** New mobile route **`/mobile/set_building_occupancy`**
+  takes `asset_name`, `occupied` and `people_work_here`.
+  - Who: the location role.
+  - Where: building asset types only.
+  - Answer: `{asset_name, occupied, people_work_here, occupancy}`.
+  - `get_asset_detail` returns `occupied`, `people_work_here`, `occupancy`, `rodent_bait_state` and
+    `rodent_bait_state_since` for building types.
+  - A Housing Unit's flags are set with `create_housing_unit` / `update_farm_location` (Housing Unit
+    only).
+- **§4.2–§4.3 Inspection sections.** Both sections are **optional**, so a phone that has never seen
+  them still files the visit. The clearance is judged anyway: if the template carries
+  `rodent_bait_cleared` and the phone did not send it, the finding goes onto the first submitted
+  section that files a Housing Inspection.
+- **§8 Where the routing and tier settings live.** `notify_roles`, `notify_severities` and
+  `severity_by_field` live in the rule's **`extra_parameters`**, edited with
+  `update_compliance_rule(extra_parameters=…)`.
+- **§8 The check-overdue seed.** `rodent_bait_check_overdue` links `producer_task_template` only when
+  the Check template exists at seed time.
+- **§6 Where the applicator check runs.** It is also applied on `resume_farm_task`.

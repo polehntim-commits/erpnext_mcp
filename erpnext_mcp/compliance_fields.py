@@ -1180,6 +1180,78 @@ _ITEM_FIELDS = (
 		),
 		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
 	),
+	# v0.203.0. Rodent bait at housing and buildings: the label facts each
+	# placement is checked against (docs/design/rodent_bait_program.md §10).
+	# Read off the label by `document_intel.bait_label_facts` when a product is
+	# registered; blank means the label was not read for it, never "allowed".
+	ComplianceField(
+		fieldname="tamper_resistant_station_required",
+		label="Tamper-Resistant Station Required",
+		fieldtype="Check",
+		framework="FIFRA label use directions — 40 CFR 156.10(i); EPA rodenticide risk mitigation (2008 RMD)",
+		why=(
+			"Rodenticide labels require bait in tamper-resistant stations wherever children, pets, "
+			"domestic animals or non-target wildlife may reach it — which is every place people live."
+		),
+		operational=(
+			"A placement at an occupied cabin with this product must be in locked stations; the "
+			"placement task says so and the conformance rule flags one that does not record it."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="max_distance_from_structure_ft",
+		label="Max Distance From Structure (ft)",
+		fieldtype="Float",
+		framework="FIFRA label use directions — 40 CFR 156.10(i)",
+		why=(
+			"Most rodent baits may only be used in and within a stated distance of buildings — "
+			"50 or 100 feet — which is what separates structural pest control from a field use."
+		),
+		operational="Printed on every placement task for this product; the applicator stays inside it.",
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="burrow_baiting_allowed",
+		label="Burrow Baiting Allowed",
+		fieldtype="Select",
+		options="\nYes\nNo",
+		framework="FIFRA label use directions — 40 CFR 156.10(i)",
+		why="Some bait forms may be placed in burrows and others (place pacs) may not; the label says which.",
+		operational="Printed on the placement task. Blank means the label was not read for it.",
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="min_bait_days",
+		label="Minimum Bait Days",
+		fieldtype="Int",
+		framework="FIFRA label use directions — 40 CFR 156.10(i)",
+		why=(
+			"Labels set how long bait must be maintained — 'maintain for at least 1 week', 'fresh "
+			"bait for 10 days' — because a round pulled early leaves the colony behind."
+		),
+		operational=(
+			"A Removal and Clearance completed sooner than this after the placement is flagged, "
+			"unless the last check found no activity."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="interior_use_allowed",
+		label="Interior Use Allowed",
+		fieldtype="Select",
+		options="\nYes\nNo",
+		framework="FIFRA label use directions — 40 CFR 156.10(i); FIFRA §12(a)(2)(G)",
+		why=(
+			"Whether the label permits use inside buildings ('in and around buildings') or only "
+			"outdoors. Using a product indoors that is labelled for outdoor use is a label violation."
+		),
+		operational=(
+			"An Interior placement of a product marked No is refused when the task would be raised, "
+			"and flagged Critical if one is recorded anyway."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
 	ComplianceField(
 		fieldname="label_scan_validation",
 		label="Label Scan Validation",
@@ -1377,6 +1449,32 @@ TARGETS = (
 					"explicit housing_deduction_from_wages on a single assignment still "
 					"wins, because one arrangement can differ from the entity's norm."
 				),
+			),
+			# v0.203.0. Tim: rodent bait checks "seven days should be fine … and
+			# maybe out to once a month during the off season". The season is
+			# this entity's, not the site's — two farms, two climates.
+			ComplianceField(
+				fieldname="pest_season_start",
+				label="Pest Season Start (MM-DD)",
+				fieldtype="Data",
+				framework="Internal policy — rodent bait check cadence (docs/design/rodent_bait_program.md §7)",
+				why=(
+					"Rodent pressure and crew occupancy follow the growing season. In season every "
+					"bait location is checked weekly; off season a maintenance station with no "
+					"activity may go to a monthly check."
+				),
+				operational=(
+					"The day the season starts each year, as MM-DD (e.g. 03-01). Blank on either "
+					"end means 03-01 to 10-31."
+				),
+			),
+			ComplianceField(
+				fieldname="pest_season_end",
+				label="Pest Season End (MM-DD)",
+				fieldtype="Data",
+				framework="Internal policy — rodent bait check cadence (docs/design/rodent_bait_program.md §7)",
+				why="The last day of the season, inclusive. A window may wrap the year end (11-01 to 02-28).",
+				operational="After it, maintenance stations with no activity drop to the off-season interval.",
 			),
 		),
 		absent_note=(

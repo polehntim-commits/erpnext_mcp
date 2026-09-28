@@ -230,6 +230,29 @@ class FarmTask(Document):
 
 		self.company = self.company or _company_of(self.location_doctype, self.location)
 
+		# v0.203.0. THE COMPLETION TIME, SET ONCE. Rules that time work from its
+		# completion used `modified`, so every later edit reset the clock.
+		if self.state == COMPLETED and not self.get("completed_at"):
+			self.completed_at = frappe.utils.now()
+
+		# v0.203.0. Rodent bait: the occupancy tier the work was raised in, and
+		# which side of the wall a placement is. See `rodent_bait.stamp_task`.
+		from ....rodent_bait import stamp_task
+
+		stamp_task(self)
+
+	def on_update(self):
+		# v0.203.0. A bait task completing moves its location's bait state
+		# (Active / Maintenance / Cleared). On the TRANSITION only.
+		if self.state != COMPLETED:
+			return
+		before = self.get_doc_before_save() if hasattr(self, "get_doc_before_save") else None
+		if before is not None and (before.get("state") if hasattr(before, "get") else None) == COMPLETED:
+			return
+		from ....rodent_bait import on_task_completed
+
+		on_task_completed(self)
+
 
 def parse_evidence_required(raw) -> dict:
 	"""The evidence contract as a dict of booleans, or a refusal saying why.

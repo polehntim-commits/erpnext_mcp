@@ -267,6 +267,22 @@ _ITEM_LABEL_ARGS = {
 	"package_size": _field(
 		_STRING, "v0.202.0. Net contents as printed, e.g. '22 × 3 oz (85 g)'. '' clears it."
 	),
+	"tamper_resistant_station_required": _field(
+		_BOOLEAN, "v0.203.0. true when the label requires tamper-resistant bait stations."
+	),
+	"max_distance_from_structure_ft": _field(
+		_NUMBER, "v0.203.0. The label's 'within N feet of structures' limit. '' clears it."
+	),
+	"burrow_baiting_allowed": _field(
+		_STRING, "v0.203.0. 'Yes', 'No', or '' when the label does not say. Place pacs: No."
+	),
+	"min_bait_days": _field(
+		_INTEGER, "v0.203.0. How long the label says bait must be maintained, in whole days (1 week = 7)."
+	),
+	"interior_use_allowed": _field(
+		_STRING,
+		"v0.203.0. 'Yes' when the label permits use inside buildings, 'No' for outdoor-only, '' unknown.",
+	),
 	"label_scan_validation": _field(
 		_STRING,
 		"The Document Validation (a scanned label) these values were read from. "
@@ -695,6 +711,18 @@ def _w4_pdf_ready():
 #: records nobody can edit. One table, for the same reason `rules._TEXT_FIELDS`
 #: is one table.
 _RULE_DRAFT_ARGUMENTS = {
+	"control_point": _field(
+		_STRING,
+		"v0.203.0 (declared; the handler always read it). Makes the rule a GATE consulted at the "
+		"moment of the transaction instead of a nightly scan. One of this app's control points — "
+		"e.g. 'housing_preoccupancy_bait_clearance' (a Housing Assignment while interior rodent "
+		"bait is not cleared). Any other value is refused.",
+	),
+	"enforcement_mode": _field(
+		_STRING,
+		"v0.203.0. For a gate: 'Advisory' (files an alert and allows) or 'Enforced' (refuses and "
+		"names what would make it succeed).",
+	),
 	"rule_id": _field(
 		_STRING,
 		"The stable key its alerts are filed under, lower_snake_case — "
@@ -4171,6 +4199,20 @@ TOOLS = {
 			),
 			"source_name": _field(_STRING, "Docname of the source record. Needs source_doctype too."),
 			"remarks": _field(_STRING, "Free text explaining the movement."),
+			"bait_location": _field(
+				_STRING,
+				"v0.203.0. Rodent bait: the Housing Unit or building asset a Pest Control product is "
+				"going to. Raises the placement task (answer's `bait_tasks`). Without it, a line whose "
+				"target warehouse belongs to a building asset raises one there.",
+			),
+			"bait_location_doctype": _field(
+				_STRING, "v0.203.0. 'Housing Unit' or 'Asset Register'. Inferred when omitted."
+			),
+			"bait_placement": _field(
+				_STRING,
+				"v0.203.0. 'Exterior' (default) or 'Interior'. Interior of a product whose label does not "
+				"allow indoor use is refused (no task raised).",
+			),
 		},
 		required=("entry_type", "company", "items"),
 		mutating=True,
@@ -7243,6 +7285,13 @@ TOOLS = {
 				"(ORS 634 licenses pesticide consultants in Oregon). Replaces the whole "
 				"table; pass [] to clear it.",
 			),
+			"pest_season_start": _field(
+				_STRING,
+				"v0.203.0. First day of this entity's pest season each year, MM-DD (e.g. 03-01). In "
+				"season, rodent bait maintenance stations are checked every 7 days; outside it, "
+				"monthly. Blank on either end means 03-01 to 10-31.",
+			),
+			"pest_season_end": _field(_STRING, "v0.203.0. Last day of the pest season, MM-DD (e.g. 10-31)."),
 			"default_currency": _field(
 				_STRING, "New ISO code. Refused outright once anything has been posted."
 			),
@@ -7974,6 +8023,10 @@ TOOLS = {
 			"water_source": _field(_STRING, "New water source. Irrigation Zone only."),
 			"flow_rate_gpm": _field(_NUMBER, "New flow. Irrigation Zone only."),
 			"notes": _field(_STRING, "New notes. All four."),
+			"occupied": _field(
+				_BOOLEAN, "v0.203.0. Housing Unit only: somebody lives here with or without an assignment."
+			),
+			"people_work_here": _field(_BOOLEAN, "v0.203.0. Housing Unit only: people work here."),
 		},
 		required=("doctype", "name"),
 		mutating=True,
@@ -8754,6 +8807,14 @@ TOOLS = {
 			"fsma_worker_facility": _field(
 				_BOOLEAN, "Subject to FSMA Produce Safety Rule Subpart L worker facility requirements."
 			),
+			"occupied": _field(
+				_BOOLEAN,
+				"v0.203.0. Somebody lives here whether or not a Housing Assignment says so (tenants "
+				"in place at takeover). Puts rodent bait here in the occupied, strictest tier.",
+			),
+			"people_work_here": _field(
+				_BOOLEAN, "v0.203.0. People work here (a barn, a shop): the occupied tier for rodent bait."
+			),
 			"or_housing_law_compliant": _field(
 				_STRING, "Yes, No, Unknown or Not Applicable. Default Unknown."
 			),
@@ -8810,6 +8871,14 @@ TOOLS = {
 			),
 			"gps_longitude": _field(_NUMBER, "New longitude, decimal degrees."),
 			"fsma_worker_facility": _field(_BOOLEAN, "New FSMA worker facility flag."),
+			"occupied": _field(
+				_BOOLEAN,
+				"v0.203.0. Somebody lives here whether or not a Housing Assignment says so (tenants "
+				"in place at takeover). Puts rodent bait here in the occupied, strictest tier.",
+			),
+			"people_work_here": _field(
+				_BOOLEAN, "v0.203.0. People work here (a barn, a shop): the occupied tier for rodent bait."
+			),
 			"or_housing_law_compliant": _field(_STRING, "Yes, No, Unknown or Not Applicable."),
 			"max_occupants_per_or_law": _field(_INTEGER, "New occupancy limit."),
 			"last_habitability_inspection": _field(_STRING, "New inspection date, YYYY-MM-DD."),
@@ -9958,6 +10027,18 @@ TOOLS = {
 			),
 			"title": _field(_STRING, "Rename it."),
 			"category": _field(_STRING, "Move it to another shelf of the calendar."),
+			"control_point": _field(
+				_STRING,
+				"v0.203.0 (declared; the handler always read it). Makes the rule a GATE consulted at the "
+				"moment of the transaction instead of a nightly scan. One of this app's control points — "
+				"e.g. 'housing_preoccupancy_bait_clearance' (a Housing Assignment while interior rodent "
+				"bait is not cleared). Any other value is refused.",
+			),
+			"enforcement_mode": _field(
+				_STRING,
+				"v0.203.0. For a gate: 'Advisory' (files an alert and allows) or 'Enforced' (refuses and "
+				"names what would make it succeed).",
+			),
 			"target_doctype": _field(_STRING, "Change what it scans."),
 			"date_field": _field(_STRING, "Change the cadence anchor."),
 			"cadence_days": _field(_INTEGER, "Change how often the activity must recur."),
@@ -11300,6 +11381,13 @@ TOOLS = {
 			),
 			"allow_meter_reset": _field(
 				_BOOLEAN, "true when the meter was replaced or reset, so a lower reading is kept."
+			),
+			"bait_activity": _field(
+				_BOOLEAN,
+				"v0.203.0. Rodent Bait Check only: true when the check found consumption, fresh signs "
+				"of feeding or carcasses (the station stays on 7-day checks), false when it found "
+				"none (the location drops to Maintenance). Omitted: read from the checklist, and "
+				"nothing said counts as activity.",
 			),
 		},
 		required=("worker_id",),
@@ -21094,6 +21182,13 @@ TOOLS = {
 			"allow_meter_reset": _field(
 				_BOOLEAN, "true when the meter was replaced or reset, so a lower reading is kept."
 			),
+			"bait_activity": _field(
+				_BOOLEAN,
+				"v0.203.0. Rodent Bait Check only: true when the check found consumption, fresh signs "
+				"of feeding or carcasses (the station stays on 7-day checks), false when it found "
+				"none (the location drops to Maintenance). Omitted: read from the checklist, and "
+				"nothing said counts as activity.",
+			),
 			"user": _field(_STRING, "Only when the request carries no per-user credential."),
 		},
 		mutating=True,
@@ -21817,6 +21912,14 @@ TOOLS = {
 			"lien_holder": _field(
 				_STRING, "v0.165.0. Vehicle or Tractor only. The lender the title names, if any."
 			),
+			"occupied": _field(
+				_BOOLEAN,
+				"v0.203.0. Buildings (Cabin, House, Housing Unit, Storage): somebody lives here "
+				"whether or not a Housing Assignment says so — the occupied tier for rodent bait.",
+			),
+			"people_work_here": _field(
+				_BOOLEAN, "v0.203.0. Buildings: people work here (a barn, a shop) — the occupied tier."
+			),
 			"max_safe_slope_degrees": _field(
 				_NUMBER,
 				"v0.168.0. Tractor, Vehicle, Sprayer or Implement only. The steepest slope in degrees "
@@ -21869,6 +21972,14 @@ TOOLS = {
 				"same company, not be cancelled and not mirror another tag. Every other Asset "
 				"linked to this tag is unlinked (not deleted) and listed in "
 				"erpnext_asset_unlinked. May be passed on its own.",
+			),
+			"occupied": _field(
+				_BOOLEAN,
+				"v0.203.0. Buildings (Cabin, House, Housing Unit, Storage): somebody lives here "
+				"whether or not a Housing Assignment says so — the occupied tier for rodent bait.",
+			),
+			"people_work_here": _field(
+				_BOOLEAN, "v0.203.0. Buildings: people work here (a barn, a shop) — the occupied tier."
 			),
 			"max_safe_slope_degrees": _field(
 				_NUMBER,

@@ -47,8 +47,15 @@ SWEPT_RULES = 31
 #: such addition look like a regression in a test about something else.
 GATE_RULES = len(enforcement.CONTROL_POINTS)
 
+#: v0.203.0. The four rodent bait rules, seeded DISABLED (Tim switches the program on).
+RODENT_RULES = 4
+
 #: What the seeder writes on a fresh site, all told.
-ALL_RULES = SWEPT_RULES + GATE_RULES
+ALL_RULES = SWEPT_RULES + GATE_RULES + RODENT_RULES
+
+#: The rows that are LIVE after a fresh seed: the rodent rules and the rodent
+#: pre-occupancy gate arrive switched off.
+LIVE_RULES = ALL_RULES - RODENT_RULES - len(enforcement._NON_FINANCE)
 
 RULE_TOOLS = {
 	f"allow_{name}": 1
@@ -297,7 +304,7 @@ class TheThirteenMigrateInThreeShapes(RuleEngineTestCase):
 		"""
 		report = self.seed_rules()
 		self.assertEqual(len(report["created"]), ALL_RULES)
-		self.assertEqual(len(compliance_rules.rule_rows()), ALL_RULES)
+		self.assertEqual(len(compliance_rules.rule_rows()), LIVE_RULES)
 		# v0.80.0. The thirty are still thirty. What grew is the gate register
 		# beside them, and the two are counted separately here so that adding a
 		# control point can never be mistaken for losing a swept rule.
@@ -1119,7 +1126,7 @@ class TheSeederIsIdempotent(RuleEngineTestCase):
 		again = compliance_rules.seed_compliance_rules()
 		self.assertEqual(again["created"], [])
 		self.assertEqual(len(again["present"]), ALL_RULES)
-		self.assertEqual(len(compliance_rules.rule_rows()), ALL_RULES)
+		self.assertEqual(len(compliance_rules.rule_rows()), LIVE_RULES)
 
 	def test_an_operator_edit_is_not_overwritten_on_the_next_migrate(self):
 		"""The difference between a seeder and a Frappe fixture, and the reason
@@ -1175,7 +1182,7 @@ class TheRuleTools(RuleEngineTestCase):
 
 	def test_list_filters_by_regime_category_target_and_active(self):
 		self.seed_rules()
-		housing = self.tool_data("list_compliance_rules", {"category": "Housing"})
+		housing = self.tool_data("list_compliance_rules", {"category": "Housing", "active": True})
 		self.assertEqual(
 			sorted(rule["alert_type"] for rule in housing["rules"]),
 			["housing_corrective_action_open", "housing_detector_test_stale", "housing_inspection_overdue"],

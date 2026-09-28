@@ -1371,6 +1371,7 @@ def complete_task_via_mobile(
 	brix_method=None,
 	hours_reading=None,
 	allow_meter_reset=None,
+	bait_activity=None,
 ) -> dict:
 	"""Finish one task: file the evidence, write the compliance record.
 
@@ -1445,6 +1446,9 @@ def complete_task_via_mobile(
 		# down, so a bad value is refused in a sentence rather than a 500.
 		("hours_reading", hours_reading),
 		("allow_meter_reset", allow_meter_reset),
+		# v0.203.0. Rodent Bait Check: consumption, fresh feeding signs or
+		# carcasses found (true) or not (false). §7 of the bait contract.
+		("bait_activity", bait_activity),
 	):
 		if value is not None:
 			inner[key] = value
@@ -8141,6 +8145,11 @@ def _create_one_location(user: str, register: str, arguments: dict) -> dict:
 		value = arguments.get(key)
 		if value not in (None, ""):
 			inner[key] = value
+	# v0.203.0. A cabin occupied at takeover, or a building people work in.
+	if register == "Housing Unit":
+		for key in ("occupied", "people_work_here"):
+			if arguments.get(key) not in (None, ""):
+				inner[key] = arguments[key]
 
 	result = getattr(_LOCATION_TOOLS[register], spec["tool"])(inner)
 	data = dict(result.data)
@@ -8413,6 +8422,8 @@ def create_housing_unit(
 	unit_type=None,
 	capacity=None,
 	notes=None,
+	occupied=None,
+	people_work_here=None,
 ) -> dict:
 	"""Register one building on a camp.
 
@@ -8437,6 +8448,9 @@ def create_housing_unit(
 			"unit_type": unit_type,
 			"capacity": capacity,
 			"notes": notes,
+			# v0.203.0. The rodent bait program's occupancy flags.
+			"occupied": occupied,
+			"people_work_here": people_work_here,
 		},
 	)
 
@@ -9174,6 +9188,8 @@ def register_asset(
 	license_plate=None,
 	title_holder=None,
 	lien_holder=None,
+	occupied=None,
+	people_work_here=None,
 ) -> dict:
 	"""Register a new asset from the field. The docname IS the printed tag ID.
 
@@ -9236,6 +9252,10 @@ def register_asset(
 		("service_interval_hours", service_interval_hours),
 		("service_interval_days", service_interval_days),
 		("last_service_hours", last_service_hours),
+		# v0.203.0. A cabin or house occupied at takeover, or a building people
+		# work in — the rodent bait program's strict tier.
+		("occupied", occupied),
+		("people_work_here", people_work_here),
 	):
 		if value is not None:
 			inner[key] = value
@@ -11735,6 +11755,9 @@ def create_stock_entry(
 	source_doctype=None,
 	source_name=None,
 	remarks=None,
+	bait_location_doctype=None,
+	bait_location=None,
+	bait_placement=None,
 ) -> dict:
 	"""File a Material Receipt, Issue or Transfer. IT COMES BACK A DRAFT.
 
@@ -11761,6 +11784,11 @@ def create_stock_entry(
 		("source_doctype", source_doctype),
 		("source_name", source_name),
 		("remarks", remarks),
+		# v0.203.0. Rodent bait going to a cabin or building: the answer's
+		# `bait_tasks` says what was raised (docs/design/rodent_bait_program.md §4.1).
+		("bait_location_doctype", bait_location_doctype),
+		("bait_location", bait_location),
+		("bait_placement", bait_placement),
 	):
 		if value not in (None, ""):
 			inner[key] = str(value).strip()
@@ -14413,6 +14441,8 @@ def update_farm_location(
 	water_source=None,
 	flow_rate_gpm=None,
 	notes=None,
+	occupied=None,
+	people_work_here=None,
 ) -> dict:
 	"""Correct one place the handset can already create. The other half of item 11.
 
@@ -14465,6 +14495,9 @@ def update_farm_location(
 		("water_source", water_source),
 		("flow_rate_gpm", flow_rate_gpm),
 		("notes", notes),
+		# v0.203.0. Housing Unit only; any other register refuses them by name.
+		("occupied", occupied),
+		("people_work_here", people_work_here),
 	):
 		if value is not None:
 			inner[key] = value
@@ -20440,7 +20473,7 @@ def register_product_label(
 		frappe.db.set_value("Item", code, "label_scan_validation", validation_name, update_modified=False)
 
 	# 4. The label's facts, into the Item's blanks only.
-	updates, warnings = _label_blanks(code, fields, record, result)
+	updates, warnings = _label_blanks(code, fields, record, result, text)
 	return {
 		"item_code": code,
 		"photos": photos,
@@ -20539,10 +20572,15 @@ def _json_argument(raw, label: str):
 		frappe.throw(f"{label} must be JSON. Nothing was filed.", frappe.ValidationError)
 
 
-def _label_blanks(item_code: str, fields: dict, record, result: dict) -> tuple:
+def _label_blanks(item_code: str, fields: dict, record, result: dict, ocr_text: str = "") -> tuple:
 	"""Fill the Item's empty label columns from the reading, then from EPA. Never overwrites."""
+	from .. import document_intel
+
 	record = record or {}
 	warnings = []
+	# v0.203.0. The five rodent bait label facts: the phone's reading first, then
+	# the server's own reading of the OCR (docs/design/rodent_bait_program.md §10).
+	bait_facts = document_intel.bait_label_facts(ocr_text)
 	candidates = {
 		"epa_registration_number": fields.get("epa_registration_number"),
 		"signal_word": fields.get("signal_word") or record.get("signal_word"),
@@ -20551,6 +20589,16 @@ def _label_blanks(item_code: str, fields: dict, record, result: dict) -> tuple:
 		"storage_disposal": fields.get("storage_disposal"),
 		"product_form": fields.get("product_form"),
 		"package_size": fields.get("package_size"),
+		**{
+			key: fields.get(key) if fields.get(key) not in (None, "") else bait_facts.get(key)
+			for key in (
+				"tamper_resistant_station_required",
+				"max_distance_from_structure_ft",
+				"burrow_baiting_allowed",
+				"min_bait_days",
+				"interior_use_allowed",
+			)
+		},
 		"restricted_use": 1 if record.get("restricted_use") else None,
 	}
 	# The phone sends `{name, concentration, unit, cas}`; the Item column keeps
@@ -20708,6 +20756,47 @@ def link_asset_warehouse(user: str, asset_name=None, warehouse=None) -> dict:
 		"asset_name": name,
 		"warehouse": wanted or None,
 		"warehouse_name": (frappe.db.get_value("Warehouse", wanted, "warehouse_name") if wanted else None),
+	}
+
+
+# ── 126a. set_building_occupancy ─────────────────────────────────────────────
+#
+# v0.203.0. RODENT BAIT'S STRICT TIER STARTS WITH WHETHER SOMEBODY LIVES THERE.
+# Mill Creek's four houses are occupied at takeover and their tenants never come
+# through a Housing Assignment, so the building's own `occupied` flag is a
+# first-class source (docs/design/rodent_bait_program.md §2) — and it has to be
+# settable from in front of the building, not only at registration. NARROW, like
+# `link_asset_warehouse`: the asset and the two flags, nothing else. Building
+# asset types only. The location role, as for correcting a Housing Unit.
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("set_building_occupancy", mutating=True, limit=guard.WRITE_LIMIT)
+def set_building_occupancy(user: str, asset_name=None, occupied=None, people_work_here=None) -> dict:
+	"""Mark a building asset occupied / people-work-here, or not."""
+	from .. import rodent_bait
+
+	allowed = guard.require_scope(user)
+	guard.require_location_role(user, "Marking a building occupied")
+	name = guard.require_scoped_doc("Asset Register", asset_name, "asset_name", allowed)
+	kind = str(frappe.db.get_value("Asset Register", name, "asset_type") or "")
+	if kind not in rodent_bait.BUILDING_ASSET_TYPES:
+		frappe.throw(
+			f"{name} is a {kind or 'asset of no type'}, not a building "
+			f"({', '.join(rodent_bait.BUILDING_ASSET_TYPES)}). Nothing was changed.",
+			frappe.ValidationError,
+		)
+	inner: dict = {"asset_name": name}
+	for key, value in (("occupied", occupied), ("people_work_here", people_work_here)):
+		if value is not None:
+			inner[key] = value
+	if len(inner) == 1:
+		frappe.throw("Pass occupied and/or people_work_here. Nothing was changed.", frappe.ValidationError)
+	asset_tags.update_registered_asset(inner)
+	row = frappe.db.get_value("Asset Register", name, ["occupied", "people_work_here"], as_dict=True) or {}
+	return {
+		"asset_name": name,
+		"occupied": compat.checked(row.get("occupied")),
+		"people_work_here": compat.checked(row.get("people_work_here")),
+		"occupancy": rodent_bait.occupancy("Asset Register", name),
 	}
 
 

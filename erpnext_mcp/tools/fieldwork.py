@@ -698,6 +698,8 @@ def complete_task_via_mobile(args: dict) -> ToolResult:
 		# v0.198.0. The hour meter and whether a lower figure is a new meter.
 		"hours_reading",
 		"allow_meter_reset",
+		# v0.203.0. What a rodent bait check found.
+		"bait_activity",
 	):
 		if args.get(key) is not None:
 			inner[key] = args.get(key)

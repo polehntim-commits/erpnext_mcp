@@ -1501,6 +1501,17 @@ def _housing(spec: AuditPacketType, company: str, start: str, end: str) -> dict:
 	undeclared = [row["assignment"] for row in occupancy if row["wage_deduction"] == "Unknown"]
 	if undeclared:
 		section["wage_deduction_unrecorded"] = undeclared[:100]
+	# v0.203.0. Rodent bait is camp maintenance, so it is filed here: every
+	# placement, check, removal and occupant notice in the period, by place,
+	# with the tier it was done in (docs/design/rodent_bait_program.md §11).
+	try:
+		from . import rodent_bait
+
+		pest = rodent_bait.audit_rows(company or "", start, end)
+	except Exception:  # pragma: no cover - a packet must not fail over one register
+		pest = []
+	if pest:
+		section["pest_control"] = pest[:SECTION_CAP]
 	return section
 
 

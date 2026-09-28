@@ -47,7 +47,7 @@ import json
 
 import frappe
 
-from .. import compat, proposals, sessions
+from .. import compat, proposals, rodent_bait, sessions
 from .. import training as regimes_vocabulary
 from ..args import as_bool, as_date, as_int, as_limit, as_str, as_visit_id, resolve_company
 from ..errors import ToolError
@@ -806,6 +806,11 @@ def submit_inspection_session(args: dict) -> ToolResult:
 	row.update({key: doc.get(key) for key in ("worker", "worker_name", "foreman", "visit_id")})
 
 	now = frappe.utils.now()
+	# v0.203.0. "Bait cleared / no rodent signs" is the server's to judge: it
+	# passes only when every interior bait round here ended in a COMPLETED Removal
+	# and Clearance (docs/design/rodent_bait_program.md §4.3). Before the records
+	# are written, so a failure files Corrective Action Required.
+	bait_clearance = rodent_bait.review_clearance(row, submitted, template_sections)
 	produced = _write_the_records(doc, row, template_sections, submitted, args)
 
 	doc.set("section_submissions", [])
@@ -833,6 +838,8 @@ def submit_inspection_session(args: dict) -> ToolResult:
 	described = _describe_session(dict(doc.as_dict()), full=True)
 	skipped = [name for name, entry in submitted.items() if entry.get("skipped")]
 	compliance_eval = _evaluate_compliance_after(produced, str(doc.get("company") or ""))
+	# v0.203.0. "Rodent activity seen?" answered yes raises a placement task (§4.2).
+	bait_tasks = rodent_bait.activity_tasks(row, submitted)
 	data = {
 		**described,
 		"produced": produced,
@@ -849,6 +856,10 @@ def submit_inspection_session(args: dict) -> ToolResult:
 			"Detector Test are the same photograph rather than two of the same wall."
 		),
 	}
+	if bait_clearance:
+		data["bait_clearance"] = bait_clearance
+	if bait_tasks:
+		data["bait_tasks"] = bait_tasks
 	if skipped:
 		data["skipped_note"] = (
 			f"{len(skipped)} optional section(s) were marked not applicable and produced nothing. "

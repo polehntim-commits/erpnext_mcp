@@ -78,6 +78,10 @@ SEEDED: tuple[tuple[str, str, int, str], ...] = (
 	("Cold Storage", "C", 120, "Refrigerated storage. Carries a temperature record."),
 	("Block", "B", 130, "A farmed block, tagged so a scan reaches it."),
 	("Housing Unit", "H", 140, "A cabin or a bunkhouse, tagged in the field."),
+	# v0.203.0. Tim adds Mill Creek's cabins and houses as assets of these types;
+	# `occupied` on the asset is what puts rodent bait there in the strict tier.
+	("Cabin", "K", 142, "A cabin somebody lives in. Mark it Occupied when somebody does."),
+	("House", "O", 144, "A house somebody lives in. Mark it Occupied when somebody does."),
 	("General", "A", 200, "Anything the other types do not describe."),
 )
 

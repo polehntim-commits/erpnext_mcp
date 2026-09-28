@@ -574,6 +574,55 @@ def merge_key(doctype: str, subject: str) -> tuple:
 #: migrate` with no ability to skip what a site already has, so an operator who
 #: added a section to their close-down would get it silently removed on the next
 #: upgrade, and the first anybody would know is a winter with no propane check.
+#:
+#: v0.203.0. The two rodent bait sections (docs/design/rodent_bait_program.md
+#: §4.2–§4.3) are defined once here, used by the seed below and by the patch
+#: `add_rodent_sections_to_inspection_templates` for sites seeded before them.
+RODENT_BAIT_CLEARED_SECTION = {
+	"section_name": "Rodent bait cleared",
+	"section_description": (
+		"Before anybody moves in: no rodent bait left inside, and no fresh signs of rodents. The "
+		"server checks this against the bait record — it passes only when every interior bait "
+		"round here ended in a COMPLETED Rodent Bait Removal and Clearance, whatever is ticked."
+	),
+	"produces_record_doctype": "Housing Inspection",
+	"renderer_hint": "checklist",
+	# OPTIONAL so a handset that has never seen this section still files the
+	# visit. The server judges the clearance whether or not it is submitted.
+	"required": 0,
+	"evidence_contract": {"checklist_items": ["rodent_bait_cleared"]},
+	"field_prompts": {
+		"rodent_bait_cleared": {
+			"type": "boolean",
+			"label": "Bait cleared and no rodent signs inside",
+			"label_es": "Cebo retirado y sin señales de roedores adentro",
+		}
+	},
+}
+RODENT_ACTIVITY_SECTION = {
+	"section_name": "Rodent activity",
+	"section_description": (
+		"Droppings, gnaw marks, burrows by the foundation, nesting, or a rodent seen. Yes raises a "
+		"rodent bait placement task for this building."
+	),
+	"produces_record_doctype": "",
+	"renderer_hint": "checklist",
+	# OPTIONAL so a handset that has never seen this section still files the visit.
+	"required": 0,
+	"evidence_contract": {"checklist_items": ["rodent_activity_seen"]},
+	"field_prompts": {
+		"rodent_activity_seen": {
+			"type": "boolean",
+			"label": "Rodent activity seen?",
+			"label_es": "¿Se vio actividad de roedores?",
+		}
+	},
+}
+#: template_name → the rodent section it carries.
+RODENT_SECTIONS = {
+	"Pre-season Cabin Opening": RODENT_BAIT_CLEARED_SECTION,
+	"Mid-season Habitability": RODENT_ACTIVITY_SECTION,
+}
 #: `seed_inspection_templates` checks before it writes and leaves an edited
 #: template exactly as it is, including one somebody deactivated.
 SEED_TEMPLATES = (
@@ -657,6 +706,7 @@ SEED_TEMPLATES = (
 					"checklist_items": ["beds_made", "lighting_works", "cabin_clean"],
 				},
 			},
+			RODENT_BAIT_CLEARED_SECTION,
 		),
 	},
 	{
@@ -699,6 +749,7 @@ SEED_TEMPLATES = (
 				"required": 1,
 				"evidence_contract": {"checklist_items": ["co_alarm_sounds"]},
 			},
+			RODENT_ACTIVITY_SECTION,
 		),
 	},
 	{

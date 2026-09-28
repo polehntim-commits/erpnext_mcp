@@ -639,7 +639,7 @@ def active_tokens_for_employees(employees) -> list:
 	)
 
 
-def supervisor_logins() -> list:
+def supervisor_logins(role_names=None) -> list:
 	"""Every login holding a role that may dispatch. Sorted; never raises.
 
 	READ OFF `Has Role` ROWS, which is where a real bench keeps them and what
@@ -653,7 +653,7 @@ def supervisor_logins() -> list:
 		rows = (
 			frappe.db.get_all(
 				ROLE_ROW_DOCTYPE,
-				filters={"role": ["in", sorted(roles.DISPATCH_ROLES)], "parenttype": "User"},
+				filters={"role": ["in", sorted(role_names or roles.DISPATCH_ROLES)], "parenttype": "User"},
 				fields=["parent"],
 				limit_page_length=0,
 			)
@@ -664,7 +664,7 @@ def supervisor_logins() -> list:
 	return sorted({str(row.get("parent") or "").strip() for row in rows if row.get("parent")})
 
 
-def supervisor_employees(company: str = "") -> list:
+def supervisor_employees(company: str = "", role_names=None) -> list:
 	"""The Employees who should hear about a compliance alert. v0.107.0.
 
 	WHY THIS IS A ROLE QUESTION AND NOT A JOB-TITLE ONE. `designation` is what
@@ -689,7 +689,9 @@ def supervisor_employees(company: str = "") -> list:
 	"""
 	if not compat.doctype_exists(EMPLOYEE_DOCTYPE) or not compat.has_field(EMPLOYEE_DOCTYPE, "user_id"):
 		return []
-	logins = supervisor_logins()
+	# v0.203.0. `role_names` narrows the audience to a rule's `notify_roles` —
+	# rodent bait inside a cabin is the Farm Manager's call, not every foreman's.
+	logins = supervisor_logins(role_names)
 	if not logins:
 		return []
 

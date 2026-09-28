@@ -576,6 +576,9 @@ class TheMobileWrappersDeclareTheRightArguments(V12TestCase):
 				"water_source",
 				"flow_rate_gpm",
 				"notes",
+				# v0.203.0. Housing Unit occupancy — the create sheet collects them too.
+				"occupied",
+				"people_work_here",
 			},
 		)
 

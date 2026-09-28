@@ -1035,6 +1035,14 @@
   "allow_add_uom_to_context",
   "allow_remove_uom_from_context",
   "allow_set_uom_aliases",
+  "pest_program_section",
+  "pest_applicator_skill",
+  "pest_applicator_certification",
+  "pest_require_applicator",
+  "pest_program_col",
+  "pest_crew_skill",
+  "pest_alert_role",
+  "pest_people_work_here_types",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
   "allow_list_spray_applications",
@@ -8001,6 +8009,58 @@
    "fieldname": "allow_set_uom_aliases",
    "fieldtype": "Check",
    "label": "Set UoM Aliases"
+  },
+  {
+   "description": "Rodent bait at housing and buildings (docs/design/rodent_bait_program.md). Tim's open decisions live here with defaults; every one can be changed without a release.",
+   "fieldname": "pest_program_section",
+   "fieldtype": "Section Break",
+   "label": "Rodent Bait Program"
+  },
+  {
+   "default": "applicator",
+   "description": "The skill_required value that means a task needs the applicator qualification. Placement and Removal and Clearance tasks carry it.",
+   "fieldname": "pest_applicator_skill",
+   "fieldtype": "Data",
+   "label": "Applicator Skill"
+  },
+  {
+   "default": "Applicator License",
+   "description": "The Certification type (cert_type) that qualifies a worker for applicator tasks. Active, and unexpired or with no expiry.",
+   "fieldname": "pest_applicator_certification",
+   "fieldtype": "Data",
+   "label": "Applicator Certification Type"
+  },
+  {
+   "default": "1",
+   "description": "Refuse to claim, assign or start a rodent bait placement or removal for a worker without the applicator qualification (a current certification of the type above, or the skill on their Employee record).",
+   "fieldname": "pest_require_applicator",
+   "fieldtype": "Check",
+   "label": "Require Applicator for Bait Placement"
+  },
+  {
+   "fieldname": "pest_program_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "camp_maintenance",
+   "description": "The skill written on seeded Rodent Bait Check and Occupant Notice templates. Camp maintenance crew; not enforced.",
+   "fieldname": "pest_crew_skill",
+   "fieldtype": "Data",
+   "label": "Camp Crew Skill"
+  },
+  {
+   "default": "Farm Manager",
+   "description": "The role the seeded rodent bait rules notify (their notify_roles). Each rule can also be edited directly with update_compliance_rule.",
+   "fieldname": "pest_alert_role",
+   "fieldtype": "Data",
+   "label": "Rodent Bait Alert Role"
+  },
+  {
+   "default": "Barn\nShop\nKitchen\nBath House\nToilet-Shower\nStorage\nCold Storage",
+   "description": "Housing Unit unit types and asset types that count as 'people work here' without ticking the flag — bait there is in the occupied (strictest) tier. One per line. Strict by default; Tim to confirm.",
+   "fieldname": "pest_people_work_here_types",
+   "fieldtype": "Small Text",
+   "label": "People-Work-Here Types"
   },
   {
    "fieldname": "spray_program_section",

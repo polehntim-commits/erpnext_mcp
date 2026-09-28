@@ -686,6 +686,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"list_item_groups",
 		# v0.202.0 — is this label a product already on file.
 		"match_product",
+		# v0.203.0 — a building occupied without an assignment behind it.
+		"set_building_occupancy",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

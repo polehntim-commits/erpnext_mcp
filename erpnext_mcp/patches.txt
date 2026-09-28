@@ -28,3 +28,5 @@ erpnext_mcp.patches.normalize_app_feedback_timestamps
 erpnext_mcp.patches.normalize_phone_timestamps
 erpnext_mcp.patches.widen_pesticide_field_visibility
 erpnext_mcp.patches.add_bait_units_to_context
+erpnext_mcp.patches.backfill_farm_task_completed_at
+erpnext_mcp.patches.add_rodent_sections_to_inspection_templates

@@ -68,6 +68,7 @@ from .. import (
 	datetimes,
 	minors,
 	records,
+	rodent_bait,
 	sessions,
 	timezones,
 	training_sessions,
@@ -186,6 +187,13 @@ _TASK_FIELDS = (
 	"rei_source_item",
 	"phi_clears_on",
 	"phi_source_item",
+	# v0.203.0. Completion time and the rodent bait snapshot.
+	"completed_at",
+	"occupancy_at_creation",
+	"occupancy_source",
+	"bait_placement",
+	"bait_product",
+	"bait_activity",
 	"creation",
 	"modified",
 	"owner",
@@ -858,6 +866,8 @@ def _describe_task(row: dict) -> dict:
 		"creates_record_data": _safe_json(row.get("creates_record_data")),
 		"produced_record": row.get("produced_record") or None,
 		"notes": row.get("notes") or None,
+		# v0.203.0. When it was completed — set once, never moved by an edit.
+		"completed_at": row.get("completed_at") or None,
 		"open": (row.get("state") or DRAFT) not in TERMINAL_STATES,
 		"self_pickable": (row.get("dispatch_mode") or "Either") in SELF_PICKABLE,
 	}
@@ -872,6 +882,17 @@ def _describe_task(row: dict) -> dict:
 		out["training"] = training
 	if row.get("template"):
 		out["template"] = row["template"]
+	# v0.203.0. Rodent bait: the tier it was raised in, the side, the product and
+	# what a check found. Present only on bait tasks.
+	for key in (
+		"occupancy_at_creation",
+		"occupancy_source",
+		"bait_placement",
+		"bait_product",
+		"bait_activity",
+	):
+		if row.get(key):
+			out[key] = row[key]
 	items = checklist_items(row.get("checklist_status"))
 	if items:
 		out["checklist"] = items
@@ -1676,6 +1697,8 @@ def assign_farm_task(args: dict) -> ToolResult:
 	# shorten and which therefore has one — because nobody can consent a
 	# sixteen-year-old into being a lawful pesticide handler.
 	minor = _refuse_a_minor_on_prohibited_work(worker, worker_name, row, verb="changed")
+	# v0.203.0. Rodent bait placement and removal are licensed-applicator work.
+	rodent_bait.refuse_unqualified(row, worker, "changed")
 
 	held = live_assignment(row["name"])
 	reassigned_from = None
@@ -2057,6 +2080,7 @@ def claim_farm_task(args: dict) -> ToolResult:
 	# foreman's tool instead, so somebody standing on a block is told who can act
 	# rather than only that they cannot.
 	_refuse_harvest_inside_phi(row, args, "changed")
+	rodent_bait.refuse_unqualified(row, worker, "changed")
 
 	if (row.get("dispatch_mode") or "Either") not in SELF_PICKABLE:
 		raise ToolError(
@@ -2140,6 +2164,11 @@ def start_farm_task(args: dict) -> ToolResult:
 	_refuse_harvest_inside_phi(
 		task, args, "started", windows=_phi_sprayed_since(task, str(assignment.get("claimed_at") or ""))
 	)
+	# v0.203.0. Rodent bait: the applicator qualification, and at an occupied
+	# place the English/Spanish occupant notice done first. Both the MCP tool and
+	# the phone start here. docs/design/rodent_bait_program.md §5–§6.
+	rodent_bait.refuse_unqualified(task, str(assignment.get("assigned_to") or ""), "started")
+	rodent_bait.refuse_start_without_notice(task)
 
 	farm_shift = _shift_argument(args, str(task.get("company") or ""))
 
@@ -2499,6 +2528,15 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# without one never has an empty blob stamped over the default.
 	if checklist_items(checklist_state):
 		task_fields["checklist_status"] = json.dumps(checklist_state)
+	# v0.203.0. The task's own completion time is the assignment's — which may
+	# have been back-dated to when the work was actually done — never "now".
+	if final_state == COMPLETED:
+		task_fields["completed_at"] = doc.completed_at
+	# v0.203.0. What a rodent bait check found decides the location's next
+	# interval (docs/design/rodent_bait_program.md §7).
+	if task.get("template") == rodent_bait.CHECK:
+		found = rodent_bait.activity_of(args.get("bait_activity"), checklist_items(checklist_state))
+		task_fields["bait_activity"] = rodent_bait.ACTIVITY if found else rodent_bait.NO_ACTIVITY
 	# v0.69.0. WHAT WAS ACTUALLY USED, AND WHAT THE DRAWDOWN DID, ON THE TASK.
 	# `materials_used` is overwritten only when the completion NAMED a list —
 	# where the tank mix came off the task itself, rewriting it with a copy of
@@ -5895,6 +5933,10 @@ def resume_farm_task(args: dict) -> ToolResult:
 		)
 
 	holder = str(assignment.get("assigned_to") or "")
+	# v0.203.0. Resuming is starting: the same rodent bait refusals.
+	resumed_task = task_row(assignment["task"])
+	rodent_bait.refuse_unqualified(resumed_task, holder, "resumed")
+	rodent_bait.refuse_start_without_notice(resumed_task)
 	# RESUMING IS STARTING, so the same exclusivity applies: whatever this worker
 	# had running is stood down first. Without this a resume would be the one door
 	# left that could put somebody In-Progress on two jobs at once.

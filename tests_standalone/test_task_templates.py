@@ -916,6 +916,12 @@ class TheSeededTemplates(V12TestCase):
 		# are deliberately invisible from the template — see
 		# `test_the_scouting_seed_produces_a_crop_observation`.
 		"Field Scouting",
+		# v0.203.0. The five rodent bait templates, seeded DISABLED.
+		"Rodent Bait Placement - Exterior",
+		"Rodent Bait Placement - Interior",
+		"Rodent Bait Check",
+		"Rodent Bait Removal and Clearance",
+		"Rodent Bait Occupant Notice (EN/ES)",
 	)
 
 	def test_they_are_all_seeded(self):

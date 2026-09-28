@@ -306,6 +306,16 @@ def get_compliance_alert(args: dict) -> ToolResult:
 
 
 # ── get_compliance_calendar ─────────────────────────────────────────────────
+def _camp_maintenance(company, today: str, housing: list) -> dict:
+	"""Never raises: a calendar that fails over the bait block is no calendar at all."""
+	try:
+		from .. import rodent_bait
+
+		return rodent_bait.camp_maintenance(company or "", str(today), housing)
+	except Exception as exc:  # pragma: no cover
+		return {"alerts": housing, "open_bait_tasks": [], "next_bait_checks": [], "error": str(exc)}
+
+
 def get_compliance_calendar(args: dict) -> ToolResult:
 	"""What is due and what is late, worst first, grouped by category."""
 	_require()
@@ -445,6 +455,10 @@ def get_compliance_calendar(args: dict) -> ToolResult:
 				key=lambda item: min(alerts.SEVERITY_ORDER.index(alert["severity"]) for alert in item[1]),
 			)
 		},
+		# v0.203.0. Camp and housing maintenance in one place — the Housing
+		# alerts, the open rodent bait work and each baited place's next check
+		# (docs/design/rodent_bait_program.md §11).
+		"camp_maintenance": _camp_maintenance(company, today, by_category.get("Housing") or []),
 		"hidden_snoozed": hidden_snoozed,
 		"hidden_beyond_horizon": beyond_horizon,
 		"rules_unavailable_here": skipped,

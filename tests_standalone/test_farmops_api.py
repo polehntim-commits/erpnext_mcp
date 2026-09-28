@@ -490,6 +490,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/register_product_label",
 		"/mobile/list_item_groups",
 		"/mobile/match_product",
+		"/mobile/set_building_occupancy",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2908,6 +2909,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"register_product_label",
 		# v0.188.0. Which stock a building answers for is a foreman's call.
 		"link_asset_warehouse",
+		# v0.203.0. Whether somebody lives in a building is a register
+		# correction: the location role, which refuses in the same sentence.
+		"set_building_occupancy",
 		"assign_soil_profile",
 		"create_corrective_action_record",
 		"create_food_safety_plan",
@@ -3143,7 +3147,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 131, "a method is named in two sets at once")
+		self.assertEqual(len(named), 132, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

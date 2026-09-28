@@ -259,6 +259,8 @@ ASSET_COLOURS = {
 	"Cold Storage": "#3192aa",
 	"Block": "#4c8c2b",
 	"Housing Unit": "#bc4c00",
+	"Cabin": "#953800",
+	"House": "#d4a72c",
 	"General": "#57606a",
 }
 

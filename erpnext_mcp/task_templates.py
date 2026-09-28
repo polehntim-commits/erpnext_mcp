@@ -605,7 +605,10 @@ def seed_farm_task_templates() -> dict:
 	report = {"created": [], "present": [], "failed": []}
 	if not compat.doctype_exists(TEMPLATE_DOCTYPE):
 		return report
-	for spec in SEED_TEMPLATES:
+	from .rodent_bait import SEED_TASK_TEMPLATES
+
+	# v0.203.0. The five rodent bait templates arrive DISABLED; see rodent_bait.
+	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES):
 		name = spec["template_name"]
 		try:
 			if frappe.db.exists(TEMPLATE_DOCTYPE, {"template_name": name}):

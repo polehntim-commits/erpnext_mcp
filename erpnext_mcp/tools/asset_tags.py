@@ -22,7 +22,7 @@ import json
 
 import frappe
 
-from .. import asset_mirror, asset_types, compat, geo, slope_grade, timezones
+from .. import asset_mirror, asset_types, compat, geo, rodent_bait, slope_grade, timezones
 from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..render import qr
@@ -73,6 +73,11 @@ _ASSET_FIELDS = (
 	"warehouse",
 	"creation",
 	"owner",
+	# v0.203.0. Occupancy and rodent bait (docs/design/rodent_bait_program.md §2, §7).
+	"occupied",
+	"people_work_here",
+	"rodent_bait_state",
+	"rodent_bait_state_since",
 )
 
 #: v0.162.0. THE SHIPPED LIST, AND NO LONGER THE GATE. `Farm Asset Type` is the
@@ -102,6 +107,9 @@ _HISTORY_DOCTYPES = (
 
 ASSET_TYPE_SKILL_MAP: dict[str, str] = {
 	"Housing Unit": "camp_maintenance",
+	# v0.203.0. Mill Creek's cabins and houses: camp maintenance, like a Housing Unit.
+	"Cabin": "camp_maintenance",
+	"House": "camp_maintenance",
 	"Irrigation Valve": "irrigation",
 	"Irrigation Zone": "irrigation",
 	"Sprayer": "equipment_maintenance",
@@ -214,6 +222,24 @@ def _describe_asset(row: dict) -> dict:
 		"hours_updated_at": str(row.get("hours_updated_at") or "") or None,
 		"irrigation_zone": row.get("irrigation_zone") or None,
 		"warehouse": row.get("warehouse") or None,
+		**_occupancy_block(row),
+	}
+
+
+def _occupancy_block(row: dict) -> dict:
+	"""v0.203.0. For a building: its manual flags, today's occupancy and its bait state.
+
+	Only on building asset types (Cabin, House, Housing Unit, Storage, Cold
+	Storage), so a tractor's payload is exactly what it was.
+	"""
+	if str(row.get("asset_type") or "") not in rodent_bait.BUILDING_ASSET_TYPES or not row.get("name"):
+		return {}
+	return {
+		"occupied": compat.checked(row.get("occupied")),
+		"people_work_here": compat.checked(row.get("people_work_here")),
+		"occupancy": rodent_bait.occupancy(ASSET_REGISTER, str(row["name"])),
+		"rodent_bait_state": row.get("rodent_bait_state") or None,
+		"rodent_bait_state_since": str(row.get("rodent_bait_state_since") or "") or None,
 	}
 
 
@@ -1227,6 +1253,11 @@ def register_asset(args: dict) -> ToolResult:
 		doc.gps_latitude = as_float(lat, "gps_latitude")
 	if lon is not None:
 		doc.gps_longitude = as_float(lon, "gps_longitude")
+	# v0.203.0. A cabin or house occupied at takeover, or a building people work in.
+	for key in ("occupied", "people_work_here"):
+		flag = as_bool(args, key)
+		if flag is not None and compat.has_field(ASSET_REGISTER, key):
+			doc.set(key, 1 if flag else 0)
 
 	doc.insert(ignore_permissions=True)
 
@@ -1309,6 +1340,10 @@ def update_registered_asset(args: dict) -> ToolResult:
 	for key in ("gps_latitude", "gps_longitude"):
 		if key in args:
 			_stage(changes, doc, key, as_float(args.get(key), key))
+	# v0.203.0. The rodent bait program's occupancy flags.
+	for key in ("occupied", "people_work_here"):
+		if key in args and compat.has_field(ASSET_REGISTER, key):
+			_stage(changes, doc, key, 1 if as_bool(args, key) else 0)
 	# v0.78.0. The service schedule and the zone link. `current_hours` is NOT
 	# settable here on purpose: it is a cache of the Asset State Log's own
 	# series, written by a metered check-out or check-in, and a column somebody
@@ -2029,6 +2064,11 @@ def _actions_for(asset_type: str, current: str) -> list[dict]:
 #: `get_irrigation_runtime` sums exactly these events into the minutes that feed
 #: water usage, so the wrong `open` is not a cosmetic error on a screen, it is a
 #: billing figure.
+# v0.203.0. A cabin or a house is occupied, vacant, uninhabitable or winterized
+# exactly as a Housing Unit asset is — and "occupied" there counts for rodent bait.
+_STATE_DEFINITIONS["Cabin"] = _STATE_DEFINITIONS["Housing Unit"]
+_STATE_DEFINITIONS["House"] = _STATE_DEFINITIONS["Housing Unit"]
+
 _CASCADING_ACTIONS: dict[str, tuple[str, ...]] = {
 	"Irrigation Valve": ("close_valve",),
 }

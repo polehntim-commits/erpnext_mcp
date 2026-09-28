@@ -570,6 +570,10 @@ class AdvisoryAndEnforcedDifferByRefusalAlone(ControlsTestCase):
 		"""The default is the load-bearing part. An operation that cannot book a
 		fuel invoice on day one turns the module off entirely."""
 		for control_point in enforcement.CONTROL_POINTS:
+			if control_point in enforcement._NON_FINANCE:
+				# v0.203.0. The rodent bait pre-occupancy gate ships OFF.
+				self.assertEqual(enforcement.mode(control_point), enforcement.OFF)
+				continue
 			self.assertEqual(
 				enforcement.mode(control_point),
 				enforcement.ADVISORY,

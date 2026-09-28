@@ -88,7 +88,7 @@ import re
 
 import frappe
 
-from .. import compat
+from .. import compat, rodent_bait
 from ..args import MAX_LIMIT, as_date, as_float, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -517,6 +517,9 @@ def create_stock_entry(args: dict) -> ToolResult:
 	posting_date = as_date(args, "posting_date") or frappe.utils.today()
 	lines = _entry_lines(args.get("items"), entry_type, company)
 	_account_preflight(company, entry_type, lines)
+	# v0.203.0. Where a Pest Control product is going, checked before anything
+	# is written (docs/design/rodent_bait_program.md §4.1).
+	bait = rodent_bait.check_stock_bait_args(args)
 
 	doc = frappe.new_doc(STOCK_ENTRY)
 	doc.company = company
@@ -580,6 +583,16 @@ def create_stock_entry(args: dict) -> ToolResult:
 			"in ERPNext, or via submit_stock_entry if that tool is enabled."
 		),
 	}
+	# v0.203.0. Rodent bait going to a cabin or a building raises its placement
+	# task. Reported per location; never fails the entry.
+	bait_tasks = rodent_bait.from_stock_entry(
+		[dict(row.as_dict() if hasattr(row, "as_dict") else row) for row in doc.get("items") or []],
+		bait,
+		company,
+		doc.name,
+	)
+	if bait_tasks is not None:
+		data["bait_tasks"] = bait_tasks
 	return ToolResult(
 		data,
 		f"created draft {entry_type} {doc.name} ({company}): {len(items)} line(s), {data['total_qty']} units",

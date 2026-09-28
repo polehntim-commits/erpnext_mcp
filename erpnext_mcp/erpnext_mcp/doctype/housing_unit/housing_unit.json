@@ -32,6 +32,13 @@
   "last_habitability_inspection",
   "smoke_detector_last_test",
   "co_detector_last_test",
+  "occupancy_section",
+  "occupied",
+  "people_work_here",
+  "occupancy_col",
+  "rodent_bait_state",
+  "rodent_bait_state_since",
+  "rodent_bait_last_placement",
   "legal_section",
   "legal_basis",
   "notes_section",
@@ -205,6 +212,51 @@
    "fieldname": "co_detector_last_test",
    "fieldtype": "Date",
    "label": "CO Detector Last Test"
+  },
+  {
+   "fieldname": "occupancy_section",
+   "fieldtype": "Section Break",
+   "label": "Occupancy and Rodent Bait"
+  },
+  {
+   "default": "0",
+   "description": "Somebody lives here, whether or not a Housing Assignment says so. A FIRST-CLASS source of occupancy, not a fallback: tenants already in a house at takeover (Mill Creek) never come through an assignment. Occupied puts rodent bait here in the strictest tier. It can only make a place occupied; an active Housing Assignment always counts.",
+   "fieldname": "occupied",
+   "fieldtype": "Check",
+   "label": "Occupied"
+  },
+  {
+   "default": "0",
+   "description": "People work here — a barn, a shop, a packing shed. Bait here is in the occupied (strictest) tier. Types listed in ERPNext MCP Settings › Rodent Bait Program count without ticking this.",
+   "fieldname": "people_work_here",
+   "fieldtype": "Check",
+   "label": "People Work Here"
+  },
+  {
+   "fieldname": "occupancy_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Written when a rodent bait task here is completed: a placement makes it Active; a check with consumption, fresh feeding signs or carcasses keeps it Active; a check with no activity makes it Maintenance; a completed Removal and Clearance makes it Cleared. The off-season monthly check interval applies to Maintenance only.",
+   "fieldname": "rodent_bait_state",
+   "fieldtype": "Select",
+   "label": "Rodent Bait State",
+   "options": "\nActive\nMaintenance\nCleared",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rodent_bait_state_since",
+   "fieldtype": "Datetime",
+   "label": "Rodent Bait State Since",
+   "read_only": 1
+  },
+  {
+   "description": "The latest completed rodent bait placement here — the start of the current round and of its knockdown window.",
+   "fieldname": "rodent_bait_last_placement",
+   "fieldtype": "Link",
+   "label": "Last Bait Placement",
+   "options": "Farm Task",
+   "read_only": 1
   },
   {
    "fieldname": "legal_section",

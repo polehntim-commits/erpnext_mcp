@@ -1258,7 +1258,12 @@ class TheUpgradeFromV0220(PrimitiveTestCase):
 		# without this assertion breaking every time a phase adds a control.
 		swept = [row for row in compliance_rules.rule_rows() if not row.get("control_point")]
 		self.assertEqual(len(swept), 31)
-		self.assertEqual(len(compliance_rules.rule_rows()), 31 + len(enforcement.CONTROL_POINTS))
+		# v0.203.0. The pre-occupancy bait gate seeds OFF (Tim switches the rodent
+		# program on), so it is not a live row.
+		self.assertEqual(
+			len(compliance_rules.rule_rows()),
+			31 + len(enforcement.CONTROL_POINTS) - len(enforcement._NON_FINANCE),
+		)
 
 	def test_an_operator_edited_threshold_survives_the_migration(self):
 		"""The question the patch exists to answer well. A site that contracted its

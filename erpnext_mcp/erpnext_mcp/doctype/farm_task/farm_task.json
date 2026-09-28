@@ -64,6 +64,14 @@
   "rei_source_item",
   "phi_clears_on",
   "phi_source_item",
+  "bait_section",
+  "completed_at",
+  "occupancy_at_creation",
+  "occupancy_source",
+  "bait_col",
+  "bait_placement",
+  "bait_product",
+  "bait_activity",
   "notes_section",
   "notes",
   "narrative_section",
@@ -426,6 +434,59 @@
    "fieldname": "phi_source_item",
    "fieldtype": "Data",
    "label": "PHI Source Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bait_section",
+   "fieldtype": "Section Break",
+   "label": "Completion and Rodent Bait"
+  },
+  {
+   "description": "When this task was COMPLETED. Set once, on the transition to Completed, and never moved by a later edit — every rule timing work from its completion reads this, not `modified`.",
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "description": "Rodent bait tasks only: was the place occupied when this task was raised? A snapshot — never recomputed. Occupied = an active Housing Assignment, the place's Occupied flag, or people work there.",
+   "fieldname": "occupancy_at_creation",
+   "fieldtype": "Select",
+   "label": "Occupancy At Creation",
+   "options": "\nOccupied\nUnoccupied",
+   "read_only": 1
+  },
+  {
+   "description": "Which source decided the occupancy snapshot: housing_assignment, manual_flag, people_work_here or none.",
+   "fieldname": "occupancy_source",
+   "fieldtype": "Data",
+   "label": "Occupancy Source",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bait_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Placement tasks: outside or inside the building.",
+   "fieldname": "bait_placement",
+   "fieldtype": "Select",
+   "label": "Bait Placement",
+   "options": "\nExterior\nInterior"
+  },
+  {
+   "description": "The Pest Control product this placement uses — whose label rules the placement is checked against.",
+   "fieldname": "bait_product",
+   "fieldtype": "Link",
+   "label": "Bait Product",
+   "options": "Item"
+  },
+  {
+   "description": "Rodent Bait Check tasks: what the check found. Activity = consumption, fresh signs of feeding or carcasses; the station stays on 7-day checks. No activity = the location drops to Maintenance.",
+   "fieldname": "bait_activity",
+   "fieldtype": "Select",
+   "label": "Bait Activity",
+   "options": "\nActivity\nNo activity",
    "read_only": 1
   },
   {

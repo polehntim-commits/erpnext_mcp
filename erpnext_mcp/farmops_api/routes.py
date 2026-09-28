@@ -811,6 +811,9 @@ ROUTES = (
 	# v0.202.0. Is this label a product already on file? Barcode, or registration
 	# + form + package — never the name. docs/design/product_label_capture.md §8.2.
 	Route("/mobile", mobile_api.match_product),
+	# v0.203.0. A building occupied without an assignment behind it (Mill Creek's
+	# houses at takeover) — docs/design/rodent_bait_program.md §2.
+	Route("/mobile", mobile_api.set_building_occupancy),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

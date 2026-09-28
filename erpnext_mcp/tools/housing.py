@@ -36,7 +36,7 @@ in question — and those are the three moments the record exists for.
 
 import frappe
 
-from .. import compat
+from .. import compat, rodent_bait
 from ..args import as_bool, as_choice, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..erpnext_mcp.doctype.housing_assignment.housing_assignment import overlaps
 from ..erpnext_mcp.doctype.housing_unit.housing_unit import (
@@ -98,6 +98,12 @@ _UNIT_FIELDS = (
 	"last_habitability_inspection",
 	"smoke_detector_last_test",
 	"co_detector_last_test",
+	# v0.203.0. Occupancy and rodent bait (docs/design/rodent_bait_program.md §2, §7).
+	"occupied",
+	"people_work_here",
+	"rodent_bait_state",
+	"rodent_bait_state_since",
+	"rodent_bait_last_placement",
 	"notes",
 	"creation",
 	"owner",
@@ -235,6 +241,11 @@ def _describe_unit(row: dict, today: str = "") -> dict:
 			if required
 			else []
 		),
+		# v0.203.0. The manual occupancy flags, and what rodent bait is doing here.
+		"occupied": compat.checked(row.get("occupied")),
+		"people_work_here": compat.checked(row.get("people_work_here")),
+		"rodent_bait_state": row.get("rodent_bait_state") or None,
+		"rodent_bait_state_since": str(row.get("rodent_bait_state_since") or "") or None,
 		"notes": row.get("notes") or None,
 	}
 
@@ -547,6 +558,10 @@ def create_housing_unit(args: dict) -> ToolResult:
 	fsma = as_bool(args, "fsma_worker_facility")
 	if fsma is not None:
 		doc.fsma_worker_facility = 1 if fsma else 0
+	for key in ("occupied", "people_work_here"):
+		flag = as_bool(args, key)
+		if flag is not None and compat.has_field(HOUSING_UNIT, key):
+			doc.set(key, 1 if flag else 0)
 
 	doc.insert(ignore_permissions=True)
 	described = _describe_unit(dict(doc.as_dict()), frappe.utils.today())
@@ -649,6 +664,11 @@ def update_housing_unit(args: dict) -> ToolResult:
 			_stage(changes, doc, key, as_date(args, key) or "")
 	if "fsma_worker_facility" in args:
 		_stage(changes, doc, "fsma_worker_facility", 1 if as_bool(args, "fsma_worker_facility") else 0)
+	# v0.203.0. Occupied at takeover with no assignment behind it (Mill Creek), or
+	# a building people work in: the rodent bait program's strict tier.
+	for key in ("occupied", "people_work_here"):
+		if key in args and compat.has_field(HOUSING_UNIT, key):
+			_stage(changes, doc, key, 1 if as_bool(args, key) else 0)
 
 	# v0.32.0. THE PAIR MOVES TOGETHER OR NOT AT ALL. Accepting one on its own
 	# would let a caller correct a longitude and leave the old latitude behind,
@@ -674,7 +694,8 @@ def update_housing_unit(args: dict) -> ToolResult:
 			"nothing to change. Pass at least one of: unit_type, square_footage, capacity, "
 			"year_built, condition, related_asset, access_card_zone, gps_latitude, gps_longitude, "
 			"fsma_worker_facility, or_housing_law_compliant, max_occupants_per_or_law, "
-			"last_habitability_inspection, smoke_detector_last_test, co_detector_last_test, notes."
+			"last_habitability_inspection, smoke_detector_last_test, co_detector_last_test, "
+			"occupied, people_work_here, notes."
 		)
 
 	# The controller only fills in a blank lawful occupancy, so a square footage
@@ -874,6 +895,11 @@ def create_housing_assignment(args: dict) -> ToolResult:
 			"created."
 		)
 
+	# v0.203.0. THE PRE-OCCUPANCY GATE, BEFORE ANYTHING IS WRITTEN. Interior
+	# rodent bait not yet cleared by a COMPLETED Removal and Clearance: Advisory
+	# reports it and allows, Enforced refuses. Seeded Off.
+	bait_gate = rodent_bait.preoccupancy_gate(unit["name"], company or unit.get("owning_entity") or "")
+
 	deposit_paid = as_float(args.get("deposit_paid"), "deposit_paid")
 	doc = frappe.new_doc(HOUSING_ASSIGNMENT)
 	doc.unit = unit["name"]
@@ -926,6 +952,8 @@ def create_housing_assignment(args: dict) -> ToolResult:
 			"occupants_after": occupants,
 			"multi_occupancy": bool(clashes),
 			"warnings": warnings,
+			# v0.203.0. What the pre-occupancy rodent bait control said.
+			"bait_clearance": bait_gate,
 			"section_119_note": (
 				"This record is the audit trail for an IRS Section 119 exclusion: lodging on the "
 				"business premises, for the employer's convenience, and required as a condition "

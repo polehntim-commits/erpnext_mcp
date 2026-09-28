@@ -3415,3 +3415,20 @@ shape(
 #     asserts the two produce byte-identical alerts. That test is only possible
 #     because both implementations are reachable by name from here.
 SCANNERS.update({key: RULES[key].scan for key in RULES})
+
+
+# v0.203.0. The rodent bait scanners. NOT registered as `Rule`s — a `Rule` is
+# also the fallback set a site with no rule records runs, and these are seeded
+# DISABLED until Tim switches the program on. Named here so a record may point
+# at them (docs/design/rodent_bait_program.md §8).
+def _rodent_scanner(name):
+	def scan(context: dict) -> list:
+		from .. import rodent_bait
+
+		return getattr(rodent_bait, name)(context)
+
+	return scan
+
+
+SCANNERS["rodent_bait_check_overdue"] = _rodent_scanner("scan_check_overdue")
+SCANNERS["rodent_bait_label_conformance"] = _rodent_scanner("scan_label_conformance")

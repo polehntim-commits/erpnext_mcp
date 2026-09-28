@@ -463,7 +463,7 @@ def _rules_producing(name: str) -> list:
 
 
 # ── 5. create_task_from_template ────────────────────────────────────────────
-def create_task_from_template(args: dict) -> ToolResult:
+def create_task_from_template(args: dict, *, origin: str = "", fields: dict | None = None) -> ToolResult:
 	"""Raise one task pre-filled from a template. Location and assignee are the overrides."""
 	name = _template_or_refuse(as_str(args, "template", required=True))
 	row = task_templates.template_row(name)
@@ -532,7 +532,12 @@ def create_task_from_template(args: dict) -> ToolResult:
 		default_name = f"{default_name} — {location}"
 	doc.task_name = (as_str(args, "task_name") or default_name)[:140]
 	doc.task_type = shape["task_type"]
-	doc.origin = ORIGIN_FOREMAN_DISPATCH
+	# v0.203.0. `origin` and `fields` are for this app's own triggers (a bait
+	# product issued to a cabin raises a `field_reported` placement carrying the
+	# product) and are not arguments a caller can send.
+	doc.origin = origin or ORIGIN_FOREMAN_DISPATCH
+	for key, value in (fields or {}).items():
+		doc.set(key, value)
 	doc.urgency = (
 		as_choice(FARM_TASK, "urgency", as_str(args, "urgency"), "urgency")
 		if args.get("urgency")
