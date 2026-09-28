@@ -20421,7 +20421,14 @@ def _label_blanks(item_code: str, fields: dict, record, result: dict) -> tuple:
 		"storage_disposal": fields.get("storage_disposal"),
 		"restricted_use": 1 if record.get("restricted_use") else None,
 	}
-	ingredients = fields.get("active_ingredients")
+	# The phone sends `{name, concentration, unit, cas}`; the Item column keeps
+	# the first three and refuses any other key, so the CAS number stays on the
+	# validation's extraction, where the whole reading is kept.
+	ingredients = [
+		{key: row[key] for key in ("name", "concentration", "unit") if row.get(key) not in (None, "")}
+		for row in (_json_argument(fields.get("active_ingredients"), "active_ingredients") or [])
+		if isinstance(row, dict) and row.get("name")
+	]
 	if not ingredients and record.get("active_ingredients"):
 		ingredients = [
 			{"name": row["name"], "concentration": row.get("percent"), "unit": "%"}

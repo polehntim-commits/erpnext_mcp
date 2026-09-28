@@ -50,7 +50,8 @@ PROWLER_FIELDS = {
 	"product_name": "PROWLER",
 	"epa_registration_number": "12455-97-3240",
 	"signal_word": "Caution",
-	"active_ingredients": [{"name": "Bromethalin", "concentration": 0.01, "unit": "%"}],
+	# The phone's own shape (fafo_ios `ProductLabelModels`): `cas` rides along.
+	"active_ingredients": [{"name": "Bromethalin", "concentration": 0.01, "unit": "%", "cas": "63333-35-7"}],
 	"ppe_requirements": "Waterproof gloves",
 	"application_rate": "Norway rats: 1 or 2 blocks",
 	"storage_disposal": "Store only in original container.",
@@ -259,6 +260,9 @@ class ALabelIsStored(LabelTestCase):
 		self.assertEqual(row["epa_registration_number"], "12455-97-3240")
 		self.assertEqual(row["pesticide_use_scope"], "Non-crop")
 		self.assertIn("original container", row["storage_disposal"])
+		self.assertIn("Bromethalin", row["active_ingredients"])
+		self.assertNotIn("cas", row["active_ingredients"])
+		self.assertEqual(answer["warnings"], [])
 
 	def test_epa_being_down_does_not_lose_the_label(self):
 		item = self.prowler()
