@@ -189,3 +189,92 @@ laundry. Remove PPE imnest". The parser's `rate:` pattern matched the "rate" ins
   in the issue list with errors downgraded to warnings. It does not change the status or the
   confidence, which stay the rules'. An MCP client's assessment still judges as before. The phone
   also drops findings the rules contradict before sending.
+
+## 8. Bait forms, unit aliases, product matching and advisory findings (frozen, v0.202.0)
+
+From the second live registration (PROWLER® Place Pacs, DVAL-2026-0007) and Tim's corrections:
+
+- The rate came from the PPE laundry sentence and not from APPLICATION DIRECTIONS.
+- The product is counted in **Place Pacs** ("22 x 3 oz (85 g) Place Pacs"), not Blocks. Tim added
+  the "Place Pac" unit live, but "pacs" still resolves to nothing.
+- The on-device model invented errors.
+- PROWLER™ (refillable bait station, blocks, UPC 048745228174) and PROWLER® (Place Pacs, EPA
+  12455-97-3240, UPC 048745221441) are **two different products** that share a brand.
+
+### 8.1 Bait units and aliases
+
+- **Seeded units** (create-only, all whole-number count units): **Place Pac**, **Pouch** and
+  **Bait Station**, alongside Block.
+- **The Bait context** offers Block (still the default), Place Pac, Pouch and Bait Station.
+  - A new site gets all four from the seed.
+  - An existing Bait context gets the missing ones from patch `add_bait_units_to_context`. It runs
+    once, adds a unit only if absent, and never removes one.
+- **Built-in resolver aliases:**
+
+| label wording | unit |
+|---|---|
+| place pac, place pacs, pac, pacs, pack, packs | Place Pac |
+| block, blocks | Block |
+| pouch, pouches, packet, packets | Pouch |
+| bait station, bait stations, station, stations | Bait Station |
+
+  Plurals resolve through the singular form. The first site unit an alias names wins, as before.
+- **Site-editable aliases:**
+  - A new Custom Field on UOM, **`uom_aliases`** (Small Text, one spelling per line). The resolver
+    matches it case- and plural-insensitively after exact names and before the built-in table.
+  - A new MCP tool, **`set_uom_aliases`** (mutating, default off, the unit-register roles), takes
+    `uom` plus `add`, `remove` or `replace` (lists).
+  - It refuses a spelling that is another unit's name or alias, which is how two units would come
+    to answer to one word.
+  - `get_uom`, `list_uoms` and `/mobile/list_uoms` rows carry **`aliases`**.
+  - New spellings need no deploy.
+
+### 8.2 One product, one Item; two products, two Items
+
+- New Item fields **`product_form`** (Data: "Place Pacs", "Bait Station", "Blocks", "Pellets", …)
+  and **`package_size`** (Data, as printed, e.g. "22 × 3 oz (85 g)").
+- `create_item` and `register_product_label` accept both, filling blanks only.
+- **`/mobile/match_product`** is a read, open on enrolment. It takes `epa_registration_number`,
+  `barcode`, `product_form` and `package_size` (all optional, at least one).
+
+```json
+{"verdict": "new" | "existing" | "related",
+ "matches": [{"item_code": "…", "item_name": "…", "product_form": "Place Pacs",
+              "package_size": "22 × 3 oz (85 g)", "epa_registration_number": "12455-97-3240",
+              "barcodes": ["048745221441"], "match": "same" | "same_registration_other_form"}]}
+```
+
+- **Same** means the barcode is on that Item, or the base EPA registration **and** the normalised
+  product form **and** the normalised package size are all equal.
+- The same registration with a different form or package is **related**. It is shown, and never
+  merged or updated automatically.
+- **The name is never compared.**
+- The phone offers "Update <item>" for a `same` match (the barcode is linked and the label
+  registered on it) and "Create a new product" otherwise.
+- The default `item_name` is brand + product form + package size from the label (for example
+  "PROWLER Place Pacs (22 × 3 oz)"). The user can edit it.
+
+### 8.3 Findings the rules contradict are dropped
+
+For an advisory (`apple-*`) assessment, the server **drops**, rather than just downgrading:
+
+- an EPA-number finding when the extracted number is well-formed (two or three hyphenated parts,
+  as `_check_epa_number` accepts);
+- REI, PHI, PHI-crop and per-acre findings on a Non-crop label;
+- findings that a 100% ingredient total is wrong.
+
+The remaining messages are truncated at 240 characters. The phone applies the same filter and
+tells the model the use scope and these rules.
+
+### 8.4 Phone (fafo_ios SERVER_CHANGES §49)
+
+- **The rate** comes from APPLICATION DIRECTIONS / DIRECTIONS FOR USE, never from PPE, first-aid
+  or laundry text ("rate" is matched as a whole word). Recognised forms:
+  - "Place 1 place pac per bait placement";
+  - "Up to two place pacs …";
+  - "place 1 or 2 blocks of bait in the bait station";
+  - "N blocks per station";
+  - the spacing, "8- to 12- feet".
+- **The unit** comes from the package line ("22 x 3 oz (85 g) Place Pacs" gives Place Pac) and the
+  rate text. It defaults `stock_uom` and the rate unit when the user hasn't touched them.
+- **Pickers** list the live `list_uoms(context: "Bait")` units, never a hardcoded list.
