@@ -439,3 +439,45 @@ class ABaitCountsInBlocks(LabelTestCase):
 		self.assertEqual(answer["default_uom"], "Block")
 		self.assertEqual([row["name"] for row in answer["uoms"]], ["Block"])
 		self.assertIsNone(mobile_api.list_uoms()["default_uom"])
+
+
+# ── 8. a phone's on-device model is heard, not obeyed ───────────────────────
+class AnOnDeviceAssessmentIsAdvisory(unittest.TestCase):
+	"""DVAL-2026-0007: the on-device model called 12455-97-3240 malformed and a
+	100% ingredient total implausible, and flagged PROWLER® on its own."""
+
+	ASSESSMENT = {
+		"status": "Flagged",
+		"confidence": 0.6,
+		"reasoning": "several inconsistencies",
+		"issues": [
+			{
+				"severity": "error",
+				"field": "epa_registration_number",
+				"code": "on_device_finding",
+				"message": "lacks hyphens",
+			},
+			{
+				"severity": "error",
+				"field": "active_ingredients",
+				"code": "on_device_finding",
+				"message": "100% is implausible",
+			},
+		],
+	}
+
+	def merged(self, model):
+		deterministic = document_intel.validate_extraction("Pesticide Label", PROWLER_OCR, PROWLER_FIELDS)
+		return deterministic, document_intel.merge_llm_assessment(deterministic, self.ASSESSMENT, model)
+
+	def test_it_cannot_flag_a_label_the_rules_passed(self):
+		deterministic, merged = self.merged("apple-foundation-models")
+		self.assertEqual(merged["status"], deterministic["status"])
+		self.assertEqual(merged["confidence"], deterministic["confidence"])
+		kept = [entry for entry in merged["issues"] if entry.get("code") == "on_device_finding"]
+		self.assertEqual({entry["severity"] for entry in kept}, {"warning"})
+		self.assertEqual(merged["llm_model"], "apple-foundation-models")
+
+	def test_an_mcp_clients_model_still_judges(self):
+		_, merged = self.merged("claude-opus-5-5")
+		self.assertEqual(merged["status"], "Flagged")

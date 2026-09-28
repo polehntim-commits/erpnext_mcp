@@ -19,6 +19,10 @@ Tim's iPhone was refused three times with "No permission for Item Group. Nothing
   that does not exist is still refused, as before.
 - **`/mobile/list_uoms` returns `default_uom`** for a `context` — `Bait` answers Block — so the
   phone defaults a bait's "Counted in" to Block instead of whatever sorted first (Box, on OML).
+- **An on-device assessment is advisory.** DVAL-2026-0007 was flagged by the phone's model alone —
+  a valid 12455-97-3240 "lacks hyphens", a 100% ingredient total "implausible", an REI "expected" on
+  a mouse bait. `llm_model` `apple-*` findings are kept as warnings; status and confidence stay the
+  rules'. An MCP client's assessment still judges.
 - The phone half (fafo_ios, §49): `rate` matched as a word (it was matching "sepa**rate**ly" in the
   PPE laundry sentence), a non-crop rate read from the directions, the heading "Rate" for non-crop.
 - Deploy: **`bench migrate`** (seeds the groups where missing), then an image rebuild.

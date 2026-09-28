@@ -183,3 +183,9 @@ laundry. Remove PPE imnest". The parser's `rate:` pattern matched the "rate" ins
   place pacs, pellets or baits per placement, station or burrow ("Place 1 to 2 blocks per
   placement"). Text that isn't a rate is left blank rather than guessed. The heading is **"Rate"**,
   not "Rates by crop", for a Non-crop product.
+- **An on-device assessment is advisory.** DVAL-2026-0007 (PROWLER®) was flagged by the phone's
+  model alone, for a well-formed EPA number it said "lacks hyphens", a "100% total is implausible",
+  and a missing REI on a non-crop bait. An assessment whose `llm_model` starts with `apple-` is kept
+  in the issue list with errors downgraded to warnings. It does not change the status or the
+  confidence, which stay the rules'. An MCP client's assessment still judges as before. The phone
+  also drops findings the rules contradict before sending.

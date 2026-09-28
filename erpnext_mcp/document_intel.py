@@ -1988,6 +1988,15 @@ def normalise_status(raw: str) -> str:
 	return ""
 
 
+#: v0.202.0. Models whose assessment is ADVISORY — kept as warnings, never the
+#: deciding vote. Matched as a prefix of `llm_model`.
+ADVISORY_MODEL_PREFIXES = ("apple-",)
+
+
+def is_advisory_model(llm_model) -> bool:
+	return _text(llm_model).lower().startswith(ADVISORY_MODEL_PREFIXES)
+
+
 def merge_llm_assessment(deterministic: dict, assessment, llm_model: str = "") -> dict:
 	"""The deterministic result and the client's judgement, resolved into one.
 
@@ -2036,9 +2045,25 @@ def merge_llm_assessment(deterministic: dict, assessment, llm_model: str = "") -
 		).strip()
 		return merged
 
-	issues.extend(assessment.get("issues") or ())
 	llm_status = assessment.get("status") or ""
 	llm_confidence = assessment.get("confidence")
+	model_issues = list(assessment.get("issues") or ())
+	if is_advisory_model(llm_model):
+		# v0.202.0. A PHONE'S ON-DEVICE MODEL IS HEARD, NOT OBEYED. On OML its
+		# assessment of PROWLER® said a well-formed 12455-97-3240 "lacks
+		# hyphens", that ingredients totalling 100% were "implausible", and that
+		# a mouse bait needs an REI — and flagged the record on its own. Its
+		# findings are kept, as warnings, for a person to read; the status and
+		# the confidence stay the rules'. An MCP client's assessment is not
+		# affected: that is a model a person chose to run the judgement.
+		model_issues = [
+			{**entry, "severity": WARNING if entry.get("severity") == ERROR else entry.get("severity")}
+			for entry in model_issues
+			if isinstance(entry, dict)
+		]
+		llm_status = ""
+		llm_confidence = None
+	issues.extend(model_issues)
 
 	if det_errors:
 		status = STATUS_REJECTED if llm_status == STATUS_REJECTED else STATUS_FLAGGED
