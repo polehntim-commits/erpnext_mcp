@@ -452,18 +452,51 @@ class PesticideLabelFields(MastersTestCase):
 		self.assertEqual(row["item_group"], CONSUMABLES, "an explicit group wins over the EPA default")
 
 	def test_an_epa_number_with_no_group_files_it_under_crop_protection(self):
-		self.assertFalse(frappe.db.exists("Item Group", masters.CROP_PROTECTION_GROUP))
+		from erpnext_mcp import agronomy_seed
+
+		agronomy_seed._seed_item_groups({"created": [], "skipped": [], "failed": []})
 		data = self.tool_data(
 			"create_item", {"item_code": "WARRIOR-II", "epa_registration_number": "100-1234"}
 		)
 		self.assertEqual(data["item_group"], masters.CROP_PROTECTION_GROUP)
-		self.assertIs(data["item_group_created"], True)
-		group = STORE.get_raw("Item Group", masters.CROP_PROTECTION_GROUP)
-		self.assertEqual(group["parent_item_group"], ITEM_GROUP_ROOT)
-		self.assertEqual(group["is_group"], 0)
-		second = self.tool_data("create_item", {"item_code": "ASSAIL", "epa_registration_number": "8033-36"})
-		self.assertEqual(second["item_group"], masters.CROP_PROTECTION_GROUP)
-		self.assertNotIn("item_group_created", second)
+		self.assertIs(data["item_group_created"], False)
+		self.assertNotIn("item_group", data["needs_review"])
+
+	def test_registration_never_creates_a_group_it_falls_back_and_says_so(self):
+		"""v0.202.0. OML: "No permission for Item Group", three times, in front of a
+		tub of mouse bait — the registration was inserting the group as the phone user."""
+		self.assertFalse(frappe.db.exists("Item Group", masters.CROP_PROTECTION_GROUP))
+		data = self.tool_data(
+			"create_item", {"item_code": "WARRIOR-II", "epa_registration_number": "100-1234"}
+		)
+		self.assertEqual(data["item_group"], ITEM_GROUP_ROOT)
+		self.assertIn("item_group", data["needs_review"])
+		self.assertIn(masters.CROP_PROTECTION_GROUP, data["item_group_note"])
+		self.assertFalse(frappe.db.exists("Item Group", masters.CROP_PROTECTION_GROUP))
+
+	def test_the_seed_makes_both_groups_once_and_leaves_an_operators_where_it_is(self):
+		from erpnext_mcp import agronomy_seed
+
+		STORE.seed(
+			"Item Group",
+			[
+				{
+					"name": "Pest Control Products",
+					"item_group_name": "Pest Control Products",
+					"parent_item_group": CONSUMABLES,
+					"is_group": 0,
+				}
+			],
+		)
+		report = {"created": [], "skipped": [], "failed": []}
+		agronomy_seed._seed_item_groups(report)
+		self.assertEqual([row["name"] for row in report["created"]], ["Item Group Crop Protection Products"])
+		self.assertEqual(
+			STORE.get_raw("Item Group", "Pest Control Products")["parent_item_group"], CONSUMABLES
+		)
+		again = {"created": [], "skipped": [], "failed": []}
+		agronomy_seed._seed_item_groups(again)
+		self.assertEqual(again["created"], [])
 
 	def test_no_epa_number_keeps_the_old_default_group(self):
 		data = self.tool_data("create_item", {"item_code": "TWINE-2", "rei_hours": 0})

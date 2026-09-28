@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.202.0 — 2026-09-27 — registration never makes master data; a bait counts in blocks
+
+**923 tools** (unchanged). No new routes. After the first live registration on OML (fafo_ios df18906):
+Tim's iPhone was refused three times with "No permission for Item Group. Nothing was changed." —
+`create_item` was INSERTING the missing "Pest Control Products" as the phone user. Contract:
+`docs/design/product_label_capture.md` §7.
+
+- **The two pesticide groups are seeded** on every migrate (`agronomy_seed._seed_item_groups`):
+  Crop Protection Products and Pest Control Products, create-only, as leaves under All Item Groups.
+  One an operator already made — OML's are under Farm Inventory — is left where it is.
+- **`create_item` never creates an Item Group**, on any path. A missing pesticide group files the
+  product in the site's default group, adds `"item_group"` to `needs_review` and names the missing
+  group in `item_group_note`; `item_group_created` is always false. An explicitly named ordinary group
+  that does not exist is still refused, as before.
+- **`/mobile/list_uoms` returns `default_uom`** for a `context` — `Bait` answers Block — so the
+  phone defaults a bait's "Counted in" to Block instead of whatever sorted first (Box, on OML).
+- The phone half (fafo_ios, §49): `rate` matched as a word (it was matching "sepa**rate**ly" in the
+  PPE laundry sentence), a non-crop rate read from the directions, the heading "Rate" for non-crop.
+- Deploy: **`bench migrate`** (seeds the groups where missing), then an image rebuild.
+
 ## 0.201.0 — 2026-09-27 — a product's label, stored; EPA's label attached; a mouse bait judged as one
 
 **923 tools** (+1: `attach_epa_label`). Two new `/mobile` routes. Two new Item compliance fields; one

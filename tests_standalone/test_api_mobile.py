@@ -3958,6 +3958,9 @@ class TheStoreAisleReachesTheCatalogue(MobileAPITestCase):
 		from erpnext_mcp import compliance_fields
 
 		compliance_fields.install_compliance_fields(respect_switch=False)
+		from erpnext_mcp import agronomy_seed
+
+		agronomy_seed._seed_item_groups({"created": [], "skipped": [], "failed": []})
 
 	def foreman(self):
 		set_roles(WORKER, ["Field Worker", "Foreman"])

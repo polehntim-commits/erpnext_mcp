@@ -326,10 +326,43 @@ def seed_agricultural_masters() -> dict:
 	"""
 	report: dict = {"created": [], "skipped": [], "failed": []}
 	_seed_uoms(report)
+	_seed_item_groups(report)
 	_seed_crops(report)
 	_seed_contexts(report)
 	_seed_conversions(report)
 	return report
+
+
+#: v0.202.0. The two groups a pesticide is filed under — see
+#: `tools/masters.GROUP_FOR_SCOPE`. Seeded rather than made by the registration
+#: that first needs one: on OML that registration ran as a phone user with no
+#: Item Group permission and was refused three times in front of the product.
+SEED_ITEM_GROUPS = ("Crop Protection Products", "Pest Control Products")
+ALL_ITEM_GROUPS = "All Item Groups"
+
+
+def _seed_item_groups(report: dict) -> None:
+	"""Make sure both pesticide groups exist, as leaves. One an operator made anywhere is left."""
+	if not doctype_exists("Item Group"):
+		_note(
+			report, "skipped", "the pesticide item groups", "this site has no Item Group doctype (no ERPNext)"
+		)
+		return
+	for name in SEED_ITEM_GROUPS:
+		if frappe.db.exists("Item Group", name):
+			continue
+		if not frappe.db.exists("Item Group", ALL_ITEM_GROUPS):
+			_note(report, "failed", f"Item Group {name}", f"there is no {ALL_ITEM_GROUPS!r} to put it under")
+			continue
+		try:
+			doc = frappe.new_doc("Item Group")
+			doc.item_group_name = name
+			doc.parent_item_group = ALL_ITEM_GROUPS
+			doc.is_group = 0
+			doc.insert(ignore_permissions=True)
+			_note(report, "created", f"Item Group {name}")
+		except Exception as exc:  # pragma: no cover - a site with a locked-down tree
+			_note(report, "failed", f"Item Group {name}", f"{type(exc).__name__}: {exc}")
 
 
 def _note(report: dict, bucket: str, what: str, reason: str = "") -> None:

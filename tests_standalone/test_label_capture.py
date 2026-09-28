@@ -146,6 +146,10 @@ class LabelTestCase(MobileAPITestCase):
 		from erpnext_mcp import compliance_fields
 
 		compliance_fields.install_compliance_fields(respect_switch=False)
+		# A migrated site has both pesticide groups (v0.202.0 seeds them).
+		from erpnext_mcp import agronomy_seed
+
+		agronomy_seed._seed_item_groups({"created": [], "skipped": [], "failed": []})
 		STORE.seed(
 			"File",
 			[
@@ -202,7 +206,7 @@ class ALabelIsStored(LabelTestCase):
 			item_name="PROWLER™", epa_registration_number="12455-97-3240", pesticide_use_scope="Non-crop"
 		)
 		self.assertEqual(answer["item_group"], "Pest Control Products")
-		self.assertTrue(answer["item_group_created"])
+		self.assertFalse(answer["item_group_created"])
 		self.assertEqual(STORE.get_raw("Item", answer["name"])["pesticide_use_scope"], "Non-crop")
 
 	def test_a_crop_product_still_goes_under_crop_protection_and_a_named_group_wins(self):
@@ -421,3 +425,17 @@ class _JsonResponse:
 
 	def close(self):
 		pass
+
+
+# ── 7. a bait counts in blocks ──────────────────────────────────────────────
+class ABaitCountsInBlocks(LabelTestCase):
+	def test_the_bait_context_names_its_default(self):
+		from erpnext_mcp import agronomy_seed
+
+		STORE.seed("UOM", [{"name": "Block", "uom_name": "Block", "enabled": 1, "must_be_whole_number": 1}])
+		agronomy_seed._seed_contexts({"created": [], "skipped": [], "failed": []})
+		self.be()
+		answer = mobile_api.list_uoms(context="Bait")
+		self.assertEqual(answer["default_uom"], "Block")
+		self.assertEqual([row["name"] for row in answer["uoms"]], ["Block"])
+		self.assertIsNone(mobile_api.list_uoms()["default_uom"])

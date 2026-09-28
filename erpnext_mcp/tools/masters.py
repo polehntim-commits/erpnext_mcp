@@ -802,16 +802,25 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 	# here would refuse exactly the groups items are supposed to go in. Resolved
 	# after every refusal above, because the crop-protection group is created on
 	# first use and a refused call should leave nothing behind.
-	group_created = False
+	# v0.201.0. The scope decides the group: a mouse bait is not a
+	# crop-protection product. Unknown scope keeps the old default.
+	#
+	# v0.202.0. AND REGISTRATION NEVER MAKES THE GROUP. v0.201.0 inserted a
+	# missing "Pest Control Products" as whoever was registering — on OML a
+	# phone user with no Item Group permission, refused three times with "No
+	# permission for Item Group" in front of a tub of rodent bait. The two
+	# pesticide groups are seeded on every migrate (`agronomy_seed`); a site
+	# still without one files the product in its default group and says so in
+	# `needs_review`, because the product exists whether or not the tree does.
 	wanted_group = as_str(args, "item_group")
+	pesticide_group = wanted_group in GROUP_FOR_SCOPE.values()
 	if not wanted_group and label.get("epa_registration_number"):
-		# v0.201.0. The scope decides the group: a mouse bait is not a
-		# crop-protection product. Unknown scope keeps the old default.
-		item_group, group_created = _crop_protection_group(
-			GROUP_FOR_SCOPE.get(label.get("pesticide_use_scope") or "", CROP_PROTECTION_GROUP)
-		)
-	elif wanted_group in GROUP_FOR_SCOPE.values() and not _exists(ITEM_GROUP, wanted_group):
-		item_group, group_created = _crop_protection_group(wanted_group)
+		wanted_group = GROUP_FOR_SCOPE.get(label.get("pesticide_use_scope") or "", CROP_PROTECTION_GROUP)
+		pesticide_group = True
+	missing_group = ""
+	if pesticide_group and not _exists(ITEM_GROUP, wanted_group):
+		missing_group = wanted_group
+		item_group = _item_group_for("")
 	else:
 		item_group = _item_group_for(wanted_group)
 
@@ -877,11 +886,13 @@ def create_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 			key: (json.loads(value) if key == "active_ingredients" and value else value)
 			for key, value in label.items()
 		}
-	if group_created:
-		data["item_group_created"] = True
+	data["item_group_created"] = False
+	if missing_group:
+		data["needs_review"] = [*data.get("needs_review", []), "item_group"]
 		data["item_group_note"] = (
-			f"The product was filed under {item_group!r}, which this site did not have, so it "
-			f"was created under {ALL_ITEM_GROUPS!r}."
+			f"{missing_group!r} does not exist on this site yet, so the product was filed under "
+			f"{item_group!r}. It is created on the next bench migrate; move the product then, or "
+			"create the group in the Desk. Registration never creates master data."
 		)
 	summary = f"created Item {doc.name} ({item_name}) in {item_group}, stocked in {stock_uom}"
 	if units["needs_review"]:
@@ -1011,24 +1022,6 @@ def _item_group_for(given: str) -> str:
 		f"item_group is required: this site has no Item Group called {ALL_ITEM_GROUPS!r} to "
 		f"default to. Call list_item_groups to see the tree. Nothing was created."
 	)
-
-
-def _crop_protection_group(name: str = CROP_PROTECTION_GROUP) -> tuple[str, bool]:
-	"""`(group, created)` for a pesticide: one of `GROUP_FOR_SCOPE`, made on first use."""
-	if _exists(ITEM_GROUP, name):
-		return name, False
-	if not _exists(ITEM_GROUP, ALL_ITEM_GROUPS):
-		raise ToolError(
-			f"a pesticide is filed under {name!r}, and this site has neither that group nor "
-			f"{ALL_ITEM_GROUPS!r} to make it under. Pass item_group, or create the group with "
-			"create_item_group. Nothing was created."
-		)
-	group = frappe.new_doc(ITEM_GROUP)
-	group.item_group_name = name
-	group.parent_item_group = ALL_ITEM_GROUPS
-	group.is_group = 0
-	group.insert()
-	return group.name, True
 
 
 def _pesticide_values(args: dict, verb: str) -> dict:

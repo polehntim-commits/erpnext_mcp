@@ -20129,18 +20129,28 @@ def list_uoms(user: str, search=None, rate_text=None, unit_text=None, context=No
 	if wanted:
 		units = [row for row in units if wanted in row["name"].lower()]
 	context = str(context or "").strip()
+	default_uom = None
 	if context:
 		if not frappe.db.exists("Agricultural UOM Context", context):
 			frappe.throw(f"no unit context called {context!r}.", frappe.ValidationError)
-		offered = set(
-			frappe.db.get_all(
-				"Agricultural UOM Context Entry",
-				filters={"parenttype": "Agricultural UOM Context", "parent": context},
-				pluck="uom",
-				limit=500,
-			)
+		entries = frappe.db.get_all(
+			"Agricultural UOM Context Entry",
+			filters={"parenttype": "Agricultural UOM Context", "parent": context},
+			fields=["uom", "is_default"],
+			limit=500,
 		)
+		offered = {row["uom"] for row in entries}
 		units = [row for row in units if row["name"] in offered]
+		# v0.202.0. The context's own default, so a bait's "Counted in" starts at
+		# Block (the Bait context) rather than at whatever sorted first.
+		default_uom = next(
+			(
+				row["uom"]
+				for row in entries
+				if compat.checked(row.get("is_default")) and row["uom"] in offered
+			),
+			None,
+		)
 	# The farm's own units first: a picker that opens on "Abampere" is one
 	# nobody scrolls to Block in.
 	farm = {spec["uom_name"] for spec in ag_uom.SEED_UOMS} | {"Nos"}
@@ -20162,6 +20172,7 @@ def list_uoms(user: str, search=None, rate_text=None, unit_text=None, context=No
 		"count": min(len(units), _MOBILE_UOM_CAP),
 		"truncated": len(units) > _MOBILE_UOM_CAP,
 		"suggestion": suggestion,
+		"default_uom": default_uom,
 	}
 
 
