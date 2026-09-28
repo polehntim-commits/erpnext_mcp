@@ -641,6 +641,10 @@ ROUTES = (
 	# on that session's evidence. See `api/mobile._inspection_evidence`.
 	Route("/mobile", mobile_api.list_inspection_evidence),
 	Route("/mobile", mobile_api.get_inspection_evidence),
+	# v0.200.0, AFB-2026-00024. A finished task's photos, signature and notes,
+	# the same proved-parent pattern as the two above.
+	Route("/mobile", mobile_api.list_task_evidence),
+	Route("/mobile", mobile_api.get_task_evidence),
 	# v0.191.0. Two actions from an asset's screen, and each goes THROUGH A FARM
 	# TASK — the asset's one audit trail — rather than creating its outcome bare.
 	# Stock in or out of the warehouse the asset holds (a DRAFT entry, so the

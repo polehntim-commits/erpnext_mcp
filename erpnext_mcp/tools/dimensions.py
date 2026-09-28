@@ -224,6 +224,14 @@ _ACCOUNT_DEFAULTS = {
 		"root_type": ("Expense",),
 		"what": "the difference a stock count found",
 	},
+	# v0.200.0, AFB-2026-00025. Under perpetual inventory every warehouse without
+	# an account of its own values its stock into this one, and a company with
+	# neither cannot take a stock receipt at all.
+	"default_inventory_account": {
+		"account_type": ("Stock",),
+		"root_type": ("Asset",),
+		"what": "the value of stock held in a warehouse with no account of its own",
+	},
 	"stock_received_but_not_billed": {
 		"account_type": ("Stock Received But Not Billed", ""),
 		"root_type": ("Liability",),

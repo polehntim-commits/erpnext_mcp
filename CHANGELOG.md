@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.200.0 — 2026-09-27 — a finished task's evidence, and a stock entry the books can take
+
+**922 tools** (unchanged). Two new `/mobile` routes. No schema change, no patch. OML App Feedback
+**AFB-2026-00024** and **AFB-2026-00025**; fafo_ios SERVER_CHANGES §47. Contract:
+`docs/design/task_evidence_and_stock_accounts.md`.
+
+- **`/mobile/list_task_evidence`** and **`/mobile/get_task_evidence`** (read, open on enrolment,
+  the task proved with `require_scoped_doc` like `get_task`). A finished task's photos (with
+  phase — read off the `_before_`/`_after_` file name for older builds), signature, report photo,
+  findings, notes, witness and location, newest assignment first; and one file's bytes, only when
+  the task names it. "I cannot review photo es etc after inspection": FT-2026-09-00004's six
+  photos and signature were unattached private Files that `get_attachment_content` refuses and
+  `get_task` never carried. Same proved-parent pattern as `get_inspection_evidence`.
+- **`create_stock_entry` asks the books first.** Under perpetual inventory a Material Receipt or
+  Issue with no line `expense_account` and no company `stock_adjustment_account`, or a warehouse
+  with no inventory account (its own, a parent's, or the company's `default_inventory_account`),
+  is refused in one sentence naming both gaps and `set_company_defaults` — before ERPNext raised
+  "Please enter <b>Difference Account</b>…" from inside the insert. Orchard Meadow has neither
+  account set; the warehouse chosen was never the problem.
+- **`set_company_defaults`** accepts `default_inventory_account` (Asset, type Stock).
+- **Refusals reach the phone as text.** `farmops_api.app._message_for` strips tags and decodes the
+  common entities, so ERPNext's Desk HTML no longer shows as `<b>…</b>` on a phone.
+- Deploy: an image rebuild. No migrate needed for this release.
+
 ## 0.199.0 — 2026-09-27 — every phone stamp in the site's zone
 
 **922 tools** (unchanged). No new routes, no schema change; one patch. Follows v0.198.0's App

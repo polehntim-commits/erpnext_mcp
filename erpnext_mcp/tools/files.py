@@ -220,8 +220,10 @@ def evidence_content(file_docname: str, max_bytes=None) -> ToolResult:
 	`_authorize_file` nor the parent-agreement check above can place them. The
 	authority here is the evidence ROW: the caller proves the session, reads the
 	File docnames off its table, and passes only one of those. It is not a
-	general reader — `api/mobile.get_inspection_evidence` is its only caller and
-	refuses any docname that is not on the session it proved.
+	general reader — `api/mobile.get_inspection_evidence` refuses any docname
+	that is not on the session it proved, and since v0.200.0
+	`api/mobile.get_task_evidence` does the same for a Farm Task's assignments
+	(AFB-2026-00024). Those are its only two callers.
 	"""
 	max_bytes = _resolve_max_bytes(as_int({"max_bytes": max_bytes}, "max_bytes", DEFAULT_MAX_BYTES))
 	return _attachment_payload(_open_attachment(file_docname), max_bytes)

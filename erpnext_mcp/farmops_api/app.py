@@ -269,6 +269,24 @@ def _status_for(exc: Exception) -> int:
 	return 0
 
 
+_TAG = re.compile(r"<[^>]+>")
+_ENTITIES = {"&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " "}
+
+
+def _plain(text: str) -> str:
+	"""A message as text: tags dropped, the common entities decoded, whitespace collapsed.
+
+	v0.200.0, AFB-2026-00025. ERPNext writes its refusals for the Desk, in HTML —
+	"Please enter <b>Difference Account</b> … <strong>Orchard Meadow, LLC</strong>"
+	— and a phone draws the tags as characters. Stripped HERE, once, so every
+	route's refusal reads as a sentence; the phone strips too, for older servers.
+	"""
+	plain = _TAG.sub("", str(text or ""))
+	for entity, char in _ENTITIES.items():
+		plain = plain.replace(entity, char)
+	return " ".join(plain.split())
+
+
 def _message_for(exc: Exception, anticipated: int) -> str:
 	"""What to say. An UNANTICIPATED failure says nothing specific, on purpose.
 
@@ -281,7 +299,7 @@ def _message_for(exc: Exception, anticipated: int) -> str:
 	"""
 	if not anticipated:
 		return INTERNAL
-	text = str(exc).strip()
+	text = _plain(str(exc))
 	if text:
 		return text
 	# v0.191.1. Frappe's own permission check (`Document.raise_no_permission_to`)
@@ -289,7 +307,7 @@ def _message_for(exc: Exception, anticipated: int) -> str:
 	# `frappe.flags.error_message`. Without this a refusal reached the phone as
 	# "That request could not be completed." and nobody could tell it was a
 	# permission, let alone which one.
-	flagged = str(getattr(frappe.flags, "error_message", "") or "").strip()
+	flagged = _plain(str(getattr(frappe.flags, "error_message", "") or ""))
 	if flagged:
 		return f"{flagged}. Nothing was changed."
 	if anticipated == 403:

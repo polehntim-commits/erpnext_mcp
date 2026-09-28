@@ -678,6 +678,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"create_item",
 		"list_uoms",
 		"update_item_units",
+		# v0.200.0 — a finished task's evidence.
+		"list_task_evidence",
+		"get_task_evidence",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

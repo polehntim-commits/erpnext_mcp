@@ -207,6 +207,9 @@ ERPNEXT_SCHEMA = {
 		"disposal_account",
 		"capital_work_in_progress_account",
 		"stock_adjustment_account",
+		# v0.200.0. The two perpetual-inventory facts `stock_inventory._account_preflight` reads.
+		"enable_perpetual_inventory",
+		"default_inventory_account",
 		"stock_received_but_not_billed",
 		"default_advance_received_account",
 		"default_selling_cost_center",

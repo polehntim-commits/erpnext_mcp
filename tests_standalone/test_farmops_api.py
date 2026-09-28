@@ -485,6 +485,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/create_item",
 		"/mobile/list_uoms",
 		"/mobile/update_item_units",
+		"/mobile/list_task_evidence",
+		"/mobile/get_task_evidence",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2986,6 +2988,10 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# v0.197.0. The site's unit list and which unit a rate names — a
 		# vocabulary, like `list_asset_types`, with nothing to scope.
 		"list_uoms",
+		# v0.200.0. A finished task's evidence, behind the task's own scope check,
+		# like `list_inspection_evidence` / `get_inspection_evidence`.
+		"list_task_evidence",
+		"get_task_evidence",
 		# v0.165.0. Filing a title on a truck, both docnames scoped. Open like
 		# `create_expense_receipt`, which makes the same link by VIN at capture.
 		"link_title_to_asset",
@@ -3126,7 +3132,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 126, "a method is named in two sets at once")
+		self.assertEqual(len(named), 128, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

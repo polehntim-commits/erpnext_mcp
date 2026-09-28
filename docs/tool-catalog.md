@@ -3532,6 +3532,7 @@ clears a field.
 | `expenses_included_in_asset_valuation` | Expense | Freight and duty that belong in an asset's cost, not the period |
 | `asset_received_but_not_billed` | Asset Received But Not Billed, Liability | An asset delivered before its invoice |
 | `stock_adjustment_account` | Expense | The difference a stock count found |
+| `default_inventory_account` | Asset (type Stock) | The value of stock in a warehouse with no account of its own (v0.200.0) |
 | `stock_received_but_not_billed` | Stock Received But Not Billed, Liability | Stock delivered before its invoice |
 | `unrealized_exchange_gain_loss_account` | Income or Expense | Movement on an unsettled foreign-currency balance |
 | `unrealized_profit_loss_account` | Income or Expense | Intra-group profit eliminated on consolidation |

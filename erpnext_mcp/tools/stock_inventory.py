@@ -406,6 +406,88 @@ def _entry_value(doc, items: list[dict]) -> float:
 	return round(sum(float(row.get("basic_amount") or 0) for row in items), 2)
 
 
+#: The purposes that post a DIFFERENCE — stock arriving from, or leaving to,
+#: nowhere in the stock ledger. A transfer moves value between two warehouses
+#: and has nothing to post against.
+_DIFFERENCE_PURPOSES = ("Material Receipt", "Material Issue")
+
+
+def _account_preflight(company: str, entry_type: str, lines: list[dict]) -> None:
+	"""Refuse, in a sentence, an entry the company's books cannot take.
+
+	v0.200.0, AFB-2026-00025. A stock receipt on Orchard Meadow came back from
+	ERPNext as "Please enter <b>Difference Account</b> or set default <b>Stock
+	Adjustment Account</b> for company <strong>Orchard Meadow, LLC</strong>" —
+	raised from inside the insert, HTML and all, and read on the phone as a
+	problem with the shed that was chosen. It is a problem with the chart: under
+	perpetual inventory every movement posts to the ledger, so a receipt needs an
+	account for the difference and every warehouse needs an inventory account.
+	Asked here, both gaps are named at once, with who fixes them and how, before
+	anything is written.
+
+	ONLY UNDER PERPETUAL INVENTORY, which is the only time ERPNext asks. A site
+	without the columns this reads is not checked; ERPNext still has the last word.
+	"""
+	if not compat.doctype_exists("Company") or not compat.has_field("Company", "enable_perpetual_inventory"):
+		return
+	fields = compat.existing_fields(
+		"Company", ("enable_perpetual_inventory", "stock_adjustment_account", "default_inventory_account")
+	)
+	row = frappe.db.get_value("Company", company, fields, as_dict=True) or {}
+	if not compat.checked(row.get("enable_perpetual_inventory")):
+		return
+
+	problems = []
+	if (
+		entry_type in _DIFFERENCE_PURPOSES
+		and compat.has_field("Company", "stock_adjustment_account")
+		and not row.get("stock_adjustment_account")
+		and not any(line.get("expense_account") for line in lines)
+	):
+		problems.append(
+			f"{company} has no Stock Adjustment Account, so a {entry_type.lower()} has no account "
+			"to post the difference to. An accountant sets it once, with set_company_defaults "
+			"(stock_adjustment_account) or on the Company in the Desk."
+		)
+
+	if compat.has_field("Company", "default_inventory_account") and not row.get("default_inventory_account"):
+		warehouses = sorted(
+			{
+				str(line.get(column))
+				for line in lines
+				for column in ("s_warehouse", "t_warehouse")
+				if line.get(column)
+			}
+		)
+		unaccounted = [name for name in warehouses if not _warehouse_account(name)]
+		if unaccounted:
+			problems.append(
+				f"{', '.join(unaccounted)} {'has' if len(unaccounted) == 1 else 'have'} no inventory "
+				f"account, and {company} has no Default Inventory Account to fall back on — under "
+				"perpetual inventory every warehouse's stock is valued into one. Set it once with "
+				"set_company_defaults (default_inventory_account), or on the warehouse in the Desk."
+			)
+
+	if problems:
+		raise ToolError(" ".join(problems) + " The warehouse chosen is not the problem. Nothing was filed.")
+
+
+def _warehouse_account(warehouse: str) -> str:
+	"""The inventory account a warehouse values into: its own, or the nearest parent's. "" for none."""
+	if not compat.has_field(WAREHOUSE, "account"):
+		return "unchecked"
+	seen: set = set()
+	current = warehouse
+	while current and current not in seen:
+		seen.add(current)
+		fields = compat.existing_fields(WAREHOUSE, ("account", "parent_warehouse"))
+		row = frappe.db.get_value(WAREHOUSE, current, fields, as_dict=True) or {}
+		if row.get("account"):
+			return str(row["account"])
+		current = str(row.get("parent_warehouse") or "")
+	return ""
+
+
 def create_stock_entry(args: dict) -> ToolResult:
 	"""Create a DRAFT Stock Entry. Moves nothing; never submits."""
 	compat.require_doctype(STOCK_ENTRY, _HINT)
@@ -413,6 +495,7 @@ def create_stock_entry(args: dict) -> ToolResult:
 	company = resolve_company(as_str(args, "company"), required=True)
 	posting_date = as_date(args, "posting_date") or frappe.utils.today()
 	lines = _entry_lines(args.get("items"), entry_type, company)
+	_account_preflight(company, entry_type, lines)
 
 	doc = frappe.new_doc(STOCK_ENTRY)
 	doc.company = company

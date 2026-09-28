@@ -20416,6 +20416,192 @@ def get_inspection_evidence(user: str, inspection_session=None, file=None, max_b
 	}
 
 
+# ── 128a–128b. A finished task's evidence ────────────────────────────────────
+#
+# v0.200.0, AFB-2026-00024: "I cannot review photos etc after inspection". A
+# completed inspection on 40-WM-SE held six photographs and a signature, and
+# the phone could not open one of them: `get_task` rebuilds its payload key by
+# key and never carried the evidence, and `get_attachment_content` places a
+# File by `attached_to_*` — which a staged upload never has, because
+# `finalize_staged_file` commits it UNATTACHED on purpose.
+#
+# THE SAME SHAPE AS AN INSPECTION SESSION'S, ON PURPOSE. The task is proved
+# first (`require_scoped_doc`, the gate `get_task` uses), and a File is served
+# only when the task's own rows name it — its assignments' evidence and
+# signatures, and the photo it was reported with. So the route reaches exactly
+# what the task shows and nothing a docname could be guessed into. Contract:
+# `docs/design/task_evidence_and_stock_accounts.md` §1.
+_TASK_EVIDENCE_ASSIGNMENT_FIELDS = (
+	"name",
+	"state",
+	"assigned_to",
+	"assigned_to_name",
+	"completed_at",
+	"findings_text",
+	"completion_narrative",
+	"witness",
+	"farm_location_gps",
+	"signature_file",
+)
+_TASK_EVIDENCE_ROW_FIELDS = (
+	"file",
+	"file_url",
+	"caption",
+	"phase",
+	"evidence_type",
+	"captured_on",
+	"gps_latitude",
+	"gps_longitude",
+	"idx",
+)
+
+
+def _file_card(reference) -> dict | None:
+	"""`{file, file_name, file_size, is_image}` for a File docname or URL, or None."""
+	ref = str(reference or "").strip()
+	if not ref:
+		return None
+	docname = ref if frappe.db.exists("File", ref) else ""
+	if not docname:
+		docname = str(frappe.db.get_value("File", {"file_url": ref}, "name") or "")
+	if not docname:
+		return None
+	meta = frappe.db.get_value("File", docname, ["file_name", "file_url", "file_size"], as_dict=True) or {}
+	label = str(meta.get("file_name") or meta.get("file_url") or "")
+	return {
+		"file": docname,
+		"file_name": meta.get("file_name"),
+		"file_size": meta.get("file_size"),
+		"is_image": label.lower().endswith(_IMAGE_SUFFIXES),
+	}
+
+
+def _task_evidence(task: str) -> dict:
+	"""A task's filed evidence, newest assignment first, as `list_task_evidence` answers it."""
+	from ..tools import inspections
+
+	row = (
+		frappe.db.get_value(
+			FARM_TASK,
+			task,
+			compat.existing_fields(
+				FARM_TASK, ("name", "task_name", "task_type", "asset", "state", "report_photo")
+			),
+			as_dict=True,
+		)
+		or {}
+	)
+	fields = compat.existing_fields(FARM_TASK_ASSIGNMENT, _TASK_EVIDENCE_ASSIGNMENT_FIELDS)
+	row_fields = compat.existing_fields("Farm Task Evidence", _TASK_EVIDENCE_ROW_FIELDS)
+	assignments = []
+	for entry in frappe.db.get_all(
+		FARM_TASK_ASSIGNMENT, filters={"task": task}, fields=fields, order_by="creation desc", limit=50
+	):
+		entry = dict(entry)
+		evidence, signature = [], None
+		for child in frappe.db.get_all(
+			"Farm Task Evidence",
+			filters={"parent": entry["name"], "parenttype": FARM_TASK_ASSIGNMENT},
+			fields=row_fields,
+			order_by="idx asc",
+			limit=200,
+		):
+			child = dict(child)
+			card = _file_card(child.get("file") or child.get("file_url"))
+			if not card:
+				continue
+			if str(child.get("evidence_type") or "") == "Signature":
+				signature = signature or card
+				continue
+			phase = str(child.get("phase") or "") or inspections._phase_from_name(
+				card.get("file_name") or child.get("caption") or child.get("file_url")
+			)
+			evidence.append(
+				{
+					**card,
+					"evidence_type": child.get("evidence_type") or "Photo",
+					"phase": phase or None,
+					"caption": child.get("caption") or None,
+					"captured_on": str(child["captured_on"]) if child.get("captured_on") else None,
+					"gps_latitude": child.get("gps_latitude"),
+					"gps_longitude": child.get("gps_longitude"),
+				}
+			)
+		signature = signature or _file_card(entry.get("signature_file"))
+		assignments.append(
+			{
+				"assignment": entry["name"],
+				"state": entry.get("state"),
+				"assigned_to": entry.get("assigned_to"),
+				"assigned_to_name": entry.get("assigned_to_name") or entry.get("assigned_to"),
+				"completed_at": str(entry["completed_at"]) if entry.get("completed_at") else None,
+				"findings_text": entry.get("findings_text"),
+				"completion_narrative": entry.get("completion_narrative") or None,
+				"witness": entry.get("witness") or None,
+				"farm_location_gps": entry.get("farm_location_gps") or None,
+				"evidence": evidence,
+				"signature": signature,
+			}
+		)
+	report_photo = _file_card(row.get("report_photo"))
+	count = sum(len(a["evidence"]) + (1 if a["signature"] else 0) for a in assignments) + (
+		1 if report_photo else 0
+	)
+	return {
+		"task": row.get("name") or task,
+		"task_name": row.get("task_name"),
+		"task_type": row.get("task_type"),
+		"asset": row.get("asset") or None,
+		"state": row.get("state"),
+		"report_photo": report_photo,
+		"assignments": assignments,
+		"evidence_count": count,
+	}
+
+
+def _task_evidence_files(listing: dict) -> set:
+	"""Every File docname `listing` names — the only ones `get_task_evidence` will serve."""
+	files = {listing["report_photo"]["file"]} if listing.get("report_photo") else set()
+	for entry in listing.get("assignments") or []:
+		files.update(item["file"] for item in entry.get("evidence") or [])
+		if entry.get("signature"):
+			files.add(entry["signature"]["file"])
+	return files
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_task_evidence", limit=guard.READ_LIMIT)
+def list_task_evidence(user: str, task=None) -> dict:
+	"""A task's photos, signature, findings and notes, newest assignment first."""
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+	return _task_evidence(name)
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_task_evidence", limit=guard.UPLOAD_LIMIT)
+def get_task_evidence(user: str, task=None, file=None, max_bytes=None) -> dict:
+	"""One of a task's evidence files, base64 — only a file that task names."""
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+	wanted = str(file or "").strip()
+	if wanted not in _task_evidence_files(_task_evidence(name)):
+		frappe.throw(
+			f"file {wanted or '(none)'} is not evidence on task {name}. Nothing was read.",
+			frappe.PermissionError,
+		)
+	data = file_tools.evidence_content(wanted, max_bytes if max_bytes not in (None, "") else None).data
+	return {
+		"task": name,
+		"file": data.get("name"),
+		"file_name": data.get("file_name"),
+		"file_size": data.get("file_size"),
+		"content_type": data.get("mime_type"),
+		"encoding": data.get("encoding"),
+		"content": data.get("content_base64"),
+	}
+
+
 # ── 129–130. An asset's own work, through a Farm Task ───────────────────────
 #
 # v0.191.0. TIM'S RULE: EVERY ACTION STARTED FROM AN ASSET'S SCREEN GOES THROUGH
