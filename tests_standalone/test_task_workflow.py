@@ -256,3 +256,31 @@ class WhatAPhotoKnows(WorkflowTestCase):
 			task, hours_reading=1, evidence_files=[{"file_url": "/files/a.jpg", "captured_at": "yesterday"}]
 		)
 		self.assertTrue(frappe.db.exists("Farm Task", task))
+
+
+class BothReadersAgreeOnOrigin(WorkflowTestCase):
+	"""On OML, `get_asset_detail` showed FT-2026-09-00004 and -00005 as
+	field_reported and `get_farm_task` said compliance_rule for both. The rows
+	were right; `get_farm_task` never selected the column and printed its
+	fallback. The two readers must say the same thing, and it must be the row."""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **ALL_ON, allow_get_asset_detail=1)
+
+	def test_the_asset_screen_and_the_task_read_the_same_origin(self):
+		task = self.a_report()["name"]
+		stored = STORE.get_raw("Farm Task", task)["origin"]
+		listed = {
+			row["name"]: row
+			for row in self.tool_data("get_asset_detail", {"asset_name": WIND_MACHINE})["open_tasks"]
+		}
+		self.assertEqual(stored, "field_reported")
+		self.assertEqual(listed[task]["origin"], stored)
+		self.assertEqual(self.tool_data("get_farm_task", {"task": task})["origin"], stored)
+
+	def test_completion_does_not_change_the_origin(self):
+		task = self.claimed_report()
+		self.finish(task, hours_reading=10)
+		self.assertEqual(STORE.get_raw("Farm Task", task)["origin"], "field_reported")
+		self.assertEqual(self.tool_data("get_farm_task", {"task": task})["origin"], "field_reported")

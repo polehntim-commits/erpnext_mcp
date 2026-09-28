@@ -19,6 +19,8 @@ Feedback **AFB-2026-00022**; fafo_ios SERVER_CHANGES §46. Contract: `docs/desig
   `reported_by_name`, `reported_at`, `report_photo` (null when absent). The phone's asset-screen
   actions (`record_asset_stock_movement`, `attach_asset_document`) now store `field_reported`
   with the caller as reporter; an MCP `create_farm_task` keeps its old default.
+  `get_asset_detail` (which read the column) and `get_farm_task` (which printed the fallback)
+  now agree — on OML both FT-2026-09-00004 and -00005 are stored `field_reported`.
 - **The hour meter.** Wind Machine, Pump, Irrigation Pump, Well Pump and Generator join Tractor
   and Vehicle as hour-meter types (`engine_hours.hour_meter_types`). The evidence contract gains
   `hours`; a field report on a metered asset asks for it. `complete_farm_task` /
