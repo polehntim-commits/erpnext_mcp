@@ -5,7 +5,8 @@ All notable changes to this project are documented here. Versions follow
 
 ## 0.202.0 — 2026-09-27 — registration never makes master data; a bait counts in blocks
 
-**923 tools** (unchanged). No new routes. After the first live registration on OML (fafo_ios df18906):
+**924 tools** (455 read, 469 write: one new write, `set_uom_aliases`). **One new route,
+`/mobile/match_product`** (131 mobile methods). After the first live registration on OML (fafo_ios df18906):
 Tim's iPhone was refused three times with "No permission for Item Group. Nothing was changed." —
 `create_item` was INSERTING the missing "Pest Control Products" as the phone user. Contract:
 `docs/design/product_label_capture.md` §7.
@@ -25,7 +26,27 @@ Tim's iPhone was refused three times with "No permission for Item Group. Nothing
   rules'. An MCP client's assessment still judges.
 - The phone half (fafo_ios, §49): `rate` matched as a word (it was matching "sepa**rate**ly" in the
   PPE laundry sentence), a non-crop rate read from the directions, the heading "Rate" for non-crop.
-- Deploy: **`bench migrate`** (seeds the groups where missing), then an image rebuild.
+- **Bait forms and unit spellings** (contract §8.1, from PROWLER® Place Pacs, DVAL-2026-0007).
+  Place Pac, Pouch and Bait Station are seeded as whole-number count units and offered by the Bait
+  context (Block stays its default); patch `add_bait_units_to_context` adds the missing ones to an
+  existing Bait context once. The resolver reads pac/pacs/pack(s)/place pac(s) as Place Pac,
+  pouch/packet as Pouch, (bait) station as Bait Station, and "blocks" as Block.
+- **A site's own spellings, no deploy** — Tim: "pacs" did not resolve. New UOM Custom Field
+  `uom_aliases` (one spelling per line, plurals read too) and MCP tool **`set_uom_aliases`**
+  (add/remove/replace; refuses a spelling another unit answers to; switch `allow_set_uom_aliases`,
+  default off, the unit-register roles). `get_uom`, `list_uoms` and `/mobile/list_uoms` carry
+  `aliases`; the mobile search matches them.
+- **Two products under one brand stay two Items** (§8.2). PROWLER™ (a refillable station, blocks)
+  and PROWLER® (Place Pacs, 22 × 3 oz) share a name and nothing else. New Item fields
+  `product_form` and `package_size` (Data; `create_item`, `update_item`, `/mobile/create_item`,
+  `register_product_label` fill blanks). **`/mobile/match_product`** (read, open on enrolment)
+  answers `new` / `existing` / `related` from the barcode, or the base EPA registration plus the
+  normalised form plus the normalised package. The name is never compared.
+- **Advisory findings the rules contradict are dropped** (§8.3): an EPA-number finding when the rules
+  accepted the number, REI/PHI/crop/per-acre findings on a Non-crop label, and a "100% is wrong"
+  ingredient finding. The rest are cut to 240 characters; `advisory_dropped` counts the rest.
+- Deploy: **`bench migrate`** (seeds the groups and bait units, adds `uom_aliases`, `product_form`
+  and `package_size`, runs `add_bait_units_to_context`), then an image rebuild.
 
 ## 0.201.0 — 2026-09-27 — a product's label, stored; EPA's label attached; a mouse bait judged as one
 

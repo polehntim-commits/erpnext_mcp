@@ -298,9 +298,10 @@ class MigrateThreeTimes(V12TestCase):
 		# kind of machine it is, and when the mirror last agreed with it.
 		self.assertEqual(
 			counts[0],
-			31,
+			33,
 			"six Employee fields, the Attendance bridge, four Asset capex columns, "
-			"six Asset register-mirror columns, thirteen Item label columns, and the "
+			"six Asset register-mirror columns, fifteen Item label columns (v0.202.0 adds "
+			"product_form and package_size), and the "
 			"v0.94.0 Company housing-deduction default",
 		)
 		self.assertEqual(counts, [counts[0]] * 3, f"custom fields multiplied across migrations: {counts}")

@@ -146,6 +146,9 @@ PESTICIDE_FIELDS = {
 	# storage and disposal statement. See `compliance_fields`.
 	"pesticide_use_scope": "use_scope",
 	"storage_disposal": "text",
+	# v0.202.0. What the product is on the shelf, and its net contents as printed.
+	"product_form": "text",
+	"package_size": "text",
 }
 USE_SCOPES = ("Crop", "Non-crop")
 SIGNAL_WORDS = ("Danger", "Warning", "Caution", "None")

@@ -1997,6 +1997,39 @@ def is_advisory_model(llm_model) -> bool:
 	return _text(llm_model).lower().startswith(ADVISORY_MODEL_PREFIXES)
 
 
+#: v0.202.0. How long an advisory finding's message may be. The on-device model
+#: wrote paragraphs; a review screen shows a line.
+ADVISORY_MESSAGE_LIMIT = 240
+
+#: The fields a Non-crop label has none of (see `NON_CROP_EXPECTED_FIELDS`).
+_CROP_ONLY_FIELDS = ("rei_hours", "phi_days", "phi_crop", "target_crops", "crop")
+_CROP_ONLY_WORDS = re.compile(
+	r"\b(rei|phi|re-?entry|pre-?harvest|harvest interval|per acre)\b|/\s*acre\b", re.IGNORECASE
+)
+_HUNDRED_PERCENT = re.compile(r"\b100(\.0+)?\s*(%|percent)", re.IGNORECASE)
+
+
+def _contradicted(entry: dict, deterministic: dict) -> str:
+	"""Why a rule contradicts this advisory finding, or "" when none does. §8.3."""
+	field = _text(entry.get("field"))
+	message = _text(entry.get("message"))
+	if field == "epa_registration_number":
+		judged = [
+			row
+			for row in deterministic.get("issues") or ()
+			if row.get("field") == "epa_registration_number" and row.get("severity") in (ERROR, WARNING)
+		]
+		if not judged:
+			return "the EPA number is well-formed by the rules"
+	if deterministic.get("pesticide_use_scope") == SCOPE_NON_CROP and (
+		field in _CROP_ONLY_FIELDS or _CROP_ONLY_WORDS.search(message)
+	):
+		return "a Non-crop label carries no REI, PHI, crop or per-acre rate"
+	if field == "active_ingredients" and _HUNDRED_PERCENT.search(message):
+		return "ingredients totalling 100% is what a label prints"
+	return ""
+
+
 def merge_llm_assessment(deterministic: dict, assessment, llm_model: str = "") -> dict:
 	"""The deterministic result and the client's judgement, resolved into one.
 
@@ -2056,11 +2089,27 @@ def merge_llm_assessment(deterministic: dict, assessment, llm_model: str = "") -
 		# findings are kept, as warnings, for a person to read; the status and
 		# the confidence stay the rules'. An MCP client's assessment is not
 		# affected: that is a model a person chose to run the judgement.
-		model_issues = [
-			{**entry, "severity": WARNING if entry.get("severity") == ERROR else entry.get("severity")}
-			for entry in model_issues
-			if isinstance(entry, dict)
-		]
+		#
+		# v0.202.0 (contract §8.3). A finding a RULE CONTRADICTS is dropped, not
+		# kept as a warning — a reviewer shown "lacks hyphens" beside a number
+		# the rules accepted learns to ignore the column. The rest are cut to
+		# `ADVISORY_MESSAGE_LIMIT` characters.
+		kept = []
+		for entry in model_issues:
+			if not isinstance(entry, dict) or _contradicted(entry, deterministic):
+				continue
+			message = _text(entry.get("message"))
+			if len(message) > ADVISORY_MESSAGE_LIMIT:
+				message = message[: ADVISORY_MESSAGE_LIMIT - 1].rstrip() + "…"
+			kept.append(
+				{
+					**entry,
+					"message": message,
+					"severity": WARNING if entry.get("severity") == ERROR else entry.get("severity"),
+				}
+			)
+		merged["advisory_dropped"] = len(model_issues) - len(kept)
+		model_issues = kept
 		llm_status = ""
 		llm_confidence = None
 	issues.extend(model_issues)

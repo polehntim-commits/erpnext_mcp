@@ -489,6 +489,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/get_task_evidence",
 		"/mobile/register_product_label",
 		"/mobile/list_item_groups",
+		"/mobile/match_product",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2999,6 +3000,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"get_task_evidence",
 		# v0.201.0. The item-group picker: a vocabulary, like `list_uoms`.
 		"list_item_groups",
+		# v0.202.0. Is a scanned label a product already on file — a catalogue
+		# read, like `search_items`, with nothing entity-scoped in it.
+		"match_product",
 		# v0.165.0. Filing a title on a truck, both docnames scoped. Open like
 		# `create_expense_receipt`, which makes the same link by VIN at capture.
 		"link_title_to_asset",
@@ -3139,7 +3143,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 130, "a method is named in two sets at once")
+		self.assertEqual(len(named), 131, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

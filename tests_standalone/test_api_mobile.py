@@ -684,6 +684,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# v0.201.0 — a product's label, stored, and the group picker.
 		"register_product_label",
 		"list_item_groups",
+		# v0.202.0 — is this label a product already on file.
+		"match_product",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

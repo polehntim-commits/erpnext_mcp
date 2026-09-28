@@ -20021,6 +20021,9 @@ _MOBILE_LABEL_FIELDS = (
 	# v0.201.0. Crop or Non-crop, and the storage and disposal statement.
 	"pesticide_use_scope",
 	"storage_disposal",
+	# v0.202.0. The shelf form and net contents — what `match_product` compares.
+	"product_form",
+	"package_size",
 )
 
 
@@ -20046,6 +20049,8 @@ def create_item(
 	item_group=None,
 	pesticide_use_scope=None,
 	storage_disposal=None,
+	product_form=None,
+	package_size=None,
 ) -> dict:
 	"""Add a product, with its retail code and its label, from a phone.
 
@@ -20082,6 +20087,8 @@ def create_item(
 		"ppe_requirements": ppe_requirements,
 		"pesticide_use_scope": pesticide_use_scope,
 		"storage_disposal": storage_disposal,
+		"product_form": product_form,
+		"package_size": package_size,
 	}
 	# v0.201.0. THE PHONE MAY NOW NAME THE GROUP, from `list_item_groups`, because
 	# the default was wrong for a mouse bait: an EPA number used to mean Crop
@@ -20234,6 +20241,112 @@ def list_item_groups(user: str) -> dict:
 		],
 		"suggested": dict(master_tools.GROUP_FOR_SCOPE),
 	}
+
+
+# ── 123e. match_product ──────────────────────────────────────────────────────
+#
+# v0.202.0. Tim: PROWLER™ (a refillable bait station, blocks, UPC 048745228174)
+# and PROWLER® (Place Pacs, 22 × 3 oz, UPC 048745221441) are TWO DIFFERENT
+# PRODUCTS — "don't merge them". A scanned label is matched on what identifies
+# a product on the shelf: the retail code, or the registration AND the form AND
+# the package. THE NAME IS NEVER COMPARED — one brand names both. Read-only;
+# open on enrolment. Contract: `docs/design/product_label_capture.md` §8.2.
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("match_product", limit=guard.READ_LIMIT)
+def match_product(
+	user: str, epa_registration_number=None, barcode=None, product_form=None, package_size=None
+) -> dict:
+	"""Which Items a scanned label is — the same product, or a sibling under its registration."""
+	from .. import epa_ppls
+
+	guard.require_scope(user)
+	registration = epa_ppls.base_registration(epa_registration_number)
+	form = _normal_form(product_form)
+	package = _normal_package(package_size)
+	code = ""
+	if str(barcode or "").strip():
+		try:
+			code = master_tools.normalize_barcode(barcode)[0]
+		except Exception:
+			code = "".join(ch for ch in str(barcode) if ch.isdigit())
+	if not (registration or code or form or package):
+		frappe.throw(
+			"pass at least one of epa_registration_number, barcode, product_form or package_size.",
+			frappe.ValidationError,
+		)
+
+	by_barcode = set()
+	if code and compat.doctype_exists("Item Barcode"):
+		by_barcode = set(
+			frappe.db.get_all(
+				"Item Barcode",
+				filters={"parenttype": "Item", "barcode": ("in", master_tools._barcode_spellings(code))},
+				pluck="parent",
+				limit=50,
+			)
+		)
+	candidates = set(by_barcode)
+	if registration and compat.has_field("Item", "epa_registration_number"):
+		for row in frappe.db.get_all(
+			"Item",
+			fields=["name", "epa_registration_number"],
+			limit=5000,
+		):
+			if epa_ppls.base_registration(row.get("epa_registration_number")) == registration:
+				candidates.add(row["name"])
+
+	matches = []
+	for name in sorted(candidates):
+		fields = compat.existing_fields(
+			"Item",
+			("name", "item_name", "epa_registration_number", "product_form", "package_size", "disabled"),
+		)
+		row = frappe.db.get_value("Item", name, fields, as_dict=True) or {}
+		if compat.checked(row.get("disabled")):
+			continue
+		same = name in by_barcode or bool(
+			registration
+			and epa_ppls.base_registration(row.get("epa_registration_number")) == registration
+			and form
+			and package
+			and _normal_form(row.get("product_form")) == form
+			and _normal_package(row.get("package_size")) == package
+		)
+		matches.append(
+			{
+				"item_code": name,
+				"item_name": row.get("item_name") or name,
+				"product_form": row.get("product_form") or None,
+				"package_size": row.get("package_size") or None,
+				"epa_registration_number": row.get("epa_registration_number") or None,
+				"barcodes": frappe.db.get_all(
+					"Item Barcode", filters={"parenttype": "Item", "parent": name}, pluck="barcode", limit=20
+				)
+				if compat.doctype_exists("Item Barcode")
+				else [],
+				"match": "same" if same else "same_registration_other_form",
+			}
+		)
+	matches.sort(key=lambda row: (row["match"] != "same", row["item_code"]))
+	verdict = (
+		"existing" if any(row["match"] == "same" for row in matches) else "related" if matches else "new"
+	)
+	return {"verdict": verdict, "matches": matches}
+
+
+def _normal_form(value) -> str:
+	"""'Place Pacs' and 'place pac' are one form; 'Blocks' and 'block' another."""
+	words = "".join(ch if ch.isalnum() else " " for ch in str(value or "").lower()).split()
+	if words:
+		words[-1] = uom_resolve._singular(words[-1])
+	return " ".join(words)
+
+
+def _normal_package(value) -> str:
+	"""'22 × 3 oz (85 g)', '22 x 3oz (85g)' and '22X3 OZ' compare equal; the metric aside does not count."""
+	text = str(value or "").lower().replace("×", "x")
+	text = text.split("(")[0]
+	return "".join(ch for ch in text if ch.isalnum() or ch == ".")
 
 
 # ── 123d. register_product_label ─────────────────────────────────────────────
@@ -20436,6 +20549,8 @@ def _label_blanks(item_code: str, fields: dict, record, result: dict) -> tuple:
 		"ppe_requirements": fields.get("ppe_requirements"),
 		"pesticide_use_scope": fields.get("pesticide_use_scope") or result.get("pesticide_use_scope"),
 		"storage_disposal": fields.get("storage_disposal"),
+		"product_form": fields.get("product_form"),
+		"package_size": fields.get("package_size"),
 		"restricted_use": 1 if record.get("restricted_use") else None,
 	}
 	# The phone sends `{name, concentration, unit, cas}`; the Item column keeps

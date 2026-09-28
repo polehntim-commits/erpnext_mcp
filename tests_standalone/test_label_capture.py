@@ -7,6 +7,7 @@ getting attached to the item", "Its not a Crop Protection Product". Contract:
 """
 
 import unittest
+from typing import ClassVar
 from unittest import mock
 
 import frappe
@@ -446,7 +447,7 @@ class AnOnDeviceAssessmentIsAdvisory(unittest.TestCase):
 	"""DVAL-2026-0007: the on-device model called 12455-97-3240 malformed and a
 	100% ingredient total implausible, and flagged PROWLER® on its own."""
 
-	ASSESSMENT = {
+	ASSESSMENT: ClassVar[dict] = {
 		"status": "Flagged",
 		"confidence": 0.6,
 		"reasoning": "several inconsistencies",
@@ -463,6 +464,18 @@ class AnOnDeviceAssessmentIsAdvisory(unittest.TestCase):
 				"code": "on_device_finding",
 				"message": "100% is implausible",
 			},
+			{
+				"severity": "error",
+				"field": "rei_hours",
+				"code": "on_device_finding",
+				"message": "No REI is stated",
+			},
+			{
+				"severity": "error",
+				"field": "storage_disposal",
+				"code": "on_device_finding",
+				"message": "The storage statement is cut off mid-sentence. " * 10,
+			},
 		],
 	}
 
@@ -478,6 +491,68 @@ class AnOnDeviceAssessmentIsAdvisory(unittest.TestCase):
 		self.assertEqual({entry["severity"] for entry in kept}, {"warning"})
 		self.assertEqual(merged["llm_model"], "apple-foundation-models")
 
+	def test_findings_the_rules_contradict_are_dropped_and_the_rest_cut_short(self):
+		_, merged = self.merged("apple-foundation-models")
+		kept = [entry for entry in merged["issues"] if entry.get("code") == "on_device_finding"]
+		# the well-formed EPA number, the 100% total and the REI on a mouse bait go
+		self.assertEqual([entry["field"] for entry in kept], ["storage_disposal"])
+		self.assertEqual(merged["advisory_dropped"], 3)
+		self.assertLessEqual(len(kept[0]["message"]), document_intel.ADVISORY_MESSAGE_LIMIT)
+
 	def test_an_mcp_clients_model_still_judges(self):
 		_, merged = self.merged("claude-opus-5-5")
 		self.assertEqual(merged["status"], "Flagged")
+		self.assertEqual(
+			len([entry for entry in merged["issues"] if entry.get("code") == "on_device_finding"]), 4
+		)
+
+
+# ── 9. two products under one brand stay two Items ──────────────────────────
+class TwoProwlersAreTwoProducts(LabelTestCase):
+	"""Tim: PROWLER™ (a refillable station, blocks) and PROWLER® (Place Pacs,
+	22 × 3 oz, EPA 12455-97-3240) are TWO products — don't merge them."""
+
+	def setUp(self):
+		super().setUp()
+		self.foreman()
+		self.station = mobile_api.create_item(
+			item_name="PROWLER Rat & Mouse Killer Bait Station",
+			barcode="048745228174",
+			product_form="Bait Station",
+		)["name"]
+		self.pacs = mobile_api.create_item(
+			item_name="PROWLER Place Pacs (22 × 3 oz)",
+			barcode="048745221441",
+			epa_registration_number="12455-97-3240",
+			pesticide_use_scope="Non-crop",
+			product_form="Place Pacs",
+			package_size="22 × 3 oz (85 g)",
+		)["name"]
+		STORE.commit()
+
+	def test_the_place_pac_barcode_is_the_place_pacs_only(self):
+		answer = mobile_api.match_product(barcode="048745221441")
+		self.assertEqual(answer["verdict"], "existing")
+		self.assertEqual([row["item_code"] for row in answer["matches"]], [self.pacs])
+
+	def test_registration_form_and_package_together_are_the_same_product(self):
+		answer = mobile_api.match_product(
+			epa_registration_number="12455-97", product_form="place pac", package_size="22 x 3oz"
+		)
+		self.assertEqual(answer["verdict"], "existing")
+		self.assertEqual(answer["matches"][0]["match"], "same")
+
+	def test_a_new_form_under_the_registration_is_related_and_not_merged(self):
+		answer = mobile_api.match_product(
+			epa_registration_number="12455-97-3240", product_form="Pellets", package_size="4 lb"
+		)
+		self.assertEqual(answer["verdict"], "related")
+		self.assertEqual(answer["matches"][0]["match"], "same_registration_other_form")
+
+	def test_the_name_is_never_compared(self):
+		answer = mobile_api.match_product(epa_registration_number="999-1", product_form="Bait Station")
+		self.assertEqual(answer, {"verdict": "new", "matches": []})
+
+	def test_nothing_to_match_on_is_refused(self):
+		with self.assertRaises(frappe.ValidationError):
+			mobile_api.match_product()

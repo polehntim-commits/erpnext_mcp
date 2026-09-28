@@ -1145,6 +1145,41 @@ _ITEM_FIELDS = (
 		),
 		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
 	),
+	# v0.202.0. Tim: PROWLER™ (a refillable bait station, blocks) and PROWLER®
+	# (Place Pacs, 22 × 3 oz) are TWO products under one brand. What tells them
+	# apart on the shelf is the form and the package, so the record keeps both,
+	# and `/mobile/match_product` compares them — never the name.
+	ComplianceField(
+		fieldname="product_form",
+		label="Product Form",
+		fieldtype="Data",
+		framework="FIFRA label net contents and product identity — 40 CFR 156.10(a)(1), 156.10(d)",
+		why=(
+			"One registration is sold in several forms — place pacs, blocks, pellets, a refillable "
+			"station — and each is a different thing on the shelf with a different rate and count. "
+			"The form is what a label says the product IS, beside the brand."
+		),
+		operational=(
+			"What a scanned label is matched on. Two products under one brand are two Items; "
+			"the same product scanned again finds the one already on file."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="package_size",
+		label="Package Size",
+		fieldtype="Data",
+		framework="FIFRA label net contents — 40 CFR 156.10(d)",
+		why=(
+			"The net contents as printed — '22 × 3 oz (85 g)' — which is how many placeable units "
+			"a package holds and what they weigh."
+		),
+		operational=(
+			"How many place pacs or blocks one package puts on the shelf, and the second half "
+			"of telling one product from its sibling under the same registration."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
 	ComplianceField(
 		fieldname="label_scan_validation",
 		label="Label Scan Validation",

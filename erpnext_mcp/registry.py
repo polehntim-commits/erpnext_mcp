@@ -259,6 +259,14 @@ _ITEM_LABEL_ARGS = {
 		"under 'Pest Control Products' and Crop under 'Crop Protection Products'. '' clears it.",
 	),
 	"storage_disposal": _field(_STRING, "The label's storage and disposal statement. '' clears it."),
+	"product_form": _field(
+		_STRING,
+		"v0.202.0. What the product is on the shelf: 'Place Pacs', 'Blocks', 'Bait Station', "
+		"'Pellets'. Two forms under one registration are two Items. '' clears it.",
+	),
+	"package_size": _field(
+		_STRING, "v0.202.0. Net contents as printed, e.g. '22 × 3 oz (85 g)'. '' clears it."
+	),
 	"label_scan_validation": _field(
 		_STRING,
 		"The Document Validation (a scanned label) these values were read from. "
