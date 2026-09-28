@@ -1,0 +1,137 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-09-28 12:00:00.000000",
+ "description": "v0.206.0. What the phone's on-device reader is told and checked against for one document type: the FoundationModels instructions and schema, the section hints, deterministic extractors, rules and the advisory findings to drop. Configuration, never code. Versioned by copy: exactly one Published row per document type; publishing a Draft supersedes the old one, which stays so every Document Validation's config_version can be traced. docs/design/config_flags_triage.md §1.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "document_type",
+  "version",
+  "status",
+  "config_version",
+  "config_section",
+  "config_json",
+  "provenance_section",
+  "notes",
+  "authored_by",
+  "published_by",
+  "published_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Data",
+   "label": "Document Type",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Pesticide Label, Receipt, I-9 Document, … — the same value Document Validation's document_type carries."
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "document_type + version is unique. The config_version string is \"<document_type>@<version>\"; the docname is that string."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nPublished\nSuperseded",
+   "default": "Draft",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Only publish_extraction_config makes a row Published; the previous Published row becomes Superseded."
+  },
+  {
+   "fieldname": "config_version",
+   "fieldtype": "Data",
+   "label": "Config Version",
+   "read_only": 1,
+   "description": "\"<document_type>@<version>\", written by the controller. What a Document Validation records."
+  },
+  {
+   "fieldname": "config_section",
+   "fieldtype": "Section Break",
+   "label": "Config"
+  },
+  {
+   "fieldname": "config_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Config JSON",
+   "reqd": 1,
+   "description": "The body, schema version 1: instructions, fields, sections, extractors, rules, advisory_drop, llm. Checked by update_extraction_config before it is written."
+  },
+  {
+   "fieldname": "provenance_section",
+   "fieldtype": "Section Break",
+   "label": "Provenance"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "description": "Why this version exists — usually the App Feedback it answers."
+  },
+  {
+   "fieldname": "authored_by",
+   "fieldtype": "Select",
+   "label": "Authored By",
+   "options": "System\nOperator\nAI-proposed",
+   "default": "Operator"
+  },
+  {
+   "fieldname": "published_by",
+   "fieldtype": "Data",
+   "label": "Published By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "published_on",
+   "fieldtype": "Datetime",
+   "label": "Published On",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-28 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Extraction Config",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "config_version"
+}

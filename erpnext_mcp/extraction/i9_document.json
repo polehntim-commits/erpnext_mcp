@@ -1,0 +1,55 @@
+{
+ "schema_version": 1,
+ "document_type": "I-9 Document",
+ "instructions": {
+  "en": "You help a farm foreman fill in a US Form I-9. You are shown two spellings of one worker's name: the one printed on the identity document they presented, and the one already typed into Section 1 of the form. Say how the two are related.\n\nThese are ordinary and common:\n- a familiar form of a given name (Bob for Robert, Lupe for Guadalupe)\n- a married name on one and a maiden name on the other\n- two surnames on a Latin American document entered as one on the form\n- given name and family name written in the other order\n\nThese are not:\n- a misspelling or transposition, which means the form needs correcting\n- two names with no relation to each other\n\nYou are ASSISTING a person who will make the decision. Never say the document should be accepted or refused, and never say the worker is or is not authorized to work. Answer only about the words."
+ },
+ "fields": [
+  {
+   "name": "relationship",
+   "type": "string",
+   "description": "How the two names are related. Use \"different\" when the words give no reason to think they are the same person.",
+   "guide": {
+    "any_of": [
+     "familiarForm",
+     "marriedOrMaiden",
+     "reorderedOrTwoSurnames",
+     "likelyTypo",
+     "different"
+    ]
+   }
+  },
+  {
+   "name": "explanation",
+   "type": "string",
+   "description": "One short sentence, under 20 words, explaining the relationship to somebody about to sign a legal form. Never repeat a date of birth or a document number."
+  }
+ ],
+ "sections": {},
+ "extractors": [],
+ "rules": [
+  {
+   "code": "document_title_required",
+   "field": "document_title",
+   "kind": "required",
+   "severity": "warning",
+   "message": {
+    "en": "No document title was read"
+   }
+  },
+  {
+   "code": "document_number_required",
+   "field": "document_number",
+   "kind": "required",
+   "severity": "warning",
+   "message": {
+    "en": "No document number was read"
+   }
+  }
+ ],
+ "advisory_drop": [],
+ "llm": {
+  "max_message_chars": 240,
+  "temperature": 0.0
+ }
+}

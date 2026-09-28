@@ -905,9 +905,10 @@ class ToolRegistration(unittest.TestCase):
 		# v0.186.0 adds one write, `post_reimbursement_receipt`: an approved check
 		# paying back a share of an expense, booked as a draft Journal Entry.
 		# v0.202.0 adds one write, `set_uom_aliases`: "pacs" for Place Pac without a deploy.
-		self.assertEqual(len(self.registry.TOOLS), 932)
-		self.assertEqual(len(self.registry.READ_TOOLS), 461)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 471)
+		# v0.206.0 adds five reads and six writes: extraction config, feature flags, triage.
+		self.assertEqual(len(self.registry.TOOLS), 943)
+		self.assertEqual(len(self.registry.READ_TOOLS), 466)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 477)
 
 
 if __name__ == "__main__":

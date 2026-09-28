@@ -705,6 +705,8 @@ def complete_task_via_mobile(args: dict) -> ToolResult:
 		"checklist",
 		"language",
 		"client_capabilities",
+		# v0.206.0. The feature flags the phone read (config_flags_triage.md §2).
+		"feature_flags",
 	):
 		if args.get(key) is not None:
 			inner[key] = args.get(key)

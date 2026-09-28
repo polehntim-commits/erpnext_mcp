@@ -699,6 +699,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"submit_inspection",
 		"search_link",
 		"report_device_capabilities",
+		# v0.206.0 — extraction config and feature flags (SERVER_CHANGES §53).
+		"get_extraction_config",
+		"get_feature_flags",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

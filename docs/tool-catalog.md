@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 932 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 943 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 461 read tools are **on** by default and can be switched off individually. A
+All 466 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20731,3 +20731,36 @@ nothing. Unattended callers pass `automation`:
 update_expense_receipt(name="EXR-2026-0016", supplier="Coastal Farm and Ranch",
                        linked_by="automation")
 ```
+
+## v0.206.0 — from hours to moments: extraction config, feature flags, triage
+
+Contract `docs/design/config_flags_triage.md`. Most field feedback is now fixed
+with a few MCP calls and no iOS release; the phone downloads configuration,
+never code.
+
+| Tool | What it does |
+| --- | --- |
+| `list_extraction_configs` | Every version of each document type's on-device extraction config, and the `config_version` in use. Read |
+| `get_extraction_config` | One config body: FoundationModels instructions and schema, sections, extractors, rules, `advisory_drop`. Published by default, else the built-in. Read |
+| `preview_extraction_config` | Dry run of a config against a stored Document Validation: carved sections, extracted values, rule results, advisory findings dropped/kept, and a diff. Read |
+| `update_extraction_config` | Check a body (portable regex subset, unique fields, known sections and rule kinds) and save it as a **Draft** at the next version. Write |
+| `publish_extraction_config` | Draft → Published; the previous version → Superseded. Every phone fetches it. Write |
+| `list_feature_flags` | Flag / threshold / text rows with company, role and app-version targeting. Read |
+| `set_feature_flag` | Upsert a row on (key, company, roles, version range). Most specific wins; no row = the caller's default. Write |
+| `list_triage_queue` | Tell the Farm notes by triage state with evidence, proposal and ticket. Read |
+| `propose_triage_fix` | Attach `calls` (existing write tools, arguments checked against their schemas) or a `ticket`. Never applied. Write |
+| `approve_triage_proposal` | Run the calls through the normal dispatcher (each tool's own switch, role gate and audit row), stop at the first failure, then reply and resolve. Write |
+| `reject_triage_proposal` | Decline with a reason; the note stays open. Write |
+
+Every write is off by default and needs **System Manager or Farm Manager**.
+Worked example — a worker says "Place Pac shows as Noi":
+
+```json
+{"tool": "propose_triage_fix", "arguments": {"feedback": "AFB-2026-00031",
+ "triage_class": "Data or config", "summary": "Place Pac reads as pacs",
+ "calls": [{"tool": "set_uom_aliases", "arguments": {"uom": "Place Pac", "add": ["pacs", "place pacs"]},
+            "why": "the label prints 'place pacs'"}]}}
+```
+
+A manager then presses **Approve proposal** on the App Feedback form (or calls
+`approve_triage_proposal`); the worker gets a "Fixed: …" reply.

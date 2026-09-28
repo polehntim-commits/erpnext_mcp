@@ -1386,6 +1386,7 @@ def complete_task_via_mobile(
 	checklist=None,
 	language=None,
 	client_capabilities=None,
+	feature_flags=None,
 ) -> dict:
 	"""Finish one task: file the evidence, write the compliance record.
 
@@ -1478,6 +1479,13 @@ def complete_task_via_mobile(
 			_json_argument(client_capabilities, "client_capabilities")
 			if isinstance(client_capabilities, str)
 			else client_capabilities,
+		),
+		# v0.206.0. The feature flags the phone read, stored on the assignment.
+		(
+			"feature_flags",
+			_json_argument(feature_flags, "feature_flags")
+			if isinstance(feature_flags, str)
+			else feature_flags,
 		),
 	):
 		if value is not None:
@@ -7126,6 +7134,8 @@ def validate_document(
 	llm_assessment=None,
 	llm_model=None,
 	expected_name=None,
+	config_version=None,
+	feature_flags=None,
 ) -> dict:
 	"""The phone has read a label. This decides whether to believe it. v0.69.0.
 
@@ -7196,6 +7206,14 @@ def validate_document(
 		("llm_assessment", llm_assessment),
 		("llm_model", llm_model),
 		("expected_name", expected_name),
+		# v0.206.0. Which extraction config the phone read with, and its flags.
+		("config_version", config_version),
+		(
+			"feature_flags",
+			_json_argument(feature_flags, "feature_flags")
+			if isinstance(feature_flags, str)
+			else feature_flags,
+		),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -12125,6 +12143,53 @@ def report_device_capabilities(
 	return device_capabilities.report(
 		user, str(device_identifier or ""), str(app_version or ""), schema_version, kinds or []
 	)
+
+
+# ── 112f. get_extraction_config ── v0.206.0 ─────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_extraction_config", limit=guard.READ_LIMIT)
+def get_extraction_config(user: str, document_type=None, known_version=None) -> dict:
+	"""The on-device reader's config for one document type (config_flags_triage.md §1.4).
+
+	Configuration, never code: instructions and schema for FoundationModels,
+	section hints, extractors, rules and advisory_drop, as JSON the app's fixed
+	Swift interprets. `known_version` equal to the one in force answers
+	`{not_modified: true}` so a launch costs a few bytes."""
+	from .. import document_intel, extraction_config
+
+	guard.require_scope(user)
+	wanted = document_intel.normalise_document_type(str(document_type or ""))
+	if not wanted:
+		frappe.throw(
+			f"document_type must be one of {', '.join(document_intel.DOCUMENT_TYPES)}.",
+			frappe.ValidationError,
+		)
+	body, config_version = extraction_config.active(wanted)
+	if body is None:
+		return {"document_type": wanted, "config_version": None, "config": None}
+	if str(known_version or "").strip() == config_version:
+		return {"document_type": wanted, "not_modified": True, "config_version": config_version}
+	return {"document_type": wanted, "config_version": config_version, "config": body}
+
+
+# ── 112g. get_feature_flags ── v0.206.0 ─────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_feature_flags", limit=guard.READ_LIMIT)
+def get_feature_flags(user: str, app_version=None, company=None) -> dict:
+	"""The caller's resolved flags and thresholds (config_flags_triage.md §2).
+
+	For the caller's company (or `company`, when this account reaches it), roles
+	and app version. A key with no applicable row is absent — the app's own
+	default applies, so new behaviour ships dark."""
+	from .. import flags
+
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) if company else (allowed[0] if allowed else "")
+	return {
+		"flags": flags.for_user(user, entity or "", str(app_version or "") or None),
+		"company": entity or None,
+		"evaluated_at": frappe.utils.now(),
+	}
 
 
 # ── 113. get_payroll_register ────────────────────────────────────────────────
@@ -20688,6 +20753,8 @@ def register_product_label(
 	llm_model=None,
 	fetch_epa_label=None,
 	company=None,
+	config_version=None,
+	feature_flags=None,
 ) -> dict:
 	"""File a product's label: photos on the Item, a validation, EPA's record and PDF."""
 	from .. import epa_ppls
@@ -20749,6 +20816,15 @@ def register_product_label(
 		validation_args["llm_assessment"] = _json_argument(llm_assessment, "llm_assessment")
 	if str(llm_model or "").strip():
 		validation_args["llm_model"] = str(llm_model).strip()
+	# v0.206.0. The extraction config the phone read the label with, and its flags.
+	if str(config_version or "").strip():
+		validation_args["config_version"] = str(config_version).strip()
+	if feature_flags not in (None, "", {}):
+		validation_args["feature_flags"] = (
+			_json_argument(feature_flags, "feature_flags")
+			if isinstance(feature_flags, str)
+			else feature_flags
+		)
 	result = docvalidation.validate_document_extraction(validation_args).data
 	validation_name = result.get("name") or result.get("validation_id")
 	if validation_name and compat.has_field("Item", "label_scan_validation"):

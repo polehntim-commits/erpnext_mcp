@@ -34,7 +34,11 @@
   "revalidation_due",
   "last_revalidated",
   "revalidation_col",
-  "revalidation_count"
+  "revalidation_count",
+  "config_section",
+  "config_version",
+  "config_col",
+  "feature_flags"
  ],
  "fields": [
   {
@@ -214,11 +218,37 @@
    "fieldtype": "Int",
    "label": "Revalidation Count",
    "read_only": 1
+  },
+  {
+   "fieldname": "config_section",
+   "fieldtype": "Section Break",
+   "label": "Configuration",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "config_version",
+   "fieldtype": "Data",
+   "label": "Config Version",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "v0.206.0. The Extraction Config that read this document, \"<document_type>@<version>\" (or @builtin-1). Sent by the phone; a server-side validation writes the one it used."
+  },
+  {
+   "fieldname": "config_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "feature_flags",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Feature Flags",
+   "read_only": 1,
+   "description": "v0.206.0. The flags in force when this was made: what the phone sent plus any the server read."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-14 09:00:00.000000",
+ "modified": "2026-09-28 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Document Validation",

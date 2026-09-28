@@ -267,6 +267,13 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 		# by Frappe, so one entity really can be made to ask for a document
 		# another does not — without two spellings of the certificate itself.
 		#
+		# THE v0.206.0 ADDITION IS `Extraction Config`, the Inspection Template
+		# argument again: it is how a PHONE READS a kind of paper — the prompt, the
+		# section headings, the rules for an EPA number — and names no worker, no
+		# product anybody owns and no entity. The Document Validations it produces
+		# link to Company and are scoped by Frappe as before. (`Farm Feature Flag`
+		# carries a Company link, empty for "every company", and is not here.)
+		#
 		# THE v0.162.0 ADDITION IS `Farm Asset Type`, and it is the same argument
 		# about a WORD. The record says that "Irrigation Valve" is a kind of thing
 		# this farm keeps; it names no valve, no company and no yard. The rows
@@ -405,6 +412,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Compliance Rule",
 				"County Tax Lot",
 				"Crop",
+				"Extraction Config",
 				"Farm Asset Type",
 				"Farm Translation",
 				"Federal Tax Table",

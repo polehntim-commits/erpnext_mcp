@@ -66,6 +66,7 @@ from .. import (
 	compat,
 	completions,
 	datetimes,
+	flags,
 	minors,
 	qualifications,
 	records,
@@ -2400,6 +2401,9 @@ def complete_farm_task(args: dict) -> ToolResult:
 	doc.completed_at = as_str(args, "completed_at") or now
 	if form_answers is not None and compat.has_field(FARM_TASK_ASSIGNMENT, "form_answers"):
 		doc.form_answers = json.dumps(form_answers)
+	# v0.206.0. The feature flags the phone read for this completion (§2).
+	if args.get("feature_flags") and compat.has_field(FARM_TASK_ASSIGNMENT, "feature_flags"):
+		flags.stamp_all(doc, flags.clean(args.get("feature_flags")))
 	doc.completion_narrative = narrative
 	doc.findings_text = findings
 	doc.witness = witness

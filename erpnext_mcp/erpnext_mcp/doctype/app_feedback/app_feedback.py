@@ -87,3 +87,39 @@ class AppFeedback(Document):
 
 		# Recomputed rather than trusted — see the module docstring.
 		self.has_screenshot = 1 if str(self.screenshot or "").strip() else 0
+
+	# ── triage, from the Desk ── v0.206.0 ───────────────────────────────────
+	#
+	# The App Feedback form's Approve proposal / Reject proposal buttons. They
+	# run the same functions as the MCP tools, behind the same switches and the
+	# same System Manager / Farm Manager gate, and every proposed call still
+	# goes through `registry.dispatch`. docs/design/config_flags_triage.md §3.
+
+	@frappe.whitelist()
+	def approve_triage_proposal(self, note=""):
+		from erpnext_mcp.tools import moments
+
+		return _desk_triage("approve_triage_proposal", lambda: moments.approve(self.name, str(note or "")))
+
+	@frappe.whitelist()
+	def reject_triage_proposal(self, reason=""):
+		from erpnext_mcp.tools import moments
+
+		return _desk_triage("reject_triage_proposal", lambda: moments.reject(self.name, str(reason or "")))
+
+
+def _desk_triage(tool, run):
+	from erpnext_mcp import settings
+	from erpnext_mcp.errors import ToolError
+
+	if not settings.tool_enabled(tool):
+		frappe.throw(
+			_(
+				"{0} is switched off on this site. An operator must tick 'allow_{0}' in ERPNext MCP "
+				"Settings to enable it."
+			).format(tool)
+		)
+	try:
+		return run()
+	except ToolError as exc:
+		frappe.throw(str(exc))

@@ -1,0 +1,157 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-09-28 12:00:00.000000",
+ "description": "v0.206.0. Feature flags and thresholds as data: one row per key and scope. The most specific active row wins — company and role, then company, then global and role, then global; rows outside their app-version range are skipped; no row means the caller's own default, so everything new ships dark. docs/design/config_flags_triage.md §2.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "flag_key",
+  "kind",
+  "enabled",
+  "number_value",
+  "text_value",
+  "active",
+  "scope_section",
+  "company",
+  "roles",
+  "min_app_version",
+  "max_app_version",
+  "about_section",
+  "description",
+  "owner_area"
+ ],
+ "fields": [
+  {
+   "fieldname": "flag_key",
+   "fieldtype": "Data",
+   "label": "Flag Key",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "lower_snake_case, e.g. label_capture_v2 or bait_check_active_days."
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Flag\nThreshold\nText",
+   "default": "Flag",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0",
+   "depends_on": "eval:doc.kind=='Flag'",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "number_value",
+   "fieldtype": "Float",
+   "label": "Number Value",
+   "depends_on": "eval:doc.kind=='Threshold'"
+  },
+  {
+   "fieldname": "text_value",
+   "fieldtype": "Small Text",
+   "label": "Text Value",
+   "depends_on": "eval:doc.kind=='Text'"
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Active",
+   "default": "1",
+   "in_list_view": 1,
+   "description": "A row switched off is ignored, as if it did not exist."
+  },
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "Applies To"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Company",
+   "in_standard_filter": 1,
+   "description": "Empty means every company."
+  },
+  {
+   "fieldname": "roles",
+   "fieldtype": "Small Text",
+   "label": "Roles",
+   "description": "Optional, one role per line. The row applies only to a user holding one of them."
+  },
+  {
+   "fieldname": "min_app_version",
+   "fieldtype": "Data",
+   "label": "Min App Version",
+   "description": "Optional. A phone below this version skips the row (semver compare)."
+  },
+  {
+   "fieldname": "max_app_version",
+   "fieldtype": "Data",
+   "label": "Max App Version",
+   "description": "Optional. A phone above this version skips the row."
+  },
+  {
+   "fieldname": "about_section",
+   "fieldtype": "Section Break",
+   "label": "About"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "description": "Why the flag exists."
+  },
+  {
+   "fieldname": "owner_area",
+   "fieldtype": "Data",
+   "label": "Owner Area",
+   "description": "What reads it, e.g. ios.label_capture or server.rodent_bait."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-28 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Feature Flag",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "flag_key"
+}

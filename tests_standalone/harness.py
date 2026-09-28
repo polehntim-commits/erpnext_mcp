@@ -1931,6 +1931,8 @@ APP_DOCTYPES = {
 	# it from this release, so a double without it makes every asset tool refuse
 	# with "run bench migrate" — which reads as a registry bug and is not one.
 	"Farm Asset Type": "farm_asset_type",
+	"Extraction Config": "extraction_config",
+	"Farm Feature Flag": "farm_feature_flag",
 	# v0.118.0, Farm App Retirement Cycle 1. The five registers the Flask
 	# sidecar held and this app did not. `IoT Reading` denormalises its field
 	# and company off the device AT WRITE TIME rather than linking through —

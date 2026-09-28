@@ -3,6 +3,41 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.206.0 — 2026-09-28 — from hours to moments: extraction config, feature flags, feedback triage
+
+**943 tools** (466 read, 477 write): `list_extraction_configs`, `get_extraction_config`,
+`preview_extraction_config`, `list_feature_flags`, `list_triage_queue` (read); `update_extraction_config`,
+`publish_extraction_config`, `set_feature_flag`, `propose_triage_fix`, `approve_triage_proposal`,
+`reject_triage_proposal` (write, default off, System Manager or Farm Manager). **Two new routes**
+(143 mobile methods): `get_extraction_config`, `get_feature_flags`. Contract
+`docs/design/config_flags_triage.md`; iOS SERVER_CHANGES §53.
+
+- **Server-driven extraction config.** New doctype **Extraction Config**, versioned by copy (Draft →
+  Published → Superseded, one Published per document type): FoundationModels instructions and schema,
+  section hints (heading and pattern forms), deterministic extractors, rules (`pattern`, `required`,
+  `sum_max`/`sum_min`, `range`, `one_of`, `not_applicable`, each with `when`) and `advisory_drop`, in a
+  portable regex subset both ICU and Python read the same way. Built-ins for Pesticide Label, Receipt and
+  I-9 Document ship in `erpnext_mcp/extraction/` (the same files the app bundles) and are seeded as
+  version 1 Published, create-only. **The server's advisory filter is now the config's `advisory_drop`**;
+  the built-in reproduces v0.202.0 §8.3 exactly. Document Validation records **`config_version`**
+  (sent by the phone, else the one in force) and **`feature_flags`**.
+- **Feature flags and thresholds as data.** New doctype **Farm Feature Flag** (Flag / Threshold / Text),
+  company-scoped with optional roles and app-version range; the most specific active row wins, and no
+  row is the caller's default — everything ships dark, nothing is seeded. `flags.value` / `enabled` /
+  `stamp`; the phone reads its resolved map from `get_feature_flags`. Completions store the flags the
+  phone read on the Farm Task Assignment.
+- **Tell the Farm triage.** App Feedback gains `triage_class`, `triage_state`, `triage_summary`,
+  `evidence_json`, `proposal_json`, `ticket_json`, `applied_json`. A deterministic classifier runs on
+  arrival and links the records a note names (FT-, DVAL-, AFB-, CRULE-, item codes, asset tags, the
+  reference, the screenshot). `propose_triage_fix` checks every call names an existing write tool with
+  arguments that fit its schema; `approve_triage_proposal` runs them through `registry.dispatch` (each
+  tool's own switch, role gate and audit row), stops at the first failure without re-running what
+  already applied, then replies "Fixed: …" and resolves. **Approve proposal / Reject proposal** buttons
+  on the App Feedback form run the same code behind the same switches.
+- **Migrate:** the two new doctypes; new fields on App Feedback, Document Validation and Farm Task
+  Assignment; seeds the three built-in configs; patch `triage_existing_feedback` classifies the open
+  backlog (fills a blank triage only, never proposes).
+
 ## 0.205.0 — 2026-09-28 — configure, not code: programs as data; every field kind on the phone
 
 **932 tools** (461 read, 471 write): `list_programs`, `export_program`, `list_device_capabilities`

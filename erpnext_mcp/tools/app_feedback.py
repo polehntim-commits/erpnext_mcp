@@ -342,6 +342,17 @@ def submit_app_feedback(args: dict) -> ToolResult:
 			frappe.db.set_value(APP_FEEDBACK, doc.name, "screenshot_omitted", "store_failed")
 			omitted = "store_failed"
 
+	# v0.206.0 (config_flags_triage.md §3): a first sort for the triage queue,
+	# with the records the note names linked. It never proposes a change, and a
+	# classifier that throws must not cost the note.
+	triaged = None
+	try:
+		from .. import triage
+
+		triaged = triage.auto_classify(doc.name)
+	except Exception:
+		frappe.log_error(title="app feedback triage", message=frappe.get_traceback())
+
 	person = as_str(args, "caller_user") or caller_employee or "an unidentified caller"
 	screen = values["screen_name"] or "an unnamed screen"
 	return ToolResult(
@@ -351,6 +362,7 @@ def submit_app_feedback(args: dict) -> ToolResult:
 			"duplicate": False,
 			"screenshot_stored": stored,
 			"screenshot_omitted": omitted or None,
+			"triage_class": (triaged or {}).get("triage_class"),
 		},
 		summary=(
 			f"filed app feedback {doc.name} from {person} on {screen}"

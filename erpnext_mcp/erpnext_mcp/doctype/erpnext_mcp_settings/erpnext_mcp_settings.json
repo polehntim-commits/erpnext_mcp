@@ -1043,6 +1043,17 @@
   "allow_export_program",
   "allow_list_device_capabilities",
   "allow_import_program",
+  "allow_list_extraction_configs",
+  "allow_get_extraction_config",
+  "allow_preview_extraction_config",
+  "allow_update_extraction_config",
+  "allow_publish_extraction_config",
+  "allow_list_feature_flags",
+  "allow_set_feature_flag",
+  "allow_list_triage_queue",
+  "allow_propose_triage_fix",
+  "allow_approve_triage_proposal",
+  "allow_reject_triage_proposal",
   "phone_link_doctypes",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
@@ -8066,6 +8077,83 @@
    "fieldname": "allow_import_program",
    "fieldtype": "Check",
    "label": "Import Program"
+  },
+  {
+   "default": "1",
+   "description": "READ. Every version of each document type's on-device extraction config, and which one is in use.",
+   "fieldname": "allow_list_extraction_configs",
+   "fieldtype": "Check",
+   "label": "List Extraction Configs"
+  },
+  {
+   "default": "1",
+   "description": "READ. One extraction config body \u2014 what the phone's reader is told and checked against.",
+   "fieldname": "allow_get_extraction_config",
+   "fieldtype": "Check",
+   "label": "Get Extraction Config"
+  },
+  {
+   "default": "1",
+   "description": "READ. Dry run of a config against a stored Document Validation's OCR \u2014 what would change.",
+   "fieldname": "allow_preview_extraction_config",
+   "fieldtype": "Check",
+   "label": "Preview Extraction Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Check a config body and save it as a Draft at the next version. Never changes what phones read.",
+   "fieldname": "allow_update_extraction_config",
+   "fieldtype": "Check",
+   "label": "Update Extraction Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Publish a Draft extraction config \u2014 every phone fetches it; the previous version is superseded.",
+   "fieldname": "allow_publish_extraction_config",
+   "fieldtype": "Check",
+   "label": "Publish Extraction Config"
+  },
+  {
+   "default": "1",
+   "description": "READ. Feature flag and threshold rows, with their company, role and app-version targeting.",
+   "fieldname": "allow_list_feature_flags",
+   "fieldtype": "Check",
+   "label": "List Feature Flags"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Create or update a feature flag / threshold row. System Manager or Farm Manager.",
+   "fieldname": "allow_set_feature_flag",
+   "fieldtype": "Check",
+   "label": "Set Feature Flag"
+  },
+  {
+   "default": "1",
+   "description": "READ. Tell the Farm notes by triage state, with evidence, proposals and tickets.",
+   "fieldname": "allow_list_triage_queue",
+   "fieldtype": "Check",
+   "label": "List Triage Queue"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Attach a proposed fix (MCP calls) or a ticket to a note. Never applies anything.",
+   "fieldname": "allow_propose_triage_fix",
+   "fieldtype": "Check",
+   "label": "Propose Triage Fix"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Apply a proposal's calls through the normal dispatcher, reply and resolve. Also gates the Desk button.",
+   "fieldname": "allow_approve_triage_proposal",
+   "fieldtype": "Check",
+   "label": "Approve Triage Proposal"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Decline a proposal with a reason; the note stays open. Also gates the Desk button.",
+   "fieldname": "allow_reject_triage_proposal",
+   "fieldtype": "Check",
+   "label": "Reject Triage Proposal"
   },
   {
    "default": "Item\nAsset Register\nHousing Unit\nEmployee\nField\nParcel\nIrrigation Zone\nWarehouse\nSupplier\nCustomer\nCrop\nUOM\nFarm Task\nCertification",

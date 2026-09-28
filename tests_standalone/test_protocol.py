@@ -1150,9 +1150,10 @@ class Catalogue(SeededTestCase):
 		booked once approved as a draft Journal Entry into the bank.
 		"""
 		# v0.202.0 adds one write, `set_uom_aliases`.
-		self.assertEqual(len(registry.TOOLS), 932)
-		self.assertEqual(len(registry.READ_TOOLS), 461)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 471)
+		# v0.206.0 adds five reads and six writes: extraction config, feature flags, triage.
+		self.assertEqual(len(registry.TOOLS), 943)
+		self.assertEqual(len(registry.READ_TOOLS), 466)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 477)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

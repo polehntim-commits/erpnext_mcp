@@ -1,0 +1,124 @@
+{
+ "schema_version": 1,
+ "document_type": "Receipt",
+ "instructions": {
+  "en": "You sort paperwork for a tree-fruit farm in the Pacific Northwest.\nYou are given fields already extracted from a photographed receipt — never the raw scan.\nAnswer only from what you are given. Do not calculate totals and do not invent facts.\n\nThe eight categories, which are fixed and cannot be added to:\n- Fuel: diesel, petrol, propane, off-road dye, DEF — anything burned in an engine or a heater\n- Equipment Parts: parts and repairs for tractors, sprayers, pumps, trailers; a mechanic's invoice\n- Supplies: picking bags, bins, gloves, sprays and chemicals, packing materials, orchard consumables\n- Hardware: a hardware store run: fasteners, timber, wire, tools, irrigation fittings\n- Feed: animal feed and bedding\n- Seed: seed, rootstock, nursery trees, cover crop\n- Fertilizer: fertiliser, soil amendments, foliar nutrients, lime\n- Other: anything that fits none of the above — services, fees, meals, a contractor's labour\n\nSupplier and cost centre must be copied from the lists you are given, or left empty.\nAn empty answer is correct and expected when nothing on the list matches.\n\nThe merchant line often carries a greeting or a tagline — 'Welcome to',\n'Thank you for shopping at', 'Come again to', 'Your hometown store since 1946'.\nThat text is the till being polite. The trading name is what is left after it.\n\nItems may fall in different categories from each other and from the receipt.\nNever restate, correct or invent a price: the money has already been read."
+ },
+ "fields": [
+  {
+   "name": "merchant",
+   "type": "string",
+   "description": "The trading name of the business paid, tidied up: expand obvious abbreviations and drop receipt clutter. IGNORE GREETINGS AND TAGLINES — \"Welcome to\", \"Thank you for shopping at\", \"Your hometown store since 1946\", \"Have a nice day\" are the till talking, not the name. If the merchant line is \"Welcome to Hatt's Downtown 76\", the name is \"Hatt's Downtown 76\". It MUST be a name that appears on the slip. Never guess a brand that is not printed."
+  },
+  {
+   "name": "category",
+   "type": "string",
+   "description": "Which of the farm's eight expense categories this purchase falls in.",
+   "guide": {
+    "any_of": [
+     "Fuel",
+     "Equipment Parts",
+     "Supplies",
+     "Hardware",
+     "Feed",
+     "Seed",
+     "Fertilizer",
+     "Other"
+    ]
+   }
+  },
+  {
+   "name": "supplier",
+   "type": "string",
+   "description": "EXACTLY one of the supplier_records offered, copied character for character, when you are confident the merchant is that supplier. Otherwise the empty string. Never write a supplier that was not offered."
+  },
+  {
+   "name": "cost_center",
+   "type": "string",
+   "description": "EXACTLY one of the cost_centres offered, copied character for character, when the merchant and category clearly belong against it. Otherwise the empty string. Never invent a cost centre."
+  },
+  {
+   "name": "rationale",
+   "type": "string",
+   "description": "One short sentence, under 20 words, saying what on the slip led to the category."
+  },
+  {
+   "name": "items",
+   "type": "array",
+   "description": "One entry for each numbered item, in the same order, keeping its number. Give the item a readable name — expand the till's abbreviations, so \"SHP TWL 12PK\" becomes \"Shop Towels 12 Pack\" — and the category that ONE item falls in, which may differ from the receipt's overall category. Never invent an item that was not listed and never mention prices.",
+   "items": {
+    "index": "integer",
+    "name": "string",
+    "category": "string"
+   }
+  }
+ ],
+ "sections": {},
+ "extractors": [
+  {
+   "field": "amount",
+   "pattern": "(?i)\\b(?:grand\\s+)?total\\b[^0-9$]{0,20}\\$?\\s*([0-9]{1,6}(?:,[0-9]{3})*\\.[0-9]{2})",
+   "group": 1
+  },
+  {
+   "field": "receipt_date",
+   "pattern": "\\b([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})\\b",
+   "group": 1
+  }
+ ],
+ "rules": [
+  {
+   "code": "merchant_required",
+   "field": "merchant",
+   "kind": "required",
+   "severity": "warning",
+   "message": {
+    "en": "No merchant was read off the receipt"
+   }
+  },
+  {
+   "code": "amount_required",
+   "field": "amount",
+   "kind": "required",
+   "severity": "warning",
+   "message": {
+    "en": "No total was read off the receipt"
+   }
+  },
+  {
+   "code": "amount_positive",
+   "field": "amount",
+   "kind": "range",
+   "min": 0.01,
+   "max": 1000000,
+   "severity": "error",
+   "message": {
+    "en": "The receipt total is not a positive amount"
+   }
+  },
+  {
+   "code": "category_known",
+   "field": "category",
+   "kind": "one_of",
+   "values": [
+    "Fuel",
+    "Equipment Parts",
+    "Supplies",
+    "Hardware",
+    "Feed",
+    "Seed",
+    "Fertilizer",
+    "Other"
+   ],
+   "severity": "warning",
+   "message": {
+    "en": "The category is not one of the farm's eight"
+   }
+  }
+ ],
+ "advisory_drop": [],
+ "llm": {
+  "max_message_chars": 240,
+  "temperature": 0.0
+ }
+}

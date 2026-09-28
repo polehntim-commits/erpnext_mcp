@@ -1,0 +1,266 @@
+{
+ "schema_version": 1,
+ "document_type": "Pesticide Label",
+ "instructions": {
+  "en": "You read pesticide labels for a tree-fruit farm's chemical records.\nYou are given text read off a photographed label by OCR. It may be out of order and contain misreadings.\nCopy values exactly as they are printed. Never calculate, convert units (except an REI given in days, to hours), or fill a blank with a typical value. A missing value is answered with -1 or an empty string — that is the correct answer when the label does not say.\nAn REI or PHI you are unsure of must be -1: a wrong interval sends workers into a treated block."
+ },
+ "fields": [
+  {
+   "name": "product_name",
+   "type": "string",
+   "description": "The product's brand name as printed, e.g. \"Warrior II with Zeon Technology\". Empty string if unclear."
+  },
+  {
+   "name": "epa_registration_number",
+   "type": "string",
+   "description": "The EPA Registration Number exactly as printed after \"EPA Reg. No.\", e.g. \"100-1295\" or \"5481-9007-10163\". Digits and hyphens only. Empty string if it is not printed. Never the EPA Establishment No."
+  },
+  {
+   "name": "signal_word",
+   "type": "string",
+   "description": "The signal word printed on the label.",
+   "guide": {
+    "any_of": [
+     "Caution",
+     "Warning",
+     "Danger",
+     "None"
+    ]
+   }
+  },
+  {
+   "name": "rei_hours",
+   "type": "integer",
+   "description": "The Restricted Entry Interval in HOURS, as printed (\"REI of 12 hours\" is 12; \"3 days\" is 72). If several are printed, the LONGEST. -1 if no REI is printed. Never guess a typical value."
+  },
+  {
+   "name": "phi_days",
+   "type": "integer",
+   "description": "The pre-harvest interval in DAYS if the label states one for all crops. -1 if it is only given per crop, or not printed, and always -1 for a product not used on crops."
+  },
+  {
+   "name": "active_ingredients",
+   "type": "array",
+   "description": "Each active ingredient from the ACTIVE INGREDIENT box, with its percentage.",
+   "items": {
+    "name": "string",
+    "concentration": "number"
+   }
+  },
+  {
+   "name": "crop_rates",
+   "type": "array",
+   "section": "rate",
+   "description": "One row per crop — or, on a product used against pests rather than on a crop (a rodenticide, a bait station, an insect bait), one row per pest — in the directions for use: the crop or pest, the rate or rate range exactly as printed with its unit, and that crop's PHI in days (-1 if not printed, and always -1 for a pest). Only crops or pests that are printed. For a bait, the rate is the count of bait per placement from the directions, e.g. \"1 place pac per bait placement\"; never PPE, first aid, laundry or phone-number text.",
+   "items": {
+    "crop": "string",
+    "rate": "string",
+    "phi_days": "integer"
+   }
+  },
+  {
+   "name": "pesticide_use_scope",
+   "type": "string",
+   "description": "Where the product is used: Crop if the label gives directions for crops (fruit, per-acre rates, harvest intervals); Non-crop for rodent baits, bait stations, burrows, buildings and structural pest control with no crop directions; Unknown if the text doesn't say.",
+   "guide": {
+    "any_of": [
+     "Crop",
+     "Non-crop",
+     "Unknown"
+    ]
+   }
+  },
+  {
+   "name": "target_pests",
+   "type": "array",
+   "description": "The pests the label says the product controls, as printed, e.g. \"Norway rats\", \"House mice\", \"Meadow voles\". Empty if none are named.",
+   "items": {
+    "value": "string"
+   }
+  },
+  {
+   "name": "storage_disposal",
+   "type": "string",
+   "description": "The STORAGE AND DISPOSAL statement copied word for word as printed, at most about 600 characters. Empty string if it is not printed."
+  },
+  {
+   "name": "ppe_requirements",
+   "type": "array",
+   "description": "Each item of personal protective equipment the label requires, as printed, e.g. \"waterproof gloves\". Empty if none is printed.",
+   "items": {
+    "value": "string"
+   }
+  }
+ ],
+ "sections": {
+  "rate": {
+   "start_headings": [
+    "DIRECTIONS FOR USE",
+    "APPLICATION DIRECTIONS",
+    "USE DIRECTIONS",
+    "PLACEMENT"
+   ],
+   "end_headings": [
+    "STORAGE AND DISPOSAL",
+    "PRECAUTIONARY STATEMENTS",
+    "FIRST AID",
+    "ENVIRONMENTAL HAZARDS"
+   ],
+   "exclude_patterns": [
+    "(?i)launder",
+    "(?i)first aid",
+    "(?i)poison control",
+    "(?i)\\b1-?800-"
+   ]
+  },
+  "package": {
+   "start_patterns": [
+    "(?i)\\b\\d+\\s*[x×]\\s*\\d+(\\.\\d+)?\\s*(oz|lb|g)\\b"
+   ],
+   "lines": 1
+  }
+ },
+ "extractors": [
+  {
+   "field": "epa_registration_number",
+   "pattern": "(?i)EPA\\s*Reg\\.?\\s*(?:No\\.?|Number)?\\s*:?\\s*([0-9]{1,7}\\s*-\\s*[0-9]{1,6}(?:\\s*-\\s*[0-9]{1,7})?)",
+   "group": 1
+  },
+  {
+   "field": "signal_word",
+   "pattern": "(?i)\\b(DANGER|WARNING|CAUTION)\\b",
+   "group": 1
+  },
+  {
+   "field": "unit_hint",
+   "section": "package",
+   "pattern": "(?i)(place pacs?|blocks?|pouches?|bait stations?|pellets?)",
+   "group": 1
+  }
+ ],
+ "rules": [
+  {
+   "code": "epa_format",
+   "field": "epa_registration_number",
+   "kind": "pattern",
+   "pattern": "^[0-9]{1,7}-[0-9]{1,6}(-[0-9]{1,7})?$",
+   "severity": "error",
+   "message": {
+    "en": "EPA Reg. No. is not in the NNNN-NN or NNNN-NN-NNNN form"
+   }
+  },
+  {
+   "code": "epa_required",
+   "field": "epa_registration_number",
+   "kind": "required",
+   "severity": "warning",
+   "message": {
+    "en": "No EPA Reg. No. was read off the label"
+   }
+  },
+  {
+   "code": "signal_word_known",
+   "field": "signal_word",
+   "kind": "one_of",
+   "values": [
+    "Caution",
+    "Warning",
+    "Danger",
+    "None"
+   ],
+   "severity": "warning",
+   "message": {
+    "en": "The signal word is not Caution, Warning or Danger"
+   }
+  },
+  {
+   "code": "ingredients_total",
+   "field": "active_ingredients.concentration",
+   "kind": "sum_max",
+   "max": 100.0,
+   "severity": "error",
+   "message": {
+    "en": "Active ingredients total more than 100%"
+   }
+  },
+  {
+   "code": "rei_range",
+   "field": "rei_hours",
+   "kind": "range",
+   "min": 1,
+   "max": 1440,
+   "severity": "warning",
+   "message": {
+    "en": "The REI is outside 1 hour to 60 days"
+   },
+   "when": {
+    "field": "pesticide_use_scope",
+    "equals": "Crop"
+   }
+  },
+  {
+   "code": "phi_range",
+   "field": "phi_days",
+   "kind": "range",
+   "min": 0,
+   "max": 365,
+   "severity": "warning",
+   "message": {
+    "en": "The PHI is outside 0 to 365 days"
+   },
+   "when": {
+    "field": "pesticide_use_scope",
+    "equals": "Crop"
+   }
+  },
+  {
+   "code": "non_crop_na",
+   "kind": "not_applicable",
+   "fields": [
+    "rei_hours",
+    "phi_days",
+    "phi_crop",
+    "target_crops",
+    "crop"
+   ],
+   "when": {
+    "field": "pesticide_use_scope",
+    "equals": "Non-crop"
+   }
+  }
+ ],
+ "advisory_drop": [
+  {
+   "field": "epa_registration_number",
+   "unless_rule_failed": "epa_format"
+  },
+  {
+   "fields": [
+    "rei_hours",
+    "phi_days",
+    "phi_crop",
+    "target_crops",
+    "crop"
+   ],
+   "when": {
+    "field": "pesticide_use_scope",
+    "equals": "Non-crop"
+   }
+  },
+  {
+   "message_pattern": "(?i)\\b(rei|phi|re-?entry|pre-?harvest|harvest interval|per acre)\\b|/\\s*acre\\b",
+   "when": {
+    "field": "pesticide_use_scope",
+    "equals": "Non-crop"
+   }
+  },
+  {
+   "field": "active_ingredients",
+   "message_pattern": "(?i)\\b100(\\.0+)?\\s*(%|percent)"
+  }
+ ],
+ "llm": {
+  "max_message_chars": 240,
+  "temperature": 0.0
+ }
+}

@@ -91,6 +91,8 @@ import difflib
 import json
 import re
 
+from erpnext_mcp import extraction_config
+
 # ── the vocabulary ──────────────────────────────────────────────────────────
 
 #: The `document_type` Select, in the doctype's own order. A caller passing
@@ -2071,33 +2073,25 @@ def is_advisory_model(llm_model) -> bool:
 #: wrote paragraphs; a review screen shows a line.
 ADVISORY_MESSAGE_LIMIT = 240
 
-#: The fields a Non-crop label has none of (see `NON_CROP_EXPECTED_FIELDS`).
-_CROP_ONLY_FIELDS = ("rei_hours", "phi_days", "phi_crop", "target_crops", "crop")
-_CROP_ONLY_WORDS = re.compile(
-	r"\b(rei|phi|re-?entry|pre-?harvest|harvest interval|per acre)\b|/\s*acre\b", re.IGNORECASE
-)
-_HUNDRED_PERCENT = re.compile(r"\b100(\.0+)?\s*(%|percent)", re.IGNORECASE)
+
+def _contradicted(entry: dict, deterministic: dict, config=None) -> str:
+	"""Why a rule contradicts this advisory finding, or "" when none does. §8.3.
+
+	v0.206.0: the list is DATA — the document type's `advisory_drop` in its
+	Extraction Config (docs/design/config_flags_triage.md §1.2). The built-in
+	Pesticide Label config reproduces the v0.202.0 rules exactly: an EPA finding
+	the rules did not also raise, a crop-only finding on a Non-crop label, and
+	"ingredients total 100%"."""
+	if config is None:
+		config, _version = _extraction_config(deterministic.get("document_type"))
+	return extraction_config.drop_reason(entry, config, deterministic)
 
 
-def _contradicted(entry: dict, deterministic: dict) -> str:
-	"""Why a rule contradicts this advisory finding, or "" when none does. §8.3."""
-	field = _text(entry.get("field"))
-	message = _text(entry.get("message"))
-	if field == "epa_registration_number":
-		judged = [
-			row
-			for row in deterministic.get("issues") or ()
-			if row.get("field") == "epa_registration_number" and row.get("severity") in (ERROR, WARNING)
-		]
-		if not judged:
-			return "the EPA number is well-formed by the rules"
-	if deterministic.get("pesticide_use_scope") == SCOPE_NON_CROP and (
-		field in _CROP_ONLY_FIELDS or _CROP_ONLY_WORDS.search(message)
-	):
-		return "a Non-crop label carries no REI, PHI, crop or per-acre rate"
-	if field == "active_ingredients" and _HUNDRED_PERCENT.search(message):
-		return "ingredients totalling 100% is what a label prints"
-	return ""
+def _extraction_config(document_type):
+	try:
+		return extraction_config.active(_text(document_type))
+	except Exception:
+		return extraction_config.builtin(_text(document_type))
 
 
 def merge_llm_assessment(deterministic: dict, assessment, llm_model: str = "") -> dict:
@@ -2164,13 +2158,15 @@ def merge_llm_assessment(deterministic: dict, assessment, llm_model: str = "") -
 		# kept as a warning — a reviewer shown "lacks hyphens" beside a number
 		# the rules accepted learns to ignore the column. The rest are cut to
 		# `ADVISORY_MESSAGE_LIMIT` characters.
+		config, config_version = _extraction_config(deterministic.get("document_type"))
+		limit = extraction_config.message_limit(config) if config else ADVISORY_MESSAGE_LIMIT
 		kept = []
 		for entry in model_issues:
-			if not isinstance(entry, dict) or _contradicted(entry, deterministic):
+			if not isinstance(entry, dict) or _contradicted(entry, deterministic, config):
 				continue
 			message = _text(entry.get("message"))
-			if len(message) > ADVISORY_MESSAGE_LIMIT:
-				message = message[: ADVISORY_MESSAGE_LIMIT - 1].rstrip() + "…"
+			if len(message) > limit:
+				message = message[: limit - 1].rstrip() + "…"
 			kept.append(
 				{
 					**entry,
@@ -2179,6 +2175,8 @@ def merge_llm_assessment(deterministic: dict, assessment, llm_model: str = "") -
 				}
 			)
 		merged["advisory_dropped"] = len(model_issues) - len(kept)
+		if config_version:
+			merged.setdefault("config_version", config_version)
 		model_issues = kept
 		llm_status = ""
 		llm_confidence = None

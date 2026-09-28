@@ -51,11 +51,20 @@
   "resolved_by",
   "resolved_at",
   "replies_section",
-  "replies"
+  "replies",
+  "triage_section",
+  "triage_class",
+  "triage_state",
+  "triage_summary",
+  "triage_col",
+  "evidence_json",
+  "proposal_json",
+  "ticket_json",
+  "applied_json"
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-27 18:00:00.000000",
+ "modified": "2026-09-28 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "App Feedback",
@@ -390,6 +399,69 @@
    "fieldtype": "Table",
    "label": "Replies",
    "options": "Task Note"
+  },
+  {
+   "fieldname": "triage_section",
+   "fieldtype": "Section Break",
+   "label": "Triage",
+   "collapsible": 1,
+   "description": "v0.206.0. docs/design/config_flags_triage.md §3. Classified on arrival; a proposal is only ever applied by a person (Approve proposal)."
+  },
+  {
+   "fieldname": "triage_class",
+   "fieldtype": "Select",
+   "label": "Triage Class",
+   "options": "\nData or config\nCode bug\nFeature request\nQuestion\nDuplicate",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "triage_state",
+   "fieldtype": "Select",
+   "label": "Triage State",
+   "options": "\nAuto-classified\nProposed\nApproved\nApplied\nRejected\nTicketed",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "triage_summary",
+   "fieldtype": "Small Text",
+   "label": "Triage Summary"
+  },
+  {
+   "fieldname": "triage_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "evidence_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Evidence",
+   "read_only": 1,
+   "description": "{screen, reference, screenshot, linked_records: [{doctype, name}], app_version} — written by the classifier."
+  },
+  {
+   "fieldname": "proposal_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Proposal",
+   "read_only": 1,
+   "description": "{calls: [{tool, arguments, why}], proposed_by, proposed_at, authored_by}. Written by propose_triage_fix; applied only by Approve proposal."
+  },
+  {
+   "fieldname": "ticket_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Ticket",
+   "read_only": 1,
+   "description": "{title, repro_steps, expected, actual, suspected_area, affected_records, app_version, severity} for a code change."
+  },
+  {
+   "fieldname": "applied_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Applied",
+   "read_only": 1,
+   "description": "{approved_by, approved_at, results: [{tool, ok, summary, action_log}], note} — which fix was applied, call by call."
   }
  ]
 }

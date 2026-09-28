@@ -827,6 +827,10 @@ ROUTES = (
 	Route("/mobile", mobile_api.submit_inspection),
 	Route("/mobile", mobile_api.search_link),
 	Route("/mobile", mobile_api.report_device_capabilities),
+	# v0.206.0. Extraction config and feature flags as data —
+	# docs/design/config_flags_triage.md §1.4, §2.
+	Route("/mobile", mobile_api.get_extraction_config),
+	Route("/mobile", mobile_api.get_feature_flags),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

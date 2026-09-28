@@ -45,7 +45,8 @@
   "visit_id",
   "idempotency_col",
   "completion_signature",
-  "form_answers"
+  "form_answers",
+  "feature_flags"
  ],
  "fields": [
   {
@@ -296,11 +297,19 @@
    "fieldtype": "Table",
    "label": "Time Segments",
    "options": "Task Time Segment"
+  },
+  {
+   "fieldname": "feature_flags",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Feature Flags",
+   "read_only": 1,
+   "description": "v0.206.0. The feature flags the phone read for this completion."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-03 21:00:00.000000",
+ "modified": "2026-09-28 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Assignment",

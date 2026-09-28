@@ -176,6 +176,7 @@ def after_install() -> None:
 	_soil_compaction_profiles()
 	_employment_types()
 	_farm_designations()
+	_extraction_configs()
 	frappe.db.commit()
 
 
@@ -230,6 +231,24 @@ def after_migrate() -> None:
 	_soil_compaction_profiles()
 	_employment_types()
 	_farm_designations()
+	_extraction_configs()
+
+
+def _extraction_configs() -> None:
+	"""Seed the three built-in extraction configs as version 1 Published. v0.206.0.
+
+	CREATE-ONLY: a type that already has any row is left alone, so an edited and
+	published config is never overwritten by a migrate. docs/design/config_flags_triage.md §1.3.
+	"""
+	try:
+		from . import extraction_config
+
+		made = extraction_config.seed()
+	except Exception as exc:  # pragma: no cover - a seed must not fail a migrate
+		print(f"erpnext_mcp: the built-in extraction configs were not seeded — {type(exc).__name__}: {exc}")
+		return
+	if made:
+		print(f"erpnext_mcp: seeded extraction config(s) {', '.join(made)} as Published.")
 
 
 def _soil_compaction_profiles() -> None:

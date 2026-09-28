@@ -65,7 +65,7 @@ import json
 
 import frappe
 
-from .. import compat, document_intel, roles, security
+from .. import compat, document_intel, extraction_config, flags, roles, security
 from ..args import as_bool, as_date, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -422,8 +422,21 @@ def _store(
 	doc.llm_model = result.get("llm_model") or None
 	doc.revalidation_due = result.get("revalidation_due") or None
 	doc.revalidation_count = 0
+	# v0.206.0 (config_flags_triage.md §1.3, §2): which extraction config read
+	# it, and the flags in force — what the phone sent, else what the server used.
+	if compat.has_field(DOCTYPE, "config_version"):
+		doc.config_version = result.get("config_version") or None
+	if compat.has_field(DOCTYPE, "feature_flags") and result.get("feature_flags"):
+		flags.stamp_all(doc, result["feature_flags"])
 	doc.insert(ignore_permissions=True)
 	return doc
+
+
+def _config_in_force(document_type: str) -> str:
+	try:
+		return extraction_config.active(document_type)[1] or ""
+	except Exception:
+		return ""
 
 
 def _payload(result: dict, validation_id: str, stored: bool) -> dict:
@@ -446,6 +459,8 @@ def _payload(result: dict, validation_id: str, stored: bool) -> dict:
 		"stored": stored,
 		# v0.201.0. Crop or Non-crop, for a pesticide label — which rules it was held to.
 		"pesticide_use_scope": result.get("pesticide_use_scope"),
+		# v0.206.0. Which extraction config this was read and judged with.
+		"config_version": result.get("config_version") or None,
 	}
 
 
@@ -496,6 +511,11 @@ def validate_document_extraction(args: dict) -> ToolResult:
 	deterministic = document_intel.validate_extraction(document_type, ocr_text, fields, context)
 	deterministic["issues"] = list(deterministic["issues"]) + notes + assessment_problems
 	result = document_intel.merge_llm_assessment(deterministic, assessment, llm_model)
+	# v0.206.0. The phone says which config it read with; a server-side run
+	# records the one in force for the type.
+	sent_version = as_str(args, "config_version")[:140]
+	result["config_version"] = sent_version or result.get("config_version") or _config_in_force(document_type)
+	result["feature_flags"] = flags.clean(args.get("feature_flags"))
 
 	validation_id = ""
 	if auto_store:

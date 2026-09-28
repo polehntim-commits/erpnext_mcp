@@ -179,6 +179,7 @@ from .tools import (
 	wizards,
 	workflow,
 )
+from .tools import moments as moment_tools
 from .tools import pest_control as pest_control_tools
 from .tools import programs as program_tools
 
@@ -11807,6 +11808,177 @@ TOOLS = {
 		"one blocks the work on that device). Read-only.",
 		{"company": _field(_STRING, "Only devices on accounts for this company.")},
 		title="List device capabilities",
+	),
+	# ── v0.206.0: extraction config, feature flags, feedback triage ──────────
+	# docs/design/config_flags_triage.md. Configuration, never code.
+	"list_extraction_configs": _tool(
+		moment_tools.list_extraction_configs,
+		"v0.206.0. Every version of each document type's on-device extraction config (Draft / "
+		"Published / Superseded) and which config_version is in use — Published, else the built-in. "
+		"Read-only.",
+		{
+			"document_type": _field(
+				_STRING, "Pesticide Label, Receipt, I-9 Document, … (Document Validation's document_type)."
+			)
+		},
+		title="List extraction configs",
+	),
+	"get_extraction_config": _tool(
+		moment_tools.get_extraction_config,
+		"v0.206.0. One extraction config body — the FoundationModels instructions and schema, "
+		"section hints, extractors, rules and advisory_drop the phone reads. `version` for a "
+		"specific one; otherwise the Published one, else the built-in default. Read-only.",
+		{
+			"document_type": _field(
+				_STRING, "Pesticide Label, Receipt, I-9 Document, … (Document Validation's document_type)."
+			),
+			"version": _field(_STRING, "A version number; default the Published one."),
+		},
+		required=("document_type",),
+		title="Get an extraction config",
+	),
+	"preview_extraction_config": _tool(
+		moment_tools.preview_extraction_config,
+		"v0.206.0. DRY RUN: run a config (a stored `version`, an unsaved `config`, or the one in "
+		"use) against a stored Document Validation's OCR text and extraction. Returns the carved "
+		"sections, extracted values, rule results, the on-device model findings that would be "
+		"dropped or kept, and a diff against what the validation recorded. Use it before "
+		"publish_extraction_config. Read-only.",
+		{
+			"validation": _field(_STRING, "A Document Validation name, e.g. DVAL-2026-0042."),
+			"document_type": _field(
+				_STRING, "Pesticide Label, Receipt, I-9 Document, … (Document Validation's document_type)."
+			),
+			"version": _field(_STRING, "A stored version to preview."),
+			"config": _field({"type": ["object", "string"]}, "An unsaved config body (schema v1)."),
+		},
+		required=("validation",),
+		title="Preview an extraction config",
+	),
+	"update_extraction_config": _tool(
+		moment_tools.update_extraction_config,
+		"MUTATING (default OFF; System Manager or Farm Manager). Check a config body (schema v1: "
+		"portable regexes only, unique fields, known sections and rule kinds) and write it as a "
+		"DRAFT at the next version. Never changes what phones read — publish_extraction_config "
+		"does that.",
+		{
+			"document_type": _field(
+				_STRING, "Pesticide Label, Receipt, I-9 Document, … (Document Validation's document_type)."
+			),
+			"config": _field({"type": ["object", "string"]}, "The whole body, schema_version 1."),
+			"notes": _field(_STRING, "Why this version exists, e.g. the App Feedback it answers."),
+			"authored_by": _field(_STRING, "Operator or AI-proposed (default)."),
+		},
+		required=("document_type", "config", "notes"),
+		mutating=True,
+		title="Draft an extraction config",
+	),
+	"publish_extraction_config": _tool(
+		moment_tools.publish_extraction_config,
+		"MUTATING (default OFF; System Manager or Farm Manager). Publish a Draft: it becomes the "
+		"config every phone fetches for that document type, and the previous Published version "
+		"becomes Superseded (kept, so old validations stay traceable).",
+		{
+			"document_type": _field(
+				_STRING, "Pesticide Label, Receipt, I-9 Document, … (Document Validation's document_type)."
+			),
+			"version": _field(_STRING, "The Draft's version number."),
+		},
+		required=("document_type", "version"),
+		mutating=True,
+		title="Publish an extraction config",
+	),
+	"list_feature_flags": _tool(
+		moment_tools.list_feature_flags,
+		"v0.206.0. Feature flag and threshold rows (Flag / Threshold / Text) with their company, "
+		"roles and app-version targeting. No row means the caller's default — new behaviour ships "
+		"dark. Read-only.",
+		{"key": _field(_STRING, "One flag_key."), "company": _COMPANY},
+		title="List feature flags",
+	),
+	"set_feature_flag": _tool(
+		moment_tools.set_feature_flag,
+		"MUTATING (default OFF; System Manager or Farm Manager). Create or update the flag row for "
+		"(flag_key, company, roles, app-version range). The most specific active row wins: "
+		"company+role, company, global+role, global.",
+		{
+			"flag_key": _field(_STRING, "lower_snake_case, e.g. label_capture_v2."),
+			"kind": _field(_STRING, "Flag (default), Threshold or Text."),
+			"value": _field({"type": ["boolean", "number", "string"]}, "true/false, a number, or text."),
+			"company": _field(_STRING, "Empty for every company."),
+			"roles": _field(_STRING_ARRAY, "Only users holding one of these roles."),
+			"min_app_version": _field(_STRING, "e.g. 1.42"),
+			"max_app_version": _field(_STRING, "e.g. 1.50"),
+			"description": _field(_STRING, "Why the flag exists."),
+			"owner_area": _field(_STRING, "What reads it, e.g. ios.label_capture."),
+			"active": _field(_BOOLEAN, "False switches the row off."),
+		},
+		required=("flag_key", "value"),
+		mutating=True,
+		title="Set a feature flag",
+	),
+	"list_triage_queue": _tool(
+		moment_tools.list_triage_queue,
+		"v0.206.0. Tell the Farm notes by triage state (default: everything not yet Applied or "
+		"Rejected), each with its class, summary, linked evidence, proposal and ticket. Read-only.",
+		{
+			"state": _field(_STRING, "Auto-classified, Proposed, Approved, Applied, Rejected or Ticketed."),
+			"triage_class": _field(
+				_STRING, "Data or config, Code bug, Feature request, Question or Duplicate."
+			),
+			"company": _COMPANY,
+			"limit": _LIMIT,
+		},
+		title="List the triage queue",
+	),
+	"propose_triage_fix": _tool(
+		moment_tools.propose_triage_fix,
+		"MUTATING (default OFF). Attach a fix to a Tell the Farm note — NEVER APPLIED HERE. A 'Data "
+		"or config' fix is `calls` [{tool, arguments, why}] of existing WRITE tools whose arguments "
+		"fit their schemas; a 'Code bug' / 'Feature request' is a `ticket` {title, repro_steps, "
+		"expected, actual, suspected_area, affected_records, app_version, severity}; a Question or "
+		"Duplicate carries the answer in `summary`. A manager applies it with "
+		"approve_triage_proposal.",
+		{
+			"feedback": _field(_STRING, "AFB-… or the handset's entry_uuid."),
+			"triage_class": _field(
+				_STRING, "Data or config, Code bug, Feature request, Question or Duplicate."
+			),
+			"summary": _field(_STRING, "One line: what is wrong and what the fix does."),
+			"calls": _field({"type": ["array", "string"]}, "[{tool, arguments, why}] — at most 10."),
+			"ticket": _field({"type": ["object", "string"]}, "The structured ticket."),
+			"authored_by": _field(_STRING, "AI-proposed (default) or Operator."),
+		},
+		required=("feedback", "triage_class", "summary"),
+		mutating=True,
+		title="Propose a triage fix",
+	),
+	"approve_triage_proposal": _tool(
+		moment_tools.approve_triage_proposal,
+		"MUTATING (default OFF; System Manager or Farm Manager). Apply a Proposed note's calls, one by "
+		"one, through the normal dispatcher — each proposed tool's own switch, role gate and audit "
+		"row apply. Stops at the first failure (calls already applied stay applied and are not "
+		"re-run on the next approval). On success: records applied_json, replies to the worker "
+		"('Fixed: …' + note) and resolves the note.",
+		{
+			"feedback": _field(_STRING, "AFB-… or the handset's entry_uuid."),
+			"note": _field(_STRING, "Optional note to the worker."),
+		},
+		required=("feedback",),
+		mutating=True,
+		title="Approve a triage proposal",
+	),
+	"reject_triage_proposal": _tool(
+		moment_tools.reject_triage_proposal,
+		"MUTATING (default OFF; System Manager or Farm Manager). Decline a note's proposal or ticket, "
+		"with the reason recorded. The note itself stays open.",
+		{
+			"feedback": _field(_STRING, "AFB-… or the handset's entry_uuid."),
+			"reason": _field(_STRING, "Why — the next proposal needs to know."),
+		},
+		required=("feedback", "reason"),
+		mutating=True,
+		title="Reject a triage proposal",
 	),
 	"preview_farm_task_template": _tool(
 		tasktemplates.preview_farm_task_template,
@@ -24972,6 +25144,12 @@ TOOLS = {
 				"The date every expiry and future-date check is made against. Defaults to "
 				"today; pass one to ask what the answer WAS.",
 			),
+			"config_version": _field(
+				_STRING,
+				"v0.206.0. The extraction config that read this document, e.g. 'Pesticide Label@3'. "
+				"Default: the one in force for the type.",
+			),
+			"feature_flags": _field(_OBJECT, "v0.206.0. {flag_key: value} in force when it was read."),
 		},
 		required=("document_type", "extracted_fields"),
 		mutating=True,
