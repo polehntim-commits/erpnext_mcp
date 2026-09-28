@@ -180,6 +180,7 @@ from .tools import (
 	workflow,
 )
 from .tools import pest_control as pest_control_tools
+from .tools import programs as program_tools
 
 _STRING = {"type": "string"}
 _NUMBER = {"type": "number"}
@@ -7286,13 +7287,15 @@ TOOLS = {
 				"(ORS 634 licenses pesticide consultants in Oregon). Replaces the whole "
 				"table; pass [] to clear it.",
 			),
-			"pest_season_start": _field(
+			"season_start": _field(
 				_STRING,
-				"v0.203.0. First day of this entity's pest season each year, MM-DD (e.g. 03-01). In "
-				"season, rodent bait maintenance stations are checked every 7 days; outside it, "
-				"monthly. Blank on either end means 03-01 to 10-31.",
+				"v0.205.0. First day of this entity's season each year, MM-DD (e.g. 03-01) — read by "
+				"rules with a seasonal cadence (rodent bait: weekly in season, monthly off season for "
+				"quiet stations). Blank on either end means 03-01 to 10-31.",
 			),
-			"pest_season_end": _field(_STRING, "v0.203.0. Last day of the pest season, MM-DD (e.g. 10-31)."),
+			"season_end": _field(_STRING, "v0.205.0. Last day of the season, MM-DD (e.g. 10-31)."),
+			"pest_season_start": _field(_STRING, "v0.203.0 alias of season_start."),
+			"pest_season_end": _field(_STRING, "v0.203.0 alias of season_end."),
 			"default_currency": _field(
 				_STRING, "New ISO code. Refused outright once anything has been posted."
 			),
@@ -11616,6 +11619,12 @@ TOOLS = {
 				"v0.204.0. Asset types whose scan screen offers this template (Cabin, House …).",
 			),
 			"title_es": _field(_STRING, "v0.204.0. The title in Spanish."),
+			"required_certification": _field(
+				_STRING,
+				"v0.205.0. A certification the worker must hold — a current Certification whose type or "
+				"name matches (Applicator License, Forklift …) or the Employee skill. Enforced on claim, "
+				"assign, start and resume, the same for every template. '' clears it.",
+			),
 			"instructions_es": _field(_STRING, "v0.204.0. The instructions in Spanish."),
 		},
 		required=("template_name", "task_type", "evidence_required"),
@@ -11685,6 +11694,12 @@ TOOLS = {
 				"v0.204.0. Asset types whose scan screen offers this template (Cabin, House …).",
 			),
 			"title_es": _field(_STRING, "v0.204.0. The title in Spanish."),
+			"required_certification": _field(
+				_STRING,
+				"v0.205.0. A certification the worker must hold — a current Certification whose type or "
+				"name matches (Applicator License, Forklift …) or the Employee skill. Enforced on claim, "
+				"assign, start and resume, the same for every template. '' clears it.",
+			),
 			"instructions_es": _field(_STRING, "v0.204.0. The instructions in Spanish."),
 		},
 		required=("template",),
@@ -11741,6 +11756,57 @@ TOOLS = {
 		title="Get a farm task template",
 		available=_needs_doctype("Farm Task Template"),
 		requires="the Farm Task Template DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"list_programs": _tool(
+		program_tools.list_programs,
+		"v0.205.0. The programs shipped with the app — bundles of templates, rules, units, unit "
+		"contexts and asset-type flags (the rodent bait program first) — and how much of each this "
+		"site has installed. Read-only.",
+		{},
+		title="List programs",
+	),
+	"export_program": _tool(
+		program_tools.export_program,
+		"v0.205.0. A program as a JSON bundle built from THIS site's records — carry the rodent program "
+		"as tuned here to another farm. Name the parts (task_templates, inspection_templates, "
+		"compliance_rules, uoms, uom_contexts, asset_types, item_groups) or a shipped program's name "
+		"to export what this site has of it. Read-only.",
+		{
+			"program": _field(_STRING, "The bundle's name, e.g. rodent_bait."),
+			"title": _field({"type": ["string", "object"]}, "A title, or {en, es}."),
+			"task_templates": _field(_STRING_ARRAY, "Farm Task Template names."),
+			"inspection_templates": _field(_STRING_ARRAY, "Inspection Template names."),
+			"compliance_rules": _field(_STRING_ARRAY, "rule_ids."),
+			"uoms": _field(_STRING_ARRAY, "UOM names."),
+			"uom_contexts": _field(_STRING_ARRAY, "Agricultural UOM Context names."),
+			"asset_types": _field(_STRING_ARRAY, "Farm Asset Type names."),
+			"item_groups": _field(_STRING_ARRAY, "Item Group names."),
+		},
+		required=("program",),
+		title="Export a program",
+	),
+	"import_program": _tool(
+		program_tools.import_program,
+		"MUTATING (default OFF). Install a program bundle — or a shipped one by name — CREATE-ONLY: a "
+		"part that exists is reported and left alone. Templates and rules arrive DISABLED and "
+		"unapproved. dry_run defaults to TRUE: it reports what it would create.",
+		{
+			"program": _field(
+				_STRING, "A shipped program's name (e.g. rodent_bait), when no bundle is given."
+			),
+			"bundle": _field({"type": ["object", "string"]}, "A bundle from export_program."),
+			"dry_run": _field(_BOOLEAN, "Default true."),
+		},
+		mutating=True,
+		title="Import a program",
+	),
+	"list_device_capabilities": _tool(
+		program_tools.list_device_capabilities,
+		"v0.205.0. Every active phone: who, which device, app version, form schema version, and the "
+		"field kinds it cannot render natively (those fall back to text or photo; a safety-critical "
+		"one blocks the work on that device). Read-only.",
+		{"company": _field(_STRING, "Only devices on accounts for this company.")},
+		title="List device capabilities",
 	),
 	"preview_farm_task_template": _tool(
 		tasktemplates.preview_farm_task_template,
@@ -21504,6 +21570,11 @@ TOOLS = {
 			"applies_to_asset_type": _field(_STRING, "Change what it applies to."),
 			"sections": _field({"type": "array", "items": _OBJECT}, "Replace the whole section list."),
 			"skill_required": _field(_STRING, "Change the crew skill."),
+			"required_certification": _field(
+				_STRING,
+				"v0.205.0. A certification the worker must hold — a current Certification whose type or "
+				"name matches (Applicator License, Forklift …) or the Employee skill. Enforced on start and submit, the same for every template. '' clears it.",
+			),
 			"estimated_duration_minutes": _field(_INTEGER, "Change the estimate."),
 			"cadence_trigger_expression": _field(_STRING, "Change the trigger prose."),
 			"regulation_citations": _field(_STRING, "Change the citations."),

@@ -42,6 +42,7 @@ from erpnext_mcp.patches import (
 	migrate_incident_tool_switches,
 	migrate_training_types,
 	move_mobile_credentials_to_devices,
+	move_rodent_settings_to_data,
 	normalize_app_feedback_timestamps,
 	normalize_phone_timestamps,
 	rebuild_rodent_templates,
@@ -95,6 +96,7 @@ PATCHES = (
 		add_rodent_sections_to_inspection_templates,
 	),
 	("erpnext_mcp.patches.rebuild_rodent_templates", rebuild_rodent_templates),
+	("erpnext_mcp.patches.move_rodent_settings_to_data", move_rodent_settings_to_data),
 )
 
 

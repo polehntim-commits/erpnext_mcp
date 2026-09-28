@@ -386,3 +386,15 @@ These points were decided while building and are recorded here so the contract m
 - **§8 The check-overdue seed.** `rodent_bait_check_overdue` links `producer_task_template` only when
   the Check template exists at seed time.
 - **§6 Where the applicator check runs.** It is also applied on `resume_farm_task`.
+
+## 15. Superseded in v0.205.0 — the settings are data now
+
+docs/design/programs_and_field_kinds.md Part A moved §9's settings onto records:
+
+- Applicator skill and certification → `required_certification` on the template (and its tasks).
+- People-work-here types → `people_present` on Farm Asset Type.
+- Alert role → each rule's `notify_roles`.
+- Season → Company `season_start` / `season_end`.
+- Check cadence → the generic `grouped_cadence` rule option.
+
+Behaviour is unchanged. Patch `move_rodent_settings_to_data` carries the stored values across.

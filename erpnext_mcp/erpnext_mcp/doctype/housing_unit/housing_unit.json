@@ -39,6 +39,7 @@
   "rodent_bait_state",
   "rodent_bait_state_since",
   "rodent_bait_last_placement",
+  "program_state",
   "legal_section",
   "legal_basis",
   "notes_section",
@@ -256,6 +257,14 @@
    "fieldtype": "Link",
    "label": "Last Bait Placement",
    "options": "Farm Task",
+   "read_only": 1
+  },
+  {
+   "description": "v0.205.0. Per program, where this place stands: {program: {state, since, last_start}} — e.g. rodent_bait Active / Maintenance / Cleared. Written by the program's task completions; read by the phone.",
+   "fieldname": "program_state",
+   "fieldtype": "Code",
+   "label": "Program State",
+   "options": "JSON",
    "read_only": 1
   },
   {

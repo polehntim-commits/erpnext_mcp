@@ -273,7 +273,7 @@ class BeforeAPlacementStarts(BaitTestCase):
 		message = self.tool_error(
 			"assign_farm_task", {"task": task, "assigned_to": "EMP-777", "assigned_to_name": "Bo"}
 		)
-		self.assertIn("applicator qualification", message)
+		self.assertIn("requires 'Applicator License'", message)
 		self.licence("EMP-777")
 		self.tool_data("assign_farm_task", {"task": task, "assigned_to": "EMP-777", "assigned_to_name": "Bo"})
 		check = self.a_task(rodent_bait.CHECK, unit)

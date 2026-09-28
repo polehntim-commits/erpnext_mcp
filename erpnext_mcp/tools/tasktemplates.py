@@ -194,6 +194,7 @@ def create_farm_task_template(args: dict) -> ToolResult:
 		"applies_to_asset_types": _asset_types_argument(args.get("applies_to_asset_types")),
 		"title_es": as_str(args, "title_es"),
 		"instructions_es": as_str(args, "instructions_es"),
+		"required_certification": as_str(args, "required_certification"),
 	}
 
 	doc = task_templates.build_template(spec)
@@ -241,6 +242,7 @@ _TEXT_FIELDS = (
 	"instructions",
 	"title_es",
 	"instructions_es",
+	"required_certification",
 )
 _CHOICE_FIELDS = (("task_type", FARM_TASK), ("dispatch_mode", TEMPLATE), ("default_urgency", TEMPLATE))
 
@@ -520,6 +522,10 @@ def render_problems(name: str, row: dict | None = None) -> list:
 		)
 	if not str(row.get("title_es") or "").strip():
 		out.append("no Spanish title (title_es).")
+	# v0.205.0 (B4). Against the phones actually enrolled for this company.
+	from .. import device_capabilities
+
+	out.extend(device_capabilities.problems(fields, str(row.get("company") or "")))
 	return out
 
 
@@ -708,6 +714,8 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 	doc.checklist_status = json.dumps(shape["checklist_status"])
 	if shape.get("form_schema") and compat.has_field(FARM_TASK, "form_schema"):
 		doc.form_schema = json.dumps(shape["form_schema"])
+	if shape.get("required_certification") and compat.has_field(FARM_TASK, "required_certification"):
+		doc.required_certification = shape["required_certification"]
 	# The template's instructions first, then anything true of THIS case. The
 	# order is the point: a worker reads the standing instruction and then the
 	# note about the particular cabin, which is the order they need them in.

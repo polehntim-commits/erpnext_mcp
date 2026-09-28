@@ -18,6 +18,7 @@
   "location_doctype",
   "location",
   "skill_required",
+  "required_certification",
   "dispatch_section",
   "dispatch_mode",
   "assigned_to",
@@ -176,6 +177,13 @@
    "in_standard_filter": 1,
    "label": "Skill Required",
    "search_index": 1
+  },
+  {
+   "description": "Copied from the template at creation. The worker must hold it (a current Certification of that type or name, or the Employee skill) to claim, be assigned, start or resume.",
+   "fieldname": "required_certification",
+   "fieldtype": "Data",
+   "label": "Required Certification",
+   "read_only": 0
   },
   {
    "fieldname": "dispatch_section",

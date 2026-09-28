@@ -886,23 +886,25 @@ def update_company(args: dict) -> ToolResult:
 			raise ToolError("this ERPNext's Company has no company_logo field. Nothing was changed.")
 		_stage(changes, unchanged, row, "company_logo", _file_url(as_str(args, "company_logo")))
 
-	# v0.203.0. The rodent bait season (docs/design/rodent_bait_program.md §9):
-	# MM-DD, refused when malformed so a typo never silently means March–October.
-	for key in ("pest_season_start", "pest_season_end"):
-		if key not in args:
+	# v0.203.0 / v0.205.0. The company's season (docs/design/programs_and_field_kinds.md
+	# A5): MM-DD, refused when malformed so a typo never silently means
+	# March–October. The v0.203.0 `pest_season_*` names are accepted as aliases.
+	for key, alias in (("season_start", "pest_season_start"), ("season_end", "pest_season_end")):
+		given = key if key in args else alias if alias in args else ""
+		if not given:
 			continue
 		if not compat.has_field("Company", key):
 			raise ToolError(
 				f"this site's Company has no {key} column — it is a compliance field this app adds on "
 				"`bench migrate`. Nothing was changed."
 			)
-		value = as_str(args, key)
+		value = as_str(args, given)
 		if value:
-			from .. import rodent_bait
+			from .. import occupancy
 
-			if not rodent_bait.valid_mmdd(value):
-				raise ToolError(f"{key} must be MM-DD, e.g. 03-01, got {value!r}. Nothing was changed.")
-			value = rodent_bait._mmdd(value, value)
+			if not occupancy.valid_mmdd(value):
+				raise ToolError(f"{given} must be MM-DD, e.g. 03-01, got {value!r}. Nothing was changed.")
+			value = occupancy.mmdd(value, value)
 		_stage(changes, unchanged, row, key, value)
 
 	# The consultants table is REPLACED WHOLESALE when passed, never merged. A

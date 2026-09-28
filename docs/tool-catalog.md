@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 928 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 932 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 458 read tools are **on** by default and can be switched off individually. A
+All 461 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -16050,6 +16050,10 @@ the unit it really is (Block). The contract is `docs/design/uom_registry.md`.
 | `create_ag_uom_context` | A new context — one measurement per context. Write |
 | `update_ag_uom_context` | Switch on/off, reword, change the default. Write |
 | `add_uom_to_context` / `remove_uom_from_context` | One unit in or out; never the last one. Write |
+| `list_programs` | (v0.205.0) Shipped programs and how much of each this site has. Read |
+| `export_program` | (v0.205.0) A program as a JSON bundle from this site's records. Read |
+| `import_program` | (v0.205.0) Install a program bundle, create-only, disabled, dry run by default. Write |
+| `list_device_capabilities` | (v0.205.0) Each phone's app version and the field kinds it cannot render. Read |
 | `preview_farm_task_template` | (v0.204.0) Exactly what the phone renders for a task from a template, per language and context, with every render problem. Read |
 | `preview_inspection_template` | (v0.204.0) What the phone renders for each inspection section. Read |
 | `approve_task_step` | (v0.204.0) Sign a task's approval step; the caller must hold its role. Write |

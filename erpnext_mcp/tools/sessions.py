@@ -489,6 +489,13 @@ def _template_spec_from_args(args: dict, required: bool, current: dict | None = 
 			as_str(args, "skill_required") if "skill_required" in args else current.get("skill_required")
 		)
 		or "",
+		# v0.205.0. docs/design/programs_and_field_kinds.md A1.
+		"required_certification": (
+			as_str(args, "required_certification")
+			if "required_certification" in args
+			else current.get("required_certification")
+		)
+		or "",
 		"estimated_duration_minutes": (
 			as_int(args, "estimated_duration_minutes")
 			if "estimated_duration_minutes" in args
@@ -634,6 +641,9 @@ def start_inspection_session(args: dict) -> ToolResult:
 	doc.farm_location_gps = as_str(args, "farm_location_gps")
 	doc.worker = _employee(as_str(args, "worker"), "worker")
 	doc.foreman = _employee(as_str(args, "foreman"), "foreman")
+	# v0.205.0. A template's required certification, enforced on the named worker
+	# exactly as on a task (docs/design/programs_and_field_kinds.md A1).
+	_refuse_unqualified_worker(template, doc.worker, "started")
 	doc.company = resolve_company(as_str(args, "company"), required=False)
 	doc.visit_id = as_visit_id(args)
 	doc.notes = as_str(args, "notes")
@@ -664,6 +674,19 @@ def start_inspection_session(args: dict) -> ToolResult:
 			f"v{doc.template_version} at {doc.location}"
 		),
 		docstatus_delta="none → 0 (created)",
+	)
+
+
+def _refuse_unqualified_worker(template: str, worker, verb: str) -> None:
+	from .. import qualifications
+
+	if not worker or not compat.has_field(sessions.TEMPLATE_DOCTYPE, "required_certification"):
+		return
+	requirement = str(
+		frappe.db.get_value(sessions.TEMPLATE_DOCTYPE, template, "required_certification") or ""
+	)
+	qualifications.refuse_unqualified(
+		{"required_certification": requirement}, str(worker), verb, what=f"Inspection template {template}"
 	)
 
 
@@ -776,6 +799,11 @@ def preview_inspection_template(args: dict) -> ToolResult:
 		report = form_schema.validate(fields)
 		for finding in report["errors"] + report["warnings"]:
 			problems.append(f"{described['section_name']} › {finding['path']}: {finding['message']}")
+		from .. import device_capabilities
+
+		problems.extend(
+			f"{described['section_name']} › {line}" for line in device_capabilities.problems(fields)
+		)
 		out.append(
 			{
 				"section_name": described["section_name"],
@@ -840,6 +868,7 @@ def submit_inspection_session(args: dict) -> ToolResult:
 	if doc.get("worker") and not doc.get("worker_name") and compat.doctype_exists("Employee"):
 		doc.worker_name = str(frappe.db.get_value("Employee", doc.worker, "employee_name") or "")
 	row.update({key: doc.get(key) for key in ("worker", "worker_name", "foreman", "visit_id")})
+	_refuse_unqualified_worker(row["template"], doc.get("worker"), "submitted")
 
 	now = frappe.utils.now()
 	# v0.203.0. "Bait cleared / no rodent signs" is the server's to judge: it

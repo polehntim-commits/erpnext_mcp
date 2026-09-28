@@ -693,6 +693,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_item_label_file",
 		"record_label_viewed",
 		"approve_task_step",
+		# v0.205.0 — inspections on the phone, search-link, capabilities.
+		"list_my_inspections",
+		"get_inspection",
+		"submit_inspection",
+		"search_link",
+		"report_device_capabilities",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

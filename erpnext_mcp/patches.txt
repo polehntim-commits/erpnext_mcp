@@ -31,3 +31,4 @@ erpnext_mcp.patches.add_bait_units_to_context
 erpnext_mcp.patches.backfill_farm_task_completed_at
 erpnext_mcp.patches.add_rodent_sections_to_inspection_templates
 erpnext_mcp.patches.rebuild_rodent_templates
+erpnext_mcp.patches.move_rodent_settings_to_data

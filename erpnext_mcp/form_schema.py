@@ -25,7 +25,8 @@ from __future__ import annotations
 import json
 import re
 
-TYPES = (
+#: Schema version 1 (v0.204.0): the seventeen kinds every app since v0.204.0 renders.
+V1_KINDS = (
 	"select",
 	"multi_select",
 	"check",
@@ -44,6 +45,90 @@ TYPES = (
 	"approval",
 	"info",
 )
+
+#: Schema version 2 (v0.205.0, docs/design/programs_and_field_kinds.md B1):
+#: Frappe's field types 1:1, and the farm kinds.
+V2_KINDS = (
+	"data",
+	"small_text",
+	"text_editor",
+	"dynamic_link",
+	"time",
+	"duration",
+	"int",
+	"float",
+	"currency",
+	"percent",
+	"rating",
+	"table",
+	"attach",
+	"attach_image",
+	"geolocation",
+	"barcode",
+	"color",
+	"html",
+	"read_only",
+	"scan",
+	"map_area",
+	"timer",
+	"audio_note",
+	"document",
+	"computed",
+)
+TYPES = (*V1_KINDS, *V2_KINDS)
+#: Refused outright: a form never collects a secret.
+REFUSED_KINDS = ("password",)
+#: Kinds with no answer — shown, never sent.
+DISPLAY_KINDS = ("info", "html", "read_only", "document")
+#: What each schema version renders.
+SCHEMA_KINDS = {1: frozenset(V1_KINDS), 2: frozenset(TYPES)}
+CURRENT_SCHEMA = 2
+
+#: Frappe fieldtype spellings → the kind (case-insensitive, spaces or underscores).
+ALIASES = {
+	"data": "data",
+	"small text": "small_text",
+	"long text": "long_text",
+	"text": "long_text",
+	"text editor": "text_editor",
+	"select": "select",
+	"link": "link",
+	"dynamic link": "dynamic_link",
+	"date": "date",
+	"datetime": "datetime",
+	"time": "time",
+	"duration": "duration",
+	"check": "check",
+	"int": "int",
+	"float": "float",
+	"currency": "currency",
+	"percent": "percent",
+	"rating": "rating",
+	"table": "table",
+	"attach": "attach",
+	"attach image": "attach_image",
+	"signature": "signature",
+	"geolocation": "geolocation",
+	"barcode": "barcode",
+	"color": "color",
+	"password": "password",
+	"html": "html",
+	"read only": "read_only",
+}
+SCAN_KINDS = ("asset_tag", "upc", "badge", "qr", "any")
+DOCUMENT_SOURCES = ("item_label", "sop", "file", "url")
+FALLBACKS = ("text", "photo")
+
+
+def canonical(kind) -> str:
+	"""A field type in the kind vocabulary: v1/v2 names as they are, Frappe spellings mapped."""
+	text = str(kind or "").strip()
+	if text in TYPES or text in REFUSED_KINDS:
+		return text
+	key = text.lower().replace("_", " ")
+	return ALIASES.get(key, text)
+
+
 FIELD_KEYS = {
 	"key",
 	"type",
@@ -64,8 +149,52 @@ FIELD_KEYS = {
 	"role",
 	"before_start",
 	"statement",
+	# v0.205.0 (B1).
+	"safety_critical",
+	"fallback",
+	"currency",
+	"scan",
+	"min_points",
+	"purpose",
+	"max_seconds",
+	"document",
+	"formula",
+	"precision",
+	"source",
 }
+#: v0.204.0's fixed list; v0.205.0 reads `phone_link_doctypes` (B3) and this is its floor.
 LINK_DOCTYPES = ("Item", "Asset Register", "Housing Unit", "Employee")
+DEFAULT_PHONE_LINK_DOCTYPES = (
+	"Item",
+	"Asset Register",
+	"Housing Unit",
+	"Employee",
+	"Field",
+	"Parcel",
+	"Irrigation Zone",
+	"Warehouse",
+	"Supplier",
+	"Customer",
+	"Crop",
+	"UOM",
+	"Farm Task",
+	"Certification",
+)
+
+
+def phone_link_doctypes() -> tuple:
+	"""The doctypes a phone form may link to and search (ERPNext MCP Settings). Never raises."""
+	try:
+		from . import settings
+
+		raw = settings._value("phone_link_doctypes")
+	except Exception:
+		raw = None
+	if not str(raw or "").strip():
+		return DEFAULT_PHONE_LINK_DOCTYPES
+	return tuple(line.strip() for line in str(raw).replace(",", "\n").splitlines() if line.strip())
+
+
 CONTEXT_KEYS = (
 	"occupancy_at_creation",
 	"bait_placement",
@@ -127,7 +256,19 @@ def as_fields(raw) -> list:
 		return out
 	if not isinstance(raw, list):
 		raise SchemaError([_finding("", "not_a_list", "the form must be a JSON list of fields")])
-	return [dict(field) if isinstance(field, dict) else field for field in raw]
+	return [_normalised(field) for field in raw]
+
+
+def _normalised(field):
+	"""A field with its Frappe-spelled type mapped to the kind, children too."""
+	if not isinstance(field, dict):
+		return field
+	field = dict(field)
+	if "type" in field:
+		field["type"] = canonical(field["type"])
+	if isinstance(field.get("fields"), list):
+		field["fields"] = [_normalised(child) for child in field["fields"]]
+	return field
 
 
 def _finding(path: str, code: str, message: str) -> dict:
@@ -181,12 +322,19 @@ def _check_level(fields, prefix, errors, warnings, *, top, context_keys, depth, 
 			errors.append(
 				_finding(path, "unknown_attribute", f"unknown attribute(s): {', '.join(sorted(unknown))}")
 			)
-		kind = str(field.get("type") or "")
+		kind = canonical(field.get("type"))
+		if kind in REFUSED_KINDS:
+			errors.append(_finding(path, "refused_type", "a form never collects a password or other secret"))
+			continue
 		if kind not in TYPES:
 			errors.append(_finding(path, "unknown_type", f"type {kind!r} is not one of {', '.join(TYPES)}"))
 			continue
+		_check_v2(field, kind, path, errors, top, siblings or fields)
 		label = field.get("label")
-		if not (isinstance(label, dict) and str(label.get("en") or "").strip()) and kind != "info":
+		if not (isinstance(label, dict) and str(label.get("en") or "").strip()) and kind not in (
+			"info",
+			"html",
+		):
 			errors.append(_finding(path, "no_label", "label.en is required"))
 		for attr in ("label", "help", "statement"):
 			value = field.get(attr)
@@ -203,9 +351,15 @@ def _check_level(fields, prefix, errors, warnings, *, top, context_keys, depth, 
 						break
 		if kind == "link":
 			link = field.get("link")
-			if not isinstance(link, dict) or link.get("doctype") not in LINK_DOCTYPES:
+			allowed = phone_link_doctypes()
+			if not isinstance(link, dict) or link.get("doctype") not in allowed:
 				errors.append(
-					_finding(path, "bad_link", f"link.doctype must be one of {', '.join(LINK_DOCTYPES)}")
+					_finding(
+						path,
+						"bad_link",
+						f"link.doctype must be a phone-searchable doctype ({', '.join(allowed)}) — add it to "
+						"ERPNext MCP Settings › phone_link_doctypes to allow it",
+					)
 				)
 			elif link.get("filters") is not None and not isinstance(link.get("filters"), dict):
 				errors.append(
@@ -232,7 +386,7 @@ def _check_level(fields, prefix, errors, warnings, *, top, context_keys, depth, 
 								f"uom.from_field {uom['from_field']!r} must name a link to Item",
 							)
 						)
-		if kind == "group":
+		if kind in ("group", "table"):
 			children = field.get("fields")
 			if not isinstance(children, list) or not children:
 				errors.append(_finding(path, "empty_group", "a group needs fields"))
@@ -283,6 +437,66 @@ def _check_level(fields, prefix, errors, warnings, *, top, context_keys, depth, 
 						path, "safety_without_attestation", "a safety statement — consider an attestation"
 					)
 				)
+
+
+def _check_v2(field: dict, kind: str, path: str, errors: list, top: list, siblings: list) -> None:
+	"""The v0.205.0 kinds' own rules (B1, B5)."""
+	fallback = field.get("fallback")
+	if fallback is not None and fallback not in FALLBACKS:
+		errors.append(_finding(path, "bad_fallback", f"fallback must be one of {', '.join(FALLBACKS)}"))
+	if kind == "dynamic_link":
+		link = field.get("link") or {}
+		source = str(link.get("doctype_from") or "")
+		if not source or not _find(top, siblings, source):
+			errors.append(
+				_finding(path, "bad_link", "dynamic_link needs link.doctype_from naming another field")
+			)
+	if kind == "rating" and field.get("max") is not None and not isinstance(field["max"], int):
+		errors.append(_finding(path, "bad_number", "rating max must be a whole number"))
+	if kind == "scan":
+		kinds = (field.get("scan") or {}).get("kinds") or ["any"]
+		bad = [entry for entry in kinds if entry not in SCAN_KINDS]
+		if bad:
+			errors.append(_finding(path, "bad_scan", f"scan.kinds must be among {', '.join(SCAN_KINDS)}"))
+	if kind == "document":
+		spec = field.get("document") or {}
+		source = spec.get("source")
+		if source not in DOCUMENT_SOURCES:
+			errors.append(
+				_finding(
+					path, "bad_document", f"document.source must be one of {', '.join(DOCUMENT_SOURCES)}"
+				)
+			)
+		elif source == "item_label":
+			target = _find(top, siblings, str(spec.get("from_field") or ""))
+			if not target or (target.get("link") or {}).get("doctype") != "Item":
+				errors.append(_finding(path, "bad_document", "document.from_field must name a link to Item"))
+		elif source == "file" and not spec.get("file"):
+			errors.append(_finding(path, "bad_document", "document.file is required for source file"))
+		elif source == "url" and not str(spec.get("url") or "").startswith(("https://", "http://")):
+			errors.append(_finding(path, "bad_document", "document.url must be an http(s) URL"))
+	if kind == "computed":
+		try:
+			names = formula_names(str(field.get("formula") or ""))
+		except ValueError as exc:
+			errors.append(_finding(path, "bad_formula", str(exc)))
+		else:
+			for name in names:
+				head = name.split(".", 1)[0]
+				if not _find(top, siblings, head):
+					errors.append(_finding(path, "bad_formula", f"the formula names no field {head!r}"))
+	if kind == "read_only":
+		source = str(field.get("source") or "")
+		if source.startswith("answer:"):
+			if not _find(top, siblings, source[7:]):
+				errors.append(_finding(path, "bad_source", f"no field {source[7:]!r}"))
+		elif source.startswith("context:"):
+			if source[8:] not in CONTEXT_KEYS:
+				errors.append(
+					_finding(path, "bad_source", f"context must be one of {', '.join(CONTEXT_KEYS)}")
+				)
+		elif source:
+			errors.append(_finding(path, "bad_source", "source is answer:<key> or context:<key>"))
 
 
 def _find(top: list, siblings: list, key: str) -> dict | None:
@@ -372,7 +586,26 @@ def check_answers(
 	answers = dict(answers or {})
 	problems: list = []
 	stored = _check_level_answers(fields, answers, context, language, approvals or {}, problems, None, "")
+	# v0.205.0. Computed fields are the SERVER's answer, recomputed from what was
+	# stored — the phone's live value is a preview.
+	_compute(fields, stored, problems, language)
 	return {"answers": stored, "problems": problems}
+
+
+def _compute(fields: list, stored: dict, problems: list, language: str) -> None:
+	for field in fields:
+		if field.get("type") != "computed":
+			continue
+		try:
+			value = evaluate_formula(str(field.get("formula") or ""), stored)
+		except (ValueError, ZeroDivisionError) as exc:
+			problems.append(
+				f"{text_of(field.get('label'), language) or field['key']}: cannot compute ({exc})"
+			)
+			continue
+		if value is not None and field.get("precision") is not None:
+			value = round(value, int(field["precision"]))
+		stored[field["key"]] = value
 
 
 def _check_level_answers(fields, answers, context, language, approvals, problems, local, prefix):
@@ -382,7 +615,7 @@ def _check_level_answers(fields, answers, context, language, approvals, problems
 		kind = field.get("type")
 		key = field.get("key")
 		name = text_of(field.get("label") or field.get("statement") or key, language) or key
-		if kind == "info":
+		if kind in DISPLAY_KINDS or kind == "computed":
 			continue
 		if field.get("show_if") and not holds(field["show_if"], answers, context, local):
 			continue
@@ -398,11 +631,21 @@ def _check_level_answers(fields, answers, context, language, approvals, problems
 			if required:
 				problems.append(f"{prefix}{name}: required")
 			continue
+		# v0.205.0 (B4). An app that cannot render a kind sends its fallback;
+		# accepted for anything that is not safety-critical, and stored as given.
+		if isinstance(value, dict) and value.get("fallback") in FALLBACKS and kind not in ("text", "photo"):
+			if field.get("safety_critical"):
+				problems.append(
+					f"{prefix}{name}: this safety-critical field needs the app updated to answer it"
+				)
+				continue
+			stored[key] = value
+			continue
 		problem, clean = _check_value(field, value, answers, local)
 		if problem:
 			problems.append(f"{prefix}{name}: {problem}")
 			continue
-		if kind == "group":
+		if kind in ("group", "table"):
 			rows = []
 			for index, row in enumerate(clean):
 				rows.append(
@@ -439,10 +682,13 @@ def _check_value(field, value, answers, local) -> tuple:
 		if isinstance(value, str):
 			value = value.strip().lower() in ("1", "true", "yes")
 		return "", bool(value)
-	if kind in ("text", "long_text", "date", "datetime", "gps", "signature", "link"):
+	if kind in ("text", "long_text", "date", "datetime", "gps", "signature", "link", "data", "small_text"):
 		if isinstance(value, (dict, list)):
 			return "must be a single value", None
 		return "", str(value).strip()
+	v2 = _check_v2_value(field, kind, value)
+	if v2 is not None:
+		return v2
 	if kind == "select":
 		allowed = [str(option.get("value")) for option in field.get("options") or []]
 		return (
@@ -469,16 +715,253 @@ def _check_value(field, value, answers, local) -> tuple:
 			return "", number
 		uom = str(value.get("uom") or "") if isinstance(value, dict) else ""
 		return "", {"value": number, "uom": uom or resolved_uom(field, answers, local) or ""}
-	if kind in ("photo", "group"):
+	if kind in ("photo", "group", "table", "attach", "attach_image"):
 		items = value if isinstance(value, list) else [value]
 		low = int(field.get("min_count") if field.get("min_count") is not None else 1)
-		high = int(field.get("max_count") or (10 if kind == "photo" else 50))
+		high = int(field.get("max_count") or (50 if kind in ("group", "table") else 10))
 		if len(items) < low:
 			return f"needs at least {low}", None
 		if len(items) > high:
 			return f"takes at most {high}", None
 		return "", items
 	return "", value
+
+
+_TIME = re.compile(r"^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$")
+_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+_SCRIPT = re.compile(
+	r"<\s*(script|style|iframe|object|embed)[^>]*>.*?<\s*/\s*\1\s*>", re.IGNORECASE | re.DOTALL
+)
+_EVENT_ATTR = re.compile(r"\s+on[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
+
+
+def sanitise_html(text: str) -> str:
+	"""Rich text from a phone: no scripts, frames or inline handlers."""
+	return _EVENT_ATTR.sub("", _SCRIPT.sub("", str(text or "")))
+
+
+def _number(value):
+	try:
+		return float(value.get("value") if isinstance(value, dict) else value)
+	except (TypeError, ValueError):
+		return None
+
+
+def _check_v2_value(field: dict, kind: str, value):
+	"""`(problem, clean)` for a v0.205.0 kind, or None when it is not one."""
+	if kind == "text_editor":
+		return "", sanitise_html(value if isinstance(value, str) else json.dumps(value))
+	if kind == "time":
+		text = str(value).strip()
+		return ("", text) if _TIME.match(text) else ("must be HH:MM or HH:MM:SS", None)
+	if kind in ("duration", "int", "rating"):
+		number = _number(value)
+		if number is None or number != int(number):
+			return "must be a whole number", None
+		number = int(number)
+		low = 1 if kind == "rating" else field.get("min", 0 if kind == "duration" else None)
+		high = int(field.get("max") or 5) if kind == "rating" else field.get("max")
+		if low is not None and number < low:
+			return f"must be at least {low}", None
+		if high is not None and number > high:
+			return f"must be at most {high}", None
+		return "", number
+	if kind in ("float", "currency", "percent"):
+		number = _number(value)
+		if number is None:
+			return "must be a number", None
+		low = field.get("min", 0 if kind == "percent" else None)
+		high = field.get("max", 100 if kind == "percent" else None)
+		if low is not None and number < float(low):
+			return f"must be at least {low}", None
+		if high is not None and number > float(high):
+			return f"must be at most {high}", None
+		return "", number
+	if kind == "dynamic_link":
+		if not isinstance(value, dict) or not value.get("doctype") or not value.get("name"):
+			return "must be {doctype, name}", None
+		if value["doctype"] not in phone_link_doctypes():
+			return f"{value['doctype']} is not a phone-searchable doctype", None
+		return "", {"doctype": str(value["doctype"]), "name": str(value["name"])}
+	if kind == "geolocation":
+		if isinstance(value, str) and "," in value:
+			lat, lon = (part.strip() for part in value.split(",", 1))
+			value = {"type": "Point", "coordinates": [float(lon), float(lat)]}
+		if (
+			not isinstance(value, dict)
+			or value.get("type") != "Point"
+			or len(value.get("coordinates") or []) != 2
+		):
+			return "must be a GeoJSON Point", None
+		return "", value
+	if kind == "map_area":
+		ring = (value.get("coordinates") or [[]])[0] if isinstance(value, dict) else []
+		if not isinstance(value, dict) or value.get("type") != "Polygon":
+			return "must be a GeoJSON Polygon", None
+		points = len(ring) - (1 if ring and ring[0] == ring[-1] else 0)
+		if points < int(field.get("min_points") or 3):
+			return f"needs at least {int(field.get('min_points') or 3)} points", None
+		return "", value
+	if kind in ("barcode", "scan"):
+		if isinstance(value, str):
+			value = {"code": value}
+		if not isinstance(value, dict) or not str(value.get("code") or "").strip():
+			return "must carry a code", None
+		clean = {"code": str(value["code"]).strip()}
+		for attr in ("symbology", "kind", "doctype", "name"):
+			if value.get(attr):
+				clean[attr] = str(value[attr])
+		return "", clean
+	if kind == "color":
+		text = str(value).strip()
+		return ("", text.upper()) if _COLOR.match(text) else ("must be #RRGGBB", None)
+	if kind == "timer":
+		if not isinstance(value, dict):
+			return "must be {started_at, stopped_at, seconds}", None
+		seconds = _number(value.get("seconds"))
+		if seconds is None or seconds < 0:
+			return "seconds must be zero or more", None
+		return "", {
+			"started_at": value.get("started_at"),
+			"stopped_at": value.get("stopped_at"),
+			"seconds": int(seconds),
+		}
+	if kind == "audio_note":
+		if isinstance(value, list):
+			value = value[0] if value else ""
+		return ("", str(value)) if str(value).strip() else ("must be a recording", None)
+	return None
+
+
+# ── computed fields: a whitelist arithmetic reader (B1, B5) ─────────────────
+_FUNCTIONS = ("min", "max", "round", "sum")
+
+
+def formula_names(formula: str) -> list:
+	"""The answer keys (and table.column pairs) a formula reads. Raises ValueError."""
+	import ast
+
+	if not formula.strip():
+		raise ValueError("a computed field needs a formula")
+	try:
+		tree = ast.parse(formula, mode="eval")
+	except SyntaxError as exc:
+		raise ValueError(f"the formula is not arithmetic: {exc.msg}") from None
+	names: list = []
+
+	def walk(node):
+		if isinstance(node, ast.Expression):
+			return walk(node.body)
+		if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
+			walk(node.left)
+			return walk(node.right)
+		if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+			return walk(node.operand)
+		if (
+			isinstance(node, ast.Constant)
+			and isinstance(node.value, (int, float))
+			and not isinstance(node.value, bool)
+		):
+			return None
+		if isinstance(node, ast.Name):
+			names.append(node.id)
+			return None
+		if (
+			isinstance(node, ast.Call)
+			and isinstance(node.func, ast.Name)
+			and node.func.id in _FUNCTIONS
+			and not node.keywords
+		):
+			if node.func.id == "sum":
+				if (
+					len(node.args) != 1
+					or not isinstance(node.args[0], ast.Attribute)
+					or not isinstance(node.args[0].value, ast.Name)
+				):
+					raise ValueError("sum takes one table.column")
+				names.append(f"{node.args[0].value.id}.{node.args[0].attr}")
+				return None
+			for arg in node.args:
+				walk(arg)
+			return None
+		raise ValueError(
+			f"the formula may use numbers, answers, + - * / ( ) and {', '.join(_FUNCTIONS)} only"
+		)
+
+	walk(tree)
+	return names
+
+
+def evaluate_formula(formula: str, answers: dict):
+	"""The formula's value over the answers; None when an answer it needs is missing."""
+	import ast
+
+	formula_names(formula)
+	tree = ast.parse(formula, mode="eval")
+
+	def value(node):
+		if isinstance(node, ast.Expression):
+			return value(node.body)
+		if isinstance(node, ast.Constant):
+			return float(node.value)
+		if isinstance(node, ast.Name):
+			return _number(answers.get(node.id))
+		if isinstance(node, ast.UnaryOp):
+			inner = value(node.operand)
+			return None if inner is None else (-inner if isinstance(node.op, ast.USub) else inner)
+		if isinstance(node, ast.BinOp):
+			left, right = value(node.left), value(node.right)
+			if left is None or right is None:
+				return None
+			if isinstance(node.op, ast.Add):
+				return left + right
+			if isinstance(node.op, ast.Sub):
+				return left - right
+			if isinstance(node.op, ast.Mult):
+				return left * right
+			return left / right
+		if isinstance(node, ast.Call):
+			if node.func.id == "sum":
+				table, column = node.args[0].value.id, node.args[0].attr
+				rows = answers.get(table) or []
+				return sum(_number(row.get(column)) or 0 for row in rows if isinstance(row, dict))
+			args = [value(arg) for arg in node.args]
+			if any(arg is None for arg in args):
+				return None
+			if node.func.id == "round":
+				return round(args[0], int(args[1]) if len(args) > 1 else 0)
+			return (min if node.func.id == "min" else max)(args)
+		raise ValueError("unsupported")
+
+	return value(tree)
+
+
+# ── capabilities (B4) ───────────────────────────────────────────────────────
+def kinds_used(fields: list, *, safety_critical_only: bool = False) -> set:
+	"""Every kind a form uses (groups and tables included)."""
+	out = set()
+	for field in fields or []:
+		if not isinstance(field, dict):
+			continue
+		if not safety_critical_only or field.get("safety_critical"):
+			out.add(canonical(field.get("type")))
+		out |= kinds_used(field.get("fields") or [], safety_critical_only=safety_critical_only)
+	return out
+
+
+def kinds_of(capabilities) -> frozenset:
+	"""The kinds a client renders: its reported list, else its schema version's."""
+	if isinstance(capabilities, str):
+		try:
+			capabilities = json.loads(capabilities)
+		except ValueError:
+			capabilities = {}
+	capabilities = capabilities or {}
+	reported = capabilities.get("field_kinds")
+	if isinstance(reported, list) and reported:
+		return frozenset(canonical(kind) for kind in reported)
+	version = int(capabilities.get("schema_version") or 1)
+	return SCHEMA_KINDS.get(version, SCHEMA_KINDS[1])
 
 
 def resolved_uom(field: dict, answers: dict, local: dict | None = None) -> str:
@@ -618,8 +1101,8 @@ _WIZARD_TYPES = {
 	"checkbox": ("check", None),
 	"photo": ("photo", None),
 	"signature": ("signature", None),
-	"qr_scan": ("text", None),
-	"audio_note": ("long_text", None),
+	"qr_scan": ("scan", None),
+	"audio_note": ("audio_note", None),
 	"employee_select": ("link", "Employee"),
 	"asset_select": ("link", "Asset Register"),
 }

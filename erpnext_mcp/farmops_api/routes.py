@@ -820,6 +820,13 @@ ROUTES = (
 	Route("/mobile", mobile_api.get_item_label_file),
 	Route("/mobile", mobile_api.record_label_viewed),
 	Route("/mobile", mobile_api.approve_task_step),
+	# v0.205.0. Inspections on the phone, search-link and capability negotiation —
+	# docs/design/programs_and_field_kinds.md B3, B4, Part C.
+	Route("/mobile", mobile_api.list_my_inspections),
+	Route("/mobile", mobile_api.get_inspection),
+	Route("/mobile", mobile_api.submit_inspection),
+	Route("/mobile", mobile_api.search_link),
+	Route("/mobile", mobile_api.report_device_capabilities),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

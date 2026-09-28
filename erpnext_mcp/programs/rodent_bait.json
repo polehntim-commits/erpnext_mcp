@@ -1,0 +1,1268 @@
+{
+ "asset_types": [
+  {
+   "enabled": 1,
+   "people_present": 1,
+   "type_name": "Storage"
+  },
+  {
+   "enabled": 1,
+   "people_present": 1,
+   "type_name": "Cold Storage"
+  },
+  {
+   "enabled": 0,
+   "people_present": 1,
+   "type_name": "Barn"
+  },
+  {
+   "enabled": 0,
+   "people_present": 1,
+   "type_name": "Shop"
+  },
+  {
+   "enabled": 0,
+   "people_present": 1,
+   "type_name": "Kitchen"
+  },
+  {
+   "enabled": 0,
+   "people_present": 1,
+   "type_name": "Bath House"
+  },
+  {
+   "enabled": 0,
+   "people_present": 1,
+   "type_name": "Toilet-Shower"
+  },
+  {
+   "enabled": 1,
+   "people_present": 0,
+   "type_name": "Cabin"
+  },
+  {
+   "enabled": 1,
+   "people_present": 0,
+   "type_name": "House"
+  }
+ ],
+ "compliance_rules": [
+  {
+   "audit_packet_types": [
+    "OSHA",
+    "EPA"
+   ],
+   "authored_by": "System",
+   "cadence_days": 0,
+   "category": "Housing",
+   "date_field": "completed_at",
+   "date_field_role": "Timestamp",
+   "default_severity": "Critical",
+   "due_date_mode": "None",
+   "enabled": 0,
+   "extra_parameters": {
+    "notify_roles": [
+     "Farm Manager"
+    ],
+    "notify_severities": [
+     "Critical",
+     "Warning"
+    ],
+    "severity_by_field": {
+     "field": "occupancy_at_creation",
+     "map": {
+      "Unoccupied": "Warning"
+     }
+    }
+   },
+   "kairotic_gate_description": "Fires on STATE: an Interior placement task In-Progress, Awaiting-Review or Completed. Critical where the place was occupied when the task was raised, Warning where it was not. OCCUPIED = an active Housing Assignment, the place marked Occupied, or people work there (the people-work-here list in ERPNext MCP Settings); everything else is UNOCCUPIED. Silenced ONLY by a later COMPLETED Rodent Bait Removal and Clearance at the same place — a removal that is merely raised or in progress clears nothing.",
+   "message_template": "INTERIOR rodent bait at {{ row.location or row.task_name }} ({{ row.occupancy_at_creation or 'occupancy unknown' }}; task {{ row.name }}, {{ row.state }}). Confirm it was approved, every placement is in a locked tamper-resistant station and the EN/ES notice was posted first. A housing unit must not be assigned until a Rodent Bait Removal and Clearance there is COMPLETED.",
+   "missing_date_behaviour": "Raise",
+   "purpose": "Interior bait where people live or work is the highest-exposure use of a rodenticide. The Farm Manager must know about every interior placement while it is in place.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "regulation_citations": "Product label directions (FIFRA §12(a)(2)(G), 7 U.S.C. 136j); 29 CFR 1910.142(j) insect and rodent control in temporary labor camps; OAR 437-004-1120 agricultural labor housing",
+   "requires_doctypes": "Farm Task",
+   "retention_years": 3,
+   "rule_id": "rodent_bait_interior_placement",
+   "scope_filters": [
+    {
+     "field": "template",
+     "op": "eq",
+     "value": "Rodent Bait Placement - Interior"
+    },
+    {
+     "field": "state",
+     "op": "in",
+     "value": [
+      "In-Progress",
+      "Awaiting-Review",
+      "Completed"
+     ]
+    }
+   ],
+   "severity_expired": "Critical",
+   "superseded_by_later_clean": {
+    "clean_filters": [
+     {
+      "field": "template",
+      "op": "eq",
+      "value": "Rodent Bait Removal and Clearance"
+     },
+     {
+      "field": "state",
+      "op": "eq",
+      "value": "Completed"
+     }
+    ],
+    "date_field": "completed_at",
+    "finding_date_fields": [
+     "completed_at",
+     "modified"
+    ],
+    "subject_field": "location",
+    "unreadable_counts_as_dirty": true
+   },
+   "target_doctype": "Farm Task",
+   "threshold_critical_days": 30,
+   "threshold_warning_days": 90,
+   "title": "Rodent bait has been placed INSIDE a unit or building and has not been cleared"
+  },
+  {
+   "audit_packet_types": [
+    "OSHA",
+    "EPA"
+   ],
+   "authored_by": "System",
+   "cadence_days": 7,
+   "category": "Housing",
+   "date_field": "completed_at",
+   "due_date_mode": "None",
+   "enabled": 0,
+   "extra_parameters": {
+    "active_interval_days": 7,
+    "grouped_cadence": {
+     "active_interval_days": 7,
+     "anchor_filters": [
+      {
+       "field": "template",
+       "op": "in",
+       "value": [
+        "Rodent Bait Placement - Exterior",
+        "Rodent Bait Placement - Interior",
+        "Rodent Bait Check"
+       ]
+      },
+      {
+       "field": "state",
+       "op": "eq",
+       "value": "Completed"
+      }
+     ],
+     "date_field": "completed_at",
+     "end_filters": [
+      {
+       "field": "template",
+       "op": "eq",
+       "value": "Rodent Bait Removal and Clearance"
+      },
+      {
+       "field": "state",
+       "op": "eq",
+       "value": "Completed"
+      }
+     ],
+     "group_by": "location",
+     "intervals": {
+      "occupied": {
+       "in_season_days": 7,
+       "off_season_days": 30
+      },
+      "unoccupied": {
+       "in_season_days": 7,
+       "off_season_days": 30
+      }
+     },
+     "knockdown_days": 10,
+     "season": "company",
+     "start_filters": [
+      {
+       "field": "template",
+       "op": "in",
+       "value": [
+        "Rodent Bait Placement - Exterior",
+        "Rodent Bait Placement - Interior"
+       ]
+      },
+      {
+       "field": "state",
+       "op": "eq",
+       "value": "Completed"
+      }
+     ],
+     "state": {
+      "active_values": [
+       "Activity"
+      ],
+      "blank_is_active": true,
+      "field": "bait_activity"
+     },
+     "tier": "occupancy"
+    },
+    "knockdown_days": 10,
+    "notify_roles": [
+     "Farm Manager"
+    ],
+    "notify_severities": [
+     "Critical"
+    ],
+    "occupied": {
+     "in_season_days": 7,
+     "off_season_days": 30
+    },
+    "unoccupied": {
+     "in_season_days": 7,
+     "off_season_days": 30
+    }
+   },
+   "kairotic_gate_description": "Fires when a place's next check is due, measured from its latest COMPLETED placement or check (completed_at). Every 7 days while bait is ACTIVE — a new placement's first knockdown_days (10), or a last check that found consumption, fresh feeding signs or carcasses — in season and off. A MAINTENANCE station (last check found no activity) is checked every in_season_days in the company's pest season and every off_season_days (30) outside it. Tier by today's occupancy: OCCUPIED = an active Housing Assignment, the place marked Occupied, or people work there (the people-work-here list in ERPNext MCP Settings); everything else is UNOCCUPIED. Silenced by a later completed check or a completed Removal and Clearance. Tim, 2026-09-27: 'seven days should be fine … maybe out to once a month during the off season.'",
+   "message_template": "Rodent bait check {% if days_overdue == 0 %}due today{% else %}{{ days_overdue }} day(s) overdue{% endif %} at {{ location }} ({{ tier|lower }}, {% if in_season %}in{% else %}off{% endif %} season, {% if phase == 'knockdown' %}a new placement is still in its knockdown window{% elif phase == 'active' %}the last check found activity (or bait is newly placed){% else %}a maintenance station with no activity{% endif %}): every {{ interval_days }} days, last bait task {{ anchor_task }} on {{ anchor[:10] }}. Check every station — consumption, replenish, carcasses with waterproof gloves, stations locked — and record whether there was activity.",
+   "producer_task_template": "Rodent Bait Check",
+   "purpose": "Unchecked stations get opened, moved or emptied, carcasses sit where children and pets find them, and consumption goes unrecorded. Regular checks make baiting near people defensible.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "regulation_citations": "Product label directions (FIFRA §12(a)(2)(G), 7 U.S.C. 136j); 29 CFR 1910.142(j) insect and rodent control in temporary labor camps; OAR 437-004-1120 agricultural labor housing",
+   "requires_doctypes": "Farm Task",
+   "retention_years": 3,
+   "rule_id": "rodent_bait_check_overdue",
+   "target_doctype": "Farm Task",
+   "title": "Rodent bait at a unit or building is overdue for its station check"
+  },
+  {
+   "authored_by": "System",
+   "category": "Records",
+   "default_severity": "Warning",
+   "due_date_mode": "None",
+   "enabled": 0,
+   "kairotic_gate_description": "Fires on STATE: an enabled Pest Control Products item with any of the label fields empty. Silences when they are filled.",
+   "message_template": "{{ row.item_name }} ({{ row.name }}) is missing label data the bait rules read: {% if not row.epa_registration_number %}EPA Reg. No.; {% endif %}{% if not row.application_rate %}application rate; {% endif %}{% if not row.ppe_requirements %}PPE; {% endif %}{% if not row.storage_disposal %}storage/disposal; {% endif %}{% if not row.label_scan_validation %}confirmed label scan; {% endif %}{% if not row.interior_use_allowed %}interior use allowed?; {% endif %}{% if not row.min_bait_days %}minimum bait days; {% endif %}Fill these in from the label before it is used at any unit or building.",
+   "missing_date_behaviour": "Skip",
+   "purpose": "The bait rules follow whatever product is used. A product with nothing on the record cannot be placed by the book, because the worker has nothing to follow.",
+   "regimes": [
+    "Internal"
+   ],
+   "regulation_citations": "Product label directions (FIFRA §12(a)(2)(G), 7 U.S.C. 136j)",
+   "requires_doctypes": "Item",
+   "requires_fields": [
+    "epa_registration_number",
+    "application_rate",
+    "ppe_requirements",
+    "storage_disposal",
+    "label_scan_validation"
+   ],
+   "retention_years": 3,
+   "rule_id": "pest_control_label_fields_missing",
+   "scope_filters": [
+    {
+     "field": "item_group",
+     "op": "eq",
+     "value": "Pest Control Products"
+    },
+    {
+     "field": "disabled",
+     "op": "isfalse"
+    },
+    {
+     "field": "",
+     "op": "any",
+     "value": [
+      {
+       "field": "epa_registration_number",
+       "op": "isnull"
+      },
+      {
+       "field": "application_rate",
+       "op": "isnull"
+      },
+      {
+       "field": "ppe_requirements",
+       "op": "isnull"
+      },
+      {
+       "field": "storage_disposal",
+       "op": "isnull"
+      },
+      {
+       "field": "label_scan_validation",
+       "op": "isnull"
+      },
+      {
+       "field": "interior_use_allowed",
+       "op": "isnull"
+      },
+      {
+       "field": "min_bait_days",
+       "op": "isnull"
+      }
+     ]
+    }
+   ],
+   "severity_expired": "Warning",
+   "target_doctype": "Item",
+   "title": "A pest control product is missing the label fields the bait rules read"
+  },
+  {
+   "audit_packet_types": [
+    "OSHA",
+    "EPA"
+   ],
+   "authored_by": "System",
+   "builtin_scanner": "rodent_bait_label_conformance",
+   "category": "Housing",
+   "enabled": 0,
+   "extra_parameters": {
+    "notify_roles": [
+     "Farm Manager"
+    ],
+    "notify_severities": [
+     "Critical"
+    ]
+   },
+   "kairotic_gate_description": "Fires on a placement whose product's label it contradicts: interior use of a product labelled for outdoor use (Critical); an occupied placement of a tamper-resistant-station product that does not record the stations (Warning); a removal sooner than the label's minimum bait days when the last check still found activity (Warning). Distance and burrow placement are printed on the task and not machine-checked.",
+   "purpose": "Use inconsistent with the label is unlawful. Each placement is checked against its own product.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "regulation_citations": "Product label directions (FIFRA §12(a)(2)(G), 7 U.S.C. 136j); 29 CFR 1910.142(j) insect and rodent control in temporary labor camps; OAR 437-004-1120 agricultural labor housing",
+   "requires_doctypes": "Farm Task",
+   "retention_years": 3,
+   "rule_id": "rodent_bait_label_conformance",
+   "target_doctype": "Farm Task",
+   "title": "A rodent bait placement does not conform to its product's label"
+  },
+  {
+   "authored_by": "System",
+   "category": "Spray and Pesticides",
+   "date_field": "completed_at",
+   "date_field_role": "Timestamp",
+   "default_severity": "Warning",
+   "due_date_mode": "None",
+   "enabled": 0,
+   "kairotic_gate_description": "Fires on a COMPLETED task that handled a product (bait, a form's product, or its materials) whose EPA label PDF was not on file at completion. Informational: the completion itself is never refused.",
+   "message_template": "{{ row.name }} ({{ row.task_name }}) handled a product with no EPA label on file when the work was done. Attach the label (attach_epa_label, or 'Add label photos' on the product) so the next applicator has it in hand.",
+   "missing_date_behaviour": "Raise",
+   "purpose": "The label is the law, and the applicator must be able to read it where the work is done.",
+   "regimes": [
+    "WPS",
+    "Internal"
+   ],
+   "regulation_citations": "FIFRA §12(a)(2)(G) (use consistent with the label); 40 CFR 170.311 (labeling information available to handlers)",
+   "requires_doctypes": "Farm Task",
+   "requires_fields": [
+    "label_available",
+    "label_snapshot"
+   ],
+   "retention_years": 3,
+   "rule_id": "pesticide_label_unavailable",
+   "scope_filters": [
+    {
+     "field": "state",
+     "op": "eq",
+     "value": "Completed"
+    },
+    {
+     "field": "label_available",
+     "op": "isfalse"
+    },
+    {
+     "field": "label_snapshot",
+     "op": "isnotnull"
+    }
+   ],
+   "severity_expired": "Warning",
+   "target_doctype": "Farm Task",
+   "threshold_critical_days": -1,
+   "threshold_warning_days": -1,
+   "title": "A pesticide was applied with no label on file"
+  }
+ ],
+ "inspection_templates": [],
+ "item_groups": [
+  "Pest Control Products"
+ ],
+ "program": "rodent_bait",
+ "requires_app": "0.205.0",
+ "task_templates": [
+  {
+   "applies_to_asset_types": [
+    "Cabin",
+    "House",
+    "Housing Unit",
+    "Storage",
+    "Cold Storage"
+   ],
+   "creates_record": "Pest Control Application",
+   "default_urgency": "Normal",
+   "description": "Rodent bait outside a housing unit or building, from Pest Control Products. Occupied: locked tamper-resistant stations only, occupant notice first.",
+   "dispatch_mode": "Dispatched",
+   "enabled": 0,
+   "estimated_duration_minutes": 45,
+   "evidence_required": {
+    "gps": true,
+    "signature": true
+   },
+   "form_schema": [
+    {
+     "help": {
+      "en": "Scan or pick the bait. Its label opens from here.",
+      "es": "Escanee o elija el cebo. Su etiqueta se abre aquí."
+     },
+     "key": "product",
+     "label": {
+      "en": "Product",
+      "es": "Producto"
+     },
+     "link": {
+      "doctype": "Item",
+      "filters": {
+       "item_group": "Pest Control Products"
+      }
+     },
+     "required": true,
+     "type": "link"
+    },
+    {
+     "key": "notice_posted",
+     "label": {
+      "en": "Occupant notice",
+      "es": "Aviso a ocupantes"
+     },
+     "required": true,
+     "show_if": {
+      "context": "occupancy_at_creation",
+      "equals": "Occupied"
+     },
+     "statement": {
+      "en": "The English/Spanish occupant notice is posted and occupants were told before placement.",
+      "es": "El aviso en inglés/español está colocado y se informó a los ocupantes antes de colocar el cebo."
+     },
+     "type": "attestation"
+    },
+    {
+     "key": "ppe_gloves",
+     "label": {
+      "en": "PPE",
+      "es": "EPP"
+     },
+     "required": true,
+     "statement": {
+      "en": "I am wearing waterproof gloves and any other PPE the label requires.",
+      "es": "Llevo guantes impermeables y cualquier otro EPP que exija la etiqueta."
+     },
+     "type": "attestation"
+    },
+    {
+     "key": "tamper_resistant",
+     "label": {
+      "en": "Tamper-resistant stations",
+      "es": "Estaciones a prueba de manipulación"
+     },
+     "required": true,
+     "required_if": {
+      "context": "occupancy_at_creation",
+      "equals": "Occupied"
+     },
+     "statement": {
+      "en": "Every placement is inside a locked tamper-resistant station; no loose pacs or blocks.",
+      "es": "Cada colocación está dentro de una estación con llave a prueba de manipulación; sin paquetes ni bloques sueltos."
+     },
+     "type": "attestation"
+    },
+    {
+     "fields": [
+      {
+       "key": "photo",
+       "label": {
+        "en": "Station, lid closed and locked",
+        "es": "Estación, tapa cerrada y con llave"
+       },
+       "max_count": 3,
+       "min_count": 1,
+       "required": true,
+       "type": "photo"
+      },
+      {
+       "key": "where",
+       "label": {
+        "en": "Where (side of building, tag)",
+        "es": "Dónde (lado del edificio, etiqueta)"
+       },
+       "required": true,
+       "type": "text"
+      },
+      {
+       "key": "distance_ft",
+       "label": {
+        "en": "Distance from the building (ft)",
+        "es": "Distancia al edificio (pies)"
+       },
+       "min": 0,
+       "required": false,
+       "type": "number"
+      },
+      {
+       "key": "count",
+       "label": {
+        "en": "Bait placed in this station",
+        "es": "Cebo colocado en esta estación"
+       },
+       "min": 0,
+       "required": true,
+       "type": "measurement",
+       "uom": {
+        "from_field": "product"
+       }
+      }
+     ],
+     "help": {
+      "en": "One entry per station.",
+      "es": "Una entrada por estación."
+     },
+     "key": "stations",
+     "label": {
+      "en": "Stations",
+      "es": "Estaciones"
+     },
+     "max_count": 50,
+     "min_count": 1,
+     "required": true,
+     "type": "group"
+    },
+    {
+     "key": "away_from_food",
+     "label": {
+      "en": "Placement",
+      "es": "Colocación"
+     },
+     "required": true,
+     "statement": {
+      "en": "Not in burrows (unless the label allows), not near vents, food or food-contact surfaces.",
+      "es": "No en madrigueras (salvo que la etiqueta lo permita), ni cerca de ventilaciones, alimentos o superficies en contacto con alimentos."
+     },
+     "type": "attestation"
+    }
+   ],
+   "instructions": "Read the label before you start — the label is the law. Stay within the label's distance of the building. Keep bait away from vents, food and food-contact surfaces. No place pacs in burrows.",
+   "instructions_es": "Lea la etiqueta antes de empezar: la etiqueta es la ley. Manténgase dentro de la distancia al edificio que indica la etiqueta. Mantenga el cebo lejos de ventilaciones, alimentos y superficies en contacto con alimentos. No ponga paquetes en madrigueras.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "required_certification": "Applicator License",
+   "skill_required": "applicator",
+   "task_type": "Pest Control",
+   "template_name": "Rodent Bait Placement - Exterior",
+   "title_es": "Colocación de cebo para roedores - Exterior"
+  },
+  {
+   "applies_to_asset_types": [
+    "Cabin",
+    "House",
+    "Housing Unit",
+    "Storage",
+    "Cold Storage"
+   ],
+   "creates_record": "Pest Control Application",
+   "default_urgency": "High",
+   "description": "Rodent bait INSIDE a housing unit or building — the highest-exposure use. Farm Manager approval first; locked tamper-resistant stations only; nobody is assigned to the unit until a Removal and Clearance is completed.",
+   "dispatch_mode": "Dispatched",
+   "enabled": 0,
+   "estimated_duration_minutes": 45,
+   "evidence_required": {
+    "gps": true,
+    "signature": true
+   },
+   "form_schema": [
+    {
+     "before_start": true,
+     "key": "manager_approval",
+     "label": {
+      "en": "Farm Manager approval for interior bait",
+      "es": "Aprobación del gerente para cebo interior"
+     },
+     "required": true,
+     "role": "Farm Manager",
+     "type": "approval"
+    },
+    {
+     "help": {
+      "en": "Scan or pick the bait. Its label opens from here.",
+      "es": "Escanee o elija el cebo. Su etiqueta se abre aquí."
+     },
+     "key": "product",
+     "label": {
+      "en": "Product",
+      "es": "Producto"
+     },
+     "link": {
+      "doctype": "Item",
+      "filters": {
+       "item_group": "Pest Control Products"
+      }
+     },
+     "required": true,
+     "type": "link"
+    },
+    {
+     "key": "notice_posted",
+     "label": {
+      "en": "Occupant notice",
+      "es": "Aviso a ocupantes"
+     },
+     "required": true,
+     "show_if": {
+      "context": "occupancy_at_creation",
+      "equals": "Occupied"
+     },
+     "statement": {
+      "en": "The English/Spanish occupant notice is posted and occupants were told before placement.",
+      "es": "El aviso en inglés/español está colocado y se informó a los ocupantes antes de colocar el cebo."
+     },
+     "type": "attestation"
+    },
+    {
+     "key": "ppe_gloves",
+     "label": {
+      "en": "PPE",
+      "es": "EPP"
+     },
+     "required": true,
+     "statement": {
+      "en": "I am wearing waterproof gloves and any other PPE the label requires.",
+      "es": "Llevo guantes impermeables y cualquier otro EPP que exija la etiqueta."
+     },
+     "type": "attestation"
+    },
+    {
+     "key": "tamper_resistant",
+     "label": {
+      "en": "Tamper-resistant stations",
+      "es": "Estaciones a prueba de manipulación"
+     },
+     "required": true,
+     "required_if": {
+      "context": "occupancy_at_creation",
+      "equals": "Occupied"
+     },
+     "statement": {
+      "en": "Every placement is inside a locked tamper-resistant station; no loose pacs or blocks.",
+      "es": "Cada colocación está dentro de una estación con llave a prueba de manipulación; sin paquetes ni bloques sueltos."
+     },
+     "type": "attestation"
+    },
+    {
+     "fields": [
+      {
+       "key": "photo",
+       "label": {
+        "en": "Station, lid closed and locked",
+        "es": "Estación, tapa cerrada y con llave"
+       },
+       "max_count": 3,
+       "min_count": 1,
+       "required": true,
+       "type": "photo"
+      },
+      {
+       "key": "where",
+       "label": {
+        "en": "Room",
+        "es": "Habitación"
+       },
+       "required": true,
+       "type": "text"
+      },
+      {
+       "key": "count",
+       "label": {
+        "en": "Bait placed in this station",
+        "es": "Cebo colocado en esta estación"
+       },
+       "min": 0,
+       "required": true,
+       "type": "measurement",
+       "uom": {
+        "from_field": "product"
+       }
+      }
+     ],
+     "help": {
+      "en": "One entry per station.",
+      "es": "Una entrada por estación."
+     },
+     "key": "stations",
+     "label": {
+      "en": "Stations",
+      "es": "Estaciones"
+     },
+     "max_count": 50,
+     "min_count": 1,
+     "required": true,
+     "type": "group"
+    },
+    {
+     "key": "out_of_reach",
+     "label": {
+      "en": "Placement",
+      "es": "Colocación"
+     },
+     "required": true,
+     "statement": {
+      "en": "Out of reach of children and pets; not near vents, food, dishes or food-contact surfaces.",
+      "es": "Fuera del alcance de niños y mascotas; no cerca de ventilaciones, alimentos, platos o superficies en contacto con alimentos."
+     },
+     "type": "attestation"
+    }
+   ],
+   "instructions": "Only with the Farm Manager's approval. Every placement in a locked station, out of reach of children and pets, never near vents, food, dishes or counters. Photograph each station with the room visible.",
+   "instructions_es": "Solo con la aprobación del gerente. Cada colocación en una estación con llave, fuera del alcance de niños y mascotas, nunca cerca de ventilaciones, alimentos, platos o mostradores. Fotografíe cada estación con la habitación visible.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "required_certification": "Applicator License",
+   "skill_required": "applicator",
+   "task_type": "Pest Control",
+   "template_name": "Rodent Bait Placement - Interior",
+   "title_es": "Colocación de cebo para roedores - Interior"
+  },
+  {
+   "applies_to_asset_types": [
+    "Cabin",
+    "House",
+    "Housing Unit",
+    "Storage",
+    "Cold Storage"
+   ],
+   "creates_record": "",
+   "default_urgency": "Normal",
+   "description": "Check every active bait station at one place. Every 7 days while active or in season; every 30 days off season for maintenance stations with no activity.",
+   "dispatch_mode": "Dispatched",
+   "enabled": 0,
+   "estimated_duration_minutes": 30,
+   "evidence_required": {
+    "gps": true
+   },
+   "form_schema": [
+    {
+     "help": {
+      "en": "Scan or pick the bait. Its label opens from here.",
+      "es": "Escanee o elija el cebo. Su etiqueta se abre aquí."
+     },
+     "key": "product",
+     "label": {
+      "en": "Product",
+      "es": "Producto"
+     },
+     "link": {
+      "doctype": "Item",
+      "filters": {
+       "item_group": "Pest Control Products"
+      }
+     },
+     "required": false,
+     "type": "link"
+    },
+    {
+     "key": "ppe_gloves",
+     "label": {
+      "en": "PPE",
+      "es": "EPP"
+     },
+     "required": true,
+     "statement": {
+      "en": "I am wearing waterproof gloves and any other PPE the label requires.",
+      "es": "Llevo guantes impermeables y cualquier otro EPP que exija la etiqueta."
+     },
+     "type": "attestation"
+    },
+    {
+     "fields": [
+      {
+       "key": "photo",
+       "label": {
+        "en": "Station, open then locked",
+        "es": "Estación, abierta y luego con llave"
+       },
+       "max_count": 3,
+       "min_count": 1,
+       "required": true,
+       "type": "photo"
+      },
+      {
+       "key": "where",
+       "label": {
+        "en": "Station (room/side, tag)",
+        "es": "Estación (habitación/lado, etiqueta)"
+       },
+       "required": true,
+       "type": "text"
+      },
+      {
+       "key": "consumption",
+       "label": {
+        "en": "Bait eaten",
+        "es": "Cebo consumido"
+       },
+       "options": [
+        {
+         "label": {
+          "en": "None",
+          "es": "Nada"
+         },
+         "value": "none"
+        },
+        {
+         "label": {
+          "en": "Some",
+          "es": "Algo"
+         },
+         "value": "partial"
+        },
+        {
+         "label": {
+          "en": "All",
+          "es": "Todo"
+         },
+         "value": "all"
+        }
+       ],
+       "required": true,
+       "type": "select"
+      },
+      {
+       "key": "replenished",
+       "label": {
+        "en": "Bait added",
+        "es": "Cebo añadido"
+       },
+       "min": 0,
+       "type": "measurement",
+       "uom": {
+        "from_field": "product"
+       }
+      },
+      {
+       "key": "intact",
+       "label": {
+        "en": "Station intact, locked, not moved",
+        "es": "Estación intacta, con llave, sin mover"
+       },
+       "required": true,
+       "type": "check"
+      }
+     ],
+     "key": "stations",
+     "label": {
+      "en": "Stations checked",
+      "es": "Estaciones revisadas"
+     },
+     "max_count": 50,
+     "min_count": 1,
+     "required": true,
+     "type": "group"
+    },
+    {
+     "key": "carcasses",
+     "label": {
+      "en": "Carcasses collected",
+      "es": "Cadáveres recogidos"
+     },
+     "min": 0,
+     "required": true,
+     "type": "number"
+    },
+    {
+     "key": "rodent_activity_found",
+     "label": {
+      "en": "Rodent activity found? (bait eaten, fresh signs of feeding, or carcasses)",
+      "es": "¿Actividad de roedores? (cebo consumido, señales frescas o cadáveres)"
+     },
+     "options": [
+      {
+       "label": {
+        "en": "Yes",
+        "es": "Sí"
+       },
+       "value": "yes"
+      },
+      {
+       "label": {
+        "en": "No",
+        "es": "No"
+       },
+       "value": "no"
+      }
+     ],
+     "required": true,
+     "type": "select"
+    },
+    {
+     "key": "notice_still_posted",
+     "label": {
+      "en": "Occupant notice still posted",
+      "es": "El aviso a ocupantes sigue colocado"
+     },
+     "required_if": {
+      "context": "occupancy_at_creation",
+      "equals": "Occupied"
+     },
+     "show_if": {
+      "context": "occupancy_at_creation",
+      "equals": "Occupied"
+     },
+     "type": "check"
+    }
+   ],
+   "instructions": "Visit every station, not a sample. Bag every carcass and dispose of it as the label says.",
+   "instructions_es": "Visite todas las estaciones, no una muestra. Embolse cada cadáver y deséchelo como indica la etiqueta.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "skill_required": "camp_maintenance",
+   "task_type": "Pest Control",
+   "template_name": "Rodent Bait Check",
+   "title_es": "Revisión de cebo para roedores"
+  },
+  {
+   "applies_to_asset_types": [
+    "Cabin",
+    "House",
+    "Housing Unit",
+    "Storage",
+    "Cold Storage"
+   ],
+   "creates_record": "Pest Control Application",
+   "default_urgency": "High",
+   "description": "End a baiting round: every station removed, leftover bait and carcasses collected and disposed per label. For interior bait at a housing unit this is the PRE-OCCUPANCY CLEARANCE.",
+   "dispatch_mode": "Dispatched",
+   "enabled": 0,
+   "estimated_duration_minutes": 45,
+   "evidence_required": {
+    "gps": true,
+    "signature": true
+   },
+   "form_schema": [
+    {
+     "help": {
+      "en": "Scan or pick the bait. Its label opens from here.",
+      "es": "Escanee o elija el cebo. Su etiqueta se abre aquí."
+     },
+     "key": "product",
+     "label": {
+      "en": "Product",
+      "es": "Producto"
+     },
+     "link": {
+      "doctype": "Item",
+      "filters": {
+       "item_group": "Pest Control Products"
+      }
+     },
+     "required": false,
+     "type": "link"
+    },
+    {
+     "key": "ppe_gloves",
+     "label": {
+      "en": "PPE",
+      "es": "EPP"
+     },
+     "required": true,
+     "statement": {
+      "en": "I am wearing waterproof gloves and any other PPE the label requires.",
+      "es": "Llevo guantes impermeables y cualquier otro EPP que exija la etiqueta."
+     },
+     "type": "attestation"
+    },
+    {
+     "key": "preoccupancy",
+     "label": {
+      "en": "Is this a pre-occupancy clearance?",
+      "es": "¿Es una limpieza antes de ocupar?"
+     },
+     "options": [
+      {
+       "label": {
+        "en": "Yes",
+        "es": "Sí"
+       },
+       "value": "yes"
+      },
+      {
+       "label": {
+        "en": "No",
+        "es": "No"
+       },
+       "value": "no"
+      }
+     ],
+     "required": true,
+     "type": "select"
+    },
+    {
+     "fields": [
+      {
+       "key": "photo",
+       "label": {
+        "en": "Former location, empty",
+        "es": "Ubicación anterior, vacía"
+       },
+       "max_count": 2,
+       "min_count": 1,
+       "required": true,
+       "type": "photo"
+      },
+      {
+       "key": "where",
+       "label": {
+        "en": "Station (room/side, tag)",
+        "es": "Estación (habitación/lado, etiqueta)"
+       },
+       "required": true,
+       "type": "text"
+      },
+      {
+       "key": "count",
+       "label": {
+        "en": "Leftover bait collected",
+        "es": "Cebo sobrante recogido"
+       },
+       "min": 0,
+       "type": "measurement",
+       "uom": {
+        "from_field": "product"
+       }
+      }
+     ],
+     "key": "stations",
+     "label": {
+      "en": "Stations removed",
+      "es": "Estaciones retiradas"
+     },
+     "max_count": 50,
+     "min_count": 1,
+     "required": true,
+     "type": "group"
+    },
+    {
+     "key": "carcasses",
+     "label": {
+      "en": "Carcasses collected",
+      "es": "Cadáveres recogidos"
+     },
+     "min": 0,
+     "required": true,
+     "type": "number"
+    },
+    {
+     "key": "residue_free",
+     "label": {
+      "en": "Surfaces free of bait residue",
+      "es": "Superficies sin residuos de cebo"
+     },
+     "min_count": 1,
+     "required_if": {
+      "context": "bait_placement",
+      "equals": "Interior"
+     },
+     "type": "photo"
+    },
+    {
+     "key": "disposed_per_label",
+     "label": {
+      "en": "Disposal",
+      "es": "Eliminación"
+     },
+     "required": true,
+     "statement": {
+      "en": "Leftover bait, carcasses and packaging were disposed of as the label says; sealed product returned to the chemical store.",
+      "es": "El cebo sobrante, los cadáveres y el empaque se desecharon según la etiqueta; el producto sellado volvió al almacén de químicos."
+     },
+     "type": "attestation"
+    }
+   ],
+   "instructions": "The number removed must match the number placed. Dispose of bait, carcasses and packaging as the label's Storage and Disposal section says.",
+   "instructions_es": "El número retirado debe coincidir con el colocado. Deseche el cebo, los cadáveres y el empaque como indica la sección de Almacenamiento y Eliminación de la etiqueta.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "required_certification": "Applicator License",
+   "skill_required": "applicator",
+   "task_type": "Pest Control",
+   "template_name": "Rodent Bait Removal and Clearance",
+   "title_es": "Retiro y limpieza de cebo para roedores"
+  },
+  {
+   "applies_to_asset_types": [
+    "Cabin",
+    "House",
+    "Housing Unit",
+    "Storage",
+    "Cold Storage"
+   ],
+   "creates_record": "",
+   "default_urgency": "High",
+   "description": "Post and hand out the English/Spanish notice BEFORE rodent bait is placed at an occupied unit or building. Placement cannot start until this is completed for the round.",
+   "dispatch_mode": "Dispatched",
+   "enabled": 0,
+   "estimated_duration_minutes": 15,
+   "evidence_required": {
+    "gps": true
+   },
+   "form_schema": [
+    {
+     "help": {
+      "en": "Scan or pick the bait. Its label opens from here.",
+      "es": "Escanee o elija el cebo. Su etiqueta se abre aquí."
+     },
+     "key": "product",
+     "label": {
+      "en": "Product",
+      "es": "Producto"
+     },
+     "link": {
+      "doctype": "Item",
+      "filters": {
+       "item_group": "Pest Control Products"
+      }
+     },
+     "required": true,
+     "type": "link"
+    },
+    {
+     "key": "notice_en",
+     "label": {
+      "en": "English notice at each entrance",
+      "es": "Aviso en inglés en cada entrada"
+     },
+     "max_count": 10,
+     "min_count": 1,
+     "required": true,
+     "type": "photo"
+    },
+    {
+     "key": "notice_es",
+     "label": {
+      "en": "Spanish notice at each entrance",
+      "es": "Aviso en español en cada entrada"
+     },
+     "max_count": 10,
+     "min_count": 1,
+     "required": true,
+     "type": "photo"
+    },
+    {
+     "key": "removal_date",
+     "label": {
+      "en": "Expected removal date on the notice",
+      "es": "Fecha de retiro prevista en el aviso"
+     },
+     "required": true,
+     "type": "date"
+    },
+    {
+     "key": "occupants_told",
+     "label": {
+      "en": "Occupants told in person (names, or 'none present')",
+      "es": "Ocupantes informados en persona (nombres, o 'nadie presente')"
+     },
+     "required": true,
+     "type": "text"
+    }
+   ],
+   "instructions": "Post the notice at every entrance and near each outside station group: bait in locked stations; do not touch them; keep children and pets away; report dead rodents; who to call; start and removal dates; product and EPA Reg. No.",
+   "instructions_es": "Coloque el aviso en cada entrada y cerca de cada grupo de estaciones exteriores: cebo en estaciones con llave; no tocarlas; mantener alejados a niños y mascotas; reportar roedores muertos; a quién llamar; fechas de inicio y retiro; producto y No. de Reg. EPA.",
+   "regimes": [
+    "OR-OSHA",
+    "Internal"
+   ],
+   "skill_required": "camp_maintenance",
+   "task_type": "Pest Control",
+   "template_name": "Rodent Bait Occupant Notice (EN/ES)",
+   "title_es": "Aviso a ocupantes sobre cebo para roedores (EN/ES)"
+  }
+ ],
+ "title": {
+  "en": "Rodent bait at housing and buildings",
+  "es": "Cebo para roedores en viviendas y edificios"
+ },
+ "uom_contexts": [
+  {
+   "applies_to": "Count",
+   "context_name": "Bait",
+   "description": "Rodent and insect bait placed by the piece. A bait label's rate is a count per station or per placement — \"1 or 2 blocks of bait\" — and is stocked the same way.",
+   "uoms": [
+    {
+     "is_default": 1,
+     "notes": "One bait block, as the label counts it.",
+     "uom": "Block"
+    },
+    {
+     "is_default": 0,
+     "notes": "A pre-measured pouch of bait placed whole — \"1 place pac per bait placement\".",
+     "uom": "Place Pac"
+    },
+    {
+     "is_default": 0,
+     "notes": "Soft-bait pouches and packets placed unopened.",
+     "uom": "Pouch"
+    },
+    {
+     "is_default": 0,
+     "notes": "A tamper-resistant station, counted as placed.",
+     "uom": "Bait Station"
+    }
+   ]
+  }
+ ],
+ "uoms": [
+  {
+   "aliases": [],
+   "must_be_whole_number": 1,
+   "uom_name": "Block"
+  },
+  {
+   "aliases": [
+    "pac",
+    "pacs",
+    "place pacs",
+    "pack",
+    "packs"
+   ],
+   "must_be_whole_number": 1,
+   "uom_name": "Place Pac"
+  },
+  {
+   "aliases": [],
+   "must_be_whole_number": 1,
+   "uom_name": "Pouch"
+  },
+  {
+   "aliases": [
+    "station",
+    "stations"
+   ],
+   "must_be_whole_number": 1,
+   "uom_name": "Bait Station"
+  }
+ ],
+ "version": 1
+}

@@ -68,9 +68,12 @@ def build_application(task: dict, assignment_doc, answers: dict | None) -> str:
 	doc.stations = stations or 0
 	doc.applicator = worker
 	doc.applicator_name = str(getattr(assignment_doc, "assigned_to_name", "") or worker)
-	cert = rodent_bait.applicator_qualification(worker) if worker else ""
-	if cert.startswith("Certification "):
-		doc.applicator_certification = cert.split(" ")[1]
+	from . import qualifications
+
+	requirement = str(task.get("required_certification") or "") or rodent_bait.APPLICATOR_CERTIFICATION
+	cert = qualifications.certificate_of(worker, requirement) if worker else ""
+	if cert:
+		doc.applicator_certification = cert
 	available, _snapshot = task_forms.label_state({**task, "bait_product": product})
 	doc.label_available = 1 if available else 0
 	views = task_forms._json(task.get("label_views"), [])

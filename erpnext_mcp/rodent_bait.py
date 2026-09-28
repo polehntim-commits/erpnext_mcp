@@ -68,18 +68,12 @@ TERMINAL_STATES = ("Completed", "Rejected", "Cancelled", "Merged")
 
 PEST_CONTROL_GROUP = "Pest Control Products"
 
-#: The program's settings and their defaults (ERPNext MCP Settings).
-DEFAULTS = {
-	"pest_applicator_skill": "applicator",
-	"pest_applicator_certification": "Applicator License",
-	"pest_require_applicator": 1,
-	"pest_crew_skill": "camp_maintenance",
-	"pest_alert_role": "Farm Manager",
-	"pest_people_work_here_types": "Barn\nShop\nKitchen\nBath House\nToilet-Shower\nStorage\nCold Storage",
-}
-
-#: The season when a company names none: March through October.
-DEFAULT_SEASON = ("03-01", "10-31")
+#: What placement and removal require (v0.205.0: `required_certification` on the
+#: template, enforced by `qualifications` for every template — no longer a setting).
+APPLICATOR_CERTIFICATION = "Applicator License"
+APPLICATOR_SKILL = "applicator"
+CREW_SKILL = "camp_maintenance"
+ALERT_ROLE = "Farm Manager"
 
 #: `rodent_bait_check_overdue`'s extra_parameters when the rule carries none.
 DEFAULT_INTERVALS = {
@@ -88,29 +82,6 @@ DEFAULT_INTERVALS = {
 	"occupied": {"in_season_days": 7, "off_season_days": 30},
 	"unoccupied": {"in_season_days": 7, "off_season_days": 30},
 }
-
-
-# ── settings ────────────────────────────────────────────────────────────────
-def setting(fieldname: str):
-	"""One program setting, its default when unset. Never raises."""
-	try:
-		from . import settings
-
-		value = settings._value(fieldname)
-	except Exception:
-		value = None
-	if value in (None, ""):
-		return DEFAULTS.get(fieldname)
-	return value
-
-
-def people_work_here_types() -> set:
-	raw = str(setting("pest_people_work_here_types") or "")
-	return {line.strip().casefold() for line in raw.replace(",", "\n").splitlines() if line.strip()}
-
-
-def applicator_skill() -> str:
-	return str(setting("pest_applicator_skill") or "").strip()
 
 
 # ── what a task is ──────────────────────────────────────────────────────────
@@ -127,127 +98,14 @@ def _location_of(row) -> tuple:
 	return str(get("location_doctype") or ""), str(get("location") or "")
 
 
-# ── occupancy ───────────────────────────────────────────────────────────────
-def occupancy(location_doctype: str, location: str, on: str | None = None) -> dict:
-	"""`{occupied, source, detail}` for one place. The first source that says yes wins.
-
-	1. An active Housing Assignment on a Housing Unit.
-	2. The place's own `occupied` flag — first-class, not a fallback.
-	3. People work there: the `people_work_here` flag, or a type on the
-	   people-work-here list (ERPNext MCP Settings).
-	Otherwise unoccupied. Never raises: a place this cannot read is reported as
-	OCCUPIED, the strict tier, because guessing empty is the unsafe direction.
-	"""
-	on = str(on or frappe.utils.today())[:10]
-	if location_doctype not in LOCATION_DOCTYPES or not location:
-		return {"occupied": False, "source": "none", "detail": "no housing unit or building named"}
-	try:
-		if not compat.doctype_exists(location_doctype) or not frappe.db.exists(location_doctype, location):
-			return {"occupied": True, "source": "unreadable", "detail": f"{location} could not be read"}
-		if location_doctype == HOUSING_UNIT:
-			assignment = _active_assignment(location, on)
-			if assignment:
-				return {
-					"occupied": True,
-					"source": "housing_assignment",
-					"detail": f"Housing Assignment {assignment} is current",
-				}
-		fields = compat.existing_fields(
-			location_doctype,
-			("name", "occupied", "people_work_here", "unit_type", "asset_type", "current_state"),
-		)
-		row = frappe.db.get_value(location_doctype, location, fields, as_dict=True) or {}
-		if compat.checked(row.get("occupied")):
-			return {"occupied": True, "source": "manual_flag", "detail": f"{location} is marked Occupied"}
-		if _asset_state(row.get("current_state")) == "occupied":
-			return {
-				"occupied": True,
-				"source": "manual_flag",
-				"detail": f"{location}'s state is occupied (mark_occupied on the asset)",
-			}
-		if compat.checked(row.get("people_work_here")):
-			return {"occupied": True, "source": "people_work_here", "detail": f"people work at {location}"}
-		kind = str(row.get("unit_type") or row.get("asset_type") or "")
-		if kind and kind.casefold() in people_work_here_types():
-			return {
-				"occupied": True,
-				"source": "people_work_here",
-				"detail": f"{location} is a {kind}, which counts as a place people work",
-			}
-	except Exception:
-		return {"occupied": True, "source": "unreadable", "detail": f"{location} could not be read"}
-	return {"occupied": False, "source": "none", "detail": f"nobody lives or works at {location}"}
-
-
-def _asset_state(raw) -> str:
-	try:
-		value = json.loads(raw) if isinstance(raw, str) and raw.strip() else (raw or {})
-	except Exception:
-		return ""
-	return str(value.get("state") or "") if isinstance(value, dict) else ""
-
-
-def _active_assignment(unit: str, on: str) -> str:
-	if not compat.doctype_exists(HOUSING_ASSIGNMENT):
-		return ""
-	rows = frappe.db.get_all(
-		HOUSING_ASSIGNMENT,
-		filters={"unit": unit},
-		fields=["name", "status", "assigned_date", "end_date"],
-		limit=500,
-	)
-	for row in rows or []:
-		if str(row.get("status") or "Current") != "Current":
-			continue
-		start = str(row.get("assigned_date") or "")[:10]
-		end = str(row.get("end_date") or "")[:10]
-		if start and start > on:
-			continue
-		if end and end < on:
-			continue
-		return str(row["name"])
-	return ""
-
-
-# ── the season ──────────────────────────────────────────────────────────────
-_MMDD = re.compile(r"^(\d{1,2})-(\d{1,2})$")
-
-
-def _mmdd(value, fallback: str) -> str:
-	match = _MMDD.match(str(value or "").strip())
-	if not match:
-		return fallback
-	month, day = int(match.group(1)), int(match.group(2))
-	if not (1 <= month <= 12 and 1 <= day <= 31):
-		return fallback
-	return f"{month:02d}-{day:02d}"
-
-
-def season_of(company: str) -> tuple:
-	"""`(start, end)` as MM-DD for a company; March–October when unset."""
-	start, end = DEFAULT_SEASON
-	if company and compat.doctype_exists("Company"):
-		fields = compat.existing_fields("Company", ("pest_season_start", "pest_season_end"))
-		if fields:
-			row = frappe.db.get_value("Company", company, fields, as_dict=True) or {}
-			raw_start, raw_end = row.get("pest_season_start"), row.get("pest_season_end")
-			if str(raw_start or "").strip() and str(raw_end or "").strip():
-				start, end = _mmdd(raw_start, start), _mmdd(raw_end, end)
-	return start, end
-
-
-def in_season(company: str, on: str | None = None) -> bool:
-	"""Is `on` inside the company's pest season? Inclusive; a window may wrap the year."""
-	day = str(on or frappe.utils.today())[5:10]
-	start, end = season_of(company)
-	if start <= end:
-		return start <= day <= end
-	return day >= start or day <= end
-
-
-def valid_mmdd(value) -> bool:
-	return bool(_MMDD.match(str(value or "").strip())) and _mmdd(value, "") != ""
-
+# ── occupancy and the season (generic since v0.205.0: `occupancy.py`) ─────
+from .occupancy import (  # noqa: E402  — re-exported; callers and tests use these names
+	DEFAULT_SEASON as _DEFAULT_SEASON,  # noqa: F401
+)
+from .occupancy import active_assignment as _active_assignment  # noqa: E402, F401
+from .occupancy import asset_state as _asset_state  # noqa: E402, F401
+from .occupancy import in_season, occupancy, season_of, valid_mmdd  # noqa: E402, F401
+from .occupancy import mmdd as _mmdd  # noqa: E402, F401
 
 # ── bait tasks at one place ─────────────────────────────────────────────────
 _TASK_FIELDS = (
@@ -369,6 +227,23 @@ def on_task_completed(doc) -> None:
 			return
 		for key, value in values.items():
 			frappe.db.set_value(location_doctype, location, key, value, update_modified=False)
+		# v0.205.0. The generic per-program mirror (docs/design/programs_and_field_kinds.md A6).
+		if compat.has_field(location_doctype, "program_state"):
+			raw = frappe.db.get_value(location_doctype, location, "program_state")
+			try:
+				states = json.loads(raw) if raw else {}
+			except ValueError:
+				states = {}
+			entry = dict(states.get("rodent_bait") or {})
+			entry.update(
+				{"state": values["rodent_bait_state"], "since": str(values["rodent_bait_state_since"])}
+			)
+			if template in PLACEMENT_SIDE:
+				entry["last_start"] = doc.name
+			states["rodent_bait"] = entry
+			frappe.db.set_value(
+				location_doctype, location, "program_state", json.dumps(states), update_modified=False
+			)
 	except Exception:  # pragma: no cover - a completion must never fail over a mirror
 		frappe.log_error(title="erpnext_mcp: rodent bait state not updated", message=compat.traceback_text())
 
@@ -408,71 +283,19 @@ def activity_of(explicit, checklist_items: list) -> bool:
 	return said is None
 
 
-# ── who may do it ───────────────────────────────────────────────────────────
-def needs_applicator(task: dict) -> bool:
-	skill = applicator_skill()
-	return bool(
-		skill
-		and is_bait_template(task.get("template"))
-		and str(task.get("skill_required") or "").strip() == skill
-		and compat.checked(setting("pest_require_applicator"))
-	)
+# ── who may do it (generic since v0.205.0: `qualifications.py`) ──────────
+def applicator_qualification(employee: str, requirement: str = APPLICATOR_CERTIFICATION) -> str:
+	"""Kept for callers: what satisfies the applicator requirement, or ''."""
+	from . import qualifications
 
-
-def applicator_qualification(employee: str) -> str:
-	"""What qualifies this worker for applicator work, or '' when nothing does."""
-	if not employee:
-		return ""
-	skill = applicator_skill()
-	if compat.doctype_exists("Employee"):
-		from .tools import fieldwork
-
-		field = compat.first_field("Employee", *fieldwork._SKILL_FIELDS)
-		if field:
-			listed = str(frappe.db.get_value("Employee", employee, field) or "")
-			tokens = {token.strip().casefold() for token in re.split(r"[,\n;]", listed) if token.strip()}
-			if skill and skill.casefold() in tokens:
-				return f"Employee.{field} lists {skill}"
-	cert_type = str(setting("pest_applicator_certification") or "").strip()
-	if not cert_type or not compat.doctype_exists("Certification"):
-		return ""
-	names = {employee.casefold()}
-	if compat.doctype_exists("Employee"):
-		full = str(frappe.db.get_value("Employee", employee, "employee_name") or "").strip()
-		if full:
-			names.add(full.casefold())
-	today = frappe.utils.today()
-	for row in frappe.db.get_all(
-		"Certification",
-		filters={"cert_type": cert_type},
-		fields=["name", "holder", "status", "expiration_date"],
-		limit=2000,
-	):
-		if str(row.get("holder") or "").strip().casefold() not in names:
-			continue
-		if str(row.get("status") or "Active") != "Active":
-			continue
-		expires = str(row.get("expiration_date") or "")[:10]
-		if expires and expires < today:
-			continue
-		return f"Certification {row['name']} ({cert_type})"
-	return ""
+	return qualifications.qualification(employee, requirement)
 
 
 def refuse_unqualified(task: dict, employee: str, verb: str) -> None:
-	"""Refuse applicator work for a worker without the qualification. §6."""
-	if not needs_applicator(task) or not employee:
-		return
-	if applicator_qualification(employee):
-		return
-	cert_type = setting("pest_applicator_certification")
-	raise ToolError(
-		f"{task.get('name')} is rodent bait {'placement' if task.get('template') in PLACEMENT_SIDE else 'removal'} "
-		f"and needs the applicator qualification, which {employee} does not have on record: no current "
-		f"{cert_type!r} Certification held by them, and no {applicator_skill()!r} on their Employee "
-		f"skills. Record the licence with create_certification, or send a licensed applicator. "
-		f"Nothing was {verb}."
-	)
+	"""Kept for callers: the task's own `required_certification`, as for every task."""
+	from . import qualifications
+
+	qualifications.refuse_unqualified(task, employee, verb)
 
 
 def refuse_start_without_notice(task: dict) -> None:
@@ -694,7 +517,35 @@ def _note(task: str, text: str) -> None:
 		pass
 
 
-# ── the next check ──────────────────────────────────────────────────────────
+# ── the next check (the generic `cadence` primitive since v0.205.0) ────────
+#: `rodent_bait_check_overdue`'s grouped_cadence — docs/design/programs_and_field_kinds.md A4.
+def cadence_params(extra: dict | None = None) -> dict:
+	"""The rodent block, with a rule's own intervals laid over the defaults."""
+	merged = intervals(extra)
+	return {
+		"group_by": "location",
+		"anchor_filters": [
+			{"field": "template", "op": "in", "value": [EXTERIOR, INTERIOR, CHECK]},
+			{"field": "state", "op": "eq", "value": COMPLETED},
+		],
+		"start_filters": [
+			{"field": "template", "op": "in", "value": [EXTERIOR, INTERIOR]},
+			{"field": "state", "op": "eq", "value": COMPLETED},
+		],
+		"end_filters": [
+			{"field": "template", "op": "eq", "value": REMOVAL},
+			{"field": "state", "op": "eq", "value": COMPLETED},
+		],
+		"date_field": "completed_at",
+		"state": {"field": "bait_activity", "active_values": [ACTIVITY], "blank_is_active": True},
+		"knockdown_days": merged["knockdown_days"],
+		"active_interval_days": merged["active_interval_days"],
+		"tier": "occupancy",
+		"intervals": {"occupied": merged["occupied"], "unoccupied": merged["unoccupied"]},
+		"season": "company",
+	}
+
+
 def intervals(extra: dict | None = None) -> dict:
 	merged = json.loads(json.dumps(DEFAULT_INTERVALS))
 	for key, value in (extra or {}).items():
@@ -712,52 +563,13 @@ def next_check(
 	extra: dict | None = None,
 	company: str = "",
 ) -> dict | None:
-	"""When the next Rodent Bait Check is due at a place, and why. None when no bait is out. §7."""
+	"""When the next Rodent Bait Check is due at a place, and why. None when no bait is out."""
+	from . import cadence
+
 	today = str(today or frappe.utils.today())[:10]
-	rows = bait_tasks(location_doctype, location)
-	since = round_start(location_doctype, location, rows)
-	placements = [
-		row
-		for row in rows
-		if row.get("template") in PLACEMENT_SIDE and _done_at(row) and _done_at(row) > since
-	]
-	if not placements:
-		return None
-	anchors = [
-		row
-		for row in rows
-		if row.get("template") in (EXTERIOR, INTERIOR, CHECK) and _done_at(row) and _done_at(row) > since
-	]
-	anchor_row = max(anchors, key=_done_at)
-	anchor = _done_at(anchor_row)
-	placed = max(_done_at(row) for row in placements)
-	settings = intervals(extra)
-	company = company or str(anchor_row.get("company") or "")
-	tier = OCCUPIED if occupancy(location_doctype, location, today)["occupied"] else UNOCCUPIED
-	season = in_season(company, today)
-	state = _state_of(location_doctype, location) or ACTIVE
-	knockdown = _days_between(placed[:10], anchor[:10]) < int(settings["knockdown_days"])
-	if knockdown or state == ACTIVE:
-		interval, phase = int(settings["active_interval_days"]), ("knockdown" if knockdown else "active")
-	else:
-		band = settings["occupied" if tier == OCCUPIED else "unoccupied"]
-		interval = int(band["in_season_days" if season else "off_season_days"])
-		phase = "maintenance"
-	due = (datetime.date.fromisoformat(anchor[:10]) + datetime.timedelta(days=interval)).isoformat()
-	return {
-		"location_doctype": location_doctype,
-		"location": location,
-		"anchor_task": str(anchor_row["name"]),
-		"anchor": anchor,
-		"latest_placement": placed,
-		"tier": tier,
-		"in_season": season,
-		"phase": phase,
-		"interval_days": interval,
-		"due_date": due,
-		"days_remaining": _days_between(today, due),
-		"company": company,
-	}
+	params = cadence.params_of((extra or {}).get("grouped_cadence") or cadence_params(extra))
+	rows = [dict(row) for row in bait_tasks(location_doctype, location)]
+	return cadence.evaluate(rows, params, (location_doctype, location), today)
 
 
 def _state_of(location_doctype: str, location: str) -> str:
@@ -1016,6 +828,7 @@ SEED_TASK_TEMPLATES = (
 			"EN/ES occupant notice done BEFORE placement (the start is refused until it is)."
 		),
 		"skill_required": "applicator",
+		"required_certification": APPLICATOR_CERTIFICATION,
 		"estimated_duration_minutes": 45,
 		"dispatch_mode": "Dispatched",
 		"default_urgency": "Normal",
@@ -1057,6 +870,7 @@ SEED_TASK_TEMPLATES = (
 			"first where occupied. Nobody is assigned to the unit until a Removal and Clearance is completed."
 		),
 		"skill_required": "applicator",
+		"required_certification": APPLICATOR_CERTIFICATION,
 		"estimated_duration_minutes": 45,
 		"dispatch_mode": "Dispatched",
 		"default_urgency": "High",
@@ -1137,6 +951,7 @@ SEED_TASK_TEMPLATES = (
 			"PRE-OCCUPANCY CLEARANCE: only a COMPLETED one clears the unit."
 		),
 		"skill_required": "applicator",
+		"required_certification": APPLICATOR_CERTIFICATION,
 		"estimated_duration_minutes": 45,
 		"dispatch_mode": "Dispatched",
 		"default_urgency": "High",
@@ -1208,49 +1023,28 @@ def _extra_of(context: dict) -> dict:
 		return {}
 
 
+#: The v0.203.0 message, as a template the generic scan renders.
+CHECK_MESSAGE = (
+	"Rodent bait check {% if days_overdue == 0 %}due today{% else %}{{ days_overdue }} day(s) overdue{% endif %} "
+	"at {{ location }} ({{ tier|lower }}, {% if in_season %}in{% else %}off{% endif %} season, "
+	"{% if phase == 'knockdown' %}a new placement is still in its knockdown window"
+	"{% elif phase == 'active' %}the last check found activity (or bait is newly placed)"
+	"{% else %}a maintenance station with no activity{% endif %}): every {{ interval_days }} days, "
+	"last bait task {{ anchor_task }} on {{ anchor[:10] }}. Check every station — consumption, replenish, "
+	"carcasses with waterproof gloves, stations locked — and record whether there was activity."
+)
+
+
 def scan_check_overdue(context: dict) -> list:
-	"""`rodent_bait_check_overdue` (§7–§8): each place's next check, raised when due.
+	"""The builtin name, kept: a row that still names it runs the generic primitive."""
+	from . import cadence
 
-	Warning from the due date; Critical once more than `active_interval_days`
-	overdue. Raised on the place's latest bait task, so a later completed Check
-	or Removal moves or silences it by itself.
-	"""
-	from .alerts.base import SEVERITY_CRITICAL, SEVERITY_WARNING, Observation
-
-	today = str(context.get("today") or frappe.utils.today())[:10]
-	company = str(context.get("company") or "")
 	extra = _extra_of(context)
-	settings = intervals(extra)
-	out = []
-	for location_doctype, location in bait_locations(company):
-		due = next_check(location_doctype, location, today, extra)
-		if not due or due["days_remaining"] > 0:
-			continue
-		overdue = -int(due["days_remaining"])
-		severity = SEVERITY_CRITICAL if overdue > int(settings["active_interval_days"]) else SEVERITY_WARNING
-		why = {
-			"knockdown": "a new placement is still in its knockdown window",
-			"active": "the last check found activity (or bait is newly placed)",
-			"maintenance": "a maintenance station with no activity",
-		}[due["phase"]]
-		out.append(
-			Observation(
-				source_doctype=FARM_TASK,
-				source_docname=due["anchor_task"],
-				message=(
-					f"Rodent bait check {'due today' if overdue == 0 else f'{overdue} day(s) overdue'} at "
-					f"{location} ({due['tier'].lower()}, {'in' if due['in_season'] else 'off'} season, "
-					f"{why}): every {due['interval_days']} days, last bait task {due['anchor_task']} on "
-					f"{due['anchor'][:10]}. Check every station — consumption, replenish, carcasses with "
-					"waterproof gloves, stations locked — and record whether there was activity."
-				),
-				severity=severity,
-				due_date=due["due_date"],
-				company=due["company"],
-				category="Housing",
-			)
-		)
-	return out
+	rule = dict(context.get("rule") or {})
+	rule.setdefault("target_doctype", FARM_TASK)
+	rule["message_template"] = rule.get("message_template") or CHECK_MESSAGE
+	rule["category"] = rule.get("category") or "Housing"
+	return cadence.scan(rule, context, extra.get("grouped_cadence") or cadence_params(extra))
 
 
 def scan_label_conformance(context: dict) -> list:
@@ -1357,7 +1151,7 @@ _CITES = (
 
 def rule_seed_specs() -> list:
 	"""The four rodent bait rules, DISABLED and unapproved — the program is Tim's to switch on."""
-	role = str(setting("pest_alert_role") or "Farm Manager")
+	role = ALERT_ROLE
 	return [
 		{
 			"rule_id": "rodent_bait_interior_placement",
@@ -1424,13 +1218,18 @@ def rule_seed_specs() -> list:
 			"target_doctype": FARM_TASK,
 			"requires_doctypes": FARM_TASK,
 			"enabled": 0,
-			"builtin_scanner": "rodent_bait_check_overdue",
+			# v0.205.0. Declarative: the generic grouped_cadence primitive carries
+			# every tunable (docs/design/programs_and_field_kinds.md A4).
 			"cadence_days": 7,
+			"message_template": CHECK_MESSAGE,
+			"date_field": "completed_at",
+			"due_date_mode": "None",
 			# The Link only where the template exists: the rules seed before the
 			# templates on a fresh site, and a dangling Link refuses the whole rule.
 			**({"producer_task_template": CHECK} if template_exists(CHECK) else {}),
 			"extra_parameters": {
 				**json.loads(json.dumps(DEFAULT_INTERVALS)),
+				"grouped_cadence": cadence_params(),
 				"notify_roles": [role],
 				"notify_severities": ["Critical"],
 			},
@@ -1780,6 +1579,7 @@ SEED_TASK_TEMPLATES_V204 = (
 		"title_es": "Colocación de cebo para roedores - Exterior",
 		"description": "Rodent bait outside a housing unit or building, from Pest Control Products. Occupied: locked tamper-resistant stations only, occupant notice first.",
 		"skill_required": "applicator",
+		"required_certification": APPLICATOR_CERTIFICATION,
 		"estimated_duration_minutes": 45,
 		"dispatch_mode": "Dispatched",
 		"default_urgency": "Normal",
@@ -1811,6 +1611,7 @@ SEED_TASK_TEMPLATES_V204 = (
 		"title_es": "Colocación de cebo para roedores - Interior",
 		"description": "Rodent bait INSIDE a housing unit or building — the highest-exposure use. Farm Manager approval first; locked tamper-resistant stations only; nobody is assigned to the unit until a Removal and Clearance is completed.",
 		"skill_required": "applicator",
+		"required_certification": APPLICATOR_CERTIFICATION,
 		"estimated_duration_minutes": 45,
 		"dispatch_mode": "Dispatched",
 		"default_urgency": "High",
@@ -1950,6 +1751,7 @@ SEED_TASK_TEMPLATES_V204 = (
 		"title_es": "Retiro y limpieza de cebo para roedores",
 		"description": "End a baiting round: every station removed, leftover bait and carcasses collected and disposed per label. For interior bait at a housing unit this is the PRE-OCCUPANCY CLEARANCE.",
 		"skill_required": "applicator",
+		"required_certification": APPLICATOR_CERTIFICATION,
 		"estimated_duration_minutes": 45,
 		"dispatch_mode": "Dispatched",
 		"default_urgency": "High",

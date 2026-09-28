@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.205.0 — 2026-09-28 — configure, not code: programs as data; every field kind on the phone
+
+**932 tools** (461 read, 471 write): `list_programs`, `export_program`, `list_device_capabilities`
+(read), `import_program` (write, default off). **Five new routes** (141 mobile methods):
+`list_my_inspections`, `get_inspection`, `submit_inspection`, `search_link`,
+`report_device_capabilities`. Contract `docs/design/programs_and_field_kinds.md`.
+
+- **Part A — the Rodent Bait Program settings section is gone; the rodent program behaves the same.**
+  `required_certification` on any Farm Task Template / Inspection Template (snapshotted onto the
+  task), enforced for every template on claim, assign, start, resume and inspection start/submit
+  (`qualifications.py`: a current Certification whose type or name matches, or the Employee skill).
+  `people_present` on Farm Asset Type (a Housing Unit's unit type reads the type of the same name;
+  Barn/Shop/Kitchen/Bath House/Toilet-Shower seeded as disabled flag-only types; the per-place
+  Occupied flag stays). Occupancy and the season are generic (`occupancy.py`); the season is Company
+  `season_start` / `season_end` (the `pest_*` names still accepted). **`grouped_cadence`** is a rule
+  option any declarative rule can use (group by place, round/start/anchor filters, knockdown,
+  active/maintenance state from a field, occupancy or field tiers, in/off season) — the rodent check
+  rule is declarative on it and the builtin scanner name delegates to it. `program_state` mirror on
+  Housing Unit / Asset Register.
+- **Programs are bundles**: `programs/rodent_bait.json` (generated from the seed definitions; a test
+  keeps them equal); export from this site, import create-only (disabled, unapproved, dry run first).
+- **Patch `move_rodent_settings_to_data`** reads the old settings from tabSingles and carries them:
+  certifications onto applicator templates and their open tasks, the people-work-here list onto
+  asset types, seasons onto the new Company fields, and System-authored check rules onto
+  `grouped_cadence`. OML's AI-proposed CRULE-2026-0048 is left alone.
+- **Part B — field kinds v2**: Frappe types 1:1 (data, small_text, long_text, text_editor, select,
+  link to any phone-searchable doctype, dynamic_link, date, datetime, time, duration, check, int,
+  float, currency, percent, rating, table, attach, attach_image, signature, geolocation, barcode,
+  color, html, read_only; password refused) plus scan, map_area, timer, audio_note, document viewer
+  and computed (whitelisted arithmetic incl. `sum(table.column)`, recomputed by the server). Frappe
+  spellings are accepted as types. `phone_link_doctypes` setting (security) + `search_link` route.
+- **Capability negotiation**: phones report schema version + field kinds onto their device row;
+  template tools and previews name the devices/app versions that fall back; a `safety_critical`
+  field an app cannot render refuses that app's completion (`client_capabilities`). Unknown kinds
+  render as a text/photo fallback, accepted by the server unless safety-critical.
+- **Part C — inspections on the phone**: list, open (each section as a form, with context) and submit
+  (answers validated, photos, notes, skips). The rodent sections now work on the phone.
+- Deploy: **`bench migrate`**, then an image rebuild. iOS: fafo_ios §52.
+
 ## 0.204.0 — 2026-09-28 — templates the phone renders; the product label one tap away
 
 **928 tools** (458 read, 470 write): `preview_farm_task_template`, `preview_inspection_template`,

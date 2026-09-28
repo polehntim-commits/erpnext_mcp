@@ -60,7 +60,7 @@ class TheVocabulary(unittest.TestCase):
 				{"key": "c", "type": "text", "label": T("x"), "show_if": {"field": "nope", "equals": 1}},
 				{"key": "d", "type": "measurement", "label": T("x"), "uom": {"from_field": "c"}},
 				{"key": "e", "type": "approval", "label": T("x")},
-				{"key": "f", "type": "link", "label": T("x"), "link": {"doctype": "Customer"}},
+				{"key": "f", "type": "link", "label": T("x"), "link": {"doctype": "User"}},
 			]
 		)
 		codes = sorted({row["code"] for row in report["errors"]})

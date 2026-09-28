@@ -17,6 +17,12 @@
   "enrollment_expires_at",
   "enrolled_at",
   "last_seen_on",
+  "capabilities_section",
+  "app_version",
+  "form_schema_version",
+  "capabilities_col",
+  "field_kinds",
+  "capabilities_reported_at",
   "issued_by",
   "revocation_section",
   "revoked_on",
@@ -97,6 +103,44 @@
    "read_only": 1,
    "in_list_view": 1,
    "description": "The last time this credential authenticated a request, stamped at most once an hour. The idle sweep reads it per device, so a phone lost in an orchard is revoked on its own while the worker's new phone keeps working."
+  },
+  {
+   "fieldname": "capabilities_section",
+   "fieldtype": "Section Break",
+   "label": "App Capabilities",
+   "collapsible": 1
+  },
+  {
+   "description": "v0.205.0. The app version this device last reported.",
+   "fieldname": "app_version",
+   "fieldtype": "Data",
+   "label": "App Version",
+   "read_only": 1
+  },
+  {
+   "description": "The form schema version the app renders (1 = v0.204.0 kinds, 2 = v0.205.0).",
+   "fieldname": "form_schema_version",
+   "fieldtype": "Int",
+   "label": "Form Schema Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "capabilities_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The field kinds this app renders natively.",
+   "fieldname": "field_kinds",
+   "fieldtype": "Code",
+   "label": "Field Kinds",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "capabilities_reported_at",
+   "fieldtype": "Datetime",
+   "label": "Capabilities Reported At",
+   "read_only": 1
   },
   {
    "fieldname": "issued_by",

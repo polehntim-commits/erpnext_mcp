@@ -19,6 +19,7 @@
   "description",
   "work_section",
   "skill_required",
+  "required_certification",
   "estimated_duration_minutes",
   "work_col",
   "cadence_trigger_expression",
@@ -122,6 +123,12 @@
    "fieldtype": "Data",
    "label": "Skill Required",
    "search_index": 1
+  },
+  {
+   "description": "v0.205.0. A certification the named worker must hold to start or submit a session from this template.",
+   "fieldname": "required_certification",
+   "fieldtype": "Data",
+   "label": "Required Certification"
   },
   {
    "description": "How long the whole visit takes, in minutes — all sections, one trip. It is what makes 'MC-Cabin-01: 3 tasks, ~90 min combined' answerable before somebody sets off, and it is deliberately the WHOLE visit rather than the sum of the parts, because walking in once is most of the saving.",

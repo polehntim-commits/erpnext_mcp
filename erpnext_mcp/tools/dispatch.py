@@ -67,6 +67,7 @@ from .. import (
 	completions,
 	datetimes,
 	minors,
+	qualifications,
 	records,
 	rodent_bait,
 	sessions,
@@ -195,6 +196,8 @@ _TASK_FIELDS = (
 	"bait_placement",
 	"bait_product",
 	"bait_activity",
+	# v0.205.0. Who may do it.
+	"required_certification",
 	# v0.204.0. The form snapshot, its answers, approvals and the label record.
 	"form_schema",
 	"form_answers",
@@ -1710,7 +1713,7 @@ def assign_farm_task(args: dict) -> ToolResult:
 	# sixteen-year-old into being a lawful pesticide handler.
 	minor = _refuse_a_minor_on_prohibited_work(worker, worker_name, row, verb="changed")
 	# v0.203.0. Rodent bait placement and removal are licensed-applicator work.
-	rodent_bait.refuse_unqualified(row, worker, "changed")
+	qualifications.refuse_unqualified(row, worker, "changed")
 
 	held = live_assignment(row["name"])
 	reassigned_from = None
@@ -2092,7 +2095,7 @@ def claim_farm_task(args: dict) -> ToolResult:
 	# foreman's tool instead, so somebody standing on a block is told who can act
 	# rather than only that they cannot.
 	_refuse_harvest_inside_phi(row, args, "changed")
-	rodent_bait.refuse_unqualified(row, worker, "changed")
+	qualifications.refuse_unqualified(row, worker, "changed")
 
 	if (row.get("dispatch_mode") or "Either") not in SELF_PICKABLE:
 		raise ToolError(
@@ -2179,7 +2182,7 @@ def start_farm_task(args: dict) -> ToolResult:
 	# v0.203.0. Rodent bait: the applicator qualification, and at an occupied
 	# place the English/Spanish occupant notice done first. Both the MCP tool and
 	# the phone start here. docs/design/rodent_bait_program.md §5–§6.
-	rodent_bait.refuse_unqualified(task, str(assignment.get("assigned_to") or ""), "started")
+	qualifications.refuse_unqualified(task, str(assignment.get("assigned_to") or ""), "started")
 	rodent_bait.refuse_start_without_notice(task)
 	# v0.204.0. A `before_start` approval step (e.g. the Farm Manager's sign-off
 	# on interior bait) must be signed first.
@@ -4096,6 +4099,7 @@ def _recipe_from_template(template: str, row: dict) -> dict | None:
 		"template": shape["template"],
 		"checklist_status": shape["checklist_status"],
 		"form_schema": list(shape.get("form_schema") or []),
+		"required_certification": shape.get("required_certification") or "",
 		"creates_record_data": dict(shape["creates_record_data"]),
 		"instructions": shape["notes"],
 	}
@@ -5152,6 +5156,8 @@ def _task_from_alert(row: dict, recipe: dict, dry_run: bool, overrides: dict | N
 		doc.checklist_status = json.dumps(recipe.get("checklist_status") or {"items": []})
 		if recipe.get("form_schema") and compat.has_field(FARM_TASK, "form_schema"):
 			doc.form_schema = json.dumps(recipe["form_schema"])
+		if recipe.get("required_certification") and compat.has_field(FARM_TASK, "required_certification"):
+			doc.required_certification = recipe["required_certification"]
 	if assignee:
 		doc.assigned_to = assignee
 		doc.assigned_to_name = _worker_name(assignee, "")
@@ -5978,7 +5984,7 @@ def resume_farm_task(args: dict) -> ToolResult:
 	holder = str(assignment.get("assigned_to") or "")
 	# v0.203.0. Resuming is starting: the same rodent bait refusals.
 	resumed_task = task_row(assignment["task"])
-	rodent_bait.refuse_unqualified(resumed_task, holder, "resumed")
+	qualifications.refuse_unqualified(resumed_task, holder, "resumed")
 	rodent_bait.refuse_start_without_notice(resumed_task)
 	# RESUMING IS STARTING, so the same exclusivity applies: whatever this worker
 	# had running is stood down first. Without this a resume would be the one door

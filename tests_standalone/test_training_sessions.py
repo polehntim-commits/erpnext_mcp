@@ -806,6 +806,12 @@ class TheSignatureIsASeparateAct(TrainingSessionTestCase):
 		So this test makes the two moments coincide by doing them at once.
 		"""
 		session = self.open_session()["name"]
+		# The double's clock ticks one second per `now()` call, so "the same minute"
+		# depended on how many timestamps the setup before it happened to take.
+		# Start the scan at the top of a minute so the two acts share one.
+		from . import harness
+
+		harness._now_counter = ((harness._now_counter // 60) + 1) * 60
 		self.tool_data("add_session_attendee", {"session": session, "badge_scan": BEN_BADGE})
 		data = self.tool_data(
 			"sign_session_attendance",

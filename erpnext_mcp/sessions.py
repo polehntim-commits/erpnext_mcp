@@ -970,6 +970,9 @@ def build_template(spec: dict):
 	doc.description = str(spec.get("description") or "").strip()
 	doc.applies_to_asset_type = str(spec.get("applies_to_asset_type") or "General").strip()
 	doc.skill_required = str(spec.get("skill_required") or "").strip()
+	# v0.205.0. A certification the named worker must hold.
+	if spec.get("required_certification") and compat.has_field(TEMPLATE_DOCTYPE, "required_certification"):
+		doc.required_certification = str(spec["required_certification"]).strip()
 	doc.estimated_duration_minutes = int(spec.get("estimated_duration_minutes") or 0)
 	doc.cadence_trigger_expression = str(spec.get("cadence_trigger_expression") or "").strip()
 	doc.regulation_citations = str(spec.get("regulation_citations") or "").strip()

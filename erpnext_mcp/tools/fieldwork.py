@@ -704,6 +704,7 @@ def complete_task_via_mobile(args: dict) -> ToolResult:
 		"form_answers",
 		"checklist",
 		"language",
+		"client_capabilities",
 	):
 		if args.get(key) is not None:
 			inner[key] = args.get(key)

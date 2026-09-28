@@ -121,6 +121,8 @@ TEMPLATE_FIELDS = (
 	"applies_to_asset_types",
 	"title_es",
 	"instructions_es",
+	# v0.205.0. The certification a worker must hold (docs/design/programs_and_field_kinds.md A1).
+	"required_certification",
 	"creation",
 	"modified",
 	"owner",
@@ -290,6 +292,7 @@ def describe(name: str, with_checklist: bool = False) -> dict:
 		"applies_to_asset_types": asset_types_of(row),
 		"title_es": str(row.get("title_es") or "") or None,
 		"instructions_es": str(row.get("instructions_es") or "") or None,
+		"required_certification": str(row.get("required_certification") or "") or None,
 		"checklist_item_count": len(checklist),
 		"required_checklist_item_count": len([item for item in checklist if item.get("required")]),
 	}
@@ -342,6 +345,8 @@ def snapshot(name: str) -> dict:
 		"company": row.get("company") or None,
 		# v0.204.0. The form, COPIED — editing the template never reaches a task.
 		"form_schema": form_of(row),
+		# v0.205.0. Who may do it, COPIED the same way.
+		"required_certification": str(row.get("required_certification") or ""),
 		"checklist_status": {
 			"items": [
 				{
@@ -386,7 +391,7 @@ def build_template(spec: dict):
 	if spec.get("applies_to_asset_types"):
 		types = spec["applies_to_asset_types"]
 		doc.applies_to_asset_types = "\n".join(types) if isinstance(types, (list, tuple)) else str(types)
-	for key in ("title_es", "instructions_es"):
+	for key in ("title_es", "instructions_es", "required_certification"):
 		if spec.get(key):
 			doc.set(key, str(spec[key]).strip())
 	doc.enabled = 1 if spec.get("enabled", 1) else 0

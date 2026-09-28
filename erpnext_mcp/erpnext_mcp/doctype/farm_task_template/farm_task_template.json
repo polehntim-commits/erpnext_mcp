@@ -19,6 +19,7 @@
   "description",
   "work_section",
   "skill_required",
+  "required_certification",
   "estimated_duration_minutes",
   "work_col",
   "dispatch_mode",
@@ -129,6 +130,12 @@
    "in_standard_filter": 1,
    "label": "Skill Required",
    "search_index": 1
+  },
+  {
+   "description": "v0.205.0. A certification the worker must hold — matched against a current Certification's type or name (e.g. Applicator License, Forklift), or the worker's Employee skills. Enforced on claim, assign, start and resume for every task raised from this template. Empty means none.",
+   "fieldname": "required_certification",
+   "fieldtype": "Data",
+   "label": "Required Certification"
   },
   {
    "description": "How long one of these takes, in minutes. Copied onto the task, where it is compared against the actual on the assignment afterwards — which is how an estimate on a template stops being a guess somebody made once and becomes a number with a season of evidence behind it.",

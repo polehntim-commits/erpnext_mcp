@@ -85,6 +85,15 @@ SEEDED: tuple[tuple[str, str, int, str], ...] = (
 	("General", "A", 200, "Anything the other types do not describe."),
 )
 
+#: v0.205.0. Types where people live or work — the occupied tier for programs
+#: that have one (docs/design/programs_and_field_kinds.md A3). Set on CREATE only.
+PEOPLE_PRESENT = ("Storage", "Cold Storage")
+
+#: v0.205.0. Housing Unit unit types where people work, carried as DISABLED asset
+#: types so the flag has a register row without adding a picker entry. They
+#: replace the `pest_people_work_here_types` setting's default list.
+FLAG_ONLY_TYPES = ("Barn", "Shop", "Kitchen", "Bath House", "Toilet-Shower")
+
 #: The type names alone, in seed order.
 SEEDED_NAMES: tuple[str, ...] = tuple(row[0] for row in SEEDED)
 
@@ -255,7 +264,11 @@ def seed(*, extra: list | None = None) -> dict:
 		# find it to fill the rest in.
 		wanted.append((text, text[:1].upper(), 500, ""))
 
-	for name, icon, order, detail in wanted:
+	flag_only = [
+		(name, name[:1].upper(), 900, "A Housing Unit type people work in (flag only).")
+		for name in FLAG_ONLY_TYPES
+	]
+	for name, icon, order, detail in [*wanted, *flag_only]:
 		try:
 			if frappe.db.exists(DOCTYPE, name):
 				report["present"].append(name)
@@ -265,7 +278,9 @@ def seed(*, extra: list | None = None) -> dict:
 			doc.icon = icon
 			doc.display_order = order
 			doc.description = detail
-			doc.enabled = 1
+			doc.enabled = 0 if name in FLAG_ONLY_TYPES else 1
+			if name in PEOPLE_PRESENT or name in FLAG_ONLY_TYPES:
+				doc.people_present = 1
 			doc.flags.ignore_permissions = True
 			doc.insert(ignore_permissions=True)
 			report["created"].append(name)

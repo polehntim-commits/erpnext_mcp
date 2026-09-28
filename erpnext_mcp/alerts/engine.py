@@ -248,6 +248,17 @@ def _declarative_scan(row: dict):
 		today = context.get("today") or frappe.utils.today()
 		company = context.get("company") or ""
 		warnings = []
+		# v0.205.0. A rule carrying `grouped_cadence` is scanned group by group
+		# (docs/design/programs_and_field_kinds.md A4) — rodent bait checks
+		# first, any program after.
+		try:
+			extra = compliance_rules.as_object(row.get("extra_parameters_json"), "extra_parameters")
+		except ValueError:
+			extra = {}
+		if isinstance(extra.get("grouped_cadence"), dict):
+			from .. import cadence
+
+			return cadence.scan(row, {"today": today, "company": company}, extra["grouped_cadence"])
 		try:
 			filters = compliance_rules.parse_filters(row.get("scope_filters_json"))
 		except ValueError as exc:

@@ -124,6 +124,16 @@ def check_completion(task: dict, args: dict) -> dict | None:
 			+ ", ".join(f"{form_schema.text_of(f.get('label'))} ({f.get('role')})" for f in pending)
 			+ ". Nothing was changed."
 		)
+	# v0.205.0 (B4). A visible safety-critical field this client cannot render
+	# refuses the completion; everything else degrades to a fallback answer.
+	from . import device_capabilities
+
+	device_capabilities.refuse_incapable(
+		fields,
+		sent if isinstance(sent, dict) else {},
+		context_of(task),
+		args.get("client_capabilities"),
+	)
 	if sent in (None, "", {}):
 		return None
 	language = str(args.get("language") or "en")

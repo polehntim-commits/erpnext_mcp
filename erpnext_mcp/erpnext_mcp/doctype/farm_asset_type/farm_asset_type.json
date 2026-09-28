@@ -12,6 +12,7 @@
   "identity_col",
   "icon",
   "display_order",
+  "people_present",
   "detail_section",
   "description"
  ],
@@ -49,6 +50,13 @@
    "fieldname": "display_order",
    "fieldtype": "Int",
    "label": "Display Order"
+  },
+  {
+   "default": "0",
+   "description": "v0.205.0. People live or work in places of this type — a barn, a shop, a bunkhouse. Treated as OCCUPIED for programs with an occupied tier (rodent bait's strict tier). A Housing Unit whose unit type has the same name counts too. The per-place Occupied flag still applies on top.",
+   "fieldname": "people_present",
+   "fieldtype": "Check",
+   "label": "People Live or Work Here"
   },
   {
    "fieldname": "detail_section",

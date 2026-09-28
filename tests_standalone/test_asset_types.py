@@ -464,7 +464,11 @@ class TheRegisterIsManagedThroughMCP(V12TestCase):
 		error = self.tool_error("create_asset_type", {"type_name": "tractor"})
 		self.assertIn("'Tractor'", error)
 		self.assertIn("Nothing was created", error)
-		self.assertEqual(len(asset_types.names(enabled_only=False)), len(asset_types.SEEDED))
+		# v0.205.0: plus the disabled flag-only Housing Unit types (people_present).
+		self.assertEqual(
+			len(asset_types.names(enabled_only=False)),
+			len(asset_types.SEEDED) + len(asset_types.FLAG_ONLY_TYPES),
+		)
 
 	def test_a_type_can_be_staged_disabled(self):
 		created = self.tool_data("create_asset_type", {"type_name": "Drone", "enabled": False})

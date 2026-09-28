@@ -1385,6 +1385,7 @@ def complete_task_via_mobile(
 	form_answers=None,
 	checklist=None,
 	language=None,
+	client_capabilities=None,
 ) -> dict:
 	"""Finish one task: file the evidence, write the compliance record.
 
@@ -1471,6 +1472,13 @@ def complete_task_via_mobile(
 		),
 		("checklist", _json_argument(checklist, "checklist") if isinstance(checklist, str) else checklist),
 		("language", language),
+		# v0.205.0. What this app renders — a safety-critical field it cannot is refused.
+		(
+			"client_capabilities",
+			_json_argument(client_capabilities, "client_capabilities")
+			if isinstance(client_capabilities, str)
+			else client_capabilities,
+		),
 	):
 		if value is not None:
 			inner[key] = value
@@ -11874,6 +11882,249 @@ def start_inspection(
 			inner[key] = str(value).strip()
 
 	return session_tools.start_inspection_session(inner).data
+
+
+# ── 112a–112c. Inspections on the phone ──────────────────────────────────────
+#
+# v0.205.0. docs/design/programs_and_field_kinds.md Part C. The phone could OPEN
+# an inspection visit and never fill one in: there was no read of its sections
+# and no submit. So the rodent sections ("Rodent activity seen?", "Rodent bait
+# cleared") — and every section a template authored through MCP carries — could
+# only be answered through MCP. Each section's prompts come back as a form in
+# the one vocabulary the phone renders everywhere.
+def _inspection_form(section: dict) -> list:
+	from .. import form_schema, sessions
+
+	fields = sessions.section_fields(section)
+	if fields:
+		return form_schema.for_phone(fields, {})
+	contract = section.get("evidence_contract") or {}
+	out = [
+		{
+			"key": form_schema.slug(key) if not key.islower() else key,
+			"type": "check",
+			"label": {"en": key.replace("_", " ").capitalize()},
+			"required": True,
+		}
+		for key in contract.get("checklist_items") or []
+	]
+	out += [
+		{"key": key, "type": "float", "label": {"en": key.replace("_", " ").capitalize()}, "required": True}
+		for key in contract.get("measurements") or []
+	]
+	return out
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_my_inspections", limit=guard.READ_LIMIT)
+def list_my_inspections(user: str, state=None, limit=None) -> dict:
+	"""The caller's inspection visits: open first, then recently submitted."""
+	allowed = guard.require_scope(user)
+	employee = fieldwork._employee_for(user)
+	filters: dict = {}
+	if employee:
+		filters["worker"] = employee
+	if str(state or "").strip():
+		filters["state"] = str(state).strip()
+	rows = frappe.db.get_all(
+		"Inspection Session",
+		filters=filters,
+		fields=compat.existing_fields(
+			"Inspection Session",
+			(
+				"name",
+				"template",
+				"state",
+				"company",
+				"location_doctype",
+				"location",
+				"started_at",
+				"submitted_at",
+			),
+		),
+		order_by="creation desc",
+		limit=min(int(limit or 50), 200),
+	)
+	rows = [dict(row) for row in rows or [] if not row.get("company") or row.get("company") in allowed]
+	rows.sort(
+		key=lambda row: (
+			row.get("state") in ("Submitted", "Reviewed", "Superseded"),
+			str(row.get("started_at") or ""),
+		)
+	)
+	return {"sessions": rows, "count": len(rows)}
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_inspection", limit=guard.READ_LIMIT)
+def get_inspection(user: str, session=None) -> dict:
+	"""One visit, and each section as a form the phone renders."""
+	from .. import occupancy, sessions
+
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc("Inspection Session", session, "session", allowed)
+	data = dict(session_tools.get_inspection_session({"name": name}).data)
+	row = (
+		frappe.db.get_value(
+			"Inspection Session", name, ["template", "location_doctype", "location"], as_dict=True
+		)
+		or {}
+	)
+	sections = []
+	for section in sessions.sections_of(row.get("template")):
+		described = sessions.describe_section(section)
+		sections.append(
+			{
+				"section_name": described["section_name"],
+				"section_description": described["section_description"],
+				"required": described["required"],
+				"renderer_hint": described["renderer_hint"],
+				"evidence_contract": described["evidence_contract"],
+				"produces_record_doctype": described["produces_record_doctype"],
+				"checklist_items": list((described["evidence_contract"] or {}).get("checklist_items") or []),
+				"form": _inspection_form(described),
+			}
+		)
+	asset_type = ""
+	if row.get("location_doctype") == "Asset Register" and row.get("location"):
+		asset_type = str(frappe.db.get_value("Asset Register", row["location"], "asset_type") or "")
+	occupied = (
+		occupancy.occupancy(row.get("location_doctype") or "", row.get("location") or "")
+		if row.get("location_doctype") in occupancy.LOCATION_DOCTYPES
+		else {"occupied": False}
+	)
+	data["sections"] = sections
+	data["form_context"] = {
+		"location_doctype": row.get("location_doctype") or "",
+		"asset_type": asset_type,
+		"occupancy_at_creation": "Occupied" if occupied.get("occupied") else "Unoccupied",
+		"template": row.get("template") or "",
+	}
+	return data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("submit_inspection", mutating=True, limit=guard.WRITE_LIMIT)
+def submit_inspection(
+	user: str, session=None, section_submissions=None, client_capabilities=None, visit_id=None
+) -> dict:
+	"""File a visit from the phone: each section's answers, photos, notes, or skipped."""
+	from .. import device_capabilities, sessions
+
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc("Inspection Session", session, "session", allowed)
+	employee = fieldwork._employee_for(user)
+	worker = frappe.db.get_value("Inspection Session", name, "worker")
+	if worker and worker != employee:
+		guard.require_dispatch_role(user, "Submitting somebody else's inspection")
+	raw = (
+		_json_argument(section_submissions, "section_submissions")
+		if isinstance(section_submissions, str)
+		else section_submissions
+	)
+	if not isinstance(raw, list) or not raw:
+		frappe.throw(
+			"section_submissions must be a list of sections. Nothing was written.", frappe.ValidationError
+		)
+	capabilities = (
+		_json_argument(client_capabilities, "client_capabilities")
+		if isinstance(client_capabilities, str)
+		else client_capabilities
+	)
+	template = frappe.db.get_value("Inspection Session", name, "template")
+	by_name = {
+		str(section.get("section_name") or ""): sessions.describe_section(section)
+		for section in sessions.sections_of(template)
+	}
+	for entry in raw:
+		described = by_name.get(str((entry or {}).get("section_name") or ""))
+		if described and not entry.get("skipped"):
+			answers = entry.get("answers") or {}
+			device_capabilities.refuse_incapable(
+				sessions.section_fields(described), answers, {}, capabilities
+			)
+	inner = {"name": name, "section_submissions": raw}
+	if employee and not worker:
+		inner["worker"] = employee
+	if str(visit_id or "").strip():
+		inner["visit_id"] = str(visit_id).strip()
+	return session_tools.submit_inspection_session(inner).data
+
+
+# ── 112d. search_link ────────────────────────────────────────────────────────
+#
+# v0.205.0 (B3). A form's link to any record the operator has made phone-
+# searchable (ERPNext MCP Settings › phone_link_doctypes). Scoped to the caller's
+# entities where the doctype has a company; Employee answers names only.
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("search_link", limit=guard.READ_LIMIT)
+def search_link(user: str, doctype=None, txt=None, filters=None, limit=None) -> dict:
+	"""Search one phone-searchable doctype by name/title for a form's link picker."""
+	from .. import form_schema
+
+	allowed = guard.require_scope(user)
+	wanted = str(doctype or "").strip()
+	if wanted not in form_schema.phone_link_doctypes():
+		frappe.throw(
+			f"{wanted or '(none)'} is not searchable from the phone. An operator adds it to ERPNext MCP "
+			"Settings › phone_link_doctypes.",
+			frappe.PermissionError,
+		)
+	if not compat.doctype_exists(wanted):
+		frappe.throw(f"this site has no {wanted} doctype.", frappe.ValidationError)
+	given = _json_argument(filters, "filters") if isinstance(filters, str) else (filters or {})
+	if not isinstance(given, dict) or any(isinstance(value, (list, dict)) for value in given.values()):
+		frappe.throw("filters must be an object of equality filters.", frappe.ValidationError)
+	meta = frappe.get_meta(wanted)
+	title_field = str(getattr(meta, "title_field", "") or "")
+	if wanted == "Employee":
+		title_field = "employee_name"
+	search_fields = [f.strip() for f in str(getattr(meta, "search_fields", "") or "").split(",") if f.strip()]
+	company_field = compat.first_field(wanted, "company", "owning_entity")
+	query = dict(given)
+	if company_field:
+		query[company_field] = ("in", list(allowed))
+	fields = (
+		compat.existing_fields(wanted, ("name", title_field, *search_fields[:3])) if title_field else ["name"]
+	)
+	text = str(txt or "").strip().lower()
+	rows = frappe.db.get_all(wanted, filters=query, fields=fields, limit=2000)
+	out = []
+	for row in rows or []:
+		row = dict(row)
+		title = str(row.get(title_field) or "") if title_field else ""
+		haystack = " ".join(str(value or "") for value in row.values()).lower()
+		if text and text not in haystack:
+			continue
+		description = (
+			""
+			if wanted == "Employee"
+			else ", ".join(
+				str(row.get(field) or "")
+				for field in search_fields[:3]
+				if row.get(field) and field != title_field
+			)
+		)
+		out.append({"name": row["name"], "title": title or row["name"], "description": description or None})
+		if len(out) >= min(int(limit or 20), 50):
+			break
+	return {"doctype": wanted, "results": out, "count": len(out)}
+
+
+# ── 112e. report_device_capabilities ─────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("report_device_capabilities", mutating=True, limit=guard.WRITE_LIMIT)
+def report_device_capabilities(
+	user: str, device_identifier=None, app_version=None, schema_version=None, field_kinds=None
+) -> dict:
+	"""What this app build renders (v0.205.0, B4) — stored on the caller's device row."""
+	from .. import device_capabilities
+
+	guard.require_scope(user)
+	kinds = _json_argument(field_kinds, "field_kinds") if isinstance(field_kinds, str) else field_kinds
+	return device_capabilities.report(
+		user, str(device_identifier or ""), str(app_version or ""), schema_version, kinds or []
+	)
 
 
 # ── 113. get_payroll_register ────────────────────────────────────────────────

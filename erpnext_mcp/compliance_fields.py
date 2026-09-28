@@ -1450,18 +1450,20 @@ TARGETS = (
 					"wins, because one arrangement can differ from the entity's norm."
 				),
 			),
-			# v0.203.0. Tim: rodent bait checks "seven days should be fine … and
-			# maybe out to once a month during the off season". The season is
-			# this entity's, not the site's — two farms, two climates.
+			# v0.203.0, generic since v0.205.0. Tim: rodent bait checks "seven days
+			# should be fine … and maybe out to once a month during the off season".
+			# The season is this entity's, not the site's — two farms, two climates —
+			# and any rule's `grouped_cadence` may read it
+			# (docs/design/programs_and_field_kinds.md A4–A5).
 			ComplianceField(
-				fieldname="pest_season_start",
-				label="Pest Season Start (MM-DD)",
+				fieldname="season_start",
+				label="Season Start (MM-DD)",
 				fieldtype="Data",
-				framework="Internal policy — rodent bait check cadence (docs/design/rodent_bait_program.md §7)",
+				framework="Internal policy — in-season vs off-season cadence for rules that use it",
 				why=(
-					"Rodent pressure and crew occupancy follow the growing season. In season every "
-					"bait location is checked weekly; off season a maintenance station with no "
-					"activity may go to a monthly check."
+					"Pest pressure, crew occupancy and much recurring work follow the growing season. "
+					"A rule with a seasonal cadence (rodent bait checks: weekly in season, monthly off "
+					"season for quiet stations) reads this entity's window."
 				),
 				operational=(
 					"The day the season starts each year, as MM-DD (e.g. 03-01). Blank on either "
@@ -1469,12 +1471,12 @@ TARGETS = (
 				),
 			),
 			ComplianceField(
-				fieldname="pest_season_end",
-				label="Pest Season End (MM-DD)",
+				fieldname="season_end",
+				label="Season End (MM-DD)",
 				fieldtype="Data",
-				framework="Internal policy — rodent bait check cadence (docs/design/rodent_bait_program.md §7)",
+				framework="Internal policy — in-season vs off-season cadence for rules that use it",
 				why="The last day of the season, inclusive. A window may wrap the year end (11-01 to 02-28).",
-				operational="After it, maintenance stations with no activity drop to the off-season interval.",
+				operational="After it, a seasonal rule uses its off-season interval.",
 			),
 		),
 		absent_note=(
