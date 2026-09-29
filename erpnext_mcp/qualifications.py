@@ -70,13 +70,43 @@ def certificate_of(employee: str, requirement: str) -> str:
 	return answer.split(" ")[1] if answer.startswith("Certification ") else ""
 
 
+def requirements_of(record: dict) -> list:
+	"""The certifications a piece of work demands: its own `required_certification`,
+	plus (v0.207.0) those of the products it handles, from their Active label
+	profiles — docs/design/phone_config_and_compliance_loop.md §5.2."""
+	out = []
+	own = str(record.get("required_certification") or "").strip()
+	if own:
+		out.append(own)
+	try:
+		from . import label_compliance
+
+		product = dict(record)
+		if (
+			record.get("name")
+			and "bait_product" not in record
+			and frappe.db.exists("Farm Task", record["name"])
+		):
+			product.update(
+				frappe.db.get_value(
+					"Farm Task", record["name"], ["bait_product", "materials_used"], as_dict=True
+				)
+				or {}
+			)
+		out += [c for c in label_compliance.certifications_for(product) if c not in out]
+	except Exception:
+		pass
+	return out
+
+
 def refuse_unqualified(record: dict, employee: str, verb: str, what: str = "") -> None:
-	"""Refuse work whose `required_certification` this worker does not hold."""
-	requirement = str(record.get("required_certification") or "").strip()
-	if not requirement or not employee:
+	"""Refuse work whose required certifications this worker does not hold."""
+	if not employee:
 		return
-	if qualification(employee, requirement):
+	missing = [req for req in requirements_of(record) if not qualification(employee, req)]
+	if not missing:
 		return
+	requirement = missing[0]
 	label = what or str(record.get("task_name") or record.get("name") or "this work")
 	raise ToolError(
 		f"{label} requires {requirement!r}, which {employee} does not have on record: no current "

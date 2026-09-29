@@ -1,0 +1,30 @@
+{
+ "blocked": [],
+ "counts": {
+  "blocked": 0,
+  "due": 0,
+  "overdue": 1,
+  "total": 1
+ },
+ "due": [],
+ "evaluated_at": "<volatile>",
+ "overdue": [
+  {
+   "action": {
+    "context": {
+     "source_alert": "ALERT-1"
+    },
+    "kind": "task_template",
+    "ref": "Detector Test"
+   },
+   "alert": "ALERT-1",
+   "company": "Example Trading Co",
+   "due_date": "2020-01-01",
+   "regulation": null,
+   "severity": "Warning",
+   "state": "overdue",
+   "subject": "EMP-ANA",
+   "title": "Detector test is stale at MC-Cabin-01"
+  }
+ ]
+}

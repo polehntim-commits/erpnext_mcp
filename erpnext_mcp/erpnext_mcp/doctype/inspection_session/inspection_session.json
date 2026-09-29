@@ -26,6 +26,7 @@
   "timing_section",
   "started_at",
   "submitted_at",
+  "submit_reference",
   "timing_col",
   "visit_id",
   "farm_task",
@@ -230,11 +231,18 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "submit_reference",
+   "fieldtype": "Data",
+   "label": "Submit Reference",
+   "read_only": 1,
+   "description": "v0.207.0. The phone's client_reference for the submit, so a queued resend returns the first result."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-03 23:00:00.000000",
+ "modified": "2026-09-28 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Inspection Session",

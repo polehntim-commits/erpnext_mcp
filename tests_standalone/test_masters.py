@@ -11,7 +11,7 @@ from typing import ClassVar
 
 import frappe
 
-from erpnext_mcp import compat, compliance_fields, registry
+from erpnext_mcp import compat, compliance_fields, label_compliance, registry
 from erpnext_mcp.tools import masters
 
 from .fixtures import (
@@ -425,7 +425,11 @@ class PesticideLabelFields(MastersTestCase):
 		# v0.197.0. The rate's unit is installed beside the label fields but is
 		# RESOLVED against the UOM register rather than stored as sent, so it is
 		# its own argument and not a PESTICIDE_FIELDS kind.
-		installed = {field.fieldname for field in compliance_fields._ITEM_FIELDS}
+		# v0.207.0. The three label-compliance columns are written by the profile
+		# matcher and its approval, never typed through create_item.
+		installed = {field.fieldname for field in compliance_fields._ITEM_FIELDS} - set(
+			label_compliance.ITEM_FIELDS
+		)
 		self.assertEqual(set(masters.PESTICIDE_FIELDS) | {masters.RATE_UOM_FIELD}, installed)
 		for tool in ("create_item", "update_item"):
 			self.assertIn(masters.RATE_UOM_FIELD, registry.TOOLS[tool]["inputSchema"]["properties"])

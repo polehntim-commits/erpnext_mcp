@@ -267,6 +267,11 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 		# by Frappe, so one entity really can be made to ask for a document
 		# another does not — without two spellings of the certificate itself.
 		#
+		# THE v0.207.0 ADDITION IS `Farm Config Version`, the same argument: a
+		# wizard, a tile or a label profile is the SHAPE of a phone screen or a
+		# matching rule. Its audience may name companies, but the rows it produces —
+		# tasks, sessions, accident reports — link to Company and are scoped by Frappe.
+		#
 		# THE v0.206.0 ADDITION IS `Extraction Config`, the Inspection Template
 		# argument again: it is how a PHONE READS a kind of paper — the prompt, the
 		# section headings, the rules for an EPA number — and names no worker, no
@@ -414,6 +419,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Crop",
 				"Extraction Config",
 				"Farm Asset Type",
+				"Farm Config Version",
 				"Farm Translation",
 				"Federal Tax Table",
 				"I-9 Audit Log",

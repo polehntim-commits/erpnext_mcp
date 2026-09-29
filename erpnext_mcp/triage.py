@@ -56,9 +56,27 @@ _BUG = re.compile(
 	re.IGNORECASE,
 )
 _FEATURE = re.compile(
-	r"(would be (nice|great|good|helpful)|please add|can (we|you) (add|have|get)|could (we|you) (add|have)|"
-	r"\bwish\b|\bfeature\b|should be able|it would help|add an? option|sería (bueno|útil)|\bagregar\b|"
-	r"\bañadir\b|\bpodrían\b)",
+	# v0.207.0: DESIRE phrasing is a feature request even when it is a question —
+	# "can the app show my hours?" is asking for something, not asking how.
+	r"(would be (nice|great|good|helpful|useful)|please add|\badd (an?|the|a way)\b|\ballow\b|\blet (us|me)\b|"
+	r"^\s*¿?\s*(can|could|would|will) (we|you|it|the app|this|i|there be)\b|is it possible|would it be possible|"
+	r"\bany way to\b|\bis there (a|any) way\b|\bi want\b|\bwe want\b|\bi need\b|\bwe need\b|\bi'?d like\b|"
+	r"\bwe'?d like\b|\bwish\b|\bfeature\b|should be able|should (show|have|let|allow|include|remember)|"
+	r"it would help|\boption to\b|sería (bueno|útil)|\bagregar\b|\bañadir\b|\bpodrían\b|se puede|"
+	r"quisiera|necesitamos|necesito|me gustaría|estaría bien|\bdebería\b)",
+	re.IGNORECASE | re.MULTILINE,
+)
+_DESIRE_WORDS = re.compile(
+	r"(\bi want\b|\bwe need\b|\bi need\b|please add|would be (nice|great)|quisiera|necesitamos|me gustaría)",
+	re.IGNORECASE,
+)
+_WRONG = re.compile(
+	r"\b(wrong|incorrect|missing|typo|misspell\w*|incorrecto|falta|equivocad[oa])\b", re.IGNORECASE
+)
+#: A how-to question: the only kind of note that is a Question (v0.207.0).
+_HOW_TO = re.compile(
+	r"^\s*¿?\s*(how (do|can|should) (i|we)|how to|where (is|are|do i|can i|do we)|what (does|is|do)|"
+	r"why (does|is|did|do)|when (do|does|should)|who (do|should)|cómo|dónde|qué (es|significa|hago)|por qué)\b",
 	re.IGNORECASE,
 )
 _DATA = re.compile(
@@ -157,14 +175,18 @@ def classify(doc) -> dict:
 		triage_class = DUPLICATE
 	elif _BUG.search(text):
 		triage_class = BUG
-	elif _FEATURE.search(text):
+	elif _FEATURE.search(text) and not (_HOW_TO.search(text) and not _DESIRE_WORDS.search(text)):
 		triage_class = FEATURE
+	elif _HOW_TO.search(text) and not _WRONG.search(text):
+		triage_class = QUESTION
 	elif _DATA.search(text) or (evidence["linked_records"] and not text.rstrip().endswith("?")):
 		triage_class = DATA
-	elif text.rstrip().endswith("?") or _QUESTION_START.search(text):
+	elif _QUESTION_START.search(text):
 		triage_class = QUESTION
 	else:
-		triage_class = DATA if evidence["linked_records"] else QUESTION
+		# v0.207.0: a note that names nothing wrong and asks no how-to question is,
+		# in practice, somebody asking for something. It used to default to Question.
+		triage_class = DATA if evidence["linked_records"] else FEATURE
 	gist = " ".join(text.split())
 	gist = gist if len(gist) <= 140 else gist[:139].rstrip() + "…"
 	where = evidence["screen_label"] or evidence["screen"] or "an unnamed screen"

@@ -102,6 +102,29 @@ class FarmTaskTemplate(Document):
 		self.skill_required = str(self.skill_required or "").strip()
 
 		self._check_the_checklist()
+		self._bump_version()
+
+	def _bump_version(self) -> None:
+		"""v0.207.0: a new version whenever what a task snapshots changes, so every
+		task can say which shape it was raised from (Farm Task.template_version)."""
+		import hashlib
+
+		shape = json.dumps(
+			[
+				self.get("form_schema") or "",
+				[(r.item_name, r.evidence_type) for r in self.checklist or []],
+				self.evidence_required or "",
+				self.get("required_certification") or "",
+			],
+			sort_keys=True,
+			default=str,
+		)
+		digest = hashlib.sha256(shape.encode()).hexdigest()[:16]
+		if not self.get("version"):
+			self.version = 1
+		elif self.get("form_hash") and self.form_hash != digest:
+			self.version = int(self.version) + 1
+		self.form_hash = digest
 
 	def _check_the_checklist(self) -> None:
 		"""Names that are present and distinct, and an order that is a sequence."""

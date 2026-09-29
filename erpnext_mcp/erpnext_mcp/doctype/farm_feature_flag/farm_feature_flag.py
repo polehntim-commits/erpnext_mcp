@@ -22,3 +22,4 @@ class FarmFeatureFlag(Document):
 				frappe.throw(f"{fieldname} {value!r} is not a version like 1.42 or 1.42.3.")
 			self.set(fieldname, value)
 		self.roles = "\n".join(flags.role_list(self.roles))
+		self.users = "\n".join(flags.role_list(self.get("users")))

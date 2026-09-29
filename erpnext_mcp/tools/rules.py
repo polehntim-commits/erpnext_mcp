@@ -98,6 +98,8 @@ _TEXT_FIELDS = (
 	"message_template",
 	"regimes_from_field",
 	"producer_task_template",
+	"producer_inspection_template",
+	"producer_wizard",
 	"producer_farm_task_type",
 	"producer_skill_required",
 	"producer_assigned_to_expression",
@@ -344,6 +346,26 @@ def approve_compliance_rule(args: dict) -> ToolResult:
 		)
 	signature = _signature_url(as_str(args, "approver_signature_file_token"))
 
+	# v0.207.0 (docs/design/phone_config_and_compliance_loop.md §4.1). A rule that
+	# raises WORK must be able to put that work on a phone somebody can see. An
+	# alert-only rule (no producer) is reported by audit_compliance_loop, not blocked.
+	loop_gap_reason = as_str(args, "accept_loop_gap")
+	loop_gaps = []
+	try:
+		from .. import compliance_loop
+
+		if compliance_loop.path_of(row)["kind"] != "none":
+			loop_gaps = compliance_loop.enable_gaps(row)
+	except Exception:
+		loop_gaps = []
+	if loop_gaps and not loop_gap_reason:
+		raise ToolError(
+			f"{name} raises work the phones cannot close yet:\n- "
+			+ "\n- ".join(loop_gaps)
+			+ "\n\nFix it (preview_compliance_loop shows each stage), or pass accept_loop_gap with the "
+			"reason it should run anyway. Nothing was written."
+		)
+
 	before = {
 		"enabled": bool(compat.checked(row.get("enabled"))),
 		"human_approved_by": row.get("human_approved_by"),
@@ -364,6 +386,8 @@ def approve_compliance_rule(args: dict) -> ToolResult:
 	if signature:
 		doc.approver_signature = signature
 	doc.enabled = 1
+	if loop_gaps and loop_gap_reason and compat.has_field(DOCTYPE, "loop_gap_accepted"):
+		doc.loop_gap_accepted = f"{loop_gap_reason} — accepted by {approver} ({'; '.join(loop_gaps)})"[:2000]
 	doc.save(ignore_permissions=True)
 	_link_signature(doc, signature)
 

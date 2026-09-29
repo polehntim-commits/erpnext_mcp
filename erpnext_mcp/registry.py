@@ -181,6 +181,7 @@ from .tools import (
 )
 from .tools import moments as moment_tools
 from .tools import pest_control as pest_control_tools
+from .tools import phone_configs as phone_config_tools
 from .tools import programs as program_tools
 
 _STRING = {"type": "string"}
@@ -829,6 +830,14 @@ _RULE_DRAFT_ARGUMENTS = {
 		"RECIPE — type, skill, duration, dispatch mode, evidence contract, produced record "
 		"and checklist all come off it, and the three producer_* fields below are not read. "
 		"list_farm_task_templates has the register.",
+	),
+	"producer_inspection_template": _field(
+		_STRING,
+		"v0.207.0. The Inspection Template the phone opens for this rule's work (the "
+		"Compliance inbox starts it). Used where no producer_task_template is set.",
+	),
+	"producer_wizard": _field(
+		_STRING, "v0.207.0. A Wizard key the phone opens for this rule's work (with source_alert)."
 	),
 	"producer_farm_task_type": _field(_STRING, "The Farm Task type raised where no template is set."),
 	"producer_skill_required": _field(_STRING, "The crew skill the producer task needs."),
@@ -9988,6 +9997,11 @@ TOOLS = {
 				"as, which is the honest answer where the caller is a person.",
 			),
 			"approver_employee": _field(_STRING, "The approver as an Employee, where the site keeps one."),
+			"accept_loop_gap": _field(
+				_STRING,
+				"v0.207.0. The reason to enable a rule whose work the phones cannot yet close "
+				"(audit_compliance_loop names the gap). Without it such a rule is refused.",
+			),
 			"approver_signature_file_token": _field(
 				_STRING,
 				"A File docname holding the approver's signature. Refused if it points at "
@@ -10079,6 +10093,10 @@ TOOLS = {
 				"Template — that one is a multi-section VISIT, and multi-section visits are "
 				"matched by their sections rather than by this field.",
 			),
+			"producer_inspection_template": _field(
+				_STRING, "v0.207.0. Change the inspection the phone opens."
+			),
+			"producer_wizard": _field(_STRING, "v0.207.0. Change the wizard the phone opens."),
 			"producer_farm_task_type": _field(_STRING, "Change the Farm Task type raised."),
 			"producer_skill_required": _field(_STRING, "Change the crew skill."),
 			"evidence_contract": _field(_OBJECT, "Replace the producer task's evidence contract."),
@@ -11808,6 +11826,259 @@ TOOLS = {
 		"one blocks the work on that device). Read-only.",
 		{"company": _field(_STRING, "Only devices on accounts for this company.")},
 		title="List device capabilities",
+	),
+	# ── v0.207.0: phone configuration and the compliance loop ────────────────
+	# docs/design/phone_config_and_compliance_loop.md. Versioned, immutable once
+	# staged; draft → preview → stage (users first) → publish; one-step rollback.
+	"list_phone_configs": _tool(
+		phone_config_tools.list_phone_configs,
+		"v0.207.0. Every version of the phone's Wizards, Tiles and Label Profiles with status "
+		"(Draft/Staged/Published/Superseded/Retired), rollout flag, who changed it and the last "
+		"validation. Read-only.",
+		{
+			"kind": _field(_STRING, "Wizard, Tile or Label Profile."),
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"status": _field(_STRING, "Only this status."),
+		},
+		title="List phone configs",
+	),
+	"get_phone_config": _tool(
+		phone_config_tools.get_phone_config,
+		"v0.207.0. One phone config version with its body — the version in force by default. Read-only.",
+		{
+			"kind": _field(_STRING, "Wizard, Tile or Label Profile."),
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"version": _field(_STRING, "A version number."),
+		},
+		required=("kind", "key"),
+		title="Get a phone config",
+	),
+	"stage_phone_config": _tool(
+		phone_config_tools.stage_phone_config,
+		"MUTATING (default OFF; System Manager or Farm Manager). Draft → Staged: served only to "
+		"`users` / `roles` / `companies` through the rollout flag (e.g. Tim first). Validated as for "
+		"publish (audience resolves to real people, Spanish present, safety-critical kinds render).",
+		{
+			"kind": _field(_STRING, "Wizard, Tile or Label Profile."),
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"version": _field(_STRING, "A version number."),
+			"users": _field(_STRING_ARRAY, "Users who get it first."),
+			"roles": _field(_STRING_ARRAY, "Roles who get it."),
+			"companies": _field(_STRING_ARRAY, "Companies who get it."),
+			"change_note": _field(_STRING, "REQUIRED. Why — kept on the record for the audit."),
+		},
+		required=("kind", "key", "version", "change_note"),
+		mutating=True,
+		title="Stage a phone config",
+	),
+	"publish_phone_config": _tool(
+		phone_config_tools.publish_phone_config,
+		"MUTATING (default OFF; System Manager or Farm Manager). Make a version what every phone "
+		"gets (enable). The previous Published version becomes Superseded; the rollout flag is "
+		"switched off. Re-publishing an old version is allowed — its content never changed.",
+		{
+			"kind": _field(_STRING, "Wizard, Tile or Label Profile."),
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"version": _field(_STRING, "A version number."),
+			"change_note": _field(_STRING, "REQUIRED. Why — kept on the record for the audit."),
+		},
+		required=("kind", "key", "version", "change_note"),
+		mutating=True,
+		title="Publish a phone config",
+	),
+	"rollback_phone_config": _tool(
+		phone_config_tools.rollback_phone_config,
+		"MUTATING (default OFF; System Manager or Farm Manager). One step back: the Published "
+		"version is Superseded and the one before it is Published again.",
+		{
+			"kind": _field(_STRING, "Wizard, Tile or Label Profile."),
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"change_note": _field(_STRING, "REQUIRED. Why — kept on the record for the audit."),
+		},
+		required=("kind", "key", "change_note"),
+		mutating=True,
+		title="Roll back a phone config",
+	),
+	"retire_phone_config": _tool(
+		phone_config_tools.retire_phone_config,
+		"MUTATING (default OFF; System Manager or Farm Manager). Disable a key: every live version "
+		"is Retired and no phone is served it. publish_phone_config enables it again.",
+		{
+			"kind": _field(_STRING, "Wizard, Tile or Label Profile."),
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"change_note": _field(_STRING, "REQUIRED. Why — kept on the record for the audit."),
+		},
+		required=("kind", "key", "change_note"),
+		mutating=True,
+		title="Retire a phone config",
+	),
+	"create_wizard_definition": _tool(
+		phone_config_tools.create_wizard_definition,
+		"MUTATING (default OFF; System Manager or Farm Manager). A new wizard as a Draft: steps whose "
+		"`form` is form_schema v2 (the same renderer as templates), branching `next: [{if, go}]`, EN/ES, "
+		"and `submit.handler` from a fixed allowlist (create_accident_report, create_discipline_record, "
+		"register_asset, create_employee, start_inspection, report_field_task, report_asset_issue, "
+		"start_template_task). Refused if the key exists.",
+		{
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+			"notes": _field(_STRING, "Why this version exists."),
+			"authored_by": _field(_STRING, "Operator or AI-proposed."),
+		},
+		required=("key", "body", "notes"),
+		mutating=True,
+		title="Create a wizard",
+	),
+	"update_wizard_definition": _tool(
+		phone_config_tools.update_wizard_definition,
+		"MUTATING (default OFF; System Manager or Farm Manager). A new Draft version of a wizard "
+		"(or replaces the open Draft). Published versions never change.",
+		{
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+			"notes": _field(_STRING, "Why this version exists."),
+			"authored_by": _field(_STRING, "Operator or AI-proposed."),
+		},
+		required=("key", "body", "notes"),
+		mutating=True,
+		title="Update a wizard",
+	),
+	"preview_wizard": _tool(
+		phone_config_tools.preview_wizard,
+		"v0.207.0. What a wizard is before it ships: the validator report, each step as the phone "
+		"renders it in EN and ES, the step path `answers` would take, what the handler would receive, "
+		"answers it would drop, and device problems. A stored version, the open Draft, or an unsaved "
+		"`body`. Read-only.",
+		{
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"version": _field(_STRING, "A version number."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+			"answers": _field(_OBJECT, "Sample answers to trace the path and the handler call."),
+			"language": _field(_STRING, "en or es."),
+		},
+		title="Preview a wizard",
+	),
+	"create_tile": _tool(
+		phone_config_tools.create_tile,
+		"MUTATING (default OFF; System Manager or Farm Manager). A new tile as a Draft: surface "
+		"(today/work/asset_scan), title EN/ES, icon from the allowlist, target (wizard, task_template, "
+		"inspection_template, report, list_query, document), audience (roles, companies, skills, "
+		"certifications, users), order, badge query from the allowlist, show_if (flag, season, "
+		"occupancy, asset_types), min_app_version.",
+		{
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+			"notes": _field(_STRING, "Why this version exists."),
+			"authored_by": _field(_STRING, "Operator or AI-proposed."),
+		},
+		required=("key", "body", "notes"),
+		mutating=True,
+		title="Create a tile",
+	),
+	"update_tile": _tool(
+		phone_config_tools.update_tile,
+		"MUTATING (default OFF; System Manager or Farm Manager). A new Draft version of a tile.",
+		{
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+			"notes": _field(_STRING, "Why this version exists."),
+			"authored_by": _field(_STRING, "Operator or AI-proposed."),
+		},
+		required=("key", "body", "notes"),
+		mutating=True,
+		title="Update a tile",
+	),
+	"preview_tiles": _tool(
+		phone_config_tools.preview_tiles,
+		"v0.207.0. Exactly what get_tiles returns for a user on a surface, with every hidden tile and "
+		"why (audience, show_if, app version, rollout); plus, for a draft `key`/`body`, its validator "
+		"report and whether this user would see it. Read-only.",
+		{
+			"surface": _field(_STRING, "today, work or asset_scan."),
+			"as_user": _field(_STRING, "Whose phone. Default: the caller."),
+			"asset": _field(_STRING, "For asset_scan: the scanned asset."),
+			"app_version": _field(_STRING, "The phone's version. Default: newest."),
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"version": _field(_STRING, "A version number."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+		},
+		required=("surface",),
+		title="Preview tiles",
+	),
+	"audit_compliance_loop": _tool(
+		phone_config_tools.audit_compliance_loop,
+		"v0.207.0. For every enabled compliance rule (or one): the work path to a phone (task "
+		"template / inspection / wizard / task), whether it renders on the enrolled devices, who can "
+		"act on it, the entry points they see it through, how the alert clears, and every gap. "
+		"Read-only.",
+		{"company": _COMPANY, "rule": _field(_STRING, "One rule (docname or rule_id).")},
+		title="Audit the compliance loop",
+	),
+	"preview_compliance_loop": _tool(
+		phone_config_tools.preview_compliance_loop,
+		"v0.207.0. END TO END, WRITING NOTHING: the alert, the work and the version it would "
+		"snapshot, the form as the phone renders it (EN/ES), who sees it and through which entry "
+		"point, what completion produces, and how the alert clears. Read-only.",
+		{
+			"rule": _field(_STRING, "Docname or rule_id."),
+			"alert": _field(_STRING, "A specific open alert; default the newest, else a synthetic one."),
+			"as_user": _field(_STRING, "Whose inbox to check."),
+			"language": _field(_STRING, "en or es."),
+		},
+		required=("rule",),
+		title="Preview the compliance loop",
+	),
+	"update_label_profile": _tool(
+		phone_config_tools.update_label_profile,
+		"MUTATING (default OFF; System Manager or Farm Manager). A Draft label profile: WHEN label "
+		"facts match (all/any over Item label fields), ATTACH programs, templates, rules and "
+		"requirements (certifications, PPE attestation). Publishing re-matches every labelled product.",
+		{
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+			"notes": _field(_STRING, "Why this version exists."),
+			"authored_by": _field(_STRING, "Operator or AI-proposed."),
+		},
+		required=("key", "body", "notes"),
+		mutating=True,
+		title="Update a label profile",
+	),
+	"preview_label_profile": _tool(
+		phone_config_tools.preview_label_profile,
+		"v0.207.0. A label profile's validator report, the labelled products it would match and on "
+		"which facts, and for one `item` what would attach or be proposed. Read-only.",
+		{
+			"key": _field(_STRING, "The config key, lower_snake_case."),
+			"version": _field(_STRING, "A version number."),
+			"body": _field({"type": ["object", "string"]}, "The whole body (schema_version 1)."),
+			"item": _field(_STRING, "An Item code."),
+		},
+		title="Preview a label profile",
+	),
+	"list_label_compliance": _tool(
+		phone_config_tools.list_label_compliance,
+		"v0.207.0. Products with label compliance: attached profiles, pending proposals and stale "
+		"attachments (an older profile version). Read-only.",
+		{"item": _field(_STRING, "One Item."), "state": _field(_STRING, "Active, Proposed or Rejected.")},
+		title="List label compliance",
+	),
+	"approve_label_compliance": _tool(
+		phone_config_tools.approve_label_compliance,
+		"MUTATING (default OFF; System Manager or Farm Manager). Apply a product's proposal — each "
+		"call through the normal dispatcher with its own switch and gate — then attach the profiles.",
+		{"item": _field(_STRING, "The Item code."), "note": _field(_STRING, "Optional.")},
+		required=("item",),
+		mutating=True,
+		title="Approve label compliance",
+	),
+	"reject_label_compliance": _tool(
+		phone_config_tools.reject_label_compliance,
+		"MUTATING (default OFF; System Manager or Farm Manager). Decline a product's proposal, "
+		"with the reason recorded.",
+		{"item": _field(_STRING, "The Item code."), "reason": _field(_STRING, "Why.")},
+		required=("item", "reason"),
+		mutating=True,
+		title="Reject label compliance",
 	),
 	# ── v0.206.0: extraction config, feature flags, feedback triage ──────────
 	# docs/design/config_flags_triage.md. Configuration, never code.

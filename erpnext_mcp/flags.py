@@ -36,6 +36,7 @@ ROW_FIELDS = [
 	"text_value",
 	"company",
 	"roles",
+	"users",
 	"min_app_version",
 	"max_app_version",
 	"description",
@@ -106,25 +107,31 @@ def _in_range(row: dict, app_version) -> bool:
 	return not ((lower and mine < lower) or (upper and mine > upper))
 
 
-def _rank(row: dict, company: str, roles: set):
-	"""Specificity, or None when the row does not apply."""
+def _rank(row: dict, company: str, roles: set, user: str = ""):
+	"""Specificity, or None when the row does not apply.
+
+	v0.207.0: a row naming `users` is the most specific of all — the staged
+	rollout's "Tim first" (docs/design/phone_config_and_compliance_loop.md §1.3)."""
 	row_company = str(row.get("company") or "")
 	row_roles = set(role_list(row.get("roles")))
+	row_users = set(role_list(row.get("users")))
 	if row_company and row_company != company:
 		return None
 	if row_roles and not (row_roles & roles):
 		return None
-	return (2 if row_company else 0) + (1 if row_roles else 0)
+	if row_users and user not in row_users:
+		return None
+	return (4 if row_users else 0) + (2 if row_company else 0) + (1 if row_roles else 0)
 
 
-def resolve(company: str = "", roles=(), app_version=None, key: str = "") -> dict:
+def resolve(company: str = "", roles=(), app_version=None, key: str = "", user: str = "") -> dict:
 	"""{flag_key: {value, kind, row}} for every key with an applicable row."""
 	roles = set(role_list(roles))
 	best: dict = {}
 	for row in rows(key=key, include_inactive=False):
 		if not int(row.get("active") or 0) or not _in_range(row, app_version):
 			continue
-		rank = _rank(row, company or "", roles)
+		rank = _rank(row, company or "", roles, user or "")
 		if rank is None:
 			continue
 		current = best.get(row["flag_key"])
@@ -139,14 +146,16 @@ def resolve(company: str = "", roles=(), app_version=None, key: str = "") -> dic
 	}
 
 
-def value(key: str, company: str = "", roles=(), app_version=None, default=None):
+def value(key: str, company: str = "", roles=(), app_version=None, default=None, user: str = ""):
 	"""The resolved value of one key, or `default` when no row applies."""
-	found = resolve(company, roles, app_version, key=key).get(key)
+	found = resolve(company, roles, app_version, key=key, user=user).get(key)
 	return default if found is None else found["value"]
 
 
-def enabled(key: str, company: str = "", roles=(), app_version=None, default: bool = False) -> bool:
-	return bool(value(key, company, roles, app_version, default))
+def enabled(
+	key: str, company: str = "", roles=(), app_version=None, default: bool = False, user: str = ""
+) -> bool:
+	return bool(value(key, company, roles, app_version, default, user=user))
 
 
 def for_user(user: str = "", company: str = "", app_version=None) -> dict:
@@ -156,7 +165,7 @@ def for_user(user: str = "", company: str = "", app_version=None) -> dict:
 		roles = frappe.get_roles(user) if user else []
 	except Exception:
 		roles = []
-	return {k: v["value"] for k, v in resolve(company, roles, app_version).items()}
+	return {k: v["value"] for k, v in resolve(company, roles, app_version, user=user).items()}
 
 
 def clean(raw) -> dict:
@@ -207,14 +216,17 @@ def upsert(
 	description=None,
 	owner_area=None,
 	active=None,
+	users=(),
 ):
-	"""Create or update the row for (key, company, roles, versions). Returns (doc, created)."""
+	"""Create or update the row for (key, company, roles, users, versions). Returns (doc, created)."""
 	roles_text = "\n".join(role_list(roles))
+	users_text = "\n".join(role_list(users))
 	name = None
 	for row in rows(key=flag_key):
 		if (
 			str(row.get("company") or "") == (company or "")
 			and "\n".join(role_list(row.get("roles"))) == roles_text
+			and "\n".join(role_list(row.get("users"))) == users_text
 			and str(row.get("min_app_version") or "") == (min_app_version or "")
 			and str(row.get("max_app_version") or "") == (max_app_version or "")
 		):
@@ -225,6 +237,7 @@ def upsert(
 	doc.kind = kind
 	doc.company = company or None
 	doc.roles = roles_text
+	doc.users = users_text
 	doc.min_app_version = min_app_version or ""
 	doc.max_app_version = max_app_version or ""
 	if kind == "Threshold":

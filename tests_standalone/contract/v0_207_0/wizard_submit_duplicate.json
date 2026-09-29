@@ -1,0 +1,12 @@
+{
+ "duplicate": true,
+ "filed": true,
+ "first": {
+  "config_version": "wizard:near_miss@1",
+  "result_name": "AR-00001",
+  "submit_method": "create_accident_report",
+  "wizard": "near_miss"
+ },
+ "first_filed_at": "<volatile>",
+ "wizard": "near_miss"
+}

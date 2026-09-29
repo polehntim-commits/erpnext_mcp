@@ -177,6 +177,7 @@ def after_install() -> None:
 	_employment_types()
 	_farm_designations()
 	_extraction_configs()
+	_phone_configs()
 	frappe.db.commit()
 
 
@@ -232,6 +233,27 @@ def after_migrate() -> None:
 	_employment_types()
 	_farm_designations()
 	_extraction_configs()
+	_phone_configs(convert_wizards=True)
+
+
+def _phone_configs(convert_wizards: bool = False) -> None:
+	"""Seed the built-in tiles and label profiles, and convert legacy wizards. v0.207.0.
+
+	CREATE-ONLY: a key that already has any version is left alone, so nothing an
+	operator published is overwritten by a migrate.
+	docs/design/phone_config_and_compliance_loop.md §8.
+	"""
+	try:
+		from . import label_compliance, tiles, wizard_config
+
+		made = tiles.seed() + label_compliance.seed()
+		if convert_wizards:
+			made += wizard_config.seed_from_legacy()
+	except Exception as exc:  # pragma: no cover - a seed must not fail a migrate
+		print(f"erpnext_mcp: phone configuration was not seeded — {type(exc).__name__}: {exc}")
+		return
+	if made:
+		print(f"erpnext_mcp: seeded phone configuration {', '.join(made)} as Published.")
 
 
 def _extraction_configs() -> None:

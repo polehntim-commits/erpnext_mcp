@@ -831,6 +831,12 @@ ROUTES = (
 	# docs/design/config_flags_triage.md §1.4, §2.
 	Route("/mobile", mobile_api.get_extraction_config),
 	Route("/mobile", mobile_api.get_feature_flags),
+	# v0.207.0. Tiles, the Compliance inbox, starting work from a tile or the
+	# inbox, and the scan's startable inspections — docs/design/phone_config_and_compliance_loop.md.
+	Route("/mobile", mobile_api.get_tiles),
+	Route("/mobile", mobile_api.get_compliance_inbox),
+	Route("/mobile", mobile_api.start_template_task),
+	Route("/mobile", mobile_api.list_startable_inspections),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

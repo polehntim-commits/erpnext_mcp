@@ -1,0 +1,222 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-09-28 18:00:00.000000",
+ "description": "v0.207.0. Phone configuration as versioned, immutable data: every version of every Wizard, Tile and Label Profile. Draft → Staged (rollout flag) → Published → Superseded; any → Retired; one-step rollback. docs/design/phone_config_and_compliance_loop.md §1.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "config_kind",
+  "config_key",
+  "version",
+  "status",
+  "title",
+  "col1",
+  "schema_version",
+  "body_hash",
+  "rollout_flag",
+  "body_section",
+  "body_json",
+  "validation_json",
+  "provenance_section",
+  "notes",
+  "authored_by",
+  "change_note",
+  "col2",
+  "staged_by",
+  "staged_on",
+  "published_by",
+  "published_on",
+  "retired_by",
+  "retired_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "config_kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Wizard\nTile\nLabel Profile",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "config_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "lower_snake_case, unique within a kind."
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nStaged\nPublished\nSuperseded\nRetired",
+   "default": "Draft",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "Changed only by stage/publish/rollback/retire. From Staged on the body is immutable."
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "schema_version",
+   "fieldtype": "Int",
+   "label": "Schema Version",
+   "default": "1",
+   "read_only": 1
+  },
+  {
+   "fieldname": "body_hash",
+   "fieldtype": "Data",
+   "label": "Body Hash",
+   "read_only": 1,
+   "description": "sha256 of the canonical body, written at insert and checked on every save."
+  },
+  {
+   "fieldname": "rollout_flag",
+   "fieldtype": "Data",
+   "label": "Rollout Flag",
+   "read_only": 1,
+   "description": "The Farm Feature Flag that gates a Staged version (rollout_<kind>_<key>)."
+  },
+  {
+   "fieldname": "body_section",
+   "fieldtype": "Section Break",
+   "label": "Body"
+  },
+  {
+   "fieldname": "body_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Body",
+   "reqd": 1
+  },
+  {
+   "fieldname": "validation_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Last Validation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "provenance_section",
+   "fieldtype": "Section Break",
+   "label": "Provenance"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "authored_by",
+   "fieldtype": "Select",
+   "label": "Authored By",
+   "options": "Operator\nAI-proposed\nSystem",
+   "default": "Operator"
+  },
+  {
+   "fieldname": "change_note",
+   "fieldtype": "Small Text",
+   "label": "Change Note",
+   "read_only": 1,
+   "description": "The reason given for the last status change."
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "staged_by",
+   "fieldtype": "Data",
+   "label": "Staged By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "staged_on",
+   "fieldtype": "Datetime",
+   "label": "Staged On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "published_by",
+   "fieldtype": "Data",
+   "label": "Published By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "published_on",
+   "fieldtype": "Datetime",
+   "label": "Published On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retired_by",
+   "fieldtype": "Data",
+   "label": "Retired By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retired_on",
+   "fieldtype": "Datetime",
+   "label": "Retired On",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-28 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Config Version",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

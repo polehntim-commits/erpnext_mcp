@@ -3,6 +3,55 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.207.0 — 2026-09-28 — phone config as versioned data; closing the compliance loop
+
+**962 tools** (474 read, 488 write). **Four new routes** (147 mobile methods): `get_tiles`,
+`get_compliance_inbox`, `start_template_task`, `list_startable_inspections`. Contract
+`docs/design/phone_config_and_compliance_loop.md`; iOS SERVER_CHANGES §54.
+
+- **One lifecycle for phone configuration.** New doctype **Farm Config Version** holds every version of
+  every Wizard, Tile and Label Profile: Draft → Staged (served through a rollout flag to named users,
+  roles or companies — Tim first) → Published → Superseded; any → Retired; **one-step rollback**;
+  re-publishing an old version re-enables it. **Immutable once staged** (the controller checks the body
+  hash); `track_changes` plus the MCP Action Log is the audit. Validation on every write: schema, size
+  (64 KB), form_schema v2, device capability (safety-critical kinds block at publish), audience resolves to
+  real people, targets exist, queries/handlers/icons from allowlists, Spanish required at publish. Flags
+  gain a `users` target (the most specific row). Tools: `list/get/stage/publish/rollback/retire_phone_config`.
+- **Wizards as data.** Steps use the same form_schema v2 and phone renderer as templates, branch with
+  `next: [{if, go}]`, carry EN/ES, and submit through **`wizard_config.HANDLERS`** (eight allowlisted
+  routes) instead of the whole route table. `required_roles` is enforced (the old `required_role` never
+  was). The phone submits against the version it started with (`config_version`), idempotently
+  (`client_reference`), with an alert/location `context`. Legacy Wizard Definitions convert to version 1
+  Published (patch `wizards_to_config_versions`; the legacy row stays as the fallback). Tools:
+  `create/update_wizard_definition`, `preview_wizard` (EN/ES render, branch path, handler call).
+- **Server-driven tiles** on Today, Work and the asset-scan screen: icon allowlist, six target kinds,
+  audience, order, badge from an allowlisted query (`tile_queries.QUERIES`), show-if (flag, season,
+  occupancy, asset type), minimum app version. `get_tiles` never fails on a badge. Tools:
+  `create/update_tile`, `preview_tiles` (with the reason each hidden tile is hidden).
+- **The compliance loop.** Rules gain `producer_inspection_template` and `producer_wizard`.
+  `audit_compliance_loop` reports every enabled rule's path to a phone, renderability on enrolled devices,
+  who can act, their entry points, how the alert clears, and every gap; `preview_compliance_loop` shows
+  one rule end to end (alert → work → phone form EN/ES → who → record → dismissal) writing nothing.
+  **`approve_compliance_rule` refuses to enable a rule whose work cannot close on a phone** unless
+  `accept_loop_gap` (recorded as `loop_gap_accepted`). Each person's **Compliance inbox**
+  (`get_compliance_inbox`, seeded tile `compliance_inbox`) lists due, overdue and blocked items with the
+  action that opens the work; `start_template_task` raises and claims it; a wizard filed with
+  `source_alert` re-runs the alert's rule.
+- **Label-driven compliance.** Label Profiles match Item label facts and attach programs, templates, rules
+  and requirements. Registering a label attaches what is live and **proposes** (MCP calls, approved in one
+  step through the dispatcher) anything that would activate something new. Active requirements join the
+  qualification check for any task handling the product — no rule edits per product. Seeded profiles:
+  rodenticide in bait stations, restricted-use (Applicator License), DANGER (PPE attestation). Tools:
+  `update_label_profile`, `preview_label_profile`, `list_label_compliance`, `approve/reject_label_compliance`.
+- **Snapshots:** Farm Task Template gains `version` (bumped when what a task snapshots changes) and
+  Farm Task records `template_version`.
+- **Phone items:** `list_startable_inspections` (Start Inspection opens a session directly),
+  `submit_inspection` idempotent on `client_reference` (offline queue), `list_my_inspections` rows carry
+  `farm_task`, tiles for triage replies. **Triage classifier:** desire phrasing ("can the app show…",
+  "is there a way", "¿se puede…") is a Feature request; Question is how-to only; patch
+  `reclassify_feature_requests` re-sorts Auto-classified Question notes.
+- **Contract fixtures** in `tests_standalone/contract/v0_207_0/`, generated from the real routes.
+
 ## 0.206.0 — 2026-09-28 — from hours to moments: extraction config, feature flags, feedback triage
 
 **943 tools** (466 read, 477 write): `list_extraction_configs`, `get_extraction_config`,

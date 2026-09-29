@@ -1272,6 +1272,41 @@ _ITEM_FIELDS = (
 		),
 		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
 	),
+	# v0.207.0 — label-driven compliance (docs/design/phone_config_and_compliance_loop.md §5).
+	ComplianceField(
+		fieldname="compliance_state",
+		label="Label Compliance",
+		fieldtype="Select",
+		options="\nActive\nProposed\nRejected",
+		framework="Internal provenance — v0.207.0 label-driven compliance",
+		why=(
+			"Whether the label profiles this product's label matched are attached (Active), "
+			"waiting for a person to approve what they would switch on (Proposed), or declined."
+		),
+		operational=(
+			"An Active restricted-use product demands the applicator licence on every task that "
+			"handles it, without a rule being edited for that product."
+		),
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="compliance_profiles_json",
+		label="Label Profiles",
+		fieldtype="Code",
+		framework="Internal provenance — v0.207.0 label-driven compliance",
+		why="Which label profiles matched, the facts they matched on, and the parts each attached.",
+		operational="What `list_label_compliance` and the qualification check read.",
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
+	ComplianceField(
+		fieldname="compliance_proposal_json",
+		label="Label Compliance Proposal",
+		fieldtype="Code",
+		framework="Internal provenance — v0.207.0 label-driven compliance",
+		why="The MCP calls a person approves to switch on what a matched profile needs.",
+		operational="Nothing new is activated for a product until somebody approves this.",
+		depends_on=CHEMICAL_ITEM_DEPENDS_ON,
+	),
 )
 
 

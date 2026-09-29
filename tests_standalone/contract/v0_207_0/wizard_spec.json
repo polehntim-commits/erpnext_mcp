@@ -1,0 +1,192 @@
+{
+ "category": "Safety",
+ "config_version": "wizard:near_miss@1",
+ "description": "Tell us what almost happened.",
+ "icon": "exclamationmark.shield",
+ "language": "en",
+ "name": "near_miss",
+ "required_role": null,
+ "required_roles": [],
+ "source": "config",
+ "step_count": 3,
+ "steps": [
+  {
+   "fields": [
+    {
+     "fieldname": "incident_description",
+     "key": "incident_description",
+     "label_en": "What happened",
+     "label_es": "Qué pasó",
+     "options": [],
+     "required": true,
+     "server_field_type": "long_text",
+     "type": "text"
+    },
+    {
+     "fieldname": "occurred_at",
+     "key": "occurred_at",
+     "label_en": "When",
+     "label_es": "Cuándo",
+     "options": [],
+     "required": true,
+     "server_field_type": "datetime",
+     "type": "date"
+    },
+    {
+     "fieldname": "injury",
+     "key": "injury",
+     "label_en": "Was anyone hurt?",
+     "label_es": "¿Alguien se lastimó?",
+     "options": [
+      {
+       "label_en": "Yes",
+       "label_es": "Sí",
+       "value": "1"
+      },
+      {
+       "label_en": "No",
+       "label_es": "No",
+       "value": "0"
+      }
+     ],
+     "required": false,
+     "server_field_type": "check",
+     "type": "select"
+    }
+   ],
+   "form": [
+    {
+     "key": "incident_description",
+     "label": {
+      "en": "What happened",
+      "es": "Qué pasó"
+     },
+     "required": true,
+     "type": "long_text"
+    },
+    {
+     "key": "occurred_at",
+     "label": {
+      "en": "When",
+      "es": "Cuándo"
+     },
+     "required": true,
+     "type": "datetime"
+    },
+    {
+     "key": "injury",
+     "label": {
+      "en": "Was anyone hurt?",
+      "es": "¿Alguien se lastimó?"
+     },
+     "type": "check"
+    }
+   ],
+   "help_en": "",
+   "help_es": null,
+   "key": "what",
+   "next": [
+    {
+     "go": "injury",
+     "if": {
+      "equals": true,
+      "field": "injury"
+     }
+    },
+    {
+     "go": "where"
+    }
+   ],
+   "optional": false,
+   "show_if": null,
+   "step_key": "what",
+   "title_en": "What happened",
+   "title_es": "Qué pasó"
+  },
+  {
+   "fields": [
+    {
+     "fieldname": "body_part",
+     "key": "body_part",
+     "label_en": "Where on the body",
+     "label_es": "Dónde en el cuerpo",
+     "options": [],
+     "required": true,
+     "server_field_type": "text",
+     "type": "text"
+    }
+   ],
+   "form": [
+    {
+     "key": "body_part",
+     "label": {
+      "en": "Where on the body",
+      "es": "Dónde en el cuerpo"
+     },
+     "required": true,
+     "safety_critical": true,
+     "type": "text"
+    }
+   ],
+   "help_en": "",
+   "help_es": null,
+   "key": "injury",
+   "next": [
+    {
+     "go": "where"
+    }
+   ],
+   "optional": false,
+   "show_if": null,
+   "step_key": "injury",
+   "title_en": "The injury",
+   "title_es": "La lesión"
+  },
+  {
+   "fields": [
+    {
+     "fieldname": "location_description",
+     "key": "location_description",
+     "label_en": "Where was it",
+     "label_es": "Dónde fue",
+     "options": [],
+     "required": false,
+     "server_field_type": "text",
+     "type": "text"
+    }
+   ],
+   "form": [
+    {
+     "key": "location_description",
+     "label": {
+      "en": "Where was it",
+      "es": "Dónde fue"
+     },
+     "type": "text"
+    }
+   ],
+   "help_en": "",
+   "help_es": null,
+   "key": "where",
+   "next": [],
+   "optional": false,
+   "show_if": null,
+   "step_key": "where",
+   "title_en": "Where",
+   "title_es": "Dónde"
+  }
+ ],
+ "submit_context": {},
+ "submit_endpoint": "farmops/api/mobile/submit_wizard_via_mobile",
+ "submit_method": "create_accident_report",
+ "submit_unmapped": [
+  "injury"
+ ],
+ "success_en": "Thanks — filed.",
+ "success_es": "Gracias — enviado.",
+ "title": "Report a near miss",
+ "title_en": "Report a near miss",
+ "title_es": "Reportar un casi accidente",
+ "version": 1,
+ "wizard_key": "near_miss"
+}

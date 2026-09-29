@@ -43,17 +43,19 @@ from erpnext_mcp.patches import (
 	migrate_training_types,
 	move_mobile_credentials_to_devices,
 	move_rodent_settings_to_data,
-	triage_existing_feedback,
 	normalize_app_feedback_timestamps,
 	normalize_phone_timestamps,
 	rebuild_rodent_templates,
+	reclassify_feature_requests,
 	recompute_2026_dependents_credit,
 	register_custom_party_types,
 	rename_discipline_record,
 	repoint_producer_task_template,
 	set_default_tool_switches,
+	triage_existing_feedback,
 	widen_i9_attestation_filters,
 	widen_pesticide_field_visibility,
+	wizards_to_config_versions,
 )
 from erpnext_mcp.tools import company
 
@@ -99,6 +101,8 @@ PATCHES = (
 	("erpnext_mcp.patches.rebuild_rodent_templates", rebuild_rodent_templates),
 	("erpnext_mcp.patches.move_rodent_settings_to_data", move_rodent_settings_to_data),
 	("erpnext_mcp.patches.triage_existing_feedback", triage_existing_feedback),
+	("erpnext_mcp.patches.wizards_to_config_versions", wizards_to_config_versions),
+	("erpnext_mcp.patches.reclassify_feature_requests", reclassify_feature_requests),
 )
 
 

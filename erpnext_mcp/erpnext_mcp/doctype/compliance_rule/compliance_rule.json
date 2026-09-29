@@ -58,6 +58,9 @@
   "category_heuristics_json",
   "producer_section",
   "producer_task_template",
+  "producer_inspection_template",
+  "producer_wizard",
+  "loop_gap_accepted",
   "producer_farm_task_type",
   "producer_col",
   "producer_skill_required",
@@ -575,11 +578,31 @@
    "fieldname": "approver_signature",
    "fieldtype": "Attach",
    "label": "Approver Signature"
+  },
+  {
+   "fieldname": "producer_inspection_template",
+   "fieldtype": "Link",
+   "options": "Inspection Template",
+   "label": "Producer Inspection Template",
+   "description": "v0.207.0. The inspection the phone opens for this rule's work, when the work is an inspection rather than a task."
+  },
+  {
+   "fieldname": "producer_wizard",
+   "fieldtype": "Data",
+   "label": "Producer Wizard",
+   "description": "v0.207.0. A Wizard key (Farm Config Version) the phone opens for this rule's work."
+  },
+  {
+   "fieldname": "loop_gap_accepted",
+   "fieldtype": "Small Text",
+   "label": "Loop Gap Accepted",
+   "read_only": 1,
+   "description": "v0.207.0. Why this rule was enabled although audit_compliance_loop found a gap (accept_loop_gap on approve_compliance_rule)."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-04 09:00:00.000000",
+ "modified": "2026-09-28 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Compliance Rule",

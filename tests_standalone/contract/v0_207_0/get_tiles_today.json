@@ -1,0 +1,53 @@
+{
+ "etag": "<volatile>",
+ "evaluated_at": "<volatile>",
+ "surface": "today",
+ "tiles": [
+  {
+   "badge": {
+    "count": 0,
+    "tone": "neutral"
+   },
+   "config_version": "tile:compliance_inbox@1",
+   "icon": "tray.full",
+   "key": "compliance_inbox",
+   "order": 10,
+   "stale": false,
+   "subtitle": {
+    "en": "Due, overdue, blocked",
+    "es": "Por vencer, vencidos, bloqueados"
+   },
+   "target": {
+    "kind": "report",
+    "report": "compliance_inbox"
+   },
+   "title": {
+    "en": "Compliance inbox",
+    "es": "Pendientes de cumplimiento"
+   }
+  },
+  {
+   "badge": {
+    "count": 0,
+    "tone": "neutral"
+   },
+   "config_version": "tile:my_feedback@1",
+   "icon": "bubble.left.and.text.bubble.right",
+   "key": "my_feedback",
+   "order": 90,
+   "stale": false,
+   "subtitle": {
+    "en": "What the farm answered",
+    "es": "Lo que respondió la granja"
+   },
+   "target": {
+    "kind": "report",
+    "report": "my_feedback"
+   },
+   "title": {
+    "en": "My notes and replies",
+    "es": "Mis notas y respuestas"
+   }
+  }
+ ]
+}

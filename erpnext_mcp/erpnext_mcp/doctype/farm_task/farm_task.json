@@ -31,6 +31,7 @@
   "source_workorder",
   "inspection_session",
   "template",
+  "template_version",
   "subject_doctype",
   "subject_docname",
   "asset_section",
@@ -632,11 +633,18 @@
    "in_standard_filter": 1,
    "label": "Parent DocType",
    "options": "DocType"
+  },
+  {
+   "fieldname": "template_version",
+   "fieldtype": "Int",
+   "label": "Template Version",
+   "read_only": 1,
+   "description": "v0.207.0. The Farm Task Template version this task was raised from — the snapshot it keeps."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-09 12:00:00.000000",
+ "modified": "2026-09-28 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task",

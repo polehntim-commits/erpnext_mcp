@@ -14,6 +14,8 @@
   "identity_col",
   "company",
   "enabled",
+  "version",
+  "form_hash",
   "group_training",
   "description_section",
   "description",
@@ -286,11 +288,26 @@
    "fieldtype": "Table MultiSelect",
    "label": "Compliance Regimes",
    "options": "Compliance Regime Link"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "default": "1",
+   "read_only": 1,
+   "description": "v0.207.0. Bumped whenever the form, checklist, evidence contract or certification changes; every task records the version it was raised from (template_version)."
+  },
+  {
+   "fieldname": "form_hash",
+   "fieldtype": "Data",
+   "label": "Form Hash",
+   "read_only": 1,
+   "hidden": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-06 12:00:00.000000",
+ "modified": "2026-09-28 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Template",

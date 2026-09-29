@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 943 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 962 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 466 read tools are **on** by default and can be switched off individually. A
+All 474 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20764,3 +20764,31 @@ Worked example — a worker says "Place Pac shows as Noi":
 
 A manager then presses **Approve proposal** on the App Feedback form (or calls
 `approve_triage_proposal`); the worker gets a "Fixed: …" reply.
+
+## v0.207.0 — phone config as versioned data; closing the compliance loop
+
+Contract `docs/design/phone_config_and_compliance_loop.md`. Wizards, tiles and
+label profiles are versions in **Farm Config Version**: Draft → Staged (rollout
+flag, e.g. Tim first) → Published → Superseded; any → Retired; immutable once
+staged; one-step rollback.
+
+| Tool | What it does |
+| --- | --- |
+| `list_phone_configs` / `get_phone_config` | Versions with status, rollout and last validation; one body. Read |
+| `stage_phone_config` | Draft → Staged for named users/roles/companies. Write |
+| `publish_phone_config` | Enable a version for everyone; previous → Superseded. Write |
+| `rollback_phone_config` | One step back. Write |
+| `retire_phone_config` | Disable a key. Write |
+| `create_wizard_definition` / `update_wizard_definition` | Draft wizards: form_schema v2 steps, branching, EN/ES, allowlisted handler. Write |
+| `preview_wizard` | Validator report, EN/ES render, branch path, the handler call. Read |
+| `create_tile` / `update_tile` | Draft tiles for Today/Work/asset scan. Write |
+| `preview_tiles` | What a user's phone shows, and why a tile is hidden. Read |
+| `audit_compliance_loop` | Every enabled rule's path to a phone, audience, entry points, dismissal, gaps. Read |
+| `preview_compliance_loop` | One rule end to end, writing nothing. Read |
+| `update_label_profile` / `preview_label_profile` | Label facts → programs, templates, rules, requirements. Write / Read |
+| `list_label_compliance` | Products' attached profiles and pending proposals. Read |
+| `approve_label_compliance` / `reject_label_compliance` | Apply (through the dispatcher) or decline a product's proposal. Write |
+
+Every write is off by default and needs **System Manager or Farm Manager**.
+`approve_compliance_rule` gains `accept_loop_gap`: a rule that raises work the
+phones cannot close is refused without a reason.

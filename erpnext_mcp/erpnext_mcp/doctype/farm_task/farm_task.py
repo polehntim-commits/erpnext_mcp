@@ -48,6 +48,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from erpnext_mcp import compat
+
 #: The ten states, in the order they read across a dispatch board.
 DRAFT = "Draft"
 AVAILABLE = "Available"
@@ -188,6 +190,14 @@ class FarmTask(Document):
 		self.name = f"{prefix}{highest + 1:05d}"
 
 	def validate(self):
+		# v0.207.0: the task keeps the template version it was raised from.
+		if (
+			self.get("template")
+			and not self.get("template_version")
+			and compat.has_field("Farm Task", "template_version")
+		):
+			version = frappe.db.get_value("Farm Task Template", self.template, "version")
+			self.template_version = int(version) if str(version or "").isdigit() else None
 		self.task_name = str(self.task_name or "").strip()
 		if not self.task_name:
 			frappe.throw(_("Task is required — a task nobody can name is a task nobody will do."))

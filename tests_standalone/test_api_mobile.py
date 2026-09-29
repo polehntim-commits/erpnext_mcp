@@ -702,6 +702,11 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# v0.206.0 — extraction config and feature flags (SERVER_CHANGES §53).
 		"get_extraction_config",
 		"get_feature_flags",
+		# v0.207.0 — tiles, inbox, template tasks, startable inspections (SERVER_CHANGES §54).
+		"get_tiles",
+		"get_compliance_inbox",
+		"start_template_task",
+		"list_startable_inspections",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",
@@ -5018,7 +5023,11 @@ class TheWizardFilesWhatWasFilledIn(MobileAPITestCase):
 		self.assertNotIn("answers", farmops_routes.accepted_arguments(mobile_api.create_accident_report))
 		self.assertNotIn("wizard", farmops_routes.accepted_arguments(mobile_api.create_accident_report))
 		accepted = farmops_routes.accepted_arguments(mobile_api.submit_wizard_via_mobile)
-		self.assertEqual(accepted, {"wizard", "wizard_key", "answers"})
+		# v0.207.0 adds the version the phone started with, the queue's idempotency
+		# key and the alert/location context (docs/design/phone_config_and_compliance_loop.md §2.2).
+		self.assertEqual(
+			accepted, {"wizard", "wizard_key", "answers", "config_version", "client_reference", "context"}
+		)
 
 	def test_the_endpoint_the_spec_hands_the_renderer_is_this_one(self):
 		"""The read and the write have to agree about where a form goes, and the

@@ -15,6 +15,7 @@
   "scope_section",
   "company",
   "roles",
+  "users",
   "min_app_version",
   "max_app_version",
   "about_section",
@@ -115,11 +116,17 @@
    "fieldtype": "Data",
    "label": "Owner Area",
    "description": "What reads it, e.g. ios.label_capture or server.rodent_bait."
+  },
+  {
+   "fieldname": "users",
+   "fieldtype": "Small Text",
+   "label": "Users",
+   "description": "v0.207.0. Optional, one user per line. A row naming users applies only to them and is the most specific of all — how a staged rollout reaches Tim first."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-28 12:00:00.000000",
+ "modified": "2026-09-28 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Feature Flag",

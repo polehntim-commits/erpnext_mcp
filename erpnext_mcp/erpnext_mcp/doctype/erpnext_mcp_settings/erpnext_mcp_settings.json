@@ -1054,6 +1054,25 @@
   "allow_propose_triage_fix",
   "allow_approve_triage_proposal",
   "allow_reject_triage_proposal",
+  "allow_list_phone_configs",
+  "allow_get_phone_config",
+  "allow_stage_phone_config",
+  "allow_publish_phone_config",
+  "allow_rollback_phone_config",
+  "allow_retire_phone_config",
+  "allow_create_wizard_definition",
+  "allow_update_wizard_definition",
+  "allow_preview_wizard",
+  "allow_create_tile",
+  "allow_update_tile",
+  "allow_preview_tiles",
+  "allow_audit_compliance_loop",
+  "allow_preview_compliance_loop",
+  "allow_update_label_profile",
+  "allow_preview_label_profile",
+  "allow_list_label_compliance",
+  "allow_approve_label_compliance",
+  "allow_reject_label_compliance",
   "phone_link_doctypes",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
@@ -8154,6 +8173,139 @@
    "fieldname": "allow_reject_triage_proposal",
    "fieldtype": "Check",
    "label": "Reject Triage Proposal"
+  },
+  {
+   "default": "1",
+   "description": "READ. Every version of the phone's wizards, tiles and label profiles.",
+   "fieldname": "allow_list_phone_configs",
+   "fieldtype": "Check",
+   "label": "List Phone Configs"
+  },
+  {
+   "default": "1",
+   "description": "READ. One phone config version with its body.",
+   "fieldname": "allow_get_phone_config",
+   "fieldtype": "Check",
+   "label": "Get Phone Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Stage a version to named users/roles/companies first (rollout flag).",
+   "fieldname": "allow_stage_phone_config",
+   "fieldtype": "Check",
+   "label": "Stage Phone Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Publish (enable) a phone config version for everyone.",
+   "fieldname": "allow_publish_phone_config",
+   "fieldtype": "Check",
+   "label": "Publish Phone Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. One-step rollback to the previous version.",
+   "fieldname": "allow_rollback_phone_config",
+   "fieldtype": "Check",
+   "label": "Rollback Phone Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Retire (disable) a phone config key.",
+   "fieldname": "allow_retire_phone_config",
+   "fieldtype": "Check",
+   "label": "Retire Phone Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. A new wizard as a Draft (form_schema v2, allowlisted handlers).",
+   "fieldname": "allow_create_wizard_definition",
+   "fieldtype": "Check",
+   "label": "Create Wizard Definition"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. A new Draft version of a wizard.",
+   "fieldname": "allow_update_wizard_definition",
+   "fieldtype": "Check",
+   "label": "Update Wizard Definition"
+  },
+  {
+   "default": "1",
+   "description": "READ. A wizard as the phone renders it, its branching path and handler call.",
+   "fieldname": "allow_preview_wizard",
+   "fieldtype": "Check",
+   "label": "Preview Wizard"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. A new Today/Work/asset-scan tile as a Draft.",
+   "fieldname": "allow_create_tile",
+   "fieldtype": "Check",
+   "label": "Create Tile"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. A new Draft version of a tile.",
+   "fieldname": "allow_update_tile",
+   "fieldtype": "Check",
+   "label": "Update Tile"
+  },
+  {
+   "default": "1",
+   "description": "READ. What a user's phone shows on a surface, and why a tile is hidden.",
+   "fieldname": "allow_preview_tiles",
+   "fieldtype": "Check",
+   "label": "Preview Tiles"
+  },
+  {
+   "default": "1",
+   "description": "READ. Every rule's path to a phone, who sees it, and every gap.",
+   "fieldname": "allow_audit_compliance_loop",
+   "fieldtype": "Check",
+   "label": "Audit Compliance Loop"
+  },
+  {
+   "default": "1",
+   "description": "READ. One rule end to end, writing nothing.",
+   "fieldname": "allow_preview_compliance_loop",
+   "fieldtype": "Check",
+   "label": "Preview Compliance Loop"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. A Draft label profile (label facts \u2192 programs, templates, requirements).",
+   "fieldname": "allow_update_label_profile",
+   "fieldtype": "Check",
+   "label": "Update Label Profile"
+  },
+  {
+   "default": "1",
+   "description": "READ. Which labelled products a profile matches and what it would attach.",
+   "fieldname": "allow_preview_label_profile",
+   "fieldtype": "Check",
+   "label": "Preview Label Profile"
+  },
+  {
+   "default": "1",
+   "description": "READ. Products' attached label profiles and pending proposals.",
+   "fieldname": "allow_list_label_compliance",
+   "fieldtype": "Check",
+   "label": "List Label Compliance"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Apply a product's label-compliance proposal through the dispatcher.",
+   "fieldname": "allow_approve_label_compliance",
+   "fieldtype": "Check",
+   "label": "Approve Label Compliance"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Decline a product's label-compliance proposal.",
+   "fieldname": "allow_reject_label_compliance",
+   "fieldtype": "Check",
+   "label": "Reject Label Compliance"
   },
   {
    "default": "Item\nAsset Register\nHousing Unit\nEmployee\nField\nParcel\nIrrigation Zone\nWarehouse\nSupplier\nCustomer\nCrop\nUOM\nFarm Task\nCertification",

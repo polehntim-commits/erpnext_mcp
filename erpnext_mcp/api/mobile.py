@@ -10777,10 +10777,37 @@ def _with_submit_endpoint(data: dict) -> dict:
 	return data
 
 
+def _config_wizard(user: str, key: str, version=None, language=None):
+	"""The config-served wizard spec, or None when this key has no config rows."""
+	from .. import phone_config, wizard_config
+
+	if not key or not phone_config.ready() or not phone_config.rows("Wizard", key):
+		return None
+	if str(version or "").strip():
+		wanted = str(version).strip()
+		number = wanted.rsplit("@", 1)[-1]
+		doc = phone_config.doc_of("Wizard", key, int(number)) if number.isdigit() else None
+		if doc is None or doc.status in (phone_config.DRAFT, phone_config.RETIRED):
+			frappe.throw(f"wizard {key} has no servable version {wanted!r}.", frappe.DoesNotExistError)
+	else:
+		person = phone_config.person_of(user)
+		doc, _body = phone_config.in_force("Wizard", key, user, "", person.get("roles") or ())
+		if doc is None:
+			frappe.throw(f"wizard {key!r} was withdrawn.", frappe.DoesNotExistError)
+	lang = (
+		str(language or "").strip()
+		or (frappe.db.get_value("Employee", _employee(user), "preferred_language") if _employee(user) else "")
+		or "en"
+	)
+	return wizard_config.phone_spec(
+		doc, phone_config.body_of(doc), "es" if str(lang).lower().startswith("es") else "en"
+	)
+
+
 # ── 91. get_wizard_definition ────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("get_wizard_definition", limit=guard.READ_LIMIT)
-def get_wizard_definition(user: str, wizard=None, language=None) -> dict:
+def get_wizard_definition(user: str, wizard=None, language=None, version=None) -> dict:
 	"""One wizard's spec, in this worker's own language.
 
 	THE LANGUAGE IS THE CALLER'S AND IS NOT TAKEN FROM THE BODY BY DEFAULT. The
@@ -10792,6 +10819,12 @@ def get_wizard_definition(user: str, wizard=None, language=None) -> dict:
 	"""
 	guard.require_scope(user)
 	employee = _employee(user)
+	# v0.207.0 (§2.2): a wizard with a Farm Config Version is served from it —
+	# the version in force for this user, or the exact `version` the phone
+	# started with. The legacy Wizard Definition answers only keys never converted.
+	config = _config_wizard(user, str(wizard or "").strip(), version, language)
+	if config is not None:
+		return config
 	inner = {"wizard": str(wizard or "").strip(), "employee": employee, "user": user}
 	if language:
 		inner["language"] = str(language).strip()
@@ -10831,13 +10864,58 @@ def list_wizard_definitions(user: str, category=None, language=None) -> dict:
 		inner["category"] = str(category).strip()
 	if language:
 		inner["language"] = str(language).strip()
-	return wizard_tools.list_wizard_definitions(inner).data
+	data = wizard_tools.list_wizard_definitions(inner).data
+	# v0.207.0: config wizards replace their legacy rows and carry config_version.
+	from .. import phone_config
+
+	if phone_config.ready():
+		person = phone_config.person_of(user)
+		served = {
+			doc.config_key: (doc, body)
+			for doc, body in phone_config.served("Wizard", user, "", person.get("roles") or ())
+		}
+		retired = {r["config_key"] for r in phone_config.rows("Wizard")} - set(served)
+		rows = [
+			w
+			for w in data.get("wizards") or []
+			if w.get("wizard_key") not in served and w.get("wizard_key") not in retired
+		]
+		for key, (doc, body) in sorted(served.items()):
+			if category and body.get("category") != str(category).strip():
+				continue
+			rows.append(
+				{
+					"wizard_key": key,
+					"title": (body.get("title") or {}).get(
+						"es" if str(language or "").startswith("es") else "en"
+					)
+					or (body.get("title") or {}).get("en"),
+					"category": body.get("category"),
+					"version": doc.version,
+					"config_version": phone_config.version_string(doc),
+					"submit_method": (body.get("submit") or {}).get("handler"),
+					"icon": body.get("icon"),
+					"required_role": ", ".join(body.get("required_roles") or []) or None,
+					"enabled": True,
+				}
+			)
+		data["wizards"] = rows
+		data["wizard_count"] = len(rows)
+	return data
 
 
 # ── 92b. submit_wizard_via_mobile ────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint(SUBMIT_WIZARD, mutating=True, limit=guard.WRITE_LIMIT)
-def submit_wizard_via_mobile(user: str, wizard=None, wizard_key=None, answers=None) -> dict:
+def submit_wizard_via_mobile(
+	user: str,
+	wizard=None,
+	wizard_key=None,
+	answers=None,
+	config_version=None,
+	client_reference=None,
+	context=None,
+) -> dict:
 	"""File a finished wizard: unpack its answers and call the target it names.
 
 	THE PAYLOAD HAD NOWHERE TO LAND. The app posts one envelope for every
@@ -10893,6 +10971,12 @@ def submit_wizard_via_mobile(user: str, wizard=None, wizard_key=None, answers=No
 			"Wizard Definition these answers were collected against."
 		)
 
+	# v0.207.0 (§2.2): a config wizard is checked against the version the phone
+	# started with and filed through the HANDLERS allowlist, not the route table.
+	configured = _submit_config_wizard(user, key, answers, config_version, client_reference, context)
+	if configured is not None:
+		return configured
+
 	# THE SPEC IS THE AUTHORITY ON WHERE THIS GOES, and reading it through the
 	# tool is what makes an unknown or withdrawn wizard refuse here in exactly
 	# the sentence the read refuses in. A worker whose form was withdrawn between
@@ -10924,6 +11008,63 @@ def submit_wizard_via_mobile(user: str, wizard=None, wizard_key=None, answers=No
 		"accepted_count": len(unpacked),
 		"result": result if isinstance(result, dict) else {"value": result},
 	}
+
+
+def _submit_config_wizard(user, key, answers, config_version, client_reference, context):
+	"""The v0.207.0 submit path, or None for a key with no config rows."""
+	from .. import compliance_loop, phone_config, wizard_config
+
+	if not phone_config.ready() or not phone_config.rows("Wizard", key):
+		return None
+	reference = str(client_reference or "").strip()[:100]
+	earlier = wizard_config.earlier_submit(reference)
+	if earlier is not None:
+		return {"wizard": key, "filed": True, "duplicate": True, **earlier}
+	raw = answers if isinstance(answers, (dict, str)) else {}
+	if isinstance(raw, str) and len(raw.encode()) > wizard_config.MAX_ANSWER_BYTES:
+		raise ToolError("the answers are over 256 KB; send files with stage_file_chunk. Nothing was filed.")
+	given = _wizard_answers(raw)
+	if len(json.dumps(given, default=str).encode()) > wizard_config.MAX_ANSWER_BYTES:
+		raise ToolError("the answers are over 256 KB; send files with stage_file_chunk. Nothing was filed.")
+	ctx = _json_argument(context, "context") if isinstance(context, str) else (context or {})
+	ctx = {
+		k: str(v) for k, v in (ctx or {}).items() if k in wizard_config.CONTEXT_KEYS and v not in (None, "")
+	}
+	if ctx.get("source_alert") and not frappe.db.exists("Compliance Alert", ctx["source_alert"]):
+		raise ToolError(f"no Compliance Alert {ctx['source_alert']!r}. Nothing was filed.")
+	try:
+		doc, body = wizard_config.load_for_submit(key, str(config_version or "").strip(), user)
+	except ValueError as exc:
+		raise ToolError(f"{exc}.") from exc
+	if doc is None:
+		raise ToolError(f"wizard {key!r} is not served to this account. Nothing was filed.")
+	checked = wizard_config.check(body, given, ctx, user)
+	if checked["problems"]:
+		raise ToolError("the form was not filed:\n- " + "\n- ".join(checked["problems"]))
+	handler = (body.get("submit") or {}).get("handler")
+	spec = wizard_config.HANDLERS.get(handler) or {}
+	if spec.get("roles") and not set(spec["roles"]) & set(frappe.get_roles(user) or []):
+		raise ToolError(f"{handler} is for {' / '.join(spec['roles'])}. Nothing was filed.")
+	route = wizard_config.route_of(handler)
+	if route is None:
+		raise ToolError(f"{handler} has no route on this site. Nothing was filed.")
+	arguments, ignored = wizard_config.handler_arguments(body, checked["answers"], ctx)
+	result = route.handler(**arguments)
+	answer = {
+		"wizard": key,
+		"config_version": phone_config.version_string(doc),
+		"submit_method": handler,
+		"filed": True,
+		"duplicate": False,
+		"path": checked["path"],
+		"ignored": ignored,
+		"accepted_count": len(arguments),
+		"result": result if isinstance(result, dict) else {"value": result},
+	}
+	wizard_config.record_submit(reference, answer)
+	if ctx.get("source_alert"):
+		compliance_loop.after_wizard(ctx["source_alert"])
+	return answer
 
 
 # ── 93. list_shipments ───────────────────────────────────────────────────────
@@ -11958,6 +12099,8 @@ def list_my_inspections(user: str, state=None, limit=None) -> dict:
 				"location",
 				"started_at",
 				"submitted_at",
+				# v0.207.0 §6.4: the task a session was started for.
+				"farm_task",
 			),
 		),
 		order_by="creation desc",
@@ -12024,13 +12167,28 @@ def get_inspection(user: str, session=None) -> dict:
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("submit_inspection", mutating=True, limit=guard.WRITE_LIMIT)
 def submit_inspection(
-	user: str, session=None, section_submissions=None, client_capabilities=None, visit_id=None
+	user: str,
+	session=None,
+	section_submissions=None,
+	client_capabilities=None,
+	visit_id=None,
+	client_reference=None,
 ) -> dict:
-	"""File a visit from the phone: each section's answers, photos, notes, or skipped."""
+	"""File a visit from the phone: each section's answers, photos, notes, or skipped.
+
+	v0.207.0 §6.3: `client_reference` makes a queued resend safe — a session
+	already submitted under the same reference answers as the first submit did."""
 	from .. import device_capabilities, sessions
 
 	allowed = guard.require_scope(user)
 	name = guard.require_scoped_doc("Inspection Session", session, "session", allowed)
+	reference = str(client_reference or "").strip()[:140]
+	if reference and compat.has_field("Inspection Session", "submit_reference"):
+		held = (
+			frappe.db.get_value("Inspection Session", name, ["submit_reference", "state"], as_dict=True) or {}
+		)
+		if held.get("submit_reference") == reference:
+			return {"name": name, "state": held.get("state"), "duplicate": True}
 	employee = fieldwork._employee_for(user)
 	worker = frappe.db.get_value("Inspection Session", name, "worker")
 	if worker and worker != employee:
@@ -12066,7 +12224,10 @@ def submit_inspection(
 		inner["worker"] = employee
 	if str(visit_id or "").strip():
 		inner["visit_id"] = str(visit_id).strip()
-	return session_tools.submit_inspection_session(inner).data
+	data = session_tools.submit_inspection_session(inner).data
+	if reference and compat.has_field("Inspection Session", "submit_reference"):
+		frappe.db.set_value("Inspection Session", name, "submit_reference", reference, update_modified=False)
+	return data
 
 
 # ── 112d. search_link ────────────────────────────────────────────────────────
@@ -12189,6 +12350,176 @@ def get_feature_flags(user: str, app_version=None, company=None) -> dict:
 		"flags": flags.for_user(user, entity or "", str(app_version or "") or None),
 		"company": entity or None,
 		"evaluated_at": frappe.utils.now(),
+	}
+
+
+# ── 112h. get_tiles ── v0.207.0 ───────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_tiles", limit=guard.READ_LIMIT)
+def get_tiles(user: str, surface=None, app_version=None, asset=None, company=None) -> dict:
+	"""The tiles for one surface (docs/design/phone_config_and_compliance_loop.md §3.5).
+
+	Audience, show-if, app version and staged rollout are applied here; a badge
+	query that fails is `badge: null` and never fails the route."""
+	from .. import tiles
+
+	allowed = guard.require_scope(user)
+	wanted = str(surface or "").strip()
+	if wanted not in tiles.SURFACES:
+		frappe.throw(f"surface must be one of {', '.join(tiles.SURFACES)}.", frappe.ValidationError)
+	entity = guard.require_company(user, company, allowed) if company else ""
+	if asset:
+		for doctype in ("Asset Register", "Housing Unit"):
+			if compat.doctype_exists(doctype) and frappe.db.exists(doctype, str(asset)):
+				guard.require_scoped_doc(doctype, asset, "asset", allowed)
+				break
+	shown = tiles.for_user(user, wanted, str(app_version or "") or None, asset or None, entity)
+	stamp = frappe.utils.now()
+	return {
+		"surface": wanted,
+		"tiles": shown,
+		"evaluated_at": stamp,
+		"etag": phone_config_etag(shown),
+	}
+
+
+def phone_config_etag(rows: list) -> str:
+	import hashlib
+
+	return hashlib.sha256(
+		json.dumps([(r["key"], r["config_version"], r.get("badge")) for r in rows], default=str).encode()
+	).hexdigest()[:16]
+
+
+# ── 112i. get_compliance_inbox ── v0.207.0 ────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_compliance_inbox", limit=guard.READ_LIMIT)
+def get_compliance_inbox(user: str, company=None) -> dict:
+	"""The caller's due, overdue and blocked compliance items, each with the
+	action that opens its work on this phone (§4.3)."""
+	from .. import compliance_loop
+
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) if company else ""
+	return compliance_loop.json_safe(compliance_loop.inbox(user, entity))
+
+
+# ── 112j. start_template_task ── v0.207.0 ─────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("start_template_task", mutating=True, limit=guard.WRITE_LIMIT)
+def start_template_task(
+	user: str, template=None, location_doctype=None, location=None, source_alert=None, client_reference=None
+) -> dict:
+	"""Raise a task from a template for the caller and claim it (§4.4).
+
+	One task per alert, as materialize_task_for_alert; the caller must hold the
+	template's certification; idempotent on `client_reference`."""
+	from .. import qualifications, wizard_config
+	from ..tools import tasktemplates
+
+	allowed = guard.require_scope(user)
+	name = str(template or "").strip()
+	if not name or not frappe.db.exists("Farm Task Template", name):
+		frappe.throw(
+			f"no Farm Task Template {name or '(none)'!r}. Nothing was created.", frappe.ValidationError
+		)
+	reference = str(client_reference or "").strip()[:100]
+	earlier = wizard_config.earlier_submit(f"task:{reference}") if reference else None
+	if earlier and (earlier.get("first") or {}).get("result_name"):
+		task = earlier["first"]["result_name"]
+		return {"task": shape.task(dict(frappe.get_doc(FARM_TASK, task).as_dict())), "duplicate": True}
+	employee = fieldwork._employee_for(user)
+	row = (
+		frappe.db.get_value("Farm Task Template", name, ["required_certification", "company"], as_dict=True)
+		or {}
+	)
+	qualifications.refuse_unqualified(
+		{"required_certification": row.get("required_certification"), "task_name": name}, employee, "created"
+	)
+	alert = str(source_alert or "").strip()
+	if alert:
+		existing = frappe.db.get_value(FARM_TASK, {"source_alert": alert}, "name")
+		if existing:
+			return {
+				"task": shape.task(dict(frappe.get_doc(FARM_TASK, existing).as_dict())),
+				"duplicate": True,
+			}
+		alert_company = frappe.db.get_value("Compliance Alert", alert, "company")
+		if alert_company and alert_company not in allowed:
+			frappe.throw("that alert is not in an entity this account reaches.", frappe.PermissionError)
+	company = row.get("company") or (allowed[0] if allowed else "")
+	inner = {"template": name, "company": company}
+	if location_doctype and location:
+		guard.require_scoped_doc(str(location_doctype), location, "location", allowed)
+		inner.update({"location_doctype": str(location_doctype), "location": str(location)})
+	if alert:
+		inner["source_alert"] = alert
+	created = tasktemplates.create_task_from_template(inner).data
+	task_name = created.get("name") or (created.get("task") or {}).get("name")
+	claimed = None
+	try:
+		claimed = fieldwork.claim_task_via_mobile({"task": task_name}).data
+	except ToolError as exc:
+		claimed = {"not_claimed": str(exc)}
+	if reference:
+		wizard_config.record_submit(f"task:{reference}", {"result": {"name": task_name}})
+	return {
+		"task": shape.task(dict(frappe.get_doc(FARM_TASK, task_name).as_dict())),
+		"claimed": bool(claimed and not claimed.get("not_claimed")),
+		"note": (claimed or {}).get("not_claimed"),
+		"duplicate": False,
+	}
+
+
+# ── 112k. list_startable_inspections ── v0.207.0 ──────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_startable_inspections", limit=guard.READ_LIMIT)
+def list_startable_inspections(user: str, location_doctype=None, location=None) -> dict:
+	"""Active, approved inspection templates for a place (§6.2): the scan's
+	"Start Inspection" opens one directly, or a picker when there are several."""
+	from .. import sessions
+
+	allowed = guard.require_scope(user)
+	doctype = str(location_doctype or "").strip()
+	place = str(location or "").strip()
+	asset_type = ""
+	if doctype and place:
+		guard.require_scoped_doc(doctype, place, "location", allowed)
+		field = {"Asset Register": "asset_type", "Housing Unit": "unit_type"}.get(doctype)
+		if field and compat.has_field(doctype, field):
+			asset_type = str(frappe.db.get_value(doctype, place, field) or "")
+	if not compat.doctype_exists(sessions.TEMPLATE_DOCTYPE):
+		return {"templates": [], "count": 0}
+	rows = frappe.db.get_all(
+		sessions.TEMPLATE_DOCTYPE,
+		filters={"active": 1, "superseded_by": ("in", ("", None))},
+		fields=compat.existing_fields(
+			sessions.TEMPLATE_DOCTYPE,
+			("name", "template_name", "version", "applies_to_asset_type", "human_approved_by", "description"),
+		),
+		limit=200,
+	)
+	out = []
+	for row in rows:
+		applies = str(row.get("applies_to_asset_type") or "").strip()
+		# A template applies to a place when it names the place's type, or the
+		# register the place is in ("Housing Unit"), or nothing at all.
+		if applies and doctype and applies not in (asset_type, doctype):
+			continue
+		out.append(
+			{
+				"template": row["name"],
+				"title": {"en": row.get("template_name") or row["name"], "es": None},
+				"version": row.get("version"),
+				"applies_to_asset_type": applies or None,
+			}
+		)
+	out.sort(key=lambda r: (r["applies_to_asset_type"] is None, r["title"]["en"]))
+	return {
+		"templates": out,
+		"count": len(out),
+		"location_doctype": doctype or None,
+		"location": place or None,
 	}
 
 
@@ -20832,7 +21163,13 @@ def register_product_label(
 
 	# 4. The label's facts, into the Item's blanks only.
 	updates, warnings = _label_blanks(code, fields, record, result, text)
+	# 5. v0.207.0 (§5.2): the label profiles this product now matches — attached
+	# where everything is live, proposed for a person where anything is new.
+	from .. import label_compliance
+
+	compliance = label_compliance.after_label(code, result)
 	return {
+		"compliance": compliance,
 		"item_code": code,
 		"photos": photos,
 		"validation": {

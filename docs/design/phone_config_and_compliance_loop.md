@@ -373,6 +373,8 @@ naming the gap, unless `accept_loop_gap` (a reason) is given. The reason is reco
 
 **Already-enabled rules are not touched;** the audit reports them.
 
+> **Amendment (implementation, v0.207.0):** only *structural* gaps gate enabling — no path target, a disabled or missing template/inspection/wizard, a form that does not render, or a safety-critical kind an enrolled device cannot render. *Reach* gaps (nobody with a phone can act; no tile reaches them) are reported by `audit_compliance_loop` as `gaps` but do not gate, so a farm with no enrolled phone can still enable rules and dispatch from the Desk. The audit returns both `gaps` and `blocking_gaps`.
+
 ### 4.2 MCP
 
 | tool | kind | what it does |
