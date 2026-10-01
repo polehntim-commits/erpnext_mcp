@@ -1,0 +1,268 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-01 12:00:00.000000",
+ "description": "v0.208.0. One request to print an employee ID card or an asset tag. ERPNext holds the queue, one Mac's agent claims and prints, and every card has a row: what, for whom, who asked, when, and whether it succeeded. NEVER DELETED — no role has delete; Cancelled and Failed jobs stay as history. docs/design/card_print_queue.md.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "job_type",
+  "reference_doctype",
+  "reference_name",
+  "reference_title",
+  "company",
+  "col_a",
+  "status",
+  "print_station",
+  "copies",
+  "sides",
+  "artwork_section",
+  "artwork",
+  "artwork_sha256",
+  "request_section",
+  "requested_by",
+  "requested_from",
+  "client_request_id",
+  "col_b",
+  "is_reprint",
+  "reprint_reason",
+  "printing_section",
+  "claimed_at",
+  "claimed_by",
+  "printed_at",
+  "col_c",
+  "attempts",
+  "cups_job",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "job_type",
+   "fieldtype": "Select",
+   "label": "Job Type",
+   "options": "Employee ID\nAsset Tag",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "options": "DocType",
+   "label": "Reference DocType",
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "options": "reference_doctype",
+   "label": "Reference",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reference_title",
+   "fieldtype": "Data",
+   "label": "Name on the Card",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Company",
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "Copied from the employee or asset. A Company User Permission scopes the queue like every other record."
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Queued\nPrinting\nPrinted\nFailed\nCancelled",
+   "default": "Queued",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "print_station",
+   "fieldtype": "Link",
+   "options": "Card Print Station",
+   "label": "Print Station",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "copies",
+   "fieldtype": "Int",
+   "label": "Copies",
+   "default": "1",
+   "description": "1 to 5."
+  },
+  {
+   "fieldname": "sides",
+   "fieldtype": "Select",
+   "label": "Sides",
+   "options": "Single\nDual",
+   "default": "Single"
+  },
+  {
+   "fieldname": "artwork_section",
+   "fieldtype": "Section Break",
+   "label": "Artwork"
+  },
+  {
+   "fieldname": "artwork",
+   "fieldtype": "Attach",
+   "label": "Artwork",
+   "read_only": 1,
+   "description": "The rendered PDF, a private file. It leaves the server only inside a claim answer to the print station."
+  },
+  {
+   "fieldname": "artwork_sha256",
+   "fieldtype": "Data",
+   "label": "Artwork SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "request_section",
+   "fieldtype": "Section Break",
+   "label": "Request"
+  },
+  {
+   "fieldname": "requested_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Requested By",
+   "read_only": 1,
+   "description": "From the session, never from the request body."
+  },
+  {
+   "fieldname": "requested_from",
+   "fieldtype": "Select",
+   "label": "Requested From",
+   "options": "iOS\nDesk\nAPI",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_request_id",
+   "fieldtype": "Data",
+   "label": "Client Request ID",
+   "unique": 1,
+   "read_only": 1,
+   "description": "The requester's idempotency key: the same id twice is one job and one card."
+  },
+  {
+   "fieldname": "col_b",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "is_reprint",
+   "fieldtype": "Check",
+   "label": "Is Reprint",
+   "read_only": 1,
+   "description": "Set by the server when a Printed card already exists for this reference."
+  },
+  {
+   "fieldname": "reprint_reason",
+   "fieldtype": "Data",
+   "label": "Reprint Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "printing_section",
+   "fieldtype": "Section Break",
+   "label": "Printing"
+  },
+  {
+   "fieldname": "claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Claimed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "claimed_by",
+   "fieldtype": "Data",
+   "label": "Claimed By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "printed_at",
+   "fieldtype": "Datetime",
+   "label": "Printed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_c",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cups_job",
+   "fieldtype": "Data",
+   "label": "CUPS Job",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-01 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Card Print Job",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Card Print Requester"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "reference_title"
+}

@@ -141,7 +141,10 @@ Rendered on the server at request time. The phone and the agent never build a ca
 
 **Rules for both:**
 - The generators' own outputs are not changed.
-- An employee with no badge gets one issued, exactly as the ID Card button does today.
+- An employee's existing badge is reused. An employee with **no badge** gets one issued only when
+  the requester may issue badges (the hiring roles, as the ID Card button requires today);
+  otherwise the request is refused, saying who can issue it. *(Amended during implementation:
+  printing a card must not be a way around the badge-issuing rule.)*
 - If the PDF cannot be made (no wkhtmltopdf, no reportlab, no QR encoder), the request is refused in
   a sentence and **no job is created**. A job with no artwork must never reach a station.
 - The PDF is attached privately to the job, and its sha256 is recorded.

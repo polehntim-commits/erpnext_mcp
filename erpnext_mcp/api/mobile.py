@@ -12523,6 +12523,83 @@ def list_startable_inspections(user: str, location_doctype=None, location=None) 
 	}
 
 
+# ── 112l–o. the card print queue ── v0.208.0 ─────────────────────────────────
+# docs/design/card_print_queue.md §4.1. The phone asks; it never renders a card
+# and never talks to a printer. Every rule is in `card_print`.
+def _card_print(function, *args, **kwargs):
+	from .. import card_print
+
+	try:
+		return function(*args, **kwargs)
+	except card_print.CardPrintError as exc:
+		errors = {"forbidden": frappe.PermissionError, "not_found": frappe.DoesNotExistError}
+		frappe.throw(str(exc), errors.get(exc.kind, frappe.ValidationError))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("request_card_print", mutating=True, limit=guard.WRITE_LIMIT)
+def request_card_print(
+	user: str,
+	job_type=None,
+	reference_name=None,
+	copies=None,
+	sides=None,
+	client_request_id=None,
+	reprint_reason=None,
+) -> dict:
+	"""Ask for an ID card or an asset tag. Idempotent on `client_request_id`."""
+	from .. import card_print
+
+	allowed = guard.require_scope(user)
+
+	def may_read(doctype, name, company):
+		return not company or company in allowed
+
+	return _card_print(
+		card_print.request,
+		user,
+		str(job_type or ""),
+		str(reference_name or ""),
+		str(client_request_id or ""),
+		copies=copies,
+		sides=str(sides or "Single"),
+		reprint_reason=str(reprint_reason or ""),
+		requested_from="iOS",
+		may_read=may_read,
+	)
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_card_print_jobs", limit=guard.READ_LIMIT)
+def list_card_print_jobs(user: str, status=None, mine_only=None, reference_name=None, limit=None) -> dict:
+	"""The caller's print jobs (or, with the role, their companies'), newest first, with station state."""
+	from .. import card_print
+
+	allowed = guard.require_scope(user)
+	mine = mine_only is None or compat.checked(mine_only)
+	return _card_print(
+		card_print.list_jobs, user, allowed, str(status or ""), mine, str(reference_name or ""), limit or 50
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("cancel_card_print_job", mutating=True, limit=guard.WRITE_LIMIT)
+def cancel_card_print_job(user: str, name=None) -> dict:
+	from .. import card_print
+
+	allowed = guard.require_scope(user)
+	return _card_print(card_print.cancel, str(name or ""), user, allowed)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("retry_card_print_job", mutating=True, limit=guard.WRITE_LIMIT)
+def retry_card_print_job(user: str, name=None) -> dict:
+	from .. import card_print
+
+	allowed = guard.require_scope(user)
+	return _card_print(card_print.retry, str(name or ""), user, allowed)
+
+
 # ── 113. get_payroll_register ────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("get_payroll_register", limit=guard.READ_LIMIT)

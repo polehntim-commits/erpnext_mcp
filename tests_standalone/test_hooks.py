@@ -558,6 +558,11 @@ class TheScheduledJobs(unittest.TestCase):
 			{
 				"cron": {
 					"*/15 * * * *": ["erpnext_mcp.services.weather.sweep_open_shifts"],
+					# v0.208.0. The card print queue's stuck-job sweep: it writes only
+					# this app's own Card Print Job, moves a job a station never
+					# reported on back to Queued (or Failed after three tries), and
+					# never raises. Five minutes, so "within ten" is kept.
+					"*/5 * * * *": ["erpnext_mcp.card_print.sweep_stuck"],
 					"0 2 * * *": ["erpnext_mcp.services.windowed_reports.recompute_kpi_history_incremental"],
 					"0 3 * * *": ["erpnext_mcp.services.kpi_engine.refresh_all_kpi_caches"],
 					"15 3 * * *": ["erpnext_mcp.tools.budget.refresh_all_active_budgets"],

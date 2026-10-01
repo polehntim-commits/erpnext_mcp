@@ -1,0 +1,44 @@
+{
+ "can_request": true,
+ "count": 1,
+ "jobs": [
+  {
+   "attempts": 1,
+   "can_cancel": false,
+   "can_retry": true,
+   "claimed_at": "<volatile>",
+   "company": "Example Trading Co",
+   "copies": 1,
+   "error": "the printer is out of ribbon",
+   "is_reprint": false,
+   "job_type": "Employee ID",
+   "name": "CPJ-2026-00001",
+   "print_station": "primacy2-main",
+   "printed_at": null,
+   "reference_doctype": "Employee",
+   "reference_name": "EMP-ANA",
+   "reference_title": "Ana Ramos",
+   "reprint_reason": null,
+   "requested_at": "<volatile>",
+   "requested_by": "ana@example.test",
+   "requested_by_name": "Ana Ramos",
+   "requested_from": "iOS",
+   "sides": "Single",
+   "status": "Failed"
+  }
+ ],
+ "stations": [
+  {
+   "enabled": true,
+   "job_types": [
+    "Employee ID",
+    "Asset Tag"
+   ],
+   "last_seen_at": "<volatile>",
+   "media": "CR80 PVC card 85.6 x 54 mm",
+   "message": "",
+   "state": "Ready",
+   "station": "primacy2-main"
+  }
+ ]
+}

@@ -179,6 +179,7 @@ from .tools import (
 	wizards,
 	workflow,
 )
+from .tools import card_prints as card_print_tools
 from .tools import moments as moment_tools
 from .tools import pest_control as pest_control_tools
 from .tools import phone_configs as phone_config_tools
@@ -11826,6 +11827,62 @@ TOOLS = {
 		"one blocks the work on that device). Read-only.",
 		{"company": _field(_STRING, "Only devices on accounts for this company.")},
 		title="List device capabilities",
+	),
+	# ── v0.208.0: the card print queue ───────────────────────────────────────
+	# docs/design/card_print_queue.md. ERPNext holds the queue; a Mac agent prints.
+	"list_card_print_jobs": _tool(
+		card_print_tools.list_card_print_jobs,
+		"v0.208.0. The card print queue: ID cards and asset tags asked for, with status (Queued / "
+		"Printing / Printed / Failed / Cancelled), who asked, when, attempts, the last error and "
+		"whether it is a reprint — plus each print station's state. Read-only.",
+		{
+			"status": _field(_STRING, "Queued, Printing, Printed, Failed or Cancelled."),
+			"mine_only": _field(_BOOLEAN, "Only the caller's own requests. Default false."),
+			"reference_name": _field(_STRING, "One employee or asset: its print history."),
+			"limit": _LIMIT,
+		},
+		title="List card print jobs",
+	),
+	"list_card_print_stations": _tool(
+		card_print_tools.list_card_print_stations,
+		"v0.208.0. Each print station: which job types it prints, its media, and what its agent last "
+		"reported (Ready / Paused / Printer error / Offline). Read-only.",
+		{},
+		title="List card print stations",
+	),
+	"request_card_print": _tool(
+		card_print_tools.request_card_print,
+		"MUTATING (default OFF; Card Print Requester). Queue an employee ID card or an asset tag for "
+		"the print station. The server renders the artwork (CR80) and the Mac agent prints it. "
+		"Idempotent on client_request_id; a card already Queued or Printing is returned, not doubled; "
+		"a card already Printed needs reprint_reason.",
+		{
+			"job_type": _field(_STRING, "Employee ID or Asset Tag."),
+			"reference_name": _field(_STRING, "The Employee or the Asset Register docname."),
+			"client_request_id": _field(_STRING, "A UUID for this request (8–64 characters)."),
+			"copies": _field(_INTEGER, "1 to 5. Default 1."),
+			"sides": _field(_STRING, "Single (default) or Dual (Employee ID only)."),
+			"reprint_reason": _field(_STRING, "Lost, Damaged, Details changed, or Other: …"),
+		},
+		required=("job_type", "reference_name", "client_request_id"),
+		mutating=True,
+		title="Request a card print",
+	),
+	"cancel_card_print_job": _tool(
+		card_print_tools.cancel_card_print_job,
+		"MUTATING (default OFF). Cancel a print job that is still Queued. The row stays as history.",
+		{"name": _field(_STRING, "The job, e.g. CPJ-2026-00012.")},
+		required=("name",),
+		mutating=True,
+		title="Cancel a card print job",
+	),
+	"retry_card_print_job": _tool(
+		card_print_tools.retry_card_print_job,
+		"MUTATING (default OFF). Send a Failed print job back to the queue.",
+		{"name": _field(_STRING, "The job, e.g. CPJ-2026-00012.")},
+		required=("name",),
+		mutating=True,
+		title="Retry a card print job",
 	),
 	# ── v0.207.0: phone configuration and the compliance loop ────────────────
 	# docs/design/phone_config_and_compliance_loop.md. Versioned, immutable once

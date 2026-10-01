@@ -1934,6 +1934,8 @@ APP_DOCTYPES = {
 	"Extraction Config": "extraction_config",
 	"Farm Feature Flag": "farm_feature_flag",
 	"Farm Config Version": "farm_config_version",
+	"Card Print Job": "card_print_job",
+	"Card Print Station": "card_print_station",
 	# v0.118.0, Farm App Retirement Cycle 1. The five registers the Flask
 	# sidecar held and this app did not. `IoT Reading` denormalises its field
 	# and company off the device AT WRITE TIME rather than linking through —

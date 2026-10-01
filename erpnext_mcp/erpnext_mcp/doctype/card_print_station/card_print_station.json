@@ -1,0 +1,154 @@
+{
+ "actions": [],
+ "autoname": "field:station_name",
+ "creation": "2026-10-01 12:00:00.000000",
+ "description": "v0.208.0. One printing place: which job types it prints, on what media, and what its agent last reported. ROUTING IS DATA — moving asset tags to a label printer is a second row here and a second agent config, not a code change. docs/design/card_print_queue.md §2.3.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "station_name",
+  "enabled",
+  "priority",
+  "job_types",
+  "companies",
+  "col_a",
+  "media",
+  "artwork_width_mm",
+  "artwork_height_mm",
+  "agent_section",
+  "last_seen_at",
+  "printer_state",
+  "printer_message",
+  "agent_version"
+ ],
+ "fields": [
+  {
+   "fieldname": "station_name",
+   "fieldtype": "Data",
+   "label": "Station Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "The name the agent's config carries, e.g. primacy2-main."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Int",
+   "label": "Priority",
+   "default": "10",
+   "description": "Lower wins when several stations print the same job type."
+  },
+  {
+   "fieldname": "job_types",
+   "fieldtype": "Small Text",
+   "label": "Job Types",
+   "reqd": 1,
+   "description": "One per line: Employee ID, Asset Tag."
+  },
+  {
+   "fieldname": "companies",
+   "fieldtype": "Small Text",
+   "label": "Companies",
+   "description": "Optional, one per line. Empty means every company."
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "media",
+   "fieldtype": "Data",
+   "label": "Media",
+   "description": "For people: e.g. CR80 PVC card 85.6 x 54 mm."
+  },
+  {
+   "fieldname": "artwork_width_mm",
+   "fieldtype": "Float",
+   "label": "Artwork Width (mm)",
+   "default": "85.6"
+  },
+  {
+   "fieldname": "artwork_height_mm",
+   "fieldtype": "Float",
+   "label": "Artwork Height (mm)",
+   "default": "54"
+  },
+  {
+   "fieldname": "agent_section",
+   "fieldtype": "Section Break",
+   "label": "Agent"
+  },
+  {
+   "fieldname": "last_seen_at",
+   "fieldtype": "Datetime",
+   "label": "Last Seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "printer_state",
+   "fieldtype": "Data",
+   "label": "Printer State",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "printer_message",
+   "fieldtype": "Small Text",
+   "label": "Printer Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "agent_version",
+   "fieldtype": "Data",
+   "label": "Agent Version",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-01 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Card Print Station",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Card Print Requester"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "station_name"
+}

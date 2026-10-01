@@ -23,6 +23,8 @@ REPORTS = (
 	"compliance",
 	"farm_dashboard",
 	"my_feedback",
+	# v0.208.0 — the card print queue screen (needs app 0.22.0).
+	"print_queue",
 )
 DOCUMENT_DOCTYPES = ("Farm Task", "Inspection Session", "Asset Register", "Item", "App Feedback")
 TARGET_KINDS = ("wizard", "task_template", "inspection_template", "report", "list_query", "document")
@@ -79,6 +81,8 @@ ICONS = (
 	"thermometer.sun",
 	"cross.case",
 	"plus.circle",
+	# v0.208.0.
+	"printer",
 )
 SEASONS = ("in", "off")
 OCCUPANCY = ("Occupied", "Unoccupied")
@@ -315,6 +319,21 @@ SEEDS = {
 		"show_if": {},
 		"min_app_version": "0.21.0",
 	},
+}
+
+
+#: v0.208.0. Seeded by `install._card_print`, for people who may print cards.
+PRINT_QUEUE_TILE = {
+	"surface": "today",
+	"title": {"en": "Print queue", "es": "Cola de impresión"},
+	"subtitle": {"en": "ID cards and asset tags", "es": "Credenciales y etiquetas"},
+	"icon": "printer",
+	"order": 60,
+	"target": {"kind": "report", "report": "print_queue"},
+	"audience": {"roles": ["Card Print Requester"]},
+	"badge": {"query": "my_print_jobs", "params": {}},
+	"show_if": {},
+	"min_app_version": "0.22.0",
 }
 
 

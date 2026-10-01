@@ -192,6 +192,33 @@ def triage_queue(user, company, params):
 	)
 
 
+def my_print_jobs(user, company, params):
+	"""v0.208.0. The caller's cards still in the queue, and any that failed."""
+	if not compat.doctype_exists("Card Print Job"):
+		return _answer([])
+	rows = frappe.db.get_all(
+		"Card Print Job",
+		filters={"requested_by": user, "status": ("in", ("Queued", "Printing", "Failed"))},
+		fields=["name", "reference_title", "job_type", "status"],
+		limit=200,
+	)
+	failed = any(r.get("status") == "Failed" for r in rows)
+	return _answer(
+		[
+			{
+				"doctype": "Card Print Job",
+				"name": r["name"],
+				"title": r.get("reference_title") or r["name"],
+				"subtitle": r.get("job_type"),
+				"state": r.get("status"),
+				"due_date": None,
+			}
+			for r in rows
+		],
+		"critical" if failed else "",
+	)
+
+
 #: id → (function, params schema {name: type}, roles gate or ()).
 QUERIES = {
 	"my_tasks_open": (my_tasks_open, {}, ()),
@@ -203,6 +230,7 @@ QUERIES = {
 	"my_inspections_open": (my_inspections_open, {}, ()),
 	"my_feedback_answered": (my_feedback_answered, {}, ()),
 	"triage_queue": (triage_queue, {}, MANAGER_ROLES),
+	"my_print_jobs": (my_print_jobs, {}, ()),
 }
 
 

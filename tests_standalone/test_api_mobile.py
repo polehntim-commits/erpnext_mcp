@@ -707,6 +707,11 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_compliance_inbox",
 		"start_template_task",
 		"list_startable_inspections",
+		# v0.208.0 — the card print queue (SERVER_CHANGES §55).
+		"request_card_print",
+		"list_card_print_jobs",
+		"cancel_card_print_job",
+		"retry_card_print_job",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 962 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 967 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 474 read tools are **on** by default and can be switched off individually. A
+All 476 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20792,3 +20792,20 @@ staged; one-step rollback.
 Every write is off by default and needs **System Manager or Farm Manager**.
 `approve_compliance_rule` gains `accept_loop_gap`: a rule that raises work the
 phones cannot close is refused without a reason.
+
+## v0.208.0 — the card print queue
+
+Contract `docs/design/card_print_queue.md`. ERPNext holds the queue; the Mac
+agent in `cardprint_agent/` prints on the Evolis Primacy 2.
+
+| Tool | What it does |
+| --- | --- |
+| `list_card_print_jobs` | The queue: status, who asked, attempts, the last error, reprints, plus station state. Read |
+| `list_card_print_stations` | Each station's job types, media and what its agent last reported. Read |
+| `request_card_print` | Queue an Employee ID or Asset Tag. Idempotent on `client_request_id`; a Printed card needs `reprint_reason`. Write |
+| `cancel_card_print_job` | Cancel a Queued job. Write |
+| `retry_card_print_job` | Send a Failed job back to the queue. Write |
+
+Requesting needs **Card Print Requester** (or System Manager). The station's
+claim and complete methods are not MCP tools: they are
+`/api/method/erpnext_mcp.api.card_print.*`, for the **Card Print Station** role.

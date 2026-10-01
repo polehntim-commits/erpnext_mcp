@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.208.0 — 2026-10-01 — the card print queue
+
+**967 tools** (476 read, 491 write): `list_card_print_jobs`, `list_card_print_stations` (read);
+`request_card_print`, `cancel_card_print_job`, `retry_card_print_job` (write, default off). **Four new
+routes** (151 mobile methods): the same four requester methods. Contract
+`docs/design/card_print_queue.md`; iOS SERVER_CHANGES §55.
+
+- **ERPNext holds the queue, one Mac prints, the phone only asks.** New doctype **Card Print Job** (never
+  deleted; `track_changes`): job type, reference, company, status (Queued / Printing / Printed / Failed /
+  Cancelled), station, copies 1–5, sides, the private artwork PDF and its hash, who asked and from where,
+  the idempotency key, attempts, the last error, reprint flag and reason, the CUPS job id.
+- **Routing is data.** New doctype **Card Print Station** (job types, optional companies, media, artwork
+  size, priority, and the agent's heartbeat). `primacy2-main` is seeded for both job types on CR80. Moving
+  asset tags to a label printer is a second row and a second agent config.
+- **Artwork** is rendered at request time at the card's own size. Employee ID: the existing card design
+  unchanged (`badge_sheet.card_html` + `CARD_CSS`) through `get_pdf` on an 85.6 × 54 mm page; Dual adds the
+  existing 38.1 mm QR back. Asset Tag: a new one-page layout (reportlab) around the asset's own `qr_url`.
+  The generators' outputs are untouched. No PDF means no job.
+- **Rules:** idempotent on `client_request_id`; a card already Queued or Printing is returned, not
+  doubled; a card already Printed needs a `reprint_reason`; **Card Print Requester** to ask, read access
+  to the record, 10 a minute and 100 a day; an employee's first badge is issued only when the requester
+  holds a hiring role. The station (**Card Print Station** role only) claims the oldest job under a row
+  lock, one at a time, and receives the PDF inside the claim answer. A retryable failure requeues up to
+  three attempts; a scheduled sweep (every 5 minutes) returns a job stuck Printing for 10.
+- **Desk:** "Print ID Card" / "Print Asset Tag" and "Print history" buttons (seeded Client Scripts), a
+  list view with status colours and Retry, and Retry / Cancel on the form.
+- **Phone:** tile `print_queue` (report id `print_queue`, badge query `my_print_jobs`, icon `printer`),
+  seeded for Card Print Requester at app 0.22.0.
+- **The Mac agent** is in `cardprint_agent/` (standard library, Python 3.9+): polls, claims, `lp`s with
+  the driver's own option names, watches the job, reports, and backs off when ERPNext or the printer is
+  not ready. `install.sh` writes the config and LaunchAgent, stores the key in the Keychain, and prints a
+  test card only if asked.
+
 ## 0.207.0 — 2026-09-28 — phone config as versioned data; closing the compliance loop
 
 **962 tools** (474 read, 488 write). **Four new routes** (147 mobile methods): `get_tiles`,

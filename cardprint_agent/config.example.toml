@@ -1,0 +1,24 @@
+# Card print agent — ~/.config/cardprint/config.toml
+# Values below are what `lpstat` / `lpoptions -p Primacy_2 -l` reported on
+# Tim's MacBook Pro on 2026-10-01. install.sh re-reads them from the driver.
+
+erpnext_url    = "http://umbrel.local:5300"   # the ERPNext site, reachable from this Mac
+station        = "primacy2-main"              # the Card Print Station record this Mac serves
+queue          = "Primacy_2"                  # the CUPS queue name (lpstat -p)
+
+# Option names come from the installed Evolis driver — never guessed:
+media_option   = "PageSize=Card"              # the driver's only page size (54.9 x 86.0 mm)
+single_option  = "Duplex=NONE"
+duplex_option  = "Duplex=DuplexNoTumble"
+# Extra `-o` options. fit-to-page lets CUPS rotate/fit the landscape card onto the
+# driver's portrait page. If the test card comes out sideways or small, add
+# "Orientation=LANDSCAPE_CC90" here.
+extra_options  = ["fit-to-page"]
+
+poll_seconds          = 5
+backoff_seconds       = 30     # when ERPNext cannot be reached
+print_timeout_seconds = 180
+
+# The API key and secret are NOT in this file. They are in the macOS Keychain:
+keychain_service = "cardprint"
+keychain_account = "erpnext"

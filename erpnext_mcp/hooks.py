@@ -256,6 +256,12 @@ scheduler_events = {
 		"*/15 * * * *": [
 			"erpnext_mcp.services.weather.sweep_open_shifts",
 		],
+		#: v0.208.0. The card print queue's stuck-job sweep: a job a station
+		#: claimed and never reported on goes back to Queued after ten minutes
+		#: (three tries, then Failed). docs/design/card_print_queue.md §4.3.
+		"*/5 * * * *": [
+			"erpnext_mcp.card_print.sweep_stuck",
+		],
 		#: v0.19.6. The KPI history sweep, at two in the morning. See the
 		#: docstring above for why it is a cron rather than `daily` — Frappe's
 		#: `daily` fires on the day's first tick, which on a farm bench is during

@@ -267,6 +267,11 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 		# by Frappe, so one entity really can be made to ask for a document
 		# another does not — without two spellings of the certificate itself.
 		#
+		# THE v0.208.0 ADDITION IS `Card Print Station`: a printing place and
+		# which job types it prints. It names a printer, not an operation; the
+		# `companies` it may be limited to is routing, and the Card Print JOBS it
+		# receives link to Company and are scoped by Frappe.
+		#
 		# THE v0.207.0 ADDITION IS `Farm Config Version`, the same argument: a
 		# wizard, a tile or a label profile is the SHAPE of a phone screen or a
 		# matching rule. Its audience may name companies, but the rows it produces —
@@ -413,6 +418,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Agricultural UOM Context",
 				"Agricultural UOM Conversion",
 				"Asset State Log",
+				"Card Print Station",
 				"Compliance Regime",
 				"Compliance Rule",
 				"County Tax Lot",

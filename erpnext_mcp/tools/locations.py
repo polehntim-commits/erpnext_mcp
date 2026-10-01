@@ -196,6 +196,9 @@ DYNAMIC_REFERRERS = (
 	("Accident Report", "location", "location_doctype"),
 	("Block Cost Entry", "reference_name", "reference_doctype"),
 	("Block Revenue Entry", "reference_name", "reference_doctype"),
+	# v0.208.0. A print job names the employee or asset whose card it printed —
+	# the print history, which is never deleted.
+	("Card Print Job", "reference_name", "reference_doctype"),
 	("Change Management Log", "reference_name", "reference_doctype"),
 	("Compliance Alert", "source_docname", "source_doctype"),
 	("Crop Observation", "block", "block_doctype"),

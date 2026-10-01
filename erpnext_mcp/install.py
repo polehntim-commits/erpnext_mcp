@@ -178,6 +178,7 @@ def after_install() -> None:
 	_farm_designations()
 	_extraction_configs()
 	_phone_configs()
+	_card_print()
 	frappe.db.commit()
 
 
@@ -234,6 +235,45 @@ def after_migrate() -> None:
 	_farm_designations()
 	_extraction_configs()
 	_phone_configs(convert_wizards=True)
+	_card_print()
+
+
+def _card_print() -> None:
+	"""The card print queue's furniture. v0.208.0. docs/design/card_print_queue.md.
+
+	Two roles (Card Print Requester; Card Print Station, for the agent's API user
+	only), the default station `primacy2-main`, the Print queue tile, and the
+	"Print ID Card" / "Print Asset Tag" buttons. All create-only; nothing an
+	operator changed is overwritten, and no role is granted to anybody.
+	"""
+	try:
+		from . import card_print, card_print_form_action, phone_config, tiles
+
+		made = []
+		for role, desk in ((card_print.REQUESTER_ROLE, 1), (card_print.STATION_ROLE, 0)):
+			if not frappe.db.exists("Role", role):
+				doc = frappe.get_doc(
+					{"doctype": "Role", "role_name": role, "desk_access": desk, "is_custom": 1}
+				)
+				doc.flags.ignore_permissions = True
+				doc.insert(ignore_if_duplicate=True)
+				made.append(f"role {role}")
+		made += [f"station {name}" for name in card_print.seed()]
+		tile = phone_config.seed(
+			"Tile", "print_queue", tiles.PRINT_QUEUE_TILE, "Built-in tile, seeded at install (v0.208.0)."
+		)
+		if tile:
+			made.append(tile)
+		for report in card_print_form_action.seed_card_print_form_actions():
+			if report.get("created") or report.get("updated"):
+				made.append(f"button {report['name']!r}")
+			elif report.get("reason") not in ("", "already present"):
+				print(f"erpnext_mcp: {report['name']!r}: {report['reason']}")
+	except Exception as exc:  # pragma: no cover - a seed must not fail a migrate
+		print(f"erpnext_mcp: the card print queue was not set up — {type(exc).__name__}: {exc}")
+		return
+	if made:
+		print(f"erpnext_mcp: card print queue — created {', '.join(made)}.")
 
 
 def _phone_configs(convert_wizards: bool = False) -> None:
@@ -2067,6 +2107,7 @@ def before_uninstall() -> None:
 	"""
 	_remove_badge_list_action()
 	_remove_badge_form_action()
+	_remove_card_print_form_actions()
 	_remove_onboard_worker_action()
 	_remove_asset_tag_list_action()
 	_remove_asset_tag_form_action()
@@ -2182,6 +2223,16 @@ def _remove_onboard_worker_action() -> None:
 			"\nerpnext_mcp: could not remove the Onboard Worker Client Script from the Employee "
 			f"form — {report['reason']}. Delete it by hand in the Desk under Client Script.\n"
 		)
+
+
+def _remove_card_print_form_actions() -> None:
+	"""v0.208.0. Take the Print ID Card / Print Asset Tag buttons with the app —
+	left behind they would call a method that no longer exists."""
+	from . import card_print_form_action
+
+	removed = card_print_form_action.remove_card_print_form_actions()
+	if removed:
+		print(f"erpnext_mcp: removed the card print buttons ({', '.join(removed)}).")
 
 
 def _remove_badge_form_action() -> None:

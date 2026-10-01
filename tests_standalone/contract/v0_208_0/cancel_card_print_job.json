@@ -1,0 +1,27 @@
+{
+ "already": false,
+ "job": {
+  "attempts": 0,
+  "can_cancel": false,
+  "can_retry": false,
+  "claimed_at": null,
+  "company": "Example Trading Co",
+  "copies": 1,
+  "error": "Cancelled by ana@example.test.",
+  "is_reprint": false,
+  "job_type": "Employee ID",
+  "name": "CPJ-2026-00001",
+  "print_station": "primacy2-main",
+  "printed_at": null,
+  "reference_doctype": "Employee",
+  "reference_name": "EMP-ANA",
+  "reference_title": "Ana Ramos",
+  "reprint_reason": null,
+  "requested_at": "<volatile>",
+  "requested_by": "ana@example.test",
+  "requested_by_name": "Ana Ramos",
+  "requested_from": "iOS",
+  "sides": "Single",
+  "status": "Cancelled"
+ }
+}

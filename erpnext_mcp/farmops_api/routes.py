@@ -837,6 +837,11 @@ ROUTES = (
 	Route("/mobile", mobile_api.get_compliance_inbox),
 	Route("/mobile", mobile_api.start_template_task),
 	Route("/mobile", mobile_api.list_startable_inspections),
+	# v0.208.0. The card print queue — docs/design/card_print_queue.md §4.1.
+	Route("/mobile", mobile_api.request_card_print),
+	Route("/mobile", mobile_api.list_card_print_jobs),
+	Route("/mobile", mobile_api.cancel_card_print_job),
+	Route("/mobile", mobile_api.retry_card_print_job),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and

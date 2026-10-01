@@ -1073,6 +1073,11 @@
   "allow_list_label_compliance",
   "allow_approve_label_compliance",
   "allow_reject_label_compliance",
+  "allow_list_card_print_jobs",
+  "allow_list_card_print_stations",
+  "allow_request_card_print",
+  "allow_cancel_card_print_job",
+  "allow_retry_card_print_job",
   "phone_link_doctypes",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
@@ -8306,6 +8311,41 @@
    "fieldname": "allow_reject_label_compliance",
    "fieldtype": "Check",
    "label": "Reject Label Compliance"
+  },
+  {
+   "default": "1",
+   "description": "READ. The card print queue: status, who asked, attempts, errors, reprints.",
+   "fieldname": "allow_list_card_print_jobs",
+   "fieldtype": "Check",
+   "label": "List Card Print Jobs"
+  },
+  {
+   "default": "1",
+   "description": "READ. Print stations and what each agent last reported.",
+   "fieldname": "allow_list_card_print_stations",
+   "fieldtype": "Check",
+   "label": "List Card Print Stations"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Queue an employee ID card or asset tag for the print station. Card Print Requester.",
+   "fieldname": "allow_request_card_print",
+   "fieldtype": "Check",
+   "label": "Request Card Print"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Cancel a Queued print job.",
+   "fieldname": "allow_cancel_card_print_job",
+   "fieldtype": "Check",
+   "label": "Cancel Card Print Job"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Send a Failed print job back to the queue.",
+   "fieldname": "allow_retry_card_print_job",
+   "fieldtype": "Check",
+   "label": "Retry Card Print Job"
   },
   {
    "default": "Item\nAsset Register\nHousing Unit\nEmployee\nField\nParcel\nIrrigation Zone\nWarehouse\nSupplier\nCustomer\nCrop\nUOM\nFarm Task\nCertification",
