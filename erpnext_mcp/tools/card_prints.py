@@ -46,7 +46,7 @@ def request_card_print(args: dict) -> ToolResult:
 		as_str(args, "reference_name", required=True),
 		as_str(args, "client_request_id", required=True),
 		copies=args.get("copies"),
-		sides=as_str(args, "sides") or "Single",
+		sides=as_str(args, "sides"),
 		reprint_reason=as_str(args, "reprint_reason"),
 		requested_from="API",
 		may_read=may_read,
@@ -102,4 +102,51 @@ def retry_card_print_job(args: dict) -> ToolResult:
 	data = _run(card_print.retry, as_str(args, "name", required=True), actor, _companies(actor))
 	return ToolResult(
 		data=data, summary=f"{data['job']['name']}: back to Queued", docstatus_delta="0 → 0 (updated)"
+	)
+
+
+def download_card_pdf(args: dict) -> ToolResult:
+	"""v0.209.0. Render one card (front and back) and record it as Downloaded."""
+	actor = _actor()
+	allowed = _companies(actor)
+
+	def may_read(doctype, name, company):
+		return not allowed or not company or company in allowed
+
+	doc, pdf, warnings = _run(
+		card_print.download,
+		actor,
+		as_str(args, "job_type", required=True),
+		as_str(args, "reference_name", required=True),
+		as_str(args, "reprint_reason"),
+		may_read,
+	)
+	return ToolResult(
+		data={
+			"job": card_print.describe(doc, actor),
+			"file_url": doc.get("artwork"),
+			"file_name": f"{doc.name}.pdf",
+			"bytes": len(pdf),
+			"warnings": warnings,
+			"print_settings": "Paper Size CR80 / ISO 7810, 100 %, no fit, Auto Rotate off",
+		},
+		summary=f"{doc.name}: card PDF for {doc.reference_title} ({len(pdf)} bytes), recorded as Downloaded",
+		docstatus_delta="none → 0 (draft)",
+	)
+
+
+def request_card_back(args: dict) -> ToolResult:
+	actor = _actor()
+	data = _run(
+		card_print.request_back,
+		as_str(args, "name", required=True),
+		actor,
+		_companies(actor),
+		as_str(args, "client_request_id"),
+		"API",
+	)
+	return ToolResult(
+		data=data,
+		summary=f"{data['job']['name']}: the back of {data['job']['reference_title']} queued",
+		docstatus_delta="none → 0 (draft)" if data["created"] else "",
 	)

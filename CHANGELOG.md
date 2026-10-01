@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.209.0 — 2026-10-01 — card artwork as approved, single-sided printers, and printing from Desk
+
+**969 tools** (476 read, 493 write): `download_card_pdf`, `request_card_back` (write, default off). **One
+new route** (152 mobile methods): `request_card_back`. Contract `docs/design/card_print_queue.md`
+Amendment 1; iOS SERVER_CHANGES §56.
+
+- **The cards are the ones approved on the bench.** `card_art.py` draws both designs in millimetres
+  straight to PDF (reportlab, vector QR, no wkhtmltopdf): front landscape 85.6 × 54 mm, back portrait
+  54 × 85.6 mm, margins of 4.9 mm or more with the QR's quiet zone inside them. The approved PDFs are in
+  `tests_standalone/fixtures/card_art/` and the text positions are held to them within half a millimetre.
+  The ID card's green band is the Employee's **Employment Type** (so "Owner / Operator" wraps onto two
+  lines as approved), `EMPLOYEE` when there is none. The photo slot is 4:5, initials when there is no
+  photo. The logo is **Company › Badge Logo**, else the Company logo; a logo under 600 px wide is drawn
+  and reported as too small for a clean print.
+- **The blank A4 page from Desk is fixed.** Employee and Asset Register get a CR80 print format each
+  ("Employee ID Card (CR80)", "Asset Tag Card (CR80)") and it becomes the doctype's default where none
+  is set, so Print no longer asks for `format=undefined` on A4. The **Print ID Card** / **Print Asset
+  Tag** buttons do not use Frappe's print dialog at all.
+- **One dialog on the record:** a preview of both sides, the station's state, any warnings, and two
+  actions — **Send to printer** and **Download card PDF**. Download is the primary action until a
+  station's agent is checking in, and Send takes over once it is. A download is a Card Print Job too
+  (status **Downloaded**), so reprint reasons and the history are the same either way.
+- **Single-sided printers.** A station is **Simplex** (the default — it is what the Primacy 2's driver
+  reports today) or **Duplex**. On Simplex a two-sided card prints its front, is marked **back pending**,
+  and **Print back** (`request_card_back`) queues the back as its own job once the card is flipped. On
+  Duplex both sides go in one job. The claim answer tells the agent `pages` and `duplex`.
+- **Orientation is a station setting:** `front_orientation` and `back_orientation` (Portrait / Landscape,
+  rotated CW / Landscape, rotated CCW), applied when the PDF is drawn, never by fit-to-page.
+- `sides` now defaults to Dual: a card has two sides unless the request says otherwise.
+
 ## 0.208.0 — 2026-10-01 — the card print queue
 
 **967 tools** (476 read, 491 write): `list_card_print_jobs`, `list_card_print_stations` (read);

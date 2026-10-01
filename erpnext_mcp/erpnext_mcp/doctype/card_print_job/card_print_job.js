@@ -8,6 +8,16 @@ frappe.ui.form.on("Card Print Job", {
 				frm.call("retry").then(() => frm.reload_doc());
 			});
 		}
+		if (frm.doc.status === "Printed" && frm.doc.back_pending) {
+			frm.add_custom_button(__("Print back"), () => {
+				frappe.confirm(__("Flip the card and put it back in the feeder, then continue."), () => {
+					frm.call("print_back").then(() => frm.reload_doc());
+				});
+			});
+		}
+		if (frm.doc.artwork) {
+			frm.add_custom_button(__("Open card PDF"), () => window.open(frm.doc.artwork, "_blank"));
+		}
 		if (frm.doc.status === "Queued") {
 			frm.add_custom_button(__("Cancel print"), () => {
 				frm.call("cancel_job").then(() => frm.reload_doc());

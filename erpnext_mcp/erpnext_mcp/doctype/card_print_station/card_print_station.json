@@ -15,6 +15,10 @@
   "media",
   "artwork_width_mm",
   "artwork_height_mm",
+  "printing_section",
+  "duplex",
+  "front_orientation",
+  "back_orientation",
   "agent_section",
   "last_seen_at",
   "printer_state",
@@ -81,6 +85,35 @@
    "default": "54"
   },
   {
+   "fieldname": "printing_section",
+   "fieldtype": "Section Break",
+   "label": "How This Printer Prints"
+  },
+  {
+   "fieldname": "duplex",
+   "fieldtype": "Select",
+   "label": "Duplex",
+   "options": "Simplex\nDuplex",
+   "default": "Simplex",
+   "description": "v0.209.0. Simplex: a two-sided card prints its front, and the back on request after a manual flip. Duplex: one job, both sides — set this once dual-side printing is enabled in the Evolis software."
+  },
+  {
+   "fieldname": "front_orientation",
+   "fieldtype": "Select",
+   "label": "Front Orientation",
+   "options": "Landscape\nPortrait, rotated CW\nPortrait, rotated CCW",
+   "default": "Landscape",
+   "description": "v0.209.0. The front is designed landscape. Choose a rotated value if the driver needs the page turned."
+  },
+  {
+   "fieldname": "back_orientation",
+   "fieldtype": "Select",
+   "label": "Back Orientation",
+   "options": "Portrait\nLandscape, rotated CW\nLandscape, rotated CCW",
+   "default": "Portrait",
+   "description": "v0.209.0. The back is designed portrait. Choose a rotated value if the driver needs it landscape."
+  },
+  {
    "fieldname": "agent_section",
    "fieldtype": "Section Break",
    "label": "Agent"
@@ -113,7 +146,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-01 12:00:00.000000",
+ "modified": "2026-10-01 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Card Print Station",

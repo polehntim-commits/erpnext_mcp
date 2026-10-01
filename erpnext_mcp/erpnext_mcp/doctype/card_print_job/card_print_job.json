@@ -16,6 +16,9 @@
   "print_station",
   "copies",
   "sides",
+  "pages",
+  "back_pending",
+  "front_job",
   "artwork_section",
   "artwork",
   "artwork_sha256",
@@ -86,7 +89,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Queued\nPrinting\nPrinted\nFailed\nCancelled",
+   "options": "Queued\nPrinting\nPrinted\nFailed\nCancelled\nDownloaded",
    "default": "Queued",
    "in_list_view": 1,
    "in_standard_filter": 1,
@@ -112,7 +115,32 @@
    "fieldtype": "Select",
    "label": "Sides",
    "options": "Single\nDual",
-   "default": "Single"
+   "default": "Dual",
+   "description": "Dual prints the front and the back; Single prints the front only."
+  },
+  {
+   "fieldname": "pages",
+   "fieldtype": "Select",
+   "label": "Pages",
+   "options": "Both\nFront\nBack",
+   "default": "Both",
+   "read_only": 1,
+   "description": "v0.209.0. What this job's PDF holds. On a simplex station a Dual card is a Front job, then a Back job on request."
+  },
+  {
+   "fieldname": "back_pending",
+   "fieldtype": "Check",
+   "label": "Back Pending",
+   "read_only": 1,
+   "description": "v0.209.0. The front printed on a simplex printer and the back has not. \"Print back\" queues it; flip the card into the feeder."
+  },
+  {
+   "fieldname": "front_job",
+   "fieldtype": "Link",
+   "options": "Card Print Job",
+   "label": "Front Job",
+   "read_only": 1,
+   "description": "v0.209.0. On a Back job: the job that printed this card's front."
   },
   {
    "fieldname": "artwork_section",
@@ -226,7 +254,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-01 12:00:00.000000",
+ "modified": "2026-10-01 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Card Print Job",

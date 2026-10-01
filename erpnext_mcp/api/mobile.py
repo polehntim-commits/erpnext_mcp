@@ -12562,7 +12562,7 @@ def request_card_print(
 		str(reference_name or ""),
 		str(client_request_id or ""),
 		copies=copies,
-		sides=str(sides or "Single"),
+		sides=str(sides or ""),
 		reprint_reason=str(reprint_reason or ""),
 		requested_from="iOS",
 		may_read=may_read,
@@ -12598,6 +12598,18 @@ def retry_card_print_job(user: str, name=None) -> dict:
 
 	allowed = guard.require_scope(user)
 	return _card_print(card_print.retry, str(name or ""), user, allowed)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("request_card_back", mutating=True, limit=guard.WRITE_LIMIT)
+def request_card_back(user: str, name=None, client_request_id=None) -> dict:
+	"""v0.209.0. Queue the back of a card whose front printed on a single-sided printer."""
+	from .. import card_print
+
+	allowed = guard.require_scope(user)
+	return _card_print(
+		card_print.request_back, str(name or ""), user, allowed, str(client_request_id or ""), "iOS"
+	)
 
 
 # ── 113. get_payroll_register ────────────────────────────────────────────────

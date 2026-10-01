@@ -11861,12 +11861,40 @@ TOOLS = {
 			"reference_name": _field(_STRING, "The Employee or the Asset Register docname."),
 			"client_request_id": _field(_STRING, "A UUID for this request (8–64 characters)."),
 			"copies": _field(_INTEGER, "1 to 5. Default 1."),
-			"sides": _field(_STRING, "Single (default) or Dual (Employee ID only)."),
+			"sides": _field(_STRING, "Dual (default: front and back) or Single (front only)."),
 			"reprint_reason": _field(_STRING, "Lost, Damaged, Details changed, or Other: …"),
 		},
 		required=("job_type", "reference_name", "client_request_id"),
 		mutating=True,
 		title="Request a card print",
+	),
+	"download_card_pdf": _tool(
+		card_print_tools.download_card_pdf,
+		"MUTATING (default OFF; Card Print Requester). v0.209.0. Render one card — front and back, "
+		"each page exactly card-sized — attach it privately and RECORD it as a Card Print Job with "
+		"status Downloaded. Returns the file URL to print by hand (Paper Size CR80, 100 %, no fit). "
+		"For when no print agent is checking in.",
+		{
+			"job_type": _field(_STRING, "Employee ID or Asset Tag."),
+			"reference_name": _field(_STRING, "The Employee or the Asset Register docname."),
+			"reprint_reason": _field(_STRING, "Optional; recorded when the card was printed before."),
+		},
+		required=("job_type", "reference_name"),
+		mutating=True,
+		title="Download a card PDF",
+	),
+	"request_card_back": _tool(
+		card_print_tools.request_card_back,
+		"MUTATING (default OFF; Card Print Requester). v0.209.0. Queue the BACK of a card whose "
+		"front printed on a single-sided printer (the job shows back_pending). Flip the card into "
+		"the feeder first.",
+		{
+			"name": _field(_STRING, "The front's job, e.g. CPJ-2026-00012."),
+			"client_request_id": _field(_STRING, "Optional idempotency key."),
+		},
+		required=("name",),
+		mutating=True,
+		title="Print the back of a card",
 	),
 	"cancel_card_print_job": _tool(
 		card_print_tools.cancel_card_print_job,

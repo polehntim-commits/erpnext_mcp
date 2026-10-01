@@ -1078,6 +1078,8 @@
   "allow_request_card_print",
   "allow_cancel_card_print_job",
   "allow_retry_card_print_job",
+  "allow_download_card_pdf",
+  "allow_request_card_back",
   "phone_link_doctypes",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
@@ -8346,6 +8348,20 @@
    "fieldname": "allow_retry_card_print_job",
    "fieldtype": "Check",
    "label": "Retry Card Print Job"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Render one card PDF to print by hand and record it as Downloaded. Card Print Requester.",
+   "fieldname": "allow_download_card_pdf",
+   "fieldtype": "Check",
+   "label": "Download Card Pdf"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Queue the back of a card whose front printed on a single-sided printer.",
+   "fieldname": "allow_request_card_back",
+   "fieldtype": "Check",
+   "label": "Request Card Back"
   },
   {
    "default": "Item\nAsset Register\nHousing Unit\nEmployee\nField\nParcel\nIrrigation Zone\nWarehouse\nSupplier\nCustomer\nCrop\nUOM\nFarm Task\nCertification",

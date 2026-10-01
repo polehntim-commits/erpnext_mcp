@@ -33,7 +33,7 @@ def _companies():
 # ── requester ───────────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 def request_card_print(
-	job_type=None, reference_name=None, copies=1, sides="Single", client_request_id=None, reprint_reason=None
+	job_type=None, reference_name=None, copies=1, sides=None, client_request_id=None, reprint_reason=None
 ):
 	return card_print.desk(
 		card_print.request,
@@ -42,7 +42,7 @@ def request_card_print(
 		str(reference_name or ""),
 		str(client_request_id or ""),
 		copies=copies,
-		sides=str(sides or "Single"),
+		sides=str(sides or ""),
 		reprint_reason=str(reprint_reason or ""),
 		requested_from="Desk",
 		may_read=_may_read,
@@ -104,4 +104,45 @@ def card_print_heartbeat(print_station=None, printer_state=None, printer_message
 		str(printer_state or ""),
 		str(printer_message or ""),
 		str(agent_version or ""),
+	)
+
+
+# ── v0.209.0: preview, download and the back of a simplex card ───────────────
+@frappe.whitelist()
+def preview_card(job_type=None, reference_name=None):
+	"""The card as SVG (front and back), the station's state and any artwork warning.
+
+	What the Desk dialog shows before anything is queued or downloaded."""
+	return card_print.desk(
+		card_print.preview, _user(), str(job_type or ""), str(reference_name or ""), _may_read
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def download_card_pdf(job_type=None, reference_name=None, reprint_reason=None):
+	"""One card-sized PDF (front and back pages) to print by hand — and a record of it.
+
+	Returns the private File's URL; the Desk opens it. Print from Preview with
+	Paper Size CR80, 100 %, no fit, Auto Rotate off."""
+	doc, pdf, warnings = card_print.desk(
+		card_print.download,
+		_user(),
+		str(job_type or ""),
+		str(reference_name or ""),
+		str(reprint_reason or ""),
+		_may_read,
+	)
+	return {
+		"job": card_print.describe(doc, _user()),
+		"file_url": doc.get("artwork"),
+		"file_name": f"{doc.name}.pdf",
+		"bytes": len(pdf),
+		"warnings": warnings,
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def request_card_back(name=None, client_request_id=None):
+	return card_print.desk(
+		card_print.request_back, str(name or ""), _user(), _companies(), str(client_request_id or "")
 	)

@@ -264,6 +264,13 @@ def _card_print() -> None:
 		)
 		if tile:
 			made.append(tile)
+		from . import card_print_format
+
+		for report in card_print_format.seed_card_print_formats():
+			if report.get("created"):
+				made.append(f"print format {report['format']!r}")
+			if report.get("default_set"):
+				made.append(f"default print format for {report['doctype']}")
 		for report in card_print_form_action.seed_card_print_form_actions():
 			if report.get("created") or report.get("updated"):
 				made.append(f"button {report['name']!r}")
@@ -2228,9 +2235,10 @@ def _remove_onboard_worker_action() -> None:
 def _remove_card_print_form_actions() -> None:
 	"""v0.208.0. Take the Print ID Card / Print Asset Tag buttons with the app —
 	left behind they would call a method that no longer exists."""
-	from . import card_print_form_action
+	from . import card_print_form_action, card_print_format
 
 	removed = card_print_form_action.remove_card_print_form_actions()
+	removed += card_print_format.remove_card_print_formats()
 	if removed:
 		print(f"erpnext_mcp: removed the card print buttons ({', '.join(removed)}).")
 

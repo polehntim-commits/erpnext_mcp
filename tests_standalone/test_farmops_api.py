@@ -510,6 +510,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/list_card_print_jobs",
 		"/mobile/cancel_card_print_job",
 		"/mobile/retry_card_print_job",
+		"/mobile/request_card_back",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -3057,6 +3058,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"list_card_print_jobs",
 		"cancel_card_print_job",
 		"retry_card_print_job",
+		"request_card_back",
 		# v0.165.0. Filing a title on a truck, both docnames scoped. Open like
 		# `create_expense_receipt`, which makes the same link by VIN at capture.
 		"link_title_to_asset",
@@ -3197,7 +3199,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 151, "a method is named in two sets at once")
+		self.assertEqual(len(named), 152, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

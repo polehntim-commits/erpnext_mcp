@@ -9,6 +9,7 @@ frappe.listview_settings["Card Print Job"] = {
 			Printed: "green",
 			Failed: "red",
 			Cancelled: "gray",
+			Downloaded: "purple",
 		};
 		return [__(doc.status), colours[doc.status] || "gray", "status,=," + doc.status];
 	},

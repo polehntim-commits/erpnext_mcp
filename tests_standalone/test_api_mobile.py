@@ -712,6 +712,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"list_card_print_jobs",
 		"cancel_card_print_job",
 		"retry_card_print_job",
+		# v0.209.0 — the back of a card on a single-sided printer (SERVER_CHANGES §56).
+		"request_card_back",
 		# v0.182.0 — where a receipt category will be booked.
 		"get_expense_account_map",
 		"normalize_merchant",

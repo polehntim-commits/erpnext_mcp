@@ -440,6 +440,8 @@ jinja = {
 	"methods": [
 		"erpnext_mcp.render.checks.erpnext_mcp_amount_in_words",
 		"erpnext_mcp.render.badge_card.erpnext_mcp_badge_card",
+		# v0.209.0. The card drawing for the CR80 print formats (Amendment 1 §A6).
+		"erpnext_mcp.card_print_format.erpnext_mcp_card_svg",
 	]
 }
 

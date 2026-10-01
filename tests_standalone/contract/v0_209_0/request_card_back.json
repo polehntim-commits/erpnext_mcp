@@ -1,18 +1,22 @@
 {
  "already_queued": false,
- "created": false,
- "duplicate": true,
+ "created": true,
+ "duplicate": false,
  "job": {
   "attempts": 0,
+  "back_pending": false,
   "can_cancel": true,
+  "can_print_back": false,
   "can_retry": false,
   "claimed_at": null,
   "company": "Example Trading Co",
   "copies": 1,
   "error": null,
+  "front_job": "CPJ-2026-00001",
   "is_reprint": false,
   "job_type": "Employee ID",
-  "name": "CPJ-2026-00001",
+  "name": "CPJ-2026-00002",
+  "pages": "Back",
   "print_station": "primacy2-main",
   "printed_at": null,
   "reference_doctype": "Employee",
@@ -27,15 +31,20 @@
   "status": "Queued"
  },
  "station": {
+  "duplex": "Simplex",
   "enabled": true,
   "job_types": [
    "Employee ID",
    "Asset Tag"
   ],
-  "last_seen_at": null,
+  "last_seen_at": "<volatile>",
   "media": "CR80 PVC card 85.6 x 54 mm",
-  "message": "the print station has never checked in",
-  "state": "Offline",
+  "message": "",
+  "state": "Ready",
   "station": "primacy2-main"
- }
+ },
+ "warnings": [
+  "Example Trading Co's logo is not set, so the card prints without one (Company › Badge Logo).",
+  "Ana Ramos has no photo on their Employee record; the card shows initials."
+ ]
 }

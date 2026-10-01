@@ -1,18 +1,22 @@
 {
  "already_queued": false,
- "created": true,
- "duplicate": false,
+ "created": false,
+ "duplicate": true,
  "job": {
   "attempts": 0,
+  "back_pending": false,
   "can_cancel": true,
+  "can_print_back": false,
   "can_retry": false,
   "claimed_at": null,
   "company": "Example Trading Co",
   "copies": 1,
   "error": null,
+  "front_job": null,
   "is_reprint": false,
   "job_type": "Employee ID",
   "name": "CPJ-2026-00001",
+  "pages": "Front",
   "print_station": "primacy2-main",
   "printed_at": null,
   "reference_doctype": "Employee",
@@ -23,10 +27,11 @@
   "requested_by": "ana@example.test",
   "requested_by_name": "Ana Ramos",
   "requested_from": "iOS",
-  "sides": "Single",
+  "sides": "Dual",
   "status": "Queued"
  },
  "station": {
+  "duplex": "Simplex",
   "enabled": true,
   "job_types": [
    "Employee ID",
@@ -37,5 +42,6 @@
   "message": "the print station has never checked in",
   "state": "Offline",
   "station": "primacy2-main"
- }
+ },
+ "warnings": []
 }

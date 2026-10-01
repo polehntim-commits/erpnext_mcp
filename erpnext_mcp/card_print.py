@@ -27,8 +27,12 @@ JOB = "Card Print Job"
 STATION = "Card Print Station"
 JOB_TYPES = {"Employee ID": "Employee", "Asset Tag": "Asset Register"}
 QUEUED, PRINTING, PRINTED, FAILED, CANCELLED = "Queued", "Printing", "Printed", "Failed", "Cancelled"
-STATUSES = (QUEUED, PRINTING, PRINTED, FAILED, CANCELLED)
+#: v0.209.0. A card PDF downloaded to print by hand — recorded, never queued.
+DOWNLOADED = "Downloaded"
+STATUSES = (QUEUED, PRINTING, PRINTED, FAILED, CANCELLED, DOWNLOADED)
 SIDES = ("Single", "Dual")
+PAGES = ("Both", "Front", "Back")
+DUPLEX_MODES = ("Simplex", "Duplex")
 SOURCES = ("iOS", "Desk", "API")
 REQUESTER_ROLE = "Card Print Requester"
 STATION_ROLE = "Card Print Station"
@@ -65,6 +69,9 @@ ROW_FIELDS = [
 	"error",
 	"is_reprint",
 	"reprint_reason",
+	"pages",
+	"back_pending",
+	"front_job",
 	"creation",
 ]
 
@@ -154,6 +161,9 @@ def stations() -> list:
 				"media",
 				"artwork_width_mm",
 				"artwork_height_mm",
+				"duplex",
+				"front_orientation",
+				"back_orientation",
 				"last_seen_at",
 				"printer_state",
 				"printer_message",
@@ -188,6 +198,7 @@ def station_state(row: dict) -> dict:
 		"media": row.get("media"),
 		"job_types": lines(row.get("job_types")),
 		"enabled": bool(compat.checked(row.get("enabled"))),
+		"duplex": row.get("duplex") or "Simplex",
 	}
 
 
@@ -222,6 +233,9 @@ def seed() -> list:
 	doc.media = "CR80 PVC card 85.6 x 54 mm"
 	doc.artwork_width_mm = 85.6
 	doc.artwork_height_mm = 54.0
+	doc.duplex = "Simplex"
+	doc.front_orientation = "Landscape"
+	doc.back_orientation = "Portrait"
 	doc.insert(ignore_permissions=True)
 	return [doc.name]
 
@@ -256,8 +270,12 @@ def describe(row, user: str = "") -> dict:
 		"error": get("error") or None,
 		"is_reprint": bool(compat.checked(get("is_reprint"))),
 		"reprint_reason": get("reprint_reason") or None,
+		"pages": get("pages") or "Both",
+		"back_pending": bool(compat.checked(get("back_pending"))),
+		"front_job": get("front_job") or None,
 		"can_cancel": bool(allowed and status == QUEUED),
 		"can_retry": bool(allowed and status == FAILED),
+		"can_print_back": bool(allowed and status == PRINTED and compat.checked(get("back_pending"))),
 	}
 
 
@@ -291,7 +309,7 @@ def _employee(reference: str) -> tuple:
 	return row["name"], row.get("employee_name") or row["name"], company, row
 
 
-def _employee_card(row: dict, company: str) -> dict:
+def _employee_card(row: dict, company: str, allow_issue: bool = True) -> dict:
 	"""The card's facts and badge QR. An existing badge is REUSED; a first badge is
 	issued only when the caller may issue badges (the hiring roles) — printing a
 	card is not a second way to mint an identifier."""
@@ -300,6 +318,11 @@ def _employee_card(row: dict, company: str) -> dict:
 
 	badge_id, created = badges._choose_badge_id(row, company, {}, "")
 	rendered = badges._render(badge_id, badges.BADGE_ERROR_CORRECTION)
+	if created and not allow_issue:
+		raise CardPrintError(
+			f"{row.get('employee_name') or row['name']} has no badge yet. Use the Print ID Card button, "
+			"which issues one and records the card."
+		)
 	if created:
 		try:
 			badges._record_badge(row, company, badge_id, {})
@@ -327,26 +350,160 @@ def _asset(reference: str) -> tuple:
 	return reference, reference, str(row.get("company") or ""), row
 
 
-def _asset_qr(row: dict) -> bytes:
+def file_bytes(url) -> bytes | None:
+	"""A File's bytes by its URL, or None. Never raises: a missing picture must not lose a card."""
+	url = str(url or "").strip()
+	if not url:
+		return None
+	try:
+		name = frappe.db.get_value("File", {"file_url": url}, "name")
+		if not name:
+			return None
+		content = frappe.get_doc("File", name).get_content()
+		return content.encode() if isinstance(content, str) else bytes(content)
+	except Exception:
+		return None
+
+
+def company_logo(company: str) -> bytes | None:
+	"""The Company's badge logo, else its ordinary logo, as bytes."""
+	if not company or not compat.doctype_exists("Company"):
+		return None
+	for field in ("badge_logo", "company_logo"):
+		if compat.has_field("Company", field):
+			data = file_bytes(frappe.db.get_value("Company", company, field))
+			if data:
+				return data
+	return None
+
+
+def band_label(employee: str) -> str:
+	"""The green band on an ID card: the Employee's employment type, else EMPLOYEE."""
+	try:
+		if compat.has_field("Employee", "employment_type"):
+			return (
+				str(frappe.db.get_value("Employee", employee, "employment_type") or "").strip() or "Employee"
+			)
+	except Exception:
+		pass
+	return "Employee"
+
+
+def _matrix(text: str, error: str) -> list:
 	from .render import qr
 
-	if not qr.available():
-		return b""
-	payload = str(row.get("qr_url") or f"/scan/{row['name']}")
-	return qr.render(payload, error="M", scale=10, border=4)["png"]
+	return qr.qr_matrix(text, error) if qr.available() else []
 
 
-def render_artwork(job_type: str, row: dict, company: str, sides: str, station: dict) -> bytes:
-	width = float(station.get("artwork_width_mm") or 85.6)
-	height = float(station.get("artwork_height_mm") or 54.0)
+def card_sides(job_type: str, row: dict, company: str, allow_issue: bool = True) -> tuple:
+	"""([front ops, back ops], warnings) — the approved layout for one record.
+
+	`allow_issue=False` (the print format) never issues a first badge."""
+	logo = company_logo(company)
+	warnings = [w for w in [card_art.logo_warning(logo, f"{company}'s logo")] if w]
+	if job_type == "Employee ID":
+		card = _employee_card(row, company, allow_issue)
+		badge_id = str(card.get("badge_id") or "")
+		matrix = _matrix(badge_id, "H")
+		photo = file_bytes(row.get("image"))
+		if not photo:
+			warnings.append(
+				f"{card.get('employee_name')} has no photo on their Employee record; the card shows initials."
+			)
+		sides = card_art.employee_sides(
+			{
+				"employee_name": card.get("employee_name"),
+				"designation": card.get("designation"),
+				"company": company,
+				"badge_id": badge_id,
+				"band": band_label(row["name"]),
+				"qr": matrix,
+				"photo": photo,
+				"logo": logo,
+			}
+		)
+	else:
+		matrix = _matrix(str(row.get("qr_url") or f"/scan/{row['name']}"), "M")
+		description = str(row.get("description") or "").strip().splitlines()
+		sides = card_art.asset_sides(
+			{
+				"asset_id": row["name"],
+				"asset_name": (description[0] if description else "") or row.get("asset_type") or "",
+				"company": company,
+				"qr": matrix,
+				"logo": logo,
+			}
+		)
+	if not matrix:
+		raise CardPrintError(
+			"no QR encoder is installed on this server (segno), so the card cannot be drawn. Nothing was queued."
+		)
+	return sides, warnings
+
+
+def _rotations(station: dict) -> list:
+	return [
+		card_art.FRONT_ORIENTATIONS.get(str(station.get("front_orientation") or "Landscape"), 0),
+		card_art.BACK_ORIENTATIONS.get(str(station.get("back_orientation") or "Portrait"), 0),
+	]
+
+
+def render_artwork(job_type: str, row: dict, company: str, pages: str, station: dict) -> tuple:
+	"""(pdf, warnings): one card-sized page per side this job prints."""
+	sides, warnings = card_sides(job_type, row, company)
+	rotations = _rotations(station)
+	keep = {"Both": (0, 1), "Front": (0,), "Back": (1,)}[pages]
 	try:
-		if job_type == "Employee ID":
-			return card_art.employee_pdf(_employee_card(row, company), sides, width, height)
-		if sides == "Dual":
-			raise CardPrintError("an asset tag is one side. Nothing was queued.")
-		return card_art.asset_pdf(row, _asset_qr(row), width, height)
+		pdf = card_art.to_pdf(
+			[sides[i] for i in keep], [rotations[i] for i in keep], title=f"{job_type} {row['name']}"
+		)
 	except card_art.ArtError as exc:
 		raise CardPrintError(str(exc)) from exc
+	return pdf, warnings
+
+
+def pages_for(sides: str, station: dict) -> str:
+	"""What a job on this station prints: both sides only where it can duplex."""
+	if sides != "Dual":
+		return "Front"
+	return "Both" if str(station.get("duplex") or "Simplex") == "Duplex" else "Front"
+
+
+def preview(user: str, job_type: str, reference_name: str, may_read=None) -> dict:
+	"""What the card will look like, and where it would go. Writes nothing but a first badge."""
+	require_requester(user)
+	if job_type not in JOB_TYPES:
+		raise CardPrintError(f"job_type is one of {', '.join(JOB_TYPES)}.")
+	name, title, company, row = (_employee if job_type == "Employee ID" else _asset)(
+		str(reference_name or "")
+	)
+	if may_read is not None and not may_read(JOB_TYPES[job_type], name, company):
+		raise CardPrintError(f"no {JOB_TYPES[job_type]} called {reference_name!r}.", "not_found")
+	sides, warnings = card_sides(job_type, row, company)
+	try:
+		station = station_for(job_type, company)
+		state = station_state(station)
+	except CardPrintError as exc:
+		station, state = {}, None
+		warnings.append(str(exc))
+	printed = frappe.db.get_all(
+		JOB,
+		filters={"job_type": job_type, "reference_name": name, "status": PRINTED},
+		fields=["name", "printed_at"],
+		limit=1,
+	)
+	return {
+		"job_type": job_type,
+		"reference_name": name,
+		"title": title,
+		"company": company,
+		"front_svg": card_art.to_svg(sides[0], css_width_mm=85.6),
+		"back_svg": card_art.to_svg(sides[1], css_width_mm=54.0),
+		"warnings": warnings,
+		"station": state,
+		"agent_online": bool(state and state["state"] != "Offline"),
+		"already_printed_on": str(printed[0].get("printed_at") or "")[:10] if printed else None,
+	}
 
 
 # ── requester methods ───────────────────────────────────────────────────────
@@ -373,7 +530,7 @@ def request(
 	reference_name: str,
 	client_request_id: str,
 	copies=1,
-	sides: str = "Single",
+	sides: str = "",
 	reprint_reason: str = "",
 	requested_from: str = "API",
 	may_read=None,
@@ -396,7 +553,7 @@ def request(
 	require_requester(user)
 	if job_type not in JOB_TYPES:
 		raise CardPrintError(f"job_type is one of {', '.join(JOB_TYPES)}. Nothing was queued.")
-	sides = sides or "Single"
+	sides = sides or "Dual"
 	if sides not in SIDES:
 		raise CardPrintError("sides is Single or Dual. Nothing was queued.")
 	try:
@@ -436,7 +593,8 @@ def request(
 		)
 	_rate_check(user)
 	station = station_for(job_type, company)
-	pdf = render_artwork(job_type, row, company, sides, station)
+	pages = pages_for(sides, station)
+	pdf, warnings = render_artwork(job_type, row, company, pages, station)
 
 	doc = frappe.new_doc(JOB)
 	doc.job_type = job_type
@@ -448,6 +606,7 @@ def request(
 	doc.print_station = station["name"]
 	doc.copies = copies
 	doc.sides = sides
+	doc.pages = pages
 	doc.requested_by = user
 	doc.requested_from = requested_from if requested_from in SOURCES else "API"
 	doc.client_request_id = key
@@ -461,10 +620,119 @@ def request(
 	from .tools import artifacts
 
 	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
-	return _answer(frappe.get_doc(JOB, doc.name), user, created=True)
+	return _answer(frappe.get_doc(JOB, doc.name), user, created=True, warnings=warnings)
 
 
-def _answer(doc, user: str, created=False, duplicate=False, already_queued=False) -> dict:
+def request_back(
+	name: str, user: str = "", companies=None, client_request_id: str = "", requested_from: str = "Desk"
+) -> dict:
+	"""Queue the BACK of a card whose front printed on a simplex station. §A4."""
+	user = user or str(frappe.session.user)
+	front = _job(name)
+	_may_touch(front, user, companies)
+	require_requester(user)
+	if front.get("pages") == "Back":
+		front = _job(front.front_job) if front.get("front_job") else front
+	if front.status != PRINTED or not compat.checked(front.get("back_pending")):
+		raise CardPrintError(
+			f"{front.name} has no back waiting: the back is printed after a front has printed on a "
+			"single-sided printer. Nothing was queued."
+		)
+	open_back = frappe.db.get_value(
+		JOB, {"front_job": front.name, "status": ("in", (QUEUED, PRINTING))}, "name"
+	)
+	if open_back:
+		return _answer(frappe.get_doc(JOB, open_back), user, created=False, already_queued=True)
+	_rate_check(user)
+	station = next((s for s in stations() if s["name"] == front.print_station), None) or station_for(
+		front.job_type, front.company or ""
+	)
+	_name, _title, company, row = (_employee if front.job_type == "Employee ID" else _asset)(
+		front.reference_name
+	)
+	pdf, warnings = render_artwork(front.job_type, row, company, "Back", station)
+	doc = frappe.new_doc(JOB)
+	doc.job_type = front.job_type
+	doc.reference_doctype = front.reference_doctype
+	doc.reference_name = front.reference_name
+	doc.reference_title = front.reference_title
+	doc.company = front.company
+	doc.status = QUEUED
+	doc.print_station = station["name"]
+	doc.copies = 1
+	doc.sides = "Single"
+	doc.pages = "Back"
+	doc.front_job = front.name
+	doc.requested_by = user
+	doc.requested_from = requested_from if requested_from in SOURCES else "API"
+	doc.client_request_id = (
+		str(client_request_id or "").strip() or f"back-{front.name}-{frappe.utils.now()}"
+	)[:64]
+	doc.attempts = 0
+	doc.artwork_sha256 = hashlib.sha256(pdf).hexdigest()
+	doc.flags.ignore_permissions = True
+	doc.insert(ignore_permissions=True)
+
+	from .tools import artifacts
+
+	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
+	return _answer(frappe.get_doc(JOB, doc.name), user, created=True, warnings=warnings)
+
+
+def download(user: str, job_type: str, reference_name: str, reprint_reason: str = "", may_read=None) -> tuple:
+	"""(job doc, pdf, warnings): the whole card to print by hand, RECORDED as Downloaded. §A5."""
+	if not ready():
+		raise CardPrintError("this site has no card print queue yet — run `bench --site <site> migrate`.")
+	require_requester(user)
+	if job_type not in JOB_TYPES:
+		raise CardPrintError(f"job_type is one of {', '.join(JOB_TYPES)}.")
+	name, title, company, row = (_employee if job_type == "Employee ID" else _asset)(
+		str(reference_name or "")
+	)
+	if may_read is not None and not may_read(JOB_TYPES[job_type], name, company):
+		raise CardPrintError(f"no {JOB_TYPES[job_type]} called {reference_name!r}.", "not_found")
+	_rate_check(user)
+	try:
+		station = station_for(job_type, company)
+	except CardPrintError:
+		station = {}
+	pdf, warnings = render_artwork(job_type, row, company, "Both", station)
+	printed = frappe.db.get_all(
+		JOB,
+		filters={"job_type": job_type, "reference_name": name, "status": PRINTED},
+		fields=["name"],
+		limit=1,
+	)
+	doc = frappe.new_doc(JOB)
+	doc.job_type = job_type
+	doc.reference_doctype = JOB_TYPES[job_type]
+	doc.reference_name = name
+	doc.reference_title = str(title)[:140]
+	doc.company = company or None
+	doc.status = DOWNLOADED
+	doc.print_station = station.get("name")
+	doc.copies = 1
+	doc.sides = "Dual"
+	doc.pages = "Both"
+	doc.requested_by = user
+	doc.requested_from = "Desk"
+	doc.client_request_id = (
+		f"download-{hashlib.sha256((name + str(frappe.utils.now()) + user).encode()).hexdigest()[:24]}"
+	)
+	doc.attempts = 0
+	doc.is_reprint = 1 if printed else 0
+	doc.reprint_reason = (str(reprint_reason or "").strip()[:140] or None) if printed else None
+	doc.artwork_sha256 = hashlib.sha256(pdf).hexdigest()
+	doc.flags.ignore_permissions = True
+	doc.insert(ignore_permissions=True)
+
+	from .tools import artifacts
+
+	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
+	return frappe.get_doc(JOB, doc.name), pdf, warnings
+
+
+def _answer(doc, user: str, created=False, duplicate=False, already_queued=False, warnings=None) -> dict:
 	station = next((s for s in stations() if s["name"] == doc.print_station), None)
 	return {
 		"job": describe(doc, user),
@@ -472,6 +740,7 @@ def _answer(doc, user: str, created=False, duplicate=False, already_queued=False
 		"duplicate": duplicate,
 		"already_queued": already_queued,
 		"station": station_state(station) if station else None,
+		"warnings": list(warnings or []),
 	}
 
 
@@ -581,6 +850,9 @@ def _claim_payload(doc) -> dict:
 		"sides": doc.sides or "Single",
 		"reference_title": doc.reference_title,
 		"attempts": int(doc.attempts or 0),
+		"pages": doc.get("pages") or "Both",
+		# v0.209.0: both sides in one pass only where the station can and the PDF has two pages.
+		"duplex": (doc.get("pages") or "Both") == "Both" and doc.sides == "Dual",
 		"artwork_base64": base64.b64encode(pdf).decode(),
 		"artwork_sha256": hashlib.sha256(pdf).hexdigest(),
 		"file_name": f"{doc.name}.pdf",
@@ -641,6 +913,11 @@ def complete(name: str, user: str, success, error: str = "", retryable=False, cu
 		doc.status = PRINTED
 		doc.printed_at = frappe.utils.now()
 		doc.error = None
+		# v0.209.0 §A4: a two-sided card on a simplex station has its back still to come.
+		if doc.get("pages") == "Front" and doc.sides == "Dual":
+			doc.back_pending = 1
+		if doc.get("pages") == "Back" and doc.get("front_job") and frappe.db.exists(JOB, doc.front_job):
+			frappe.db.set_value(JOB, doc.front_job, "back_pending", 0)
 	else:
 		doc.error = (str(error or "the print station reported a failure")[:900]) or None
 		again = _truthy(retryable) and int(doc.attempts or 0) < MAX_ATTEMPTS

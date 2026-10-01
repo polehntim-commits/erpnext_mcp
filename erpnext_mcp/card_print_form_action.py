@@ -23,9 +23,10 @@ import frappe
 
 CLIENT_SCRIPT = "Client Script"
 FORM_VIEW = "Form"
-SCRIPT_REVISION = "r1"
+SCRIPT_REVISION = "r2"
 REQUEST_METHOD = "erpnext_mcp.api.card_print.request_card_print"
-LIST_METHOD = "erpnext_mcp.api.card_print.list_card_print_jobs"
+PREVIEW_METHOD = "erpnext_mcp.api.card_print.preview_card"
+DOWNLOAD_METHOD = "erpnext_mcp.api.card_print.download_card_pdf"
 
 #: (doctype, script name, marker, job type, button label, button group)
 TARGETS = (
@@ -47,74 +48,157 @@ TARGETS = (
 	),
 )
 
-#: Earlier texts this app shipped, by fingerprint. Empty at r1.
-PRIOR_REVISIONS: dict = {}
+#: Earlier texts this app shipped, by fingerprint — how the seeder tells its own
+#: unedited copy (updated) from one an operator changed (left alone).
+PRIOR_REVISIONS: dict = {
+	"47fd72ca4d605dfde779294ff63d064f67bfbdb14494f7e90ca9936bfeec60df": "r1 — v0.208.0, Employee: queued directly, no preview or download",
+	"644854e4961095a08d9ce99e5404085ccc6371f73075aa520082e6fbfd991129": "r1 — v0.208.0, Asset Register: queued directly, no preview or download",
+}
 
 SCRIPT_TEMPLATE = """// %(stamp)s
-// Added by erpnext_mcp (v0.208.0). Untick `enabled` above to remove the buttons.
+// Added by erpnext_mcp (v0.209.0). Untick `enabled` above to remove the buttons.
 //
-// "%(label)s" sends this record to the card print queue: the server renders the
-// card and the print station's Mac prints it. Nothing is laid out or printed here.
+// "%(label)s" opens one dialog: a preview of the card (drawn by the server), then
+// either SEND TO PRINTER (the print queue; the station's Mac prints it) or
+// DOWNLOAD CARD PDF (one card-sized PDF, front and back, to print from Preview
+// with Paper Size CR80, 100%%, no fit). Nothing here uses Frappe's print dialog.
 
 (function () {
-	function send(frm, reason) {
-		frappe.call({
-			method: "%(method)s",
-			args: {
-				job_type: "%(job_type)s",
-				reference_name: frm.doc.name,
-				client_request_id: frappe.utils.get_random(12) + "-" + Date.now(),
-				reprint_reason: reason || "",
+	function request_id() {
+		return frappe.utils.get_random(12) + "-" + Date.now();
+	}
+
+	function reason_then(preview, run) {
+		if (!preview.already_printed_on) {
+			run("");
+			return;
+		}
+		frappe.prompt(
+			[
+				{
+					fieldname: "reason",
+					fieldtype: "Select",
+					label: __("Why is it being reprinted?"),
+					options: ["Lost", "Damaged", "Details changed", "Other"],
+					reqd: 1,
+				},
+				{ fieldname: "detail", fieldtype: "Data", label: __("Detail (for Other)") },
+			],
+			function (values) {
+				run(values.reason === "Other" ? "Other: " + (values.detail || "") : values.reason);
 			},
-			freeze: true,
-			freeze_message: __("Sending to the print queue…"),
-		}).then(function (r) {
-			const answer = r && r.message;
-			if (!answer || !answer.job) {
-				return;
-			}
-			const station = answer.station || {};
-			let message = answer.already_queued
-				? __("Already in the print queue as {0}.", [answer.job.name])
-				: __("Sent to the print queue as {0}.", [answer.job.name]);
-			if (station.state && station.state !== "Ready") {
-				message += " " + __("The printer is {0} — it will print when it is back.", [station.state]);
-			}
-			frappe.show_alert({ message: message, indicator: "green" }, 7);
+			__("This card was already printed on {0}", [preview.already_printed_on]),
+			__("Continue")
+		);
+	}
+
+	function send(frm, preview, dialog) {
+		reason_then(preview, function (reason) {
+			frappe.call({
+				method: "%(method)s",
+				args: {
+					job_type: "%(job_type)s",
+					reference_name: frm.doc.name,
+					client_request_id: request_id(),
+					reprint_reason: reason,
+				},
+				freeze: true,
+				freeze_message: __("Sending to the print queue…"),
+			}).then(function (r) {
+				const answer = r && r.message;
+				if (!answer || !answer.job) {
+					return;
+				}
+				dialog.hide();
+				const station = answer.station || {};
+				let message = answer.already_queued
+					? __("Already in the print queue as {0}.", [answer.job.name])
+					: __("Sent to the print queue as {0}.", [answer.job.name]);
+				if (station.state && station.state !== "Ready") {
+					message += " " + __("The printer is {0} — it will print when it is back.", [station.state]);
+				}
+				if (answer.job.pages === "Front" && answer.job.sides === "Dual") {
+					message += " " + __("This printer is single-sided: use Print back on the job after the front prints.");
+				}
+				frappe.show_alert({ message: message, indicator: "green" }, 9);
+			});
 		});
 	}
 
-	// A card already printed needs a reason. Asked BEFORE the request, off the
-	// queue's own history, so the server's refusal is the backstop and not the UI.
-	function request(frm) {
-		frappe.call({
-			method: "%(list_method)s",
-			args: { reference_name: frm.doc.name, status: "Printed", mine_only: 0, limit: 5 },
-		}).then(function (r) {
-			const jobs = ((r && r.message && r.message.jobs) || []).filter(function (job) {
-				return job.job_type === "%(job_type)s";
+	function download(frm, preview, dialog) {
+		reason_then(preview, function (reason) {
+			frappe.call({
+				method: "%(download_method)s",
+				args: { job_type: "%(job_type)s", reference_name: frm.doc.name, reprint_reason: reason },
+				freeze: true,
+				freeze_message: __("Drawing the card…"),
+			}).then(function (r) {
+				const answer = r && r.message;
+				if (!answer || !answer.file_url) {
+					return;
+				}
+				dialog.hide();
+				window.open(answer.file_url, "_blank");
+				frappe.msgprint({
+					title: __("Card PDF ready ({0})", [answer.job.name]),
+					indicator: "green",
+					message: __(
+						"Print it from Preview: Paper Size <b>CR80 / ISO 7810</b>, Scale <b>100%%</b>, no Scale to Fit, Auto Rotate <b>off</b>. Page 1 is the front and page 2 the back."
+					),
+				});
 			});
-			if (!jobs.length) {
-				send(frm, "");
+		});
+	}
+
+	function open_dialog(frm) {
+		frappe.call({
+			method: "%(preview_method)s",
+			args: { job_type: "%(job_type)s", reference_name: frm.doc.name },
+			freeze: true,
+		}).then(function (r) {
+			const preview = r && r.message;
+			if (!preview) {
 				return;
 			}
-			frappe.prompt(
-				[
+			const station = preview.station;
+			const online = !!preview.agent_online;
+			let line = __("No print station is checking in — download the PDF and print it by hand.");
+			if (station && online) {
+				line = __("Print station {0}: {1}.", [station.station, station.state]) +
+					(station.message ? " " + frappe.utils.escape_html(station.message) : "");
+			} else if (station) {
+				line = __("Print station {0} is offline — download the PDF, or queue it to print when the station is back.", [station.station]);
+			}
+			const warnings = (preview.warnings || [])
+				.map(function (w) { return "<li>" + frappe.utils.escape_html(w) + "</li>"; })
+				.join("");
+			const frame = "border:1px solid #d1d8dd;border-radius:6px;background:#fff;line-height:0;box-shadow:0 1px 3px rgba(0,0,0,.08)";
+			const dialog = new frappe.ui.Dialog({
+				title: __("%(label)s — {0}", [preview.title]),
+				size: "large",
+				fields: [
 					{
-						fieldname: "reason",
-						fieldtype: "Select",
-						label: __("Why is it being reprinted?"),
-						options: ["Lost", "Damaged", "Details changed", "Other"],
-						reqd: 1,
+						fieldtype: "HTML",
+						fieldname: "card",
+						options:
+							'<div style="display:flex;gap:16px;justify-content:center;align-items:flex-start;flex-wrap:wrap;padding:8px 0">' +
+							'<div><div class="text-muted small">' + __("Front") + '</div><div style="' + frame + '">' + preview.front_svg + "</div></div>" +
+							'<div><div class="text-muted small">' + __("Back") + '</div><div style="' + frame + '">' + preview.back_svg + "</div></div>" +
+							"</div>" +
+							'<p class="small" style="text-align:center">' + line + "</p>" +
+							(warnings ? '<ul class="small text-warning">' + warnings + "</ul>" : ""),
 					},
-					{ fieldname: "detail", fieldtype: "Data", label: __("Detail (for Other)") },
 				],
-				function (values) {
-					send(frm, values.reason === "Other" ? "Other: " + (values.detail || "") : values.reason);
+				primary_action_label: online ? __("Send to printer") : __("Download card PDF"),
+				primary_action: function () {
+					(online ? send : download)(frm, preview, dialog);
 				},
-				__("This card was already printed on {0}", [String(jobs[0].printed_at || "").slice(0, 10)]),
-				__("Reprint")
-			);
+				secondary_action_label: online ? __("Download card PDF") : __("Queue for the printer"),
+				secondary_action: function () {
+					(online ? download : send)(frm, preview, dialog);
+				},
+			});
+			dialog.show();
 		});
 	}
 
@@ -126,7 +210,7 @@ SCRIPT_TEMPLATE = """// %(stamp)s
 			if (!frappe.user.has_role("Card Print Requester") && !frappe.user.has_role("System Manager")) {
 				return;
 			}
-			frm.add_custom_button(__("%(label)s"), function () { request(frm); }, __("%(group)s"));
+			frm.add_custom_button(__("%(label)s"), function () { open_dialog(frm); }, __("%(group)s"));
 			frm.add_custom_button(
 				__("Print history"),
 				function () {
@@ -148,7 +232,8 @@ def source(doctype: str, marker: str, job_type: str, label: str, group: str) -> 
 		"stamp": f"{marker}@{SCRIPT_REVISION}",
 		"doctype": doctype,
 		"method": REQUEST_METHOD,
-		"list_method": LIST_METHOD,
+		"preview_method": PREVIEW_METHOD,
+		"download_method": DOWNLOAD_METHOD,
 		"job_type": job_type,
 		"label": label,
 		"group": group,

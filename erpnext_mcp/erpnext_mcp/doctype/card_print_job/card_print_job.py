@@ -43,5 +43,9 @@ class CardPrintJob(Document):
 		return card_print.desk(card_print.retry, self.name)
 
 	@frappe.whitelist()
+	def print_back(self):
+		return card_print.desk(card_print.request_back, self.name)
+
+	@frappe.whitelist()
 	def cancel_job(self):
 		return card_print.desk(card_print.cancel, self.name)

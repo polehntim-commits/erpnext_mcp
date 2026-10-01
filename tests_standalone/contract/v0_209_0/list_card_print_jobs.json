@@ -4,17 +4,21 @@
  "jobs": [
   {
    "attempts": 1,
+   "back_pending": true,
    "can_cancel": false,
-   "can_retry": true,
+   "can_print_back": true,
+   "can_retry": false,
    "claimed_at": "<volatile>",
    "company": "Example Trading Co",
    "copies": 1,
-   "error": "the printer is out of ribbon",
+   "error": null,
+   "front_job": null,
    "is_reprint": false,
    "job_type": "Employee ID",
    "name": "CPJ-2026-00001",
+   "pages": "Front",
    "print_station": "primacy2-main",
-   "printed_at": null,
+   "printed_at": "<volatile>",
    "reference_doctype": "Employee",
    "reference_name": "EMP-ANA",
    "reference_title": "Ana Ramos",
@@ -23,12 +27,13 @@
    "requested_by": "ana@example.test",
    "requested_by_name": "Ana Ramos",
    "requested_from": "iOS",
-   "sides": "Single",
-   "status": "Failed"
+   "sides": "Dual",
+   "status": "Printed"
   }
  ],
  "stations": [
   {
+   "duplex": "Simplex",
    "enabled": true,
    "job_types": [
     "Employee ID",

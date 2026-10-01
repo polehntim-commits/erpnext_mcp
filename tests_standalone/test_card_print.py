@@ -6,8 +6,6 @@ sweep, the three doors, and the acceptance tests that do not need a printer.
 """
 
 import base64
-import sys
-import types
 import unittest
 
 import frappe
@@ -29,7 +27,9 @@ ON = {
 	f"allow_{name}": 1
 	for name in ("request_card_print", "cancel_card_print_job", "retry_card_print_job", "register_asset")
 }
-NEEDS_QR = unittest.skipUnless(qr.available(), "needs a QR encoder (segno)")
+NEEDS_QR = unittest.skipUnless(
+	qr.available() and card_art.reportlab_available(), "needs a QR encoder (segno) and reportlab"
+)
 
 
 def uid(n: int) -> str:
@@ -46,16 +46,6 @@ class CardPrintCase(MobileAPITestCase):
 		card_print.seed()
 		set_roles(WORKER, [*guard.roles_held(WORKER), card_print.REQUESTER_ROLE])
 		set_roles(STATION_USER, [card_print.STATION_ROLE])
-		self.rendered = []
-		module = types.ModuleType("frappe.utils.pdf")
-
-		def get_pdf(html, options=None):
-			self.rendered.append((html, options))
-			return FAKE_PDF
-
-		module.get_pdf = get_pdf
-		sys.modules["frappe.utils.pdf"] = module
-		self.addCleanup(sys.modules.pop, "frappe.utils.pdf", None)
 		STORE.commit()
 
 	def ask(self, n=1, **extra):
@@ -73,6 +63,13 @@ class CardPrintCase(MobileAPITestCase):
 	def printed(self, name):
 		return card_print.complete(name, STATION_USER, True, cups_job="Primacy_2-1")
 
+	def pdf_of(self, name):
+		payload = card_print._claim_payload(frappe.get_doc("Card Print Job", name))
+		return base64.b64decode(payload["artwork_base64"])
+
+	def duplex(self, **fields):
+		frappe.db.set_value("Card Print Station", card_print.DEFAULT_STATION, {"duplex": "Duplex", **fields})
+
 
 # ── requesting ──────────────────────────────────────────────────────────────
 @NEEDS_QR
@@ -87,16 +84,26 @@ class Requesting(CardPrintCase):
 		row = STORE.get_raw("Card Print Job", job["name"])
 		self.assertTrue(job["name"].startswith("CPJ-"))
 		self.assertTrue(row["artwork"].startswith("/private/files/"))
-		html, options = self.rendered[-1]
-		self.assertEqual((options["page-width"], options["page-height"]), ("85.6mm", "54.0mm"))
-		self.assertIn("badge-card", html)
-		self.assertEqual(html.count('<div class="badge-card">'), 1)
+		# The default station is simplex: a two-sided card is its front, one card-sized page.
+		self.assertEqual((job["sides"], job["pages"]), ("Dual", "Front"))
+		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0)])
+		self.assertTrue(any("logo" in w for w in answer["warnings"]))
 
-	def test_dual_adds_the_existing_back(self):
-		self.ask(sides="Dual")
-		html, _ = self.rendered[-1]
-		self.assertEqual(html.count('<div class="badge-card">'), 2)
-		self.assertIn("bc-back-qr", html)
+	def test_a_duplex_station_gets_both_sides_as_designed(self):
+		self.duplex()
+		job = self.ask()["job"]
+		self.assertEqual(job["pages"], "Both")
+		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0), (54.0, 85.6)])
+
+	def test_the_back_can_be_sent_rotated(self):
+		self.duplex(back_orientation="Landscape, rotated CW")
+		job = self.ask()["job"]
+		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0), (85.6, 54.0)])
+
+	def test_single_is_the_front_only(self):
+		self.duplex()
+		job = self.ask(sides="Single")["job"]
+		self.assertEqual((job["pages"], len(card_art.page_sizes_mm(self.pdf_of(job["name"])))), ("Front", 1))
 
 	def test_the_same_request_id_twice_is_one_job(self):
 		first = self.ask(7)
@@ -104,7 +111,6 @@ class Requesting(CardPrintCase):
 		self.assertTrue(again["duplicate"])
 		self.assertEqual(again["job"]["name"], first["job"]["name"])
 		self.assertEqual(len(STORE.rows("Card Print Job")), 1)
-		self.assertEqual(len(self.rendered), 1)
 
 	def test_a_second_tap_does_not_queue_a_second_card(self):
 		first = self.ask(1)
@@ -135,7 +141,13 @@ class Requesting(CardPrintCase):
 				self.ask(3, **bad)
 
 	def test_no_renderer_means_no_job(self):
-		sys.modules.pop("frappe.utils.pdf", None)
+		real = card_art.to_pdf
+
+		def broken(*args, **kwargs):
+			raise card_art.ArtError("reportlab is not installed on this server. Nothing was queued.")
+
+		card_art.to_pdf = broken
+		self.addCleanup(setattr, card_art, "to_pdf", real)
 		with self.assertRaises(card_print.CardPrintError) as caught:
 			self.ask()
 		self.assertIn("Nothing was queued", str(caught.exception))
@@ -179,7 +191,8 @@ class TheStation(CardPrintCase):
 		names = self.three()
 		first = self.ready()["job"]
 		self.assertEqual(first["name"], names[0])
-		self.assertEqual(base64.b64decode(first["artwork_base64"]), FAKE_PDF)
+		self.assertTrue(base64.b64decode(first["artwork_base64"]).startswith(b"%PDF"))
+		self.assertEqual((first["pages"], first["duplex"]), ("Front", False))
 		self.assertEqual(
 			self.ready()["job"]["name"], names[0], "an open job is handed back, not a second one"
 		)
@@ -293,22 +306,16 @@ class AssetTagArtwork(CardPrintCase):
 		)
 		STORE.commit()
 
-	def test_one_card_sized_page_whose_qr_is_the_assets_own(self):
+	def test_both_sides_and_the_qr_is_the_assets_own(self):
+		self.duplex()
 		answer = card_print.request(WORKER, "Asset Tag", "MC-Valve-05", uid(1))
-		self.ready()
-		payload = card_print._claim_payload(frappe.get_doc("Card Print Job", answer["job"]["name"]))
-		pdf = base64.b64decode(payload["artwork_base64"])
-		self.assertTrue(pdf.startswith(b"%PDF"))
-		try:
-			self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0)])
-		except ImportError:
-			pass
+		pdf = self.pdf_of(answer["job"]["name"])
+		self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0), (54.0, 85.6)])
+		texts = [[item["text"] for item in page] for page in card_art.text_items(pdf)]
+		self.assertIn("MC-Valve-05", texts[0])
+		self.assertIn("Scan for asset record", texts[1])
 		row = card_print._asset("MC-Valve-05")[3]
 		self.assertTrue(str(row.get("qr_url")).endswith("/scan/MC-Valve-05"))
-
-	def test_an_asset_tag_is_one_side(self):
-		with self.assertRaises(card_print.CardPrintError):
-			card_print.request(WORKER, "Asset Tag", "MC-Valve-05", uid(2), sides="Dual")
 
 
 # ── the three doors ─────────────────────────────────────────────────────────
@@ -443,6 +450,100 @@ class TheFurniture(CardPrintCase):
 		for doctype, _n, marker, job_type, label, group in card_print_form_action.TARGETS:
 			text = card_print_form_action.source(doctype, marker, job_type, label, group)
 			self.assertIn(card_print_form_action.REQUEST_METHOD, text)
-			self.assertIn(f"{marker}@r1", text)
+			self.assertIn(f"{marker}@r2", text)
 			self.assertNotIn("%(", text)
 		self.assertTrue(callable(desk_api.request_card_print))
+
+
+# ── v0.209.0: simplex backs, downloads, the preview, the print formats ──────
+@NEEDS_QR
+class ASimplexPrinter(CardPrintCase):
+	def test_front_then_back_on_request(self):
+		front = self.ask()["job"]["name"]
+		with self.assertRaises(card_print.CardPrintError):
+			card_print.request_back(front, WORKER)
+		self.ready()
+		self.printed(front)
+		row = card_print.describe(frappe.get_doc("Card Print Job", front), WORKER)
+		self.assertEqual((row["status"], row["back_pending"], row["can_print_back"]), ("Printed", True, True))
+		back = card_print.request_back(front, WORKER)["job"]
+		self.assertEqual((back["pages"], back["front_job"], back["status"]), ("Back", front, "Queued"))
+		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(back["name"])), [(54.0, 85.6)])
+		self.assertTrue(card_print.request_back(front, WORKER)["already_queued"])
+		claimed = self.ready()["job"]
+		self.assertEqual((claimed["name"], claimed["duplex"]), (back["name"], False))
+		self.printed(back["name"])
+		self.assertFalse(STORE.get_raw("Card Print Job", front)["back_pending"])
+
+	def test_a_duplex_card_has_no_back_pending(self):
+		self.duplex()
+		name = self.ask()["job"]["name"]
+		self.assertTrue(self.ready()["job"]["duplex"])
+		self.printed(name)
+		self.assertFalse(STORE.get_raw("Card Print Job", name).get("back_pending"))
+
+
+@NEEDS_QR
+class DownloadingByHand(CardPrintCase):
+	def test_the_download_is_both_pages_and_is_recorded(self):
+		doc, pdf, _warnings = card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE)
+		self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0), (54.0, 85.6)])
+		row = STORE.get_raw("Card Print Job", doc.name)
+		self.assertEqual((row["status"], row["requested_by"], row["pages"]), ("Downloaded", WORKER, "Both"))
+		self.assertTrue(row["artwork"].startswith("/private/files/"))
+		self.assertIsNone(self.ready()["job"], "a download is never queued")
+		# A hand print may be repeated, and does not make the next request a reprint.
+		card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE)
+		self.assertFalse(self.ask()["job"]["is_reprint"])
+
+	def test_the_desk_method_returns_the_private_file(self):
+		STORE.commit()
+		self.be()
+		self.be("Administrator")
+		set_roles("Administrator", [*guard.roles_held("Administrator"), "System Manager"])
+		answer = desk_api.download_card_pdf(job_type="Employee ID", reference_name=WORKER_EMPLOYEE)
+		self.assertEqual(answer["job"]["status"], "Downloaded")
+		self.assertTrue(answer["file_url"].startswith("/private/files/"))
+		self.assertGreater(answer["bytes"], 1000)
+
+	def test_without_the_role_no_download(self):
+		set_roles(WORKER, [r for r in frappe.get_roles(WORKER) if r != card_print.REQUESTER_ROLE])
+		with self.assertRaises(card_print.CardPrintError):
+			card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE)
+
+
+@NEEDS_QR
+class ThePreview(CardPrintCase):
+	def test_it_draws_both_sides_and_says_where_the_card_would_go(self):
+		data = card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)
+		self.assertTrue(data["front_svg"].startswith("<svg"))
+		self.assertIn("Ana Ramos", data["front_svg"])
+		self.assertIn('viewBox="0 0 54.0 85.6"', data["back_svg"])
+		self.assertFalse(data["agent_online"])
+		self.assertEqual(data["station"]["state"], "Offline")
+		self.assertIsNone(data["already_printed_on"])
+		self.assertEqual(STORE.rows("Card Print Job"), [])
+		self.ready()
+		self.assertTrue(card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)["agent_online"])
+
+
+class TheBlankPageFix(CardPrintCase):
+	def test_the_formats_draw_the_card_and_never_issue_a_badge(self):
+		from erpnext_mcp import card_print_format
+
+		self.assertIn(
+			"erpnext_mcp.card_print_format.erpnext_mcp_card_svg",
+			__import__("erpnext_mcp.hooks").hooks.jinja["methods"],
+		)
+		self.assertIn(card_print_format.JINJA_GLOBAL, card_print_format.TEMPLATE)
+		self.assertIn("85.6mm 54mm", card_print_format.TEMPLATE)
+		answer = card_print_format.erpnext_mcp_card_svg("Employee", WORKER_EMPLOYEE)
+		if qr.available():
+			self.assertIn("has no badge yet", answer["error"])
+		self.assertEqual(
+			card_print_format.erpnext_mcp_card_svg("Customer", "x")["error"], "no card layout for Customer."
+		)
+		fields = card_print_format.format_fields("Employee", "Employee ID Card (CR80)")
+		self.assertEqual(
+			(fields["doc_type"], fields["margin_top"], fields["custom_format"]), ("Employee", 0, 1)
+		)

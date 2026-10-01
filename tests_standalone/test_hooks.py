@@ -431,7 +431,7 @@ class TheJinjaMethod(unittest.TestCase):
 
 		self.assertIn("erpnext_mcp_badge_card is defined", badge_print_format.BADGE_TEMPLATE)
 
-	def test_these_two_jinja_methods_and_nothing_else(self):
+	def test_these_three_jinja_methods_and_nothing_else(self):
 		"""Every entry here is evaluated when Frappe BUILDS THE JINJA ENVIRONMENT,
 		which is the most expensive place in `hooks.py` to be wrong — v0.14.0 took
 		every page on the site down, error page included, from this one key. The
@@ -439,8 +439,11 @@ class TheJinjaMethod(unittest.TestCase):
 
 		It was `assertEqual(..., 1)` until v0.56.0, when the badge card needed to
 		resolve four records into one dict and the alternative was a Print Format
-		making four framework calls in presentation code."""
-		self.assertEqual(len(hooks.jinja["methods"]), 2)
+		making four framework calls in presentation code.
+
+		Three from v0.209.0: the CR80 print formats need the card drawn by the
+		same code that draws the printed one, and a format cannot import it."""
+		self.assertEqual(len(hooks.jinja["methods"]), 3)
 		self.assertEqual(set(hooks.jinja), {"methods"})
 
 

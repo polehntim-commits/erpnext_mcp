@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 967 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 969 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20809,3 +20809,15 @@ agent in `cardprint_agent/` prints on the Evolis Primacy 2.
 Requesting needs **Card Print Requester** (or System Manager). The station's
 claim and complete methods are not MCP tools: they are
 `/api/method/erpnext_mcp.api.card_print.*`, for the **Card Print Station** role.
+
+## v0.209.0 — approved card artwork, single-sided printers, Desk download
+
+Contract `docs/design/card_print_queue.md`, Amendment 1.
+
+| Tool | What it does |
+| --- | --- |
+| `download_card_pdf` | Draw one card at its own size (front and back pages) and record it as a Downloaded job, for printing by hand. A Printed card needs `reprint_reason`. Write |
+| `request_card_back` | Queue the back of a card whose front printed on a single-sided station. Write |
+
+`request_card_print` now defaults `sides` to Dual. On a Simplex station a
+two-sided card prints its front and is marked `back_pending`.

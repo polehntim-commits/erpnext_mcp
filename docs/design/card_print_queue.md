@@ -516,7 +516,7 @@ the docname.
 | element | where |
 |---|---|
 | photo | 4:5 slot, 21.6 × 27 mm at x 4.9, y 22.1; the Employee image cropped to fill, else initials (Helvetica-Bold 26 pt grey on light grey) |
-| EMPLOYEE bar | green `#356B2E`, 21.6 × 5.9 mm at x 4.9, y 9.8; white Helvetica-Bold 7.5 pt |
+| band | green `#356B2E`, white Helvetica-Bold 7.5 pt, upper-cased. One line: 21.6 × 5.9 mm at x 4.9, y 9.8. Two lines (e.g. `OWNER /` `OPERATOR`): 21.6 × 9.3 mm at y 5.5, baselines y 11.9 and y 8.7. **The text is the Employee's `employment_type`, else `EMPLOYEE`** *(the approved file was updated at 11:14 to show a role here; the source field is this build's choice — see the open question)* |
 | name | Helvetica-Bold 12.5 pt at x 30, baseline y 43.5 |
 | designation | Helvetica 8.5 pt at x 30, baseline y 38.5 |
 | company | Helvetica 6.5 pt grey at x 30, baseline y 34 |
