@@ -706,3 +706,40 @@ when unresolved). No route, tool, or job key changes. The phone fixtures keep th
 shape; their `warnings` list gains the blank-bar sentence, because the fixture's
 worker has no Employment Type. Tim's card: `badge_title` = Manager; category from Employment Type
 Operator → `OWNER / OPERATOR`.
+
+---
+
+## Amendment 3 — the chosen card: landscape pages, back rotated CW (v0.209.2)
+
+Tim, 2026-10-01: *"'OML_EmployeeID_Test_OML-0001_back-rotCW.pdf' this format seems
+to work the best for me."* That file, and `OML_AssetTag_v2_40-WM-SE_A_standard_back-rotCW.pdf`
+for asset tags, are now THE golden references; both are in
+`tests_standalone/fixtures/card_art/`. They supersede the geometry tables in §A2
+where they differ.
+
+### C1. Station default
+
+`Card Print Station.back_orientation` defaults to **Landscape, rotated CW**: both
+PDF pages are 85.6 × 54 mm, and the back's portrait design is turned 90° clockwise
+onto its page. The same default serves Employee ID and Asset Tag. The seeded
+station, a station whose value is blank, and a download with no station all use
+it. `Portrait` and `Landscape, rotated CCW` remain choices.
+
+### C2. Geometry read off the chosen files (mm, origin bottom-left)
+
+Employee front: photo box 22.0 × 27.5 at (5.0, 21.5); band 22.0 × 9.5 at (5.0, 6.5)
+for two lines (baselines 11.9 and 8.7, 7.5 pt bold) and 22.0 × 5.9 at (5.0, 9.8)
+for one; logo 16 × 16 at (63.6, 32.6); QR 16.0 at (62.6, 7.0). Text as §A2.
+Employee back: unchanged.
+
+Asset front: logo 40 × 40 at (5.0, 7.0); QR 25.0 at (52.8, 21.0); ID 10 pt bold
+centred on x 65.3 at y 15.0; name 6.5 pt at y 11.8.
+Asset back (as designed, portrait): QR 32.0 centred, top margin 9.0; ID 15 pt bold
+y 34.6; name 8.5 pt y 29.1; company 7 pt y 20.6; "Scan for asset record" 7 pt y 16.6.
+
+### C3. Operating it over MCP
+
+`update_employee` accepts `badge_title` and `badge_category`. `update_company`
+accepts `badge_logo` (a File URL, e.g. from `attach_file_to_document`).
+`download_card_pdf` is the test render: it returns the card PDF's File URL and
+records a Downloaded job. No new tools or routes.
