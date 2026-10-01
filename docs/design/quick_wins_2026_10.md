@@ -175,3 +175,187 @@ chosen item's name and code. The typed-item lookup accepts an exact code or an e
 
 971 tools (476 read, 495 write): + `stage_extraction_config`. 153 mobile methods: +
 `get_training_certificate`.
+
+---
+
+# Amendment 1 — multi-day classes (v0.212.0 / app 0.24.0)
+
+**Frozen 2026-10-01.** Tim: a Training Session is one date, so day 2 of a class disappears
+(the Applicator License renewal on Oct 28 and Nov 17 showed as "past sessions").
+
+## M1. Model — no new doctype
+
+A **day is a Training Session**, as it always was: its own date, start / end time, location,
+attendee rows, signatures and sign-in sheet. A **course** is a Training Session that other
+sessions point at.
+
+| Doctype | New field | Meaning |
+|---|---|---|
+| Training Session | `parent_session` (Link Training Session) | Set on a day: the course it belongs to. |
+| | `day_number` (Int) | 1-based, by date within the course. Kept in order by the server. |
+| | `required_day` (Check, default 1) | Whether credit needs this day. |
+| | `end_date` (Date, read-only) | On a course: its last day. `session_date` is its first. |
+| Training Session Attendee | `reminded_on` (Datetime, read-only) | When the evening-before push went out, so it goes once. |
+| | `scan_source` gains `Self` | The attendee checked themselves in. |
+| Training Type | `renews_certification` (Data) | A Certification `cert_type` or `cert_name` this course renews (e.g. `Applicator License`). Optional. |
+
+A course's attendee table is the **registration**: who is expected on every required day. A
+course holds no attendance of its own and is never signed. Registering somebody on a course
+puts them on each open day with `attended = 0`; a badge scan or check-in on a day sets
+`attended = 1` there (and registers a walk-in on the course).
+
+**Existing sessions are single-day courses already** — a session with no `parent_session`
+and no days is a course of one, and behaves exactly as before. No data is rewritten.
+
+## M2. Tools and routes
+
+- `create_training_session` takes `days`: a list of `{session_date, start_time?, end_time?,
+  location?, required?}`. Two or more makes a course plus one day each; times and location
+  default from the call's own. (MCP tool and mobile route.)
+- **`group_training_sessions(sessions, notes?)`** — new MCP tool (write, default off, shift
+  roles): two or more existing open sessions of one Training Type and company become the days
+  of a new course; the registration is the union of their attendees. For the Oct 28 / Nov 17
+  pair.
+- **`add_training_session_day(session, session_date, start_time?, end_time?, location?,
+  required?)`** — new MCP tool (write, default off, shift roles): add a day to a course (or to
+  the course of the day named; a standalone session becomes day 1 of a new course).
+- `complete_training_session`:
+  - on a **day**: closes the day and files **no** records. Incomplete rows are judged as
+    before. When every required day of the course is Completed, the course completes itself.
+  - on a **course**: refused while a required day is open (the days are named). On
+    completion one Employee Training Record is filed per attendee who **attended every
+    required day** — `completed_date` the last required day, the signature from the latest
+    day they signed. Anybody else is listed under `missed_days` and gets no record.
+  - on a single-day session: unchanged.
+- Every session answer gains `parent_session`, `day_number`, `day_count`, `required_day`,
+  `end_date`, `is_course`, and `days: [{session, day_number, session_date, start_time,
+  end_time, location, status, required, attended?}]` (empty for a single-day session).
+  `attended` is the caller's own row, where the caller is on the day.
+  `list_training_sessions` lists courses and single sessions; days come inside their course
+  (`include_days: true` lists them as rows too). The task payload's `training` key gains the
+  same keys.
+- **`get_training_cards()`** — new mobile route, any enrolled caller. The caller's own classes
+  that are today or within `training_card_days_before`: `{cards: [{session, course,
+  training_type, phase: "tomorrow"|"today"|"soon", title, subtitle, session_date, start_time,
+  end_time, location, day_number, day_count, can_check_in, checked_in, check_in_opens_at,
+  check_in_note, papers: [{doctype, docname}], task?}], evaluated_at}`. `title` and
+  `subtitle` are rendered on the server from config (M4).
+- **`check_in_training_day(session, latitude?, longitude?, accuracy_meters?,
+  signature_base64?, client_request_id)`** — new mobile route, any enrolled caller, and only
+  for **the caller's own row** on a day they are registered for. Open from
+  `training_checkin_opens_minutes_before` the start until `…closes_minutes_after` the end (all
+  day when the session has no times). Sets `attended`, `scanned_at`, `scan_source = Self`, the
+  fix, and the signature when one is sent. Idempotent: a second call answers `already: true`.
+  A supervisor's badge scan remains the other way in.
+
+## M3. The class's papers, for the people in the class
+
+An attendee of a session (or of its course) may list and open that session's and that
+course's attachments **except the generated sign-in sheet**, which stays with the roles that
+run training. Everybody else is refused as before. This settles the question left open in
+§3: the folder was closed because of the sign-in sheet, so the sheet is what stays closed.
+
+## M4. Wording and timing are config (Farm Feature Flags, no seed needed)
+
+| Key | Kind | Default |
+|---|---|---|
+| `training_card_days_before` | Threshold | 1 |
+| `training_card_title_tomorrow` / `_es` | Text | `Class tomorrow` / `Clase mañana` |
+| `training_card_title_today` / `_es` | Text | `Class today` / `Clase hoy` |
+| `training_card_day_suffix` / `_es` | Text | ` — Day {day} of {days}` / ` — Día {day} de {days}` (multi-day only) |
+| `training_checkin_opens_minutes_before` | Threshold | 60 |
+| `training_checkin_closes_minutes_after` | Threshold | 120 |
+| `training_reminder_hour` | Threshold | 18 (site time; 0–23; −1 switches the push off) |
+| `training_reminder_title` / `_es`, `training_reminder_body` / `_es` | Text | `Class tomorrow` · `{training_type}{day_suffix}, {time} at {location}.` |
+
+Placeholders: `{training_type} {day} {days} {day_suffix} {date} {time} {location}`.
+
+## M5. Push and calendar
+
+- **Push.** Hourly job `training_courses.send_reminders`: at `training_reminder_hour` each
+  registered attendee of a class tomorrow with an active device gets one push (category
+  `FARM_TRAINING`, keys `training_session`, `course`, `phase: "tomorrow"`), in their language.
+  `reminded_on` makes it once. Capped at 200 a run; never raises.
+- **Calendar (phone).** "Add to Calendar" makes one event per day, each with an alert the
+  evening before and an hour before; "Share with papers" sends one `.ics` with every day and
+  the papers beside it. The phone has write-only calendar access and no calendar chooser:
+  events go to the phone's default calendar (iCloud, when that is the default). iOS calendars
+  cannot hold attachments; the papers travel with the share, and the event notes name them.
+
+## M6. A missed required day
+
+Seeded rule **`training_day_missed`** (built-in scanner, Workforce, alert-only, enabled). One
+alert per attendee per course: a registered attendee whose required day is Completed (or is
+more than a day past) with `attended = 0`. Message: who, which day(s), and — when the Training
+Type `renews_certification` and that person holds such a Certification — "their {cert}
+expires {date}; a make-up day is needed before then or it lapses". `due_date` is that
+expiry, else the course's `expires_date`, else 30 days after the missed day. Critical inside
+30 days of the due date, else Warning. It reaches the attendee's own compliance inbox
+(`subject_employee`) and Farm Manager / Foreman (`notify_roles`). It clears itself when the
+person attends a later day of the same Training Type or a record is filed.
+
+## M7. Counts
+
+973 tools (476 read, 497 write): + `group_training_sessions`, `add_training_session_day`.
+155 mobile methods: + `get_training_cards`, `check_in_training_day`. Swept rules 32. Hourly
+jobs 3.
+
+---
+
+# Amendment 2 — crew clock-in and assign from Work (AFB-2026-00030)
+
+**Frozen 2026-10-01.** Both already exist one level away: Crew Clock is a toolbar button on
+Work, and long-press assign is on its task rows. What is missing: a crew list to pick from, a
+visible action, certification filtering, and offline safety.
+
+## W1. Clock in crew
+
+**`clock_in_crew(employees?, badge_ids?, shift?, location?, shift_type?, client_request_id)`**
+— new mobile route, **shift roles** (Farm Manager, HR, Foreman, Crew Leader; checked in the
+wrapper and again in the tools). Joins `shift` when named, else the caller's own open shift,
+else starts one (then `location` is required). Each worker is added in turn and answered on
+their own line: `{employee, employee_name, outcome: "added"|"already"|"refused", reason?}` —
+one refusal (a minor over hours, a second open shift, another entity) does not stop the rest.
+Returns `{shift, started, results, added, already, refused}`.
+
+Idempotent: Farm Shift gains `client_request_id`; a repeat with the same id finds the shift it
+started instead of starting a second, and a worker already on the crew is `already`.
+
+**`list_crew_candidates(search?, shift?)`** — new mobile route, shift roles. Active employees
+of the caller's entities (name, badge, designation, photo initials), each marked `on_shift`
+(the shift's docname) when already on an open one. For the multi-select list; a Foreman could
+not use `search_employees`, which is HR-only.
+
+## W2. Assign a task
+
+**`list_assignable_workers(task, search?)`** — new mobile route, dispatch roles (Foreman, Farm
+Manager). The crew under the caller's open shifts first, then the roster. Each row:
+`{employee, employee_name, on_crew, holding_now, qualified, missing: [requirement…],
+skill_match}`. `qualified` is the same check `assign_farm_task` refuses on
+(`required_certification` plus the certifications the task's products need), so the list and
+the refusal cannot disagree.
+
+`assign_farm_task` gains `client_request_id` and answers `already: true` — not a refusal —
+when the task is already held by the worker named. Its certification refusal is unchanged and
+has no override.
+
+A task has one holder, so choosing several workers hands the task to the first and raises a
+copy for each of the others (`copies: [task…]`) through the existing split used for crew work.
+*Dropped if no such split exists — then the sheet is single-select and says why.*
+
+## W3. Tiles
+
+`tiles.REPORTS` gains `crew_clock_in` and `assign_tasks`. Two tiles are seeded on the **work**
+surface (create-only, `min_app_version` 0.24.0): **Clock in crew** (audience: the shift roles)
+and **Assign tasks** (audience: Foreman, Farm Manager).
+
+## W4. Phone
+
+Work gets a multi-select **Clock in crew** sheet (crew list + badge scan) and **Assign** as a
+swipe action beside the existing long-press, with unqualified workers shown and not
+selectable. Both queue offline (`clock_in_crew`, `assign_farm_task` operations carrying their
+`client_request_id`) and send when the phone is back.
+
+## W5. Counts
+
+158 mobile methods (+3). AFB-2026-00030 stays Open until Tim confirms it on a device.
