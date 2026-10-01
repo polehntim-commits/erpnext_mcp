@@ -1080,6 +1080,7 @@
   "allow_retry_card_print_job",
   "allow_download_card_pdf",
   "allow_request_card_back",
+  "allow_mark_card_print_job",
   "phone_link_doctypes",
   "spray_program_section",
   "allow_list_spray_nozzle_configs",
@@ -8362,6 +8363,13 @@
    "fieldname": "allow_request_card_back",
    "fieldtype": "Check",
    "label": "Request Card Back"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Mark a card print job Printed, or Failed with the reason, after printing it by hand.",
+   "fieldname": "allow_mark_card_print_job",
+   "fieldtype": "Check",
+   "label": "Mark Card Print Job"
   },
   {
    "default": "Item\nAsset Register\nHousing Unit\nEmployee\nField\nParcel\nIrrigation Zone\nWarehouse\nSupplier\nCustomer\nCrop\nUOM\nFarm Task\nCertification",

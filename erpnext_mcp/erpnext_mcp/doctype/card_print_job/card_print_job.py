@@ -15,6 +15,12 @@ from erpnext_mcp import card_print, shifts
 DOCTYPE = "Card Print Job"
 
 
+def _companies():
+	from erpnext_mcp import roles
+
+	return roles.companies_for(str(frappe.session.user)) or None
+
+
 class CardPrintJob(Document):
 	def autoname(self):
 		year = str(frappe.utils.today())[:4]
@@ -35,17 +41,25 @@ class CardPrintJob(Document):
 			before = frappe.db.get_value(DOCTYPE, self.name, "status")
 			if before != self.status and not self.flags.get("queue_move"):
 				frappe.throw(
-					"a print job's status changes through the queue (retry, cancel), not by editing it."
+					"a print job's status changes through its buttons (mark printed, mark failed, retry, cancel), not by editing it."
 				)
 
 	@frappe.whitelist()
 	def retry(self):
-		return card_print.desk(card_print.retry, self.name)
+		return card_print.desk(card_print.retry, self.name, "", _companies())
 
 	@frappe.whitelist()
 	def print_back(self):
-		return card_print.desk(card_print.request_back, self.name)
+		return card_print.desk(card_print.request_back, self.name, "", _companies())
+
+	@frappe.whitelist()
+	def mark_printed(self):
+		return card_print.desk(card_print.mark, self.name, "", _companies(), True)
+
+	@frappe.whitelist()
+	def mark_failed(self, error=None):
+		return card_print.desk(card_print.mark, self.name, "", _companies(), False, str(error or ""))
 
 	@frappe.whitelist()
 	def cancel_job(self):
-		return card_print.desk(card_print.cancel, self.name)
+		return card_print.desk(card_print.cancel, self.name, "", _companies())

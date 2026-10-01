@@ -37,7 +37,7 @@ def request_card_print(args: dict) -> ToolResult:
 	allowed = _companies(actor)
 
 	def may_read(doctype, name, company):
-		return not allowed or not company or company in allowed
+		return card_print.in_scope(company, allowed)
 
 	data = _run(
 		card_print.request,
@@ -97,6 +97,25 @@ def cancel_card_print_job(args: dict) -> ToolResult:
 	)
 
 
+def mark_card_print_job(args: dict) -> ToolResult:
+	"""v0.210.0. A card printed by hand: mark its job Printed, or Failed with the reason."""
+	actor = _actor()
+	printed = as_bool(args, "printed", True)
+	data = _run(
+		card_print.mark,
+		as_str(args, "name", required=True),
+		actor,
+		_companies(actor),
+		printed,
+		as_str(args, "error"),
+	)
+	return ToolResult(
+		data=data,
+		summary=f"{data['job']['name']}: {data['job']['status']}",
+		docstatus_delta="0 → 0 (updated)",
+	)
+
+
 def retry_card_print_job(args: dict) -> ToolResult:
 	actor = _actor()
 	data = _run(card_print.retry, as_str(args, "name", required=True), actor, _companies(actor))
@@ -111,7 +130,7 @@ def download_card_pdf(args: dict) -> ToolResult:
 	allowed = _companies(actor)
 
 	def may_read(doctype, name, company):
-		return not allowed or not company or company in allowed
+		return card_print.in_scope(company, allowed)
 
 	doc, pdf, warnings = _run(
 		card_print.download,

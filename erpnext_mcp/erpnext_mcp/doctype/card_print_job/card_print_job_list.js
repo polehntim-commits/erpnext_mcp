@@ -13,17 +13,24 @@ frappe.listview_settings["Card Print Job"] = {
 		};
 		return [__(doc.status), colours[doc.status] || "gray", "status,=," + doc.status];
 	},
+	// v0.210.0: cards are printed by hand. A waiting row opens its PDF; a Failed one retries.
 	button: {
 		show(doc) {
-			return doc.status === "Failed";
+			return ["Queued", "Downloaded", "Failed"].includes(doc.status);
 		},
-		get_label() {
-			return __("Retry");
+		get_label(doc) {
+			return doc.status === "Failed" ? __("Retry") : __("Print");
 		},
 		get_description(doc) {
-			return __("Send {0} back to the queue", [doc.reference_title || doc.name]);
+			return doc.status === "Failed"
+				? __("Send {0} back to the queue", [doc.reference_title || doc.name])
+				: __("Open {0} to print it and mark it Printed", [doc.reference_title || doc.name]);
 		},
 		action(doc) {
+			if (doc.status !== "Failed") {
+				frappe.set_route("Form", "Card Print Job", doc.name);
+				return;
+			}
 			frappe
 				.call({ method: "erpnext_mcp.api.card_print.retry_card_print_job", args: { name: doc.name } })
 				.then(() => cur_list && cur_list.refresh());

@@ -1,0 +1,51 @@
+{
+ "can_request": true,
+ "count": 1,
+ "jobs": [
+  {
+   "attempts": 0,
+   "back_pending": false,
+   "can_cancel": true,
+   "can_mark_failed": true,
+   "can_mark_printed": true,
+   "can_print_back": false,
+   "can_retry": false,
+   "claimed_at": null,
+   "company": "Example Trading Co",
+   "copies": 1,
+   "error": null,
+   "front_job": null,
+   "is_reprint": false,
+   "job_type": "Employee ID",
+   "name": "CPJ-2026-00001",
+   "pages": "Both",
+   "print_station": "primacy2-main",
+   "printed_at": null,
+   "reference_doctype": "Employee",
+   "reference_name": "EMP-ANA",
+   "reference_title": "Ana Ramos",
+   "reprint_reason": null,
+   "requested_at": "<volatile>",
+   "requested_by": "ana@example.test",
+   "requested_by_name": "Ana Ramos",
+   "requested_from": "iOS",
+   "sides": "Dual",
+   "status": "Queued"
+  }
+ ],
+ "stations": [
+  {
+   "duplex": "Manual",
+   "enabled": true,
+   "job_types": [
+    "Employee ID",
+    "Asset Tag"
+   ],
+   "last_seen_at": null,
+   "media": "CR80 PVC card 85.6 x 54 mm",
+   "message": "printed by hand from ERPNext: download the card PDF, print it, mark the job",
+   "state": "Manual",
+   "station": "primacy2-main"
+  }
+ ]
+}

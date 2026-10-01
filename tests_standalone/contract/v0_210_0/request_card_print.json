@@ -1,11 +1,13 @@
 {
  "already_queued": false,
- "created": false,
- "duplicate": true,
+ "created": true,
+ "duplicate": false,
  "job": {
   "attempts": 0,
   "back_pending": false,
   "can_cancel": true,
+  "can_mark_failed": true,
+  "can_mark_printed": true,
   "can_print_back": false,
   "can_retry": false,
   "claimed_at": null,
@@ -16,7 +18,7 @@
   "is_reprint": false,
   "job_type": "Employee ID",
   "name": "CPJ-2026-00001",
-  "pages": "Front",
+  "pages": "Both",
   "print_station": "primacy2-main",
   "printed_at": null,
   "reference_doctype": "Employee",
@@ -31,7 +33,7 @@
   "status": "Queued"
  },
  "station": {
-  "duplex": "Simplex",
+  "duplex": "Manual",
   "enabled": true,
   "job_types": [
    "Employee ID",
@@ -39,9 +41,13 @@
   ],
   "last_seen_at": null,
   "media": "CR80 PVC card 85.6 x 54 mm",
-  "message": "the print station has never checked in",
-  "state": "Offline",
+  "message": "printed by hand from ERPNext: download the card PDF, print it, mark the job",
+  "state": "Manual",
   "station": "primacy2-main"
  },
- "warnings": []
+ "warnings": [
+  "Example Trading Co's logo is not set, so the card prints without one (Company › Badge Logo).",
+  "The colour bar is blank: Ana Ramos has no Employment Type. Set Badge Category on the Employee, or on the Employment Type.",
+  "Ana Ramos has no photo on their Employee record; the card shows initials."
+ ]
 }

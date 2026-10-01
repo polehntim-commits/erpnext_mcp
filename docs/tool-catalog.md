@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 969 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 970 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20825,3 +20825,13 @@ two-sided card prints its front and is marked `back_pending`.
 From v0.209.2, `update_employee` takes `badge_title` and `badge_category`, and
 `update_company` takes `badge_logo` (a File URL). Card backs default to a
 landscape page rotated clockwise.
+
+## v0.210.0 — cards printed by hand; the requester gate
+
+| Tool | What it does |
+| --- | --- |
+| `mark_card_print_job` | Close a job printed by hand: Printed, or Failed with `error`. Write |
+
+Every card print tool now needs **Card Print Requester**, **Farm Manager** or
+**System Manager**, and acts only inside the caller's companies. There is no
+print agent: `download_card_pdf`, print, then `mark_card_print_job`.

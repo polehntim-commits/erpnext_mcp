@@ -21,7 +21,10 @@ def _user() -> str:
 
 
 def _may_read(doctype: str, name: str, company: str) -> bool:
-	return bool(frappe.has_permission(doctype, "read", doc=name))
+	"""Read permission on the record AND its company among the caller's (Amendment 4 §D4)."""
+	return bool(frappe.has_permission(doctype, "read", doc=name)) and card_print.in_scope(
+		company, _companies()
+	)
 
 
 def _companies():
@@ -65,6 +68,12 @@ def cancel_card_print_job(name=None):
 @frappe.whitelist(methods=["POST"])
 def retry_card_print_job(name=None):
 	return card_print.desk(card_print.retry, str(name or ""), _user(), _companies())
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_card_print_job(name=None, printed=1, error=None):
+	"""A person closes a job they printed by hand: Printed, or Failed with what went wrong."""
+	return card_print.desk(card_print.mark, str(name or ""), _user(), _companies(), printed, str(error or ""))
 
 
 # ── the print station ───────────────────────────────────────────────────────

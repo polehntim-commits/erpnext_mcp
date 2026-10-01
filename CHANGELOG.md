@@ -3,9 +3,31 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.210.0 — 2026-10-01 — cards are printed by hand, and asking for one is gated
+
+**970 tools** (476 read, 494 write): + `mark_card_print_job` (write, default off). Routes unchanged (152).
+Contract `docs/design/card_print_queue.md` Amendment 4. Deploy: `docs/deploy/v0.210.0_card_printing.md`.
+
+- **No print agent.** Automatic printing is dropped. A Card Print Station is **Manual** by default (the
+  seeded one, and any station no agent ever used — one-time patch): every job's PDF is the whole card,
+  the station is never "Offline", and the agent's claim method answers "this station is printed by
+  hand". The agent's methods and `cardprint_agent/` stay in the tree, unused.
+- **A person closes the job.** Download the card PDF, print it, then **Mark printed** or **Mark failed**
+  (with what went wrong) — from the dialog on the Employee / Asset Register form, from the Card Print Job
+  form, or with `mark_card_print_job`. The job records who marked it and when. A Failed job can be
+  retried or marked printed. **Add to print queue** files a card as Queued for whoever is at the printer;
+  the Card Print Job list is the queue.
+- **Only requesters.** Card Print Requester, Farm Manager or System Manager — checked by the server in
+  every method (request, preview, download, list, cancel, retry, mark, back) on the phone routes, the
+  Desk methods and the MCP tools. No "your own jobs" exception: an account without the role is refused in
+  one sentence, sees no queue and no badge count, and a repeated request id is not a way in.
+- **Only your own company.** A requester asks for, lists and touches only records and jobs of their own
+  entities; anything else reads as not there. A scoped caller is refused a record with no company.
+- **Rate limits** cover every call that makes a job: 10 a minute and 100 a day per account.
+
 ## 0.209.2 — 2026-10-01 — the chosen card: landscape pages, the back turned clockwise
 
-Contract `docs/design/card_print_queue.md` Amendment 3. Deploy steps: `docs/deploy/v0.209.2_card_printing.md`.
+Contract `docs/design/card_print_queue.md` Amendment 3. Deploy steps: `docs/deploy/v0.210.0_card_printing.md`.
 
 - **The default card is the one Tim chose** (`…_back-rotCW.pdf`): both PDF pages are 85.6 × 54 mm and
   the back's portrait design is turned 90° clockwise, for employee IDs and asset tags alike. Card Print

@@ -92,10 +92,10 @@
   {
    "fieldname": "duplex",
    "fieldtype": "Select",
-   "label": "Duplex",
-   "options": "Simplex\nDuplex",
-   "default": "Simplex",
-   "description": "v0.209.0. Simplex: a two-sided card prints its front, and the back on request after a manual flip. Duplex: one job, both sides — set this once dual-side printing is enabled in the Evolis software."
+   "label": "Printing",
+   "options": "Manual\nSimplex\nDuplex",
+   "default": "Manual",
+   "description": "Manual (v0.210.0): no print agent — a person downloads the card PDF from the job, prints it, and marks the job Printed. Simplex / Duplex are for a station with a print agent."
   },
   {
    "fieldname": "front_orientation",

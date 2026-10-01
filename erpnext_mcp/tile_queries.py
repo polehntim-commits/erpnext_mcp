@@ -194,7 +194,10 @@ def triage_queue(user, company, params):
 
 def my_print_jobs(user, company, params):
 	"""v0.208.0. The caller's cards still in the queue, and any that failed."""
-	if not compat.doctype_exists("Card Print Job"):
+	from . import card_print
+
+	# Amendment 4 §D3: no role, no queue — not even a count of one's own.
+	if not compat.doctype_exists("Card Print Job") or not card_print.can_request(user):
 		return _answer([])
 	rows = frappe.db.get_all(
 		"Card Print Job",
@@ -230,7 +233,7 @@ QUERIES = {
 	"my_inspections_open": (my_inspections_open, {}, ()),
 	"my_feedback_answered": (my_feedback_answered, {}, ()),
 	"triage_queue": (triage_queue, {}, MANAGER_ROLES),
-	"my_print_jobs": (my_print_jobs, {}, ()),
+	"my_print_jobs": (my_print_jobs, {}, ("Card Print Requester", "Farm Manager", "System Manager")),
 }
 
 

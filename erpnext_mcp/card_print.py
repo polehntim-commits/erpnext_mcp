@@ -32,11 +32,15 @@ DOWNLOADED = "Downloaded"
 STATUSES = (QUEUED, PRINTING, PRINTED, FAILED, CANCELLED, DOWNLOADED)
 SIDES = ("Single", "Dual")
 PAGES = ("Both", "Front", "Back")
-DUPLEX_MODES = ("Simplex", "Duplex")
+#: Amendment 4 §D1. Manual: no agent — a person downloads the PDF, prints it, marks the job.
+MANUAL = "Manual"
+DUPLEX_MODES = (MANUAL, "Simplex", "Duplex")
 SOURCES = ("iOS", "Desk", "API")
 REQUESTER_ROLE = "Card Print Requester"
 STATION_ROLE = "Card Print Station"
 ADMIN_ROLE = "System Manager"
+#: Amendment 4 §D3. Who may ask for a card, see the queue, or close a job. Nobody else.
+REQUEST_ROLES = (REQUESTER_ROLE, "Farm Manager", ADMIN_ROLE)
 ROLES = (REQUESTER_ROLE, STATION_ROLE)
 MAX_COPIES = 5
 MAX_ATTEMPTS = 3
@@ -45,7 +49,7 @@ OFFLINE_SECONDS = 120
 PER_MINUTE = 10
 PER_DAY = 100
 READY = "Ready"
-STATION_STATES = (READY, "Paused", "Printer error", "Offline")
+STATION_STATES = (READY, "Paused", "Printer error", "Offline", MANUAL)
 DEFAULT_STATION = "primacy2-main"
 REPRINT_MARKER = "reprint_reason_required"
 ROW_FIELDS = [
@@ -115,14 +119,15 @@ def roles_of(user: str) -> set:
 
 
 def can_request(user: str) -> bool:
-	return bool(roles_of(user) & {REQUESTER_ROLE, ADMIN_ROLE})
+	return bool(roles_of(user) & set(REQUEST_ROLES))
 
 
 def require_requester(user: str) -> None:
 	if not user or user == "Guest" or not can_request(user):
 		raise CardPrintError(
-			f"{user or 'this account'} may not print cards: it does not hold the {REQUESTER_ROLE} role. "
-			"An ID card is a credential, so asking for one is permissioned. Nothing was queued.",
+			f"{user or 'this account'} may not print cards or see the print queue: that takes the "
+			f"{REQUESTER_ROLE} role (or Farm Manager / System Manager). An ID card is a credential, so "
+			"asking for one is permissioned. Nothing was queued.",
 			"forbidden",
 		)
 
@@ -178,7 +183,9 @@ def station_state(row: dict) -> dict:
 	"""What a requester is shown: Ready / Paused / Printer error / Offline."""
 	age = _seconds_since(row.get("last_seen_at"))
 	state = str(row.get("printer_state") or "")
-	if age is None or age > OFFLINE_SECONDS:
+	if is_manual(row):
+		state, message = MANUAL, "printed by hand from ERPNext: download the card PDF, print it, mark the job"
+	elif age is None or age > OFFLINE_SECONDS:
 		state, message = (
 			"Offline",
 			(
@@ -198,8 +205,12 @@ def station_state(row: dict) -> dict:
 		"media": row.get("media"),
 		"job_types": lines(row.get("job_types")),
 		"enabled": bool(compat.checked(row.get("enabled"))),
-		"duplex": row.get("duplex") or "Simplex",
+		"duplex": row.get("duplex") or MANUAL,
 	}
+
+
+def is_manual(station: dict) -> bool:
+	return str((station or {}).get("duplex") or MANUAL) == MANUAL
 
 
 def station_for(job_type: str, company: str) -> dict:
@@ -233,7 +244,7 @@ def seed() -> list:
 	doc.media = "CR80 PVC card 85.6 x 54 mm"
 	doc.artwork_width_mm = 85.6
 	doc.artwork_height_mm = 54.0
-	doc.duplex = "Simplex"
+	doc.duplex = MANUAL
 	doc.front_orientation = "Landscape"
 	doc.back_orientation = card_art.DEFAULT_BACK_ORIENTATION
 	doc.insert(ignore_permissions=True)
@@ -244,8 +255,7 @@ def seed() -> list:
 def describe(row, user: str = "") -> dict:
 	get = row.get
 	status = get("status")
-	mine = bool(user) and get("requested_by") == user
-	allowed = mine or (bool(user) and can_request(user))
+	allowed = bool(user) and can_request(user)
 	full_name = ""
 	if get("requested_by"):
 		full_name = frappe.db.get_value("User", get("requested_by"), "full_name") or ""
@@ -276,6 +286,8 @@ def describe(row, user: str = "") -> dict:
 		"can_cancel": bool(allowed and status == QUEUED),
 		"can_retry": bool(allowed and status == FAILED),
 		"can_print_back": bool(allowed and status == PRINTED and compat.checked(get("back_pending"))),
+		"can_mark_printed": bool(allowed and status in (QUEUED, DOWNLOADED, FAILED)),
+		"can_mark_failed": bool(allowed and status in (QUEUED, DOWNLOADED)),
 	}
 
 
@@ -582,10 +594,11 @@ def render_artwork(job_type: str, row: dict, company: str, pages: str, station: 
 
 
 def pages_for(sides: str, station: dict) -> str:
-	"""What a job on this station prints: both sides only where it can duplex."""
+	"""What a job on this station prints: both sides where it can duplex, and where a
+	person prints it (the PDF is the whole card; they flip it)."""
 	if sides != "Dual":
 		return "Front"
-	return "Both" if str(station.get("duplex") or "Simplex") == "Duplex" else "Front"
+	return "Front" if str(station.get("duplex") or MANUAL) == "Simplex" else "Both"
 
 
 def preview(user: str, job_type: str, reference_name: str, may_read=None) -> dict:
@@ -623,7 +636,7 @@ def preview(user: str, job_type: str, reference_name: str, may_read=None) -> dic
 		"badge_category": words[1],
 		"warnings": warnings,
 		"station": state,
-		"agent_online": bool(state and state["state"] != "Offline"),
+		"agent_online": bool(state and state["state"] not in ("Offline", MANUAL)),
 		"already_printed_on": str(printed[0].get("printed_at") or "")[:10] if printed else None,
 	}
 
@@ -666,13 +679,13 @@ def request(
 			"client_request_id is required (8–64 characters, a UUID) — it is what stops a retried call "
 			"printing a second card. Nothing was queued."
 		)
+	require_requester(user)
 	held = existing_for(key)
 	if held is not None:
 		if held.requested_by != user:
 			raise CardPrintError("that client_request_id belongs to somebody else's request.", "forbidden")
 		return _answer(held, user, created=False, duplicate=True)
 
-	require_requester(user)
 	if job_type not in JOB_TYPES:
 		raise CardPrintError(f"job_type is one of {', '.join(JOB_TYPES)}. Nothing was queued.")
 	sides = sides or "Dual"
@@ -750,9 +763,9 @@ def request_back(
 ) -> dict:
 	"""Queue the BACK of a card whose front printed on a simplex station. §A4."""
 	user = user or str(frappe.session.user)
+	require_requester(user)
 	front = _job(name)
 	_may_touch(front, user, companies)
-	require_requester(user)
 	if front.get("pages") == "Back":
 		front = _job(front.front_job) if front.get("front_job") else front
 	if front.status != PRINTED or not compat.checked(front.get("back_pending")):
@@ -869,8 +882,9 @@ def _answer(doc, user: str, created=False, duplicate=False, already_queued=False
 def list_jobs(
 	user: str, companies=None, status: str = "", mine_only=True, reference_name: str = "", limit=50
 ) -> dict:
+	require_requester(user)
 	if not ready():
-		return {"jobs": [], "count": 0, "stations": [], "can_request": False}
+		return {"jobs": [], "count": 0, "stations": [], "can_request": True}
 	filters: dict = {}
 	if status:
 		if status not in STATUSES:
@@ -878,9 +892,9 @@ def list_jobs(
 		filters["status"] = status
 	if reference_name:
 		filters["reference_name"] = reference_name
-	if mine_only or not can_request(user):
+	if mine_only:
 		filters["requested_by"] = user
-	elif companies:
+	if companies:
 		filters["company"] = ("in", list(companies))
 	try:
 		limit = max(1, min(200, int(limit or 50)))
@@ -897,15 +911,61 @@ def list_jobs(
 
 
 def _may_touch(doc, user: str, companies=None) -> None:
-	if doc.requested_by == user:
-		return
+	"""§D3–D4: the role, always — having asked for a card is not a pass — and the job's
+	company inside the caller's. Out of scope reads as not there."""
 	require_requester(user)
-	if companies and doc.company and doc.company not in companies:
+	if companies and (not doc.company or doc.company not in companies):
 		raise CardPrintError(f"no print job called {doc.name!r}.", "not_found")
+
+
+def in_scope(company: str, companies) -> bool:
+	"""§D4. `companies` None or empty = unrestricted (Frappe's rule for Desk accounts)."""
+	return not companies or (bool(company) and company in companies)
+
+
+def mark(name: str, user: str = "", companies=None, printed=True, error: str = "") -> dict:
+	"""A person closes a job they printed by hand — or says it did not print. §D2."""
+	user = user or str(frappe.session.user)
+	require_requester(user)  # before the lookup: no role, no word on what exists
+	doc = _job(name)
+	_may_touch(doc, user, companies)
+	printed = _truthy(printed)
+	if doc.status == PRINTED and printed:
+		return {"job": describe(doc, user), "already": True}
+	allowed_from = (QUEUED, DOWNLOADED, FAILED) if printed else (QUEUED, DOWNLOADED)
+	if doc.status not in allowed_from:
+		raise CardPrintError(
+			f"{doc.name} is {doc.status}; it can be marked {'Printed' if printed else 'Failed'} only from "
+			f"{' or '.join(allowed_from)}. Nothing was changed."
+		)
+	reason = str(error or "").strip()
+	if not printed and not reason:
+		raise CardPrintError("say what went wrong (error) when marking a card Failed. Nothing was changed.")
+	doc.claimed_by = user
+	doc.claimed_at = frappe.utils.now()
+	if printed:
+		_printed(doc)
+	else:
+		doc.status = FAILED
+		doc.error = reason[:900]
+	_save(doc)
+	return {"job": describe(doc, user), "already": False}
+
+
+def _printed(doc) -> None:
+	doc.status = PRINTED
+	doc.printed_at = frappe.utils.now()
+	doc.error = None
+	# §A4: a two-sided card on a simplex station has its back still to come.
+	if doc.get("pages") == "Front" and doc.sides == "Dual":
+		doc.back_pending = 1
+	if doc.get("pages") == "Back" and doc.get("front_job") and frappe.db.exists(JOB, doc.front_job):
+		frappe.db.set_value(JOB, doc.front_job, "back_pending", 0)
 
 
 def cancel(name: str, user: str = "", companies=None) -> dict:
 	user = user or str(frappe.session.user)
+	require_requester(user)  # before the lookup: no role, no word on what exists
 	doc = _job(name)
 	_may_touch(doc, user, companies)
 	if doc.status == CANCELLED:
@@ -923,6 +983,7 @@ def cancel(name: str, user: str = "", companies=None) -> dict:
 
 def retry(name: str, user: str = "", companies=None) -> dict:
 	user = user or str(frappe.session.user)
+	require_requester(user)  # before the lookup: no role, no word on what exists
 	doc = _job(name)
 	_may_touch(doc, user, companies)
 	if doc.status == QUEUED:
@@ -988,6 +1049,8 @@ def claim(
 	beat = heartbeat(station, user, printer_state, printer_message, agent_version)
 	if not compat.checked(frappe.db.get_value(STATION, station, "enabled")):
 		return {"job": None, "reason": "the station is disabled"}
+	if is_manual({"duplex": frappe.db.get_value(STATION, station, "duplex")}):
+		return {"job": None, "reason": "this station is printed by hand"}
 	open_job = frappe.db.get_value(JOB, {"print_station": station, "status": PRINTING}, "name")
 	if open_job:
 		# One job at a time: an agent that died between claim and print gets its job back.
@@ -1032,14 +1095,7 @@ def complete(name: str, user: str, success, error: str = "", retryable=False, cu
 	if cups_job:
 		doc.cups_job = str(cups_job)[:140]
 	if success:
-		doc.status = PRINTED
-		doc.printed_at = frappe.utils.now()
-		doc.error = None
-		# v0.209.0 §A4: a two-sided card on a simplex station has its back still to come.
-		if doc.get("pages") == "Front" and doc.sides == "Dual":
-			doc.back_pending = 1
-		if doc.get("pages") == "Back" and doc.get("front_job") and frappe.db.exists(JOB, doc.front_job):
-			frappe.db.set_value(JOB, doc.front_job, "back_pending", 0)
+		_printed(doc)
 	else:
 		doc.error = (str(error or "the print station reported a failure")[:900]) or None
 		again = _truthy(retryable) and int(doc.attempts or 0) < MAX_ATTEMPTS

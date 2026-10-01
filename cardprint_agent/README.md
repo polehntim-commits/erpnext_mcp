@@ -1,4 +1,8 @@
-# Card print agent
+# Card print agent — PARKED
+
+> **Not in use (v0.210.0).** Printing is by hand: a person downloads the card PDF from ERPNext,
+> prints it and marks the Card Print Job. Card Print Stations are `Manual` and hand this agent
+> nothing. Kept for a station that one day wants automatic printing; do not install it.
 
 The Mac half of the card print queue (`docs/design/card_print_queue.md`).
 ERPNext holds the queue; this small service claims the oldest job for its

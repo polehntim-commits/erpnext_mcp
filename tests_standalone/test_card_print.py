@@ -37,13 +37,19 @@ def uid(n: int) -> str:
 
 
 class CardPrintCase(MobileAPITestCase):
-	"""A site with the queue installed, a requester (Ana), and a station user."""
+	"""A site with the queue installed, a requester (Ana), and a station user.
+
+	The seeded station is printed by hand (Amendment 4). The classes about the
+	parked print agent set STATION_MODE to give it one."""
+
+	STATION_MODE = "Manual"
 
 	def setUp(self):
 		super().setUp()
 		self.configure(enabled=1, **ON)
 		self.be("Administrator")
 		card_print.seed()
+		frappe.db.set_value("Card Print Station", card_print.DEFAULT_STATION, "duplex", self.STATION_MODE)
 		set_roles(WORKER, [*guard.roles_held(WORKER), card_print.REQUESTER_ROLE])
 		set_roles(STATION_USER, [card_print.STATION_ROLE])
 		STORE.commit()
@@ -61,6 +67,8 @@ class CardPrintCase(MobileAPITestCase):
 		return card_print.claim(card_print.DEFAULT_STATION, STATION_USER, "Ready", "", "test")
 
 	def printed(self, name):
+		if self.STATION_MODE == "Manual":
+			return card_print.mark(name, WORKER, None, True)
 		return card_print.complete(name, STATION_USER, True, cups_job="Primacy_2-1")
 
 	def pdf_of(self, name):
@@ -84,9 +92,10 @@ class Requesting(CardPrintCase):
 		row = STORE.get_raw("Card Print Job", job["name"])
 		self.assertTrue(job["name"].startswith("CPJ-"))
 		self.assertTrue(row["artwork"].startswith("/private/files/"))
-		# The default station is simplex: a two-sided card is its front, one card-sized page.
-		self.assertEqual((job["sides"], job["pages"]), ("Dual", "Front"))
-		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0)])
+		# The default station is printed by hand: the PDF is the whole card, two landscape pages.
+		self.assertEqual((job["sides"], job["pages"]), ("Dual", "Both"))
+		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0), (85.6, 54.0)])
+		self.assertEqual(answer["station"]["state"], "Manual")
 		self.assertTrue(any("logo" in w for w in answer["warnings"]))
 
 	def test_a_duplex_station_gets_both_sides_as_designed(self):
@@ -192,6 +201,8 @@ class Requesting(CardPrintCase):
 # ── the station ─────────────────────────────────────────────────────────────
 @NEEDS_QR
 class TheStation(CardPrintCase):
+	STATION_MODE = "Simplex"
+
 	def three(self):
 		names = []
 		for index, employee in enumerate((WORKER_EMPLOYEE, "EMP-B", "EMP-C")):
@@ -389,6 +400,8 @@ class ThePhone(CardPrintCase):
 
 @NEEDS_QR
 class TheDeskAndTheAgent(CardPrintCase):
+	STATION_MODE = "Simplex"
+
 	def test_the_agent_claims_and_completes_through_the_whitelisted_methods(self):
 		name = self.ask()["job"]["name"]
 		STORE.commit()
@@ -410,7 +423,7 @@ class TheDeskAndTheAgent(CardPrintCase):
 		doc.status = "Printed"
 		with self.assertRaises(Exception) as caught:
 			doc.save(ignore_permissions=True)
-		self.assertIn("through the queue", str(caught.exception))
+		self.assertIn("through its buttons", str(caught.exception))
 
 
 @NEEDS_QR
@@ -439,7 +452,7 @@ class TheFurniture(CardPrintCase):
 		self.assertIn("printer", tiles.ICONS)
 		self.assertEqual(len(tiles.ICONS), 49)
 		self.assertIn("my_print_jobs", tile_queries.QUERIES)
-		self.assertEqual(tiles.PRINT_QUEUE_TILE["audience"], {"roles": ["Card Print Requester"]})
+		self.assertEqual(tiles.PRINT_QUEUE_TILE["audience"], {"roles": list(card_print.REQUEST_ROLES)})
 
 	@NEEDS_QR
 	def test_the_badge_counts_open_and_failed_jobs(self):
@@ -447,8 +460,7 @@ class TheFurniture(CardPrintCase):
 		self.assertEqual(
 			tile_queries.badge({"query": "my_print_jobs"}, WORKER), {"count": 1, "tone": "attention"}
 		)
-		self.ready()
-		card_print.complete(name, STATION_USER, False, "x")
+		card_print.mark(name, WORKER, None, False, "the ribbon ran out")
 		self.assertEqual(tile_queries.badge({"query": "my_print_jobs"}, WORKER)["tone"], "critical")
 
 	def test_the_buttons_are_seeded_once(self):
@@ -466,7 +478,7 @@ class TheFurniture(CardPrintCase):
 		for doctype, _n, marker, job_type, label, group in card_print_form_action.TARGETS:
 			text = card_print_form_action.source(doctype, marker, job_type, label, group)
 			self.assertIn(card_print_form_action.REQUEST_METHOD, text)
-			self.assertIn(f"{marker}@r2", text)
+			self.assertIn(f"{marker}@r3", text)
 			self.assertNotIn("%(", text)
 		self.assertTrue(callable(desk_api.request_card_print))
 
@@ -474,6 +486,8 @@ class TheFurniture(CardPrintCase):
 # ── v0.209.0: simplex backs, downloads, the preview, the print formats ──────
 @NEEDS_QR
 class ASimplexPrinter(CardPrintCase):
+	STATION_MODE = "Simplex"
+
 	def test_front_then_back_on_request(self):
 		front = self.ask()["job"]["name"]
 		with self.assertRaises(card_print.CardPrintError):
@@ -536,11 +550,9 @@ class ThePreview(CardPrintCase):
 		self.assertIn("Ana Ramos", data["front_svg"])
 		self.assertIn('viewBox="0 0 54.0 85.6"', data["back_svg"])
 		self.assertFalse(data["agent_online"])
-		self.assertEqual(data["station"]["state"], "Offline")
+		self.assertEqual(data["station"]["state"], "Manual")
 		self.assertIsNone(data["already_printed_on"])
 		self.assertEqual(STORE.rows("Card Print Job"), [])
-		self.ready()
-		self.assertTrue(card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)["agent_online"])
 
 
 class TheBlankPageFix(CardPrintCase):
@@ -668,3 +680,191 @@ class WhatTheCardSays(CardPrintCase):
 			front = card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)
 			self.assertNotIn("EMPLOYEE", front["front_svg"])
 			self.assertIn(warning, front["warnings"])
+
+
+# ── v0.210.0, Amendment 4: printed by hand, and asking is gated ─────────────
+@NEEDS_QR
+class PrintedByHand(CardPrintCase):
+	def test_the_station_is_manual_and_nothing_waits_for_an_agent(self):
+		state = card_print.station_state(card_print.stations()[0])
+		self.assertEqual((state["state"], state["duplex"]), ("Manual", "Manual"))
+		self.assertIn("by hand", state["message"])
+		self.ask()
+		self.assertEqual(self.ready(), {"job": None, "reason": "this station is printed by hand"})
+
+	def test_a_queued_card_is_marked_printed_by_a_person(self):
+		job = self.ask()["job"]
+		self.assertTrue(job["can_mark_printed"] and job["can_mark_failed"])
+		done = card_print.mark(job["name"], WORKER, [MAIN], True)
+		self.assertEqual(done["job"]["status"], "Printed")
+		self.assertFalse(done["job"]["back_pending"])
+		row = STORE.get_raw("Card Print Job", job["name"])
+		self.assertEqual(row["claimed_by"], WORKER)
+		self.assertTrue(row["printed_at"])
+		self.assertTrue(card_print.mark(job["name"], WORKER, [MAIN], True)["already"])
+
+	def test_a_download_is_marked_too_and_only_then_counts_as_printed(self):
+		doc, _pdf, _warnings = card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE)
+		self.assertIsNone(card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)["already_printed_on"])
+		card_print.mark(doc.name, WORKER, None, True)
+		self.assertTrue(card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)["already_printed_on"])
+		with self.assertRaises(card_print.CardPrintError) as caught:
+			self.ask(2)
+		self.assertIn(card_print.REPRINT_MARKER, str(caught.exception))
+
+	def test_failed_needs_a_reason_and_can_be_retried_or_marked_printed(self):
+		name = self.ask()["job"]["name"]
+		with self.assertRaises(card_print.CardPrintError) as caught:
+			card_print.mark(name, WORKER, None, False)
+		self.assertIn("what went wrong", str(caught.exception))
+		failed = card_print.mark(name, WORKER, None, False, "ribbon snapped")["job"]
+		self.assertEqual((failed["status"], failed["error"]), ("Failed", "ribbon snapped"))
+		self.assertTrue(failed["can_retry"] and failed["can_mark_printed"])
+		self.assertFalse(failed["can_mark_failed"])
+		with self.assertRaises(card_print.CardPrintError):
+			card_print.mark(name, WORKER, None, False, "again")
+		self.assertEqual(card_print.mark(name, WORKER, None, True)["job"]["status"], "Printed")
+
+	def test_a_cancelled_job_is_not_marked(self):
+		name = self.ask()["job"]["name"]
+		card_print.cancel(name, WORKER)
+		with self.assertRaises(card_print.CardPrintError):
+			card_print.mark(name, WORKER, None, True)
+
+	def test_over_mcp_and_from_the_desk_form(self):
+		self.configure(enabled=1, **ON, allow_mark_card_print_job=1)
+		set_roles("Administrator", [*ROLES.get("Administrator", []), "System Manager"])
+		name = self.ask()["job"]["name"]
+		STORE.commit()
+		self.assertIn(
+			"what went wrong", self.tool_error("mark_card_print_job", {"name": name, "printed": False})
+		)
+		data = self.tool_data("mark_card_print_job", {"name": name})
+		self.assertEqual(data["job"]["status"], "Printed")
+		self.assertTrue(callable(desk_api.mark_card_print_job))
+
+	def test_the_patch_moves_only_stations_no_agent_has_used(self):
+		from erpnext_mcp.patches import card_stations_printed_by_hand as patch
+
+		frappe.db.set_value("Card Print Station", card_print.DEFAULT_STATION, "duplex", "Simplex")
+		self.assertEqual(patch.run(), 1)
+		self.assertEqual(patch.run(), 0)
+		frappe.db.set_value(
+			"Card Print Station",
+			card_print.DEFAULT_STATION,
+			{"duplex": "Duplex", "last_seen_at": frappe.utils.now()},
+		)
+		self.assertEqual(patch.run(), 0)
+
+
+@NEEDS_QR
+class OnlyRequesters(CardPrintCase):
+	"""§D3–D4: the role on every method, the caller's own companies, and no way round
+	either by having asked before."""
+
+	def strip(self):
+		set_roles(WORKER, [r for r in guard.roles_held(WORKER) if r not in card_print.REQUEST_ROLES])
+
+	def test_each_of_the_three_roles_may_ask_and_nothing_else(self):
+		self.strip()
+		self.assertFalse(card_print.can_request(WORKER))
+		for role in card_print.REQUEST_ROLES:
+			set_roles(WORKER, [*guard.roles_held(WORKER), role])
+			self.assertTrue(card_print.can_request(WORKER), role)
+			self.strip()
+
+	def test_without_the_role_every_method_refuses_in_words(self):
+		name = self.ask()["job"]["name"]
+		self.strip()
+		calls = (
+			lambda: self.ask(2),
+			lambda: self.ask(1),  # the same request id: asked before is not a pass
+			lambda: card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE),
+			lambda: card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE),
+			lambda: card_print.list_jobs(WORKER),
+			lambda: card_print.cancel(name, WORKER),
+			lambda: card_print.retry(name, WORKER),
+			lambda: card_print.mark(name, WORKER, None, True),
+			lambda: card_print.request_back(name, WORKER),
+		)
+		for call in calls:
+			with self.assertRaises(card_print.CardPrintError) as caught:
+				call()
+			self.assertEqual(caught.exception.kind, "forbidden")
+			self.assertIn("Card Print Requester", str(caught.exception))
+		self.assertEqual(len(STORE.rows("Card Print Job")), 1)
+		self.assertEqual(STORE.get_raw("Card Print Job", name)["status"], "Queued")
+		self.assertEqual(tile_queries.badge({"query": "my_print_jobs"}, WORKER)["count"], 0)
+
+	def test_the_phone_routes_refuse_too(self):
+		row = card_print._employee(WORKER_EMPLOYEE)[3]
+		card_print._employee_card(row, MAIN)
+		STORE.commit()
+		self.strip()
+		STORE.commit()
+		self.be()
+		for call in (
+			lambda: mobile_api.request_card_print(
+				job_type="Employee ID", reference_name=WORKER_EMPLOYEE, client_request_id=uid(1)
+			),
+			lambda: mobile_api.list_card_print_jobs(),
+			lambda: mobile_api.cancel_card_print_job(name="CPJ-2026-00001"),
+		):
+			with self.assertRaises((frappe.PermissionError, frappe.DoesNotExistError)) as caught:
+				call()
+			self.assertNotIsInstance(caught.exception, frappe.DoesNotExistError)
+			self.assertIn("Card Print Requester", str(caught.exception))
+		self.assertEqual(STORE.rows("Card Print Job"), [])
+
+	def test_another_companys_people_and_assets_read_as_absent(self):
+		for scope in ([MAIN], None):
+
+			def may_read(doctype, name, company, scope=scope):
+				return card_print.in_scope(company, scope)
+
+			calls = (
+				lambda: card_print.request(
+					WORKER, "Employee ID", OUTSIDER_EMPLOYEE, uid(5), may_read=may_read
+				),
+				lambda: card_print.download(WORKER, "Employee ID", OUTSIDER_EMPLOYEE, "", may_read),
+				lambda: card_print.preview(WORKER, "Employee ID", OUTSIDER_EMPLOYEE, may_read),
+			)
+			for call in calls:
+				if scope is None:
+					continue
+				with self.assertRaises(card_print.CardPrintError) as caught:
+					call()
+				self.assertEqual(caught.exception.kind, "not_found")
+		self.assertEqual(STORE.rows("Card Print Job"), [])
+		self.assertTrue(card_print.in_scope(OTHER, None))
+		self.assertFalse(card_print.in_scope("", [MAIN]))
+
+	def test_a_job_in_another_company_cannot_be_listed_or_touched(self):
+		name = self.ask()["job"]["name"]
+		self.assertEqual(card_print.list_jobs(WORKER, [OTHER], mine_only=False)["count"], 0)
+		self.assertEqual(card_print.list_jobs(WORKER, [OTHER], mine_only=True)["count"], 0)
+		self.assertEqual(card_print.list_jobs(WORKER, [MAIN], mine_only=False)["count"], 1)
+		for call in (card_print.cancel, card_print.retry, card_print.request_back):
+			with self.assertRaises(card_print.CardPrintError) as caught:
+				call(name, WORKER, [OTHER])
+			self.assertEqual(caught.exception.kind, "not_found")
+		with self.assertRaises(card_print.CardPrintError):
+			card_print.mark(name, WORKER, [OTHER], True)
+		self.assertEqual(STORE.get_raw("Card Print Job", name)["status"], "Queued")
+
+	def test_requests_are_rate_limited_downloads_included(self):
+		for _ in range(card_print.PER_MINUTE):
+			card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE, "Other: test")
+		# The harness does not stamp `creation` on insert (Frappe does), and its clock
+		# moves on every reading — so the ten are stamped together, as "just now".
+		stamp = frappe.utils.now()
+		for row in STORE.rows("Card Print Job"):
+			frappe.db.set_value("Card Print Job", row["name"], "creation", stamp)
+		for call in (
+			lambda: card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE, "Other: test"),
+			lambda: self.ask(77, reprint_reason="Lost"),
+		):
+			with self.assertRaises(card_print.CardPrintError) as caught:
+				call()
+			self.assertIn("in a minute", str(caught.exception))
+		self.assertEqual(len(STORE.rows("Card Print Job")), card_print.PER_MINUTE)

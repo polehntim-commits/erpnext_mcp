@@ -11901,6 +11901,21 @@ TOOLS = {
 		mutating=True,
 		title="Print the back of a card",
 	),
+	"mark_card_print_job": _tool(
+		card_print_tools.mark_card_print_job,
+		"MUTATING (default OFF; Card Print Requester, Farm Manager or System Manager). v0.210.0. "
+		"Cards are printed by hand: somebody downloads the card PDF and prints it. This closes "
+		"the job — Printed (from Queued, Downloaded or Failed), or Failed with what went wrong "
+		"(from Queued or Downloaded). Records who marked it and when.",
+		{
+			"name": _field(_STRING, "The job, e.g. CPJ-2026-00012."),
+			"printed": _field(_BOOLEAN, "true (default) = it printed; false = it did not."),
+			"error": _field(_STRING, "Required when printed is false: what went wrong."),
+		},
+		required=("name",),
+		mutating=True,
+		title="Mark a card printed or failed",
+	),
 	"cancel_card_print_job": _tool(
 		card_print_tools.cancel_card_print_job,
 		"MUTATING (default OFF). Cancel a print job that is still Queued. The row stays as history.",

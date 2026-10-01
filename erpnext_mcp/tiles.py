@@ -330,7 +330,8 @@ PRINT_QUEUE_TILE = {
 	"icon": "printer",
 	"order": 60,
 	"target": {"kind": "report", "report": "print_queue"},
-	"audience": {"roles": ["Card Print Requester"]},
+	# v0.210.0, Amendment 4 §D3: the same three roles the server lets ask.
+	"audience": {"roles": ["Card Print Requester", "Farm Manager", "System Manager"]},
 	"badge": {"query": "my_print_jobs", "params": {}},
 	"show_if": {},
 	"min_app_version": "0.22.0",

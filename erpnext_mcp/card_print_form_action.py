@@ -23,10 +23,11 @@ import frappe
 
 CLIENT_SCRIPT = "Client Script"
 FORM_VIEW = "Form"
-SCRIPT_REVISION = "r2"
+SCRIPT_REVISION = "r3"
 REQUEST_METHOD = "erpnext_mcp.api.card_print.request_card_print"
 PREVIEW_METHOD = "erpnext_mcp.api.card_print.preview_card"
 DOWNLOAD_METHOD = "erpnext_mcp.api.card_print.download_card_pdf"
+MARK_METHOD = "erpnext_mcp.api.card_print.mark_card_print_job"
 
 #: (doctype, script name, marker, job type, button label, button group)
 TARGETS = (
@@ -53,15 +54,19 @@ TARGETS = (
 PRIOR_REVISIONS: dict = {
 	"47fd72ca4d605dfde779294ff63d064f67bfbdb14494f7e90ca9936bfeec60df": "r1 — v0.208.0, Employee: queued directly, no preview or download",
 	"644854e4961095a08d9ce99e5404085ccc6371f73075aa520082e6fbfd991129": "r1 — v0.208.0, Asset Register: queued directly, no preview or download",
+	"996ece798e468ca678df5d1eb25021f71b32cae87b66cba1327f99e7e19f055c": "r2 — v0.209.0, Employee: preview, send to printer, download",
+	"d3e98d02bc4c7567a2690e6219a3ae719da00a06c23851b06bb0b4bdedc44ccf": "r2 — v0.209.0, Asset Register: preview, send to printer, download",
 }
 
 SCRIPT_TEMPLATE = """// %(stamp)s
-// Added by erpnext_mcp (v0.209.0). Untick `enabled` above to remove the buttons.
+// Added by erpnext_mcp (v0.210.0). Untick `enabled` above to remove the buttons.
 //
 // "%(label)s" opens one dialog: a preview of the card (drawn by the server), then
-// either SEND TO PRINTER (the print queue; the station's Mac prints it) or
 // DOWNLOAD CARD PDF (one card-sized PDF, front and back, to print from Preview
-// with Paper Size CR80, 100%%, no fit). Nothing here uses Frappe's print dialog.
+// with Paper Size CR80, 100%%, no fit) followed by "Did it print?" — which marks
+// the Card Print Job Printed or Failed — or ADD TO PRINT QUEUE, which files the
+// card for whoever is at the printer. Nothing here uses Frappe's print dialog.
+// The server checks the role and the company on every call; these buttons are courtesy.
 
 (function () {
 	function request_id() {
@@ -113,8 +118,10 @@ SCRIPT_TEMPLATE = """// %(stamp)s
 				const station = answer.station || {};
 				let message = answer.already_queued
 					? __("Already in the print queue as {0}.", [answer.job.name])
-					: __("Sent to the print queue as {0}.", [answer.job.name]);
-				if (station.state && station.state !== "Ready") {
+					: __("Added to the print queue as {0}.", [answer.job.name]);
+				if (station.state === "Manual") {
+					message += " " + __("Open it from the Card Print Job list to print it and mark it Printed.");
+				} else if (station.state && station.state !== "Ready") {
 					message += " " + __("The printer is {0} — it will print when it is back.", [station.state]);
 				}
 				if (answer.job.pages === "Front" && answer.job.sides === "Dual") {
@@ -139,15 +146,63 @@ SCRIPT_TEMPLATE = """// %(stamp)s
 				}
 				dialog.hide();
 				window.open(answer.file_url, "_blank");
-				frappe.msgprint({
-					title: __("Card PDF ready ({0})", [answer.job.name]),
-					indicator: "green",
-					message: __(
-						"Print it from Preview: Paper Size <b>CR80 / ISO 7810</b>, Scale <b>100%%</b>, no Scale to Fit, Auto Rotate <b>off</b>. Page 1 is the front and page 2 the back."
-					),
-				});
+				did_it_print(answer.job.name);
 			});
 		});
+	}
+
+	function mark(job, printed, error, done) {
+		frappe.call({
+			method: "%(mark_method)s",
+			args: { name: job, printed: printed ? 1 : 0, error: error || "" },
+		}).then(function (r) {
+			if (r && r.message) {
+				frappe.show_alert(
+					{
+						message: printed ? __("{0} marked Printed.", [job]) : __("{0} marked Failed.", [job]),
+						indicator: printed ? "green" : "red",
+					},
+					7
+				);
+				done();
+			}
+		});
+	}
+
+	function did_it_print(job) {
+		const ask = new frappe.ui.Dialog({
+			title: __("Did it print? ({0})", [job]),
+			fields: [
+				{
+					fieldtype: "HTML",
+					fieldname: "how",
+					options:
+						'<p>' +
+						__(
+							"Print the PDF from Preview: Paper Size <b>CR80 / ISO 7810</b>, Scale <b>100%%</b>, no Scale to Fit, Auto Rotate <b>off</b>. Page 1 is the front; flip the card and print page 2 for the back."
+						) +
+						'</p><p class="text-muted small">' +
+						__("Close this to decide later — the job stays Downloaded in the Card Print Job list.") +
+						"</p>",
+				},
+			],
+			primary_action_label: __("Mark printed"),
+			primary_action: function () {
+				mark(job, true, "", function () { ask.hide(); });
+			},
+			secondary_action_label: __("Mark failed"),
+			secondary_action: function () {
+				frappe.prompt(
+					[{ fieldname: "error", fieldtype: "Small Text", label: __("What went wrong?"), reqd: 1 }],
+					function (values) {
+						mark(job, false, values.error, function () { ask.hide(); });
+					},
+					__("Mark {0} failed", [job]),
+					__("Mark failed")
+				);
+			},
+		});
+		ask.show();
 	}
 
 	function open_dialog(frm) {
@@ -162,8 +217,10 @@ SCRIPT_TEMPLATE = """// %(stamp)s
 			}
 			const station = preview.station;
 			const online = !!preview.agent_online;
-			let line = __("No print station is checking in — download the PDF and print it by hand.");
-			if (station && online) {
+			let line = __("Download the PDF, print it from Preview, then mark the job Printed.");
+			if (station && station.state === "Manual") {
+				line = __("Printed by hand: download the PDF, print it from Preview, then mark it Printed.");
+			} else if (station && online) {
 				line = __("Print station {0}: {1}.", [station.station, station.state]) +
 					(station.message ? " " + frappe.utils.escape_html(station.message) : "");
 			} else if (station) {
@@ -193,7 +250,7 @@ SCRIPT_TEMPLATE = """// %(stamp)s
 				primary_action: function () {
 					(online ? send : download)(frm, preview, dialog);
 				},
-				secondary_action_label: online ? __("Download card PDF") : __("Queue for the printer"),
+				secondary_action_label: online ? __("Download card PDF") : __("Add to print queue"),
 				secondary_action: function () {
 					(online ? download : send)(frm, preview, dialog);
 				},
@@ -207,7 +264,11 @@ SCRIPT_TEMPLATE = """// %(stamp)s
 			if (frm.is_new()) {
 				return;
 			}
-			if (!frappe.user.has_role("Card Print Requester") && !frappe.user.has_role("System Manager")) {
+			if (
+				!frappe.user.has_role("Card Print Requester") &&
+				!frappe.user.has_role("Farm Manager") &&
+				!frappe.user.has_role("System Manager")
+			) {
 				return;
 			}
 			frm.add_custom_button(__("%(label)s"), function () { open_dialog(frm); }, __("%(group)s"));
@@ -234,6 +295,7 @@ def source(doctype: str, marker: str, job_type: str, label: str, group: str) -> 
 		"method": REQUEST_METHOD,
 		"preview_method": PREVIEW_METHOD,
 		"download_method": DOWNLOAD_METHOD,
+		"mark_method": MARK_METHOD,
 		"job_type": job_type,
 		"label": label,
 		"group": group,

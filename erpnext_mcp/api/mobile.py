@@ -12553,7 +12553,8 @@ def request_card_print(
 	allowed = guard.require_scope(user)
 
 	def may_read(doctype, name, company):
-		return not company or company in allowed
+		# Amendment 4 §D4: the caller's own entities, and a record with no company is nobody's.
+		return bool(company) and company in allowed
 
 	return _card_print(
 		card_print.request,
