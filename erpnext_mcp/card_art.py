@@ -92,8 +92,9 @@ def band_lines(label: str) -> list:
 	"""The green band's text, upper-cased, on one line or two.
 
 	"EMPLOYEE" fits one; "OWNER / OPERATOR" breaks after the slash, as approved.
+	No label is no text: this module never decides what somebody is.
 	A label that fits at full size stays on one line."""
-	text = " ".join(str(label or "").upper().split()) or "EMPLOYEE"
+	text = " ".join(str(label or "").upper().split())
 	if text_width_mm(text, "Helvetica-Bold", 7.5) <= 19.5:
 		return [text]
 	if " / " in text:
@@ -111,7 +112,7 @@ def employee_sides(card: dict) -> list:
 	"""[front ops (85.6×54), back ops (54×85.6)] for an employee ID.
 
 	`card`: employee_name, designation, company, badge_id, band (the green
-	bar's label; default EMPLOYEE), qr (matrix), photo (bytes or None), logo
+	bar's label; blank draws the bar with no text), qr (matrix), photo (bytes or None), logo
 	(bytes or None)."""
 	name = card.get("employee_name") or ""
 	company = card.get("company") or ""
@@ -123,7 +124,7 @@ def employee_sides(card: dict) -> list:
 	else:
 		front.append(("rect", 4.9, 22.1, 21.6, 27.0, LIGHT, "#AAAAAA"))
 		front.append(_text(16.0, 32.0, initials(name), "Helvetica-Bold", 26, MID, "center", 20))
-	band = band_lines(card.get("band") or "EMPLOYEE")
+	band = band_lines(card.get("band") or "")
 	if len(band) == 2:
 		front.append(("rect", 4.9, 5.5, 21.6, 9.3, GREEN, None))
 		front.append(_text(16.0, 11.9, band[0], "Helvetica-Bold", 7.5, "#FFFFFF", "center", 20.5, 5))

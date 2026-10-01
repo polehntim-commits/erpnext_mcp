@@ -45,6 +45,7 @@
  },
  "warnings": [
   "Example Trading Co's logo is not set, so the card prints without one (Company › Badge Logo).",
+  "The colour bar is blank: Ana Ramos has no Employment Type. Set Badge Category on the Employee, or on the Employment Type.",
   "Ana Ramos has no photo on their Employee record; the card shows initials."
  ]
 }

@@ -377,16 +377,130 @@ def company_logo(company: str) -> bytes | None:
 	return None
 
 
-def band_label(employee: str) -> str:
-	"""The green band on an ID card: the Employee's employment type, else EMPLOYEE."""
-	try:
-		if compat.has_field("Employee", "employment_type"):
-			return (
-				str(frappe.db.get_value("Employee", employee, "employment_type") or "").strip() or "Employee"
-			)
-	except Exception:
-		pass
-	return "Employee"
+#: Amendment 2 §B1. What the colour bar can say. The bar prints the option upper-cased.
+BADGE_CATEGORIES = ("Employee", "Management", "Owner / Operator", "Contractor", "Volunteer", "Visitor")
+EMPLOYMENT_TYPE = "Employment Type"
+
+#: §B3. Read ONCE, at migrate, to give each Employment Type a first category. At
+#: print time the Employment Type record is the only authority.
+_FIRST_CATEGORIES = (
+	(("operator", "owner"), "Owner / Operator"),
+	(("contract", "1099"), "Contractor"),
+	(("volunteer",), "Volunteer"),
+	(("visitor",), "Visitor"),
+	(
+		(
+			"full",
+			"part",
+			"season",
+			"tempor",
+			"hourly",
+			"salar",
+			"piece",
+			"commission",
+			"intern",
+			"apprentice",
+			"probation",
+			"h-2a",
+		),
+		"Employee",
+	),
+)
+
+
+def first_category(employment_type: str) -> str:
+	text = str(employment_type or "").lower()
+	for words, category in _FIRST_CATEGORIES:
+		if any(word in text for word in words):
+			return category
+	return ""
+
+
+def install_badge_fields() -> list:
+	"""Employee.badge_title, Employee.badge_category, Employment Type.badge_category,
+	and each Employment Type's first category. Idempotent; never overwrites a value."""
+	options = "\n" + "\n".join(BADGE_CATEGORIES)
+	specs = (
+		(
+			"Employee",
+			"badge_title",
+			"Badge Title",
+			"Data",
+			"",
+			"designation",
+			"Printed under the name on the ID card. Leave blank to print the Designation.",
+		),
+		(
+			"Employee",
+			"badge_category",
+			"Badge Category",
+			"Select",
+			options,
+			"badge_title",
+			"The colour bar on the ID card. Leave blank to use the Employment Type's category.",
+		),
+		(
+			EMPLOYMENT_TYPE,
+			"badge_category",
+			"Badge Category",
+			"Select",
+			options,
+			"employee_type_name",
+			"The ID card's colour bar for people of this type, unless their Employee record says otherwise. "
+			"Employee is for people on the payroll.",
+		),
+	)
+	made = []
+	for doctype, fieldname, label, fieldtype, choices, after, description in specs:
+		if not compat.doctype_exists(doctype) or compat.has_field(doctype, fieldname):
+			continue
+		doc = frappe.get_doc(
+			{
+				"doctype": "Custom Field",
+				"dt": doctype,
+				"fieldname": fieldname,
+				"label": label,
+				"fieldtype": fieldtype,
+				"options": choices,
+				"insert_after": after if compat.has_field(doctype, after) else "",
+				"description": description,
+				"module": "ERPNext MCP",
+			}
+		)
+		doc.flags.ignore_permissions = True
+		doc.insert(ignore_permissions=True)
+		made.append(f"{doctype}.{fieldname}")
+	if compat.doctype_exists(EMPLOYMENT_TYPE) and compat.has_field(EMPLOYMENT_TYPE, "badge_category"):
+		for row in frappe.db.get_all(EMPLOYMENT_TYPE, fields=["name", "badge_category"], limit=0):
+			category = "" if row.get("badge_category") else first_category(row["name"])
+			if category:
+				frappe.db.set_value(EMPLOYMENT_TYPE, row["name"], "badge_category", category)
+				made.append(f"{row['name']} → {category}")
+	return made
+
+
+def badge_words(row: dict) -> tuple:
+	"""(title, category, warning) for an ID card. §B2: the Employee's own fields, then
+	the Designation and the Employment Type's category. Never a guessed "Employee"."""
+	name = row["name"]
+	own = {}
+	fields = compat.existing_fields("Employee", ("badge_title", "badge_category", "employment_type"))
+	if fields:
+		own = dict(frappe.db.get_value("Employee", name, fields, as_dict=True) or {})
+	title = str(own.get("badge_title") or "").strip() or str(row.get("designation") or "").strip()
+	category = str(own.get("badge_category") or "").strip()
+	kind = str(own.get("employment_type") or "").strip()
+	if not category and kind and compat.has_field(EMPLOYMENT_TYPE, "badge_category"):
+		category = str(frappe.db.get_value(EMPLOYMENT_TYPE, kind, "badge_category") or "").strip()
+	if category:
+		return title, category, ""
+	who = row.get("employee_name") or name
+	where = f"Employment Type {kind!r} has no Badge Category" if kind else f"{who} has no Employment Type"
+	return (
+		title,
+		"",
+		f"The colour bar is blank: {where}. Set Badge Category on the Employee, or on the Employment Type.",
+	)
 
 
 def _matrix(text: str, error: str) -> list:
@@ -406,6 +520,9 @@ def card_sides(job_type: str, row: dict, company: str, allow_issue: bool = True)
 		badge_id = str(card.get("badge_id") or "")
 		matrix = _matrix(badge_id, "H")
 		photo = file_bytes(row.get("image"))
+		title, category, unresolved = badge_words(row)
+		if unresolved:
+			warnings.append(unresolved)
 		if not photo:
 			warnings.append(
 				f"{card.get('employee_name')} has no photo on their Employee record; the card shows initials."
@@ -413,10 +530,10 @@ def card_sides(job_type: str, row: dict, company: str, allow_issue: bool = True)
 		sides = card_art.employee_sides(
 			{
 				"employee_name": card.get("employee_name"),
-				"designation": card.get("designation"),
+				"designation": title,
 				"company": company,
 				"badge_id": badge_id,
-				"band": band_label(row["name"]),
+				"band": category,
 				"qr": matrix,
 				"photo": photo,
 				"logo": logo,
@@ -480,6 +597,7 @@ def preview(user: str, job_type: str, reference_name: str, may_read=None) -> dic
 	if may_read is not None and not may_read(JOB_TYPES[job_type], name, company):
 		raise CardPrintError(f"no {JOB_TYPES[job_type]} called {reference_name!r}.", "not_found")
 	sides, warnings = card_sides(job_type, row, company)
+	words = badge_words(row) if job_type == "Employee ID" else ("", "", "")
 	try:
 		station = station_for(job_type, company)
 		state = station_state(station)
@@ -499,6 +617,8 @@ def preview(user: str, job_type: str, reference_name: str, may_read=None) -> dic
 		"company": company,
 		"front_svg": card_art.to_svg(sides[0], css_width_mm=85.6),
 		"back_svg": card_art.to_svg(sides[1], css_width_mm=54.0),
+		"badge_title": words[0],
+		"badge_category": words[1],
 		"warnings": warnings,
 		"station": state,
 		"agent_online": bool(state and state["state"] != "Offline"),

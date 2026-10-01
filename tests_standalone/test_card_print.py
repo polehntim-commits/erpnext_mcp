@@ -547,3 +547,81 @@ class TheBlankPageFix(CardPrintCase):
 		self.assertEqual(
 			(fields["doc_type"], fields["margin_top"], fields["custom_format"]), ("Employee", 0, 1)
 		)
+
+
+# ── v0.209.1, Amendment 2: what the ID card says about a person ─────────────
+@NEEDS_QR
+class WhatTheCardSays(CardPrintCase):
+	"""The badge's title and colour bar are the card's own fields, so the payroll
+	Designation stays what payroll needs it to be."""
+
+	def setUp(self):
+		super().setUp()
+		for name in ("Operator", "Full-time", "Seasonal", "Contract", "Volunteer", "Visitor", "Board"):
+			if not frappe.db.exists("Employment Type", name):
+				frappe.get_doc({"doctype": "Employment Type", "employee_type_name": name}).insert()
+		self.made = card_print.install_badge_fields()
+		STORE.commit()
+
+	def words(self, **fields):
+		frappe.db.set_value("Employee", WORKER_EMPLOYEE, fields)
+		row = card_print._employee(WORKER_EMPLOYEE)[3]
+		return card_print.badge_words(row)
+
+	def test_the_fields_and_the_first_mapping_are_installed_once(self):
+		for doctype, field in (
+			("Employee", "badge_title"),
+			("Employee", "badge_category"),
+			("Employment Type", "badge_category"),
+		):
+			self.assertIn(f"{doctype}.{field}", self.made)
+		got = {
+			name: frappe.db.get_value("Employment Type", name, "badge_category") or ""
+			for name in ("Operator", "Full-time", "Seasonal", "Contract", "Volunteer", "Visitor", "Board")
+		}
+		self.assertEqual(
+			got,
+			{
+				"Operator": "Owner / Operator",
+				"Full-time": "Employee",
+				"Seasonal": "Employee",
+				"Contract": "Contractor",
+				"Volunteer": "Volunteer",
+				"Visitor": "Visitor",
+				"Board": "",
+			},
+		)
+		self.assertEqual(card_print.install_badge_fields(), [])
+
+	def test_the_mapping_is_data_and_a_migrate_does_not_put_it_back(self):
+		frappe.db.set_value("Employment Type", "Seasonal", "badge_category", "Contractor")
+		self.assertEqual(card_print.install_badge_fields(), [])
+		self.assertEqual(self.words(employment_type="Seasonal")[1], "Contractor")
+
+	def test_an_owner_operator_who_manages(self):
+		"""Tim's card: Designation stays Operator; the card says Manager, OWNER / OPERATOR."""
+		designation = frappe.db.get_value("Employee", WORKER_EMPLOYEE, "designation")
+		title, category, warning = self.words(employment_type="Operator", badge_title="Manager")
+		self.assertEqual((title, category, warning), ("Manager", "Owner / Operator", ""))
+		self.assertEqual(frappe.db.get_value("Employee", WORKER_EMPLOYEE, "designation"), designation)
+		front = card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)
+		self.assertEqual((front["badge_title"], front["badge_category"]), ("Manager", "Owner / Operator"))
+		for text in ("Manager", "OWNER /", "OPERATOR"):
+			self.assertIn(text, front["front_svg"])
+		self.assertNotIn("EMPLOYEE", front["front_svg"])
+
+	def test_the_title_is_the_designation_until_the_card_says_otherwise(self):
+		frappe.db.set_value("Employee", WORKER_EMPLOYEE, "designation", "Picker")
+		self.assertEqual(self.words(employment_type="Seasonal")[:2], ("Picker", "Employee"))
+
+	def test_the_employees_own_category_wins(self):
+		self.assertEqual(self.words(employment_type="Operator", badge_category="Management")[1], "Management")
+
+	def test_nobody_is_called_an_employee_by_default(self):
+		for kind in ("", "Board"):
+			_title, category, warning = self.words(employment_type=kind, badge_category="")
+			self.assertEqual(category, "")
+			self.assertIn("Badge Category", warning)
+			front = card_print.preview(WORKER, "Employee ID", WORKER_EMPLOYEE)
+			self.assertNotIn("EMPLOYEE", front["front_svg"])
+			self.assertIn(warning, front["warnings"])

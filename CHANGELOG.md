@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.209.1 — 2026-10-01 — what the ID card says about a person
+
+Contract `docs/design/card_print_queue.md` Amendment 2. No tool or route changes.
+
+- **The card has its own title and category**, so the payroll Designation is left alone. New fields on
+  Employee: **Badge Title** (blank = the Designation) and **Badge Category** (blank = the Employment
+  Type's). Categories: Employee, Management, Owner / Operator, Contractor, Volunteer, Visitor.
+- **The mapping is data:** each **Employment Type** has a Badge Category. A migrate fills the blank ones
+  once (Operator → Owner / Operator; Full-time, Part-time, Seasonal and the other payroll types →
+  Employee; Contract → Contractor; Volunteer; Visitor) and never overwrites one. Management is a manual
+  choice on the Employee.
+- **Nobody is called an employee by default.** With no category on the Employee and none on their
+  Employment Type, the bar prints without text and the dialog says where to set it. This replaces
+  0.209.0's use of the Employment Type's name as the bar text.
+- `preview_card` returns `badge_title` and `badge_category`.
+
 ## 0.209.0 — 2026-10-01 — card artwork as approved, single-sided printers, and printing from Desk
 
 **969 tools** (476 read, 493 write): `download_card_pdf`, `request_card_back` (write, default off). **One

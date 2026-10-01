@@ -103,7 +103,8 @@ class FittingAndFallbacks(unittest.TestCase):
 		self.assertEqual(card_art.fit("Ana", "Helvetica", 10, 30), ("Ana", 10))
 
 	def test_the_band_is_one_line_or_two(self):
-		self.assertEqual(card_art.band_lines(""), ["EMPLOYEE"])
+		self.assertEqual(card_art.band_lines(""), [""])
+		self.assertEqual(card_art.band_lines("Employee"), ["EMPLOYEE"])
 		self.assertEqual(card_art.band_lines("Owner / Operator"), ["OWNER /", "OPERATOR"])
 		self.assertEqual(card_art.band_lines("Seasonal"), ["SEASONAL"])
 		self.assertEqual(card_art.band_lines("Field crew leader"), ["FIELD CREW", "LEADER"])

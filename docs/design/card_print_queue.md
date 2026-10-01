@@ -702,6 +702,7 @@ the only authority (the code has no mapping at print time).
 ### B4. Surfaces
 
 `preview_card` gains `badge_title` and `badge_category` (the resolved values, `""`
-when unresolved). No route, tool, or job key changes; the phone fixtures are
-unchanged. Tim's card: `badge_title` = Manager; category from Employment Type
+when unresolved). No route, tool, or job key changes. The phone fixtures keep their
+shape; their `warnings` list gains the blank-bar sentence, because the fixture's
+worker has no Employment Type. Tim's card: `badge_title` = Manager; category from Employment Type
 Operator → `OWNER / OPERATOR`.

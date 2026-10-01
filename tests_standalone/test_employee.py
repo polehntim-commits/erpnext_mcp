@@ -1267,12 +1267,27 @@ class TheEmploymentTypesTheInstallerSeeds(EmployeeTestCase):
 
 	def test_a_type_the_site_already_has_is_left_exactly_as_it_was(self):
 		"""Seasonal Worker is on this site before the seeder runs. An operator who
-		edited one keeps their row — the seeder adds options and rewrites none."""
+		edited one keeps their row — the seeder adds options and rewrites none.
+
+		v0.209.1 adds one column, `badge_category`, and fills it where it is BLANK
+		(a payroll type is "Employee" on an ID card). Nothing that was there
+		changes, and a category an operator chose survives the next migrate."""
 		from erpnext_mcp import install
 
 		before = dict(STORE.get_raw("Employment Type", "Seasonal Worker"))
 		install.after_migrate()
-		self.assertEqual(STORE.get_raw("Employment Type", "Seasonal Worker"), before)
+		after = dict(STORE.get_raw("Employment Type", "Seasonal Worker"))
+		self.assertEqual(after.pop("badge_category", None), "Employee")
+		before.pop("badge_category", None)
+		for volatile in ("modified", "modified_by"):
+			after.pop(volatile, None)
+			before.pop(volatile, None)
+		self.assertEqual(after, before)
+		frappe.db.set_value("Employment Type", "Seasonal Worker", "badge_category", "Contractor")
+		install.after_migrate()
+		self.assertEqual(
+			frappe.db.get_value("Employment Type", "Seasonal Worker", "badge_category"), "Contractor"
+		)
 
 	def test_an_employment_type_nobody_seeded_is_still_refused(self):
 		"""The seed adds two options. It does not turn the Link check off."""

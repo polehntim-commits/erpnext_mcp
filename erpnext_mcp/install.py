@@ -259,6 +259,8 @@ def _card_print() -> None:
 				doc.insert(ignore_if_duplicate=True)
 				made.append(f"role {role}")
 		made += [f"station {name}" for name in card_print.seed()]
+		# v0.209.1, Amendment 2: what the ID card says about a person.
+		made += card_print.install_badge_fields()
 		tile = phone_config.seed(
 			"Tile", "print_queue", tiles.PRINT_QUEUE_TILE, "Built-in tile, seeded at install (v0.208.0)."
 		)
