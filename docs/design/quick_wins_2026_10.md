@@ -134,8 +134,8 @@ the block.
 
 The server's preview mirrors rule 1 in `extractors` (ordered: figure-then-TOTAL,
 TOTAL-then-figure, card charge), so `preview_extraction_config` shows the amount the phone
-will pick. `Receipt@2` also tells the model the trading name may be given by a web address
-printed on the slip.
+will pick. The model's instructions and fields are unchanged from Receipt@1: a merchant
+named by the slip's web address is not offered to the model to rename.
 
 ### 4.3 Shipping and staging
 
