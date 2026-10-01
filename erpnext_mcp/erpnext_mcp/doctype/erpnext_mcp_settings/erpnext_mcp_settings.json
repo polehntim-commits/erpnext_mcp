@@ -380,6 +380,8 @@
   "allow_add_session_attendee",
   "allow_sign_session_attendance",
   "allow_complete_training_session",
+  "allow_group_training_sessions",
+  "allow_add_training_session_day",
   "allow_render_training_sign_in_sheet",
   "i9_section",
   "allow_get_i9_settings",
@@ -3681,6 +3683,20 @@
    "fieldname": "allow_complete_training_session",
    "fieldtype": "Check",
    "label": "Complete Training Session"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Makes two or more existing training sessions the days of one new multi-day course.",
+   "fieldname": "allow_group_training_sessions",
+   "fieldtype": "Check",
+   "label": "Group Training Sessions"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Adds a day to a multi-day training course, or turns a single session into a course by giving it a second day.",
+   "fieldname": "allow_add_training_session_day",
+   "fieldtype": "Check",
+   "label": "Add Training Session Day"
   },
   {
    "default": "0",

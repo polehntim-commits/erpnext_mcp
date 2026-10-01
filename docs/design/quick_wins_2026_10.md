@@ -219,6 +219,11 @@ and no days is a course of one, and behaves exactly as before. No data is rewrit
 - **`add_training_session_day(session, session_date, start_time?, end_time?, location?,
   required?)`** — new MCP tool (write, default off, shift roles): add a day to a course (or to
   the course of the day named; a standalone session becomes day 1 of a new course).
+- A Foreman's completion now files its records. Until this, `complete_training_session`
+  passed its own gate (the shift roles) and then every record was refused by
+  `record_training`'s HR-only gate, leaving the session open with nothing filed. The
+  completion now files on its own authority; a direct `record_training` is as HR-only as
+  before.
 - `complete_training_session`:
   - on a **day**: closes the day and files **no** records. Incomplete rows are judged as
     before. When every required day of the course is Completed, the course completes itself.
@@ -231,8 +236,9 @@ and no days is a course of one, and behaves exactly as before. No data is rewrit
   `end_date`, `is_course`, and `days: [{session, day_number, session_date, start_time,
   end_time, location, status, required, attended?}]` (empty for a single-day session).
   `attended` is the caller's own row, where the caller is on the day.
-  `list_training_sessions` lists courses and single sessions; days come inside their course
-  (`include_days: true` lists them as rows too). The task payload's `training` key gains the
+  `list_training_sessions` takes `view`: `courses` (the MCP default — one row per course, its
+  days inside), `days` (one row per day and per single session, no course rows — the mobile
+  route's default, and what an app older than courses can already draw) or `all`. The task payload's `training` key gains the
   same keys.
 - **`get_training_cards()`** — new mobile route, any enrolled caller. The caller's own classes
   that are today or within `training_card_days_before`: `{cards: [{session, course,
@@ -241,12 +247,14 @@ and no days is a course of one, and behaves exactly as before. No data is rewrit
   check_in_note, papers: [{doctype, docname}], task?}], evaluated_at}`. `title` and
   `subtitle` are rendered on the server from config (M4).
 - **`check_in_training_day(session, latitude?, longitude?, accuracy_meters?,
-  signature_base64?, client_request_id)`** — new mobile route, any enrolled caller, and only
+  client_request_id)`** — new mobile route, any enrolled caller, and only
   for **the caller's own row** on a day they are registered for. Open from
   `training_checkin_opens_minutes_before` the start until `…closes_minutes_after` the end (all
-  day when the session has no times). Sets `attended`, `scanned_at`, `scan_source = Self`, the
-  fix, and the signature when one is sent. Idempotent: a second call answers `already: true`.
-  A supervisor's badge scan remains the other way in.
+  day when the session has no times). Sets `attended`, `scanned_at`, `scan_source = Self` and
+  the fix. Idempotent: a second call answers `already: true`. A self check-in identifies the
+  person as a badge scan does (it arrives on their own enrolled phone); the **signature** is
+  still taken by whoever runs the class, at the end. A supervisor's badge scan remains the
+  other way in.
 
 ## M3. The class's papers, for the people in the class
 
@@ -339,9 +347,9 @@ the refusal cannot disagree.
 when the task is already held by the worker named. Its certification refusal is unchanged and
 has no override.
 
-A task has one holder, so choosing several workers hands the task to the first and raises a
-copy for each of the others (`copies: [task…]`) through the existing split used for crew work.
-*Dropped if no such split exists — then the sheet is single-select and says why.*
+A task has one holder and this app has no way to split one into copies, so the sheet
+chooses **one** worker. ("Worker(s)" in the request: clocking in is many at once; a task
+goes to one person, and a second person gets their own task from the same template.)
 
 ## W3. Tiles
 

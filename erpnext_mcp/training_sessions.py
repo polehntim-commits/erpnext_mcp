@@ -276,6 +276,7 @@ def minutes_between(start, end) -> int | None:
 #: Every column of the Training Type this app reads. One list, so a field added
 #: to the doctype and not to this tuple is a field nothing surfaces.
 TYPE_FIELDS = (
+	"renews_certification",
 	"name",
 	"training_type_name",
 	"active",
@@ -391,6 +392,11 @@ FIELDS = (
 	"generated_pdf_on",
 	"source_alerts",
 	"notes",
+	# v0.212.0, multi-day courses (quick_wins_2026_10.md, Amendment 1).
+	"parent_session",
+	"day_number",
+	"required_day",
+	"end_date",
 )
 
 #: Every column of an attendee row this app reads.
@@ -418,6 +424,7 @@ ATTENDEE_FIELDS = (
 	"training_record",
 	"signing_evidence",
 	"notes",
+	"reminded_on",
 )
 
 
@@ -577,7 +584,13 @@ def describe_attendee(row: dict) -> dict:
 	docstring: four callers need the same answer, and the one that writes records
 	must not be able to disagree with the one that reported what was outstanding.
 	"""
-	scanned = bool(str(row.get("badge_scan") or "").strip())
+	# v0.212.0. A SELF CHECK-IN IDENTIFIES THE PERSON TOO: it arrives on their own
+	# enrolled phone, which is a stronger proof than a name somebody typed and
+	# the same kind as a badge a machine read. `scan_source = Self` with a time is
+	# therefore a scan, though `badge_scan` itself stays empty — no card was read.
+	scanned = bool(str(row.get("badge_scan") or "").strip()) or (
+		str(row.get("scan_source") or "") == "Self" and bool(str(row.get("scanned_at") or "").strip())
+	)
 	signed = bool(str(row.get("signature") or "").strip())
 	recorded = str(row.get("training_record") or "").strip()
 	attended = compat.checked(row.get("attended"))
@@ -685,7 +698,16 @@ def describe(row: dict, attendees: list | None = None) -> dict:
 		"notes": row.get("notes") or None,
 		"attendee_rows": described_attendees,
 		"attendance": attendance_summary(described_attendees),
+		**_course_fields(row),
 	}
+
+
+def _course_fields(row: dict) -> dict:
+	"""parent_session, day_number, day_count, days… — see `training_courses`. Imported
+	late: that module builds on this one."""
+	from . import training_courses
+
+	return training_courses.course_fields(row)
 
 
 def completion_blockers(described: dict) -> list:

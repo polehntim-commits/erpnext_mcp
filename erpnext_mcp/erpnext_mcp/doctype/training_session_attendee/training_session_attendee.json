@@ -13,6 +13,7 @@
   "identity_col",
   "badge_scan",
   "scanned_at",
+  "reminded_on",
   "position_section",
   "scan_latitude",
   "scan_longitude",
@@ -76,6 +77,13 @@
    "read_only": 1
   },
   {
+   "description": "v0.212.0. When the evening-before reminder was pushed to this person for this day, so it goes once.",
+   "fieldname": "reminded_on",
+   "fieldtype": "Datetime",
+   "label": "Reminded On",
+   "read_only": 1
+  },
+  {
    "fieldname": "position_section",
    "fieldtype": "Section Break",
    "label": "Where the scan happened"
@@ -119,7 +127,7 @@
    "fieldname": "scan_source",
    "fieldtype": "Select",
    "label": "Source",
-   "options": "iOS\nManual"
+   "options": "iOS\nManual\nSelf"
   },
   {
    "fieldname": "signature_section",

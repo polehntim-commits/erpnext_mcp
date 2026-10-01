@@ -38,7 +38,7 @@ from .test_alerts import ALL_ON, TODAY, AlertTestCase, days_from_today
 #: because it is the claim these tests exist to make: every rule this app ships
 #: became a record, one for one, and a release that drops one should fail here
 #: loudly.
-SWEPT_RULES = 31
+SWEPT_RULES = 32
 
 #: v0.80.0. The rules that are GATES — consulted at the moment of a transaction
 #: rather than swept. Derived from `enforcement.CONTROL_POINTS` rather than
@@ -446,6 +446,12 @@ class TheThirteenMigrateInThreeShapes(RuleEngineTestCase):
 				# holds until the shift closes.
 				"minor_hours_approaching",
 				"supervisor_review_lapsed",
+				# v0.212.0, the eighth. One alert per ATTENDEE per course: the
+				# condition joins a child row (the registration) to the dates and
+				# statuses of the course's day sessions and to that person's rows
+				# on each — and then looks for a make-up in sessions outside the
+				# course. No declarative primitive joins a child to its siblings.
+				"training_day_missed",
 			],
 		)
 

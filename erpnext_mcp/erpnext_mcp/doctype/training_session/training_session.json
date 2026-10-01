@@ -14,7 +14,13 @@
   "identity_col",
   "company",
   "session_date",
+  "end_date",
   "duration_minutes",
+  "course_section",
+  "parent_session",
+  "day_number",
+  "course_col",
+  "required_day",
   "schedule_section",
   "start_time",
   "end_time",
@@ -100,6 +106,46 @@
    "label": "Session Date",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "description": "v0.212.0. On a multi-day course: its last day. Kept by the server from the days that point at this session; empty on a single-day session.",
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "Last Day",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "course_section",
+   "fieldtype": "Section Break",
+   "label": "Multi-day Course"
+  },
+  {
+   "description": "v0.212.0. Set on ONE DAY of a multi-day course: the course it belongs to. A day is a Training Session in its own right — its own date, times, place, attendance and sign-in sheet. The course holds the registration and gives the credit, once every required day is attended.",
+   "fieldname": "parent_session",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Course",
+   "options": "Training Session",
+   "search_index": 1
+  },
+  {
+   "description": "Day 1, Day 2… by date within the course. Kept in order by the server.",
+   "fieldname": "day_number",
+   "fieldtype": "Int",
+   "label": "Day Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "course_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Whether credit for the course needs this day. Untick for an optional review day.",
+   "fieldname": "required_day",
+   "fieldtype": "Check",
+   "label": "Required Day"
   },
   {
    "description": "How long it ran, in minutes. Defaulted from the Training Type's own duration when the session is created and overridable, because the curriculum says what was planned and the session says what happened. Oregon's heat rule and the WPS handler curriculum are both read against the time actually spent, so an honest short number is worth more than a copied ideal one.",

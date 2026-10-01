@@ -132,11 +132,22 @@ def _resolve_record(args: dict) -> dict:
 
 
 # ── 1. record_training ──────────────────────────────────────────────────────
-def record_training(args: dict) -> ToolResult:
-	"""File one training event, tagged with every audit it answers."""
+def record_training(args: dict, *, authorized_actor: str = "") -> ToolResult:
+	"""File one training event, tagged with every audit it answers.
+
+	`authorized_actor` IS FOR ONE CALLER IN THIS REPO AND IS NOT ON ANY SCHEMA.
+	`complete_training_session` has already proved its caller may run training
+	(`require_shift_role` — HR, Farm Manager, Foreman, Crew Leader) and files each
+	attendee's record through here. Until v0.212.0 this function then asked the
+	HR question again, so a Foreman's completion "succeeded" with every record
+	refused and the session left open — the whole point of handing the tailgate
+	session to the supervisor, undone one layer down. The MCP dispatcher passes
+	`args` alone, so a tool call cannot reach this parameter: a direct
+	`record_training` is exactly as HR-only as it was.
+	"""
 	_require()
 	compat.require_doctype("Employee", "It comes with the Frappe HR (hrms) app.")
-	actor = employee_tool.require_hr_role()
+	actor = authorized_actor or employee_tool.require_hr_role()
 
 	person = employee_tool.resolve_employee(as_str(args, "employee", required=True))
 	row = frappe.db.get_value("Employee", person, ["employee_name", "company", "status"], as_dict=True) or {}

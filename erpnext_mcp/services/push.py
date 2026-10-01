@@ -143,6 +143,8 @@ CATEGORY_TEST = "FARM_TEST"
 CATEGORY_TASK = "FARM_TASK"
 CATEGORY_COMPLIANCE = "FARM_COMPLIANCE"
 CATEGORY_HEAT = "FARM_HEAT"
+#: v0.212.0. A class tomorrow, to the people registered on it.
+CATEGORY_TRAINING = "FARM_TRAINING"
 
 #: How much prose survives into a notification body. An APNs payload is capped at
 #: 4KB and a `Compliance Alert.alert_message` has no such cap — the rules compose

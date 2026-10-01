@@ -88,7 +88,7 @@ from __future__ import annotations
 
 import frappe
 
-from .. import compat, geo, training, training_sessions, training_sheet_pdf
+from .. import compat, geo, training, training_courses, training_sessions, training_sheet_pdf
 from ..args import as_bool, as_choice, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -784,11 +784,24 @@ def create_training_session(args: dict) -> ToolResult:
 				"at once. Nothing was created."
 			)
 
+	# v0.212.0. `days` makes this a COURSE: the document created here holds the
+	# registration and gives the credit, and each day is a session of its own.
+	try:
+		day_list = training_courses.day_specs(args.get("days"))
+	except ValueError as exc:
+		raise ToolError(f"{exc} Nothing was created.") from None
+	if len(day_list) == 1:
+		# One day is a session, not a course: its facts are simply this call's.
+		args = {**args, **{k: v for k, v in day_list[0].items() if v and k != "required"}}
+		day_list = []
+
 	doc = frappe.new_doc(DOCTYPE)
 	doc.training_type = curriculum
 	doc.company = company
 	doc.status = status
-	doc.session_date = as_date(args, "session_date") or frappe.utils.today()
+	doc.session_date = (
+		day_list[0]["session_date"] if day_list else as_date(args, "session_date") or frappe.utils.today()
+	)
 	doc.start_time = as_str(args, "start_time")
 	doc.end_time = as_str(args, "end_time")
 	doc.location = as_str(args, "location")
@@ -849,6 +862,11 @@ def create_training_session(args: dict) -> ToolResult:
 
 	doc.flags.ignore_permissions = True
 	doc.insert(ignore_permissions=True)
+	if day_list:
+		for spec in day_list:
+			training_courses.spawn_day(doc, spec)
+		training_courses.renumber(doc.name)
+		doc = frappe.get_doc(DOCTYPE, doc.name)
 
 	described = _described(dict(doc.as_dict()))
 	curriculum_row = training_sessions.type_row(curriculum)
@@ -949,14 +967,58 @@ def add_session_attendee(args: dict) -> ToolResult:
 			"or pass only one of the two. Nothing was changed."
 		)
 
+	# v0.212.0. ON A COURSE this is a REGISTRATION: the person goes on the course
+	# and on each open day, marked not-yet-attended. Attendance is taken on the day.
+	if training_courses.is_course(row["name"]):
+		if _attendee_index(frappe.get_doc(DOCTYPE, row["name"]), person) >= 0:
+			raise ToolError(f"{person} is already registered on {row['name']}. Nothing was changed.")
+		days_added = training_courses.register(row["name"], person)
+		described = _described(dict(frappe.get_doc(DOCTYPE, row["name"]).as_dict()))
+		return ToolResult(
+			data={
+				"session": row["name"],
+				"actor": actor,
+				"registered": True,
+				"attendee": next(
+					(item for item in described["attendee_rows"] if item["employee"] == person), {}
+				),
+				"days_added": days_added,
+				"days": described["days"],
+				"badge_holder": badge_card.get("employee_name") if badge_card else None,
+				"next_step": (
+					"Attendance is taken on each day: add_session_attendee on the DAY session with "
+					"the badge scanned at the door, or the attendee checks in on their phone."
+				),
+			},
+			summary=f"registered {person} on {row['name']} ({len(days_added)} day(s))",
+			docstatus_delta="0 → 0 (updated)",
+		)
+
 	doc = frappe.get_doc(DOCTYPE, row["name"])
-	if len(doc.get("attendees") or []) >= ATTENDEE_CAP:
+	existing_index = _attendee_index(doc, person)
+	# A REGISTERED PERSON ARRIVING ON THEIR DAY is the ordinary case on a course:
+	# their row is already here with attended = 0, and the scan at the door is
+	# what turns it into attendance. Not a duplicate.
+	reuse = -1
+	if row.get("parent_session"):
+		if existing_index < 0:
+			# A walk-in on one day joins the course's registration too.
+			training_courses.register(str(row["parent_session"]), person)
+			doc = frappe.get_doc(DOCTYPE, row["name"])
+			existing_index = _attendee_index(doc, person)
+		if (
+			existing_index >= 0
+			and not compat.checked(doc.attendees[existing_index].get("attended"))
+			and not str(doc.attendees[existing_index].get("training_record") or "")
+		):
+			reuse = existing_index
+	if reuse < 0 and len(doc.get("attendees") or []) >= ATTENDEE_CAP:
 		raise ToolError(
 			f"{row['name']} already holds {ATTENDEE_CAP} attendees, which is this app's ceiling "
 			"for one session. A training with more people than that was more than one session — "
 			"record it as more than one. Nothing was changed."
 		)
-	if _attendee_index(doc, person) >= 0:
+	if reuse < 0 and _attendee_index(doc, person) >= 0:
 		raise ToolError(
 			f"{person} is already on {row['name']}'s attendee list. Two rows for one person "
 			"produce two training records of one afternoon, which is how a compliance report "
@@ -975,30 +1037,34 @@ def add_session_attendee(args: dict) -> ToolResult:
 	if latitude is None and longitude is None:
 		latitude, longitude = geo.coordinates(args, required=False, tail="Nothing was changed.")
 
-	entry = doc.append(
-		"attendees",
-		{
-			"employee": person,
-			"attended": 1 if as_bool(args, "attended", True) else 0,
-			"badge_scan": badge,
-			"scanned_at": as_str(args, "scanned_at") or (frappe.utils.now() if badge else None),
-			"scan_latitude": latitude,
-			"scan_longitude": longitude,
-			"scan_accuracy_meters": (
-				as_float(args.get("scan_accuracy_meters", args.get("accuracy_meters")), "accuracy_meters")
-				if args.get("scan_accuracy_meters", args.get("accuracy_meters")) not in (None, "")
-				else None
-			),
-			"scan_h3_cell": geo.point_cell(latitude, longitude),
-			"scan_source": as_choice(
-				training_sessions.ATTENDEE_DOCTYPE,
-				"scan_source",
-				as_str(args, "scan_source") or "iOS",
-				"scan_source",
-			),
-			"notes": as_str(args, "notes"),
-		},
-	)
+	values = {
+		"employee": person,
+		"attended": 1 if as_bool(args, "attended", True) else 0,
+		"badge_scan": badge,
+		"scanned_at": as_str(args, "scanned_at") or (frappe.utils.now() if badge else None),
+		"scan_latitude": latitude,
+		"scan_longitude": longitude,
+		"scan_accuracy_meters": (
+			as_float(args.get("scan_accuracy_meters", args.get("accuracy_meters")), "accuracy_meters")
+			if args.get("scan_accuracy_meters", args.get("accuracy_meters")) not in (None, "")
+			else None
+		),
+		"scan_h3_cell": geo.point_cell(latitude, longitude),
+		"scan_source": as_choice(
+			training_sessions.ATTENDEE_DOCTYPE,
+			"scan_source",
+			as_str(args, "scan_source") or "iOS",
+			"scan_source",
+		),
+		"notes": as_str(args, "notes"),
+	}
+	if reuse >= 0:
+		entry = doc.attendees[reuse]
+		for key, value in values.items():
+			if key != "employee":
+				entry.set(key, value) if hasattr(entry, "set") else entry.update({key: value})
+	else:
+		entry = doc.append("attendees", values)
 	doc.flags.ignore_permissions = True
 	doc.save(ignore_permissions=True)
 
@@ -1340,6 +1406,14 @@ def complete_training_session(args: dict) -> ToolResult:
 			"Nothing was changed."
 		)
 
+	# v0.212.0. A DAY of a course and a COURSE complete differently from a
+	# single session: a day files no records, and a course files them from every
+	# required day. See `_complete_day` and `_complete_course`.
+	if row.get("parent_session"):
+		return _complete_day(row, args, actor)
+	if training_courses.is_course(row["name"]):
+		return _complete_course(row, args, actor)
+
 	doc = frappe.get_doc(DOCTYPE, row["name"])
 	# Topics may be supplied at completion, which is the moment somebody actually
 	# knows what was covered. They are still REQUIRED — see `completion_blockers`.
@@ -1415,7 +1489,7 @@ def complete_training_session(args: dict) -> ToolResult:
 			if value:
 				payload[key] = value
 		try:
-			result = training_tools.record_training(payload)
+			result = training_tools.record_training(payload, authorized_actor=actor)
 		except ToolError as exc:
 			failed.append(
 				{"employee": entry["employee"], "employee_name": entry["employee_name"], "reason": str(exc)}
@@ -1674,6 +1748,20 @@ def list_training_sessions(args: dict) -> ToolResult:
 			raise ToolError(f"regime {regime!r} is not one this app knows. {training.vocabulary_note()}")
 		described = [entry for entry in described if target in entry["regimes"]]
 
+	# v0.212.0. `view` decides what a multi-day course looks like in a list:
+	#   courses (default) — one row per course, its days inside it under `days`;
+	#   days — one row per DAY (and per single session), the course rows left
+	#          out: what a diary wants, and what an app that has never heard of
+	#          courses can already draw, each day on its own date;
+	#   all — both.
+	view = (as_str(args, "view") or "courses").lower()
+	if view not in ("courses", "days", "all"):
+		raise ToolError("view is courses, days or all.")
+	if view == "courses":
+		described = [entry for entry in described if not entry.get("parent_session")]
+	elif view == "days":
+		described = [entry for entry in described if not (entry.get("is_course") and entry.get("days"))]
+
 	truncated = len(described) > limit
 	described = described[:limit]
 
@@ -1732,3 +1820,376 @@ def _by_status(described: list) -> dict:
 	for entry in described:
 		counted[entry["status"]] = counted.get(entry["status"], 0) + 1
 	return counted
+
+
+# ── v0.212.0: multi-day courses (quick_wins_2026_10.md, Amendment 1) ────────
+def _complete_day(row: dict, args: dict, actor: str) -> ToolResult:
+	"""Close one day of a course. Files no records; the course does, once."""
+	doc = frappe.get_doc(DOCTYPE, row["name"])
+	course = str(row["parent_session"])
+	described = _described(dict(doc.as_dict()))
+	if described["status"] == training_sessions.STATUS_COMPLETED:
+		return ToolResult(
+			data={**described, "actor": actor, "already": True, "course": course},
+			summary=f"{doc.name} was already closed",
+		)
+	incomplete = [
+		entry
+		for entry in described["attendee_rows"]
+		if entry["state"] == training_sessions.ATTENDEE_INCOMPLETE and "badge_scan" in entry["missing"]
+	]
+	if incomplete and not as_bool(args, "skip_incomplete", False):
+		raise ToolError(
+			f"{len(incomplete)} attendee(s) on {doc.name} are marked present with nothing to show "
+			"they were: "
+			+ "; ".join(entry["employee_name"] or entry["employee"] for entry in incomplete)
+			+ ". Scan their badge, have them check in on their phone, untick `attended` for "
+			"anybody who did not come, or pass skip_incomplete=true. Nothing was changed."
+		)
+	if not any(entry["attended"] for entry in described["attendee_rows"]):
+		raise ToolError(
+			f"nobody is marked present on {doc.name}. Closing a day nobody attended would mark "
+			"everybody on the course as having missed it — cancel the day instead if it did not "
+			"run. Nothing was changed."
+		)
+	topics = training.topics(args.get("content_topics_covered"))
+	if topics:
+		doc.content_topics_covered = ", ".join(topics)
+	doc.status = training_sessions.STATUS_COMPLETED
+	doc.completed_at = as_str(args, "completed_at") or frappe.utils.now()
+	doc.completed_by = frappe.session.user
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+
+	final = _described(dict(frappe.get_doc(DOCTYPE, doc.name).as_dict()))
+	outstanding = training_courses.open_required_days(course)
+	data = {
+		**final,
+		"actor": actor,
+		"course": course,
+		"records_filed": [],
+		"filed_count": 0,
+		"failed": [],
+		"days_outstanding": [
+			{"session": day["name"], "session_date": str(day.get("session_date") or "")}
+			for day in outstanding
+		],
+		"note": (
+			"A day of a course files no training records: the course does, once, when every "
+			"required day is closed — and only for somebody who attended all of them."
+		),
+	}
+	summary = f"closed {doc.name} (day {final.get('day_number')} of {final.get('day_count')})"
+	if not outstanding:
+		# Every required day is closed: the course completes itself. Its refusals
+		# (an untagged course, nobody who earned it) are reported, not raised —
+		# the day IS closed, and that must not be lost to the course's paperwork.
+		try:
+			finished = _complete_course(
+				training_courses._row(course),
+				{"skip_incomplete": True, "regimes": args.get("regimes")},
+				actor,
+			)
+			data["course_completed"] = finished.data.get("status") == training_sessions.STATUS_COMPLETED
+			data["records_filed"] = finished.data.get("records_filed") or []
+			data["filed_count"] = len(data["records_filed"])
+			data["missed_days"] = finished.data.get("missed_days") or []
+			data["failed"] = finished.data.get("failed") or []
+			summary += f"; course {course} completed, {data['filed_count']} record(s) filed"
+		except ToolError as exc:
+			data["course_completed"] = False
+			data["course_note"] = str(exc)
+	return ToolResult(data=data, summary=summary, docstatus_delta="0 → 0 (updated)")
+
+
+def _complete_course(row: dict, args: dict, actor: str) -> ToolResult:
+	"""File one record per person who attended every required day; close the course."""
+	course = row["name"]
+	outstanding = training_courses.open_required_days(course)
+	if outstanding:
+		raise ToolError(
+			f"{course} has {len(outstanding)} required day(s) still open: "
+			+ ", ".join(f"{day['name']} ({day.get('session_date')})" for day in outstanding)
+			+ ". Complete each day first — the course's credit is for attending all of them. "
+			"Nothing was changed."
+		)
+	doc = frappe.get_doc(DOCTYPE, course)
+	topics = training.topics(args.get("content_topics_covered"))
+	if not topics and not training.topics(doc.get("content_topics_covered")):
+		# What the days covered is what the course covered.
+		for day in training_courses.days_of(course):
+			topics += [t for t in training.topics(day.get("content_topics_covered")) if t not in topics]
+	if topics:
+		doc.content_topics_covered = ", ".join(topics)
+	if args.get("regimes") not in (None, ""):
+		try:
+			training.set_rows(doc, "regimes", training.require(args.get("regimes")))
+		except ValueError as exc:
+			raise ToolError(f"{exc} Nothing was changed.") from None
+	expires = as_date(args, "expires_date")
+	if expires:
+		doc.expires_date = expires
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+	doc = frappe.get_doc(DOCTYPE, course)
+	described = _described(dict(doc.as_dict()))
+
+	ready, incomplete, missed = training_courses.earned(course)
+	already = {entry["employee"] for entry in described["attendee_rows"] if entry["training_record"]}
+	ready = [entry for entry in ready if entry["employee"] not in already]
+	problems = []
+	if not described["regimes"]:
+		problems.append(
+			"the course is tagged with no regimes, so its records would appear in no audit packet — "
+			"pass `regimes` or set them on the Training Type"
+		)
+	if not described["content_topics_covered"]:
+		problems.append("content_topics_covered is empty on the course and on every day")
+	if not ready and not already:
+		problems.append("nobody attended every required day with a scan and a signature to show for it")
+	if problems:
+		raise ToolError(
+			f"{course} cannot be completed yet: "
+			+ " ".join(f"({index + 1}) {problem}." for index, problem in enumerate(problems))
+			+ " Nothing was changed."
+		)
+	if incomplete and not as_bool(args, "skip_incomplete", False):
+		raise ToolError(
+			f"{len(incomplete)} attendee(s) came to every required day of {course} and cannot be "
+			"shown to have: "
+			+ "; ".join(f"{e['employee_name']} (no {', no '.join(e['missing'])})" for e in incomplete)
+			+ ". Sign them on a day session, or pass skip_incomplete=true to file the rest. "
+			"Nothing was changed."
+		)
+
+	last_day = training_courses.required_days(course)[-1] if training_courses.required_days(course) else {}
+	filed, failed = [], []
+	for entry in ready:
+		payload = {
+			"employee": entry["employee"],
+			"company": described["company"],
+			"training_type": described["training_type"],
+			"regimes": described["regimes"],
+			"content_topics_covered": described["content_topics_covered"],
+			"completed_date": str(last_day.get("session_date") or described["session_date"]),
+			"person_performed_signature": entry["signature"],
+			"notes": (
+				f"Recorded from training course {course}: attended all "
+				f"{len(training_courses.required_days(course))} required day(s)."
+			),
+		}
+		for key, value in (
+			("expires_date", described["expires_date"]),
+			("training_source", described["training_source"]),
+			("provider", described["provider"] or described["instructor_name"]),
+		):
+			if value:
+				payload[key] = value
+		try:
+			result = training_tools.record_training(payload, authorized_actor=actor)
+		except ToolError as exc:
+			failed.append(
+				{"employee": entry["employee"], "employee_name": entry["employee_name"], "reason": str(exc)}
+			)
+			continue
+		filed.append(
+			{
+				"employee": entry["employee"],
+				"employee_name": entry["employee_name"],
+				"training_record": result.data.get("name"),
+			}
+		)
+	for item in filed:
+		index = _attendee_index(doc, item["employee"])
+		if index >= 0:
+			frappe.db.set_value(
+				training_sessions.ATTENDEE_DOCTYPE,
+				doc.attendees[index].name,
+				"training_record",
+				item["training_record"],
+			)
+
+	closing = frappe.get_doc(DOCTYPE, course)
+	if not failed:
+		closing.status = training_sessions.STATUS_COMPLETED
+		closing.completed_at = as_str(args, "completed_at") or frappe.utils.now()
+		closing.completed_by = frappe.session.user
+	closing.records_created = int(closing.get("records_created") or 0) + len(filed)
+	closing.flags.ignore_permissions = True
+	closing.save(ignore_permissions=True)
+
+	days = {day["name"]: day for day in training_courses.days_of(course)}
+	final = _described(dict(frappe.get_doc(DOCTYPE, course).as_dict()))
+	data = {
+		**final,
+		"actor": actor,
+		"records_filed": filed,
+		"filed_count": len(filed),
+		"failed": failed,
+		"skipped_incomplete": [
+			{"employee": e["employee"], "employee_name": e["employee_name"], "missing": e["missing"]}
+			for e in incomplete
+		],
+		"missed_days": [
+			{
+				"employee": e["employee"],
+				"employee_name": e["employee_name"],
+				"missed": [
+					{
+						"session": name,
+						"day_number": int(days[name].get("day_number") or 0),
+						"session_date": str(days[name].get("session_date") or ""),
+					}
+					for name in e["missed"]
+					if name in days
+				],
+			}
+			for e in missed
+		],
+		"note": (
+			"One training record per person who attended every required day. Anybody under "
+			"missed_days has no record from this course; the compliance inbox carries them until "
+			"they make the day up."
+		),
+	}
+	return ToolResult(
+		data=data,
+		summary=(
+			f"completed course {course}: {len(filed)} record(s) filed, "
+			f"{len(missed)} missed a required day" + (f", {len(failed)} failed" if failed else "")
+		),
+		docstatus_delta="0 → 0 (updated)",
+	)
+
+
+def _course_target(args: dict, actor: str, what: str) -> dict:
+	"""An open session (course, day or single), in the caller's company."""
+	row = _open_session(args, actor, what)
+	return row
+
+
+def group_training_sessions(args: dict) -> ToolResult:
+	"""Make existing sessions the days of one new course. v0.212.0.
+
+	FOR A CLASS THAT WAS ENTERED AS TWO SESSIONS — the Applicator renewal on Oct 28
+	and Nov 17 — before a course could have days. The sessions keep everything
+	they have (attendance, signatures, their sign-in sheets) and gain a parent;
+	the course's registration is everybody who is on any of them.
+	"""
+	_require()
+	actor = employee_tool.require_shift_role()
+	if not training_courses.ready():
+		raise ToolError("this site has no multi-day courses yet — run `bench --site <site> migrate`.")
+	names = args.get("sessions")
+	if isinstance(names, str):
+		names = [part.strip() for part in names.replace("\n", ",").split(",") if part.strip()]
+	if not isinstance(names, list) or len({str(n) for n in names}) < 2:
+		raise ToolError("sessions is a list of two or more Training Session docnames. Nothing was changed.")
+	rows = []
+	for name in dict.fromkeys(str(n) for n in names):
+		row = _resolve_session({"session": name})
+		employee_tool.require_company_scope(actor, str(row.get("company") or ""))
+		if row.get("parent_session"):
+			raise ToolError(f"{name} is already a day of {row['parent_session']}. Nothing was changed.")
+		if training_courses.is_course(name):
+			raise ToolError(f"{name} is already a course with days of its own. Nothing was changed.")
+		if (row.get("status") or training_sessions.STATUS_SCHEDULED) == training_sessions.STATUS_CANCELLED:
+			raise ToolError(f"{name} is Cancelled. Nothing was changed.")
+		if int(row.get("records_created") or 0):
+			raise ToolError(
+				f"{name} has already filed training records as a session of its own, so it cannot "
+				"become one day of a course — the course would give the same credit twice. "
+				"Nothing was changed."
+			)
+		rows.append(row)
+	if len({(r.get("training_type"), r.get("company")) for r in rows}) != 1:
+		raise ToolError(
+			"those sessions are not one course: they must share a Training Type and a company. "
+			"Nothing was changed."
+		)
+	rows.sort(key=training_courses._sort_key)
+	course = training_courses.new_course_over(rows[0])
+	if as_str(args, "notes"):
+		frappe.db.set_value(DOCTYPE, course.name, "notes", as_str(args, "notes"))
+	training_courses.adopt(course, [row["name"] for row in rows])
+	described = _described(dict(frappe.get_doc(DOCTYPE, course.name).as_dict()))
+	return ToolResult(
+		data={
+			**described,
+			"actor": actor,
+			"grouped": [row["name"] for row in rows],
+			"note": (
+				"Each day keeps its own attendance and sign-in sheet. Credit is filed by the "
+				"course when every required day is completed, for whoever attended them all."
+			),
+		},
+		summary=f"{course.name}: {described['training_type']} over {len(rows)} day(s)",
+		docstatus_delta="none → 0 (created)",
+	)
+
+
+def add_training_session_day(args: dict) -> ToolResult:
+	"""Add a day to a course — or make a single session a course by giving it a second day."""
+	_require()
+	actor = employee_tool.require_shift_role()
+	if not training_courses.ready():
+		raise ToolError("this site has no multi-day courses yet — run `bench --site <site> migrate`.")
+	row = _open_session(args, actor, "adding a day")
+	try:
+		spec = training_courses.day_specs(
+			[
+				{
+					"session_date": args.get("session_date"),
+					"start_time": args.get("start_time"),
+					"end_time": args.get("end_time"),
+					"location": args.get("location"),
+					"required": args.get("required", True),
+				}
+			]
+		)[0]
+	except ValueError as exc:
+		raise ToolError(f"{str(exc).replace('days[0]', 'the new day')} Nothing was changed.") from None
+	became_course = False
+	if row.get("parent_session"):
+		course_name = str(row["parent_session"])
+	elif training_courses.is_course(row["name"]):
+		course_name = row["name"]
+	else:
+		if int(row.get("records_created") or 0):
+			raise ToolError(
+				f"{row['name']} has already filed training records, so it cannot become day 1 of a "
+				"course. Nothing was changed."
+			)
+		course = training_courses.new_course_over(row)
+		training_courses.adopt(course, [row["name"]])
+		course_name = course.name
+		became_course = True
+	existing = [
+		(str(day.get("session_date") or ""), training_sessions.clock(day.get("start_time")) or "")
+		for day in training_courses.days_of(course_name)
+	]
+	if (spec["session_date"], spec["start_time"] or "") in existing or (
+		not spec["start_time"] and spec["session_date"] in [date for date, _clock in existing]
+	):
+		raise ToolError(
+			f"{course_name} already has a day on {spec['session_date']}. Give the new one a "
+			"start_time if the course really meets twice that day. Nothing was changed."
+		)
+	day = training_courses.spawn_day(frappe.get_doc(DOCTYPE, course_name), spec)
+	training_courses.renumber(course_name)
+	described = _described(dict(frappe.get_doc(DOCTYPE, course_name).as_dict()))
+	return ToolResult(
+		data={
+			**described,
+			"actor": actor,
+			"day_added": day.name,
+			"became_course": became_course,
+			"note": (
+				f"{row['name']} is now day 1 of the new course {course_name}."
+				if became_course
+				else f"Everybody registered on {course_name} is on the new day, not yet attended."
+			),
+		},
+		summary=f"{course_name}: added {day.name} on {spec['session_date']} ({described['day_count']} days)",
+		docstatus_delta="none → 0 (created)",
+	)

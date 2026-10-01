@@ -420,6 +420,14 @@ ROUTES = (
 	Route("/mobile", mobile_api.attach_training_certificate),
 	# v0.211.0. The read of the same file: one's own card, or a trainer's reach.
 	Route("/mobile", mobile_api.get_training_certificate),
+	# v0.212.0. Multi-day classes: the caller's own class card for Today, and
+	# checking themselves in on the day.
+	Route("/mobile", mobile_api.get_training_cards),
+	# v0.212.0, AFB-2026-00030. The Work screen's two supervisor actions.
+	Route("/mobile", mobile_api.clock_in_crew),
+	Route("/mobile", mobile_api.list_crew_candidates),
+	Route("/mobile", mobile_api.list_assignable_workers),
+	Route("/mobile", mobile_api.check_in_training_day),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

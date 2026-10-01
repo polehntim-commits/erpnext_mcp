@@ -17794,6 +17794,13 @@ TOOLS = {
 			),
 			"company": _COMPANY,
 			"session_date": _field(_STRING, "The day it runs, YYYY-MM-DD. Defaults to today."),
+			"days": _field(
+				{"type": "array", "items": _OBJECT},
+				"v0.212.0. For a MULTI-DAY course: one object per day — {session_date, start_time?, "
+				"end_time?, location?, required?}. Two or more creates a course (this document: "
+				"the registration, and where the credit is filed) plus one day session each, with "
+				"its own attendance and sign-in sheet. Credit needs every required day.",
+			),
 			"start_time": _field(_STRING, "HH:MM or HH:MM:SS."),
 			"end_time": _field(
 				_STRING, "HH:MM or HH:MM:SS. Earlier than the start time on the same day is refused."
@@ -18051,6 +18058,44 @@ TOOLS = {
 		available=_needs_doctype("Training Session"),
 		requires="the Training Session DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
+	"group_training_sessions": _tool(
+		training_sessions.group_training_sessions,
+		"MUTATING (default OFF; the roles that run training). v0.212.0. Make two or more "
+		"existing sessions the DAYS of one new course — for a class entered as separate "
+		"sessions (Oct 28 and Nov 17) before a course could have days. Same Training Type and "
+		"company; none may already have filed records. Each day keeps its attendance, "
+		"signatures and sign-in sheet; the course's registration is everybody on any of them. "
+		"Credit is then filed once, by the course, for whoever attended every required day.",
+		{
+			"sessions": _field({"type": "array", "items": _STRING}, "Two or more Training Session docnames."),
+			"notes": _field(_STRING, "A note for the course."),
+		},
+		required=("sessions",),
+		mutating=True,
+		title="Group sessions into a multi-day course",
+		available=_needs_doctype("Training Session"),
+		requires="the Training Session DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"add_training_session_day": _tool(
+		training_sessions.add_training_session_day,
+		"MUTATING (default OFF; the roles that run training). v0.212.0. Add a day to a "
+		"multi-day course. `session` may be the course, one of its days, or a single open "
+		"session — which then becomes day 1 of a new course. Everybody registered is put on "
+		"the new day, not yet attended.",
+		{
+			"session": _field(_STRING, "The course, one of its days, or a single session."),
+			"session_date": _field(_STRING, "The new day, YYYY-MM-DD."),
+			"start_time": _field(_STRING, "HH:MM. Defaults to the course's."),
+			"end_time": _field(_STRING, "HH:MM. Defaults to the course's."),
+			"location": _field(_STRING, "Where this day is held. Defaults to the course's."),
+			"required": _field(_BOOLEAN, "Whether credit needs this day. Default true."),
+		},
+		required=("session", "session_date"),
+		mutating=True,
+		title="Add a day to a training course",
+		available=_needs_doctype("Training Session"),
+		requires="the Training Session DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
 	"render_training_sign_in_sheet": _tool(
 		training_sessions.render_training_sign_in_sheet,
 		"MUTATING (default OFF). Draw the sign-in sheet: the course at the top, a "
@@ -18152,6 +18197,11 @@ TOOLS = {
 			),
 			"from_date": _field(_STRING, "Earliest session_date, YYYY-MM-DD."),
 			"to_date": _field(_STRING, "Latest session_date, YYYY-MM-DD."),
+			"view": _field(
+				_STRING,
+				"v0.212.0. courses (default): one row per course with its `days` inside. days: "
+				"one row per day and per single session, no course rows. all: both.",
+			),
 			"limit": _LIMIT,
 		},
 		title="List training sessions",

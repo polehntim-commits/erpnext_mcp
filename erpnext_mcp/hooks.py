@@ -356,6 +356,10 @@ scheduler_events = {
 		],
 	},
 	"hourly": [
+		# v0.212.0. The evening-before push to tomorrow's class attendees. Hourly
+		# because the HOUR is the farm's setting (`training_reminder_hour`); the job
+		# does nothing in the other twenty-three, and nothing twice (`reminded_on`).
+		"erpnext_mcp.training_courses.send_reminders",
 		"erpnext_mcp.alerts.sweep",
 		#: v0.78.0. Close restricted-entry windows whose moment has passed.
 		#:

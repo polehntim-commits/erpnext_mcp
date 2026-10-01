@@ -3,6 +3,41 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.212.0 — 2026-10-01 — multi-day classes; crew clock-in and assign from Work
+
+**973 tools** (476 read, 497 write): + `group_training_sessions`, `add_training_session_day`. **158
+mobile methods**: + `get_training_cards`, `check_in_training_day`, `clock_in_crew`,
+`list_crew_candidates`, `list_assignable_workers`. Contract `docs/design/quick_wins_2026_10.md`
+Amendments 1–2; deploy `docs/deploy/v0.212.0_classes_and_crew.md`; iOS SERVER_CHANGES §58–§59.
+
+- **Multi-day classes, with no new doctype.** A day is a Training Session; a course is a session other
+  sessions point at (`parent_session`, `day_number`, `required_day`, `end_date`). The course holds the
+  registration and files the credit **once**, for whoever attended every required day; a day files
+  nothing. `create_training_session` takes `days`; `group_training_sessions` makes existing sessions
+  the days of a course; `add_training_session_day` adds one. Existing sessions are single-day courses
+  and are untouched.
+- **A Foreman's completion now files its records.** It was passing its own gate and then having every
+  record refused by `record_training`'s HR-only gate, leaving the session open.
+- **The class card.** `get_training_cards` returns the caller's own classes for today and tomorrow —
+  "Class tomorrow", "Class today — Day 2 of 3" — with time, place, where the papers are and whether
+  check-in is open. Wording and timing are Farm Feature Flags. `check_in_training_day` marks the
+  caller's own row present (`scan_source = Self`), once.
+- **The class's papers, for the people in the class.** A registered attendee may open the session's and
+  course's attachments, except the sign-in sheet and signatures.
+- **The evening before.** An hourly job pushes tomorrow's attendees once, at `training_reminder_hour`
+  (category `FARM_TRAINING`).
+- **A missed required day** raises `training_day_missed` (swept rules: 32) to the attendee's inbox and to
+  Farm Manager / Foreman, naming the expiry of the certification the course renews (new Training Type
+  field `renews_certification`). It clears on a make-up.
+- **Crew clock-in (AFB-2026-00030).** `clock_in_crew` joins the caller's open shift or starts one and
+  clocks several people in by name or badge, each answered on their own line; safe to send twice
+  (`Farm Shift.client_request_id`). `list_crew_candidates` gives the shift roles a list to pick from.
+- **Assign with certification filtering.** `list_assignable_workers` marks each worker `qualified` by
+  the same check `assign_farm_task` refuses on. `assign_farm_task` takes `client_request_id` and answers
+  `already: true` when the worker named already holds the task.
+- **Work tiles.** `crew_clock_in` and `assign_tasks` are tile reports, seeded on the `work` surface for
+  the roles each route allows (app 0.24.0).
+
 ## 0.211.0 — 2026-10-01 — quick wins from Tell the Farm
 
 **971 tools** (476 read, 495 write): + `stage_extraction_config`. **153 mobile methods**: +

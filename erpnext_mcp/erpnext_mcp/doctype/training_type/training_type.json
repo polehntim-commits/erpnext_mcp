@@ -15,6 +15,7 @@
   "delivery_method",
   "duration_minutes",
   "group_training",
+  "renews_certification",
   "coverage_section",
   "regimes",
   "curriculum_section",
@@ -75,6 +76,12 @@
    "fieldtype": "Check",
    "in_standard_filter": 1,
    "label": "Delivered as a Group Session"
+  },
+  {
+   "description": "v0.212.0. The Certification this course renews — a certification type or name, e.g. Applicator License. When somebody misses a required day, the warning names their certificate's expiry.",
+   "fieldname": "renews_certification",
+   "fieldtype": "Data",
+   "label": "Renews Certification"
   },
   {
    "fieldname": "coverage_section",

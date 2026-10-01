@@ -348,6 +348,18 @@ def _supervisor_review_lapsed(row: dict) -> dict:
 	}
 
 
+def _training_day_missed(row: dict) -> dict:
+	"""A MAKE-UP DAY IS BOOKED, NOT TAPPED. v0.212.0.
+
+	The alert clears when the person attends a later session of the same course,
+	and arranging that is the office's: there is no step on a phone that puts
+	somebody in a class that has not been scheduled."""
+	return _no_fix(
+		"This clears when they attend a make-up day — a later session of the same course. "
+		"Booking one is done from the training register, not from this alert."
+	)
+
+
 def _filing_response_due(row: dict) -> dict:
 	return {
 		"action_type": "update_regulatory_filing",
@@ -456,6 +468,7 @@ _BUILDERS = {
 	"certification_expiring": _certification_expiring,
 	"training_expiring": _training_expiring,
 	"supervisor_review_lapsed": _supervisor_review_lapsed,
+	"training_day_missed": _training_day_missed,
 	"filing_response_due": _filing_response_due,
 	"flc_license_expiring": _flc_license_expiring,
 	"audit_action_overdue": _audit_action_overdue,

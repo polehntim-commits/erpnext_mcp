@@ -5935,6 +5935,41 @@ ATTACHMENT_PARENTS = {
 BROKERED_PARENTS = frozenset({EMPLOYEE, TRAINING_SESSION, "Asset Register", TRAINING_TYPE})
 
 
+def _is_class_attendee(doctype: str, docname) -> bool:
+	"""Whether the caller is registered on this Training Session."""
+	if doctype != TRAINING_SESSION:
+		return False
+	try:
+		from .. import training_courses
+
+		employee = fieldwork._employee_for(str(frappe.session.user)) or ""
+		return training_courses.is_attendee(str(docname or "").strip(), employee)
+	except Exception:
+		return False
+
+
+def _class_attendee_hidden(doctype: str, docname: str) -> set:
+	"""File URLs an ATTENDEE (not a trainer) is not shown on a class folder: the
+	generated sign-in sheet and every signature image. Empty for a trainer, and
+	for any other parent."""
+	if doctype != TRAINING_SESSION:
+		return set()
+	try:
+		personnel.require_shift_role()
+		return set()
+	except Exception:
+		pass
+	hidden = {str(frappe.db.get_value(TRAINING_SESSION, docname, "generated_pdf") or "")}
+	for row in frappe.db.get_all(
+		"Training Session Attendee", filters={"parent": docname}, fields=["signature"], limit=500
+	):
+		hidden.add(str(row.get("signature") or ""))
+	hidden.discard("")
+	# Never empty for an attendee: the marker keeps "nothing to hide" distinct
+	# from "this caller is a trainer".
+	return hidden | {"\0attendee"}
+
+
 def _attachment_parent(doctype, docname, allowed: list) -> tuple:
 	"""One parent document, proved readable by this caller. Returns (doctype, name).
 
@@ -5960,7 +5995,16 @@ def _attachment_parent(doctype, docname, allowed: list) -> tuple:
 	if gate is True:
 		personnel.require_hr_role()
 	elif gate is SHIFT_GATE:
-		personnel.require_shift_role()
+		try:
+			personnel.require_shift_role()
+		except Exception:
+			# v0.212.0. THE CLASS'S PAPERS, FOR THE PEOPLE IN THE CLASS. Somebody
+			# registered on this session (or its course, or one of its days) may
+			# read its folder — minus the sign-in sheet and other people's
+			# signatures, which `_class_attendee_hidden` keeps with the roles that
+			# run training. Anybody else is refused exactly as before.
+			if not _is_class_attendee(wanted, docname):
+				raise
 	compat.require_doctype(
 		wanted,
 		"It is not installed on this site, so nothing is filed against it.",
@@ -6034,8 +6078,14 @@ def list_attachments(user: str, doctype=None, docname=None) -> dict:
 		data = file_tools.list_attachments_on_authorized_parent(parent, name).data
 	else:
 		data = file_tools.list_attachments({"doctype": parent, "name": name}).data
+	hidden = _class_attendee_hidden(parent, name)
 	rows = []
 	for row in data.get("attachments") or []:
+		if hidden and (
+			str(row.get("file_url") or "") in hidden
+			or str(row.get("attached_to_field") or "") in ("generated_pdf", "signature")
+		):
+			continue
 		rows.append(
 			{
 				"name": row.get("name"),
@@ -6163,6 +6213,17 @@ def get_attachment_content(user: str, file=None, name=None, max_bytes=None) -> d
 			inner["max_bytes"] = max_bytes
 
 		data = file_tools.get_attachment_content(inner).data
+	hidden = _class_attendee_hidden(parent, name_on_parent)
+	if hidden and (
+		str(data.get("file_url") or "") in hidden
+		or str(frappe.db.get_value("File", docname, "attached_to_field") or "")
+		in ("generated_pdf", "signature")
+	):
+		frappe.throw(
+			"that file is the class's sign-in record, which is kept by whoever ran the class. "
+			"Nothing was read.",
+			frappe.PermissionError,
+		)
 	return {
 		"name": data.get("name"),
 		"file": data.get("name"),
@@ -7507,6 +7568,7 @@ def assign_farm_task(
 	farm_shift=None,
 	override_phi=None,
 	phi_override_reason=None,
+	client_request_id=None,
 ) -> dict:
 	"""Send one named person to one task. v0.72.0.
 
@@ -7575,9 +7637,24 @@ def assign_farm_task(
 	if named_shift:
 		inner["farm_shift"] = guard.require_scoped_doc(FARM_SHIFT, named_shift, shift_label, allowed)
 
-	result = dispatch.assign_farm_task(inner)
+	# v0.212.0. A REPEAT IS AN ANSWER, NOT A REFUSAL. The phone queues an assign
+	# made with no signal and may send it twice (a lost reply, a drained queue);
+	# `client_request_id` rides along for that queue. The task already being held
+	# by the worker named is the outcome asked for, so it is reported as such.
+	try:
+		result = dispatch.assign_farm_task(inner)
+	except ToolError as exc:
+		if "is already held by" not in str(exc) or "Nothing was changed" not in str(exc):
+			raise
+		current = dispatch.get_farm_task({"task": name}).data
+		out = shape.task(current, current.get("assignment") or {})
+		out["already"] = True
+		out["reassigned_from"] = None
+		out["concurrent_claims"] = None
+		return out
 	data = result.data
 	out = shape.task(data, data.get("assignment") or {})
+	out["already"] = False
 	out["reassigned_from"] = data.get("reassigned_from")
 	out["concurrent_claims"] = data.get("concurrent_claims")
 	if data.get("phi_override"):
@@ -13516,6 +13593,7 @@ def create_training_session(
 	expires_date=None,
 	training_source=None,
 	notes=None,
+	days=None,
 ) -> dict:
 	"""Open a group training event from the shed it is about to happen in.
 
@@ -13543,6 +13621,7 @@ def create_training_session(
 		("expires_date", expires_date),
 		("training_source", training_source),
 		("notes", notes),
+		("days", _json_argument(days, "days") if isinstance(days, str) else days),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -13731,8 +13810,14 @@ def list_training_sessions(
 	from_date=None,
 	to_date=None,
 	limit=None,
+	view=None,
 ) -> dict:
 	"""The session register, scoped to the entities this account may reach.
+
+	v0.212.0. `view` DEFAULTS TO `days` HERE: one row per day of a multi-day
+	course (each carrying `parent_session`, `day_number`, `day_count`, `days`),
+	which is also what an app older than courses can draw — each day on its own
+	date, so day two no longer falls off the list the morning after day one.
 
 	THE HR GATE CAME OFF THIS WRAPPER IN v0.92.2, for the reason
 	`get_training_session` above gives: the tool underneath now takes
@@ -13758,6 +13843,7 @@ def list_training_sessions(
 		("from_date", from_date),
 		("to_date", to_date),
 		("limit", limit),
+		("view", view or "days"),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -22558,6 +22644,320 @@ def get_training_certificate(user: str, record=None, training_record=None, max_b
 		"content": data.get("content_base64"),
 		"content_base64": data.get("content_base64"),
 	}
+
+
+# ── clock_in_crew / list_crew_candidates / list_assignable_workers ── v0.212.0 ──
+#
+# docs/design/quick_wins_2026_10.md, Amendment 2 (AFB-2026-00030). The Work
+# screen's two supervisor actions. Everything they do already existed one call
+# at a time; these are the shapes a phone with a crew in front of it needs.
+CREW_CANDIDATE_CAP = 300
+
+
+def _open_shift_crews(allowed: list) -> dict:
+	"""{employee: shift} for everybody still on an open shift in these entities."""
+	if not compat.doctype_exists(FARM_SHIFT):
+		return {}
+	rows = shift_records.rows(
+		{"end_datetime": ("is", "not set"), "company": ("in", list(allowed))}, limit=CREW_BOARD_CAP
+	)
+	on = {}
+	for row in rows:
+		if compat.checked(row.get("cancelled")):
+			continue
+		for member in shift_records.crew_of(str(row.get("name") or "")):
+			person = str(member.get("employee") or "")
+			if person and not member.get("left_at"):
+				on.setdefault(person, str(row.get("name")))
+	return on
+
+
+def _active_people(allowed: list, search: str = "", company: str = "") -> list:
+	fields = compat.existing_fields("Employee", ("name", "employee_name", "designation", "company"))
+	filters = {"status": "Active", "company": company if company else ("in", list(allowed))}
+	rows = frappe.db.get_all("Employee", filters=filters, fields=fields, limit=2000) or []
+	needle = str(search or "").strip().lower()
+	out = []
+	for row in rows:
+		row = dict(row)
+		label = str(row.get("employee_name") or row["name"])
+		if needle and needle not in label.lower() and needle not in str(row["name"]).lower():
+			continue
+		out.append(row)
+	out.sort(key=lambda r: str(r.get("employee_name") or r["name"]).lower())
+	return out[:CREW_CANDIDATE_CAP]
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_crew_candidates", limit=guard.READ_LIMIT)
+def list_crew_candidates(user: str, search=None, shift=None, company=None) -> dict:
+	"""Who can be clocked in: the Active people of the caller's entities. v0.212.0.
+
+	FOR THE ROLES THAT RUN A CREW (HR, Farm Manager, Foreman, Crew Leader).
+	`search_employees` is HR-only — it answers the personnel register — so a
+	Foreman had no list to pick a crew from. This one answers a name, a
+	designation and whether the person is already on an open shift, and nothing
+	else about them.
+	"""
+	allowed = guard.require_scope(user)
+	personnel.require_shift_role()
+	entity = guard.require_company(user, company, allowed)
+	on = _open_shift_crews(allowed)
+	named = ""
+	if shift:
+		named = guard.require_scoped_doc(FARM_SHIFT, shift, "shift", allowed)
+	people = []
+	for row in _active_people(allowed, str(search or ""), entity):
+		people.append(
+			{
+				"employee": row["name"],
+				"employee_name": row.get("employee_name") or row["name"],
+				"designation": row.get("designation") or None,
+				"company": row.get("company") or None,
+				"on_shift": on.get(row["name"]),
+				"on_this_shift": bool(named) and on.get(row["name"]) == named,
+			}
+		)
+	return {"people": people, "count": len(people), "truncated": len(people) >= CREW_CANDIDATE_CAP}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("clock_in_crew", mutating=True, limit=guard.WRITE_LIMIT)
+def clock_in_crew(
+	user: str,
+	employees=None,
+	badge_ids=None,
+	shift=None,
+	location=None,
+	shift_type=None,
+	company=None,
+	latitude=None,
+	longitude=None,
+	client_request_id=None,
+) -> dict:
+	"""Clock several people onto a shift in one call. v0.212.0.
+
+	JOINS OR STARTS. `shift` when named; else the caller's own open shift; else
+	a new one, with the caller as foreman — and then `location` is required, for
+	the reason `start_shift` gives: a shift with no place has no weather and no
+	exposure record.
+
+	EACH PERSON IS ANSWERED ON THEIR OWN LINE. A minor over their hours, somebody
+	still on another crew, a badge that is retired — one refusal does not stop the
+	other eleven being clocked in, and the reason is the tool's own sentence.
+
+	SAFE TO SEND TWICE. `client_request_id` is stored on the shift this call
+	starts, so a retry finds that shift instead of starting a second; and a person
+	already on the crew is `already`, not an error. That is what lets the phone
+	queue this with no signal.
+
+	THE SHIFT ROLES ONLY, checked here and again by the tools underneath.
+	"""
+	allowed = guard.require_scope(user)
+	personnel.require_shift_role()
+	me = _employee(user)
+	key = str(client_request_id or "").strip()[:140]
+
+	people = _json_argument(employees, "employees") if isinstance(employees, str) else employees
+	badges_in = _json_argument(badge_ids, "badge_ids") if isinstance(badge_ids, str) else badge_ids
+	people = [str(p).strip() for p in (people or []) if str(p).strip()]
+	badges_in = [str(b).strip() for b in (badges_in or []) if str(b).strip()]
+	if not people and not badges_in:
+		frappe.throw(
+			"employees or badge_ids is required — who is being clocked in. Nothing was changed.",
+			frappe.ValidationError,
+		)
+	if len(people) + len(badges_in) > 100:
+		frappe.throw("at most 100 people in one call. Nothing was changed.", frappe.ValidationError)
+
+	entity = _company(user, company, allowed)
+	results, resolved = [], []
+	for badge in badges_in:
+		try:
+			card = badges.resolve_badge({"badge_id": badge, "company": entity}).data
+			resolved.append((str(card.get("employee") or ""), badge))
+		except ToolError as exc:
+			results.append({"badge_id": badge, "employee": None, "outcome": "refused", "reason": str(exc)})
+	for person in people:
+		try:
+			resolved.append((_employee_argument(person, allowed, "employees"), ""))
+		except Exception as exc:
+			results.append({"employee": person, "outcome": "refused", "reason": str(exc)})
+	seen, unique = set(), []
+	for person, badge in resolved:
+		if person and person not in seen:
+			seen.add(person)
+			unique.append((person, badge))
+
+	started = False
+	target = ""
+	if shift:
+		target = guard.require_scoped_doc(FARM_SHIFT, shift, "shift", allowed)
+	elif key and compat.has_field(FARM_SHIFT, "client_request_id"):
+		target = str(frappe.db.get_value(FARM_SHIFT, {"client_request_id": key}, "name") or "")
+	if not target:
+		mine = _open_shifts_led_by(me, allowed, entity)
+		target = str(mine[0].get("name")) if mine else ""
+	if not target:
+		if not str(location or "").strip():
+			frappe.throw(
+				"you have no shift open, so this starts one — and a shift needs a location (the "
+				"block or the yard). Nothing was changed.",
+				frappe.ValidationError,
+			)
+		inner = {"foreman": me, "company": entity, "location": str(location).strip(), "crew_employees": []}
+		if shift_type:
+			inner["shift_type"] = shift_type
+		gps = _location(None, latitude, longitude)
+		if gps:
+			inner["farm_location_gps"] = gps
+		target = str(shifts.start_shift(inner).data.get("name") or "")
+		started = True
+		if key and compat.has_field(FARM_SHIFT, "client_request_id"):
+			frappe.db.set_value(FARM_SHIFT, target, "client_request_id", key)
+
+	for person, badge in unique:
+		line = {
+			"employee": person,
+			"employee_name": frappe.db.get_value("Employee", person, "employee_name") or person,
+		}
+		if badge:
+			line["badge_id"] = badge
+		try:
+			shifts.add_worker_to_shift({"shift": target, "employee": person})
+			line["outcome"] = "added"
+		except ToolError as exc:
+			if "already on this crew" in str(exc):
+				line["outcome"] = "already"
+			else:
+				line["outcome"] = "refused"
+				line["reason"] = str(exc)
+		results.append(line)
+
+	count = {
+		name: sum(1 for r in results if r["outcome"] == name) for name in ("added", "already", "refused")
+	}
+	return {
+		"shift": target,
+		"started": started,
+		"results": results,
+		**count,
+		"crew_size": len([m for m in shift_records.crew_of(target) if not m.get("left_at")]),
+	}
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_assignable_workers", limit=guard.READ_LIMIT)
+def list_assignable_workers(user: str, task=None, search=None) -> dict:
+	"""Who this task can be handed to, and who it cannot — and why. v0.212.0.
+
+	THE SAME CHECK `assign_farm_task` REFUSES ON. `qualified` is
+	`qualifications.requirements_of` and `.qualification`, so the list and the
+	refusal cannot disagree: somebody shown as unqualified here is exactly
+	somebody the assign would refuse, with the missing certification named.
+
+	The crew under the caller's open shifts comes first, then the rest of the
+	Active roster. Foreman and Farm Manager.
+	"""
+	from .. import qualifications
+
+	guard.require_dispatch_role(user, "list who a task can be assigned to")
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+	row = dict(frappe.get_doc(FARM_TASK, name).as_dict())
+	requirements = qualifications.requirements_of(row)
+	_shifts, crew = _crew_under(user, allowed, "", "")
+	on_crew = {entry["employee"]: entry for entry in crew}
+	skill = str(row.get("skill_required") or "").strip()
+
+	people = []
+	for person in _active_people(allowed, str(search or ""), str(row.get("company") or "")):
+		employee = person["name"]
+		missing = [req for req in requirements if not qualifications.qualification(employee, req)]
+		entry = on_crew.get(employee) or {}
+		people.append(
+			{
+				"employee": employee,
+				"employee_name": person.get("employee_name") or employee,
+				"designation": person.get("designation") or None,
+				"on_crew": employee in on_crew,
+				"holding_now": entry.get("holding_now"),
+				"qualified": not missing,
+				"missing": missing,
+			}
+		)
+	people.sort(key=lambda p: (not p["on_crew"], not p["qualified"], str(p["employee_name"]).lower()))
+	return {
+		"task": name,
+		"task_name": row.get("task_name") or name,
+		"requirements": requirements,
+		"skill_required": skill or None,
+		"assigned_to": row.get("assigned_to") or None,
+		"people": people,
+		"count": len(people),
+		"qualified_count": sum(1 for p in people if p["qualified"]),
+	}
+
+
+# ── get_training_cards / check_in_training_day ── v0.212.0 ──────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_training_cards", limit=guard.READ_LIMIT)
+def get_training_cards(user: str) -> dict:
+	"""The caller's own classes that are today or about to be. v0.212.0.
+
+	"Class tomorrow" the day before and "Class today — Day 2 of 3" on the day,
+	with the time, the place, where its papers are and whether check-in is open.
+	THE WORDING AND THE TIMING ARE THE FARM'S (`training_courses.DEFAULTS`, each
+	overridable as a Farm Feature Flag), rendered here so a change is a setting
+	and not an app release.
+
+	ANY ENROLLED CALLER, AND ONLY EVER THEIR OWN: the subject is the Employee
+	behind the login and there is no argument that names anybody else. A class
+	they are not registered on is not in the answer.
+	"""
+	from .. import training_courses
+
+	guard.require_scope(user)
+	return training_courses.cards(user, fieldwork._employee_for(user) or "")
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("check_in_training_day", mutating=True, limit=guard.WRITE_LIMIT)
+def check_in_training_day(
+	user: str,
+	session=None,
+	latitude=None,
+	longitude=None,
+	accuracy_meters=None,
+	client_request_id=None,
+) -> dict:
+	"""Mark the caller present on a class day they are registered for. v0.212.0.
+
+	THE CALLER'S OWN ROW AND NO OTHER — there is no employee argument. The phone
+	it arrives from is the identification (`scan_source = Self`), the same kind of
+	proof as a badge a machine read. Open from a configured time before the start
+	until a configured time after the end. A second call answers `already: true`,
+	so a retry after a lost answer is safe; `client_request_id` is accepted for
+	the offline queue and needs no store of its own for that reason.
+
+	A class the caller is not on reads as not found. The signature is still taken
+	by whoever runs the class, at the end.
+	"""
+	from .. import training_courses
+
+	guard.require_scope(user)
+	try:
+		return training_courses.check_in(
+			str(session or "").strip(),
+			user,
+			fieldwork._employee_for(user) or "",
+			latitude,
+			longitude,
+			accuracy_meters,
+		)
+	except training_courses.CheckInError as exc:
+		errors = {"forbidden": frappe.PermissionError, "not_found": frappe.DoesNotExistError}
+		frappe.throw(str(exc), errors.get(exc.kind, frappe.ValidationError))
 
 
 # ── 269. attach_training_certificate ─────────────────────────────────────────

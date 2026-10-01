@@ -1071,7 +1071,25 @@ class ReadingTheRegister(TrainingSessionTestCase):
 				self.assertTrue(opened["name"])
 				self.tool_data("add_session_attendee", {"session": opened["name"], "employee": SUPERVISOR})
 		set_roles("Administrator", ["Foreman"])
-		self.assertTrue(self.tool_data("complete_training_session", {"session": session}))
+		done = self.tool_data("complete_training_session", {"session": session})
+		# v0.212.0. "Truthy" was all this asserted, and it was truthy while every
+		# record was being refused one layer down by `record_training`'s HR gate.
+		self.assertEqual((done["status"], done["filed_count"], done["failed"]), ("Completed", 2, []))
+		# And a Foreman still may not file a record directly: that door is HR's.
+		self.assertIn(
+			"may not change the personnel register",
+			self.tool_error(
+				"record_training",
+				{
+					"employee": TRAINEE,
+					"company": MAIN,
+					"training_type": CURRICULUM,
+					"regimes": ["OR-OSHA"],
+					"content_topics_covered": TOPICS,
+					"completed_date": frappe.utils.today(),
+				},
+			),
+		)
 
 	def test_a_field_worker_still_may_not_run_one(self):
 		"""RELAXED IS NOT OPEN, on the writes as well as the reads. A tailgate

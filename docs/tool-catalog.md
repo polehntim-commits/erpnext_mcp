@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 971 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 973 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20846,3 +20846,14 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.212.0 — multi-day classes
+
+| Tool | What it does |
+| --- | --- |
+| `group_training_sessions` | Make existing sessions the days of one new course. Write |
+| `add_training_session_day` | Add a day to a course; a single session becomes day 1 of one. Write |
+
+`create_training_session` takes `days`. `list_training_sessions` takes `view`
+(courses / days / all). `complete_training_session` closes a day without filing
+records and completes a course for whoever attended every required day.

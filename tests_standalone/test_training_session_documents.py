@@ -359,7 +359,17 @@ BARE_RECORD = "ETR-2026-0003"
 class CoursePapersAndCards(TrainingSessionDocumentsTestCase):
 	def setUp(self):
 		super().setUp()
-		STORE.seed("Training Type", [{"name": COURSE, "training_type_name": COURSE, "active": 1}])
+		STORE.seed(
+			"Training Type",
+			[
+				{"name": COURSE, "training_type_name": COURSE, "active": 1},
+				{
+					"name": "Applicator License Renewal",
+					"training_type_name": "Applicator License Renewal",
+					"active": 1,
+				},
+			],
+		)
 		STORE.seed(
 			"Employee",
 			[
@@ -481,3 +491,63 @@ class CoursePapersAndCards(TrainingSessionDocumentsTestCase):
 		data = self.tool_data("get_training_curriculum", {})
 		counts = {row["training_type"]: row["attachment_count"] for row in data["curriculum"]}
 		self.assertEqual(counts.get(COURSE), 1)
+
+	# ── v0.212.0: the class's papers, for the people in the class ──────────
+	def on_the_class(self):
+		"""Ana is registered on SESSION; its sign-in sheet is the ticket file."""
+		self.be("Administrator")
+		doc = frappe.get_doc("Training Session", SESSION)
+		doc.append("attendees", {"employee": ANA, "attended": 0})
+		doc.save(ignore_permissions=True)
+		frappe.db.set_value(
+			"Training Session",
+			SESSION,
+			"generated_pdf",
+			"/private/files/WPS-Train-the-Trainer-Ticket011026.jpg",
+		)
+		STORE.commit()
+
+	def test_an_attendee_reads_the_class_folder_but_not_the_sign_in_sheet(self):
+		self.on_the_class()
+		self.be(PICKER)
+		listed = mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
+		self.assertEqual([row["name"] for row in listed["attachments"]], [CATALOGUE])
+		self.assertEqual(
+			base64.b64decode(mobile_api.get_attachment_content(file=CATALOGUE)["content_base64"]),
+			b"catalogue",
+		)
+		with self.assertRaises(frappe.ValidationError) as caught:
+			mobile_api.get_attachment_content(file=TICKET)
+		self.assertIn("sign-in record", str(caught.exception))
+		# Whoever runs training still sees all of it.
+		self.be(FOREMAN)
+		self.assertEqual(mobile_api.list_attachments(doctype="Training Session", docname=SESSION)["count"], 2)
+
+	def test_a_picker_who_is_not_on_the_class_is_still_refused(self):
+		self.be(PICKER)
+		with self.assertRaises(frappe.ValidationError) as caught:
+			mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
+		self.assertIn("Foreman", str(caught.exception))
+
+	def test_the_card_and_check_in_routes_are_the_callers_own(self):
+		self.be("Administrator")
+		doc = frappe.get_doc("Training Session", SESSION)
+		doc.append("attendees", {"employee": ANA, "attended": 0})
+		doc.save(ignore_permissions=True)
+		frappe.db.set_value("Training Session", SESSION, "session_date", frappe.utils.today())
+		STORE.commit()
+		self.be(PICKER)
+		cards = mobile_api.get_training_cards()["cards"]
+		self.assertEqual(
+			[(c["session"], c["phase"], c["can_check_in"]) for c in cards], [(SESSION, "today", True)]
+		)
+		done = mobile_api.check_in_training_day(session=SESSION, latitude=45.6, longitude=-121.18)
+		self.assertFalse(done["already"])
+		self.assertTrue(mobile_api.check_in_training_day(session=SESSION, client_request_id="x")["already"])
+		row = frappe.get_doc("Training Session", SESSION).attendees[0]
+		self.assertEqual((row.get("scan_source"), bool(row.get("attended"))), ("Self", True))
+		# Somebody else's class reads as not there; a foreman with no class has no card.
+		with self.assertRaises(frappe.ValidationError):
+			mobile_api.check_in_training_day(session=OUTSIDER_SESSION)
+		self.be(FOREMAN)
+		self.assertEqual(mobile_api.get_training_cards()["cards"], [])

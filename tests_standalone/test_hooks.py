@@ -574,6 +574,7 @@ class TheScheduledJobs(unittest.TestCase):
 					"0 5 * * *": ["erpnext_mcp.services.usda_prices.sweep_configured_reports"],
 				},
 				"hourly": [
+					"erpnext_mcp.training_courses.send_reminders",
 					"erpnext_mcp.alerts.sweep",
 					"erpnext_mcp.tools.spray_rei.close_expired_reis",
 				],

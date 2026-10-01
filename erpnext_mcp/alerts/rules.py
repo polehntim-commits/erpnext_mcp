@@ -2142,6 +2142,133 @@ shape(
 )
 
 
+# ── 12b. training_day_missed ── v0.212.0 ────────────────────────────────────
+MISSED_DAY_GRACE_DAYS = 30
+
+
+def _scan_missed_training_days(context: dict) -> list:
+	"""Somebody registered on a multi-day course did not attend a required day.
+
+	ONE ALERT PER PERSON PER COURSE, however many days they missed, keyed on their
+	registration row on the course — which carries the `employee` link, so the
+	alert knows who it is about without reading prose.
+
+	IT CLEARS ITSELF. The finding stops being observed when the person attends a
+	later session of the same Training Type (the make-up) or a record is filed for
+	them, and an unobserved alert is auto-dismissed.
+
+	THE DUE DATE IS WHEN IT STARTS TO COST SOMETHING: the expiry of the
+	Certification the course renews, where the Training Type names one and the
+	person holds it; else the course's own expiry; else thirty days after the
+	missed day. Critical inside thirty days of that date.
+	"""
+	from .. import training_courses, training_sessions
+
+	if not training_courses.ready():
+		return []
+	today = str(context["today"])
+	critical_days = _interval(context, "threshold_critical_days", training_records.CRITICAL_WINDOW_DAYS)
+	critical = _severity_of(context, "severity_critical", SEVERITY_CRITICAL)
+	warning = _severity_of(context, "severity_warning", SEVERITY_WARNING)
+	out = []
+	for finding in training_courses.missed_days(context.get("company") or ""):
+		if not _scoped(context, {"company": finding.get("company")}):
+			continue
+		registration = next(
+			(
+				row
+				for row in training_sessions.attendees_of(finding["course"])
+				if str(row.get("employee") or "") == finding["employee"]
+			),
+			None,
+		)
+		if registration is None:
+			continue
+		cert = finding.get("certification") or {}
+		cert_expiry = str(cert.get("expiration_date") or "")[:10]
+		due = (
+			cert_expiry
+			or str(finding.get("course_expires") or "")[:10]
+			or str(frappe.utils.add_days(finding["last_missed"], MISSED_DAY_GRACE_DAYS))
+		)
+		days_left = training_records.days_until(today, due) if due else None
+		severity = critical if days_left is not None and days_left <= critical_days else warning
+		which = ", ".join(f"Day {day['day_number']} ({day['session_date']})" for day in finding["missed"])
+		message = (
+			f"{finding['employee_name']} missed {which} of {finding['training_type']} "
+			f"({finding['course']}), so the course gives them no credit."
+		)
+		if cert_expiry:
+			label = cert.get("cert_name") or cert.get("cert_type") or "certification"
+			if days_left is not None and days_left < 0:
+				message += f" Their {label} expired on {cert_expiry}."
+			else:
+				message += (
+					f" Their {label} expires on {cert_expiry}"
+					+ (f" ({days_left} day(s))" if days_left is not None else "")
+					+ " — a make-up day is needed before then, or it lapses."
+				)
+		else:
+			message += f" Book a make-up day by {due}."
+		out.append(
+			Observation(
+				source_doctype=training_sessions.ATTENDEE_DOCTYPE,
+				source_docname=str(registration["name"]),
+				message=message,
+				severity=severity,
+				due_date=due,
+				company=str(finding.get("company") or ""),
+				category="Workforce",
+			)
+		)
+	return out
+
+
+register(
+	Rule(
+		key="training_day_missed",
+		title="A registered attendee missed a required day of a multi-day course",
+		category="Workforce",
+		requires=("Training Session",),
+		framework=(
+			"The course's own terms: continuing-education credit for a licence renewal (e.g. an "
+			"Oregon pesticide applicator licence, ORS 634 / OAR 603-057) is earned by attending "
+			"every required session; EPA WPS 40 CFR 170.401/.501 and FSMA 21 CFR 112.21 training "
+			"likewise count only when the whole of it was delivered to the person"
+		),
+		purpose=(
+			"A course that runs over two days gives nothing to somebody who came to one. Until "
+			"this, day two was a separate session nobody connected to day one, so the person who "
+			"missed it simply had no record — and nothing said so until their licence lapsed."
+		),
+		kairotic_gate=(
+			"Fires once a required day is closed (or is more than a day past) with the person "
+			"registered and not attended. Stays until they attend a later session of the same "
+			"Training Type or a record is filed for them. Due on the expiry of the certification "
+			"the course renews; Critical inside thirty days of it."
+		),
+		regimes=("Internal",),
+		scan=_scan_missed_training_days,
+	)
+)
+
+shape(
+	"training_day_missed",
+	target_doctype="Training Session Attendee",
+	builtin_scanner="training_day_missed",
+	date_field="creation",
+	threshold_critical_days=training_records.CRITICAL_WINDOW_DAYS,
+	threshold_warning_days=training_records.EXPIRING_WINDOW_DAYS,
+	severity_critical=SEVERITY_CRITICAL,
+	severity_warning=SEVERITY_WARNING,
+	severity_expired=SEVERITY_CRITICAL,
+	category="Workforce",
+	audit_packet_types=["OSHA", "DOL"],
+	retention_years=2,
+	extra_parameters={"notify_roles": ["Farm Manager", "Foreman"]},
+)
+
+
 # ── 13. supervisor_review_lapsed ────────────────────────────────────────────
 #
 # THE THIRTEENTH RULE WATCHES A SIGNATURE THAT WAS NEVER PUT ON A RECORD, which

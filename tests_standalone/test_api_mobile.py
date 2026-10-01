@@ -1085,6 +1085,13 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"attach_training_certificate",
 		# v0.211.0 — fafo_ios has called it since §41; `TrainingCertificateAPI.certificate` decodes it.
 		"get_training_certificate",
+		# v0.212.0 — multi-day classes (SERVER_CHANGES §58).
+		"get_training_cards",
+		"check_in_training_day",
+		# v0.212.0 — crew clock-in and assign from Work (SERVER_CHANGES §59).
+		"clock_in_crew",
+		"list_crew_candidates",
+		"list_assignable_workers",
 		# v0.195.0. fafo_ios names all four as path constants (6e9cfd0) and no
 		# Codable decodes their answers yet, so there is nothing to mirror; the
 		# payloads are asserted key by key in test_wave5_server_changes against

@@ -25,6 +25,9 @@ REPORTS = (
 	"my_feedback",
 	# v0.208.0 — the card print queue screen (needs app 0.22.0).
 	"print_queue",
+	# v0.212.0 (AFB-2026-00030). The Work screen's supervisor actions, as tiles.
+	"crew_clock_in",
+	"assign_tasks",
 )
 DOCUMENT_DOCTYPES = ("Farm Task", "Inspection Session", "Asset Register", "Item", "App Feedback")
 TARGET_KINDS = ("wizard", "task_template", "inspection_template", "report", "list_query", "document")
@@ -338,10 +341,50 @@ PRINT_QUEUE_TILE = {
 }
 
 
+#: v0.212.0 (AFB-2026-00030). The Work screen's two supervisor actions. Seeded
+#: create-only like every other tile; the roles are the ones the server gates
+#: each action on, so a tile is never offered to somebody the route would refuse.
+WORK_TILES = {
+	"crew_clock_in": {
+		"surface": "work",
+		"title": {"en": "Clock in crew", "es": "Registrar cuadrilla"},
+		"subtitle": {
+			"en": "Scan badges or pick from the list",
+			"es": "Escanee credenciales o elija de la lista",
+		},
+		"icon": "person.badge.clock",
+		"order": 10,
+		"target": {"kind": "report", "report": "crew_clock_in"},
+		"audience": {
+			"roles": ["Foreman", "Crew Leader", "Farm Manager", "HR Manager", "HR User", "System Manager"]
+		},
+		"badge": None,
+		"show_if": {},
+		"min_app_version": "0.24.0",
+	},
+	"assign_tasks": {
+		"surface": "work",
+		"title": {"en": "Assign tasks", "es": "Asignar tareas"},
+		"subtitle": {"en": "Hand open work to your crew", "es": "Reparta el trabajo pendiente"},
+		"icon": "person.crop.circle.badge.plus",
+		"order": 20,
+		"target": {"kind": "report", "report": "assign_tasks"},
+		"audience": {"roles": ["Foreman", "Farm Manager"]},
+		"badge": {"query": "available_tasks", "params": {}},
+		"show_if": {},
+		"min_app_version": "0.24.0",
+	},
+}
+
+
 def seed() -> list:
 	made = []
 	for key, body in SEEDS.items():
 		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.207.0).")
+		if name:
+			made.append(name)
+	for key, body in WORK_TILES.items():
+		name = phone_config.seed("Tile", key, body, "Built-in Work tile, seeded at install (v0.212.0).")
 		if name:
 			made.append(name)
 	return made

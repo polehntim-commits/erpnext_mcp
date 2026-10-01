@@ -27,6 +27,7 @@
   "end_datetime",
   "cancelled",
   "cancellation_reason",
+  "client_request_id",
   "crew_section",
   "crew",
   "events_section",
@@ -185,6 +186,15 @@
    "fieldname": "cancellation_reason",
    "fieldtype": "Small Text",
    "label": "Cancellation Reason"
+  },
+  {
+   "description": "v0.212.0. The idempotency key of the phone request that started this shift (clock_in_crew). A retry carrying the same key finds this shift instead of starting a second one.",
+   "fieldname": "client_request_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Client Request ID",
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "crew_section",

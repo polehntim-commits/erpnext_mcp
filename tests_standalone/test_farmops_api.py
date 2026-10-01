@@ -691,6 +691,11 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/reply_to_app_feedback",
 		"/mobile/attach_training_certificate",
 		"/mobile/get_training_certificate",
+		"/mobile/get_training_cards",
+		"/mobile/check_in_training_day",
+		"/mobile/clock_in_crew",
+		"/mobile/list_crew_candidates",
+		"/mobile/list_assignable_workers",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
 		"/mobile/get_my_housing",
 		"/mobile/record_spray_application",
@@ -2975,6 +2980,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"end_stale_shift",
 		"get_crew_overview",
 		"list_active_shifts",
+		# v0.212.0. Who a task can be handed to: it names other people and what
+		# they hold, and it is the list behind `assign_farm_task`.
+		"list_assignable_workers",
 		"get_worker_detail",
 		# v0.141.0. The write that ends a shift a whole crew is rostered on, and
 		# it is offered from the same drill-down as `end_stale_shift`. A picker
@@ -3186,6 +3194,17 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"attach_training_certificate",
 		# v0.211.0. The read of the same file: own card, or SHIFT_ROLES for anyone's.
 		"get_training_certificate",
+		# v0.212.0. Multi-day classes: the caller's OWN class card and their own
+		# check-in. No argument on either names anybody else.
+		"get_training_cards",
+		"check_in_training_day",
+		# v0.212.0 (AFB-2026-00030). Clocking a crew in is the SHIFT roles' — HR,
+		# Farm Manager, Foreman, Crew Leader — gated inside by `require_shift_role`,
+		# the same gate `start_shift` and `add_worker_to_shift` have always had (and
+		# for the same reason they sit in no narrower set: a Crew Leader runs a
+		# crew and is not a dispatcher).
+		"clock_in_crew",
+		"list_crew_candidates",
 		# v0.195.0. The caller's own housing (no arguments, so no one else's);
 		# spray history, which WPS requires be displayed to workers; and filing a
 		# spray, which is never refused for the role of the applicator filing it.
@@ -3202,7 +3221,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 153, "a method is named in two sets at once")
+		self.assertEqual(len(named), 158, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

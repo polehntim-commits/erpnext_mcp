@@ -5354,6 +5354,9 @@ def _training_details(task: dict) -> dict | None:
 		# the invite gets the real shape of the week even though the event itself
 		# can only cover the one day the register states.
 		"notes": row.get("notes") or None,
+		# v0.212.0. Which day of a multi-day course this is, and all its days —
+		# with whether the person this task is for attended each.
+		**_course_fields_for(row, task),
 		"attendee_count": len(attendees),
 		"signed_count": int(summary.get("ready", 0)) + int(summary.get("recorded", 0)),
 		"records_created": int(row.get("records_created") or 0),
@@ -5370,6 +5373,16 @@ def _training_details(task: dict) -> dict | None:
 			}
 		),
 	}
+
+
+def _course_fields_for(row: dict, task: dict) -> dict:
+	"""`training_courses.course_fields`, never raising — a task must always draw."""
+	try:
+		from .. import training_courses
+
+		return training_courses.course_fields(row, str(task.get("assigned_to") or ""))
+	except Exception:  # pragma: no cover
+		return {}
 
 
 def _session_regimes(session: str) -> list:
@@ -5390,6 +5403,10 @@ def _session_regimes(session: str) -> list:
 #: board draws fifty tasks and a second read per training would be a round trip
 #: per afternoon.
 _TRAINING_DETAIL_FIELDS = (
+	"parent_session",
+	"day_number",
+	"required_day",
+	"end_date",
 	"name",
 	"training_type",
 	"status",
