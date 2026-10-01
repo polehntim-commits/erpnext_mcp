@@ -516,7 +516,7 @@ the docname.
 | element | where |
 |---|---|
 | photo | 4:5 slot, 21.6 × 27 mm at x 4.9, y 22.1; the Employee image cropped to fill, else initials (Helvetica-Bold 26 pt grey on light grey) |
-| band | green `#356B2E`, white Helvetica-Bold 7.5 pt, upper-cased. One line: 21.6 × 5.9 mm at x 4.9, y 9.8. Two lines (e.g. `OWNER /` `OPERATOR`): 21.6 × 9.3 mm at y 5.5, baselines y 11.9 and y 8.7. **The text is the Employee's `employment_type`, else `EMPLOYEE`** *(the approved file was updated at 11:14 to show a role here; the source field is this build's choice — see the open question)* |
+| band | green `#356B2E`, white Helvetica-Bold 7.5 pt, upper-cased. One line: 21.6 × 5.9 mm at x 4.9, y 9.8. Two lines (e.g. `OWNER /` `OPERATOR`): 21.6 × 9.3 mm at y 5.5, baselines y 11.9 and y 8.7. **The text is the badge category, upper-cased — Amendment 2** |
 | name | Helvetica-Bold 12.5 pt at x 30, baseline y 43.5 |
 | designation | Helvetica 8.5 pt at x 30, baseline y 38.5 |
 | company | Helvetica 6.5 pt grey at x 30, baseline y 34 |
@@ -653,3 +653,55 @@ The buttons in A5 remain the intended path; this makes the generic one harmless.
 
 **Counts after (a):** 969 tools — 476 read, 493 write (`download_card_pdf`, `request_card_back`).
 152 mobile routes (`request_card_back`).
+
+---
+
+## Amendment 2 — what the ID card says about a person (v0.209.1)
+
+Tim, 2026-10-01: *"I am a manager and not payed as of now."* His Employee record
+carries Designation **Operator** on purpose (owner-operator: draws, not payroll)
+and that is not to change. The card therefore reads its own fields.
+
+### B1. Fields (Custom Fields, added at migrate, removed by nothing)
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `Employee.badge_title` | Data | The line under the name. **Blank = the Designation.** |
+| `Employee.badge_category` | Select | The colour bar. **Blank = the Employment Type's category.** |
+| `Employment Type.badge_category` | Select | The category a person of this type gets by default. **This column is the mapping**, and it is edited on the Employment Type record. |
+
+Options, both Selects: *(blank)*, `Employee`, `Management`, `Owner / Operator`,
+`Contractor`, `Volunteer`, `Visitor`. The bar prints the option upper-cased;
+`OWNER / OPERATOR` breaks after the slash as approved.
+
+### B2. Resolution
+
+1. `Employee.badge_category`, when set.
+2. else the `badge_category` of the Employee's Employment Type, when set.
+3. else **nothing**: the bar is drawn without text and the answer carries a warning
+   naming the two places to set it. `EMPLOYEE` is never a fallback — it is printed
+   only when one of the two fields says Employee.
+
+### B3. The mapping's first values
+
+Seeded once, at migrate, only into Employment Types whose `badge_category` is
+blank; an operator's value is never overwritten, and after seeding the data is
+the only authority (the code has no mapping at print time).
+
+| Employment Type name contains | Category |
+| --- | --- |
+| operator, owner | Owner / Operator |
+| contract, 1099 | Contractor |
+| volunteer | Volunteer |
+| visitor | Visitor |
+| full, part, season, tempor, hourly, salar, piece, commission, intern, apprentice, probation, h-2a | Employee |
+| anything else | left blank |
+
+`Management` is never seeded; it is a manual choice on the Employee.
+
+### B4. Surfaces
+
+`preview_card` gains `badge_title` and `badge_category` (the resolved values, `""`
+when unresolved). No route, tool, or job key changes; the phone fixtures are
+unchanged. Tim's card: `badge_title` = Manager; category from Employment Type
+Operator → `OWNER / OPERATOR`.
