@@ -35,3 +35,4 @@ erpnext_mcp.patches.move_rodent_settings_to_data
 erpnext_mcp.patches.triage_existing_feedback
 erpnext_mcp.patches.wizards_to_config_versions
 erpnext_mcp.patches.reclassify_feature_requests
+erpnext_mcp.patches.card_backs_landscape_cw

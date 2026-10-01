@@ -886,6 +886,15 @@ def update_company(args: dict) -> ToolResult:
 			raise ToolError("this ERPNext's Company has no company_logo field. Nothing was changed.")
 		_stage(changes, unchanged, row, "company_logo", _file_url(as_str(args, "company_logo")))
 
+	# v0.209.2. The mark an ID card and an asset tag carry (Company › Badge Logo).
+	if "badge_logo" in args:
+		if not compat.has_field("Company", "badge_logo"):
+			raise ToolError(
+				"this site's Company has no badge_logo field — this app adds it on `bench migrate`. "
+				"Nothing was changed."
+			)
+		_stage(changes, unchanged, row, "badge_logo", _file_url(as_str(args, "badge_logo")))
+
 	# v0.203.0 / v0.205.0. The company's season (docs/design/programs_and_field_kinds.md
 	# A5): MM-DD, refused when malformed so a typo never silently means
 	# March–October. The v0.203.0 `pest_season_*` names are accepted as aliases.
@@ -924,7 +933,7 @@ def update_company(args: dict) -> ToolResult:
 
 	if not changes and not unchanged and providers is None:
 		raise ToolError(
-			"nothing to change. This tool takes country, tax_id, notes, company_logo, "
+			"nothing to change. This tool takes country, tax_id, notes, company_logo, badge_logo, "
 			f"{PEST_PROVIDER_FIELD} and — only on a company with no postings — default_currency."
 		)
 

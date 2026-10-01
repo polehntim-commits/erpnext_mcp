@@ -20821,3 +20821,7 @@ Contract `docs/design/card_print_queue.md`, Amendment 1.
 
 `request_card_print` now defaults `sides` to Dual. On a Simplex station a
 two-sided card prints its front and is marked `back_pending`.
+
+From v0.209.2, `update_employee` takes `badge_title` and `badge_category`, and
+`update_company` takes `badge_logo` (a File URL). Card backs default to a
+landscape page rotated clockwise.

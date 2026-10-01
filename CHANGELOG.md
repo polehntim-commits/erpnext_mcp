@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.209.2 — 2026-10-01 — the chosen card: landscape pages, the back turned clockwise
+
+Contract `docs/design/card_print_queue.md` Amendment 3. Deploy steps: `docs/deploy/v0.209.2_card_printing.md`.
+
+- **The default card is the one Tim chose** (`…_back-rotCW.pdf`): both PDF pages are 85.6 × 54 mm and
+  the back's portrait design is turned 90° clockwise, for employee IDs and asset tags alike. Card Print
+  Station › Back Orientation now defaults to *Landscape, rotated CW*; a one-time patch moves a station
+  still on Portrait. Portrait and rotated CCW remain choices.
+- **Held to the two chosen files**, which replace the earlier fixtures: page sizes, every text item, and
+  the boxes of the QR codes, photo slot and colour bar (22 × 9.5 mm for a two-line bar). The asset tag
+  follows the v2 layout (40 mm logo, 25 mm front QR, 32 mm back QR).
+- **Set up over MCP:** `update_employee` takes `badge_title` and `badge_category`; `update_company` takes
+  `badge_logo`. `download_card_pdf` is the test render.
+
 ## 0.209.1 — 2026-10-01 — what the ID card says about a person
 
 Contract `docs/design/card_print_queue.md` Amendment 2. No tool or route changes.

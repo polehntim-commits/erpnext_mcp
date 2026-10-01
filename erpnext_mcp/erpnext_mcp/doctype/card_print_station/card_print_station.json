@@ -110,8 +110,8 @@
    "fieldtype": "Select",
    "label": "Back Orientation",
    "options": "Portrait\nLandscape, rotated CW\nLandscape, rotated CCW",
-   "default": "Portrait",
-   "description": "v0.209.0. The back is designed portrait. Choose a rotated value if the driver needs it landscape."
+   "default": "Landscape, rotated CW",
+   "description": "The back is designed portrait and is turned onto a landscape page by default (v0.209.2), which is what the Primacy 2 prints correctly. Portrait sends it as a 54 x 85.6 mm page."
   },
   {
    "fieldname": "agent_section",

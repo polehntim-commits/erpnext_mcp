@@ -7289,6 +7289,11 @@ TOOLS = {
 				"http(s) URL. Upload with attach_file_to_document first and pass the file_url it "
 				"returns; a path on your own machine is refused. Empty string clears it.",
 			),
+			"badge_logo": _field(
+				_STRING,
+				"The mark printed on ID cards and asset tags: the URL of a file already on this "
+				"site, as for company_logo. Square, 600 px or wider. Empty string clears it.",
+			),
 			"pest_management_providers": _field(
 				{"type": "array", "items": _OBJECT},
 				"Who advises this entity on pest management. Each entry is an object with "
@@ -13227,6 +13232,16 @@ TOOLS = {
 				"Full-time, Part-time, Seasonal Worker — whatever this site's Employment Type "
 				"records are. The refusal lists them.",
 			),
+			"badge_title": _field(
+				_STRING,
+				"The line under the name on their ID card. Blank prints the Designation. "
+				"Free text — it does not change the Designation.",
+			),
+			"badge_category": _field(
+				_STRING,
+				"The colour bar on their ID card: Employee, Management, Owner / Operator, "
+				"Contractor, Volunteer or Visitor. Blank uses their Employment Type's category.",
+			),
 			"branch": _field(
 				_STRING,
 				"The operating unit or camp they are hired to. Must be a Branch on this site; "
@@ -13330,6 +13345,16 @@ TOOLS = {
 			"department": _field(_STRING, "Must be a Department on this site."),
 			"designation": _field(_STRING, "Must be a Designation on this site."),
 			"employment_type": _field(_STRING, "Must be an Employment Type on this site."),
+			"badge_title": _field(
+				_STRING,
+				"The line under the name on their ID card. Blank prints the Designation. "
+				"Free text — it does not change the Designation.",
+			),
+			"badge_category": _field(
+				_STRING,
+				"The colour bar on their ID card: Employee, Management, Owner / Operator, "
+				"Contractor, Volunteer or Visitor. Blank uses their Employment Type's category.",
+			),
 			"branch": _field(
 				_STRING,
 				"The operating unit or camp they report to. Must be a Branch on this site. "

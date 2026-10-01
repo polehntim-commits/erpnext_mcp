@@ -1,21 +1,23 @@
 # SPDX-License-Identifier: MIT
 """The approved card artwork (v0.209.0). docs/design/card_print_queue.md, Amendment 1 §A2–A3.
 
-`fixtures/card_art/` holds Tim's approved test PDFs and their geometry. These
+`fixtures/card_art/` holds the two PDFs Tim chose (Amendment 3). These
 tests render the same sample data and hold every page size and every text
 item's position, font and size to them — so a later change to the layout is a
 change somebody has to make on purpose.
 """
 
-import json
+import io
 import pathlib
+import re
 import unittest
 
 from erpnext_mcp import card_art
 from erpnext_mcp.render import qr
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "card_art"
-APPROVED = json.loads((FIXTURES / "approved_geometry.json").read_text())
+EMPLOYEE_PDF = FIXTURES / "OML_EmployeeID_Test_OML-0001_back-rotCW.pdf"
+ASSET_PDF = FIXTURES / "OML_AssetTag_v2_40-WM-SE_A_standard_back-rotCW.pdf"
 NEEDS = unittest.skipUnless(
 	card_art.reportlab_available() and qr.available(), "needs reportlab, pypdf and a QR encoder"
 )
@@ -27,8 +29,39 @@ EMPLOYEE = {
 	"badge_id": "OML-0001",
 }
 ASSET = {"asset_id": "40-WM-SE", "asset_name": "40-Acre Wind Machine", "company": "Orchard Meadow, LLC"}
-#: The approved employee test carried a placeholder line under the initials; the real card does not.
+#: The chosen employee test carried a placeholder line under the initials; the real card does not.
 PLACEHOLDER = "PHOTO 4:5 — replace"
+MM = 72 / 25.4
+#: The chosen card: both pages landscape, the back turned clockwise (Amendment 3 §C1).
+CHOSEN = [0, card_art.BACK_ORIENTATIONS[card_art.DEFAULT_BACK_ORIENTATION]]
+
+
+def boxes(pdf: bytes) -> list:
+	"""Per page: the QR's bounding box, then every other filled box smaller than the
+	page — (x, y, w, h) in mm, in the page's own drawing coordinates."""
+	from pypdf import PdfReader
+
+	pages = []
+	for page in PdfReader(io.BytesIO(pdf)).pages:
+		content = page.get_contents().get_data().decode("latin1")
+		rects = [
+			tuple(float(n) / MM for n in found.groups())
+			for found in re.finditer(r"([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+) re", content)
+		]
+		modules = [r for r in rects if r[3] < 3.0]
+		big = [tuple(round(n, 1) for n in r) for r in rects if 3.0 <= r[3] < 50.0]
+		code = ()
+		if modules:
+			left = min(r[0] for r in modules)
+			bottom = min(r[1] for r in modules)
+			code = (
+				round(left, 1),
+				round(bottom, 1),
+				round(max(r[0] + r[2] for r in modules) - left, 1),
+				round(max(r[1] + r[3] for r in modules) - bottom, 1),
+			)
+		pages.append([code, *sorted(big)])
+	return pages
 
 
 def close(case, ours: list, theirs: list, tolerance: float = 0.5) -> None:
@@ -41,7 +74,7 @@ def close(case, ours: list, theirs: list, tolerance: float = 0.5) -> None:
 
 
 @NEEDS
-class TheApprovedDesigns(unittest.TestCase):
+class TheChosenDesigns(unittest.TestCase):
 	def employee(self):
 		return card_art.employee_sides(
 			{**EMPLOYEE, "qr": qr.qr_matrix("OML-0001", "H"), "photo": None, "logo": None}
@@ -52,25 +85,43 @@ class TheApprovedDesigns(unittest.TestCase):
 			{**ASSET, "qr": qr.qr_matrix("https://farm.example/scan/40-WM-SE", "M"), "logo": None}
 		)
 
-	def test_the_employee_id_matches_the_approved_test(self):
-		pdf = card_art.to_pdf(self.employee())
-		approved = APPROVED["OML_EmployeeID_Test_OML-0001_portrait-back.pdf"]
-		self.assertEqual([list(size) for size in card_art.page_sizes_mm(pdf)], approved["pages_mm"])
-		for ours, theirs in zip(card_art.text_items(pdf), approved["text"], strict=True):
+	def held_to(self, pdf: bytes, chosen: bytes, qr_size_only=False):
+		self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0), (85.6, 54.0)])
+		self.assertEqual(card_art.page_sizes_mm(pdf), card_art.page_sizes_mm(chosen))
+		for ours, theirs in zip(card_art.text_items(pdf), card_art.text_items(chosen), strict=True):
 			close(self, ours, theirs)
+		for ours, theirs in zip(boxes(pdf), boxes(chosen), strict=True):
+			self.assertEqual(len(ours), len(theirs))
+			for mine, approved in zip(ours, theirs, strict=True):
+				for a, b in zip(mine, approved, strict=True):
+					self.assertAlmostEqual(a, b, delta=0.6, msg=f"{mine} vs {approved}")
 
-	def test_the_asset_tag_matches_the_approved_test(self):
-		pdf = card_art.to_pdf(self.asset())
-		approved = APPROVED["OML_AssetTag_Test_40-WM-SE_A_standard.pdf"]
-		self.assertEqual([list(size) for size in card_art.page_sizes_mm(pdf)], approved["pages_mm"])
-		for ours, theirs in zip(card_art.text_items(pdf), approved["text"], strict=True):
-			close(self, ours, theirs)
+	def test_the_employee_id_matches_the_chosen_file(self):
+		"""Title Manager; the bar OWNER / over OPERATOR at 7.5 pt in a 9.5 mm bar."""
+		pdf = card_art.to_pdf(self.employee(), CHOSEN)
+		self.held_to(pdf, EMPLOYEE_PDF.read_bytes())
+		front = boxes(pdf)[0]
+		self.assertIn((5.0, 6.5, 22.0, 9.5), front)
 
-	def test_a_rotated_back_is_a_landscape_page_like_the_rot_variants(self):
-		for name, rotation in (("back-rotCW", 90), ("back-rotCCW", 270)):
-			pdf = card_art.to_pdf(self.asset(), [0, rotation])
-			approved = APPROVED[f"OML_AssetTag_v2_40-WM-SE_A_standard_{name}.pdf"]
-			self.assertEqual([list(size) for size in card_art.page_sizes_mm(pdf)], approved["pages_mm"], name)
+	def test_the_asset_tag_matches_the_chosen_file(self):
+		self.held_to(card_art.to_pdf(self.asset(), CHOSEN), ASSET_PDF.read_bytes())
+
+	def test_the_back_is_turned_clockwise_onto_its_page(self):
+		pdf = card_art.to_pdf(self.asset(), CHOSEN)
+		from pypdf import PdfReader
+
+		def turn(data):
+			content = PdfReader(io.BytesIO(data)).pages[1].get_contents().get_data().decode("latin1")
+			return re.search(r"0 -1 1 0 0 153\.07", content)
+
+		self.assertTrue(turn(pdf))
+		self.assertTrue(turn(ASSET_PDF.read_bytes()))
+
+	def test_the_other_orientations_are_still_there(self):
+		self.assertEqual(card_art.page_sizes_mm(card_art.to_pdf(self.asset())), [(85.6, 54.0), (54.0, 85.6)])
+		self.assertEqual(
+			card_art.page_sizes_mm(card_art.to_pdf(self.asset(), [0, 270])), [(85.6, 54.0), (85.6, 54.0)]
+		)
 
 	def test_the_front_can_be_rotated_too(self):
 		pdf = card_art.to_pdf(self.employee(), [90, 0])

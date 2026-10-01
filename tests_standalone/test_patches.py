@@ -36,6 +36,7 @@ from erpnext_mcp.patches import (
 	backfill_observation_type,
 	backfill_planting_rootstock,
 	backfill_valve_rank,
+	card_backs_landscape_cw,
 	fix_literal_newlines_in_instructions,
 	migrate_asset_types,
 	migrate_declarative_rules,
@@ -103,6 +104,7 @@ PATCHES = (
 	("erpnext_mcp.patches.triage_existing_feedback", triage_existing_feedback),
 	("erpnext_mcp.patches.wizards_to_config_versions", wizards_to_config_versions),
 	("erpnext_mcp.patches.reclassify_feature_requests", reclassify_feature_requests),
+	("erpnext_mcp.patches.card_backs_landscape_cw", card_backs_landscape_cw),
 )
 
 

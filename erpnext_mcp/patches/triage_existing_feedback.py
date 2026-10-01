@@ -25,7 +25,11 @@ def run() -> int:
 		return 0
 	done = 0
 	for name in frappe.db.get_all(
-		triage.DOCTYPE, filters={"status": ("not in", triage.ANSWERED)}, pluck="name", order_by="creation asc", limit=100000
+		triage.DOCTYPE,
+		filters={"status": ("not in", triage.ANSWERED)},
+		pluck="name",
+		order_by="creation asc",
+		limit=100000,
 	):
 		try:
 			if triage.auto_classify(name):

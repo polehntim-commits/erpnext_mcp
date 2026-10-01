@@ -235,7 +235,7 @@ def seed() -> list:
 	doc.artwork_height_mm = 54.0
 	doc.duplex = "Simplex"
 	doc.front_orientation = "Landscape"
-	doc.back_orientation = "Portrait"
+	doc.back_orientation = card_art.DEFAULT_BACK_ORIENTATION
 	doc.insert(ignore_permissions=True)
 	return [doc.name]
 
@@ -561,7 +561,9 @@ def card_sides(job_type: str, row: dict, company: str, allow_issue: bool = True)
 def _rotations(station: dict) -> list:
 	return [
 		card_art.FRONT_ORIENTATIONS.get(str(station.get("front_orientation") or "Landscape"), 0),
-		card_art.BACK_ORIENTATIONS.get(str(station.get("back_orientation") or "Portrait"), 0),
+		card_art.BACK_ORIENTATIONS.get(
+			str(station.get("back_orientation") or card_art.DEFAULT_BACK_ORIENTATION), 90
+		),
 	]
 
 

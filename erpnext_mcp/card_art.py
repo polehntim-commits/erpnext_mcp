@@ -39,6 +39,8 @@ BLACK, GREY, LIGHT, MID = "#000000", "#555555", "#ECECEC", "#8A8A8A"
 #: station setting → degrees clockwise.
 FRONT_ORIENTATIONS = {"Landscape": 0, "Portrait, rotated CW": 90, "Portrait, rotated CCW": 270}
 BACK_ORIENTATIONS = {"Portrait": 0, "Landscape, rotated CW": 90, "Landscape, rotated CCW": 270}
+#: Amendment 3 §C1. The card Tim chose: both pages landscape, the back turned clockwise.
+DEFAULT_BACK_ORIENTATION = "Landscape, rotated CW"
 
 
 class ArtError(RuntimeError):
@@ -119,18 +121,18 @@ def employee_sides(card: dict) -> list:
 	badge = card.get("badge_id") or ""
 	front = [("rect", 0, 0, CARD_W, CARD_H, "#FFFFFF", None)]
 	if card.get("photo"):
-		front.append(("image", 4.9, 22.1, 21.6, 27.0, card["photo"], "cover"))
-		front.append(("rect", 4.9, 22.1, 21.6, 27.0, None, "#AAAAAA"))
+		front.append(("image", 5.0, 21.5, 22.0, 27.5, card["photo"], "cover"))
+		front.append(("rect", 5.0, 21.5, 22.0, 27.5, None, "#AAAAAA"))
 	else:
-		front.append(("rect", 4.9, 22.1, 21.6, 27.0, LIGHT, "#AAAAAA"))
+		front.append(("rect", 5.0, 21.5, 22.0, 27.5, LIGHT, "#AAAAAA"))
 		front.append(_text(16.0, 32.0, initials(name), "Helvetica-Bold", 26, MID, "center", 20))
 	band = band_lines(card.get("band") or "")
 	if len(band) == 2:
-		front.append(("rect", 4.9, 5.5, 21.6, 9.3, GREEN, None))
+		front.append(("rect", 5.0, 6.5, 22.0, 9.5, GREEN, None))
 		front.append(_text(16.0, 11.9, band[0], "Helvetica-Bold", 7.5, "#FFFFFF", "center", 20.5, 5))
 		front.append(_text(16.0, 8.7, band[1], "Helvetica-Bold", 7.5, "#FFFFFF", "center", 20.5, 5))
 	else:
-		front.append(("rect", 4.9, 9.8, 21.6, 5.9, GREEN, None))
+		front.append(("rect", 5.0, 9.8, 22.0, 5.9, GREEN, None))
 		front.append(_text(16.0, 11.1, band[0], "Helvetica-Bold", 7.5, "#FFFFFF", "center", 20.5, 5))
 	front.append(_text(30.0, 43.5, name, "Helvetica-Bold", 12.5, BLACK, "left", 31.5, 8))
 	front.append(_text(30.0, 38.5, card.get("designation") or "", "Helvetica", 8.5, BLACK, "left", 31.5, 6))
@@ -138,9 +140,9 @@ def employee_sides(card: dict) -> list:
 	front.append(_text(30.0, 17.5, "BADGE ID", "Helvetica", 5.5, GREY, "left", 30))
 	front.append(_text(30.0, 11.2, badge, "Helvetica-Bold", 13, BLACK, "left", 30, 8))
 	if card.get("logo"):
-		front.append(("image", 63.0, 33.3, 15.0, 15.0, card["logo"], logo_mode(card["logo"])))
+		front.append(("image", 63.6, 32.6, 16.0, 16.0, card["logo"], logo_mode(card["logo"])))
 	if card.get("qr"):
-		front.append(("qr", 61.4, 7.9, 15.8, card["qr"]))
+		front.append(("qr", 62.6, 7.0, 16.0, card["qr"]))
 
 	width, height = CARD_H, CARD_W
 	back = [("rect", 0, 0, width, height, "#FFFFFF", None)]
@@ -162,21 +164,21 @@ def asset_sides(tag: dict) -> list:
 	name = tag.get("asset_name") or ""
 	front = [("rect", 0, 0, CARD_W, CARD_H, "#FFFFFF", None)]
 	if tag.get("logo"):
-		front.append(("image", 5.5, 7.5, 39.0, 39.0, tag["logo"], logo_mode(tag["logo"])))
+		front.append(("image", 5.0, 7.0, 40.0, 40.0, tag["logo"], logo_mode(tag["logo"])))
 	if tag.get("qr"):
-		front.append(("qr", 53.0, 21.2, 25.6, tag["qr"]))
-	front.append(_text(65.8, 14.4, asset_id, "Helvetica-Bold", 10, BLACK, "center", 31, 6))
-	front.append(_text(65.8, 11.2, name, "Helvetica", 6.5, BLACK, "center", 31, 5))
+		front.append(("qr", 52.8, 21.0, 25.0, tag["qr"]))
+	front.append(_text(65.3, 15.0, asset_id, "Helvetica-Bold", 10, BLACK, "center", 31, 6))
+	front.append(_text(65.3, 11.8, name, "Helvetica", 6.5, BLACK, "center", 31, 5))
 
 	width, height = CARD_H, CARD_W
 	centre = width / 2
 	back = [("rect", 0, 0, width, height, "#FFFFFF", None)]
 	if tag.get("qr"):
-		back.append(("qr", (width - 34.0) / 2, height - 10.0 - 34.0, 34.0, tag["qr"]))
-	back.append(_text(centre, 31.1, asset_id, "Helvetica-Bold", 16, BLACK, "center", width - 9, 8))
-	back.append(_text(centre, 25.6, name, "Helvetica", 9, BLACK, "center", width - 9, 6))
-	back.append(_text(centre, 16.6, tag.get("company") or "", "Helvetica", 7, GREY, "center", width - 9, 5))
-	back.append(_text(centre, 12.6, "Scan for asset record", "Helvetica", 7, GREY, "center", width - 9))
+		back.append(("qr", (width - 32.0) / 2, height - 9.0 - 32.0, 32.0, tag["qr"]))
+	back.append(_text(centre, 34.6, asset_id, "Helvetica-Bold", 15, BLACK, "center", width - 9, 8))
+	back.append(_text(centre, 29.1, name, "Helvetica", 8.5, BLACK, "center", width - 9, 6))
+	back.append(_text(centre, 20.6, tag.get("company") or "", "Helvetica", 7, GREY, "center", width - 9, 5))
+	back.append(_text(centre, 16.6, "Scan for asset record", "Helvetica", 7, GREY, "center", width - 9))
 	return [front, back]
 
 

@@ -1362,6 +1362,8 @@ class TheAllowlistIsClosed(EmployeeTestCase):
 				"department",
 				"designation",
 				"employment_type",
+				"badge_title",
+				"badge_category",
 				"branch",
 				"reports_to",
 				"status",
@@ -1407,6 +1409,8 @@ class TheAllowlistIsClosed(EmployeeTestCase):
 			"department": "Operations",
 			"designation": "Picker",
 			"employment_type": "Seasonal Worker",
+			"badge_title": "Crew Lead",
+			"badge_category": "Management",
 			"branch": "Mill Creek Camp",
 			# The seeded supervisor's DOCNAME rather than their name, because
 			# this test compares the value it sent with the value that landed

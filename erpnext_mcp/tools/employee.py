@@ -283,7 +283,7 @@ SELECT_FIELDS = ("status", "i9_status", "w4_status")
 #: has to have an answer for them — see the module docstring.
 COMPLIANCE_FIELDS = ("i9_status", "w4_status", "jurisdiction")
 
-#: The twenty-two. Ordered as somebody filling in a form would read them, because
+#: The twenty-five. Ordered as somebody filling in a form would read them, because
 #: this tuple is what the refusal messages list.
 WRITABLE = (
 	"employee_name",
@@ -304,6 +304,13 @@ WRITABLE = (
 	"department",
 	"designation",
 	"employment_type",
+	# v0.209.2. WHAT THE ID CARD SAYS, which is deliberately not what payroll
+	# says: an owner-operator's Designation is "Operator" because that is how he
+	# is paid, and his card reads "Manager". Blank means the card uses the
+	# Designation and the Employment Type's category. Neither is a pay fact.
+	# docs/design/card_print_queue.md, Amendment 2.
+	"badge_title",
+	"badge_category",
 	# v0.54.0. Frappe HR's own operating-unit dimension on Employee, and the one
 	# field the hiring wizard's Assignment step asked for that this allowlist did
 	# not carry — so a crew hired for the Mill Creek camp came out with the ranch
@@ -635,6 +642,16 @@ def _clean(fieldname: str, raw, label: str = "") -> str:
 		# be the only field on the form you cannot fill in from the badge.
 		return resolve_employee(value)
 
+	if fieldname == "badge_category":
+		from ..card_print import BADGE_CATEGORIES
+
+		match = next((c for c in BADGE_CATEGORIES if c.lower() == value.lower()), "")
+		if not match:
+			raise ToolError(
+				f"{label} must be one of: {', '.join(BADGE_CATEGORIES)}. Got {value!r}. Nothing was changed."
+			)
+		return match
+
 	if fieldname in SELECT_FIELDS and select_options(EMPLOYEE, fieldname):
 		return as_choice(EMPLOYEE, fieldname, value, label)
 
@@ -842,6 +859,8 @@ def create_employee(args: dict) -> ToolResult:
 		"department",
 		"designation",
 		"employment_type",
+		"badge_title",
+		"badge_category",
 		# v0.54.0. On `WRITABLE` beside the three above it, and it has to be here
 		# too — that tuple is what `_reject_unknown` accepts, and THIS one is what
 		# actually gets written. A field on the first and not the second is one

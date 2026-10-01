@@ -90,15 +90,31 @@ class Requesting(CardPrintCase):
 		self.assertTrue(any("logo" in w for w in answer["warnings"]))
 
 	def test_a_duplex_station_gets_both_sides_as_designed(self):
+		"""Amendment 3: both pages landscape, the back turned clockwise, by default."""
+		self.assertEqual(
+			frappe.db.get_value("Card Print Station", card_print.DEFAULT_STATION, "back_orientation"),
+			"Landscape, rotated CW",
+		)
 		self.duplex()
 		job = self.ask()["job"]
 		self.assertEqual(job["pages"], "Both")
+		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0), (85.6, 54.0)])
+
+	def test_the_back_can_be_sent_portrait(self):
+		self.duplex(back_orientation="Portrait")
+		job = self.ask()["job"]
 		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0), (54.0, 85.6)])
 
-	def test_the_back_can_be_sent_rotated(self):
-		self.duplex(back_orientation="Landscape, rotated CW")
-		job = self.ask()["job"]
-		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(job["name"])), [(85.6, 54.0), (85.6, 54.0)])
+	def test_a_station_left_on_portrait_is_moved_once(self):
+		from erpnext_mcp.patches import card_backs_landscape_cw
+
+		frappe.db.set_value("Card Print Station", card_print.DEFAULT_STATION, "back_orientation", "Portrait")
+		self.assertEqual(card_backs_landscape_cw.run(), 1)
+		self.assertEqual(card_backs_landscape_cw.run(), 0)
+		self.assertEqual(
+			frappe.db.get_value("Card Print Station", card_print.DEFAULT_STATION, "back_orientation"),
+			"Landscape, rotated CW",
+		)
 
 	def test_single_is_the_front_only(self):
 		self.duplex()
@@ -310,7 +326,7 @@ class AssetTagArtwork(CardPrintCase):
 		self.duplex()
 		answer = card_print.request(WORKER, "Asset Tag", "MC-Valve-05", uid(1))
 		pdf = self.pdf_of(answer["job"]["name"])
-		self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0), (54.0, 85.6)])
+		self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0), (85.6, 54.0)])
 		texts = [[item["text"] for item in page] for page in card_art.text_items(pdf)]
 		self.assertIn("MC-Valve-05", texts[0])
 		self.assertIn("Scan for asset record", texts[1])
@@ -468,7 +484,7 @@ class ASimplexPrinter(CardPrintCase):
 		self.assertEqual((row["status"], row["back_pending"], row["can_print_back"]), ("Printed", True, True))
 		back = card_print.request_back(front, WORKER)["job"]
 		self.assertEqual((back["pages"], back["front_job"], back["status"]), ("Back", front, "Queued"))
-		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(back["name"])), [(54.0, 85.6)])
+		self.assertEqual(card_art.page_sizes_mm(self.pdf_of(back["name"])), [(85.6, 54.0)])
 		self.assertTrue(card_print.request_back(front, WORKER)["already_queued"])
 		claimed = self.ready()["job"]
 		self.assertEqual((claimed["name"], claimed["duplex"]), (back["name"], False))
@@ -487,7 +503,7 @@ class ASimplexPrinter(CardPrintCase):
 class DownloadingByHand(CardPrintCase):
 	def test_the_download_is_both_pages_and_is_recorded(self):
 		doc, pdf, _warnings = card_print.download(WORKER, "Employee ID", WORKER_EMPLOYEE)
-		self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0), (54.0, 85.6)])
+		self.assertEqual(card_art.page_sizes_mm(pdf), [(85.6, 54.0), (85.6, 54.0)])
 		row = STORE.get_raw("Card Print Job", doc.name)
 		self.assertEqual((row["status"], row["requested_by"], row["pages"]), ("Downloaded", WORKER, "Both"))
 		self.assertTrue(row["artwork"].startswith("/private/files/"))
@@ -609,6 +625,33 @@ class WhatTheCardSays(CardPrintCase):
 		for text in ("Manager", "OWNER /", "OPERATOR"):
 			self.assertIn(text, front["front_svg"])
 		self.assertNotIn("EMPLOYEE", front["front_svg"])
+
+	def test_it_is_set_over_mcp_and_the_logo_too(self):
+		"""Amendment 3 §C3: the post-deploy steps are tool calls."""
+		from erpnext_mcp.tools import badges
+
+		badges.install_badge_logo_field()
+		self.configure(
+			enabled=1, **ON, allow_update_employee=1, allow_update_company=1, allow_download_card_pdf=1
+		)
+		set_roles("Administrator", [*ROLES.get("Administrator", []), "System Manager"])
+		frappe.db.set_value("Employee", WORKER_EMPLOYEE, "employment_type", "Operator")
+		STORE.commit()
+		self.tool_data("update_employee", {"employee": WORKER_EMPLOYEE, "badge_title": "Manager"})
+		self.assertEqual(frappe.db.get_value("Employee", WORKER_EMPLOYEE, "badge_title"), "Manager")
+		self.assertIn(
+			"Owner / Operator",
+			self.tool_error("update_employee", {"employee": WORKER_EMPLOYEE, "badge_category": "Boss"}),
+		)
+		self.tool_data("update_employee", {"employee": WORKER_EMPLOYEE, "badge_category": "management"})
+		self.assertEqual(frappe.db.get_value("Employee", WORKER_EMPLOYEE, "badge_category"), "Management")
+		data = self.tool_data("update_company", {"company": MAIN, "badge_logo": "/files/oml-logo.png"})
+		self.assertEqual(data["changed"]["badge_logo"][1], "/files/oml-logo.png")
+		card = self.tool_data(
+			"download_card_pdf", {"job_type": "Employee ID", "reference_name": WORKER_EMPLOYEE}
+		)
+		self.assertEqual(card["job"]["status"], "Downloaded")
+		self.assertTrue(card["file_url"])
 
 	def test_the_title_is_the_designation_until_the_card_says_otherwise(self):
 		frappe.db.set_value("Employee", WORKER_EMPLOYEE, "designation", "Picker")
