@@ -111,6 +111,11 @@ INBOX_TILE = copy.deepcopy(tiles.SEEDS["compliance_inbox"])
 class PhoneConfigCase(MobileAPITestCase):
 	def setUp(self):
 		super().setUp()
+		# The write limiter is a module-global on the wall clock; each test starts
+		# with a clean minute, or the suite's own speed decides which test fails.
+		from erpnext_mcp.tools import phone_configs as phone_config_tools
+
+		phone_config_tools._recent.clear()
 		self.configure(enabled=1, **ON)
 		self.be("Administrator")
 		STORE.commit()
@@ -322,6 +327,32 @@ class WizardsOnThePhone(PhoneConfigCase):
 		made = wizard_config.seed_from_legacy()
 		self.assertTrue(any(name.startswith("wizard:accident_investigation@") for name in made))
 		self.assertEqual(wizard_config.seed_from_legacy(), [])
+
+	def test_report_an_accident_gains_a_map_pin_as_a_published_version(self):
+		"""v0.211.0, quick_wins_2026_10.md §1: a config change, not a code one."""
+		from erpnext_mcp.tools import wizards as wizard_tools
+
+		wizard_tools.install_wizard_definitions(overwrite=False)
+		wizard_config.seed_from_legacy()
+		name = wizard_config.add_accident_location()
+		self.assertEqual(name, "wizard:accident_investigation@2")
+		two = phone_config.doc_of("Wizard", "accident_investigation", 2)
+		self.assertEqual(two.status, "Published")
+		self.assertEqual(phone_config.doc_of("Wizard", "accident_investigation", 1).status, "Superseded")
+		body = phone_config.body_of(two)
+		where = next(step for step in body["steps"] if step["key"] == "where")
+		pin = where["form"][-1]
+		self.assertEqual((pin["key"], pin["type"], pin["required"]), ("location_point", "geolocation", False))
+		self.assertTrue(pin["label"]["es"])
+		# The answer reaches the route as an argument, with no submit map needed.
+		arguments, ignored = wizard_config.handler_arguments(
+			body, {"location_point": {"type": "Point", "coordinates": [-121.18, 45.6]}}, {}
+		)
+		self.assertEqual(arguments["location_point"]["coordinates"], [-121.18, 45.6])
+		self.assertEqual(ignored, [])
+		# Once, and never over a version somebody else wrote.
+		self.assertEqual(wizard_config.add_accident_location(), "")
+		self.assertEqual(len(phone_config.rows("Wizard", "accident_investigation")), 2)
 
 
 # ── §3 tiles ────────────────────────────────────────────────────────────────

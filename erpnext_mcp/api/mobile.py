@@ -197,6 +197,7 @@ HOUSING_ASSIGNMENT = "Housing Assignment"
 CERTIFICATION = "Certification"
 TRAINING_RECORD = "Employee Training Record"
 TRAINING_SESSION = "Training Session"
+TRAINING_TYPE = "Training Type"
 REGULATORY_FILING = "Regulatory Filing"
 COMPLIANCE_POLICY = "Compliance Policy"
 EXPENSE_RECEIPT = "Expense Receipt"
@@ -5820,6 +5821,13 @@ ATTACHMENT_PARENTS = {
 	# carries a `company` column, so `_attachment_parent` scopes it through
 	# `require_scoped_doc` like every other entry here.
 	"Asset Register": False,
+	# v0.211.0. A course's handouts — the slides, the safety data sheet, the
+	# quiz — for the people taking the course. `False`: nothing filed against a
+	# Training Type names anybody, and `get_training_curriculum` already lists
+	# these files to every enrolled caller; this is the door their bytes come
+	# through. A Training Type has no company, so there is no entity to scope.
+	# The CLASS folder (Training Session, sign-in sheet and all) keeps its gate.
+	TRAINING_TYPE: False,
 }
 
 #: The parents whose folder this surface opens on the strength of ITS OWN gates
@@ -5924,7 +5932,7 @@ ATTACHMENT_PARENTS = {
 #: itself (`get_asset_detail`) and already WRITES its attachments through
 #: `files.attach_file_to_authorized_parent`, which v0.152.0 brokered for the
 #: same DocPerm.
-BROKERED_PARENTS = frozenset({EMPLOYEE, TRAINING_SESSION, "Asset Register"})
+BROKERED_PARENTS = frozenset({EMPLOYEE, TRAINING_SESSION, "Asset Register", TRAINING_TYPE})
 
 
 def _attachment_parent(doctype, docname, allowed: list) -> tuple:
@@ -10204,6 +10212,10 @@ def create_accident_report(
 	asset=None,
 	narrative=None,
 	company=None,
+	latitude=None,
+	longitude=None,
+	location_accuracy_m=None,
+	location_point=None,
 ) -> dict:
 	"""Open an incident record at the scene.
 
@@ -10247,6 +10259,16 @@ def create_accident_report(
 	):
 		if value not in (None, ""):
 			inner[key] = str(value).strip()
+	# v0.211.0. Where the report was made, or the pin the reporter dropped. Passed
+	# through as sent — numbers, or a form's GeoJSON Point — and checked by the tool.
+	for key, value in (
+		("latitude", latitude),
+		("longitude", longitude),
+		("location_accuracy_m", location_accuracy_m),
+		("location_point", location_point),
+	):
+		if value not in (None, ""):
+			inner[key] = value
 	inner["source_language"] = _caller_language(user, reporter)
 
 	return accident_tools.create_accident_report(inner).data
@@ -12325,7 +12347,8 @@ def get_extraction_config(user: str, document_type=None, known_version=None) -> 
 			f"document_type must be one of {', '.join(document_intel.DOCUMENT_TYPES)}.",
 			frappe.ValidationError,
 		)
-	body, config_version = extraction_config.active(wanted)
+	# v0.211.0: `user` — a Staged version is served to the accounts it is staged to.
+	body, config_version = extraction_config.active(wanted, user)
 	if body is None:
 		return {"document_type": wanted, "config_version": None, "config": None}
 	if str(known_version or "").strip() == config_version:
@@ -22147,6 +22170,11 @@ def record_asset_stock_movement(
 			"status": entry.get("status"),
 			"entry_type": entry.get("entry_type"),
 			"item_code": first.get("item_code") or code,
+			# v0.211.0: the name, live from the Item — the code alone names nothing.
+			"item_name": frappe.db.get_value("Item", first.get("item_code") or code, "item_name")
+			or first.get("item_name")
+			or first.get("item_code")
+			or code,
 			"qty": first.get("qty") if first.get("qty") is not None else amount,
 			"uom": first.get("uom") or unit or None,
 		},
@@ -22465,6 +22493,71 @@ def reply_to_app_feedback(
 		if value not in (None, ""):
 			inner[key] = str(value)
 	return feedback_tools.reply_to_app_feedback(inner).data
+
+
+# ── get_training_certificate ─────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_training_certificate", limit=guard.UPLOAD_LIMIT)
+def get_training_certificate(user: str, record=None, training_record=None, max_bytes=None) -> dict:
+	"""The certificate on one training record, as base64. v0.211.0.
+
+	THE READ `attach_training_certificate` NEVER HAD, and the phone has asked for
+	it since §41 (it answered 404). `record` (or `training_record`) is the
+	Employee Training Record.
+
+	WHO MAY: the person the record is about, for their own card; otherwise the
+	roles that run training (`employee.SHIFT_ROLES`). The record must be inside
+	the caller's entities. Nobody reaches a colleague's card by naming it.
+
+	WHICH FILE: the one the record's `certificate_file` names, and only when it
+	is attached to this record or to nothing — a URL copied onto a record does
+	not open a file that belongs to another document. A record with no
+	certificate answers `has_certificate: false` rather than an error, because
+	"none on file" is an ordinary fact about a training record.
+	"""
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(TRAINING_RECORD, record or training_record, "record", allowed)
+	own = str(frappe.db.get_value(TRAINING_RECORD, name, "employee") or "") == (
+		fieldwork._employee_for(user) or "\0"
+	)
+	if not own:
+		personnel.require_shift_role()
+	nothing = {"training_record": name, "has_certificate": False, "file_name": None, "content": None}
+	url = str(frappe.db.get_value(TRAINING_RECORD, name, "certificate_file") or "").strip()
+	if not url or not compat.doctype_exists("File"):
+		return nothing
+	rows = frappe.db.get_all(
+		"File",
+		filters={"file_url": url},
+		fields=["name", "attached_to_doctype", "attached_to_name"],
+		limit=20,
+	)
+	mine = [
+		row
+		for row in rows
+		if row.get("attached_to_doctype") == TRAINING_RECORD and row.get("attached_to_name") == name
+	] or [row for row in rows if not row.get("attached_to_name")]
+	if not mine:
+		return nothing
+	try:
+		cap = file_tools._resolve_max_bytes(
+			file_tools.as_int({"max_bytes": max_bytes}, "max_bytes", file_tools.DEFAULT_MAX_BYTES)
+		)
+		data = file_tools._attachment_payload(frappe.get_doc("File", mine[0]["name"]), cap).data
+	except ToolError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+	return {
+		"training_record": name,
+		"has_certificate": True,
+		"file": data.get("name"),
+		"file_name": data.get("file_name"),
+		"file_size": data.get("file_size"),
+		"content_type": data.get("mime_type"),
+		"mime_type": data.get("mime_type"),
+		"encoding": "base64",
+		"content": data.get("content_base64"),
+		"content_base64": data.get("content_base64"),
+	}
 
 
 # ── 269. attach_training_certificate ─────────────────────────────────────────

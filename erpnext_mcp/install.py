@@ -298,6 +298,11 @@ def _phone_configs(convert_wizards: bool = False) -> None:
 		made = tiles.seed() + label_compliance.seed()
 		if convert_wizards:
 			made += wizard_config.seed_from_legacy()
+		# v0.211.0. "Report an Accident" v2 (the map pin) — a published config
+		# version, built only on an untouched v1. quick_wins_2026_10.md §1.
+		upgraded = wizard_config.add_accident_location()
+		if upgraded:
+			made.append(upgraded)
 	except Exception as exc:  # pragma: no cover - a seed must not fail a migrate
 		print(f"erpnext_mcp: phone configuration was not seeded — {type(exc).__name__}: {exc}")
 		return

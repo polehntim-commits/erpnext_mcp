@@ -254,7 +254,7 @@ class TheOwnerReadsTheFolder(EmployeeDocumentsTestCase):
 		self.assertEqual(data["doctype"], "Employee")
 		self.assertEqual(data["count"], 1)
 
-	def test_the_brokered_set_is_three_entries_and_all_are_parents(self):
+	def test_the_brokered_set_is_four_entries_and_all_are_parents(self):
 		"""The set is short and every entry has to be a parent this surface
 		already reads. A doctype brokered but not on `ATTACHMENT_PARENTS` would be
 		unreachable code that looks like a permission.
@@ -266,9 +266,14 @@ class TheOwnerReadsTheFolder(EmployeeDocumentsTestCase):
 
 		v0.191.0 ADDS `Asset Register`, whose DocPerms reach a phone account only
 		through Frappe's `Employee` companion role. See
-		`test_asset_actions.TheAssetFolderOpens`."""
-		self.assertEqual(mobile_api.BROKERED_PARENTS,
-		                 frozenset({"Employee", "Training Session", "Asset Register"}))
+		`test_asset_actions.TheAssetFolderOpens`.
+
+		v0.211.0 ADDS `Training Type` — a course's handouts, for the people taking
+		it. See `test_training_session_documents.CoursePapersAndCards`."""
+		self.assertEqual(
+			mobile_api.BROKERED_PARENTS,
+			frozenset({"Employee", "Training Session", "Asset Register", "Training Type"}),
+		)
 		self.assertTrue(mobile_api.BROKERED_PARENTS <= set(mobile_api.ATTACHMENT_PARENTS))
 
 

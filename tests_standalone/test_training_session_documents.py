@@ -36,6 +36,8 @@ FOUR CLAIMS.
    truthiness test it replaced would have run the HR gate on it.
 """
 
+import base64
+
 import frappe
 
 from erpnext_mcp import roles
@@ -60,10 +62,7 @@ TICKET_BYTES = b"a photograph of a CGCC applicator-licence ticket"
 CATALOGUE = "file-trns-catalogue"
 OUTSIDER_FILE = "file-trns-outsider"
 
-ON = {
-	f"allow_{name}": 1
-	for name in ("create_mobile_user", "list_attachments", "get_attachment_content")
-}
+ON = {f"allow_{name}": 1 for name in ("create_mobile_user", "list_attachments", "get_attachment_content")}
 
 
 class TrainingSessionDocumentsTestCase(V12TestCase):
@@ -244,9 +243,7 @@ class TheDoorOpens(TrainingSessionDocumentsTestCase):
 		self.be(MANAGER)
 		data = mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
 		self.assertEqual(data["count"], 2)
-		self.assertEqual(
-			sorted(row["name"] for row in data["attachments"]), sorted([CATALOGUE, TICKET])
-		)
+		self.assertEqual(sorted(row["name"] for row in data["attachments"]), sorted([CATALOGUE, TICKET]))
 
 	def test_the_ticket_comes_back_as_bytes(self):
 		"""The whole point of the feature: the file itself, through the sidecar,
@@ -330,9 +327,7 @@ class TheSentinelIsMatchedExactly(TrainingSessionDocumentsTestCase):
 	opposite of what it says."""
 
 	def test_the_training_session_carries_the_shift_gate(self):
-		self.assertIs(
-			mobile_api.ATTACHMENT_PARENTS["Training Session"], mobile_api.SHIFT_GATE
-		)
+		self.assertIs(mobile_api.ATTACHMENT_PARENTS["Training Session"], mobile_api.SHIFT_GATE)
 
 	def test_the_sentinel_is_truthy_which_is_why_it_is_compared_by_identity(self):
 		self.assertTrue(bool(mobile_api.SHIFT_GATE))
@@ -347,3 +342,142 @@ class TheSentinelIsMatchedExactly(TrainingSessionDocumentsTestCase):
 			if parent != "Training Session"
 		}
 		self.assertTrue(all(gate is True or gate is False for gate in others.values()))
+
+
+# ── v0.211.0: course handouts and one's own certificate (quick_wins §3) ─────
+COURSE = "Ladder Safety"
+HANDOUT = "file-course-handout"
+CARD = "file-own-card"
+OTHER_CARD = "file-colleague-card"
+ANA = "HR-EMP-ANA"
+BEN = "HR-EMP-BEN"
+RECORD = "ETR-2026-0001"
+BENS_RECORD = "ETR-2026-0002"
+BARE_RECORD = "ETR-2026-0003"
+
+
+class CoursePapersAndCards(TrainingSessionDocumentsTestCase):
+	def setUp(self):
+		super().setUp()
+		STORE.seed("Training Type", [{"name": COURSE, "training_type_name": COURSE, "active": 1}])
+		STORE.seed(
+			"Employee",
+			[
+				{
+					"name": ANA,
+					"employee_name": "Ana Ramos",
+					"user_id": PICKER,
+					"company": MAIN,
+					"status": "Active",
+				},
+				{"name": BEN, "employee_name": "Ben Ortiz", "company": MAIN, "status": "Active"},
+			],
+		)
+		STORE.seed(
+			"Employee Training Record",
+			[
+				{
+					"name": RECORD,
+					"employee": ANA,
+					"company": MAIN,
+					"certificate_file": "/private/files/ana-card.pdf",
+				},
+				{
+					"name": BENS_RECORD,
+					"employee": BEN,
+					"company": MAIN,
+					"certificate_file": "/private/files/ben-card.pdf",
+				},
+				{"name": BARE_RECORD, "employee": ANA, "company": MAIN},
+			],
+		)
+		STORE.seed(
+			"File",
+			[
+				{
+					"name": HANDOUT,
+					"file_name": "ladder-safety-handout.pdf",
+					"file_url": "/private/files/ladder-safety-handout.pdf",
+					"file_size": 7,
+					"is_private": 1,
+					"attached_to_doctype": "Training Type",
+					"attached_to_name": COURSE,
+				},
+				{
+					"name": CARD,
+					"file_name": "ana-card.pdf",
+					"file_url": "/private/files/ana-card.pdf",
+					"file_size": 8,
+					"is_private": 1,
+					"attached_to_doctype": "Employee Training Record",
+					"attached_to_name": RECORD,
+				},
+				{
+					"name": OTHER_CARD,
+					"file_name": "ben-card.pdf",
+					"file_url": "/private/files/ben-card.pdf",
+					"file_size": 8,
+					"is_private": 1,
+					"attached_to_doctype": "Employee Training Record",
+					"attached_to_name": BENS_RECORD,
+				},
+			],
+		)
+		STORE.file_contents[HANDOUT] = b"handout"
+		STORE.file_contents[CARD] = b"ana-card"
+		STORE.file_contents[OTHER_CARD] = b"ben-card"
+		STORE.commit()
+
+	def test_a_picker_opens_the_course_handout_and_still_not_the_class_folder(self):
+		self.be(PICKER)
+		listed = mobile_api.list_attachments(doctype="Training Type", docname=COURSE)
+		self.assertEqual([row["name"] for row in listed["attachments"]], [HANDOUT])
+		content = mobile_api.get_attachment_content(file=HANDOUT)
+		self.assertEqual(base64.b64decode(content["content_base64"]), b"handout")
+		with self.assertRaises(frappe.ValidationError):
+			mobile_api.list_attachments(doctype="Training Session", docname=SESSION)
+
+	def test_the_course_door_needs_no_frappe_read_on_training_type(self):
+		STORE.denied_permissions.add(("Training Type", "read"))
+		self.addCleanup(STORE.denied_permissions.discard, ("Training Type", "read"))
+		self.be(PICKER)
+		self.assertEqual(mobile_api.list_attachments(doctype="Training Type", docname=COURSE)["count"], 1)
+
+	def test_my_own_card_comes_back_as_bytes(self):
+		self.be(PICKER)
+		answer = mobile_api.get_training_certificate(record=RECORD, max_bytes=8 * 1024 * 1024)
+		self.assertTrue(answer["has_certificate"])
+		self.assertEqual(answer["file_name"], "ana-card.pdf")
+		self.assertEqual(answer["content_type"], "application/pdf")
+		self.assertEqual(base64.b64decode(answer["content"]), b"ana-card")
+		self.assertEqual(answer["content"], answer["content_base64"])
+
+	def test_a_colleagues_card_is_refused_to_a_picker_and_open_to_a_foreman(self):
+		self.be(PICKER)
+		with self.assertRaises(frappe.ValidationError) as caught:
+			mobile_api.get_training_certificate(record=BENS_RECORD)
+		self.assertIn("Foreman", str(caught.exception))
+		self.be(FOREMAN)
+		self.assertEqual(
+			base64.b64decode(mobile_api.get_training_certificate(training_record=BENS_RECORD)["content"]),
+			b"ben-card",
+		)
+
+	def test_no_card_is_an_ordinary_answer(self):
+		self.be(PICKER)
+		answer = mobile_api.get_training_certificate(record=BARE_RECORD)
+		self.assertEqual((answer["has_certificate"], answer["content"]), (False, None))
+
+	def test_a_url_copied_from_somebody_elses_record_opens_nothing(self):
+		"""The file must hang off THIS record (or off nothing)."""
+		frappe.db.set_value(
+			"Employee Training Record", BARE_RECORD, "certificate_file", "/private/files/ben-card.pdf"
+		)
+		self.be(PICKER)
+		self.assertFalse(mobile_api.get_training_certificate(record=BARE_RECORD)["has_certificate"])
+
+	def test_the_curriculum_counts_each_courses_files(self):
+		self.configure(enabled=1, **ON, allow_get_training_curriculum=1)
+		data = self.tool_data("get_training_curriculum", {})
+		counts = {row["training_type"]: row["attachment_count"] for row in data["curriculum"]}
+		self.assertEqual(counts.get(COURSE), 1)

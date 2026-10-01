@@ -22,6 +22,9 @@
   "location_doctype",
   "location",
   "location_description",
+  "latitude",
+  "longitude",
+  "location_accuracy_m",
   "asset",
   "injury_section",
   "injured_person",
@@ -161,6 +164,26 @@
    "fieldname": "location_description",
    "fieldtype": "Small Text",
    "label": "Location Description"
+  },
+  {
+   "description": "v0.211.0. Where the report was made, or the pin the reporter dropped: decimal degrees. Empty when the phone had no fix or the reporter declined.",
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": "6"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": "6"
+  },
+  {
+   "description": "The fix's horizontal accuracy in metres, as the phone reported it. Empty for a pin dropped by hand.",
+   "fieldname": "location_accuracy_m",
+   "fieldtype": "Float",
+   "label": "Location Accuracy (m)",
+   "precision": "1"
   },
   {
    "description": "The machine involved, where there was one. Scanning its tag afterwards is how a worker finds out this happened here.",

@@ -660,8 +660,26 @@ def get_training_curriculum(args: dict) -> ToolResult:
 	described = [
 		training_sessions.describe_type(dict(row), with_attachments=False) for row in rows[:CURRICULUM_CAP]
 	]
+	# v0.211.0. How many handouts each course has, so a phone can say "3 files"
+	# on the list and fetch them (list_attachments on the Training Type) on a tap.
+	counts: dict = {}
+	if described and compat.doctype_exists("File"):
+		for row in (
+			frappe.db.get_all(
+				"File",
+				filters={
+					"attached_to_doctype": TYPE_DOCTYPE,
+					"attached_to_name": ("in", [entry["training_type"] for entry in described]),
+				},
+				fields=["attached_to_name"],
+				limit=2000,
+			)
+			or []
+		):
+			counts[row.get("attached_to_name")] = counts.get(row.get("attached_to_name"), 0) + 1
 	for entry in described:
 		entry["content_gaps"] = _content_gaps(entry)
+		entry["attachment_count"] = counts.get(entry["training_type"], 0)
 
 	incomplete = [entry["training_type"] for entry in described if entry["content_gaps"]]
 	data = {

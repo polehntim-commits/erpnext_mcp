@@ -2,7 +2,7 @@
  "schema_version": 1,
  "document_type": "Receipt",
  "instructions": {
-  "en": "You sort paperwork for a tree-fruit farm in the Pacific Northwest.\nYou are given fields already extracted from a photographed receipt — never the raw scan.\nAnswer only from what you are given. Do not calculate totals and do not invent facts.\n\nThe eight categories, which are fixed and cannot be added to:\n- Fuel: diesel, petrol, propane, off-road dye, DEF — anything burned in an engine or a heater\n- Equipment Parts: parts and repairs for tractors, sprayers, pumps, trailers; a mechanic's invoice\n- Supplies: picking bags, bins, gloves, sprays and chemicals, packing materials, orchard consumables\n- Hardware: a hardware store run: fasteners, timber, wire, tools, irrigation fittings\n- Feed: animal feed and bedding\n- Seed: seed, rootstock, nursery trees, cover crop\n- Fertilizer: fertiliser, soil amendments, foliar nutrients, lime\n- Other: anything that fits none of the above — services, fees, meals, a contractor's labour\n\nSupplier and cost centre must be copied from the lists you are given, or left empty.\nAn empty answer is correct and expected when nothing on the list matches.\n\nThe merchant line often carries a greeting or a tagline — 'Welcome to',\n'Thank you for shopping at', 'Come again to', 'Your hometown store since 1946'.\nThat text is the till being polite. The trading name is what is left after it.\n\nItems may fall in different categories from each other and from the receipt.\nNever restate, correct or invent a price: the money has already been read."
+  "en": "You sort paperwork for a tree-fruit farm in the Pacific Northwest.\nYou are given fields already extracted from a photographed receipt — never the raw scan.\nAnswer only from what you are given. Do not calculate totals and do not invent facts.\n\nThe eight categories, which are fixed and cannot be added to:\n- Fuel: diesel, petrol, propane, off-road dye, DEF — anything burned in an engine or a heater\n- Equipment Parts: parts and repairs for tractors, sprayers, pumps, trailers; a mechanic's invoice\n- Supplies: picking bags, bins, gloves, sprays and chemicals, packing materials, orchard consumables\n- Hardware: a hardware store run: fasteners, timber, wire, tools, irrigation fittings\n- Feed: animal feed and bedding\n- Seed: seed, rootstock, nursery trees, cover crop\n- Fertilizer: fertiliser, soil amendments, foliar nutrients, lime\n- Other: anything that fits none of the above — services, fees, meals, a contractor's labour\n\nSupplier and cost centre must be copied from the lists you are given, or left empty.\nAn empty answer is correct and expected when nothing on the list matches.\n\nThe merchant line often carries a greeting or a tagline — 'Welcome to',\n'Thank you for shopping at', 'Come again to', 'Your hometown store since 1946'.\nThat text is the till being polite. The trading name is what is left after it.\nA printed logo is often misread: when the lines you are given include a web address\n(homedepot.com), the business that address belongs to is the merchant.\n\nItems may fall in different categories from each other and from the receipt.\nNever restate, correct or invent a price: the money has already been read."
  },
  "fields": [
   {
@@ -57,7 +57,17 @@
  "extractors": [
   {
    "field": "amount",
-   "pattern": "(?i)\\b(?:grand\\s+)?total\\b[^0-9$]{0,20}\\$?\\s*([0-9]{1,6}(?:,[0-9]{3})*\\.[0-9]{2})",
+   "pattern": "(?i)(?:^|\\n)\\s*\\$?\\s*([0-9]{1,6}(?:,[0-9]{3})*\\.[0-9]{2})\\s*\\n\\s*(?:grand\\s+)?total\\s*(?=\\n|$)",
+   "group": 1
+  },
+  {
+   "field": "amount",
+   "pattern": "(?i)(?:^|\\n)\\s*(?:grand\\s+)?total\\b[^0-9$\\n]{0,20}\\n?\\s*\\$?\\s*([0-9]{1,6}(?:,[0-9]{3})*\\.[0-9]{2})",
+   "group": 1
+  },
+  {
+   "field": "amount",
+   "pattern": "(?i)\\bUSD\\s*\\$\\s*([0-9]{1,6}(?:,[0-9]{3})*\\.[0-9]{2})",
    "group": 1
   },
   {
@@ -117,6 +127,73 @@
   }
  ],
  "advisory_drop": [],
+ "receipt": {
+  "total_labels": [
+   "GRAND TOTAL",
+   "TOTAL",
+   "AMOUNT DUE",
+   "BALANCE DUE"
+  ],
+  "subtotal_labels": [
+   "SUBTOTAL",
+   "SUB TOTAL",
+   "SUB-TOTAL"
+  ],
+  "charge_patterns": [
+   "(?i)\\bUSD\\s*\\$\\s*([0-9]{1,6}(?:,[0-9]{3})*\\.[0-9]{2})"
+  ],
+  "never_amount": [
+   "SPEND",
+   "SUMMARY",
+   "YTD",
+   "YEAR TO DATE",
+   "POINTS",
+   "SAVINGS",
+   "YOU SAVED",
+   "SAVE UP TO",
+   "CREDIT LINE",
+   "REWARDS",
+   "MEMBER STATEMENT"
+  ],
+  "not_items": [
+   "SELF CHECKOUT",
+   "USD$",
+   "AUTH CODE",
+   "AUTH MODE",
+   "PRO XTRA",
+   "SPEND",
+   "SUMMARY",
+   "YTD",
+   "POINTS",
+   "SAVINGS",
+   "CREDIT LINE",
+   "RETURN POLICY",
+   "POLICY ID",
+   "POLICY EXPIRES",
+   "PO/JOB NAME"
+  ],
+  "merchant_domains": {
+   "homedepot.com": "The Home Depot",
+   "lowes.com": "Lowe's",
+   "acehardware.com": "Ace Hardware",
+   "harborfreight.com": "Harbor Freight Tools",
+   "tractorsupply.com": "Tractor Supply Co.",
+   "costco.com": "Costco",
+   "walmart.com": "Walmart",
+   "fredmeyer.com": "Fred Meyer",
+   "safeway.com": "Safeway",
+   "napaonline.com": "NAPA Auto Parts",
+   "oreillyauto.com": "O'Reilly Auto Parts",
+   "autozone.com": "AutoZone",
+   "grainger.com": "Grainger",
+   "fastenal.com": "Fastenal",
+   "wilco.coop": "Wilco",
+   "coastalcountry.com": "Coastal",
+   "amazon.com": "Amazon",
+   "staples.com": "Staples",
+   "homedepot.ca": "The Home Depot"
+  }
+ },
  "llm": {
   "max_message_chars": 240,
   "temperature": 0.0

@@ -94,6 +94,9 @@ _FIELDS = (
 	"location_doctype",
 	"location",
 	"location_description",
+	"latitude",
+	"longitude",
+	"location_accuracy_m",
 	"asset",
 	"injured_person",
 	"injured_person_name",
@@ -185,6 +188,7 @@ def _describe(row: dict) -> dict:
 		"location_doctype": row.get("location_doctype") or None,
 		"location": row.get("location") or None,
 		"location_description": row.get("location_description") or None,
+		**_coordinates_out(row),
 		"asset": row.get("asset") or None,
 		"injured_person": row.get("injured_person") or None,
 		"injured_person_name": row.get("injured_person_name") or row.get("injured_person") or None,
@@ -280,6 +284,74 @@ def _outstanding(name: str, row: dict) -> list[dict]:
 	return out
 
 
+def _coordinates_out(row) -> dict:
+	"""latitude / longitude / location_accuracy_m, None where the report has no fix.
+
+	0,0 is "not captured": a Float column reads 0.0 when empty, and no orchard
+	is in the Gulf of Guinea."""
+	try:
+		latitude = float(row.get("latitude") or 0)
+		longitude = float(row.get("longitude") or 0)
+	except (TypeError, ValueError):
+		latitude = longitude = 0.0
+	if not latitude and not longitude:
+		return {"latitude": None, "longitude": None, "location_accuracy_m": None}
+	try:
+		accuracy = float(row.get("location_accuracy_m") or 0) or None
+	except (TypeError, ValueError):
+		accuracy = None
+	return {"latitude": latitude, "longitude": longitude, "location_accuracy_m": accuracy}
+
+
+def scene_coordinates(args: dict) -> tuple:
+	"""(latitude, longitude, accuracy_m) from a create call, or (None, None, None).
+
+	`latitude` + `longitude` win; otherwise `location_point` — a GeoJSON Point
+	(`coordinates` is [lon, lat]) or the string "lat,lon", which is what a form's
+	`geolocation` and `gps` fields answer. docs/design/quick_wins_2026_10.md §1."""
+
+	def number(value, label):
+		if value in (None, ""):
+			return None
+		try:
+			return float(value)
+		except (TypeError, ValueError):
+			raise ToolError(f"{label} must be a number in decimal degrees. Nothing was created.") from None
+
+	latitude = number(args.get("latitude"), "latitude")
+	longitude = number(args.get("longitude"), "longitude")
+	if (latitude is None) != (longitude is None):
+		raise ToolError("latitude and longitude come together — send both or neither. Nothing was created.")
+	if latitude is None:
+		point = args.get("location_point")
+		if isinstance(point, str) and point.strip().startswith("{"):
+			import json
+
+			try:
+				point = json.loads(point)
+			except ValueError:
+				point = None
+		if isinstance(point, dict):
+			pair = point.get("coordinates")
+			if point.get("type") == "Point" and isinstance(pair, (list, tuple)) and len(pair) >= 2:
+				longitude, latitude = number(pair[0], "location_point"), number(pair[1], "location_point")
+		elif isinstance(point, str) and "," in point:
+			first, second = (part.strip() for part in point.split(",", 1))
+			latitude, longitude = number(first, "location_point"), number(second, "location_point")
+		if latitude is None or longitude is None:
+			if point not in (None, "", {}):
+				raise ToolError('location_point is a GeoJSON Point or "lat,lon". Nothing was created.')
+			return None, None, None
+	if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+		raise ToolError(
+			f"{latitude}, {longitude} is not a place: latitude is ±90 and longitude ±180. Nothing was created."
+		)
+	accuracy = number(args.get("location_accuracy_m"), "location_accuracy_m")
+	if accuracy is not None and accuracy < 0:
+		accuracy = None
+	return round(latitude, 6), round(longitude, 6), accuracy
+
+
 # ── create_accident_report ──────────────────────────────────────────────────
 def create_accident_report(args: dict) -> ToolResult:
 	"""Open an incident record at the scene, with whatever is known now.
@@ -328,6 +400,10 @@ def create_accident_report(args: dict) -> ToolResult:
 	doc.location_doctype = as_str(args, "location_doctype") or None
 	doc.location = as_str(args, "location") or None
 	doc.location_description = as_str(args, "location_description")
+	latitude, longitude, accuracy = scene_coordinates(args)
+	if latitude is not None and compat.has_field(ACCIDENT, "latitude"):
+		doc.latitude, doc.longitude = latitude, longitude
+		doc.location_accuracy_m = accuracy
 	doc.asset = as_str(args, "asset") or None
 	doc.injured_person = as_str(args, "injured_person") or None
 	doc.injured_person_name = as_str(args, "injured_person_name") or None

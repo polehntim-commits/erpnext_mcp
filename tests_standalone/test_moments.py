@@ -39,7 +39,8 @@ class TheBodyIsChecked(unittest.TestCase):
 		for document_type in extraction_config.BUILTINS:
 			body, version = extraction_config.builtin(document_type)
 			self.assertEqual(extraction_config.problems(body), [], document_type)
-			self.assertEqual(version, f"{document_type}@builtin-1")
+			revision = extraction_config.BUILTIN_REVISIONS.get(document_type, 1)
+			self.assertEqual(version, f"{document_type}@builtin-{revision}")
 
 	def test_the_portable_subset(self):
 		for refused in ("(?<=a)b", "(?<!a)b", "(?P<x>a)", "(?<x>a)", "(a)\\1", "a(?i)b", "(?s)a"):
@@ -318,6 +319,101 @@ class ExtractionConfigRecords(MobileAPITestCase):
 		self.assertEqual([d["field"] for d in preview["advisory_dropped"]], ["active_ingredients"])
 		self.assertIn({"field": "signal_word", "recorded": "Caution", "config": "CAUTION"}, preview["diff"])
 		self.assertEqual(len(STORE.rows("Extraction Config")), before)
+
+	# ── v0.211.0: staging, from_builtin, and Receipt@2 (quick_wins_2026_10.md §4) ──
+	def receipt_two(self):
+		self.configure(enabled=1, **{**ON, "allow_stage_extraction_config": 1})
+		return self.tool_data(
+			"update_extraction_config",
+			{"document_type": "Receipt", "from_builtin": True, "notes": "AFB-2026-00029"},
+		)
+
+	def test_from_builtin_drafts_the_shipped_body_and_changes_nothing(self):
+		drafted = self.receipt_two()
+		self.assertEqual((drafted["name"], drafted["status"]), ("Receipt@2", "Draft"))
+		self.assertIn("receipt", extraction_config.body_of(extraction_config.row("Receipt", 2)))
+		self.assertEqual(extraction_config.active("Receipt")[1], "Receipt@1")
+		self.assertIn(
+			"not both",
+			self.tool_error(
+				"update_extraction_config",
+				{"document_type": "Receipt", "from_builtin": True, "config": {"a": 1}, "notes": "x"},
+			),
+		)
+
+	def test_staged_goes_to_the_named_accounts_only_then_to_everyone(self):
+		self.receipt_two()
+		self.assertIn(
+			"name who gets it first",
+			self.tool_error(
+				"stage_extraction_config", {"document_type": "Receipt", "version": "2", "users": []}
+			),
+		)
+		self.assertIn(
+			"no User called",
+			self.tool_error(
+				"stage_extraction_config",
+				{"document_type": "Receipt", "version": "2", "users": ["nobody@example.test"]},
+			),
+		)
+		staged = self.tool_data(
+			"stage_extraction_config", {"document_type": "Receipt", "version": "2", "users": [WORKER]}
+		)
+		self.assertEqual((staged["status"], staged["staged_users"]), ("Staged", [WORKER]))
+		self.assertEqual(staged["in_force_for_everyone_else"], "Receipt@1")
+		# Ana's phone gets it; the site's own readers and everybody else do not.
+		self.assertEqual(extraction_config.active("Receipt", WORKER)[1], "Receipt@2")
+		self.assertEqual(extraction_config.active("Receipt", "ben@example.test")[1], "Receipt@1")
+		self.assertEqual(extraction_config.active("Receipt")[1], "Receipt@1")
+		STORE.commit()
+		self.be()
+		answer = mobile_api.get_extraction_config(document_type="Receipt")
+		self.assertEqual(answer["config_version"], "Receipt@2")
+		self.assertIn("never_amount", answer["config"]["receipt"])
+		self.be("Administrator")
+		published = self.tool_data("publish_extraction_config", {"document_type": "Receipt", "version": "2"})
+		self.assertEqual((published["status"], published["superseded"]), ("Published", "Receipt@1"))
+		self.assertEqual(extraction_config.active("Receipt", "ben@example.test")[1], "Receipt@2")
+
+	def test_staging_another_version_returns_the_first_to_draft(self):
+		self.receipt_two()
+		self.tool_data(
+			"stage_extraction_config", {"document_type": "Receipt", "version": "2", "users": [WORKER]}
+		)
+		self.tool_data(
+			"update_extraction_config",
+			{"document_type": "Receipt", "from_builtin": True, "notes": "a second try"},
+		)
+		self.tool_data(
+			"stage_extraction_config", {"document_type": "Receipt", "version": "3", "users": [WORKER]}
+		)
+		self.assertEqual(STORE.get_raw("Extraction Config", "Receipt@2")["status"], "Draft")
+		self.assertEqual(extraction_config.active("Receipt", WORKER)[1], "Receipt@3")
+
+	def test_the_home_depot_slip_previews_at_its_total(self):
+		"""EXR-2026-0018: dry-run Receipt@2 against the stored validation, as an operator would."""
+		import pathlib
+
+		slip = (pathlib.Path(__file__).parent / "fixtures" / "receipts" / "EXR-2026-0018.txt").read_text()
+		filed = self.tool_data(
+			"validate_document_extraction",
+			{
+				"document_type": "Receipt",
+				"ocr_text": slip,
+				"extracted_fields": {"merchant": "How doers", "amount": 1937.0, "receipt_date": "2026-09-30"},
+				"company": MAIN,
+			},
+		)
+		self.receipt_two()
+		before = extraction_config.active("Receipt")[1]
+		preview = self.tool_data(
+			"preview_extraction_config", {"validation": filed["validation_id"], "version": "2"}
+		)
+		self.assertEqual(preview["config_version"], "Receipt@2")
+		self.assertEqual(preview["extracted"]["amount"], "626.94")
+		self.assertIn({"field": "amount", "recorded": 1937.0, "config": "626.94"}, preview["diff"])
+		self.assertEqual(preview["rule_failures"], [])
+		self.assertEqual(extraction_config.active("Receipt")[1], before)
 
 
 # ── §2 flags ────────────────────────────────────────────────────────────────

@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.211.0 — 2026-10-01 — quick wins from Tell the Farm
+
+**971 tools** (476 read, 495 write): + `stage_extraction_config`. **153 mobile methods**: +
+`get_training_certificate`. Contract `docs/design/quick_wins_2026_10.md`; deploy
+`docs/deploy/v0.211.0_quick_wins.md`; iOS SERVER_CHANGES §57.
+
+- **Where an incident happened (AFB-2026-00026).** Accident Report gains `latitude`, `longitude` and
+  `location_accuracy_m`; `create_accident_report` takes them, or a form's `location_point` (GeoJSON
+  Point or "lat,lon"). **Data:** "Report an Accident" v2 is published at migrate — an optional map pin
+  on the *where* step, and "Witnesses" becomes a text box (it was a multi-select with nothing to pick).
+  Only an untouched v1 is built on.
+- **The class PDF (AFB-2026-00015, -00019).** A course's handouts open on any enrolled phone: Training
+  Type is an attachment parent, and the curriculum list carries `attachment_count`. New route
+  `get_training_certificate` returns a training record's certificate — one's own, or anyone's for the
+  roles that run training. The class folder (sign-in sheet) keeps its gate.
+- **Receipt@2 (AFB-2026-00029).** A new optional `receipt` block in an extraction config says how the
+  phone picks the amount (the TOTAL line, with its figure on the line above or below; then the card
+  charge; never a spend / summary / YTD / points / savings / credit-line figure), the merchant (by the
+  slip's web address) and the line items (what is not one). The built-in Receipt body is revision 2
+  and its preview extractors read EXR-2026-0018 at $626.94. **Nothing is published at migrate:**
+  `update_extraction_config(from_builtin: true)` drafts it, and the new **`stage_extraction_config`**
+  serves a Draft to named accounts first (status `Staged`) before `publish_extraction_config`.
+- **Inventory names (AFB-2026-00028).** Stock ledger movements carry `item_name`, read live from the
+  Item; item search matches the code as well as the name; `record_asset_stock_movement` answers with the
+  name; the warehouse summary sorts by name.
+
 ## 0.210.0 — 2026-10-01 — cards are printed by hand, and asking for one is gated
 
 **970 tools** (476 read, 494 write): + `mark_card_print_job` (write, default off). Routes unchanged (152).

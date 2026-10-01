@@ -517,6 +517,70 @@ def seed_from_legacy() -> list:
 	return made
 
 
+#: v0.211.0, docs/design/quick_wins_2026_10.md §1. The one field "Report an
+#: Accident" gains: an optional map pin. `create_accident_report` takes it as
+#: `location_point`, so the wizard's submit needs no map.
+ACCIDENT_WIZARD = "accident_investigation"
+ACCIDENT_LOCATION_FIELD = {
+	"key": "location_point",
+	"type": "geolocation",
+	"label": {"en": "Pin where it happened", "es": "Marque dónde ocurrió"},
+	"help": {
+		"en": "Optional. Use your location, or tap the map.",
+		"es": "Opcional. Use su ubicación o toque el mapa.",
+	},
+	"required": False,
+}
+
+
+def add_accident_location() -> str:
+	"""Publish v2 of "Report an Accident" with the map pin — where v1 is untouched.
+
+	A CONFIG CHANGE, NOT A CODE ONE: a new Farm Config Version, drafted and
+	published through the same lifecycle an operator uses. Only the converted,
+	System-authored version 1 is built on; a site that already wrote its own
+	version is left alone. Returns the new version's name, or "" (with a reason
+	printed when it declined)."""
+	rows = phone_config.rows("Wizard", ACCIDENT_WIZARD)
+	if not rows:
+		return ""
+	if any(int(row.get("version") or 0) > 1 for row in rows):
+		return ""
+	doc = phone_config.doc_of("Wizard", ACCIDENT_WIZARD, 1)
+	if doc is None or doc.status != phone_config.PUBLISHED or doc.get("authored_by") != "System":
+		return ""
+	body = phone_config.body_of(doc)
+	if any(field.get("key") == ACCIDENT_LOCATION_FIELD["key"] for field in all_fields(body)):
+		return ""
+	step = next((s for s in body.get("steps") or [] if s.get("key") == "where"), None)
+	if step is None:
+		print("erpnext_mcp: 'Report an Accident' has no 'where' step, so the map pin was not added")
+		return ""
+	step["form"] = [*(step.get("form") or []), dict(ACCIDENT_LOCATION_FIELD)]
+	# The converted v1 carries "Witnesses" as a multi_select with no options —
+	# nothing to pick, and a body the validator refuses. `create_accident_report`
+	# takes names separated by commas, so it becomes the text box it should be.
+	for field in all_fields(body):
+		if field.get("type") in ("multi_select", "select") and not field.get("options"):
+			field["type"] = "text"
+			if field.get("key") == "witnesses":
+				field["help"] = {
+					"en": "Names, separated by commas — including people who do not work here.",
+					"es": "Nombres, separados por comas — incluso quien no trabaja aquí.",
+				}
+	note = "v0.211.0: an optional map pin for where it happened (AFB-2026-00026)."
+	try:
+		draft, _report = phone_config.save_draft("Wizard", ACCIDENT_WIZARD, body, note, "System")
+		published, _previous, _already = phone_config.publish(
+			"Wizard", ACCIDENT_WIZARD, draft.version, note, "Administrator"
+		)
+	except phone_config.ConfigError as exc:
+		# Left as a Draft for a person: e.g. no phone holds the roles yet.
+		print(f"erpnext_mcp: 'Report an Accident' v2 was drafted but not published — {exc}")
+		return ""
+	return phone_config.version_string(published)
+
+
 def legacy_body(key: str, wizard_tools) -> dict:
 	doc = frappe.get_doc("Wizard Definition", key)
 	english = wizard_tools.describe(doc, "en")

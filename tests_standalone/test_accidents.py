@@ -25,6 +25,8 @@ FIVE CLAIMS.
    knows, and a comma-separated string cannot say it.
 """
 
+import json
+
 from .fixtures import MAIN, V12TestCase
 from .harness import STORE, frappe
 
@@ -449,3 +451,44 @@ class TheRegisterFilters(AccidentTestCase):
 	def test_an_unknown_status_is_refused_with_the_list(self):
 		error = self.tool_error("list_accident_reports", {"status": "Filed"})
 		self.assertIn("Corrective Actions Pending", error)
+
+
+# ── v0.211.0: where it happened (quick_wins_2026_10.md §1) ──────────────────
+class WhereItHappened(AccidentTestCase):
+	def test_a_fix_is_stored_and_read_back(self):
+		name = self.a_report(latitude=45.601234567, longitude=-121.184321, location_accuracy_m=8.4)["name"]
+		row = STORE.get_raw("Accident Report", name)
+		self.assertEqual(
+			(row["latitude"], row["longitude"], row["location_accuracy_m"]), (45.601235, -121.184321, 8.4)
+		)
+		read = self.tool_data("get_accident_report", {"report": name})
+		self.assertEqual((read["latitude"], read["longitude"]), (45.601235, -121.184321))
+
+	def test_a_forms_pin_is_the_same_fact(self):
+		pin = {"type": "Point", "coordinates": [-121.18, 45.6]}
+		for point in (pin, json.dumps(pin), "45.6, -121.18"):
+			name = self.a_report(location_point=point)["name"]
+			row = STORE.get_raw("Accident Report", name)
+			self.assertEqual((row["latitude"], row["longitude"]), (45.6, -121.18), point)
+			self.assertFalse(row.get("location_accuracy_m"))
+
+	def test_no_fix_is_ordinary(self):
+		read = self.tool_data("get_accident_report", {"report": self.a_report()["name"]})
+		self.assertEqual(
+			(read["latitude"], read["longitude"], read["location_accuracy_m"]), (None, None, None)
+		)
+
+	def test_half_a_fix_and_nowhere_are_refused(self):
+		for bad, words in (
+			({"latitude": 45.6}, "both or neither"),
+			({"latitude": 145.6, "longitude": -121.0}, "not a place"),
+			({"latitude": "north", "longitude": -121.0}, "must be a number"),
+			({"location_point": "somewhere"}, "GeoJSON Point"),
+		):
+			payload = {
+				"occurred_at": _hours_ago(1),
+				"incident_description": "A ladder slipped.",
+				**bad,
+			}
+			self.assertIn(words, self.tool_error("create_accident_report", payload))
+		self.assertEqual(STORE.rows("Accident Report"), [])

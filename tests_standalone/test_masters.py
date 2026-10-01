@@ -155,6 +155,17 @@ class Items(MastersTestCase):
 		data = self.tool_data("list_items", {"search": "surround"})
 		self.assertEqual([row["item_code"] for row in data["items"]], [SPRAY])
 
+	def test_searches_on_the_item_code_too(self):
+		"""v0.211.0. A renamed item keeps its code: the name no longer contains what
+		somebody types off the old shelf label, and the code still finds it."""
+		frappe.db.set_value("Item", SPRAY, "item_name", "Kaolin Clay Crop Protectant")
+		by_code = self.tool_data("list_items", {"search": "surround"})
+		self.assertEqual([row["item_code"] for row in by_code["items"]], [SPRAY])
+		self.assertEqual(by_code["items"][0]["item_name"], "Kaolin Clay Crop Protectant")
+		by_name = self.tool_data("list_items", {"search": "kaolin"})
+		self.assertEqual([row["item_code"] for row in by_name["items"]], [SPRAY])
+		self.assertEqual(self.tool_data("list_items", {"search": "zzz-nothing"})["items"], [])
+
 	def test_truncation_is_reported(self):
 		data = self.tool_data("list_items", {"limit": 1})
 		self.assertEqual(data["count"], 1)

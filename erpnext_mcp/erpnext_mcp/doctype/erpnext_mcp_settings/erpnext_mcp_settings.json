@@ -1047,6 +1047,7 @@
   "allow_get_extraction_config",
   "allow_preview_extraction_config",
   "allow_update_extraction_config",
+  "allow_stage_extraction_config",
   "allow_publish_extraction_config",
   "allow_list_feature_flags",
   "allow_set_feature_flag",
@@ -8132,6 +8133,13 @@
    "fieldname": "allow_update_extraction_config",
    "fieldtype": "Check",
    "label": "Update Extraction Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Stage a Draft extraction config to named accounts first; everyone else keeps the Published version.",
+   "fieldname": "allow_stage_extraction_config",
+   "fieldtype": "Check",
+   "label": "Stage Extraction Config"
   },
   {
    "default": "0",

@@ -32,6 +32,9 @@ from . import compat
 DOCTYPE = "Extraction Config"
 SCHEMA_VERSION = 1
 BUILTIN_REVISION = 1
+#: A built-in whose bundled file has changed since v0.206.0. Receipt: v0.211.0 (the
+#: `receipt` block — quick_wins_2026_10.md §4).
+BUILTIN_REVISIONS = {"Receipt": 2}
 BUILTIN_DIR = pathlib.Path(__file__).parent / "extraction"
 BUILTINS = {
 	"Pesticide Label": "pesticide_label",
@@ -39,6 +42,8 @@ BUILTINS = {
 	"I-9 Document": "i9_document",
 }
 DRAFT, PUBLISHED, SUPERSEDED = "Draft", "Published", "Superseded"
+#: v0.211.0. Served to the accounts in `staged_users` only; everyone else keeps Published.
+STAGED = "Staged"
 FIELD_TYPES = ("string", "number", "integer", "boolean", "array")
 RULE_KINDS = ("pattern", "required", "sum_max", "sum_min", "range", "one_of", "not_applicable")
 SEVERITIES = ("error", "warning", "info")
@@ -53,7 +58,15 @@ TOP_KEYS = (
 	"rules",
 	"advisory_drop",
 	"llm",
+	# v0.211.0. How a receipt's amount, merchant and line items are chosen on
+	# the phone. Optional; an app older than 0.23.0 ignores it.
+	"receipt",
 )
+RECEIPT_LISTS = ("total_labels", "subtotal_labels", "never_amount", "not_items")
+RECEIPT_KEYS = (*RECEIPT_LISTS, "charge_patterns", "merchant_domains")
+RECEIPT_LIST_CAP = 60
+RECEIPT_PHRASE_CAP = 60
+RECEIPT_DOMAIN_CAP = 200
 
 
 def version_string(document_type, version) -> str:
@@ -111,6 +124,54 @@ def _patterns_of(config: dict):
 	for index, row in enumerate(config.get("advisory_drop") or ()):
 		if isinstance(row, dict) and row.get("message_pattern") is not None:
 			yield f"advisory_drop[{index}].message_pattern", row.get("message_pattern")
+	receipt = config.get("receipt")
+	if isinstance(receipt, dict) and isinstance(receipt.get("charge_patterns"), list):
+		for index, pattern in enumerate(receipt["charge_patterns"]):
+			yield f"receipt.charge_patterns[{index}]", pattern
+
+
+def receipt_problems(block) -> list:
+	"""What is wrong with a `receipt` block, or []. quick_wins_2026_10.md §4.2."""
+	if block is None:
+		return []
+	if not isinstance(block, dict):
+		return ["receipt must be an object"]
+	out = []
+	unknown = sorted(set(block) - set(RECEIPT_KEYS))
+	if unknown:
+		out.append(f"receipt has unknown keys: {', '.join(unknown)}")
+	for key in (*RECEIPT_LISTS, "charge_patterns"):
+		value = block.get(key, [])
+		if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+			out.append(f"receipt.{key} must be a list of non-empty strings")
+			continue
+		if len(value) > RECEIPT_LIST_CAP:
+			out.append(f"receipt.{key} has more than {RECEIPT_LIST_CAP} entries")
+		if key != "charge_patterns" and any(len(v) > RECEIPT_PHRASE_CAP for v in value):
+			out.append(f"receipt.{key} has a phrase over {RECEIPT_PHRASE_CAP} characters")
+	for index, pattern in enumerate(block.get("charge_patterns") or ()):
+		if isinstance(pattern, str):
+			try:
+				groups = compile_pattern(pattern).groups
+			except re.error:
+				continue  # reported by regex_problems
+			if groups != 1:
+				out.append(f"receipt.charge_patterns[{index}] needs exactly one capture group (the amount)")
+	domains = block.get("merchant_domains", {})
+	if not isinstance(domains, dict) or not all(
+		isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip() for k, v in domains.items()
+	):
+		out.append("receipt.merchant_domains must map a domain to a trading name")
+	else:
+		if len(domains) > RECEIPT_DOMAIN_CAP:
+			out.append(f"receipt.merchant_domains has more than {RECEIPT_DOMAIN_CAP} entries")
+		bad = sorted(k for k in domains if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", k))
+		if bad:
+			out.append(
+				"receipt.merchant_domains keys are bare lower-case domains (homedepot.com): "
+				+ ", ".join(bad[:5])
+			)
+	return out
 
 
 def problems(config) -> list:
@@ -210,6 +271,7 @@ def problems(config) -> list:
 				f"advisory_drop[{index}] names rule {row['unless_rule_failed']!r}, which is not defined"
 			)
 
+	out.extend(receipt_problems(config.get("receipt")))
 	for where, pattern in _patterns_of(config):
 		out.extend(f"{where}: {problem}" for problem in regex_problems(pattern))
 	return out
@@ -447,7 +509,8 @@ def builtin(document_type: str):
 	path = BUILTIN_DIR / f"{slug}.json"
 	if not path.exists():
 		return None, ""
-	return json.loads(path.read_text()), version_string(document_type, f"builtin-{BUILTIN_REVISION}")
+	revision = BUILTIN_REVISIONS.get(document_type, BUILTIN_REVISION)
+	return json.loads(path.read_text()), version_string(document_type, f"builtin-{revision}")
 
 
 def _doctype_ready() -> bool:
@@ -501,8 +564,31 @@ def body_of(doc) -> dict:
 		return {}
 
 
-def active(document_type: str):
-	"""(body, config_version) in use for a type: Published, then built-in."""
+def staged(document_type: str):
+	"""The Staged doc for a type, or None. At most one."""
+	if not _doctype_ready() or not compat.has_field(DOCTYPE, "staged_users"):
+		return None
+	name = frappe.db.get_value(DOCTYPE, {"document_type": document_type, "status": STAGED}, "name")
+	return frappe.get_doc(DOCTYPE, name) if name else None
+
+
+def staged_users(doc) -> list:
+	return [
+		u.strip().lower()
+		for u in str(doc.get("staged_users") or "").replace(",", "\n").splitlines()
+		if u.strip()
+	]
+
+
+def active(document_type: str, user: str = ""):
+	"""(body, config_version) in use for a type: Staged for the accounts it is staged
+	to, else Published, then built-in."""
+	if user:
+		early = staged(document_type)
+		if early is not None and str(user).strip().lower() in staged_users(early):
+			body = body_of(early)
+			if not problems(body):
+				return body, early.config_version or version_string(document_type, early.version)
 	doc = row(document_type)
 	if doc is not None:
 		body = body_of(doc)
@@ -538,8 +624,13 @@ def publish(document_type: str, version, user: str = ""):
 	doc = row(document_type, version)
 	if doc is None:
 		raise LookupError(f"{document_type} has no version {version}.")
-	if doc.status != DRAFT:
-		raise ValueError(f"{doc.name} is {doc.status}; only a Draft can be published.")
+	if doc.status not in (DRAFT, STAGED):
+		raise ValueError(f"{doc.name} is {doc.status}; only a Draft or a Staged version can be published.")
+	for other in frappe.db.get_all(
+		DOCTYPE, filters={"document_type": document_type, "status": STAGED}, fields=["name"], limit=20
+	):
+		if other["name"] != doc.name:
+			frappe.db.set_value(DOCTYPE, other["name"], "status", SUPERSEDED)
 	previous = row(document_type)
 	if previous is not None:
 		previous.status = SUPERSEDED
@@ -549,6 +640,40 @@ def publish(document_type: str, version, user: str = ""):
 	doc.published_on = frappe.utils.now()
 	doc.save(ignore_permissions=True)
 	return doc, previous.name if previous is not None else ""
+
+
+def stage(document_type: str, version, users, user: str = ""):
+	"""Draft → Staged for `users` (logins). They are served it; nobody else is.
+
+	A second look before everybody gets it: the phones of the people named fetch
+	this version at their next capture, while the Published one stays in force
+	for the rest. One Staged version per type — staging another returns the
+	earlier one to Draft. Staging an already-Staged version replaces its users."""
+	doc = row(document_type, version)
+	if doc is None:
+		raise LookupError(f"{document_type} has no version {version}.")
+	if doc.status not in (DRAFT, STAGED):
+		raise ValueError(f"{doc.name} is {doc.status}; only a Draft is staged.")
+	if not compat.has_field(DOCTYPE, "staged_users"):
+		raise ValueError("this site's Extraction Config has no staging yet — run `bench migrate`.")
+	people = sorted({str(u).strip().lower() for u in users or () if str(u).strip()})
+	if not people:
+		raise ValueError("name who gets it first: users=[their login email, …].")
+	missing = [u for u in people if not frappe.db.exists("User", u)]
+	if missing:
+		raise ValueError(f"no User called {', '.join(missing)} on this site.")
+	found = problems(body_of(doc))
+	if found:
+		raise ValueError("the phone would refuse this config: " + "; ".join(found))
+	for other in frappe.db.get_all(
+		DOCTYPE, filters={"document_type": document_type, "status": STAGED}, fields=["name"], limit=20
+	):
+		if other["name"] != doc.name:
+			frappe.db.set_value(DOCTYPE, other["name"], "status", DRAFT)
+	doc.status = STAGED
+	doc.staged_users = "\n".join(people)
+	doc.save(ignore_permissions=True)
+	return doc, people
 
 
 def seed() -> list:

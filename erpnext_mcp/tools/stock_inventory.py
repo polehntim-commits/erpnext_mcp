@@ -901,6 +901,19 @@ def get_stock_balance(args: dict) -> ToolResult:
 	)
 
 
+def _item_names(codes) -> dict:
+	"""{item code: item_name} for the codes given, read live from Item."""
+	codes = sorted(code for code in codes if code)
+	if not codes or not compat.doctype_exists(ITEM):
+		return {}
+	return {
+		row["name"]: row.get("item_name") or row["name"]
+		for row in frappe.db.get_all(
+			ITEM, filters={"name": ("in", codes)}, fields=["name", "item_name"], limit=MAX_LIMIT
+		)
+	}
+
+
 def get_stock_ledger(args: dict) -> ToolResult:
 	"""Movement history from Stock Ledger Entry, newest first.
 
@@ -963,6 +976,11 @@ def get_stock_ledger(args: dict) -> ToolResult:
 	truncated = len(rows) > limit
 	rows = rows[:limit]
 
+	# v0.211.0. The name beside the code, read LIVE from the Item: a ledger row
+	# stores only the code, and a code like "PROWLER®" tells nobody which product
+	# moved. A renamed item shows its current name on every past movement.
+	item_names = _item_names({str(row.get("item_code")) for row in rows if row.get("item_code")})
+
 	movements = []
 	for row in rows:
 		movements.append(
@@ -970,6 +988,7 @@ def get_stock_ledger(args: dict) -> ToolResult:
 				"posting_date": row.get("posting_date"),
 				"posting_time": row.get("posting_time"),
 				"item_code": row.get("item_code"),
+				"item_name": item_names.get(str(row.get("item_code"))) or row.get("item_code"),
 				"warehouse": row.get("warehouse"),
 				"qty_change": float(row.get("actual_qty") or 0),
 				"balance_qty": float(row.get("qty_after_transaction") or 0),
@@ -1070,7 +1089,13 @@ def get_warehouse_summary(args: dict) -> ToolResult:
 			names[item["name"]] = item
 
 	items = []
-	for row in sorted(rows, key=lambda r: str(r.get("item_code") or "")):
+
+	# v0.211.0: by NAME (then code) — what a person reads the shelf by.
+	def by_name(r):
+		code = str(r.get("item_code") or "")
+		return (str((names.get(code) or {}).get("item_name") or code).lower(), code)
+
+	for row in sorted(rows, key=by_name):
 		item_code = str(row.get("item_code") or "")
 		rule = rules.get((item_code, warehouse)) or rules.get((item_code, "")) or {}
 		qty = float(row.get("actual_qty") or 0)

@@ -9,6 +9,7 @@
   "document_type",
   "version",
   "status",
+  "staged_users",
   "config_version",
   "config_section",
   "config_json",
@@ -40,7 +41,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Draft\nPublished\nSuperseded",
+   "options": "Draft\nStaged\nPublished\nSuperseded",
    "default": "Draft",
    "in_list_view": 1,
    "in_standard_filter": 1,
@@ -65,6 +66,14 @@
    "label": "Config JSON",
    "reqd": 1,
    "description": "The body, schema version 1: instructions, fields, sections, extractors, rules, advisory_drop, llm. Checked by update_extraction_config before it is written."
+  },
+  {
+   "fieldname": "staged_users",
+   "fieldtype": "Small Text",
+   "label": "Staged To",
+   "depends_on": "eval:doc.status=='Staged'",
+   "read_only": 1,
+   "description": "v0.211.0. The logins served this version while it is Staged, one per line. Everybody else keeps the Published one. Set by stage_extraction_config."
   },
   {
    "fieldname": "provenance_section",

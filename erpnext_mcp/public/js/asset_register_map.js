@@ -74,7 +74,7 @@
 	//:
 	//: A test holds this string equal to `erpnext_mcp.__version__`, so it cannot
 	//: drift into being a stamp that lies.
-	const BUILD = "0.210.0";
+	const BUILD = "0.211.0";
 	if (window.erpnext_mcp && window.erpnext_mcp.geo_map) {
 		window.erpnext_mcp.geo_map.asset_map_build = BUILD;
 	}

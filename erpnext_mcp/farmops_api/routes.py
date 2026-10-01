@@ -418,6 +418,8 @@ ROUTES = (
 	# v0.193.0. A certificate that arrives after the record — the mailed card, the
 	# emailed ticket. `record_training` takes one only at filing time.
 	Route("/mobile", mobile_api.attach_training_certificate),
+	# v0.211.0. The read of the same file: one's own card, or a trainer's reach.
+	Route("/mobile", mobile_api.get_training_certificate),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

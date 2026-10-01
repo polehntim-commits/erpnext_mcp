@@ -537,6 +537,21 @@ def list_items(args: dict) -> ToolResult:
 
 	limit = as_limit(args)
 	rows = _rows(ITEM, filters, _ITEM_LIST_FIELDS, "item_name asc", limit)
+	if search and "name" not in filters:
+		# v0.211.0. THE CODE IS SEARCHED TOO. Until now only `item_name` was, so a
+		# typed code found nothing once an item had been renamed — the code stays
+		# "PROWLER®" while the name becomes "PROWLER Place Pacs (22 × 3 oz)". Two
+		# reads merged rather than an OR, which is portable across Frappe versions.
+		by_code = dict(filters)
+		by_code.pop("item_name", None)
+		by_code["name"] = ("like", f"%{search}%")
+		seen = {row.get("name") for row in rows}
+		rows = list(rows) + [
+			row
+			for row in _rows(ITEM, by_code, _ITEM_LIST_FIELDS, "item_name asc", limit)
+			if row.get("name") not in seen
+		]
+		rows = sorted(rows, key=lambda r: str(r.get("item_name") or r.get("name") or "").lower())[:limit]
 	items = [_clean(row) for row in rows]
 
 	by_group: dict = {}

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 970 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 971 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20835,3 +20835,14 @@ landscape page rotated clockwise.
 Every card print tool now needs **Card Print Requester**, **Farm Manager** or
 **System Manager**, and acts only inside the caller's companies. There is no
 print agent: `download_card_pdf`, print, then `mark_card_print_job`.
+
+## v0.211.0 — quick wins from Tell the Farm
+
+| Tool | What it does |
+| --- | --- |
+| `stage_extraction_config` | Serve a Draft extraction config to named accounts first; everyone else keeps the Published one. Write |
+
+`update_extraction_config` takes `from_builtin` (draft the shipped body). `create_accident_report`
+takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
+carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
+`attachment_count`.

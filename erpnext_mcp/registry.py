@@ -12242,16 +12242,40 @@ TOOLS = {
 				_STRING, "Pesticide Label, Receipt, I-9 Document, … (Document Validation's document_type)."
 			),
 			"config": _field({"type": ["object", "string"]}, "The whole body, schema_version 1."),
+			"from_builtin": _field(
+				_BOOLEAN,
+				"Instead of config: draft the body this app version ships for the type (how a "
+				"site picks up a new built-in, e.g. Receipt with the `receipt` block).",
+			),
 			"notes": _field(_STRING, "Why this version exists, e.g. the App Feedback it answers."),
 			"authored_by": _field(_STRING, "Operator or AI-proposed (default)."),
 		},
-		required=("document_type", "config", "notes"),
+		required=("document_type", "notes"),
 		mutating=True,
 		title="Draft an extraction config",
 	),
+	"stage_extraction_config": _tool(
+		moment_tools.stage_extraction_config,
+		"MUTATING (default OFF; System Manager or Farm Manager). v0.211.0. Serve a Draft to named "
+		"accounts only — their phones fetch it at the next capture while everybody else keeps "
+		"the Published version. One Staged version per document type. Publish it when it reads "
+		"right; staging again replaces who it is staged to.",
+		{
+			"document_type": _field(
+				_STRING, "Pesticide Label, Receipt, I-9 Document, … (Document Validation's document_type)."
+			),
+			"version": _field(_STRING, "The Draft's version number."),
+			"users": _field(
+				{"type": "array", "items": _STRING}, "The logins that get it first, e.g. the owner's."
+			),
+		},
+		required=("document_type", "version", "users"),
+		mutating=True,
+		title="Stage an extraction config",
+	),
 	"publish_extraction_config": _tool(
 		moment_tools.publish_extraction_config,
-		"MUTATING (default OFF; System Manager or Farm Manager). Publish a Draft: it becomes the "
+		"MUTATING (default OFF; System Manager or Farm Manager). Publish a Draft or Staged version: it becomes the "
 		"config every phone fetches for that document type, and the previous Published version "
 		"becomes Superseded (kept, so old validations stay traceable).",
 		{
@@ -23702,6 +23726,13 @@ TOOLS = {
 			"location_doctype": _field(_STRING, "Field, Housing Unit, Asset Register…"),
 			"location": _field(_STRING, "Which one."),
 			"location_description": _field(_STRING, "Where exactly, in words."),
+			"latitude": _field(_NUMBER, "Decimal degrees, with longitude. Where it happened."),
+			"longitude": _field(_NUMBER, "Decimal degrees, with latitude."),
+			"location_accuracy_m": _field(_NUMBER, "The fix's accuracy in metres, if known."),
+			"location_point": _field(
+				_STRING,
+				'Instead of latitude/longitude: a GeoJSON Point or "lat,lon", as a form field answers.',
+			),
 			"asset": _field(_STRING, "The machine involved."),
 			"investigation_lead": _field(_STRING, "Who is running the investigation."),
 			"narrative": _field(_STRING, "A longer account, appended as the first narrative entry."),

@@ -30,16 +30,18 @@ what OSHA 300 column F prints.
 
 **Wizard (data).** `wizard:accident_investigation` ("Report an Accident") v2 adds to step
 `where` one optional field: `{key: "location_point", type: "geolocation", label: {en: "Pin
-where it happened", es: "Marque dónde ocurrió"}}`. *(migrate)* A one-time patch drafts and
+where it happened", es: "Marque dónde ocurrió"}}`. It also turns "Witnesses" from a multi-select with no options
+(nothing to pick — the conversion from the legacy wizard left it that way, and the
+validator refuses it) into a text box of names separated by commas, which is what
+`create_accident_report` accepts. *(migrate)* A one-time patch drafts and
 publishes v2 **only where the version in force is the untouched converted v1**; a site that
 edited the wizard is left alone and told so. Fresh sites get it the same way.
 
 **Phone.** `ReportIncidentView` and `QuickSafetyReportSheet` record the phone's position
 when the report is opened (no prompt beyond the system's own; a refusal files the report
 without one) and offer **Pin on map** to move it. They send `latitude`, `longitude`,
-`location_accuracy_m`. The route refuses arguments it does not know, so a server older than
-0.211.0 answers with a refusal naming them; the phone then files the same report once more
-without the three, so the report is never lost to a version mismatch.
+`location_accuracy_m`. A server older than 0.211.0 drops arguments it does not declare, so
+the report files either way.
 
 ## 2. An asset's documents on its screen
 

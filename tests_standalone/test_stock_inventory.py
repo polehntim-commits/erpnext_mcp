@@ -13,7 +13,7 @@ from .fixtures import (
 	TWINE,
 	StockTestCase,
 )
-from .harness import STORE, post_stock_entry_ledger, register_doctype
+from .harness import STORE, frappe, post_stock_entry_ledger, register_doctype
 
 #: Every mutating tool this module adds. Read tools default on and need no
 #: override; these default off, so a test that expects one to run has to turn it
@@ -420,6 +420,12 @@ class GetStockLedger(StockTestCase):
 		self.assertEqual(data["movements"][0]["qty_change"], -120.0)
 		self.assertEqual(data["movements"][0]["balance_qty"], 80.0)
 		self.assertEqual(data["movements"][0]["voucher_type"], "Stock Entry")
+		# v0.211.0: the name, live from the Item — the code alone names nothing.
+		self.assertEqual({row["item_name"] for row in data["movements"]}, {"Surround WP"})
+		frappe.db.set_value("Item", SPRAY, "item_name", "Surround WP Crop Protectant (25 lb)")
+		renamed = self.tool_data("get_stock_ledger", {"item_code": SPRAY})
+		self.assertEqual(renamed["movements"][0]["item_name"], "Surround WP Crop Protectant (25 lb)")
+		self.assertEqual(renamed["movements"][0]["item_code"], SPRAY)
 
 	def test_a_cancelled_movement_is_excluded(self):
 		"""The SHOP row in the fixture is cancelled; it never happened."""

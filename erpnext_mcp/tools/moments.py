@@ -72,6 +72,7 @@ def _config_row(doc) -> dict:
 		"status": doc.get("status"),
 		"config_version": doc.get("config_version"),
 		"notes": doc.get("notes"),
+		"staged_users": extraction_config.staged_users(doc) if doc.get("status") == "Staged" else [],
 		"authored_by": doc.get("authored_by"),
 		"published_by": doc.get("published_by") or None,
 		"published_on": str(doc.get("published_on") or "") or None,
@@ -122,7 +123,17 @@ def update_extraction_config(args: dict) -> ToolResult:
 	_require_doctype()
 	triage.require_manager("write an extraction config")
 	document_type = _document_type(args)
-	config = _json_arg(args, "config", dict, required=True)
+	# v0.211.0. `from_builtin` drafts the body this app version ships for the
+	# type — how a site that already has a Published row picks up a new built-in
+	# (a migrate never overwrites one). It is still only a Draft.
+	if as_bool(args, "from_builtin", False):
+		if args.get("config") not in (None, "", {}):
+			raise ToolError("pass config or from_builtin, not both. Nothing was written.")
+		config, _version = extraction_config.builtin(document_type)
+		if config is None:
+			raise ToolError(f"{document_type} has no built-in extraction config. Nothing was written.")
+	else:
+		config = _json_arg(args, "config", dict, required=True)
 	notes = as_str(args, "notes")
 	if not notes:
 		raise ToolError(
@@ -140,11 +151,39 @@ def update_extraction_config(args: dict) -> ToolResult:
 			**_config_row(doc),
 			"next": (
 				f"preview_extraction_config(document_type={document_type!r}, version={doc.version}, "
-				f"validation=<a DVAL>) to see what it changes, then publish_extraction_config to ship it."
+				f"validation=<a DVAL>) to see what it changes; stage_extraction_config(users=[…]) to "
+				"try it on named accounts first; then publish_extraction_config to ship it."
 			),
 		},
 		summary=f"drafted {doc.name}",
 		docstatus_delta="none → 0 (draft)",
+	)
+
+
+def stage_extraction_config(args: dict) -> ToolResult:
+	"""Draft → Staged for named accounts; everyone else keeps the Published version. v0.211.0."""
+	_require_doctype()
+	actor = triage.require_manager("stage an extraction config")
+	document_type = _document_type(args)
+	version = as_str(args, "version", required=True)
+	users = args.get("users")
+	if isinstance(users, str):
+		users = [part for part in users.replace(",", "\n").splitlines()]
+	try:
+		doc, people = extraction_config.stage(document_type, version, users or [], actor)
+	except (LookupError, ValueError) as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from exc
+	return ToolResult(
+		data={
+			**_config_row(doc),
+			"in_force_for_everyone_else": extraction_config.active(document_type)[1] or None,
+			"next": (
+				"Those accounts' phones fetch it at their next capture. When it reads right, "
+				f"publish_extraction_config(document_type={document_type!r}, version={doc.version})."
+			),
+		},
+		summary=f"staged {doc.name} to {', '.join(people)}",
+		docstatus_delta="0 → 0 (updated)",
 	)
 
 
