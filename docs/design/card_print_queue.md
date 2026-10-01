@@ -451,3 +451,205 @@ The defaults apply unless changed.
 8. **Orientation:** whether the card needs `Orientation=LANDSCAPE_CC90` as well as fit-to-page. The
    first test card answers this.
 9. **A photo-less employee** prints with initials, as the current card does [yes].
+
+---
+
+# Amendment 1 — approved artwork, Desk first, simplex and orientation (frozen, v0.209.0)
+
+Tim, 2026-10-01, after hand-testing:
+
+> "Ok can we get these sorted out so i can print the asset tags and employee id's please."
+> "Using ERP next."
+
+**Goal:** Tim prints real cards from ERPNext Desk as soon as stage (a) is deployed — through the
+agent when it is installed, and by downloading the card PDF until then.
+
+This amends §2.1, §2.3, §3, §4.4 and §6 above. Where the two disagree, this section wins.
+
+## A1. What the hand tests found
+
+| finding | consequence |
+|---|---|
+| The right Preview settings are Paper Size CR80 / ISO 7810, 100%, no fit, Auto Rotate off | the agent no longer sends `fit-to-page`; the PDF's pages are already card-sized |
+| A 2-page PDF came out as two cards | the printer is running **simplex** (Evolis ships dual-side off, or this is a simplex model); stations get a `duplex` setting, default Simplex (A4) |
+| The driver may need the back pre-rotated | stations get `front_orientation` and `back_orientation` (A3) |
+| The Evolis preview could not open the PDF | the agent sends files with `lp` directly, as already built |
+| Desk "Print" on Employee produced `format=undefined`, A4, blank | Employee and Asset Register get a card print format as their default (A6) |
+| CUPS on this Mac, re-read 2026-10-01 | queue `Primacy_2`; `PageSize=Card` only; `Duplex=NONE` (default) / `DuplexNoTumble`; `Orientation=PORTRAIT` (default) / `LANDSCAPE_CC90`; three completed test jobs |
+
+## A2. Artwork — the approved designs
+
+**One layout, drawn by the server with reportlab** — a true card-sized PDF, one page per side, with
+a vector QR. This replaces §3's HTML-through-wkhtmltopdf ID card and the first asset tag layout.
+The old "Employee Badge Card" Letter sheet and the generators' own outputs are untouched.
+
+**Reference files** (Tim's approved tests) are kept in `tests_standalone/fixtures/card_art/` as the
+golden references. Tests compare each page's size and every text item's position against them.
+
+Front: 85.6 × 54 mm landscape. Back: 54 × 85.6 mm portrait. Margins ≥ 4 mm; the QR's quiet zone is
+inside the margin. Helvetica throughout. Positions are from the bottom-left, in mm, text by baseline.
+
+**Asset Tag — front**
+
+| element | where |
+|---|---|
+| logo | left, 39 mm square at x 5.5, y 7.5 |
+| QR | right, 25.6 mm square at x 51.8, y 21.2 |
+| asset ID | Helvetica-Bold 10 pt, centred under the QR, baseline y 14.4 |
+| asset name | Helvetica 6.5 pt, centred under the ID, baseline y 11.2 |
+
+**Asset Tag — back**
+
+| element | where |
+|---|---|
+| QR | 34 mm square, centred, top margin 10 |
+| asset ID | Helvetica-Bold 16 pt, centred, baseline y 31.1 |
+| asset name | Helvetica 9 pt, centred, baseline y 25.6 |
+| company | Helvetica 7 pt grey, centred, baseline y 16.6 |
+| "Scan for asset record" | Helvetica 7 pt grey, centred, baseline y 12.6 |
+
+The asset "name" is the Asset Register description's first line, else the asset type. The ID is
+the docname.
+
+**Employee ID — front**
+
+| element | where |
+|---|---|
+| photo | 4:5 slot, 21.6 × 27 mm at x 4.9, y 22.1; the Employee image cropped to fill, else initials (Helvetica-Bold 26 pt grey on light grey) |
+| EMPLOYEE bar | green `#356B2E`, 21.6 × 5.9 mm at x 4.9, y 9.8; white Helvetica-Bold 7.5 pt |
+| name | Helvetica-Bold 12.5 pt at x 30, baseline y 43.5 |
+| designation | Helvetica 8.5 pt at x 30, baseline y 38.5 |
+| company | Helvetica 6.5 pt grey at x 30, baseline y 34 |
+| "BADGE ID" | Helvetica 5.5 pt grey at x 30, baseline y 17.5 |
+| badge ID | Helvetica-Bold 13 pt at x 30, baseline y 11.2 |
+| logo | 15 mm square, top right at x 63, y 33.3 |
+| QR | 15.8 mm square, bottom right at x 61.4, y 7.9 |
+
+**Employee ID — back**
+
+| element | where |
+|---|---|
+| badge QR | 33.5 mm square, centred, top margin 10.3 |
+| badge ID | Helvetica-Bold 17 pt, centred, baseline y 32.9 |
+| name | Helvetica 10 pt, centred, baseline y 26.9 |
+| company | Helvetica 7.5 pt grey, centred, baseline y 21.9 |
+| rule | hairline at y 14 |
+| "If found, please return to" / company | Helvetica 6 pt grey, centred, baselines y 10 and y 7 |
+
+**Text that does not fit** shrinks to a floor, then is cut with an ellipsis. It never overflows a
+margin.
+
+**Logo:** the Company's `badge_logo` (the field this app already adds), else ERPNext's
+`company_logo`. With neither, the logo box is left empty and the card still prints.
+- A logo under 600 px wide is reported as a warning on every answer: "the logo is 406 px wide; it
+  will look soft on a card — upload one at least 600 px".
+- Tim's file `~/Documents/Misc/OrchardMeadowLogo.png` is 406 × 404 px, so it will draw that warning
+  until a larger one is uploaded.
+
+**QR payloads are unchanged:** the badge ID for an employee, and `Asset Register.qr_url` for an
+asset.
+
+**Both job types are two-sided now.** `sides` defaults to `Dual`; `Single` prints the front only.
+
+## A3. Orientation, per station
+
+Two new Card Print Station fields. The server rotates a page before the PDF leaves; the agent sends
+it as it arrives.
+
+| field | values | default |
+|---|---|---|
+| `front_orientation` | `Landscape` / `Portrait, rotated CW` / `Portrait, rotated CCW` | `Landscape` |
+| `back_orientation` | `Portrait` / `Landscape, rotated CW` / `Landscape, rotated CCW` | `Portrait` |
+
+A rotated page keeps the same drawing, turned 90°, on a page of the other shape. These match the
+`_back-rotCW` / `_back-rotCCW` reference files.
+
+## A4. Simplex and duplex, per station
+
+New station field **`duplex`**: `Simplex` (default) / `Duplex`.
+
+| station | a Dual job |
+|---|---|
+| **Duplex** | one job, a two-page PDF; the agent adds the driver's duplex option |
+| **Simplex** | the job prints the **front only** (a one-page PDF), ends `Printed`, and is marked **`back_pending`** |
+
+**Printing the back on a simplex printer:** `request_card_back(name)` — a Desk button "Print back"
+on the job and on the form's history, plus an MCP tool and a phone route.
+- It queues a second job with `pages = Back`, linked by `front_job`.
+- The person flips the card into the feeder.
+- When the back job prints, `back_pending` clears on the front job.
+- No reprint reason is needed for a back.
+
+**New Card Print Job fields:**
+- `pages` — `Both` / `Front` / `Back`: what this job's PDF holds.
+- `back_pending` — Check.
+- `front_job` — Link Card Print Job.
+
+**The claim answer** gains `duplex: bool` and `pages`. The agent uses its duplex option only when
+`duplex` is true. It reads the option names from `lpoptions`; a driver that offers no duplex value
+makes a `Duplex` station report "this printer has no duplex option" as a printer message, and the
+job is printed front only with `back_pending`.
+
+**Switching to Duplex later:** after enabling dual-side in Evolis Premium Suite 2 (Printer settings
+→ advanced → Printing → Ribbon → Front/Back options), set the station's `duplex` to `Duplex`. No
+deploy.
+
+## A5. Desk first
+
+The Employee and Asset Register buttons ("Card › Print ID Card", "Tags › Print Asset Tag") open one
+dialog:
+- a **preview** of the front and back, drawn by the server as SVG from the same layout;
+- the **station's state** in a sentence, and any artwork warning (e.g. the logo);
+- **Send to printer** — `request_card_print`. This is the primary button when the station has
+  checked in during the last 2 minutes;
+- **Download card PDF** — `download_card_pdf`. This is the primary button when no agent is checking
+  in. One card-sized PDF, front and back pages, to print from Preview with Paper Size CR80, 100%.
+
+Neither button uses Frappe's generic print dialog.
+
+**`download_card_pdf(job_type, reference_name, reprint_reason?)`** (Desk method and MCP tool):
+- the same permission, read check and rate limits as a request;
+- renders both pages using the default station's orientation settings;
+- **records a Card Print Job with the new status `Downloaded`** — every card still has a record:
+  who, when, for whom — with the PDF attached;
+- returns the file.
+- A `Downloaded` job does not count as `Printed` for the reprint rule: a hand print may be repeated
+  while settings are being found.
+
+Once the agent is installed and checking in, the same button's primary action becomes **Send to
+printer**. Nothing needs changing.
+
+**Statuses** are now `Queued` / `Printing` / `Printed` / `Failed` / `Cancelled` / `Downloaded`.
+
+## A6. The blank-page bug
+
+**Cause:** Employee had no usable print format, so Desk asked for `format=undefined` on A4.
+
+**Fix:** two Print Formats, seeded create-only:
+- **"Employee ID Card (CR80)"** on Employee;
+- **"Asset Tag Card (CR80)"** on Asset Register.
+
+Each has a Custom 85.6 × 54 mm page, zero margins, and draws the same layout through a Jinja global
+(`erpnext_mcp_card_svg`): the front, then the back rotated to landscape. Each is set as its
+doctype's **default print format** by a Property Setter, only where no default is set. So Frappe's
+own Print button and bulk Print now produce the card instead of a blank A4.
+
+The buttons in A5 remain the intended path; this makes the generic one harmless.
+
+## A7. The agent
+
+- `extra_options` defaults to empty: no `fit-to-page`.
+- It reads `duplex` and `pages` from the claim answer (A4).
+- `install.sh` reports whether the driver offers a duplex value.
+- Version 1.1.0.
+
+## A8. Order of delivery
+
+| stage | what | usable on its own |
+|---|---|---|
+| **(a)** | renderer, new fields and statuses, `download_card_pdf`, `request_card_back`, Desk dialog, print formats and defaults | **yes** — print from Desk by download; queue when an agent exists |
+| **(b)** | agent 1.1.0 and install script | the queue prints unattended |
+| **(c)** | phone: omit `sides`, show `Downloaded` and back-pending, "Print back" | printing from the phone |
+
+**Counts after (a):** 969 tools — 476 read, 493 write (`download_card_pdf`, `request_card_back`).
+152 mobile routes (`request_card_back`).
