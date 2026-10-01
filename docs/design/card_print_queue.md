@@ -743,3 +743,89 @@ y 34.6; name 8.5 pt y 29.1; company 7 pt y 20.6; "Scan for asset record" 7 pt y 
 accepts `badge_logo` (a File URL, e.g. from `attach_file_to_document`).
 `download_card_pdf` is the test render: it returns the card PDF's File URL and
 records a Downloaded job. No new tools or routes.
+
+---
+
+## Amendment 4 — printing is by hand; asking is gated (v0.210.0)
+
+Tim, 2026-10-01: *"Don't worry about automatic printing. With regard to the iPhone
+screens that should be gated so not everyone can send print jobs in the organization."*
+
+Stage (b), the Mac print agent, is **dropped**. The Card Print Job stays as the log
+and the queue of cards asked for and printed. This amendment supersedes §4.2, §5,
+§A4 and §A7 wherever they put an agent on the path of a card.
+
+### D1. A station printed by hand
+
+`Card Print Station.duplex` gains **Manual** and it is the default: the seeded
+station is Manual, and a one-time patch moves every station whose agent has never
+checked in. On a Manual station:
+
+- every job's artwork is the whole card (`pages` = Both), in the station's
+  orientations — a person prints page 1, flips the card, prints page 2;
+- `station.state` is `Manual` with the message "printed by hand from ERPNext";
+  `agent_online` is false; nothing is ever Offline;
+- `claim_next_card_print_job` answers `{job: null, reason: "this station is printed by hand"}`.
+
+The agent's three methods and `cardprint_agent/` stay in the tree, role-gated as
+before and unused. Simplex / Duplex still mean what §A4 says, for a station that
+one day has an agent.
+
+### D2. A person closes the job
+
+`mark_card_print_job(name, printed, error?)` — Desk method and MCP tool (write,
+default off). Not a phone route: the printer is beside the Mac.
+
+| From | `printed: true` | `printed: false` |
+| --- | --- | --- |
+| Queued, Downloaded | → **Printed**, `printed_at` now | → **Failed**; `error` is required (what went wrong) |
+| Failed | → **Printed** (it was reprinted by hand) | refused: already Failed |
+| Printed | answered `already: true` | refused |
+| Printing, Cancelled | refused | refused |
+
+`claimed_by` / `claimed_at` record who marked it and when. The caller needs the
+requester gate of D3 and the job's company in scope. Retry (Failed → Queued) and
+Cancel (Queued) are unchanged.
+
+Desk: the Card Print Job form carries **Open card PDF**, **Mark printed** and
+**Mark failed** on a Queued or Downloaded job (and **Mark printed** on a Failed
+one); the list view filters to Queued by status. On the Employee / Asset Register
+dialog, **Download card PDF** opens the PDF and then asks *Did it print?* —
+**Mark printed**, **Mark failed** (asks why), or close and decide later.
+**Add to print queue** files the card as Queued for whoever is at the printer.
+
+### D3. Who may ask — enforced on the server
+
+`REQUEST_ROLES` = **Card Print Requester**, **Farm Manager**, **System Manager**.
+An account holding none of them is refused, with one sentence naming the role, by
+**every** method on the surface — request, request back, preview, download, list,
+cancel, retry, mark — on the phone routes, the Desk methods and the MCP tools alike.
+There is no "your own jobs" exception: `list_card_print_jobs` refuses rather than
+answering an empty list, and a duplicate `client_request_id` is checked after the
+role, not before.
+
+The phone learns it may show the actions from two places, both server-decided: the
+`print_queue` tile (audience = the three roles) and the session's roles; a hidden
+button is courtesy and the refusal is the control.
+
+### D4. Company scope
+
+A requester asks only for records of their own entities: the phone's
+`guard.require_scope` companies, and on Desk / MCP the caller's Company User
+Permissions (none = unrestricted, Frappe's rule). An Employee or asset outside
+them is answered exactly as one that does not exist. A scoped caller is also
+refused a record that carries **no** company. Lists, cancel, retry and mark apply
+the same scope to the job's company.
+
+### D5. Rate limits
+
+Unchanged and now stated for the whole surface: 10 cards a minute and 100 a day per
+account across request, request back and download (each makes a job); the phone
+routes add the guard's per-route write limit.
+
+### D6. Counts
+
+970 tools (476 read, 494 write): + `mark_card_print_job`. 152 routes, unchanged.
+Phone fixtures `v0_210_0`: `station.state` may be `Manual`, `station.duplex` may be
+`Manual`, a two-sided job's `pages` is `Both`; `request_card_back` remains for
+agent-driven stations and is not exercised by the phone.
