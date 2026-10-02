@@ -81,7 +81,7 @@ import json
 
 import frappe
 
-from . import compat
+from . import compat, crew_tasks
 from . import training as regimes_vocabulary
 from .erpnext_mcp.doctype.farm_task.farm_task import (
 	parse_evidence_required,
@@ -123,6 +123,11 @@ TEMPLATE_FIELDS = (
 	"instructions_es",
 	# v0.205.0. The certification a worker must hold (docs/design/programs_and_field_kinds.md A1).
 	"required_certification",
+	# v0.213.0. Crew tasks (docs/design/crew_tasks.md).
+	"work_mode",
+	"is_crew_task",
+	"crew_piece_unit",
+	"crew_sections",
 	"creation",
 	"modified",
 	"owner",
@@ -293,6 +298,10 @@ def describe(name: str, with_checklist: bool = False) -> dict:
 		"title_es": str(row.get("title_es") or "") or None,
 		"instructions_es": str(row.get("instructions_es") or "") or None,
 		"required_certification": str(row.get("required_certification") or "") or None,
+		"work_mode": str(row.get("work_mode") or "Individual"),
+		"is_crew_task": str(row.get("work_mode") or "") == "Crew",
+		"crew_piece_unit": str(row.get("crew_piece_unit") or "") or None,
+		"crew_sections": crew_tasks.sections_of(row.get("crew_sections")),
 		"checklist_item_count": len(checklist),
 		"required_checklist_item_count": len([item for item in checklist if item.get("required")]),
 	}
@@ -347,6 +356,10 @@ def snapshot(name: str) -> dict:
 		"form_schema": form_of(row),
 		# v0.205.0. Who may do it, COPIED the same way.
 		"required_certification": str(row.get("required_certification") or ""),
+		# v0.213.0. Whether it is a crew job, what it counts and its sections, COPIED.
+		"is_crew_task": str(row.get("work_mode") or "") == "Crew",
+		"crew_piece_unit": str(row.get("crew_piece_unit") or ""),
+		"crew_sections": crew_tasks.sections_of(row.get("crew_sections")),
 		"checklist_status": {
 			"items": [
 				{
@@ -394,6 +407,10 @@ def build_template(spec: dict):
 	for key in ("title_es", "instructions_es", "required_certification"):
 		if spec.get(key):
 			doc.set(key, str(spec[key]).strip())
+	if spec.get("is_crew_task") and compat.has_field(TEMPLATE_DOCTYPE, "work_mode"):
+		doc.work_mode = "Crew"
+		doc.crew_piece_unit = str(spec.get("crew_piece_unit") or "").strip() or None
+		doc.crew_sections = json.dumps(spec.get("crew_sections") or [])
 	doc.enabled = 1 if spec.get("enabled", 1) else 0
 	for regime in regimes_vocabulary.to_rows(spec.get("compliance_regimes") or spec.get("regimes") or []):
 		doc.append("compliance_regimes", dict(regime))

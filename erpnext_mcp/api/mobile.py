@@ -1214,6 +1214,30 @@ def list_my_tasks(user: str, company=None, timezone=None) -> dict:
 		detail = entry.get("task_detail")
 		if detail:
 			rows.append(shape.task(detail, entry, clock))
+	# v0.213.0. THE CREW TASKS THIS PERSON IS ON. They hold no assignment of
+	# their own that `list_dispatched_tasks` would find — the lead holds the task
+	# — so without this a picker put on "Prune Block 4" would see nothing. Marked
+	# `member`, and shaped against no live assignment so the phone has nothing to
+	# start or complete; the lead's own rows above are marked `lead`.
+	from .. import crew_tasks
+
+	mine = fieldwork._employee_for(user) or ""
+	for row in rows:
+		if row.get("is_crew_task"):
+			row["my_crew_role"] = "lead"
+	held = {row.get("name") for row in rows}
+	for member in crew_tasks.open_rows(employee=mine) if mine else []:
+		name = str(member.get("task") or "")
+		if not name or name in held:
+			continue
+		detail = dispatch._describe_task(dispatch.task_row(name))
+		if wanted and detail.get("company") != wanted:
+			continue
+		shaped = shape.task(detail, {}, clock)
+		shaped["my_crew_role"] = "member"
+		shaped["my_crew_started_at"] = str(member.get("started_at") or "") or None
+		held.add(name)
+		rows.append(shaped)
 	rows = guard.scoped(rows, allowed)
 	return {"tasks": rows, "count": len(rows), "company": wanted or None, **clock.block()}
 
@@ -1288,6 +1312,13 @@ def get_task(user: str, task=None, timezone=None) -> dict:
 	)
 	out.update(clock.block())
 	out["is_mine"] = data.get("is_mine")
+	# v0.213.0. On a crew task: what the CALLER is on it — `lead`, `member`, or
+	# null. A member holds no assignment, so the phone offers them their own part
+	# and never Start or Complete.
+	if out.get("is_crew_task"):
+		from .. import crew_tasks
+
+		out["my_crew_role"] = crew_tasks.my_role(dispatch.task_row(name), fieldwork._employee_for(user) or "")
 	out["evidence_contract"] = data.get("evidence_contract")
 	out["evidence_outstanding"] = data.get("evidence_outstanding")
 	out["evidence_complete"] = data.get("evidence_complete")
@@ -7624,6 +7655,8 @@ def assign_farm_task(
 	person = _employee_argument(person, allowed, label)
 
 	inner = {"task": name, "assigned_to": person}
+	if client_request_id is not None:
+		inner["client_request_id"] = client_request_id
 	if reassign is not None:
 		inner["reassign"] = reassign
 	if reason is not None:
@@ -7654,7 +7687,8 @@ def assign_farm_task(
 		return out
 	data = result.data
 	out = shape.task(data, data.get("assignment") or {})
-	out["already"] = False
+	# v0.213.0. On a crew task the tool itself answers `already`.
+	out["already"] = bool(data.get("already"))
 	out["reassigned_from"] = data.get("reassigned_from")
 	out["concurrent_claims"] = data.get("concurrent_claims")
 	if data.get("phi_override"):
@@ -22859,16 +22893,30 @@ def list_assignable_workers(user: str, task=None, search=None) -> dict:
 	The crew under the caller's open shifts comes first, then the rest of the
 	Active roster. Foreman and Farm Manager.
 	"""
-	from .. import qualifications
+	from .. import crew_tasks, qualifications
+	from ..tools import crew_tasks as crew_tools
 
-	guard.require_dispatch_role(user, "list who a task can be assigned to")
+	# v0.213.0. A CREW TASK'S LIST IS FOR WHOEVER MAY PUT PEOPLE ON ITS CREW —
+	# Foreman, Farm Manager and Crew Leader — which is wider than dispatch. So
+	# the gate is in two halves: nobody outside both sets gets past the first
+	# line (before anything is read), and an individual task still demands the
+	# dispatch role it always has.
+	if not crew_tools.is_supervisor(user):
+		guard.require_dispatch_role(user, "list who a task can be assigned to")
 	allowed = guard.require_scope(user)
 	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
 	row = dict(frappe.get_doc(FARM_TASK, name).as_dict())
+	if not crew_tasks.is_crew(row):
+		guard.require_dispatch_role(user, "list who a task can be assigned to")
 	requirements = qualifications.requirements_of(row)
 	_shifts, crew = _crew_under(user, allowed, "", "")
 	on_crew = {entry["employee"]: entry for entry in crew}
 	skill = str(row.get("skill_required") or "").strip()
+	on_task = (
+		{str(m.get("assigned_to")) for m in crew_tasks.open_rows(task=name)}
+		if crew_tasks.is_crew(row)
+		else set()
+	)
 
 	people = []
 	for person in _active_people(allowed, str(search or ""), str(row.get("company") or "")):
@@ -22884,6 +22932,8 @@ def list_assignable_workers(user: str, task=None, search=None) -> dict:
 				"holding_now": entry.get("holding_now"),
 				"qualified": not missing,
 				"missing": missing,
+				# v0.213.0. Already on this crew task's crew. False on an individual task.
+				"on_this_task": employee in on_task,
 			}
 		)
 	people.sort(key=lambda p: (not p["on_crew"], not p["qualified"], str(p["employee_name"]).lower()))
@@ -22893,10 +22943,187 @@ def list_assignable_workers(user: str, task=None, search=None) -> dict:
 		"requirements": requirements,
 		"skill_required": skill or None,
 		"assigned_to": row.get("assigned_to") or None,
+		"is_crew_task": crew_tasks.is_crew(row),
 		"people": people,
 		"count": len(people),
 		"qualified_count": sum(1 for p in people if p["qualified"]),
 	}
+
+
+# ── crew tasks ── v0.213.0 ───────────────────────────────────────────────────
+#
+# docs/design/crew_tasks.md. Many people on one task. THE GATE IS IN THE TOOLS —
+# Foreman, Farm Manager or Crew Leader for adding, removing and sections; a crew
+# member for their own row and their own crew — so the phone and the MCP path
+# cannot disagree about who may. What these wrappers add is the entity scope:
+# the task must be inside the caller's own companies, and one that is not reads
+# as not found.
+def _crew_task_argument(user: str, task) -> str:
+	allowed = guard.require_scope(user)
+	return guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+
+
+def _given(**values) -> dict:
+	return {key: value for key, value in values.items() if value is not None}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("add_to_crew_task", mutating=True, limit=guard.WRITE_LIMIT)
+def add_to_crew_task(
+	user: str,
+	task=None,
+	employees=None,
+	badge_ids=None,
+	shift=None,
+	lead=None,
+	section=None,
+	client_request_id=None,
+	override_phi=None,
+	phi_override_reason=None,
+) -> dict:
+	"""Put people on a crew task: a whole shift, named people, scanned badges. v0.213.0.
+
+	Each person is answered on their own line — `added`, `already` or `refused`
+	with the farm's reason (a missing certification, an age bar, another entity)
+	— and one refusal does not stop the rest. With no lead on the task yet, the
+	caller becomes it. A repeat is `already`, so the offline queue may send this
+	twice. Foreman, Farm Manager or Crew Leader.
+	"""
+	from ..tools import crew_tasks as crew_tools
+
+	name = _crew_task_argument(user, task)
+	return crew_tools.add_to_crew_task(
+		{
+			"task": name,
+			**_given(
+				employees=employees,
+				badge_ids=badge_ids,
+				shift=shift,
+				lead=lead,
+				section=section,
+				client_request_id=client_request_id,
+				override_phi=override_phi,
+				phi_override_reason=phi_override_reason,
+			),
+		}
+	).data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("remove_from_crew_task", mutating=True, limit=guard.WRITE_LIMIT)
+def remove_from_crew_task(
+	user: str,
+	task=None,
+	employees=None,
+	badge_ids=None,
+	all=None,
+	reason=None,
+	ended_at=None,
+	client_request_id=None,
+) -> dict:
+	"""Take people off a crew task. Their row is closed and kept. v0.213.0.
+
+	`removed`, or `already` for somebody who was not on it — so a repeat is safe.
+	Foreman, Farm Manager or Crew Leader.
+	"""
+	from ..tools import crew_tasks as crew_tools
+
+	name = _crew_task_argument(user, task)
+	return crew_tools.remove_from_crew_task(
+		{
+			"task": name,
+			**_given(
+				employees=employees,
+				badge_ids=badge_ids,
+				all=all,
+				reason=reason,
+				ended_at=ended_at,
+				client_request_id=client_request_id,
+			),
+		}
+	).data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_crew_task_member", mutating=True, limit=guard.WRITE_LIMIT)
+def update_crew_task_member(
+	user: str,
+	task=None,
+	employee=None,
+	pieces=None,
+	add_pieces=None,
+	piece_unit=None,
+	notes=None,
+	section=None,
+	part_done=None,
+) -> dict:
+	"""One person's row on a crew task: pieces, a note, "my part is done". v0.213.0.
+
+	WITH NO `employee` IT IS THE CALLER'S OWN ROW, which is all a crew member may
+	touch. A supervisor may name anybody on the crew. `part_done` closes that
+	person's time and leaves the task open.
+	"""
+	from ..tools import crew_tasks as crew_tools
+
+	name = _crew_task_argument(user, task)
+	return crew_tools.update_crew_task_member(
+		{
+			"task": name,
+			**_given(
+				employee=employee,
+				pieces=pieces,
+				add_pieces=add_pieces,
+				piece_unit=piece_unit,
+				notes=notes,
+				section=section,
+				part_done=part_done,
+			),
+		}
+	).data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_crew_task_sections", mutating=True, limit=guard.WRITE_LIMIT)
+def update_crew_task_sections(user: str, task=None, sections=None, section=None, done=None) -> dict:
+	"""Set a crew task's sections, or tick one done. v0.213.0. Supervisors."""
+	from ..tools import crew_tasks as crew_tools
+
+	name = _crew_task_argument(user, task)
+	return crew_tools.update_crew_task_sections(
+		{"task": name, **_given(sections=sections, section=section, done=done)}
+	).data
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_crew_task_members", limit=guard.READ_LIMIT)
+def list_crew_task_members(user: str, task=None) -> dict:
+	"""Who is on a crew task now, who was, their time and counts. v0.213.0.
+
+	A supervisor, the task's lead, or somebody who has been on that crew.
+	"""
+	from ..tools import crew_tasks as crew_tools
+
+	name = _crew_task_argument(user, task)
+	return crew_tools.list_crew_task_members({"task": name}).data
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_crew_tasks", limit=guard.READ_LIMIT)
+def list_crew_tasks(user: str, company=None) -> dict:
+	"""The open crew tasks in the caller's entities, each with its crew. v0.213.0.
+
+	The board behind the Work screen's "Crew tasks" tile: what is being worked by
+	a crew right now, who leads it and how many are on it. Foreman, Farm Manager
+	or Crew Leader — it names other people.
+	"""
+	from ..tools import crew_tasks as crew_tools
+
+	allowed = guard.require_scope(user)
+	crew_tools.require_supervisor("read the crew task board")
+	wanted = guard.require_company(user, company, allowed)
+	rows = shape.tasks(crew_tools.open_crew_tasks([wanted] if wanted else list(allowed)))
+	rows = guard.scoped(rows, allowed)
+	return {"tasks": rows, "count": len(rows), "company": wanted or None}
 
 
 # ── get_training_cards / check_in_training_day ── v0.212.0 ──────────────────

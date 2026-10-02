@@ -427,6 +427,13 @@ ROUTES = (
 	Route("/mobile", mobile_api.clock_in_crew),
 	Route("/mobile", mobile_api.list_crew_candidates),
 	Route("/mobile", mobile_api.list_assignable_workers),
+	# v0.213.0. Crew tasks: many people on one task (docs/design/crew_tasks.md).
+	Route("/mobile", mobile_api.add_to_crew_task),
+	Route("/mobile", mobile_api.remove_from_crew_task),
+	Route("/mobile", mobile_api.update_crew_task_member),
+	Route("/mobile", mobile_api.update_crew_task_sections),
+	Route("/mobile", mobile_api.list_crew_task_members),
+	Route("/mobile", mobile_api.list_crew_tasks),
 	Route("/mobile", mobile_api.check_in_training_day),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),

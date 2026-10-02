@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 973 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 978 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 476 read tools are **on** by default and can be switched off individually. A
+All 477 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,22 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.213.0 — crew tasks
+
+| Tool | What it does |
+| --- | --- |
+| `add_to_crew_task` | Put a shift, named people or scanned badges on a crew task; per-person results. Write |
+| `remove_from_crew_task` | Take people off; each row is closed with its time and reason, and kept. Write |
+| `update_crew_task_member` | One person's pieces, note, section, or "part done". Write |
+| `update_crew_task_sections` | Set a crew task's sections (row ranges) or tick one. Write |
+| `list_crew_task_members` | Who is on it, who was, their time, pieces and the totals. Read |
+
+`create_farm_task`, the template tools and `create_task_from_template` take `work_mode`
+(`Individual` / `Crew`), `piece_unit` and `sections`. On a crew task `assign_farm_task` adds the
+person to the crew, `claim_farm_task` refuses, `complete_farm_task` is one close by the lead (or a
+supervisor, who takes the lead), and `get_farm_task` returns `crew`. Contract:
+`docs/design/crew_tasks.md`.
 
 ## v0.212.0 — multi-day classes
 

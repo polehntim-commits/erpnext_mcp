@@ -696,6 +696,12 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/clock_in_crew",
 		"/mobile/list_crew_candidates",
 		"/mobile/list_assignable_workers",
+		"/mobile/add_to_crew_task",
+		"/mobile/remove_from_crew_task",
+		"/mobile/update_crew_task_member",
+		"/mobile/update_crew_task_sections",
+		"/mobile/list_crew_task_members",
+		"/mobile/list_crew_tasks",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
 		"/mobile/get_my_housing",
 		"/mobile/record_spray_application",
@@ -3205,6 +3211,17 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# crew and is not a dispatcher).
 		"clock_in_crew",
 		"list_crew_candidates",
+		# v0.213.0 (docs/design/crew_tasks.md). Crew tasks. Adding, removing,
+		# sections and the board are Foreman / Farm Manager / CREW LEADER — wider
+		# than `DISPATCH_ROLES`, so the gate is `crew_tasks.require_supervisor`
+		# inside the tool, where the MCP path shares it. A crew member may read
+		# their own crew and update their own row, which is why those two are open.
+		"add_to_crew_task",
+		"remove_from_crew_task",
+		"update_crew_task_member",
+		"update_crew_task_sections",
+		"list_crew_task_members",
+		"list_crew_tasks",
 		# v0.195.0. The caller's own housing (no arguments, so no one else's);
 		# spray history, which WPS requires be displayed to workers; and filing a
 		# spray, which is never refused for the role of the applicator filing it.
@@ -3221,7 +3238,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 158, "a method is named in two sets at once")
+		self.assertEqual(len(named), 164, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

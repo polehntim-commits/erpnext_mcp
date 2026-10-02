@@ -21,6 +21,7 @@
   "dispatch_mode",
   "estimated_duration_minutes",
   "evidence_required",
+  "is_crew_task",
   "location",
   "location_doctype",
   "location_type",
@@ -49,6 +50,7 @@
   "task_name",
   "task_type",
   "template",
-  "urgency"
+  "urgency",
+  "work_mode"
  ]
 }

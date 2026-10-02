@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.213.0 — 2026-10-01 — crew tasks; every ID and asset print is the CR80 card
+
+**978 tools** (477 read, 501 write): + `add_to_crew_task`, `remove_from_crew_task`,
+`update_crew_task_member`, `update_crew_task_sections`, `list_crew_task_members`. **164 mobile
+methods**: those five + `list_crew_tasks`. Contract `docs/design/crew_tasks.md`; deploy
+`docs/deploy/v0.213.0_crew_tasks.md`; iOS SERVER_CHANGES §60.
+
+- **Many people on one task, with no new doctype.** Farm Task gains `work_mode` (Individual / Crew,
+  mirrored by `is_crew_task`), `crew_piece_unit`, `crew_sections` and four roll-up columns. A crew task
+  keeps one ordinary holder — the **lead**, who starts and closes it — and one Farm Task Assignment per
+  worker per stint in two new states, `On Crew` / `Off Crew`, which are not live states. Individual
+  tasks are unchanged.
+- **Add and remove at any time.** `add_to_crew_task` takes a whole shift, named people, scanned badges
+  or a mix and answers each person on their own line; the required certification and the under-18 bars
+  are checked per person. `remove_from_crew_task` closes the row with its end time and reason — nothing
+  is deleted. A person is on one crew task at a time; leaving their shift, or the task closing, ends
+  their time on it. Both calls are safe to send twice.
+- **`assign_farm_task` on a crew task adds to the crew**; `claim_farm_task` refuses one.
+- **One close.** `complete_farm_task` by the lead, with one evidence set. A Foreman, Farm Manager or
+  Crew Leader who is not the lead takes it in the same call; a crew member is refused and may mark
+  their own part done (`update_crew_task_member`).
+- **Time, pieces, sections.** Each row carries its own start, end, minutes and shift; pieces (trees,
+  bins, rows) and a note per person; bucket scans are read from the bucket log for the time they were
+  on. Sections (row ranges) can be ticked, with progress in words. A crew row has the columns the
+  payroll cost-centre split already reads, so crew labour lands on the block. **Pieces are not pay**:
+  the column is not one the payroll run reads.
+- **Templates** carry `work_mode`, the unit and sections. **Tile** `crew_tasks` on Work (app 0.25.0).
+- **Phone.** `list_my_tasks` returns the crew tasks the caller is on (`my_crew_role`); every task
+  carries `is_crew_task`, `work_mode` and, on a crew task, `crew`.
+- **Every ID and asset print draws the CR80 card** (`card_redirect`). The four older buttons — Print
+  Badge Sheet and ID Card on Employee, Generate QR Sheet and QR Tag on the Asset Register — and
+  `generate_employee_id_card` now answer the approved card, one side per 85.6 × 54 mm page; the
+  redirect is in the server methods, so the Client Script rows are untouched. The ID card PDF is drawn
+  by `card_art` and no longer needs wkhtmltopdf. Patch `legacy_badge_prints_use_cr80` repoints an
+  unedited "Employee Badge Card" print format and leaves an edited one alone. Farm Feature Flag
+  `legacy_badge_layouts` brings the old layouts back.
+- `list_assignable_workers` on a crew task is open to Crew Leader as well, and adds `on_this_task`;
+  `get_task` sends `my_crew_role`.
+- Fixed: `training_courses.course_fields` used an `or` on a stored day number (the zero-drop check).
+
 ## 0.212.0 — 2026-10-01 — multi-day classes; crew clock-in and assign from Work
 
 **973 tools** (476 read, 497 write): + `group_training_sessions`, `add_training_session_day`. **158

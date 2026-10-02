@@ -28,6 +28,8 @@ REPORTS = (
 	# v0.212.0 (AFB-2026-00030). The Work screen's supervisor actions, as tiles.
 	"crew_clock_in",
 	"assign_tasks",
+	# v0.213.0. The crew task board (needs app 0.25.0).
+	"crew_tasks",
 )
 DOCUMENT_DOCTYPES = ("Farm Task", "Inspection Session", "Asset Register", "Item", "App Feedback")
 TARGET_KINDS = ("wizard", "task_template", "inspection_template", "report", "list_query", "document")
@@ -376,6 +378,23 @@ WORK_TILES = {
 	},
 }
 
+#: v0.213.0 (docs/design/crew_tasks.md). The crew task board: what a crew is
+#: working now, who leads it, and the door to adding and removing people.
+CREW_TILES = {
+	"crew_tasks": {
+		"surface": "work",
+		"title": {"en": "Crew tasks", "es": "Tareas de cuadrilla"},
+		"subtitle": {"en": "Who is on each job", "es": "Quién está en cada trabajo"},
+		"icon": "list.bullet.clipboard",
+		"order": 30,
+		"target": {"kind": "report", "report": "crew_tasks"},
+		"audience": {"roles": ["Foreman", "Crew Leader", "Farm Manager", "System Manager"]},
+		"badge": None,
+		"show_if": {},
+		"min_app_version": "0.25.0",
+	},
+}
+
 
 def seed() -> list:
 	made = []
@@ -385,6 +404,10 @@ def seed() -> list:
 			made.append(name)
 	for key, body in WORK_TILES.items():
 		name = phone_config.seed("Tile", key, body, "Built-in Work tile, seeded at install (v0.212.0).")
+		if name:
+			made.append(name)
+	for key, body in CREW_TILES.items():
+		name = phone_config.seed("Tile", key, body, "Built-in Work tile, seeded at install (v0.213.0).")
 		if name:
 			made.append(name)
 	return made

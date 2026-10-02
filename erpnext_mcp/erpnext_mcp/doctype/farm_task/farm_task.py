@@ -240,6 +240,13 @@ class FarmTask(Document):
 
 		self.company = self.company or _company_of(self.location_doctype, self.location)
 
+		# v0.213.0 (docs/design/crew_tasks.md). ONE FACT, TWO SPELLINGS. `work_mode`
+		# is the one a person or a tool sets; `is_crew_task` is derived from it so a
+		# list filter has a checkbox to read.
+		if compat.has_field("Farm Task", "work_mode"):
+			self.work_mode = "Crew" if str(self.get("work_mode") or "") == "Crew" else "Individual"
+			self.is_crew_task = 1 if self.work_mode == "Crew" else 0
+
 		# v0.203.0. THE COMPLETION TIME, SET ONCE. Rules that time work from its
 		# completion used `modified`, so every later edit reset the clock.
 		if self.state == COMPLETED and not self.get("completed_at"):
@@ -252,6 +259,11 @@ class FarmTask(Document):
 		stamp_task(self)
 
 	def on_update(self):
+		# v0.213.0. A crew task that stops being worked has nobody left on it:
+		# every open crew row is closed with the time and the reason.
+		from .... import crew_tasks
+
+		crew_tasks.close_when_task_stops(self)
 		# v0.203.0. A bait task completing moves its location's bait state
 		# (Active / Maintenance / Cleared). On the TRANSITION only.
 		if self.state != COMPLETED:

@@ -84,6 +84,16 @@
   "label_views",
   "notes_section",
   "notes",
+  "crew_section",
+  "work_mode",
+  "is_crew_task",
+  "crew_piece_unit",
+  "crew_sections",
+  "crew_rollup_column",
+  "crew_headcount",
+  "crew_on_now",
+  "crew_person_minutes",
+  "crew_pieces",
   "narrative_section",
   "task_notes"
  ],
@@ -574,6 +584,74 @@
    "fieldname": "notes",
    "fieldtype": "Text",
    "label": "Instructions"
+  },
+  {
+   "fieldname": "crew_section",
+   "fieldtype": "Section Break",
+   "label": "Crew",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "work_mode",
+   "fieldtype": "Select",
+   "label": "Work Mode",
+   "options": "Individual\nCrew",
+   "default": "Individual",
+   "in_standard_filter": 1,
+   "description": "Crew: many people work it at once, each with their own time; one supervisor closes it. docs/design/crew_tasks.md."
+  },
+  {
+   "fieldname": "is_crew_task",
+   "fieldtype": "Check",
+   "label": "Is Crew Task",
+   "default": "0",
+   "read_only": 1,
+   "description": "Kept equal to Work Mode = Crew."
+  },
+  {
+   "fieldname": "crew_piece_unit",
+   "fieldtype": "Data",
+   "label": "Counts",
+   "description": "What this task counts: trees, bins, rows, buckets."
+  },
+  {
+   "fieldname": "crew_sections",
+   "fieldtype": "Code",
+   "label": "Sections",
+   "options": "JSON",
+   "description": "Row ranges or sections, each with done / done_at / done_by."
+  },
+  {
+   "fieldname": "crew_rollup_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "crew_headcount",
+   "fieldtype": "Int",
+   "label": "People",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "crew_on_now",
+   "fieldtype": "Int",
+   "label": "On Now",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "crew_person_minutes",
+   "fieldtype": "Int",
+   "label": "Person-Minutes",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "crew_pieces",
+   "fieldtype": "Float",
+   "label": "Pieces",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "hierarchy_section",

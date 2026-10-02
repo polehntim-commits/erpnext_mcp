@@ -69,7 +69,7 @@ import itertools
 import frappe
 
 from .. import breaks as breaks_mod
-from .. import compat, geo, minors, shifts, timezones
+from .. import compat, crew_tasks, geo, minors, shifts, timezones
 from ..args import as_bool, as_choice, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -852,6 +852,8 @@ def remove_worker_from_shift(args: dict) -> ToolResult:
 		target.notes = as_str(args, "notes")
 	doc.flags.ignore_permissions = True
 	doc.save(ignore_permissions=True)
+	# v0.213.0. Off the shift is off the crew task they were working on it.
+	crew_tasks.close_for_shift(row["name"], person, left, "Left the shift")
 
 	described = shifts.describe(dict(doc.as_dict()), with_children=True)
 	hours = shifts.hours_between(str(target.get("joined_at") or ""), left)
@@ -1068,6 +1070,7 @@ def cancel_shift(args: dict) -> ToolResult:
 		doc.foreman_notes = as_str(args, "foreman_notes")
 	doc.flags.ignore_permissions = True
 	doc.save(ignore_permissions=True)
+	crew_tasks.close_for_shift(row["name"], "", when, "Shift cancelled")
 
 	described = shifts.describe(dict(doc.as_dict()), with_children=True)
 	crew = shifts.crew_of(row["name"])
@@ -1173,6 +1176,8 @@ def end_shift(args: dict) -> ToolResult:
 		doc.foreman_notes = as_str(args, "foreman_notes")
 	doc.flags.ignore_permissions = True
 	doc.save(ignore_permissions=True)
+	# v0.213.0. The shift is over, and so is its crew's time on any crew task.
+	crew_tasks.close_for_shift(row["name"], "", end, "Shift ended")
 
 	closed = dict(doc.as_dict())
 	described = shifts.describe(closed, with_children=True)

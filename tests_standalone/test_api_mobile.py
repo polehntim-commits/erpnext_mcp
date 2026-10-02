@@ -1092,6 +1092,13 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"clock_in_crew",
 		"list_crew_candidates",
 		"list_assignable_workers",
+		# v0.213.0 — crew tasks (SERVER_CHANGES §60).
+		"add_to_crew_task",
+		"remove_from_crew_task",
+		"update_crew_task_member",
+		"update_crew_task_sections",
+		"list_crew_task_members",
+		"list_crew_tasks",
 		# v0.195.0. fafo_ios names all four as path constants (6e9cfd0) and no
 		# Codable decodes their answers yet, so there is nothing to mirror; the
 		# payloads are asserted key by key in test_wave5_server_changes against

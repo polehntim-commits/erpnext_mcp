@@ -184,7 +184,8 @@ def course_fields(row: dict, viewer: str = "") -> dict:
 	for index, day in enumerate(days):
 		entry = {
 			"session": day["name"],
-			"day_number": int(day.get("day_number") or 0) or index + 1,
+			# A stored Int: an unset column reads back 0, and no day is day 0.
+			"day_number": int(day["day_number"]) if day.get("day_number") else index + 1,
 			"session_date": str(day.get("session_date") or "") or None,
 			"start_time": training_sessions.clock(day.get("start_time")) or None,
 			"end_time": training_sessions.clock(day.get("end_time")) or None,

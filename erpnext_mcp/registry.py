@@ -180,6 +180,7 @@ from .tools import (
 	workflow,
 )
 from .tools import card_prints as card_print_tools
+from .tools import crew_tasks as crew_task_tools
 from .tools import moments as moment_tools
 from .tools import pest_control as pest_control_tools
 from .tools import phone_configs as phone_config_tools
@@ -11105,6 +11106,18 @@ TOOLS = {
 				"override with no reason is indistinguishable afterwards from a guard that was "
 				"never there.",
 			),
+			"work_mode": _field(
+				_STRING,
+				"v0.213.0. 'Individual' (default) or 'Crew'. A crew task takes many people at once, "
+				"each with their own time on it, and one supervisor closes it. `assigned_to` is then "
+				"its lead. `is_crew_task: true` says the same.",
+			),
+			"is_crew_task": _field(_BOOLEAN, "Same as work_mode 'Crew'."),
+			"piece_unit": _field(_STRING, "What a crew task counts: trees, bins, rows, buckets."),
+			"sections": _field(
+				{"type": "array", "items": {"type": ["object", "string"]}},
+				"A crew task's sections: [{label, from_row, to_row}] or plain labels. Optional.",
+			),
 		},
 		required=("task_name", "task_type", "evidence_required"),
 		mutating=True,
@@ -11208,6 +11221,9 @@ TOOLS = {
 		dispatch.assign_farm_task,
 		"MUTATING (default OFF). Send one named person to one task — the foreman's "
 		"half of the dual mode, for work where the named holder matters.\n\n"
+		"ON A CREW TASK (v0.213.0) THIS ADDS THEM TO THE CREW and takes nobody off; "
+		"reassign and reason are not asked for, and the answer carries `crew` and "
+		"`already`. add_to_crew_task does the same for a whole shift at once.\n\n"
 		"REFUSES to take work off somebody who already holds it unless you pass "
 		"reassign=true AND a reason, which is written onto their assignment. 'Taken "
 		"off them with no explanation' is a record nobody can defend. Refuses a task "
@@ -11246,12 +11262,119 @@ TOOLS = {
 				"override with no reason is indistinguishable afterwards from a guard that was "
 				"never there.",
 			),
+			"section": _field(_STRING, "On a crew task: the section key they are working."),
+			"client_request_id": _field(_STRING, "An id the caller made, kept on a crew row for the trail."),
 		},
 		required=("task", "assigned_to"),
 		mutating=True,
 		title="Assign a farm task",
 		available=_needs_doctype("Farm Task"),
 		requires="the Farm Task DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"add_to_crew_task": _tool(
+		crew_task_tools.add_to_crew_task,
+		"MUTATING (default OFF; Foreman, Farm Manager or Crew Leader). v0.213.0. Put people on "
+		"a CREW task — a whole shift, named people, scanned badges, or a mix. One Farm Task "
+		"Assignment per person, state On Crew, timed from now and linked to the shift they are "
+		"clocked into.\n\n"
+		"EACH PERSON IS ANSWERED ON THEIR OWN LINE (added / already / refused, with the "
+		"reason), so one refusal does not stop the rest. The task's required certification and "
+		"the under-18 bars are checked PER PERSON. Somebody on another crew task is moved: "
+		"that row is closed here. A repeat is `already`, so the call is safe to send twice.\n\n"
+		"The task needs a LEAD — the supervisor who closes it. `lead` names one; otherwise it "
+		"is the caller's own Employee. Refuses an individual task (use assign_farm_task).",
+		{
+			"task": _field(_STRING, "The crew Farm Task."),
+			"employees": _field(_STRING_ARRAY, "Employee docnames."),
+			"badge_ids": _field(_STRING_ARRAY, "Scanned badge ids; each is resolved to its Employee."),
+			"shift": _field(_STRING, "A Farm Shift: everybody on it now is added."),
+			"lead": _field(_STRING, "The Employee who leads and closes the task. Sets or changes it."),
+			"section": _field(_STRING, "The section key these people are working."),
+			"client_request_id": _field(_STRING, "An id the caller made, kept on each row."),
+		},
+		required=("task",),
+		mutating=True,
+		title="Add people to a crew task",
+		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
+		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
+	),
+	"remove_from_crew_task": _tool(
+		crew_task_tools.remove_from_crew_task,
+		"MUTATING (default OFF; Foreman, Farm Manager or Crew Leader). v0.213.0. Take people "
+		"off a crew task. Each row is CLOSED — Off Crew, with its end time, minutes and reason "
+		"— and never deleted; coming back later is a new row. Somebody not on the crew is "
+		"`already`, so a repeat is safe.",
+		{
+			"task": _field(_STRING, "The crew Farm Task."),
+			"employees": _field(_STRING_ARRAY, "Employee docnames."),
+			"badge_ids": _field(_STRING_ARRAY, "Scanned badge ids; each is resolved to its Employee."),
+			"all": _field(_BOOLEAN, "Everybody on it now."),
+			"reason": _field(_STRING, "Why — 'went home sick', 'moved to the shop'."),
+			"ended_at": _field(_STRING, "When they stopped, if not now. Never before they started."),
+			"client_request_id": _field(_STRING, "An id the caller made."),
+		},
+		required=("task",),
+		mutating=True,
+		title="Remove people from a crew task",
+		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
+		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
+	),
+	"update_crew_task_member": _tool(
+		crew_task_tools.update_crew_task_member,
+		"MUTATING (default OFF). v0.213.0. One person's row on a crew task: their piece count "
+		"(trees, bins, rows), a note, the section they are on, or 'my part is done' — which "
+		"closes their time and leaves the task open. A supervisor may update anybody; a crew "
+		"member only their own row.\n\n"
+		"PIECES ARE NOT PAY: they roll up to the task for cost per block and are not read by "
+		"the payroll run. Buckets are read from the bucket log, not entered here.",
+		{
+			"task": _field(_STRING, "The crew Farm Task."),
+			"employee": _field(_STRING, "Whose row. Defaults to the caller's own."),
+			"pieces": _field(_NUMBER, "Their count so far (replaces)."),
+			"add_pieces": _field(_NUMBER, "Add to their count."),
+			"piece_unit": _field(_STRING, "trees, bins, rows… Defaults to the task's."),
+			"notes": _field(_STRING, "A note on their row."),
+			"section": _field(_STRING, "Move them to this section key (supervisor)."),
+			"part_done": _field(_BOOLEAN, "Their part is done: closes their time on the task."),
+		},
+		required=("task",),
+		mutating=True,
+		title="Update a crew task member",
+		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
+		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
+	),
+	"update_crew_task_sections": _tool(
+		crew_task_tools.update_crew_task_sections,
+		"MUTATING (default OFF; Foreman, Farm Manager or Crew Leader). v0.213.0. A crew task's "
+		"sections — row ranges or named parts of a block. `sections` sets the list (the "
+		"done-state of a key that survives is kept); `section` with `done` ticks one. Returns "
+		"progress: 'Rows 1–20 done; Rows 21–40 open'.",
+		{
+			"task": _field(_STRING, "The crew Farm Task."),
+			"sections": _field(
+				{"type": "array", "items": {"type": ["object", "string"]}},
+				"[{label, from_row, to_row, key?}] or plain labels.",
+			),
+			"section": _field(_STRING, "A section key to tick."),
+			"done": _field(_BOOLEAN, "Default true. False un-ticks it."),
+		},
+		required=("task",),
+		mutating=True,
+		title="Set or tick a crew task's sections",
+		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
+		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
+	),
+	"list_crew_task_members": _tool(
+		crew_task_tools.list_crew_task_members,
+		"v0.213.0. Who is on a crew task now and who was: each person's start, end, minutes, "
+		"shift, pieces, buckets (from the bucket log), section and notes, with the task's "
+		"totals — people, person-minutes, pieces — and section progress. The same block "
+		"get_farm_task returns as `crew`.",
+		{"task": _field(_STRING, "The crew Farm Task.")},
+		required=("task",),
+		title="List a crew task's members",
+		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
+		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
 	),
 	"claim_farm_task": _tool(
 		dispatch.claim_farm_task,
@@ -11651,6 +11774,18 @@ TOOLS = {
 				"assign, start and resume, the same for every template. '' clears it.",
 			),
 			"instructions_es": _field(_STRING, "v0.204.0. The instructions in Spanish."),
+			"work_mode": _field(
+				_STRING,
+				"v0.213.0. 'Individual' (default) or 'Crew'. A crew task takes many people at once, "
+				"each with their own time on it, and one supervisor closes it. `assigned_to` is then "
+				"its lead. `is_crew_task: true` says the same.",
+			),
+			"is_crew_task": _field(_BOOLEAN, "Same as work_mode 'Crew'."),
+			"piece_unit": _field(_STRING, "What a crew task counts: trees, bins, rows, buckets."),
+			"sections": _field(
+				{"type": "array", "items": {"type": ["object", "string"]}},
+				"A crew task's sections: [{label, from_row, to_row}] or plain labels. Optional.",
+			),
 		},
 		required=("template_name", "task_type", "evidence_required"),
 		mutating=True,
@@ -11726,6 +11861,18 @@ TOOLS = {
 				"assign, start and resume, the same for every template. '' clears it.",
 			),
 			"instructions_es": _field(_STRING, "v0.204.0. The instructions in Spanish."),
+			"work_mode": _field(
+				_STRING,
+				"v0.213.0. 'Individual' (default) or 'Crew'. A crew task takes many people at once, "
+				"each with their own time on it, and one supervisor closes it. `assigned_to` is then "
+				"its lead. `is_crew_task: true` says the same.",
+			),
+			"is_crew_task": _field(_BOOLEAN, "Same as work_mode 'Crew'."),
+			"piece_unit": _field(_STRING, "What a crew task counts: trees, bins, rows, buckets."),
+			"sections": _field(
+				{"type": "array", "items": {"type": ["object", "string"]}},
+				"A crew task's sections: [{label, from_row, to_row}] or plain labels. Optional.",
+			),
 		},
 		required=("template",),
 		mutating=True,
@@ -12485,6 +12632,18 @@ TOOLS = {
 			"source_alert": _field(_STRING, "The Compliance Alert this answers, if any."),
 			"company": _COMPANY,
 			"draft": _field(_BOOLEAN, "Hold it in Draft rather than publishing to the pool. Default false."),
+			"work_mode": _field(
+				_STRING,
+				"v0.213.0. 'Individual' (default) or 'Crew'. A crew task takes many people at once, "
+				"each with their own time on it, and one supervisor closes it. `assigned_to` is then "
+				"its lead. `is_crew_task: true` says the same.",
+			),
+			"is_crew_task": _field(_BOOLEAN, "Same as work_mode 'Crew'."),
+			"piece_unit": _field(_STRING, "What a crew task counts: trees, bins, rows, buckets."),
+			"sections": _field(
+				{"type": "array", "items": {"type": ["object", "string"]}},
+				"A crew task's sections: [{label, from_row, to_row}] or plain labels. Optional.",
+			),
 		},
 		required=("template",),
 		mutating=True,

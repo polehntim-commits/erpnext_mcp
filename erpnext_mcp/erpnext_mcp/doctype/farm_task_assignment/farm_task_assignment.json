@@ -40,6 +40,17 @@
   "evidence_section",
   "signature_file",
   "produced_record",
+  "crew_section",
+  "pieces",
+  "piece_unit",
+  "section",
+  "part_done",
+  "member_notes",
+  "crew_member_column",
+  "end_reason",
+  "added_by",
+  "ended_by",
+  "client_request_id",
   "evidence_files",
   "idempotency_section",
   "visit_id",
@@ -82,7 +93,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "State",
-   "options": "Claimed\nIn-Progress\nPaused\nCompleted\nRejected\nMerged",
+   "options": "Claimed\nIn-Progress\nPaused\nCompleted\nRejected\nMerged\nOn Crew\nOff Crew",
    "reqd": 1,
    "search_index": 1
   },
@@ -208,6 +219,67 @@
    "fieldtype": "Data",
    "label": "Produced Record",
    "read_only": 1
+  },
+  {
+   "fieldname": "crew_section",
+   "fieldtype": "Section Break",
+   "label": "Crew Member",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "pieces",
+   "fieldtype": "Float",
+   "label": "Pieces",
+   "description": "Trees, bins, rows. Not read by payroll."
+  },
+  {
+   "fieldname": "piece_unit",
+   "fieldtype": "Data",
+   "label": "Piece Unit"
+  },
+  {
+   "fieldname": "section",
+   "fieldtype": "Data",
+   "label": "Section"
+  },
+  {
+   "fieldname": "part_done",
+   "fieldtype": "Check",
+   "label": "Part Done",
+   "default": "0"
+  },
+  {
+   "fieldname": "member_notes",
+   "fieldtype": "Small Text",
+   "label": "Member Notes"
+  },
+  {
+   "fieldname": "crew_member_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "end_reason",
+   "fieldtype": "Small Text",
+   "label": "End Reason"
+  },
+  {
+   "fieldname": "added_by",
+   "fieldtype": "Data",
+   "label": "Added By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ended_by",
+   "fieldtype": "Data",
+   "label": "Ended By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_request_id",
+   "fieldtype": "Data",
+   "label": "Client Request ID",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "description": "Photographs and documents filed against this completion.",

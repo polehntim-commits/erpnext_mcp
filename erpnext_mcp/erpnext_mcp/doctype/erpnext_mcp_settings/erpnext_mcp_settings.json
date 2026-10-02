@@ -586,6 +586,11 @@
   "allow_report_field_task",
   "allow_report_asset_issue",
   "allow_assign_farm_task",
+  "allow_add_to_crew_task",
+  "allow_remove_from_crew_task",
+  "allow_update_crew_task_member",
+  "allow_update_crew_task_sections",
+  "allow_list_crew_task_members",
   "allow_claim_farm_task",
   "allow_start_farm_task",
   "dispatch_write_col",
@@ -5038,6 +5043,41 @@
    "fieldname": "allow_assign_farm_task",
    "fieldtype": "Check",
    "label": "Assign Farm Task"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Puts people on a crew task — a whole shift, named people or scanned badges. One assignment per person, timed and certification-checked per person.",
+   "fieldname": "allow_add_to_crew_task",
+   "fieldtype": "Check",
+   "label": "Add To Crew Task"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Takes people off a crew task. Each row is closed with its end time and reason, never deleted.",
+   "fieldname": "allow_remove_from_crew_task",
+   "fieldtype": "Check",
+   "label": "Remove From Crew Task"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. One person's row on a crew task: pieces, notes, section, or their part done.",
+   "fieldname": "allow_update_crew_task_member",
+   "fieldtype": "Check",
+   "label": "Update Crew Task Member"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Sets a crew task's sections (row ranges) or ticks one done.",
+   "fieldname": "allow_update_crew_task_sections",
+   "fieldtype": "Check",
+   "label": "Update Crew Task Sections"
+  },
+  {
+   "default": "1",
+   "description": "Who is on a crew task now and who was, with time, pieces and totals.",
+   "fieldname": "allow_list_crew_task_members",
+   "fieldtype": "Check",
+   "label": "List Crew Task Members"
   },
   {
    "default": "0",

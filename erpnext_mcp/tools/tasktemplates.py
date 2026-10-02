@@ -45,7 +45,7 @@ import json
 
 import frappe
 
-from .. import compat, form_schema, task_templates
+from .. import compat, crew_tasks, form_schema, task_templates
 from .. import training as regimes_vocabulary
 from ..args import as_bool, as_choice, as_int, as_limit, as_str, resolve_company
 from ..erpnext_mcp.doctype.farm_task.farm_task import (
@@ -195,6 +195,10 @@ def create_farm_task_template(args: dict) -> ToolResult:
 		"title_es": as_str(args, "title_es"),
 		"instructions_es": as_str(args, "instructions_es"),
 		"required_certification": as_str(args, "required_certification"),
+		# v0.213.0. docs/design/crew_tasks.md.
+		"is_crew_task": bool(crew_tasks.mode_argument(args)),
+		"crew_piece_unit": as_str(args, "piece_unit") or as_str(args, "crew_piece_unit"),
+		"crew_sections": crew_tasks.normalise_sections(args.get("sections")),
 	}
 
 	doc = task_templates.build_template(spec)
@@ -267,6 +271,24 @@ def update_farm_task_template(args: dict) -> ToolResult:
 			if str(getattr(doc, field, "") or "") != value:
 				changes[field] = {"from": getattr(doc, field, "") or "", "to": value}
 			setattr(doc, field, value)
+
+	# v0.213.0. Crew or individual, what it counts, and its sections.
+	if compat.has_field(TEMPLATE, "work_mode"):
+		mode = crew_tasks.mode_argument(args)
+		if mode is not None:
+			value = "Crew" if mode else "Individual"
+			if str(doc.get("work_mode") or "Individual") != value:
+				changes["work_mode"] = {"from": str(doc.get("work_mode") or "Individual"), "to": value}
+			doc.work_mode = value
+		unit = as_str(args, "piece_unit") or as_str(args, "crew_piece_unit")
+		if "piece_unit" in args or "crew_piece_unit" in args:
+			if str(doc.get("crew_piece_unit") or "") != unit:
+				changes["crew_piece_unit"] = {"from": doc.get("crew_piece_unit") or "", "to": unit}
+			doc.crew_piece_unit = unit or None
+		if "sections" in args:
+			sections = crew_tasks.normalise_sections(args.get("sections"))
+			changes["crew_sections"] = {"to": [s["label"] for s in sections]}
+			doc.crew_sections = json.dumps(sections)
 
 	if "estimated_duration_minutes" in args:
 		value = as_int(args, "estimated_duration_minutes") or 0
@@ -716,6 +738,23 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 		doc.form_schema = json.dumps(shape["form_schema"])
 	if shape.get("required_certification") and compat.has_field(FARM_TASK, "required_certification"):
 		doc.required_certification = shape["required_certification"]
+	# v0.213.0. A crew template raises a crew task; `work_mode` on the call wins.
+	mode = crew_tasks.mode_argument(args)
+	if (shape.get("is_crew_task") if mode is None else mode) and crew_tasks.ready():
+		doc.work_mode = crew_tasks.CREW
+		doc.is_crew_task = 1
+		doc.dispatch_mode = "Dispatched"
+		doc.crew_piece_unit = (
+			as_str(args, "piece_unit")
+			or as_str(args, "crew_piece_unit")
+			or shape.get("crew_piece_unit")
+			or None
+		)
+		doc.crew_sections = json.dumps(
+			crew_tasks.normalise_sections(args.get("sections"))
+			if args.get("sections") is not None
+			else shape.get("crew_sections") or []
+		)
 	# The template's instructions first, then anything true of THIS case. The
 	# order is the point: a worker reads the standing instruction and then the
 	# note about the particular cabin, which is the order they need them in.

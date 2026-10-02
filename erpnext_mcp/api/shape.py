@@ -192,6 +192,12 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 	# The step counters, so a handset can draw "3 of 5 done" on an investigation
 	# without a second call per row.
 	out["parent_task"] = row.get("parent_task") or None
+	# v0.213.0 (docs/design/crew_tasks.md). ALWAYS PRESENT, false on an individual
+	# task; `crew` — who is on it, their time and counts — only on a crew task.
+	out["is_crew_task"] = bool(row.get("is_crew_task"))
+	out["work_mode"] = "Crew" if out["is_crew_task"] else "Individual"
+	if row.get("crew"):
+		out["crew"] = row["crew"]
 	out["merged_into"] = row.get("merged_into") or None
 	# v0.98.0, item 5. WHEN IT WAS SEEN, and this shaper is exactly why it needed
 	# saying: `dispatch._describe_task` reports the column and this function

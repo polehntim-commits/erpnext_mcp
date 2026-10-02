@@ -101,6 +101,13 @@ class FarmTaskTemplate(Document):
 		self.creates_record = str(self.creates_record or "").strip()
 		self.skill_required = str(self.skill_required or "").strip()
 
+		# v0.213.0. Derived, as on Farm Task.
+		from erpnext_mcp import compat
+
+		if compat.has_field("Farm Task Template", "work_mode"):
+			self.work_mode = "Crew" if str(self.get("work_mode") or "") == "Crew" else "Individual"
+			self.is_crew_task = 1 if self.work_mode == "Crew" else 0
+
 		self._check_the_checklist()
 		self._bump_version()
 

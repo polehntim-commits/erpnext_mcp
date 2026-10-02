@@ -65,6 +65,7 @@ from .. import (
 	alerts,
 	compat,
 	completions,
+	crew_tasks,
 	datetimes,
 	flags,
 	minors,
@@ -206,6 +207,11 @@ _TASK_FIELDS = (
 	"label_available",
 	"label_snapshot",
 	"label_views",
+	# v0.213.0. Crew tasks (docs/design/crew_tasks.md).
+	"work_mode",
+	"is_crew_task",
+	"crew_piece_unit",
+	"crew_sections",
 	"creation",
 	"modified",
 	"owner",
@@ -944,6 +950,13 @@ def _describe_task(row: dict) -> dict:
 	for column in ("rei_source_item", "phi_source_item"):
 		if row.get(column):
 			out[column] = row[column]
+	# v0.213.0. A CREW TASK SAYS SO, AND SAYS WHO IS ON IT. Present only on one,
+	# so an individual task's payload is exactly what it was.
+	crew = crew_tasks.describe(row)
+	if crew:
+		out["is_crew_task"] = True
+		out["work_mode"] = crew_tasks.CREW
+		out["crew"] = crew
 	return out
 
 
@@ -1377,6 +1390,15 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 		doc.subject_doctype = training_sessions.DOCTYPE
 		doc.subject_docname = training_session
 	doc.farm_shift = farm_shift or None
+	# v0.213.0. A CREW TASK: many people at once, one supervisor closes it. The
+	# person named in `assigned_to` is its LEAD. Nobody takes a crew job from the
+	# pool, so it is Dispatched whatever was asked for.
+	if crew_tasks.mode_argument(args) and crew_tasks.ready():
+		doc.work_mode = crew_tasks.CREW
+		doc.is_crew_task = 1
+		doc.dispatch_mode = DISPATCH_DISPATCHED
+		doc.crew_piece_unit = as_str(args, "piece_unit") or as_str(args, "crew_piece_unit") or None
+		doc.crew_sections = json.dumps(crew_tasks.normalise_sections(args.get("sections")))
 	doc.state = DRAFT if draft else AVAILABLE
 	if worker:
 		doc.assigned_to = worker
@@ -1420,7 +1442,12 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 			"This task names no location, so it cannot be routed to whoever is already stood in the "
 			"right place. Legitimate for desk work — a certificate renewal happens at a desk."
 		)
-	if described["dispatch_mode"] == DISPATCH_DISPATCHED and not worker:
+	if described.get("is_crew_task"):
+		warnings.append(
+			"This is a crew task with nobody on it yet. add_to_crew_task puts a shift, named people "
+			"or scanned badges on its crew; the lead closes it with complete_farm_task."
+		)
+	elif described["dispatch_mode"] == DISPATCH_DISPATCHED and not worker:
 		warnings.append(
 			"Dispatch mode is Dispatched and nobody is assigned, so this task will sit in Available "
 			"and no worker can claim it. Somebody has to be sent with assign_farm_task."
@@ -1678,7 +1705,50 @@ def _push_assignment(task: dict, worker: str, reassigned: bool = False) -> dict:
 
 # ── 2. assign_farm_task ─────────────────────────────────────────────────────
 def assign_farm_task(args: dict) -> ToolResult:
-	"""Send one named person to one task. The foreman's half of the dual mode."""
+	"""Send one named person to one task. The foreman's half of the dual mode.
+
+	v0.213.0. ON A CREW TASK THIS ADDS THEM TO THE CREW and takes nobody off —
+	the same code `add_to_crew_task` runs, for one person. An individual task is
+	`assign_holder` below, exactly as it was.
+	"""
+	_require()
+	row = task_row(as_str(args, "task", required=True))
+	if crew_tasks.is_crew(row) and crew_tasks.ready():
+		from . import crew_tasks as crew_tools
+
+		person = _worker(args, "assigned_to")
+		inner = {"task": row["name"], "employees": [person]}
+		for key in ("client_request_id", "override_phi", "phi_override_reason", "section", "lead"):
+			if args.get(key) is not None:
+				inner[key] = args[key]
+		answer = crew_tools.add_to_crew_task(inner).data
+		line = next((entry for entry in answer["results"] if entry.get("employee") == person), {})
+		if line.get("outcome") == "refused":
+			raise ToolError(str(line.get("reason") or "refused") + " Nothing was changed.")
+		data = {
+			**_describe_task(task_row(row["name"])),
+			"assignment": (
+				_describe_assignment(_assignment_row(line["assignment"])) if line.get("assignment") else None
+			),
+			"already": line.get("outcome") == "already",
+			"crew_result": line,
+			"concurrent_claims": None,
+		}
+		if answer.get("warnings"):
+			data["warnings"] = answer["warnings"]
+		return ToolResult(
+			data=data,
+			summary=(
+				f"{line.get('employee_name') or person} "
+				+ ("is already on" if data["already"] else "added to")
+				+ f" the crew of {row['name']}"
+			),
+		)
+	return assign_holder(args)
+
+
+def assign_holder(args: dict) -> ToolResult:
+	"""Make one named person the holder of one task — on a crew task, its lead."""
 	_require()
 	row = task_row(as_str(args, "task", required=True))
 	# THE SAME LOCK `claim_farm_task` TAKES, and for a race that is worse here.
@@ -2092,6 +2162,12 @@ def claim_farm_task(args: dict) -> ToolResult:
 			"prevent. Nothing was changed."
 		)
 
+	if crew_tasks.is_crew(row):
+		raise ToolError(
+			f"{row['name']} is a crew task: nobody takes it from the pool. A foreman puts people on "
+			"its crew with add_to_crew_task, and one supervisor closes it. Nothing was changed."
+		)
+
 	# THE WORKER'S DOOR, AND IT HAS NO OVERRIDE. `override_tool` names the
 	# foreman's tool instead, so somebody standing on a block is told who can act
 	# rather than only that they cannot.
@@ -2197,10 +2273,17 @@ def start_farm_task(args: dict) -> ToolResult:
 	# up the job they walked away from; they want the valve fixed. So whatever
 	# they had running is stood down, the answer says so, and nobody has to route
 	# around this app to do the urgent thing. See the v0.79.0 block below.
-	auto_paused = _auto_pause_for(
-		str(assignment.get("assigned_to") or ""),
-		exclude_task=str(assignment["task"]),
-		reason=f"Started {assignment['task']}",
+	# v0.213.0. LEADING A CREW IS NOT WORKING A JOB. A foreman may lead two crews
+	# at once, so starting a crew task stands nothing down — and
+	# `in_progress_assignment` never offers a crew task up to be paused.
+	auto_paused = (
+		None
+		if crew_tasks.is_crew(task)
+		else _auto_pause_for(
+			str(assignment.get("assigned_to") or ""),
+			exclude_task=str(assignment["task"]),
+			reason=f"Started {assignment['task']}",
+		)
 	)
 
 	doc = frappe.get_doc(FARM_TASK_ASSIGNMENT, assignment["name"])
@@ -2283,6 +2366,34 @@ def complete_farm_task(args: dict) -> ToolResult:
 			"outstanding work is invisible from the record that is supposed to carry it. Finish or "
 			"reject the steps first, or reject this one with a reason. Nothing was changed."
 		)
+
+	# v0.213.0. A CREW TASK IS CLOSED ONCE, BY A SUPERVISOR. The lead closes it; a
+	# Foreman, Farm Manager or Crew Leader who is not the lead takes the lead in
+	# this call and the old lead's assignment says so. A crew member does not.
+	if (
+		crew_tasks.is_crew(task)
+		and assignment.get("assigned_to") != worker
+		and assignment.get("state") in (CLAIMED, IN_PROGRESS, PAUSED)
+	):
+		from . import crew_tasks as crew_tools
+
+		if not crew_tools.is_supervisor():
+			raise ToolError(
+				f"{task['name']} is a crew task led by "
+				f"{assignment.get('assigned_to_name') or assignment.get('assigned_to')}. One supervisor "
+				"closes it, with one set of evidence — a crew member marks their own part done with "
+				"update_crew_task_member instead. Nothing was changed."
+			)
+		assign_holder(
+			{
+				"task": task["name"],
+				"assigned_to": worker,
+				"reassign": True,
+				"reason": "Took the lead to close the task",
+			}
+		)
+		assignment = _assignment_for({"task": task["name"]})
+		task = task_row(task["name"])
 
 	if assignment.get("assigned_to") != worker:
 		raise ToolError(
@@ -5884,9 +5995,13 @@ def in_progress_assignment(worker: str, exclude_task: str = "") -> dict:
 		)
 		or []
 	)
+	crew_ready = crew_tasks.ready()
 	for row in rows:
 		row = dict(row)
 		if exclude_task and str(row.get("task")) == exclude_task:
+			continue
+		# v0.213.0. The lead of a crew task is not "working" it: see `start_farm_task`.
+		if crew_ready and compat.checked(frappe.db.get_value(FARM_TASK, row.get("task"), "is_crew_task")):
 			continue
 		return row
 	return {}

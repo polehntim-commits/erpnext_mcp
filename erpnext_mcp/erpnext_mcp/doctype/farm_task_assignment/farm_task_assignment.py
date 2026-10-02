@@ -54,8 +54,14 @@ PAUSED = "Paused"
 COMPLETED = "Completed"
 REJECTED = "Rejected"
 MERGED = "Merged"
+#: v0.213.0 (docs/design/crew_tasks.md). One worker's stint on a CREW task: on
+#: the job, and off it. Deliberately NOT live states — the lead holds the task,
+#: and the one-live-assignment rule, the claim limit and "what is this worker
+#: holding" must not see the twelve people doing the work.
+ON_CREW = "On Crew"
+OFF_CREW = "Off Crew"
 
-STATES = (CLAIMED, IN_PROGRESS, PAUSED, COMPLETED, REJECTED, MERGED)
+STATES = (CLAIMED, IN_PROGRESS, PAUSED, COMPLETED, REJECTED, MERGED, ON_CREW, OFF_CREW)
 
 #: The states in which this assignment is the one that owns the task.
 #:
@@ -133,6 +139,27 @@ class FarmTaskAssignment(Document):
 
 		if self.state in LIVE_STATES:
 			self._refuse_a_second_live_assignment()
+		if self.state == ON_CREW:
+			self._refuse_the_same_person_twice()
+
+	def _refuse_the_same_person_twice(self) -> None:
+		other = frappe.db.get_value(
+			"Farm Task Assignment",
+			{
+				"task": self.task,
+				"state": ON_CREW,
+				"assigned_to": self.assigned_to,
+				"name": ("!=", self.name or ""),
+			},
+			"name",
+		)
+		if other:
+			frappe.throw(
+				_("{0} is already on the crew of {1} ({2}).").format(
+					self.assigned_to_name or self.assigned_to, self.task, other
+				),
+				title=_("Already on the crew"),
+			)
 
 	def _refuse_a_second_live_assignment(self) -> None:
 		other = frappe.db.get_value(

@@ -33,6 +33,11 @@
   "creates_record_data",
   "instructions_section",
   "instructions",
+  "crew_section",
+  "work_mode",
+  "is_crew_task",
+  "crew_piece_unit",
+  "crew_sections",
   "sop_section",
   "sop_document_en",
   "sop_col",
@@ -208,6 +213,42 @@
    "fieldname": "instructions",
    "fieldtype": "Text",
    "label": "Instructions"
+  },
+  {
+   "fieldname": "crew_section",
+   "fieldtype": "Section Break",
+   "label": "Crew",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "work_mode",
+   "fieldtype": "Select",
+   "label": "Work Mode",
+   "options": "Individual\nCrew",
+   "default": "Individual",
+   "in_standard_filter": 1,
+   "description": "Crew: many people work it at once, each with their own time; one supervisor closes it. docs/design/crew_tasks.md."
+  },
+  {
+   "fieldname": "is_crew_task",
+   "fieldtype": "Check",
+   "label": "Is Crew Task",
+   "default": "0",
+   "read_only": 1,
+   "description": "Kept equal to Work Mode = Crew."
+  },
+  {
+   "fieldname": "crew_piece_unit",
+   "fieldtype": "Data",
+   "label": "Counts",
+   "description": "What this task counts: trees, bins, rows, buckets."
+  },
+  {
+   "fieldname": "crew_sections",
+   "fieldtype": "Code",
+   "label": "Sections",
+   "options": "JSON",
+   "description": "Row ranges or sections, each with done / done_at / done_by."
   },
   {
    "fieldname": "sop_section",
