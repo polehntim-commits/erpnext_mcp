@@ -83,9 +83,10 @@ import time
 import traceback
 
 import frappe
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.wrappers import Request, Response
 
-from .. import __version__, audit, device_enrollment, security, slope_aspect, slope_grade
+from .. import audit, device_enrollment, security, settings, slope_aspect, slope_grade
 from ..api import fallback_auth, guard
 from ..errors import ToolError
 from ..tools import employee as personnel
@@ -207,6 +208,162 @@ _MAX_BODY = auth.MAX_BODY_BYTES
 #: only the form encoding names its parts, and a part with no name has no key to
 #: land on.
 _MULTIPART = frozenset({"multipart/form-data"})
+
+
+#: v0.216.0 hardening (docs/design/farmops_only_funnel.md, addendum H1–H4).
+TOO_LARGE = "That request is larger than this service accepts."
+TOO_MANY = "Too many requests from this address. Wait a minute and try again."
+NOT_FOUND = "Not found."
+
+#: Failed authentications a minute from one address before further FAILED
+#: attempts get 429. A valid credential is never refused on this count: forty
+#: phones behind one carrier NAT must not be locked out by a stranger sharing it.
+AUTH_FAILURE_LIMIT = 60
+
+#: Failed authentications a minute from one address that raise the alert.
+AUTH_FAILURE_ALERT = 10
+
+#: The alert for one address is raised at most once in this many seconds.
+AUTH_ALERT_INTERVAL = 3600
+
+#: Requests a minute from one address to the routes that need no credential
+#: (health, the tag page). Both are static; this only stops a flood.
+OPEN_LIMIT = 120
+
+#: The Frappe hook an operator's own app can register to hear about H4.
+AUTH_ALERT_HOOK = "farmops_auth_alert"
+
+
+def _peer(request: Request) -> str:
+	"""The caller's address: rightmost `X-Forwarded-For` hop, else the socket peer.
+
+	Rightmost for the reason `security.caller_ip` gives — it is the hop the
+	nearest proxy appended, and the leftmost is whatever the client typed. Read
+	off the request itself so it works before a Frappe session is open.
+	"""
+	hops = [
+		hop.strip() for hop in str(request.headers.get("X-Forwarded-For") or "").split(",") if hop.strip()
+	]
+	return hops[-1] if hops else str(request.remote_addr or "")
+
+
+def _open_route_limited(request: Request) -> bool:
+	"""True when this address has used up `OPEN_LIMIT` on the credential-less routes."""
+	return guard._count(f"open:{_peer(request) or 'unknown'}", 60) > OPEN_LIMIT
+
+
+def _unauthenticated(request: Request, path: str, body=None) -> Response:
+	"""THE ONE ANSWER TO A CALLER NOBODY VOUCHES FOR. H1, H3, H4.
+
+	Called with a session open and before the path or the method has been
+	looked at, so a route that exists, one that does not, a GET on a POST route,
+	a tile and the login-QR image are indistinguishable from outside: the same
+	401, with the same body.
+
+	Counts the failure against the address, logs it, raises the alert the tenth
+	time in a minute, and answers 429 once the address is past the limit. Never
+	raises — a failure to count is not a reason to answer differently.
+	"""
+	ip = _peer(request) or "unknown"
+	failures = 0
+	try:
+		api_key, _secret, _source = auth.presented(request.headers, body or {})
+		failures = guard._count(f"authfail:{ip}", 60)
+		logger.warning(
+			"farmops-api auth-failure ip=%s path=%s key=%s n=%s",
+			ip,
+			path[:120],
+			fallback_auth._fingerprint(api_key) if api_key else "-",
+			failures,
+		)
+		if failures == AUTH_FAILURE_ALERT and _first_alert(ip):
+			_raise_auth_alert(ip, failures, path)
+	except Exception:  # pragma: no cover - counting must never change the answer
+		logger.error("farmops-api auth-failure accounting failed\n%s", traceback.format_exc())
+	if failures > AUTH_FAILURE_LIMIT:
+		return _failure(429, TOO_MANY)
+	return _failure(401, UNAUTHORIZED)
+
+
+def _alert_listeners() -> list:
+	"""The callables registered under the `farmops_auth_alert` hook. Never raises."""
+	try:
+		return [frappe.get_attr(method) for method in frappe.get_hooks(AUTH_ALERT_HOOK) or []]
+	except Exception:
+		return []
+
+
+#: Address → when this worker last raised its alert. Bounded; see `_first_alert`.
+_ALERTED: dict = {}
+
+
+def _first_alert(ip: str) -> bool:
+	"""True once per address per `AUTH_ALERT_INTERVAL`.
+
+	This worker's own memory first, then the shared cache where there is one —
+	so a bench with redis raises one alert an hour per address, and one without
+	raises at most one per worker.
+	"""
+	now = time.time()
+	if now - _ALERTED.get(ip, 0) < AUTH_ALERT_INTERVAL:
+		return False
+	if len(_ALERTED) > 2000:
+		_ALERTED.clear()
+	_ALERTED[ip] = now
+	client = fallback_auth._client()
+	if client is None:
+		return True
+	try:
+		slot = f"erpnext_mcp:farmops:authalert:{ip}:{int(now // AUTH_ALERT_INTERVAL)}"
+		hits = int(client.incr(slot))
+		if hits == 1:
+			client.expire(slot, AUTH_ALERT_INTERVAL * 2)
+		return hits == 1
+	except Exception:  # pragma: no cover - no redis on this bench
+		return True
+
+
+def _raise_auth_alert(ip: str, failures: int, path: str) -> None:
+	"""One audit row, the hook, and an email if an address is configured. H4.
+
+	At most once an hour per address — the caller holds that — so an
+	unauthenticated flood cannot grow MCP Action Log or a mailbox without bound,
+	which is the argument that kept refusals out of the log until now.
+	"""
+	payload = {
+		"ip": ip,
+		"failures": failures,
+		"window_seconds": 60,
+		"path": path[:120],
+		"at": str(frappe.utils.now()),
+	}
+	summary = (
+		f"Blocked — {failures} failed Farm Ops sign-ins from {ip} in one minute "
+		f"(last path {payload['path']}). Further failures from this address are counted, not logged here."
+	)
+	try:
+		audit.record(
+			"mobile:auth_failures", payload, audit.STATUS_BLOCKED, summary, caller_ip=ip, commit=True
+		)
+	except Exception:  # pragma: no cover
+		logger.error("farmops-api auth alert: audit row failed\n%s", traceback.format_exc())
+	for listener in _alert_listeners():
+		try:
+			listener(dict(payload))
+		except Exception:
+			logger.error("farmops-api auth alert hook %r failed\n%s", listener, traceback.format_exc())
+	try:
+		to = settings.drift_report_email()
+		if to:
+			frappe.sendmail(
+				recipients=[to],
+				subject="Farm Ops: repeated failed sign-ins",
+				message=summary,
+				now=False,
+			)
+			frappe.db.commit()
+	except Exception:  # pragma: no cover - mail is best effort
+		logger.error("farmops-api auth alert: mail failed\n%s", traceback.format_exc())
 
 
 # ── the answer shapes ───────────────────────────────────────────────────────
@@ -375,6 +532,8 @@ def _multipart(request: Request) -> dict:
 				fields[f"{key}_filename"] = os.path.basename(str(part.filename))
 			if part.mimetype:
 				fields[f"{key}_content_type"] = str(part.mimetype)
+	except RequestEntityTooLarge:
+		raise
 	except Exception:  # pragma: no cover - a truncated or hostile multipart body
 		return {}
 	return fields
@@ -394,11 +553,12 @@ def _body(request: Request) -> dict:
 	still leave as JSON.
 	"""
 	try:
-		if request.content_length and int(request.content_length) > _MAX_BODY:
-			return {}
 		if (request.mimetype or "") in _MULTIPART:
 			return _multipart(request)
 		raw = request.get_data(cache=False, as_text=True) or ""
+	except RequestEntityTooLarge:
+		# v0.216.0 (H2): `dispatch` set the ceiling and answers this with 413.
+		raise
 	except Exception:  # pragma: no cover - a truncated or hostile body
 		return {}
 	if not raw.strip().startswith("{"):
@@ -433,21 +593,22 @@ def _login_qr_image(request: Request) -> Response:
 	is the caller for the whole of this call, exactly as it is for every other
 	`/mobile/*` route.
 	"""
-	if request.method != "GET":
-		return _failure(405, f"{QR_IMAGE_PATH} is GET only.")
-
-	target = str(request.args.get("user") or "").strip()
-	if not target:
-		return _failure(400, "login_qr_image needs `?user=<email>`. Nothing was read.")
-
 	with session.request_session(request=request, body={}):
 		if not guard.mobile_enabled():
 			return _failure(503, "The Farm Ops mobile API is switched off on this site.")
 
+		# v0.216.0 (H1): WHO, before WHAT. The method and the argument are only
+		# discussed with somebody holding a credential.
 		caller, _source = auth.resolve(request.headers, {})
 		if not caller:
-			logger.info("farmops-api 401 %s from %s", QR_IMAGE_PATH, request.remote_addr)
-			return _failure(401, UNAUTHORIZED)
+			return _unauthenticated(request, QR_IMAGE_PATH)
+
+		if request.method != "GET":
+			return _failure(405, f"{QR_IMAGE_PATH} is GET only.")
+
+		target = str(request.args.get("user") or "").strip()
+		if not target:
+			return _failure(400, "login_qr_image needs `?user=<email>`. Nothing was read.")
 
 		ip = security.caller_ip()
 		try:
@@ -679,21 +840,21 @@ def _terrain_tile(
 	may refuse: DoesNotExistError is 404, `slope_grade.AssetNotRated` 400, any
 	other ToolError 503 (numpy missing), anything else 500.
 	"""
-	if request.method not in ("GET", "HEAD"):
-		return _failure(405, f"{prefix}{{z}}/{{x}}/{{y}}.png is GET only.")
-	match = _TILE_TAIL.match(path[len(prefix) :])
-	if not match or not slope_aspect.valid_tile(*match.groups()):
-		return _failure(404, f"{path} is not a {label} tile. The pattern is {{z}}/{{x}}/{{y}}.png.")
-	z, x, y = (int(part) for part in match.groups())
-
 	with session.request_session(request=request, body={}):
 		if not guard.mobile_enabled():
 			return _failure(503, "The Farm Ops mobile API is switched off on this site.")
 
+		# v0.216.0 (H1): the credential first; the pattern and the method after.
 		caller, _source = auth.resolve(request.headers, {})
 		if not caller:
-			logger.info("farmops-api 401 %s from %s", path, request.remote_addr)
-			return _failure(401, UNAUTHORIZED)
+			return _unauthenticated(request, path)
+
+		if request.method not in ("GET", "HEAD"):
+			return _failure(405, f"{prefix}{{z}}/{{x}}/{{y}}.png is GET only.")
+		match = _TILE_TAIL.match(path[len(prefix) :])
+		if not match or not slope_aspect.valid_tile(*match.groups()):
+			return _failure(404, f"{path} is not a {label} tile. The pattern is {{z}}/{{x}}/{{y}}.png.")
+		z, x, y = (int(part) for part in match.groups())
 
 		try:
 			guard.throttle(caller, throttle_key, TILE_LIMIT)
@@ -741,62 +902,88 @@ def _terrain_tile(
 		return _png(png, "private, max-age=86400")
 
 
-_SCAN_PAGE = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Farm Ops tag</title>
-<style>body{{font:17px -apple-system,system-ui,sans-serif;margin:0;padding:32px 24px;color:#1c1c1e;background:#f5f5f2}}
-main{{max-width:28em;margin:0 auto}}h1{{font-size:22px}}code{{display:inline-block;padding:6px 10px;border-radius:8px;background:#e6e6e0;font-size:16px}}
-p{{line-height:1.45}}.es{{color:#55554f}}</style></head><body><main>
-<h1>Farm Ops tag</h1>
-<p><code>{code}</code></p>
-<p>Open the <strong>Farm Ops</strong> app and scan this tag with the app&rsquo;s scanner.</p>
-<p class="es">Abra la aplicaci&oacute;n <strong>Farm Ops</strong> y escanee esta etiqueta con el esc&aacute;ner de la aplicaci&oacute;n.</p>
-</main></body></html>"""
+_SCAN_PAGE = (
+	"Farm Ops tag: {code}\n\n"
+	"Open the Farm Ops app and scan this tag with the app's scanner.\n\n"
+	"Abra la aplicación Farm Ops y escanee esta etiqueta con el escáner de la aplicación.\n"
+)
 
 
 def _scan_page(path: str) -> Response:
 	"""What a tag's QR shows a phone camera that is not the app. v0.216.0.
 
-	PUBLIC, STATIC, AND IT LOOKS NOTHING UP. The code in the URL is echoed back,
-	escaped, and that is the whole of what an anonymous caller learns: whether
-	the tag is real, what it is on and where are answered only by
+	PUBLIC, STATIC, PLAIN TEXT, AND IT LOOKS NOTHING UP. The code in the URL is
+	echoed back and that is the whole of what an anonymous caller learns:
+	whether the tag is real, what it is on and where are answered only by
 	`universal_scan`, to an enrolled caller. No session is opened and nothing is
 	read, so this cannot be used to enumerate the register.
+
+	`text/plain` because nothing under /farmops answers HTML (addendum H7): a
+	plain body cannot carry markup whatever the code in the URL says, and
+	`nosniff` keeps a browser from deciding otherwise.
 
 	It exists so a tag does not need `/erpnext/scan/...` on the public Funnel —
 	a path that never had a page behind it and answered Frappe's 404.
 	"""
-	from html import escape
 	from urllib.parse import unquote
 
-	code = unquote(path[len(SCAN_PREFIX) :]).strip()[:140]
-	body = _SCAN_PAGE.format(code=escape(code) or "&mdash;")
-	response = Response(body, status=200, mimetype="text/html")
+	code = " ".join(unquote(path[len(SCAN_PREFIX) :]).split())[:140]
+	response = Response(
+		_SCAN_PAGE.format(code=code or "—"), status=200, content_type="text/plain; charset=utf-8"
+	)
 	response.headers["Cache-Control"] = "public, max-age=3600"
 	response.headers["X-Content-Type-Options"] = "nosniff"
-	response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
 	return response
 
 
 def dispatch(request: Request) -> Response:
-	"""One request, start to finish. Returns a JSON response for every outcome."""
+	"""One request, start to finish. Returns a JSON response for every outcome.
+
+	v0.216.0 (addendum H1–H3). The order is the design:
+
+	1. SIZE. Over the ceiling is 413 before a byte is parsed, with a
+	   Content-Length or without one.
+	2. THE THREE OPEN ROUTES — health, the tag page, enrolment.
+	3. WHO. Everything else authenticates before the path or the method is
+	   looked at, and nobody gets the one 401 whatever they asked for.
+	4. WHAT. 404 and 405 are answered only to a caller holding a credential.
+	"""
 	path = (request.path or "").rstrip("/") or "/"
 
+	if request.content_length and int(request.content_length) > _MAX_BODY:
+		return _failure(413, TOO_LARGE)
+	# The same ceiling for a body that did not announce its length: Werkzeug
+	# stops reading at it and raises, which `_dispatch` lets through to here.
+	request.max_content_length = _MAX_BODY
+	try:
+		return _dispatch(request, path)
+	except RequestEntityTooLarge:
+		return _failure(413, TOO_LARGE)
+
+
+def _dispatch(request: Request, path: str) -> Response:
 	if path == HEALTH_PATH:
 		# GET or POST, unauthenticated, and deliberately incurious: it proves
-		# this process is answering on this path and says nothing else.
-		return _json({"ok": True, "service": "farmops-api", "version": __version__})
+		# this process is answering on this path and says nothing else — not
+		# even which release it is, since v0.216.0.
+		if _open_route_limited(request):
+			return _failure(429, TOO_MANY)
+		return _json({"ok": True, "service": "farmops-api"})
 
-	if path == QR_IMAGE_PATH:
-		return _login_qr_image(request)
+	if path.startswith(SCAN_PREFIX) and request.method == "GET":
+		if _open_route_limited(request):
+			return _failure(429, TOO_MANY)
+		return _scan_page(path)
 
 	if path == ENROLL_PATH:
 		return _enroll_device(request)
 
-	if path.startswith(SCAN_PREFIX) and request.method == "GET":
-		return _scan_page(path)
+	if not path.startswith(f"{PREFIX}/"):
+		# Not reachable through the Funnel mount at all. Nothing is echoed.
+		return _failure(404, NOT_FOUND)
+
+	if path == QR_IMAGE_PATH:
+		return _login_qr_image(request)
 
 	if path.startswith(TILE_PREFIX):
 		return _slope_aspect_tile(request, path)
@@ -804,35 +991,29 @@ def dispatch(request: Request) -> Response:
 	if path.startswith(GRADE_TILE_PREFIX):
 		return _slope_grade_tile(request, path)
 
-	if not path.startswith(f"{PREFIX}/"):
-		return _failure(404, f"{path} is not a Farm Ops API path.")
-
 	route = BY_PATH.get(path[len(PREFIX) :])
-	if route is None:
-		# The same 404 for a path that does not exist and one that is not
-		# reachable, which here is the same fact: the surface is eleven routes
-		# and there is nothing else behind this prefix.
-		return _failure(404, f"{path} is not a Farm Ops API method.")
-
-	if request.method != "POST":
-		# Every method is POST, including the reads. The whitelisted path
-		# accepted GET on the reads and this one does not: a GET carries its
-		# arguments in a URL, and a URL is the one part of a request that gets
-		# written to an access log by every proxy between here and a phone.
-		return _failure(405, f"{path} is POST only.")
-
 	body = _body(request)
 
 	with session.request_session(request=request, body=body):
 		user, source = auth.resolve(request.headers, body)
 		if not user:
 			# Nothing was opened as anybody, so there is nothing to roll back.
-			# The refusal is not audited HERE because `guard` audits per method
-			# on an authenticated caller — an unauthenticated flood must not be
-			# able to grow MCP Action Log, which is the same argument v0.17.2
-			# made for metering failures by key rather than logging them.
-			logger.info("farmops-api 401 %s from %s", path, request.remote_addr)
-			return _failure(401, UNAUTHORIZED)
+			# One refusal is not audited — `guard` audits per method on an
+			# authenticated caller, and an unauthenticated flood must not be
+			# able to grow MCP Action Log. `_unauthenticated` counts it, and
+			# writes ONE row per address per hour when it becomes a pattern.
+			return _unauthenticated(request, path, body)
+
+		if route is None:
+			# Said only to somebody holding a credential.
+			return _failure(404, f"{path} is not a Farm Ops API method.")
+
+		if request.method != "POST":
+			# Every method is POST, including the reads. The whitelisted path
+			# accepted GET on the reads and this one does not: a GET carries its
+			# arguments in a URL, and a URL is the one part of a request that gets
+			# written to an access log by every proxy between here and a phone.
+			return _failure(405, f"{path} is POST only.")
 
 		session.become(user)
 		try:

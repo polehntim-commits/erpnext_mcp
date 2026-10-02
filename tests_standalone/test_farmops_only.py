@@ -276,29 +276,177 @@ class TheTagPage(FarmOpsAPITestCase):
 	def get(self, path):
 		return self.post(path, credential=False, method="GET")
 
-	def test_it_answers_anybody_and_shows_only_the_code(self):
+	def test_it_answers_anybody_in_plain_text_and_shows_only_the_code(self):
 		response = self.get("/farmops/api/scan/40-WM-SE")
 		self.assertEqual(response.status_code, 200)
-		self.assertIn("text/html", response.headers["Content-Type"])
+		self.assertTrue(response.headers["Content-Type"].startswith("text/plain"))
+		self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
 		body = response.get_data(as_text=True)
-		self.assertIn("40-WM-SE", body)
-		self.assertIn("Farm Ops", body)
+		self.assertIn("Farm Ops tag: 40-WM-SE", body)
 		self.assertNotIn("latitude", body.lower())
 
-	def test_the_code_is_escaped(self):
-		body = self.get("/farmops/api/scan/%3Cscript%3Ealert(1)%3C%2Fscript%3E").get_data(as_text=True)
-		self.assertNotIn("<script>", body)
-		self.assertIn("&lt;script&gt;", body)
+	def test_markup_in_the_code_is_only_text(self):
+		response = self.get("/farmops/api/scan/%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+		self.assertTrue(response.headers["Content-Type"].startswith("text/plain"))
+		self.assertNotIn("html", response.headers["Content-Type"])
 
 	def test_it_is_the_same_page_for_a_tag_that_does_not_exist(self):
 		"""No lookup: the page cannot be used to learn which assets are real."""
 		self.assertEqual(self.get("/farmops/api/scan/NOPE-1").status_code, 200)
 
-	def test_a_post_there_is_not_a_method(self):
-		self.assertEqual(self.post("/farmops/api/scan/40-WM-SE", credential=False).status_code, 404)
+	def test_a_post_there_is_the_same_401_as_anywhere(self):
+		self.assertEqual(self.post("/farmops/api/scan/40-WM-SE", credential=False).status_code, 401)
 
 	def test_it_is_described(self):
 		self.assertIn(sidecar_app.SCAN_DESCRIBED_ROUTE, sidecar_app.DESCRIBED_ROUTES)
+
+
+CONTEXT = "/farmops/api/mobile/get_current_user_context"
+
+
+class TheSidecarIsTheWholePublicSurface(FarmOpsAPITestCase):
+	"""Addendum H1–H7: every phone is a crew phone, so this is all there is."""
+
+	def setUp(self):
+		super().setUp()
+		sidecar_app._ALERTED.clear()
+		self.addCleanup(sidecar_app._ALERTED.clear)
+
+	def anonymous(self, path, method="POST", **extra):
+		return self.post(path, credential=False, method=method, **extra)
+
+	# ── H1 ──────────────────────────────────────────────────────────────────
+	def test_an_anonymous_caller_cannot_tell_a_real_route_from_a_made_up_one(self):
+		answers = [
+			self.anonymous(CONTEXT),
+			self.anonymous("/farmops/api/mobile/no_such_method"),
+			self.anonymous("/farmops/api/nothing/at/all"),
+			self.anonymous(CONTEXT, method="GET"),
+			self.anonymous("/farmops/api/mobile/login_qr_image", method="GET"),
+			self.anonymous("/farmops/api/mobile/login_qr_image", method="POST"),
+			self.anonymous("/farmops/api/tiles/slope_aspect/14/1/1.png", method="GET"),
+			self.anonymous("/farmops/api/tiles/slope_aspect/not-a-tile", method="GET"),
+			self.anonymous("/farmops/api/tiles/slope_grade/14/1/1.png", method="POST"),
+			self.anonymous("/farmops/api/files/stage_file_chunk"),
+			self.post(CONTEXT, token="madeupkey:madeupsecret"),
+		]
+		self.assertEqual({response.status_code for response in answers}, {401})
+		self.assertEqual(len({response.get_data() for response in answers}), 1)
+
+	def test_a_revoked_device_gets_that_same_answer(self):
+		anonymous = self.anonymous(CONTEXT)
+		for row in frappe.db.get_all("Mobile Device Enrollment", fields=["name"]):
+			frappe.db.set_value("Mobile Device Enrollment", row["name"], "enrollment_status", "Revoked")
+		STORE.commit()
+		revoked = self.post(CONTEXT)
+		self.assertEqual(revoked.status_code, 401)
+		self.assertEqual(revoked.get_data(), anonymous.get_data())
+
+	def test_only_a_caller_with_a_credential_is_told_404_and_405(self):
+		self.assertEqual(self.post("/farmops/api/mobile/no_such_method").status_code, 404)
+		self.assertEqual(self.post(CONTEXT, method="GET").status_code, 405)
+		self.assertEqual(self.post(CONTEXT).status_code, 200)
+
+	def test_outside_the_prefix_nothing_is_echoed(self):
+		response = self.anonymous("/erpnext/login", method="GET")
+		self.assertEqual(response.status_code, 404)
+		self.assertNotIn("erpnext", response.get_data(as_text=True))
+
+	# ── H2 ──────────────────────────────────────────────────────────────────
+	def test_a_body_over_the_ceiling_is_413_before_anything(self):
+		response = self.client.open(
+			CONTEXT,
+			method="POST",
+			data=b"{" + b" " * (sidecar_app._MAX_BODY + 10) + b"}",
+			headers={"Content-Type": "application/json"},
+		)
+		self.assertEqual(response.status_code, 413)
+		self.assertEqual(response.headers["Content-Type"], "application/json")
+
+	def test_a_chunk_sized_body_is_nowhere_near_it(self):
+		self.assertGreater(sidecar_app._MAX_BODY, 4 * 512 * 1024)
+
+	# ── H3, H4 ──────────────────────────────────────────────────────────────
+	def test_failures_from_one_address_become_429_and_a_good_credential_still_works(self):
+		codes = [self.anonymous(CONTEXT).status_code for _ in range(sidecar_app.AUTH_FAILURE_LIMIT + 3)]
+		self.assertEqual(codes[sidecar_app.AUTH_FAILURE_LIMIT - 1], 401)
+		self.assertEqual(codes[-1], 429)
+		# Same address, real phone: never locked out by a stranger's failures.
+		self.assertEqual(self.post(CONTEXT).status_code, 200)
+
+	def test_the_tenth_failure_writes_one_row_and_calls_the_hook_once(self):
+		original = sidecar_app._alert_listeners
+		sidecar_app._alert_listeners = lambda: [heard_alert]
+		self.addCleanup(lambda: setattr(sidecar_app, "_alert_listeners", original))
+		HEARD.clear()
+		before = len(STORE.rows("MCP Action Log"))
+		for _ in range(35):
+			self.anonymous("/farmops/api/mobile/no_such_method")
+		rows = STORE.rows("MCP Action Log")[before:]
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0]["tool_name"], "mobile:auth_failures")
+		self.assertIn("Blocked", str(rows[0]))
+		self.assertEqual(len(HEARD), 1)
+		self.assertEqual(HEARD[0]["failures"], sidecar_app.AUTH_FAILURE_ALERT)
+		self.assertEqual(HEARD[0]["ip"], "100.64.0.7")
+
+	def test_nothing_secret_is_in_the_alert(self):
+		before = len(STORE.rows("MCP Action Log"))
+		for _ in range(12):
+			self.post(CONTEXT, token="realkeyguess:hunter2secret")
+		row = STORE.rows("MCP Action Log")[before:][0]
+		self.assertNotIn("hunter2secret", str(row))
+		self.assertNotIn("realkeyguess", str(row))
+
+	def test_the_open_routes_are_metered_per_address(self):
+		codes = [
+			self.anonymous("/farmops/api/health", method="GET").status_code
+			for _ in range(sidecar_app.OPEN_LIMIT + 2)
+		]
+		self.assertEqual(codes[0], 200)
+		self.assertEqual(codes[-1], 429)
+
+	# ── H6, H7 ──────────────────────────────────────────────────────────────
+	def test_health_says_it_is_the_service_and_not_which_release(self):
+		body = self.payload(self.anonymous("/farmops/api/health", method="GET"))
+		self.assertEqual(body, {"ok": True, "service": "farmops-api"})
+
+	def test_nothing_under_farmops_answers_html(self):
+		for response in (
+			self.anonymous("/farmops/api/health", method="GET"),
+			self.anonymous("/farmops/api/scan/X", method="GET"),
+			self.anonymous(CONTEXT),
+			self.post(CONTEXT),
+			self.post("/farmops/api/mobile/no_such_method"),
+			self.anonymous("/farmops/api/../../erpnext/app", method="GET"),
+		):
+			self.assertNotIn("html", response.headers["Content-Type"].lower())
+
+	def test_no_private_file_is_served_by_a_url(self):
+		"""H6. A file leaves this service only inside an authenticated answer."""
+		for path in (
+			"/private/files/badge.jpg",
+			"/files/logo.png",
+			"/farmops/api/private/files/badge.jpg",
+			"/farmops/api/files/badge.jpg",
+			"/farmops/private/files/badge.jpg",
+		):
+			with self.subTest(path=path):
+				self.assertIn(self.post(path, method="GET").status_code, (404, 405))
+				self.assertIn(self.anonymous(path, method="GET").status_code, (401, 404))
+		gets = [
+			route
+			for route in sidecar_app.DESCRIBED_ROUTES
+			if route["group"] not in ("mobile", "tiles", "scan")
+		]
+		self.assertEqual(gets, [], "a new GET route group appeared — is it serving files?")
+
+
+HEARD: list = []
+
+
+def heard_alert(payload):
+	HEARD.append(payload)
 
 
 class TagsPointAtThePage(MobileAPITestCase):

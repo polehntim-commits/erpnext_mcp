@@ -24,9 +24,22 @@ Security review 2026-10-02: C1 (public `/erpnext`), L4 (route gates), and three 
 - **`list_sidecar_routes`** gains `gate` (the `require_*` checks each route runs), `gate_note` and
   `mutating_ungated`. A test fails if a mutating route has no gate and no stated reason. Today: 189
   mutating routes, 187 gated, 2 caller-scoped upload routes.
-- **Asset tags:** `GET /farmops/api/scan/<code>` is a static public page that looks nothing up. With
+- **Asset tags:** `GET /farmops/api/scan/<code>` is a static, public, plain-text page that looks nothing up. With
   `farmops_public_url` set, new and re-saved assets get that URL in their QR. Printed tags keep
   resolving in the app, old shape or new.
+- **Hardening — every phone is a crew phone, so the sidecar is the whole public surface**
+  (contract addendum H1–H8):
+  - an unauthenticated caller gets the identical `401` for a real route, a made-up one, a wrong
+    method, a tile and the login-QR image; `404`/`405` are said only to a caller with a credential;
+  - a body over 4 MB is `413`, with or without a `Content-Length` (it used to be read as empty, or
+    read whole);
+  - failed sign-ins are counted per address: a warning log line each, one `mobile:auth_failures`
+    audit row plus the `farmops_auth_alert` hook (and an email to `drift_report_email` when set) at
+    10 in a minute, at most once an hour per address, and `429` past 60 a minute — never for a
+    request with a valid credential;
+  - health and the tag page are limited to 120 a minute per address; health no longer states the
+    version; the tag page is `text/plain` — nothing under `/farmops` answers HTML;
+  - no file is served by URL (pinned by a test); revocation was already checked on every call.
 - **Fixes:** `generate_access_control_report` no longer crashes on an orphaned permission row; `record_backup_test.test_restore_by`
   accepts a user id, email or full name, and keeps anything else in the notes;
   `create_backup_record.location` over 140 characters is shortened, with the full text in the notes.

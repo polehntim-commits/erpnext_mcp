@@ -2474,9 +2474,11 @@ class TheAuditRow(FarmOpsAPITestCase):
 		— and a caller who can write rows without a credential can push an
 		operator's real evidence out of view."""
 		before = len(STORE.rows("MCP Action Log"))
-		for _ in range(20):
+		for _ in range(40):
 			self.post(CONTEXT, credential=False)
-		self.assertEqual(len(STORE.rows("MCP Action Log")), before)
+		# v0.216.0: ONE row per address per hour says it became a pattern.
+		# Forty refusals are still not forty rows.
+		self.assertEqual(len(STORE.rows("MCP Action Log")), before + 1)
 
 
 class NoSecretReachesThePhone(FarmOpsAPITestCase):

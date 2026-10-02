@@ -272,7 +272,7 @@ def _route_report(url: str, timeout: int) -> dict:
 	report = {
 		"base": base,
 		"health_ok": health.get("status") == 200 and "farmops-api" in str(health.get("body") or ""),
-		"scan_page_ok": scan.get("status") == 200 and "html" in str(scan.get("content_type") or "").lower(),
+		"scan_page_ok": scan.get("status") == 200 and "Farm Ops tag" in str(scan.get("body") or ""),
 		"checked": len(ROUTES),
 		"published": [row["path"] for row in published],
 		"unpublished": unpublished,

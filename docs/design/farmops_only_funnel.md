@@ -109,8 +109,8 @@ the list names a route that no longer needs it.
 
 ## 7. Asset tag links
 
-- `GET /farmops/api/scan/<name>` — public, static. One small HTML page: "This is a Farm Ops tag.
-  Open the Farm Ops app and scan it." It looks nothing up and shows nothing but the escaped code.
+- `GET /farmops/api/scan/<name>` — public, static, `text/plain` (addendum H7): "Farm Ops tag:
+  <code>. Open the Farm Ops app and scan this tag…" It looks nothing up and shows nothing but the code.
 - New and re-saved assets get `qr_url = <farmops_public_url>/farmops/api/scan/<name>` when
   `farmops_public_url` is set; otherwise unchanged.
 - **Printed tags keep working**: `universal_scan` unwraps anything containing `/scan/`, old or
