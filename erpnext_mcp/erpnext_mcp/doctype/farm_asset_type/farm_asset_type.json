@@ -13,6 +13,7 @@
   "icon",
   "display_order",
   "people_present",
+  "fixed_location",
   "detail_section",
   "description"
  ],
@@ -57,6 +58,13 @@
    "fieldname": "people_present",
    "fieldtype": "Check",
    "label": "People Live or Work Here"
+  },
+  {
+   "fieldname": "fixed_location",
+   "fieldtype": "Check",
+   "label": "Fixed Location",
+   "default": "0",
+   "description": "It does not move: a wind machine, a well, a valve, a building. A scan never changes its position; moving it is an explicit, logged act. docs/design/badge_photo_and_fixed_assets.md Part B."
   },
   {
    "fieldname": "detail_section",

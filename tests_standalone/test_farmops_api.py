@@ -702,6 +702,9 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/update_crew_task_sections",
 		"/mobile/list_crew_task_members",
 		"/mobile/list_crew_tasks",
+		"/mobile/request_badge_photo",
+		"/mobile/move_asset",
+		"/mobile/undo_asset_move",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
 		"/mobile/get_my_housing",
 		"/mobile/record_spray_application",
@@ -2989,6 +2992,10 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# v0.212.0. Who a task can be handed to: it names other people and what
 		# they hold, and it is the list behind `assign_farm_task`.
 		"list_assignable_workers",
+		# v0.214.0. Moving an asset, and undoing it: a scan no longer does, and a
+		# fixed asset's position is a foreman's to change, with a reason.
+		"move_asset",
+		"undo_asset_move",
 		"get_worker_detail",
 		# v0.141.0. The write that ends a shift a whole crew is rostered on, and
 		# it is offered from the same drill-down as `end_stale_shift`. A picker
@@ -3222,6 +3229,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"update_crew_task_sections",
 		"list_crew_task_members",
 		"list_crew_tasks",
+		# v0.214.0. A person's OWN badge photo task needs no role; somebody else's
+		# is HR / Farm Manager / Foreman, gated in the tool (`badge_photo.require_may`).
+		"request_badge_photo",
 		# v0.195.0. The caller's own housing (no arguments, so no one else's);
 		# spray history, which WPS requires be displayed to workers; and filing a
 		# spray, which is never refused for the role of the applicator filing it.
@@ -3238,7 +3248,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 164, "a method is named in two sets at once")
+		self.assertEqual(len(named), 167, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

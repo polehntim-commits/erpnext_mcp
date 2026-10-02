@@ -670,11 +670,13 @@ def seed_farm_task_templates() -> dict:
 	report = {"created": [], "present": [], "failed": []}
 	if not compat.doctype_exists(TEMPLATE_DOCTYPE):
 		return report
-	from .rodent_bait import SEED_TASK_TEMPLATES_V204
-
 	# v0.203.0. The five rodent bait templates arrive DISABLED; see rodent_bait.
 	# v0.204.0. In their form-schema shape (docs/design/form_schema_and_labels.md §7).
-	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204):
+	# v0.214.0. "Badge photo" — the portrait for the ID card, as a task.
+	from .badge_photo import SEED_TEMPLATE as BADGE_PHOTO
+	from .rodent_bait import SEED_TASK_TEMPLATES_V204
+
+	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204, BADGE_PHOTO):
 		name = spec["template_name"]
 		try:
 			if frappe.db.exists(TEMPLATE_DOCTYPE, {"template_name": name}):

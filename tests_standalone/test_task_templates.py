@@ -922,6 +922,8 @@ class TheSeededTemplates(V12TestCase):
 		"Rodent Bait Check",
 		"Rodent Bait Removal and Clearance",
 		"Rodent Bait Occupant Notice (EN/ES)",
+		# v0.214.0. The portrait for the ID card, as a task (`test_badge_photo`).
+		"Badge photo",
 	)
 
 	def test_they_are_all_seeded(self):

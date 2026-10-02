@@ -111,6 +111,11 @@ ROUTES = (
 	Route("/mobile", mobile_api.dismiss_compliance_alert),
 	Route("/mobile", mobile_api.scan_asset),
 	Route("/mobile", mobile_api.get_asset_detail),
+	# v0.214.0. A scan no longer moves a fixed asset; these are the only doors.
+	# v0.214.0. The badge photo, as a task the phone can raise for its own user.
+	Route("/mobile", mobile_api.request_badge_photo),
+	Route("/mobile", mobile_api.move_asset),
+	Route("/mobile", mobile_api.undo_asset_move),
 	Route("/mobile", mobile_api.log_asset_state_change),
 	Route("/mobile", mobile_api.get_available_actions),
 	Route("/mobile", mobile_api.report_asset_issue),

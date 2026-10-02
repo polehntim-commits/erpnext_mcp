@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.214.0 — 2026-10-01 — badge photo as a task; fixed assets do not move by accident
+
+**982 tools** (477 read, 505 write): + `request_badge_photo`, `set_employee_photo`, `move_asset`,
+`undo_asset_move`. **167 mobile methods**: + `request_badge_photo`, `move_asset`, `undo_asset_move`.
+Contract `docs/design/badge_photo_and_fixed_assets.md`; deploy `docs/deploy/v0.214.0_photo_and_fixed_assets.md`;
+iOS SERVER_CHANGES §61–§62.
+
+- **A scan no longer moves a fixed asset.** `scan_asset` had always written the handset's GPS fix onto
+  the asset, and recorded nothing: 40-WM-SE, a wind machine, moved 180 m that way. `Farm Asset Type`
+  gains `fixed_location` (wind machines, wells, valves, tanks, blocks and buildings ship fixed; a patch
+  flags the types a site already has). For a fixed asset a scan never changes the position — it records
+  where the phone was (`last_scan_latitude` / `last_scan_longitude`). A mobile asset still follows the
+  scan, and a change past 25 m is now history.
+- **`move_asset` / `undo_asset_move`** (Foreman, Farm Manager): the only way a fixed asset moves. A
+  reason is required when it already has a position; the Asset State Log row carries from and to
+  coordinates, the distance, the reason and who. Undo for 24 hours.
+- **The server refuses everything else.** `Asset Register.validate` refuses a position change on a
+  fixed asset that did not come through a move; `update_registered_asset` and the valve update need
+  `reason` and write the same history row. Until this release no position change was recorded at all.
+- **Badge photo, as a task.** A seeded template "Badge photo" (EN/ES): the employee, one portrait with
+  a 4:5 guide on the front camera, a consent attestation, and an optional "ask for a new ID card".
+  `request_badge_photo` raises it — anybody for themselves; HR, Farm Manager or Foreman for somebody
+  else — and it is raised automatically at onboarding and when a card is requested for someone with no
+  photo (flag `badge_photo_auto_request`). A "Request badge photo" button is seeded on the Employee form.
+- **The completion handler** (a closed registry keyed by template name) crops to 4:5, resizes to
+  600 × 750, re-encodes with every EXIF tag removed, saves a private file and sets `Employee.image`.
+  The previous photo's file is kept and a comment records the change. `set_employee_photo` does the
+  same from Desk or MCP.
+- A `photo` form field takes two optional hints, `guide` (`portrait_4x5`) and `camera`
+  (`front` / `back`); a phone that does not know them draws its ordinary photo control.
+
 ## 0.213.0 — 2026-10-01 — crew tasks; every ID and asset print is the CR80 card
 
 **978 tools** (477 read, 501 write): + `add_to_crew_task`, `remove_from_crew_task`,

@@ -22,7 +22,7 @@ import json
 
 import frappe
 
-from .. import asset_mirror, asset_types, compat, geo, rodent_bait, slope_grade, timezones
+from .. import asset_mirror, asset_moves, asset_types, compat, geo, rodent_bait, slope_grade, timezones
 from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..render import qr
@@ -209,6 +209,8 @@ def _describe_asset(row: dict) -> dict:
 		"replacement_value": _money(row.get("replacement_value")),
 		"gps_latitude": round(float(row.get("gps_latitude") or 0), 7) or None,
 		"gps_longitude": round(float(row.get("gps_longitude") or 0), 7) or None,
+		# v0.214.0. A fixed asset is never moved by a scan; see `asset_moves`.
+		"fixed_location": asset_moves.is_fixed(row.get("asset_type")),
 		# The schedule and the meter, each kept apart from "not set" the same way
 		# the currency columns above are: a machine with a zero-hour interval is
 		# not on an hours schedule, and one reading 0.0 is straight off the lot.
@@ -368,6 +370,8 @@ def list_asset_types(args: dict) -> ToolResult:
 					"display_order": row.get("display_order") or 0,
 					"description": row.get("description") or None,
 					"enabled": bool(row.get("enabled")),
+					# v0.214.0. A scan never moves an asset of a fixed type.
+					"fixed_location": asset_moves.is_fixed(row.get("name") or row.get("type_name")),
 				}
 				for row in rows
 			],
@@ -444,6 +448,8 @@ def _type_out(row: dict, *, with_usage: bool = False) -> dict:
 		"display_order": int(row.get("display_order") or 0),
 		"description": row.get("description") or None,
 		"enabled": bool(row.get("enabled")),
+		# v0.214.0. Whether assets of this type stay put — a scan never moves one.
+		"fixed_location": asset_moves.is_fixed(name),
 	}
 	if with_usage:
 		# THE NUMBER THAT DECIDES WHETHER A DELETE CAN HAPPEN, on the read that
@@ -567,7 +573,7 @@ def get_asset_type(args: dict) -> ToolResult:
 #: What `update_asset_type` may change, apart from the name. Deliberately every
 #: column the doctype has that is not the identity — there is nothing on this
 #: record an operator should have to open the Desk for.
-UPDATABLE_TYPE_FIELDS = ("icon", "description", "display_order", "enabled")
+UPDATABLE_TYPE_FIELDS = ("icon", "description", "display_order", "enabled", "fixed_location")
 
 
 def update_asset_type(args: dict) -> ToolResult:
@@ -612,11 +618,20 @@ def update_asset_type(args: dict) -> ToolResult:
 			# that dropped it would refuse to retire anything while reporting
 			# that it had.
 			value = 1 if as_bool(args, "enabled", True) else 0
+		elif key == "fixed_location":
+			if not asset_moves.ready():
+				raise ToolError(
+					"this site has no fixed_location column yet — run `bench --site <site> migrate`. "
+					"Nothing was changed."
+				)
+			value = 1 if as_bool(args, "fixed_location", False) else 0
 		else:
 			value = as_str(args, key)
 
 		current = row.get(key)
-		if key == "enabled":
+		if key == "fixed_location":
+			current = 1 if asset_moves.is_fixed(name) else 0
+		elif key == "enabled":
 			current = 1 if current else 0
 		elif key == "display_order":
 			current = int(current or 0)
@@ -868,6 +883,8 @@ def get_asset_detail(args: dict) -> ToolResult:
 			"child_count": len(child_list),
 			"history": history,
 			"history_count": len(history),
+			# v0.214.0. The latest position change, and whether it can be undone.
+			"last_move": asset_moves.last_move(row["name"]),
 		},
 		summary=f"{row['name']}: {described['asset_type'] or 'untyped'}"
 		+ (f", {len(open_tasks)} open task(s)" if open_tasks else ""),
@@ -900,8 +917,17 @@ def get_asset_history(args: dict) -> ToolResult:
 def scan_asset(args: dict) -> ToolResult:
 	"""Record a scan event, return asset detail + open tasks + due compliance items.
 
-	Updates last_scan_at and last_scan_by on the asset record. If GPS coordinates
-	are provided, updates the asset's position too.
+	Updates last_scan_at and last_scan_by on the asset record, and WHERE THE
+	PHONE WAS (`last_scan_latitude` / `last_scan_longitude`).
+
+	v0.214.0. THE PHONE'S POSITION IS NOT THE ASSET'S. Until this release a scan
+	wrote its fix straight onto the asset, so a wind machine moved 180 m when
+	somebody scanned its tag from the road. Now:
+
+	  * a FIXED asset (`Farm Asset Type.fixed_location`) is never moved by a
+	    scan — not even placed by one. `move_asset` is the only door;
+	  * a MOBILE asset still follows the scan — that is how a tractor is found —
+	    and a change past 25 m writes a `Moved` row to its history.
 	"""
 	_require()
 	name = as_str(args, "asset_name", required=True)
@@ -916,14 +942,39 @@ def scan_asset(args: dict) -> ToolResult:
 
 	gps_lat = args.get("gps_lat") or args.get("gps_latitude")
 	gps_lon = args.get("gps_lon") or args.get("gps_longitude")
+	fix = None
 	if gps_lat is not None and gps_lon is not None:
 		try:
-			doc.gps_latitude = float(gps_lat)
-			doc.gps_longitude = float(gps_lon)
+			fix = asset_moves.point(float(gps_lat), float(gps_lon))
 		except (TypeError, ValueError):
-			pass
+			fix = None
+	fixed = asset_moves.is_fixed(doc.asset_type)
+	before = asset_moves.point(doc.gps_latitude, doc.gps_longitude)
+	position_updated = False
+	if fix:
+		if compat.has_field(ASSET_REGISTER, "last_scan_latitude"):
+			doc.last_scan_latitude = fix["latitude"]
+			doc.last_scan_longitude = fix["longitude"]
+		if not fixed:
+			doc.gps_latitude = fix["latitude"]
+			doc.gps_longitude = fix["longitude"]
+			position_updated = True
 
 	doc.save(ignore_permissions=True)
+	if position_updated and before:
+		metres = asset_moves.distance_m(
+			before["latitude"], before["longitude"], fix["latitude"], fix["longitude"]
+		)
+		if metres > asset_moves.SCAN_MOVE_METRES:
+			asset_moves.log(
+				doc.name,
+				str(doc.asset_type or ""),
+				before,
+				fix,
+				asset_moves.MOVED,
+				"Seen here on a scan.",
+				scanned_by,
+			)
 	described = _describe_asset(dict(doc.as_dict()))
 
 	open_tasks = []
@@ -1005,6 +1056,11 @@ def scan_asset(args: dict) -> ToolResult:
 		data={
 			**described,
 			"scan_recorded": True,
+			# v0.214.0. Whether this scan moved the pin (never, on a fixed asset),
+			# and the latest position change with whether it can be undone.
+			"position_updated": position_updated,
+			"scan_location": fix,
+			"last_move": asset_moves.last_move(doc.name),
 			"open_tasks": open_tasks,
 			"open_task_count": len(open_tasks),
 			"due_compliance": due_compliance,
@@ -1367,9 +1423,34 @@ def update_registered_asset(args: dict) -> ToolResult:
 		if location and location == row["name"]:
 			raise ToolError("An asset cannot be its own parent. Nothing was changed.")
 		_stage(changes, doc, "location", location or None)
+	# v0.214.0. A POSITION CHANGE IS A MOVE. On a fixed asset that already has a
+	# position it needs `reason`; on any asset it is written to the history with
+	# where it was. See `asset_moves`.
+	position_before = asset_moves.point(doc.gps_latitude, doc.gps_longitude)
 	for key in ("gps_latitude", "gps_longitude"):
 		if key in args:
 			_stage(changes, doc, key, as_float(args.get(key), key))
+	position_after = asset_moves.point(doc.gps_latitude, doc.gps_longitude)
+	moving = position_before is not None and position_before != position_after
+	move_reason = as_str(args, "reason") or as_str(args, "move_reason")
+	if moving and asset_moves.is_fixed(doc.get("asset_type")) and not move_reason:
+		metres = (
+			asset_moves.distance_m(
+				position_before["latitude"],
+				position_before["longitude"],
+				position_after["latitude"],
+				position_after["longitude"],
+			)
+			if position_after
+			else 0
+		)
+		raise ToolError(
+			f"{row['name']} is a {doc.get('asset_type')}, which has a fixed location, and this would "
+			f"move it {metres:g} m. Pass reason — why it is moving, or why the old position was wrong — "
+			"and the move is made and recorded in its history with where it was. Nothing was changed."
+		)
+	if moving:
+		doc.flags.move_authorised = True
 	# v0.203.0. The rodent bait program's occupancy flags.
 	for key in ("occupied", "people_work_here"):
 		if key in args and compat.has_field(ASSET_REGISTER, key):
@@ -1475,6 +1556,15 @@ def update_registered_asset(args: dict) -> ToolResult:
 
 	if changes:
 		doc.save(ignore_permissions=True)
+	if moving:
+		asset_moves.log(
+			doc.name,
+			str(doc.get("asset_type") or ""),
+			position_before,
+			position_after,
+			asset_moves.MOVED,
+			move_reason or "Position corrected with update_registered_asset.",
+		)
 	if repointed:
 		changes["erpnext_asset"] = [", ".join(repointed["before"]) or None, repointed["after"]]
 	described = _describe_asset(dict(doc.as_dict()))
@@ -2508,6 +2598,10 @@ def list_asset_state_history(args: dict) -> ToolResult:
 			"gps_longitude",
 			"photo",
 			"asset_type",
+			# v0.214.0. A position change: where it was, and how far it went.
+			"from_latitude",
+			"from_longitude",
+			"distance_m",
 			"creation",
 		),
 	)
@@ -2540,6 +2634,10 @@ def list_asset_state_history(args: dict) -> ToolResult:
 				"gps_latitude": round(float(r.get("gps_latitude") or 0), 7) or None,
 				"gps_longitude": round(float(r.get("gps_longitude") or 0), 7) or None,
 				"photo": r.get("photo") or None,
+				# v0.214.0. Set on `Moved` / `Move undone` rows; null on a state change.
+				"from_latitude": round(float(r.get("from_latitude") or 0), 7) or None,
+				"from_longitude": round(float(r.get("from_longitude") or 0), 7) or None,
+				"distance_m": round(float(r.get("distance_m") or 0), 1) or None,
 			}
 		)
 		clock.add(events[-1], "performed_at")
@@ -2553,4 +2651,145 @@ def list_asset_state_history(args: dict) -> ToolResult:
 			**clock.block(),
 		},
 		summary=f"{row['name']}: {len(events)} state change(s)",
+	)
+
+
+# ── move_asset / undo_asset_move ── v0.214.0 ────────────────────────────────
+#
+# docs/design/badge_photo_and_fixed_assets.md, Part B. The ONLY doors through
+# which a fixed asset's position changes. One gate for MCP and the phone.
+def _require_mover(what: str) -> str:
+	from . import employee as employee_tool
+
+	return employee_tool._require_one_of(asset_moves.ROLES, "an asset move", what)
+
+
+def move_asset(args: dict) -> ToolResult:
+	"""Move one asset to a position, with a reason, and record where it was."""
+	_require()
+	actor = _require_mover("move an asset")
+	row = asset_row(as_str(args, "asset_name", required=True), _company(args) or "")
+	from . import employee as employee_tool
+
+	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
+	if row.get("retired_at"):
+		raise ToolError(f"{row['name']} was retired; it is not moved. Nothing was changed.")
+
+	raw_lat = args.get("gps_latitude") if args.get("gps_latitude") is not None else args.get("gps_lat")
+	raw_lon = args.get("gps_longitude") if args.get("gps_longitude") is not None else args.get("gps_lon")
+	if raw_lat in (None, "") or raw_lon in (None, ""):
+		raise ToolError("gps_latitude and gps_longitude are required — where it is now. Nothing was changed.")
+	latitude, longitude = as_float(raw_lat, "gps_latitude"), as_float(raw_lon, "gps_longitude")
+	if not (-90 <= latitude <= 90 and -180 <= longitude <= 180) or not asset_moves.has_position(
+		latitude, longitude
+	):
+		raise ToolError("that is not a position on the ground. Nothing was changed.")
+
+	doc = frappe.get_doc(ASSET_REGISTER, row["name"])
+	before = asset_moves.point(doc.gps_latitude, doc.gps_longitude)
+	fixed = asset_moves.is_fixed(doc.asset_type)
+	if before and asset_moves.same_place(before["latitude"], before["longitude"], latitude, longitude):
+		# The same request again, or a move to where it already is: an answer.
+		return ToolResult(
+			data={
+				"asset": row["name"],
+				"moved": False,
+				"distance_m": 0.0,
+				"from": before,
+				"to": before,
+				"fixed_location": fixed,
+				"last_move": asset_moves.last_move(row["name"]),
+			},
+			summary=f"{row['name']} is already there",
+		)
+	reason = as_str(args, "reason")
+	if before and not reason:
+		metres = asset_moves.distance_m(before["latitude"], before["longitude"], latitude, longitude)
+		raise ToolError(
+			f"reason is required — {row['name']} already has a position and this moves it {metres:g} m. "
+			"Say why it moved, or why the old position was wrong; it is written to the asset's history. "
+			"Nothing was changed."
+		)
+	accuracy = args.get("accuracy_m")
+	note = reason or "First placement."
+	if accuracy not in (None, ""):
+		try:
+			note += f" (fix ±{float(accuracy):g} m)"
+		except (TypeError, ValueError):
+			pass
+	written = asset_moves.move(
+		doc, latitude, longitude, reason=note, by=actor, request=as_str(args, "client_request_id")
+	)
+	last = asset_moves.last_move(row["name"])
+	return ToolResult(
+		data={
+			"asset": row["name"],
+			"moved": True,
+			"first_placement": before is None,
+			"distance_m": written.get("distance_m") or 0.0,
+			"from": written["from"],
+			"to": written["to"],
+			"log": written.get("log"),
+			"reason": reason or None,
+			"fixed_location": fixed,
+			"undo_until": (last or {}).get("undo_until"),
+			"last_move": last,
+			"actor": actor,
+		},
+		summary=(
+			f"placed {row['name']}"
+			if before is None
+			else f"moved {row['name']} {written.get('distance_m') or 0:g} m"
+		),
+		docstatus_delta="0 → 0 (updated)",
+	)
+
+
+def undo_asset_move(args: dict) -> ToolResult:
+	"""Put an asset back where its latest move took it from, within 24 hours."""
+	_require()
+	actor = _require_mover("undo an asset move")
+	row = asset_row(as_str(args, "asset_name", required=True), _company(args) or "")
+	from . import employee as employee_tool
+
+	employee_tool.require_company_scope(actor, str(row.get("company") or ""))
+	last = asset_moves.last_move(row["name"])
+	if not last or last["action"] != asset_moves.MOVED:
+		raise ToolError(
+			f"{row['name']} has no move to undo"
+			+ (" — its last move was already undone" if last else "")
+			+ ". Nothing was changed."
+		)
+	if not last["from"]:
+		raise ToolError(
+			f"{row['name']}'s last move was its first placement, so there is nowhere to put it back "
+			"to. move_asset places it somewhere else. Nothing was changed."
+		)
+	if not last["can_undo"]:
+		raise ToolError(
+			f"{row['name']} was moved at {last['moved_at']}, more than {asset_moves.UNDO_HOURS} hours "
+			"ago. move_asset moves it again, with a reason. Nothing was changed."
+		)
+	doc = frappe.get_doc(ASSET_REGISTER, row["name"])
+	written = asset_moves.move(
+		doc,
+		last["from"]["latitude"],
+		last["from"]["longitude"],
+		reason=as_str(args, "reason") or f"Undid the move of {last['moved_at']}.",
+		by=actor,
+		action=asset_moves.UNDONE,
+	)
+	return ToolResult(
+		data={
+			"asset": row["name"],
+			"undone": last["log"],
+			"distance_m": written.get("distance_m") or 0.0,
+			"from": written["from"],
+			"to": written["to"],
+			"log": written.get("log"),
+			"last_move": asset_moves.last_move(row["name"]),
+			"actor": actor,
+		},
+		summary=f"put {row['name']} back ({written.get('distance_m') or 0:g} m)",
+		docstatus_delta="0 → 0 (updated)",
 	)

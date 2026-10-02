@@ -67,6 +67,8 @@
   "last_scan_at",
   "scan_col",
   "last_scan_by",
+  "last_scan_latitude",
+  "last_scan_longitude",
   "boundary_section",
   "boundary_geojson",
   "boundary_centroid_lat",
@@ -469,6 +471,23 @@
    "fieldtype": "Link",
    "label": "Last Scan By",
    "options": "User"
+  },
+  {
+   "fieldname": "last_scan_latitude",
+   "fieldtype": "Float",
+   "label": "Last Scan Latitude",
+   "precision": "7",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Where the phone was at the last scan. NOT the asset's position."
+  },
+  {
+   "fieldname": "last_scan_longitude",
+   "fieldtype": "Float",
+   "label": "Last Scan Longitude",
+   "precision": "7",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "description": "The shape the asset occupies on the ground, for anything that has one — a shed, a pump house, a cabin, a cold store. A valve, a tractor and a sprayer have a POSITION and no footprint, and leaving this empty is the right answer for them: the map draws a pin from gps_latitude/gps_longitude for those and an outline from this for the buildings. Everything below the polygon is DERIVED from it on save and must not be edited by hand — a figure a person can change independently of the polygon is a figure that will disagree with it.",

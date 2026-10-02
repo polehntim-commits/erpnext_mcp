@@ -20990,6 +20990,42 @@ TOOLS = {
 		available=_badge_qr_ready,
 		requires=_BADGE_QR_REQUIRES,
 	),
+	"request_badge_photo": _tool(
+		badges.request_badge_photo,
+		"MUTATING (default OFF). v0.214.0. Raise the 'Badge photo' task for one person: a "
+		"portrait in a 4:5 frame, taken on the phone, with their consent. Completing it sets "
+		"Employee.image (cropped, 600 x 750, camera metadata removed, private) and keeps the "
+		"previous photo. One open task per person — a second request answers it with "
+		"`already: true`. Anybody may ask for their own; for somebody else it takes HR, Farm "
+		"Manager or Foreman. Also raised automatically when a card is requested for someone "
+		"with no photo, and at onboarding.",
+		{
+			"employee": _field(_STRING, "Whose photo. Defaults to the caller's own Employee."),
+			"assign_to": _field(_STRING, "Who takes it. Defaults to the employee themselves."),
+		},
+		mutating=True,
+		title="Request a badge photo",
+		available=_needs_doctype("Farm Task", "Farm Task Template"),
+		requires="the Farm Task and Farm Task Template DocTypes — run `bench migrate`",
+	),
+	"set_employee_photo": _tool(
+		badges.set_employee_photo,
+		"MUTATING (default OFF; HR, Farm Manager, Foreman — or the person themselves). "
+		"v0.214.0. Make a file already on the site an Employee's badge photo: cropped to 4:5 "
+		"about its centre, resized to 600 x 750, re-encoded with every EXIF tag (GPS included) "
+		"removed, saved as a private file and set as Employee.image. The previous photo's "
+		"file is kept and a comment records the change.",
+		{
+			"employee": _field(_STRING, "The Employee."),
+			"file_url": _field(_STRING, "A file on this site, e.g. /private/files/ana.jpg."),
+			"file": _field(_STRING, "Or the File docname."),
+		},
+		required=("employee",),
+		mutating=True,
+		title="Set an employee's badge photo",
+		available=_needs_doctype("Employee"),
+		requires="the Employee DocType (HRMS / ERPNext)",
+	),
 	"generate_employee_badge_sheet": _tool(
 		badges.generate_employee_badge_sheet,
 		"MUTATING (default OFF). A printable sheet of badge cards for a crew at "
@@ -22708,6 +22744,11 @@ TOOLS = {
 				_BOOLEAN,
 				"false RETIRES the type — off every picker, assets untouched. true puts it back.",
 			),
+			"fixed_location": _field(
+				_BOOLEAN,
+				"v0.214.0. Assets of this type do not move: a scan never changes their position, "
+				"and moving one needs move_asset (or update_registered_asset with a reason).",
+			),
 		},
 		required=("name",),
 		mutating=True,
@@ -22965,10 +23006,56 @@ TOOLS = {
 				"20 for an ATV/UTV. get_slope_grade_layer colours the ground against it. null clears it "
 				"and the type's cautious figure applies again.",
 			),
+			"reason": _field(
+				_STRING,
+				"v0.214.0. Why the position is changing. REQUIRED to change gps_latitude / "
+				"gps_longitude on an asset whose type has a fixed location (a wind machine, a well, "
+				"a valve, a building) and that already has a position. Written to the asset's "
+				"history with where it was.",
+			),
 		},
 		required=("asset_name",),
 		mutating=True,
 		title="Update an asset",
+		available=_needs_doctype("Asset Register"),
+		requires="the Asset Register DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"move_asset": _tool(
+		asset_tags.move_asset,
+		"MUTATING (default OFF; Foreman, Farm Manager). v0.214.0. Move one asset to a position "
+		"and record where it was. The ONLY way a FIXED asset's position changes (a wind "
+		"machine, a well, a valve, a building — `Farm Asset Type.fixed_location`); a scan never "
+		"moves one.\n\n"
+		"`reason` is required whenever the asset already has a position. Writes an Asset State "
+		"Log row — action Moved, from and to coordinates, the distance, the reason, who and "
+		"when — which list_asset_state_history returns. undo_asset_move reverses it for 24 "
+		"hours. The same coordinates again answers `moved: false`.",
+		{
+			"asset_name": _field(_STRING, "The asset's tag ID."),
+			"gps_latitude": _field(_NUMBER, "Where it is now."),
+			"gps_longitude": _field(_NUMBER, "Where it is now."),
+			"reason": _field(_STRING, "Why it moved, or why the old position was wrong."),
+			"accuracy_m": _field(_NUMBER, "The fix's accuracy in metres, noted on the row."),
+			"client_request_id": _field(_STRING, "An id the caller made, kept on the row."),
+		},
+		required=("asset_name", "gps_latitude", "gps_longitude"),
+		mutating=True,
+		title="Move an asset",
+		available=_needs_doctype("Asset Register"),
+		requires="the Asset Register DocType, which ships with erpnext_mcp — run `bench migrate`",
+	),
+	"undo_asset_move": _tool(
+		asset_tags.undo_asset_move,
+		"MUTATING (default OFF; Foreman, Farm Manager). v0.214.0. Put an asset back where its "
+		"latest move took it from. Only within 24 hours of that move, and only once; writes a "
+		"'Move undone' row to its history.",
+		{
+			"asset_name": _field(_STRING, "The asset's tag ID."),
+			"reason": _field(_STRING, "Optional note for the history row."),
+		},
+		required=("asset_name",),
+		mutating=True,
+		title="Undo an asset move",
 		available=_needs_doctype("Asset Register"),
 		requires="the Asset Register DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
@@ -23336,6 +23423,11 @@ TOOLS = {
 				_STRING,
 				"Optional IANA zone — 'America/Los_Angeles'. Every timestamp keeps its stored "
 				"spelling and gains a `*_local` twin rendered in this zone.",
+			),
+			"reason": _field(
+				_STRING,
+				"v0.214.0. Why the position is changing. Required to change or clear a position "
+				"the valve already has — a valve has a fixed location — and written to its history.",
 			),
 		},
 		required=("name",),

@@ -1328,3 +1328,69 @@ def _shift_membership(shift: str, employee: str) -> dict:
 				"left_at": str(entry.get("left_at") or "") or None,
 			}
 	return {"shift": shift, "on_shift": False, "shift_state": state, "joined_at": None, "left_at": None}
+
+
+# ── request_badge_photo / set_employee_photo ── v0.214.0 ────────────────────
+#
+# docs/design/badge_photo_and_fixed_assets.md, Part A. The model, the picture
+# and the completion handler are `erpnext_mcp/badge_photo.py`.
+def _photo_actor() -> str:
+	from .. import security
+
+	return security.caller_identity() or str(getattr(frappe.session, "user", "") or "")
+
+
+def request_badge_photo(args: dict) -> ToolResult:
+	"""Raise the "Badge photo" task for one person, or answer the one already open."""
+	from .. import badge_photo
+
+	actor = _photo_actor()
+	employee = as_str(args, "employee") or badge_photo.employee_of(actor)
+	if not employee:
+		raise ToolError(
+			"employee is required — whose badge photo. (A phone may leave it out: it is then the "
+			"caller's own.) Nothing was changed."
+		)
+	row = _employee_row(employee)
+	badge_photo.require_may(actor, row["name"], "ask for a badge photo")
+	assign_to = as_str(args, "assign_to")
+	if assign_to:
+		assign_to = _employee_row(assign_to)["name"]
+	answer = badge_photo.request(row["name"], assign_to)
+	answer.pop("_task", None)
+	return ToolResult(
+		data={
+			**answer,
+			"employee_name": row.get("employee_name") or row["name"],
+			"has_photo": bool(row.get("image")),
+		},
+		summary=(
+			f"{answer['task']} is already open for {row.get('employee_name') or row['name']}"
+			if answer["already"]
+			else f"raised {answer['task']}: badge photo for {row.get('employee_name') or row['name']}"
+		),
+	)
+
+
+def set_employee_photo(args: dict) -> ToolResult:
+	"""Make a file already on the site the Employee's badge photo: cropped, resized, stripped."""
+	from .. import badge_photo
+
+	actor = _photo_actor()
+	row = _employee_row(as_str(args, "employee", required=True))
+	badge_photo.require_may(actor, row["name"], "set a badge photo")
+	reference = as_str(args, "file_url") or as_str(args, "file")
+	if not reference:
+		raise ToolError("file_url (or file, a File docname) is required. Nothing was changed.")
+	answer = badge_photo.set_photo(row["name"], reference, actor)
+	return ToolResult(
+		data={
+			**answer,
+			"note": (
+				"Cropped to 4:5 about its centre, resized to 600 x 750 and saved with no camera "
+				"metadata, as a private file on the Employee. The previous photo's file is kept."
+			),
+		},
+		summary=f"badge photo set for {answer['employee_name']} ({answer['width']} x {answer['height']})",
+		docstatus_delta="0 → 0 (updated)",
+	)

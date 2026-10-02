@@ -755,7 +755,18 @@ def request(
 	from .tools import artifacts
 
 	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
-	return _answer(frappe.get_doc(JOB, doc.name), user, created=True, warnings=warnings)
+	answer = _answer(frappe.get_doc(JOB, doc.name), user, created=True, warnings=warnings)
+	# v0.214.0. A CARD ASKED FOR WITH NO PHOTO RAISES THE BADGE PHOTO TASK. The
+	# card still queues — initials print — and the answer says a photo has been
+	# asked for. `auto_request` never raises and answers None when a site turned
+	# it off or the person already has one.
+	if job_type == "Employee ID" and not str(row.get("image") or "").strip():
+		from . import badge_photo
+
+		task = badge_photo.auto_request(name, origin="")
+		if task:
+			answer["badge_photo_task"] = task
+	return answer
 
 
 def request_back(

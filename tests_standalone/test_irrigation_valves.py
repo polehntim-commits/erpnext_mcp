@@ -653,15 +653,25 @@ class TheEditIsHeldToTheCreatesRules(ValveTestCase):
 		self.a_valve(LATERAL)
 		data = self.an_edit(LATERAL, gps_latitude=45.9327, gps_longitude=-118.3877)
 		self.assertEqual(data["gps_latitude"], 45.9327)
-		data = self.an_edit(LATERAL, gps_lat=45.6, gps_lon=-118.2)
+		# v0.214.0. The first was a placement; this replaces a position, which on
+		# a valve is a move and needs saying why.
+		self.assertIn(
+			"Pass reason",
+			self.tool_error(
+				"update_irrigation_valve", {"valve": LATERAL, "gps_lat": 45.6, "gps_lon": -118.2}
+			),
+		)
+		data = self.an_edit(LATERAL, gps_lat=45.6, gps_lon=-118.2, reason="Surveyed")
 		self.assertEqual(data["gps_latitude"], 45.6)
 		self.assertEqual(data["gps_longitude"], -118.2)
+		moved = [r for r in STORE.rows("Asset State Log") if r["action"] == "Moved"]
+		self.assertEqual((len(moved), moved[0]["notes"]), (1, "Surveyed"))
 
 	def test_a_null_fix_clears_the_column_rather_than_writing_null_island(self):
 		"""0.0/0.0 is a real coordinate in the Gulf of Guinea, and a valve whose
 		position was cleared must not come back onto a map off West Africa."""
 		self.a_valve(LATERAL, gps_latitude=45.9327, gps_longitude=-118.3877)
-		self.an_edit(LATERAL, gps_latitude=None, gps_longitude=None)
+		self.an_edit(LATERAL, gps_latitude=None, gps_longitude=None, reason="Pinned in the wrong block")
 		row = STORE.tables["Asset Register"][LATERAL]
 		self.assertIn(row.get("gps_latitude"), (None, ""))
 		self.assertIn(row.get("gps_longitude"), (None, ""))
@@ -1048,8 +1058,12 @@ class TheHandsetScansAndCanAct(MobileAPITestCase):
 		row = STORE.rows("Asset State Log")[-1]
 		self.assertEqual(row["gps_latitude"], 45.9327)
 		self.assertEqual(row["gps_longitude"], -118.3877)
+		# v0.214.0. The fix is where the PHONE was. It is on the log row above and
+		# on the asset's last-scan columns; a valve has a fixed location, so the
+		# valve's own position is not moved by it (`test_asset_moves`).
 		valve = STORE.tables["Asset Register"][LATERAL]
-		self.assertEqual(valve["gps_latitude"], 45.9327)
+		self.assertEqual(valve["last_scan_latitude"], 45.9327)
+		self.assertFalse(valve.get("gps_latitude"))
 
 	def test_a_scan_alone_reads_the_gate_and_leaves_it_alone(self):
 		self.be()

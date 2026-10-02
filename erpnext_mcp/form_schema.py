@@ -161,7 +161,13 @@ FIELD_KEYS = {
 	"formula",
 	"precision",
 	"source",
+	# v0.214.0. Two optional hints on a `photo`: a framing guide and which camera
+	# to open. A client that does not know them draws its ordinary photo control.
+	"guide",
+	"camera",
 }
+PHOTO_GUIDES = ("portrait_4x5",)
+PHOTO_CAMERAS = ("front", "back")
 #: v0.204.0's fixed list; v0.205.0 reads `phone_link_doctypes` (B3) and this is its floor.
 LINK_DOCTYPES = ("Item", "Asset Register", "Housing Unit", "Employee")
 DEFAULT_PHONE_LINK_DOCTYPES = (
@@ -415,6 +421,18 @@ def _check_level(fields, prefix, errors, warnings, *, top, context_keys, depth, 
 				problem = _condition_problem(field[attr], top, siblings or fields, context_keys)
 				if problem:
 					errors.append(_finding(path, "bad_condition", f"{attr}: {problem}"))
+		# v0.214.0. The two photo hints: a closed vocabulary, on a photo only.
+		for attr, allowed in (("guide", PHOTO_GUIDES), ("camera", PHOTO_CAMERAS)):
+			if field.get(attr) in (None, ""):
+				continue
+			if kind != "photo":
+				errors.append(_finding(path, "bad_attribute", f"{attr} belongs on a photo field"))
+			elif field[attr] not in allowed:
+				errors.append(
+					_finding(
+						path, "bad_attribute", f"{attr} {field[attr]!r} is not one of {', '.join(allowed)}"
+					)
+				)
 		english = text_of(label, "en") if isinstance(label, dict) else ""
 		if english:
 			if _PROSE_BRANCHING.search(english) and not field.get("show_if"):

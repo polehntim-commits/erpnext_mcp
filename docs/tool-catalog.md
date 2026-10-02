@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 978 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 982 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20846,6 +20846,21 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.214.0 — badge photo; fixed assets
+
+| Tool | What it does |
+| --- | --- |
+| `request_badge_photo` | Raise the "Badge photo" task for a person; completing it sets their Employee photo. Write |
+| `set_employee_photo` | Make a file on the site an Employee's badge photo: 4:5, 600 × 750, metadata removed, private. Write |
+| `move_asset` | Move an asset to a position with a reason; where it was goes into its history. Write |
+| `undo_asset_move` | Put an asset back where its latest move took it from, within 24 hours. Write |
+
+`scan_asset` no longer moves an asset whose type has `fixed_location`; it records where the phone
+was. `update_registered_asset` needs `reason` to change a fixed asset's position, and
+`update_asset_type` takes `fixed_location`. `list_asset_state_history` returns `from_latitude`,
+`from_longitude` and `distance_m` on a move. A `photo` form field takes `guide` and `camera`.
+Contract: `docs/design/badge_photo_and_fixed_assets.md`.
 
 ## v0.213.0 — crew tasks
 

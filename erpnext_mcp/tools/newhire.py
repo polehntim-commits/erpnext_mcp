@@ -222,6 +222,12 @@ def onboard_employee(args: dict) -> ToolResult:
 	if as_bool(args, "first_day_tasks", False):
 		_first_day(args, employee, full_name, company, report)
 
+	# v0.214.0. A new hire with no photo gets the badge photo task. Never fatal,
+	# and off with the `badge_photo_auto_request` flag.
+	from .. import badge_photo
+
+	report["badge_photo_task"] = badge_photo.auto_request(employee)
+
 	linked = bool((report["link"] or {}).get("user_id"))
 	return ToolResult(
 		data={

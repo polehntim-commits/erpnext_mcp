@@ -288,11 +288,13 @@ class OnlyTheAssetBranchWrites(ScanTestCase):
 		self.assertTrue(frappe.db.get_value(ASSET_REGISTER, VALVE, "last_scan_at"))
 		self.assertEqual(frappe.db.get_value(ASSET_REGISTER, VALVE, "last_scan_by"), "Administrator")
 
-	def test_a_gps_fix_moves_the_asset_and_only_on_that_branch(self):
+	def test_a_gps_fix_is_where_the_phone_was_and_a_valve_stays_put(self):
+		"""v0.214.0: a fixed asset is never moved by a scan (`test_asset_moves`)."""
 		self.an_asset()
 		self.scan(VALVE, gps_lat=45.6, gps_lon=-121.2)
+		self.assertFalse(float(frappe.db.get_value(ASSET_REGISTER, VALVE, "gps_latitude") or 0))
 		self.assertAlmostEqual(
-			float(frappe.db.get_value(ASSET_REGISTER, VALVE, "gps_latitude")), 45.6, places=4
+			float(frappe.db.get_value(ASSET_REGISTER, VALVE, "last_scan_latitude")), 45.6, places=4
 		)
 
 	def test_a_badge_a_cabin_and_a_block_record_nothing(self):

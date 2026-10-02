@@ -266,6 +266,11 @@ def _card_print() -> None:
 		)
 		if tile:
 			made.append(tile)
+		# v0.214.0. "Request badge photo" on the Employee form.
+		from . import badge_photo
+
+		if badge_photo.seed_desk_button().get("created"):
+			made.append(f"button {badge_photo.SCRIPT_NAME!r}")
 		from . import card_print_format
 
 		for report in card_print_format.seed_card_print_formats():

@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import frappe
 
-from . import compat
+from . import asset_moves, compat
 
 DOCTYPE = "Farm Asset Type"
 ASSET_REGISTER = "Asset Register"
@@ -281,6 +281,9 @@ def seed(*, extra: list | None = None) -> dict:
 			doc.enabled = 0 if name in FLAG_ONLY_TYPES else 1
 			if name in PEOPLE_PRESENT or name in FLAG_ONLY_TYPES:
 				doc.people_present = 1
+			# v0.214.0. Whether a scan may move it (`asset_moves`). On CREATE only.
+			if name in asset_moves.FIXED_TYPES and compat.has_field(DOCTYPE, "fixed_location"):
+				doc.fixed_location = 1
 			doc.flags.ignore_permissions = True
 			doc.insert(ignore_permissions=True)
 			report["created"].append(name)

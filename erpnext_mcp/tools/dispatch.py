@@ -63,6 +63,7 @@ import frappe
 
 from .. import (
 	alerts,
+	badge_photo,
 	compat,
 	completions,
 	crew_tasks,
@@ -2459,6 +2460,13 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# form with a required answer missing, a value out of range or an approval
 	# still pending is refused here, naming every field, before anything is
 	# written (docs/design/form_schema_and_labels.md §3.2).
+	# v0.214.0. A badge photo is its subject's own, or a supervisor's to take.
+	if badge_photo.is_badge_photo(task):
+		from .. import security
+
+		badge_photo.precheck(
+			task, worker, security.caller_identity() or str(getattr(frappe.session, "user", "") or "")
+		)
 	form_answers = task_forms.check_completion(task, args)
 	args["_form_answers"] = form_answers
 	checklist_state = _marked_checklist(task, args)
@@ -2823,6 +2831,19 @@ def complete_farm_task(args: dict) -> ToolResult:
 	training_close = _close_out_training(task, assignment, worker)
 	if training_close is not None:
 		data["training_session"] = training_close
+
+	# v0.214.0. COMPLETION HANDLERS: a closed registry keyed by template name.
+	# "Badge photo" turns the answer into Employee.image. A handler never raises
+	# — the work is done — and what it did, or could not, is on the answer.
+	if badge_photo.is_badge_photo(task):
+		from .. import security
+
+		data["badge_photo"] = badge_photo.COMPLETION_HANDLERS[badge_photo.TEMPLATE](
+			task,
+			form_answers,
+			worker,
+			security.caller_identity() or str(getattr(frappe.session, "user", "") or ""),
+		)
 
 	# v0.85.0. THE COMPLETION GOES UP THE CHAIN, FROZEN. It runs last, after the
 	# record, the stock movement, the spray windows and the compliance

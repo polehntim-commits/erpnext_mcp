@@ -58,6 +58,13 @@ class AssetRegister(Document):
 			if lon < -180 or lon > 180:
 				frappe.throw(_("GPS Longitude must be between -180 and 180."))
 
+		# v0.214.0. A FIXED asset's position changes only through an explicit,
+		# logged move — see `asset_moves`. Here so the Desk form and every code
+		# path that saves this document are covered, not only the tools.
+		from erpnext_mcp import asset_moves
+
+		asset_moves.guard(self)
+
 		self.qr_url = _build_qr_url(self.name)
 
 	def before_save(self):

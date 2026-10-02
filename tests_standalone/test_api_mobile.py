@@ -1099,6 +1099,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"update_crew_task_sections",
 		"list_crew_task_members",
 		"list_crew_tasks",
+		# v0.214.0 — badge photo and fixed assets (SERVER_CHANGES §61–§62).
+		"request_badge_photo",
+		"move_asset",
+		"undo_asset_move",
 		# v0.195.0. fafo_ios names all four as path constants (6e9cfd0) and no
 		# Codable decodes their answers yet, so there is nothing to mirror; the
 		# payloads are asserted key by key in test_wave5_server_changes against

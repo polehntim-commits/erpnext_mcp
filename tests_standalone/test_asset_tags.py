@@ -206,7 +206,9 @@ class ScanAsset(AssetTagTestCase):
 		self.assertTrue(data["scan_recorded"])
 		self.assertIsNotNone(data["last_scan_at"])
 
-	def test_scan_updates_gps(self):
+	def test_scan_records_where_the_phone_was_and_does_not_move_a_valve(self):
+		"""v0.214.0. A valve has a fixed location: the scan's fix is the PHONE's.
+		`test_asset_moves` has the rest."""
 		self.an_asset()
 		data = self.tool_data(
 			"scan_asset",
@@ -216,8 +218,9 @@ class ScanAsset(AssetTagTestCase):
 				"gps_lon": -122.6784,
 			},
 		)
-		self.assertAlmostEqual(data["gps_latitude"], 45.5152, places=4)
-		self.assertAlmostEqual(data["gps_longitude"], -122.6784, places=4)
+		self.assertIsNone(data["gps_latitude"])
+		self.assertFalse(data["position_updated"])
+		self.assertAlmostEqual(data["scan_location"]["latitude"], 45.5152, places=4)
 
 	def test_scan_nonexistent_is_refused(self):
 		error = self.tool_error("scan_asset", {"asset_name": "NOWHERE"})

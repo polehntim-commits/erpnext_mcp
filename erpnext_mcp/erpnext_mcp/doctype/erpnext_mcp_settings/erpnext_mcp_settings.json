@@ -691,6 +691,8 @@
   "allow_link_badge_to_employee",
   "allow_link_entries_to_shift",
   "allow_generate_employee_badge_qr",
+  "allow_request_badge_photo",
+  "allow_set_employee_photo",
   "allow_generate_employee_badge_sheet",
   "allow_generate_employee_id_card",
   "allow_generate_employee_badge_pass",
@@ -790,6 +792,8 @@
   "allow_scan_asset",
   "allow_register_asset",
   "allow_update_registered_asset",
+  "allow_move_asset",
+  "allow_undo_asset_move",
   "allow_retire_asset",
   "allow_log_asset_state_change",
   "allow_bulk_create_assets",
@@ -5734,6 +5738,20 @@
   },
   {
    "default": "0",
+   "description": "WRITE. Raises the Badge photo task for one person; completing it sets their Employee photo.",
+   "fieldname": "allow_request_badge_photo",
+   "fieldtype": "Check",
+   "label": "Request Badge Photo"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Makes a file on the site an Employee's badge photo: cropped 4:5, 600x750, metadata removed, private.",
+   "fieldname": "allow_set_employee_photo",
+   "fieldtype": "Check",
+   "label": "Set Employee Photo"
+  },
+  {
+   "default": "0",
    "description": "MUTATING. A printable sheet of badge cards for a crew at once — name, photograph, designation, badge ID and QR — issuing a badge to anybody who has none.",
    "fieldname": "allow_generate_employee_badge_sheet",
    "fieldtype": "Check",
@@ -6323,6 +6341,20 @@
    "fieldname": "allow_update_registered_asset",
    "fieldtype": "Check",
    "label": "Update Registered Asset"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Moves an asset to a position with a reason and records where it was. The only way a fixed asset's position changes.",
+   "fieldname": "allow_move_asset",
+   "fieldtype": "Check",
+   "label": "Move Asset"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Puts an asset back where its latest move took it from, within 24 hours.",
+   "fieldname": "allow_undo_asset_move",
+   "fieldtype": "Check",
+   "label": "Undo Asset Move"
   },
   {
    "default": "0",

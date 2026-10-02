@@ -1786,6 +1786,93 @@ def get_asset_detail(user: str, asset_name=None) -> dict:
 	return result.data
 
 
+# ── request_badge_photo ── v0.214.0 ──────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("request_badge_photo", mutating=True, limit=guard.WRITE_LIMIT)
+def request_badge_photo(user: str, employee=None, assign_to=None) -> dict:
+	"""Raise the "Badge photo" task, and hand back the task to open. v0.214.0.
+
+	WITH NO `employee` IT IS THE CALLER'S OWN, which anybody may ask for. Naming
+	somebody else takes HR, Farm Manager or Foreman — checked in the tool, where
+	the MCP path shares it — and the person must be in the caller's entities.
+	One open task per person: asking again answers the same task.
+	"""
+	from ..tools import badges as badge_tools
+
+	allowed = guard.require_scope(user)
+	inner = {}
+	if employee not in (None, ""):
+		inner["employee"] = _employee_argument(employee, allowed, "employee")
+	if assign_to not in (None, ""):
+		inner["assign_to"] = _employee_argument(assign_to, allowed, "assign_to")
+	data = badge_tools.request_badge_photo(inner).data
+	current = dispatch.get_farm_task({"task": data["task"]}).data
+	return {**data, "task_detail": shape.task(current, current.get("live_assignment") or {})}
+
+
+# ── move_asset / undo_asset_move ── v0.214.0 ─────────────────────────────────
+#
+# docs/design/badge_photo_and_fixed_assets.md, Part B. A scan no longer moves a
+# fixed asset; these two are the only doors. Foreman or Farm Manager — checked
+# here so a picker's refusal reads like every other dispatch refusal, and again
+# in the tool, which is the gate the MCP path shares.
+def _scoped_asset(user: str, asset_name) -> str:
+	allowed = guard.require_scope(user)
+	name = str(asset_name or "").strip()
+	if not name:
+		frappe.throw("asset_name is required.", frappe.ValidationError)
+	owner = (
+		frappe.db.get_value("Asset Register", name, "company")
+		if frappe.db.exists("Asset Register", name)
+		else None
+	)
+	if not owner or owner not in set(allowed):
+		frappe.throw(f"asset_name {name} was not found.", frappe.DoesNotExistError)
+	return name
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("move_asset", mutating=True, limit=guard.WRITE_LIMIT)
+def move_asset(
+	user: str,
+	asset_name=None,
+	gps_latitude=None,
+	gps_longitude=None,
+	reason=None,
+	accuracy_m=None,
+	client_request_id=None,
+) -> dict:
+	"""Move one asset to a position, with a reason; where it was goes into its history. v0.214.0.
+
+	THE ONLY WAY A FIXED ASSET MOVES. `reason` is required when the asset already
+	has a position. The same coordinates again answer `moved: false`, so the
+	offline queue may send it twice. `undo_asset_move` reverses it for 24 hours.
+	"""
+	guard.require_dispatch_role(user, "Moving an asset")
+	name = _scoped_asset(user, asset_name)
+	inner = {"asset_name": name, "gps_latitude": gps_latitude, "gps_longitude": gps_longitude}
+	for key, value in (
+		("reason", reason),
+		("accuracy_m", accuracy_m),
+		("client_request_id", client_request_id),
+	):
+		if value not in (None, ""):
+			inner[key] = value
+	return asset_tags.move_asset(inner).data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("undo_asset_move", mutating=True, limit=guard.WRITE_LIMIT)
+def undo_asset_move(user: str, asset_name=None, reason=None) -> dict:
+	"""Put an asset back where its latest move took it from, within 24 hours. v0.214.0."""
+	guard.require_dispatch_role(user, "Undoing an asset move")
+	name = _scoped_asset(user, asset_name)
+	inner = {"asset_name": name}
+	if reason not in (None, ""):
+		inner["reason"] = reason
+	return asset_tags.undo_asset_move(inner).data
+
+
 # ── 14. log_asset_state_change ────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("log_asset_state_change", mutating=True, limit=guard.WRITE_LIMIT)

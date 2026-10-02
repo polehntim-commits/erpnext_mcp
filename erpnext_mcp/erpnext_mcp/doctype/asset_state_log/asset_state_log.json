@@ -29,6 +29,10 @@
   "gps_latitude",
   "location_col",
   "gps_longitude",
+  "from_latitude",
+  "from_longitude",
+  "distance_m",
+  "client_request_id",
   "photo_section",
   "photo"
  ],
@@ -158,6 +162,35 @@
    "fieldtype": "Float",
    "label": "GPS Longitude",
    "precision": "7"
+  },
+  {
+   "fieldname": "from_latitude",
+   "fieldtype": "Float",
+   "label": "From Latitude",
+   "precision": "7",
+   "read_only": 1,
+   "description": "A move: where the asset was."
+  },
+  {
+   "fieldname": "from_longitude",
+   "fieldtype": "Float",
+   "label": "From Longitude",
+   "precision": "7",
+   "read_only": 1
+  },
+  {
+   "fieldname": "distance_m",
+   "fieldtype": "Float",
+   "label": "Distance (m)",
+   "precision": "1",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_request_id",
+   "fieldtype": "Data",
+   "label": "Client Request ID",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "photo_section",

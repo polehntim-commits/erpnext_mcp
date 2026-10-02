@@ -753,6 +753,11 @@ def update_irrigation_valve(args: dict) -> ToolResult:
 	# A NULL FIX CLEARS THE COLUMN RATHER THAN WRITING 0. `as_float(None)` is
 	# 0.0, and 0.0/0.0 is a real coordinate in the Gulf of Guinea — a valve whose
 	# position was cleared must not come back onto a map off the coast of Africa.
+	# v0.214.0. A valve has a fixed location: changing a position it already has
+	# is a move, needs `reason`, and goes into its history. See `asset_moves`.
+	from .. import asset_moves
+
+	position_before = asset_moves.point(doc.gps_latitude, doc.gps_longitude)
 	for stored, alias in (("gps_latitude", "gps_lat"), ("gps_longitude", "gps_lon")):
 		if stored not in args and alias not in args:
 			continue
@@ -761,6 +766,17 @@ def update_irrigation_valve(args: dict) -> ToolResult:
 			asset_tags._stage(changes, doc, stored, None)
 		else:
 			asset_tags._stage(changes, doc, stored, as_float(value, stored))
+	position_after = asset_moves.point(doc.gps_latitude, doc.gps_longitude)
+	moving = position_before is not None and position_before != position_after
+	move_reason = as_str(args, "reason")
+	if moving and asset_moves.is_fixed(doc.asset_type) and not move_reason:
+		raise ToolError(
+			f"{row['name']} already has a position, and a valve does not move. Pass reason — why it "
+			"is moving, or why the old position was wrong — and the change is made and recorded in "
+			"its history. Nothing was changed."
+		)
+	if moving:
+		doc.flags.move_authorised = True
 
 	if not changes:
 		raise ToolError(
@@ -770,6 +786,15 @@ def update_irrigation_valve(args: dict) -> ToolResult:
 		)
 
 	doc.save(ignore_permissions=True)
+	if moving:
+		asset_moves.log(
+			doc.name,
+			str(doc.asset_type or ""),
+			position_before,
+			position_after,
+			asset_moves.MOVED,
+			move_reason,
+		)
 
 	after = dict(frappe.db.get_value(ASSET_REGISTER, doc.name, _fields(), as_dict=True) or {})
 	data = _status(after, args)

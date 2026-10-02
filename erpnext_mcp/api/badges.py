@@ -83,6 +83,25 @@ def employee_badge_card(employee=None, regenerate=0):
 	return _speaks_frappe(_employee_badge_card, employee=employee, regenerate=regenerate)
 
 
+@frappe.whitelist(methods=["POST"])
+def request_badge_photo(employee=None):
+	"""Raise the "Badge photo" task for one Employee, from their Desk form. v0.214.0.
+
+	The tool's own gate is the gate: a person's own, or HR / Farm Manager /
+	Foreman for somebody else. This adds the per-record read check a Desk method
+	owes, so a User Permission scoping somebody to one company scopes the button.
+	"""
+	return _speaks_frappe(_request_badge_photo, employee=employee)
+
+
+def _request_badge_photo(employee=None):
+	name = str(employee or "").strip()
+	if not name:
+		frappe.throw(frappe._("No employee was named."), title=frappe._("Badge photo"))
+	frappe.has_permission(EMPLOYEE, "read", doc=name, throw=True)
+	return badges.request_badge_photo({"employee": name}).data
+
+
 def _employee_badge_card(employee=None, regenerate=0):
 	name = str(employee or "").strip()
 	if not name:
