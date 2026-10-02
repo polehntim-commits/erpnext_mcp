@@ -139,3 +139,75 @@ No new tools (983) and no new mobile routes (167 named). One argument on
 2. **The readiness flag never blocks a phone.** Turning `allow_legacy_erpnext_paths` off only
    stops new cards/tags being issued on `/erpnext`.
 3. **Idle devices (30 days) do not hold up readiness.**
+
+---
+
+# Addendum — every phone is a crew phone; the sidecar is the whole public surface
+
+Tim, 2026-10-02: "Assume all are crew phones." No phone has Tailscale. Nothing the app does may
+depend on the tailnet or on `/erpnext`. Still server **v0.216.0** / app **0.27.0** (not yet deployed).
+
+## H1. What an unauthenticated caller can learn: nothing about routes
+
+Open, by design, and only these: `GET|POST /farmops/api/health`, `GET /farmops/api/scan/<code>`,
+`POST /farmops/api/mobile/enroll_device`.
+
+Every other request is authenticated **before** the path or method is looked at. No credential, a
+malformed one, an unknown key, a wrong secret, a revoked device and a disabled login all get the
+identical `401` body — for a real route, a route that does not exist, a GET on a POST route, a
+tile, and the login-QR image alike. `404` and `405` are answered only to an authenticated caller.
+
+## H2. Size
+
+A request body over 4 MB is refused `413` — with a `Content-Length` or without one (chunked) —
+before it is parsed. (Evidence uploads are 512 KB chunks; nothing legitimate is near the limit.)
+
+## H3. Rate limits
+
+- Per token: unchanged (per user per method: 60 reads, 10 writes, 20 completions, 120 upload chunks a minute).
+- Per key: unchanged (10 wrong secrets a minute, then the key is refused for the window).
+- **Per address, failed authentication:** counted per minute. Over **60** the address gets `429` on
+  further *failed* attempts. A request with a valid credential is never refused on this count, so a
+  stranger behind the same carrier NAT cannot lock a crew out.
+- **Per address, open routes** (health, tag page): 120 a minute, then `429`.
+
+The address is the rightmost `X-Forwarded-For` hop, else the socket peer.
+
+## H4. Authentication failures are recorded and raise an alert
+
+Every failure: one warning log line (address, path, a hash of the key presented — never the key or
+secret). When an address reaches **10 failures in a minute**: one `mobile:auth_failures` row in MCP
+Action Log (status Blocked) and the alert hook, at most once an hour per address:
+
+- every method named in the Frappe hook `farmops_auth_alert` is called with
+  `{ip, failures, window_seconds, path, at}`;
+- if `drift_report_email` is set on ERPNext MCP Settings, one email goes there.
+
+## H5. Revocation
+
+Already checked on every call with no cache, and now pinned by tests: the device row must be
+Enrolled, the login enabled, the grant Active — for routes, tiles and uploads alike.
+
+## H6. Files
+
+No file is served by URL and none will be: there is no GET that returns a private file, and no
+signed or short-lived link. File bytes travel inside the answer of an authenticated, role-gated
+call. A test holds the surface to that. (Decision 4 below.)
+
+## H7. No HTML
+
+Nothing under `/farmops` answers `text/html`. The tag page (§7) is `text/plain`. Health no longer
+states the server version: `{"ok": true, "service": "farmops-api"}`.
+
+## H8. Manager features
+
+Card printing, the compliance inbox and alerts, approvals, leave, expenses and payroll views are
+already sidecar routes with their role gates (§6 lists the gate per route). No feature of the app
+needs the MCP endpoint or the Desk.
+
+## Decisions left for Tim (addendum)
+
+4. **No short-lived download URLs.** They would add an unauthenticated GET surface that is weaker
+   than what exists. Say so if a signed-URL download is still wanted (large files would be the reason).
+5. **`GET /mobile/login_qr_image?user=`** stays (HR-gated, audited): it mints a login card from a
+   phone. It puts an email in a URL; say if it should become a POST.
