@@ -962,6 +962,7 @@
   "allow_create_transfer_pricing_doc",
   "allow_update_transfer_pricing_doc",
   "allow_create_change_management_log",
+  "allow_get_backup_status",
   "allow_create_backup_record",
   "allow_record_backup_test",
   "allow_create_reporting_template",
@@ -7573,6 +7574,13 @@
    "fieldname": "allow_create_change_management_log",
    "fieldtype": "Check",
    "label": "Create Change Management Log"
+  },
+  {
+   "default": "1",
+   "description": "Is the site's data safe right now: last backup, whether it reached the peer, whether the peer restored it, and every alert. Reads the erp-backup status files and the Backup Record register.",
+   "fieldname": "allow_get_backup_status",
+   "fieldtype": "Check",
+   "label": "Get Backup Status"
   },
   {
    "default": "0",

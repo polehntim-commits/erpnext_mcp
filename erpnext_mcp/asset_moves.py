@@ -91,15 +91,17 @@ def is_fixed(asset_type) -> bool:
 
 
 def _number(value) -> float:
+	if value in (None, ""):
+		return 0.0
 	try:
-		return float(value or 0)
+		return float(value)
 	except (TypeError, ValueError):
 		return 0.0
 
 
 def has_position(latitude, longitude) -> bool:
 	"""0,0 is Frappe's unset Float, not a place on this farm."""
-	return bool(_number(latitude) or _number(longitude))
+	return _number(latitude) != 0 or _number(longitude) != 0
 
 
 def point(latitude, longitude) -> dict | None:

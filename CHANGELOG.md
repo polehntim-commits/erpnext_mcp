@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.215.0 — 2026-10-01 — backup status
+
+**983 tools** (478 read, 505 write): + `get_backup_status`. Contract `docs/design/backup_status.md`;
+deploy `docs/deploy/v0.215.0_backup_status.md`.
+
+- **`get_backup_status`** (read-only, on by default): one call for "is this site's data safe right
+  now?" — the last backup, whether it reached the peer, whether the peer restored it last night and
+  how the checks went, the last archive test, and every alert. It reads the status files the
+  erp-backup kit writes to `sites/erp_backup_status/<box>.json` and the Backup Record register.
+  **Alerts are recomputed from the timestamps**, so a stale file cannot report itself healthy:
+  `REPORTER_DEAD` (file over 26 h old) and `NO_STATUS_FILE` are critical.
+- **Ingest, inside the app.** The scripts hold no API token. An hourly job, and a System-Manager-only
+  `erpnext_mcp.backup_status.ingest`, turn the file into Backup Records: one per good set, one per
+  failure, one for the copy on the peer, and the peer's nightly restore as that copy's test restore.
+  Keyed on a new hidden `ingest_key` column, so reading the same file every hour writes nothing twice.
+- Farm Feature Flags: `backup_box` (which box this site is, when more than one file is present),
+  `backup_record_company`, `backup_peer_is_offsite` (default false).
+- Reads only `<box>.json` files directly inside that one directory: no other path, no symlink out, no shell.
+
 ## 0.214.0 — 2026-10-01 — badge photo as a task; fixed assets do not move by accident
 
 **982 tools** (477 read, 505 write): + `request_badge_photo`, `set_employee_photo`, `move_asset`,

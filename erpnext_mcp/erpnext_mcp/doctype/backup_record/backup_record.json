@@ -31,7 +31,9 @@
   "restore_duration_minutes",
   "test_restore_notes",
   "notes_section",
-  "notes"
+  "notes",
+  "ingest_key",
+  "test_ingest_key"
  ],
  "fields": [
   {
@@ -192,6 +194,25 @@
    "fieldname": "notes",
    "fieldtype": "Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "ingest_key",
+   "fieldtype": "Data",
+   "label": "Ingest Key",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "search_index": 1,
+   "description": "Set by the backup status ingest (box|set|kind) so re-reading a status file never writes a second row."
+  },
+  {
+   "fieldname": "test_ingest_key",
+   "fieldtype": "Small Text",
+   "label": "Test Ingest Keys",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Every test restore the ingest has already applied to this row, one per line."
   }
  ],
  "index_web_pages_for_search": 0,

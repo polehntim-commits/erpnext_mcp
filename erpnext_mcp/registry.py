@@ -35,7 +35,7 @@ import json
 
 import frappe
 
-from . import audit, form_pdf_renderer, geo, i9_pdf, settings, w4_pdf
+from . import audit, backup_status, form_pdf_renderer, geo, i9_pdf, settings, w4_pdf
 from .compat import doctype_exists, traceback_text
 from .errors import ToolError
 from .render import qr
@@ -27920,6 +27920,23 @@ TOOLS = {
 		title="Get a change management report",
 		available=_needs_doctype("Change Management Log"),
 		requires="the Change Management Log DocType — run `bench migrate`",
+	),
+	"get_backup_status": _tool(
+		backup_status.get_backup_status,
+		"v0.215.0. Is this site's data safe right now? One read: the last backup (when, size, "
+		"encrypted), whether it reached the peer, whether the peer RESTORED it last night and "
+		"how the checks went, the last full archive test, and every alert.\n\n"
+		"It reads the status files the erp-backup scripts write (`sites/erp_backup_status/"
+		"<box>.json`) and the Backup Record register. ALERTS ARE RECOMPUTED FROM THE TIMESTAMPS, "
+		"so a stale file cannot hide a problem: REPORTER_DEAD means the file itself is over 26 h "
+		"old — the timers are gone — and NO_STATUS_FILE means there is none. `overall` is ok, "
+		"warning or critical. It never writes, never shells out and reads no other path.",
+		{
+			"box": _field(_STRING, "One box (e.g. 'oml'). Default: every status file present."),
+			"stale_hours": _field(_NUMBER, "How old is too old. Default 30."),
+			"include_raw": _field(_BOOLEAN, "Also return the status JSON verbatim. Default false."),
+		},
+		title="Backup status",
 	),
 	"create_backup_record": _tool(
 		itgc.create_backup_record,

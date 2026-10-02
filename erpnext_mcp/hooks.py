@@ -360,6 +360,10 @@ scheduler_events = {
 		# because the HOUR is the farm's setting (`training_reminder_hour`); the job
 		# does nothing in the other twenty-three, and nothing twice (`reminded_on`).
 		"erpnext_mcp.training_courses.send_reminders",
+		# v0.215.0. The boxes' backup status files → Backup Records. The scripts
+		# hold no API token, so the records are made here, inside the app. Keyed
+		# per (box, set, kind): reading the same file every hour writes nothing twice.
+		"erpnext_mcp.backup_status.ingest_scheduled",
 		"erpnext_mcp.alerts.sweep",
 		#: v0.78.0. Close restricted-entry windows whose moment has passed.
 		#:

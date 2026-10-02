@@ -575,6 +575,7 @@ class TheScheduledJobs(unittest.TestCase):
 				},
 				"hourly": [
 					"erpnext_mcp.training_courses.send_reminders",
+					"erpnext_mcp.backup_status.ingest_scheduled",
 					"erpnext_mcp.alerts.sweep",
 					"erpnext_mcp.tools.spray_rei.close_expired_reis",
 				],

@@ -133,7 +133,7 @@ Frozen before code. Where this section and the spec above differ, this section i
    company. With neither, ingest reports it and writes nothing.
 4. **Idempotency is a column, not a note.** Backup Record gains `ingest_key` (hidden, read-only):
    `<box>|<set>|own`, `<box>|<set>|replica`, `<box>|<failed at>|failed`. Tests are keyed in
-   `test_ingest_key`: `<restored_by>|<at>|restore`, `<tester>|<at>|archive`. Re-ingesting writes nothing.
+   `test_ingest_key` (every key applied to the row, one per line): `<restored_by>|<at>|restore`, `<tester>|<at>|archive`. Re-ingesting writes nothing.
 5. **`test_restore_by` is a Link to User**, so `erp-backup@<box>` cannot be stored in it. It is left
    empty and the first line of `test_restore_notes` is `By erp-backup@<restored_by>`.
 6. **Offsite.** Flag `backup_peer_is_offsite` (default false). False → the replica row is
