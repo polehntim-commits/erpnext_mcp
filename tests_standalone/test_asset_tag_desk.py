@@ -215,6 +215,15 @@ class TheWholeSheet(unittest.TestCase):
 class TheEndpoints(V12TestCase):
 	def setUp(self):
 		super().setUp()
+		# v0.213.0. These pin the LEGACY layout, which still draws for a site that
+		# sets `legacy_badge_layouts`; the CR80 redirect is `test_card_redirect`.
+		from unittest import mock
+
+		from erpnext_mcp import card_redirect
+
+		patcher = mock.patch.object(card_redirect, "legacy", return_value=True)
+		patcher.start()
+		self.addCleanup(patcher.stop)
 		self.configure(enabled=1, **ALL_ON)
 		self.tool_data("register_asset", {"name": VALVE, "asset_type": "Irrigation Valve", "company": MAIN})
 

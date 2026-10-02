@@ -1122,12 +1122,25 @@ def generate_employee_id_card(args: dict) -> ToolResult:
 	employee = str(card.get("employee") or "")
 	badge_id = str(card.get("badge_id") or "")
 
+	from .. import card_redirect
 	from ..badge_sheet import sheet_html
 
-	html = sheet_html([card], title=f"ID Card — {card.get('employee_name') or employee}")
-
+	# v0.213.0. THE CARD IS THE CR80 CARD — the one `request_card_print` records
+	# and the "Employee ID Card (CR80)" print format draws — and its PDF is drawn
+	# by `card_art`, so it no longer needs wkhtmltopdf. `legacy_badge_layouts`
+	# (a Farm Feature Flag) brings the old layout back.
 	attach = as_bool(args, "attach", True)
-	rendered = _card_pdf(html)
+	if card_redirect.legacy():
+		html = sheet_html([card], title=f"ID Card — {card.get('employee_name') or employee}")
+		rendered = _card_pdf(html)
+		print_format = "Employee Badge Card"
+	else:
+		html = card_redirect.document(
+			"Employee", [employee], title=f"ID Card — {card.get('employee_name') or employee}"
+		)
+		pdf, note = card_redirect.pdf("Employee", employee)
+		rendered = {"pdf": pdf, "note": note}
+		print_format = card_redirect.FORMATS["Employee"]
 	attachment = {"attached": False, "note": rendered["note"]}
 	if attach and rendered["pdf"]:
 		attachment = _attach_to_employee(
@@ -1150,7 +1163,7 @@ def generate_employee_id_card(args: dict) -> ToolResult:
 		"card_attachment": attachment,
 		"card_html": html,
 		"pdf_bytes": len(rendered["pdf"]) if rendered["pdf"] else 0,
-		"print_format": "Employee Badge Card",
+		"print_format": print_format,
 	}
 	summary = f"ID card for {card.get('employee_name') or employee} ({badge_id})"
 	summary += (

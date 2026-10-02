@@ -39,6 +39,7 @@ from erpnext_mcp.patches import (
 	card_backs_landscape_cw,
 	card_stations_printed_by_hand,
 	fix_literal_newlines_in_instructions,
+	legacy_badge_prints_use_cr80,
 	migrate_asset_types,
 	migrate_declarative_rules,
 	migrate_incident_tool_switches,
@@ -107,6 +108,8 @@ PATCHES = (
 	("erpnext_mcp.patches.reclassify_feature_requests", reclassify_feature_requests),
 	("erpnext_mcp.patches.card_backs_landscape_cw", card_backs_landscape_cw),
 	("erpnext_mcp.patches.card_stations_printed_by_hand", card_stations_printed_by_hand),
+	# v0.213.0. Its behaviour is pinned in `test_card_redirect.TheBadgeRowPrintFormat`.
+	("erpnext_mcp.patches.legacy_badge_prints_use_cr80", legacy_badge_prints_use_cr80),
 )
 
 

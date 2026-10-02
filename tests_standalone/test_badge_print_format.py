@@ -113,8 +113,9 @@ class BadgeFormatTestCase(SeededTestCase):
 		template asks for and the global does not return raises here rather than
 		printing the word "Undefined" onto somebody's ID card.
 		"""
-		badge_print_format.seed_badge_print_format()
-		html = STORE.get_raw(PRINT_FORMAT, FORMAT_NAME)["html"]
+		# v0.213.0. The seeded format draws the CR80 card now (`test_card_redirect`);
+		# this renders the layout it replaced, which `legacy_badge_layouts` still uses.
+		html = badge_print_format.LEGACY_TEMPLATE
 		environment = jinja2.Environment(undefined=jinja2.StrictUndefined, autoescape=False)
 		environment.globals["erpnext_mcp_badge_card"] = badge_card.erpnext_mcp_badge_card
 		return environment.from_string(html).render(doc=frappe.get_doc(BADGE_DOCTYPE, name))

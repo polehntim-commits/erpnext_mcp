@@ -359,7 +359,11 @@ CARD_MARKUP = """
 """
 
 #: What the Print Format record actually holds.
-BADGE_TEMPLATE = "\n<style>" + CARD_CSS + CARD_PAGE_CSS + "</style>\n" + CARD_MARKUP
+#: The layout this format shipped with until v0.213.0. Kept so the redirect
+#: patch can tell an untouched format from one an operator edited, and because
+#: `badge_sheet` still draws it for a site that sets `legacy_badge_layouts`.
+LEGACY_TEMPLATE = "\n<style>" + CARD_CSS + CARD_PAGE_CSS + "</style>\n" + CARD_MARKUP
+BADGE_TEMPLATE = LEGACY_TEMPLATE
 
 
 def _page_size_fields() -> dict:
@@ -409,10 +413,18 @@ def print_format_fields() -> dict:
 		"margin_bottom": 0,
 		"margin_left": 0,
 		"margin_right": 0,
-		"html": BADGE_TEMPLATE,
+		# v0.213.0. A new site gets the CR80 card on this format too; see
+		# `card_redirect`. `BADGE_TEMPLATE` is the layout it replaced.
+		"html": _cr80_template(),
 	}
 	fields.update(_page_size_fields())
 	return {key: value for key, value in fields.items() if value is not None}
+
+
+def _cr80_template() -> str:
+	from . import card_redirect
+
+	return card_redirect.badge_format_template()
 
 
 def seed_badge_print_format() -> dict:

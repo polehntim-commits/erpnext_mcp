@@ -278,8 +278,21 @@ def render_badge_sheet(employees=None, company=None):
 		return None  # pragma: no cover - frappe.throw does not return
 
 	data = result.data or {}
+	# v0.213.0. THE SHEET IS NOW THE CR80 CARD, one side per card-sized page — see
+	# `card_redirect`. The badges were issued by the tool above exactly as before.
+	from . import card_redirect
+
+	if card_redirect.legacy():
+		html = sheet_html(data.get("cards") or [], data.get("errors") or [])
+	else:
+		html = card_redirect.document(
+			"Employee",
+			[card.get("employee") for card in data.get("cards") or []],
+			data.get("errors") or [],
+			"Employee ID Cards",
+		)
 	return {
-		"html": sheet_html(data.get("cards") or [], data.get("errors") or []),
+		"html": html,
 		"card_count": data.get("card_count") or 0,
 		"issued_count": data.get("issued_count") or 0,
 		"errors": data.get("errors") or [],

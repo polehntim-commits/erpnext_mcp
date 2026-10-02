@@ -37,3 +37,4 @@ erpnext_mcp.patches.wizards_to_config_versions
 erpnext_mcp.patches.reclassify_feature_requests
 erpnext_mcp.patches.card_backs_landscape_cw
 erpnext_mcp.patches.card_stations_printed_by_hand
+erpnext_mcp.patches.legacy_badge_prints_use_cr80

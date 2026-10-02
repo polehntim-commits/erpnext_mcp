@@ -374,8 +374,20 @@ def render_asset_qr_sheet(assets=None, template=None):
 
 	data = result.data or {}
 	errors = list(data.get("errors") or []) + refused
+	# v0.213.0. THE SHEET IS NOW THE CR80 ASSET TAG CARD — see `card_redirect`.
+	from . import card_redirect
+
+	if card_redirect.legacy():
+		html = sheet_html(data.get("labels") or [], errors, wanted)
+	else:
+		html = card_redirect.document(
+			"Asset Register",
+			[label.get("asset_name") for label in data.get("labels") or []],
+			errors,
+			"Asset Tag Cards",
+		)
 	return {
-		"html": sheet_html(data.get("labels") or [], errors, wanted),
+		"html": html,
 		"label_count": data.get("label_count") or 0,
 		"errors": errors,
 		"template": template_spec(wanted)["key"],

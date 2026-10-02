@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import frappe
 
-from .. import asset_tag_sheet
+from .. import asset_tag_sheet, card_redirect
 from ..errors import ToolError
 from ..tools import asset_tags
 
@@ -120,7 +120,12 @@ def _asset_qr_tag(asset_name=None, template=None):
 		# The printable document is ONE LABEL ON THE CHOSEN STOCK and not a scaled
 		# picture of the symbol, so what comes out of the Print button lands inside
 		# a die cut like the sheet does. Same layout, one tag.
-		"html": asset_tag_sheet.sheet_html([tag], [], wanted),
+		# v0.213.0. The CR80 asset tag card, unless the site asked for the old label.
+		"html": (
+			asset_tag_sheet.sheet_html([tag], [], wanted)
+			if card_redirect.legacy()
+			else card_redirect.document(ASSET_REGISTER, [resolved], title=f"Asset Tag — {resolved}")
+		),
 		"template": asset_tag_sheet.template_spec(wanted)["key"],
 		"summary": result.summary,
 	}
