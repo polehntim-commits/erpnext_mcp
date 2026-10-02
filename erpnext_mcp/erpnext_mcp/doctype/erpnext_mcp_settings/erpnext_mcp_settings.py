@@ -33,6 +33,26 @@ class ERPNextMCPSettings(Document):
 		self._validate_cidrs()
 		self._validate_token_present()
 		self._validate_system_user()
+		self._validate_farmops_url()
+
+	def _validate_farmops_url(self) -> None:
+		"""`https://<host>`, nothing after it. The phone appends /farmops/api itself."""
+		from urllib.parse import urlsplit
+
+		raw = str(self.get("farmops_public_url") or "").strip().rstrip("/")
+		self.farmops_public_url = raw
+		if not raw:
+			return
+		parsed = urlsplit(raw)
+		if parsed.scheme != "https" or not parsed.hostname:
+			frappe.throw(
+				f"Farm Ops Public URL must be an https:// address, e.g. https://erp.tail1234.ts.net — got {raw!r}."
+			)
+		if parsed.path.strip("/") or parsed.query or parsed.fragment:
+			frappe.throw(
+				"Farm Ops Public URL must not carry a path — the app adds /farmops/api itself. "
+				f"Use {parsed.scheme}://{parsed.netloc}."
+			)
 
 	def on_update(self):
 		self._warn_about_enabled_mutations()

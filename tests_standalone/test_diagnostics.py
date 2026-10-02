@@ -523,14 +523,16 @@ class TheRouteTableIsHonest(DiagnosticsTestCase):
 		self.assertIn(f"{sidecar_routes.PREFIX}/mobile/get_task", paths)
 
 	def test_the_answer_refuses_to_imply_it_knows_who_may_call_what(self):
-		"""THE MISSING COLUMN IS THE IMPORTANT ONE. A route absent from a gate
-		column would read as open, and the gate is a line in each wrapper's own
-		body that nothing here can see."""
+		"""v0.216.0: `gate` names the require_* checks each wrapper RUNS, read off
+		the source. It still does not say who passes them, so there is no `roles`
+		column and the note says what the column is not."""
 		result = self.routes()
 		self.assertIn("NOT AN ACCESS MAP", " ".join(result["notes"]))
+		table = {f"{sidecar_routes.PREFIX}{route.path}" for route in sidecar_routes.ROUTES}
 		for entry in result["routes"]:
-			self.assertNotIn("gate", entry)
 			self.assertNotIn("roles", entry)
+			if entry["path"] in table:
+				self.assertIsInstance(entry["gate"], list)
 
 	def test_mutating_is_read_off_the_wrapper_rather_than_restated(self):
 		by_path = {entry["path"]: entry for entry in self.routes()["routes"]}

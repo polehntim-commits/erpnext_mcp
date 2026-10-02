@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.216.0 — 2026-10-02 — Farm Ops over /farmops/api only
+
+**983 tools**, **167 mobile methods** — both unchanged. Contract `docs/design/farmops_only_funnel.md`;
+deploy and cutover runbook `docs/deploy/v0.216.0_farmops_only_funnel.md`; iOS SERVER_CHANGES §63.
+Security review 2026-10-02: C1 (public `/erpnext`), L4 (route gates), and three tool fixes.
+
+- **Audit:** the app has only ever called `<base>/farmops/api/...`. What tied it to the public
+  `/erpnext` mount was the base URL on its login card (`public_url`).
+- **Settings:** `farmops_public_url` (`https://<host>`, no path — the address phones use) and
+  `legacy_erpnext_paths` — "Allow legacy /erpnext paths for phones" (default on). Login cards, enrolment QRs and the credential an
+  enrolment returns are built on `farmops_public_url` when it is set. The payloads keep their shape,
+  so a new card works on every app build.
+- **Who has moved:** `report_device_capabilities` takes `api_base_mode` (`farmops` / `legacy`), stored
+  on the device row. `get_server_status.erpnext_funnel` reports `ready_to_close_erpnext_funnel`, the
+  reasons it is not, and each phone. It informs; it refuses nothing.
+- **`validate_public_endpoint probe_routes=true`** probes the routes where a phone asks for them,
+  plus health and the tag page, and reports whether `/erpnext` is still public on that host
+  (`erpnext`, `farmops_only.verdict`). A `public_url` with a path is accepted as the configured URL.
+- **`list_sidecar_routes`** gains `gate` (the `require_*` checks each route runs), `gate_note` and
+  `mutating_ungated`. A test fails if a mutating route has no gate and no stated reason. Today: 189
+  mutating routes, 187 gated, 2 caller-scoped upload routes.
+- **Asset tags:** `GET /farmops/api/scan/<code>` is a static public page that looks nothing up. With
+  `farmops_public_url` set, new and re-saved assets get that URL in their QR. Printed tags keep
+  resolving in the app, old shape or new.
+- **Fixes:** `generate_access_control_report` no longer crashes on an orphaned permission row; `record_backup_test.test_restore_by`
+  accepts a user id, email or full name, and keeps anything else in the notes;
+  `create_backup_record.location` over 140 characters is shortened, with the full text in the notes.
+
 ## 0.215.0 — 2026-10-01 — backup status
 
 **983 tools** (478 read, 505 write): + `get_backup_status`. Contract `docs/design/backup_status.md`;

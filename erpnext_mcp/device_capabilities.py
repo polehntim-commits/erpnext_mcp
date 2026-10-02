@@ -21,8 +21,13 @@ from . import compat, form_schema
 GRANT = "Mobile Access Grant"
 DEVICE = "Mobile Device Enrollment"
 
+#: What `api_base_mode` may say. docs/design/farmops_only_funnel.md §3.
+BASE_MODES = ("farmops", "legacy")
 
-def report(user: str, device_identifier: str, app_version: str, schema_version, field_kinds) -> dict:
+
+def report(
+	user: str, device_identifier: str, app_version: str, schema_version, field_kinds, api_base_mode: str = ""
+) -> dict:
 	"""Store what one of the caller's devices renders. Returns the stored row."""
 	if not compat.doctype_exists(GRANT):
 		return {"stored": False, "reason": "no Mobile Access Grant doctype"}
@@ -50,6 +55,11 @@ def report(user: str, device_identifier: str, app_version: str, schema_version, 
 		"field_kinds": json.dumps(sorted(set(kinds))),
 		"capabilities_reported_at": frappe.utils.now(),
 	}
+	# v0.216.0. Only a build that says so is recorded: an older app sends nothing
+	# and must not erase what a newer one on the same row reported.
+	mode = str(api_base_mode or "").strip().lower()
+	if mode in BASE_MODES:
+		values["api_base_mode"] = mode
 	for key, value in values.items():
 		if compat.has_field(DEVICE, key):
 			target.set(key, value)

@@ -19,6 +19,8 @@
   "network_section",
   "allowed_cidrs",
   "public_url",
+  "farmops_public_url",
+  "legacy_erpnext_paths",
   "farm_ops_mobile_enabled",
   "mobile_grant_idle_days",
   "drift_report_email",
@@ -1295,6 +1297,19 @@
    "fieldname": "public_url",
    "fieldtype": "Data",
    "label": "Public URL"
+  },
+  {
+   "description": "The address PHONES use: https://<host> with no path. The Farm Ops app reaches the sidecar at <this>/farmops/api, and login cards, enrolment QRs and asset tags are built on it. Leave empty and they are built on Public URL as before. Example: https://erp.tail1234.ts.net",
+   "fieldname": "farmops_public_url",
+   "fieldtype": "Data",
+   "label": "Farm Ops Public URL"
+  },
+  {
+   "default": "1",
+   "description": "On: while Farm Ops Public URL is empty, login cards and asset tags are still issued on Public URL (the /erpnext path). Off: nothing new is issued on a URL that carries a path. Turn it off after the public /erpnext Funnel mount has been removed. get_server_status reports ready_to_close_erpnext_funnel.",
+   "fieldname": "legacy_erpnext_paths",
+   "fieldtype": "Check",
+   "label": "Allow legacy /erpnext paths for phones"
   },
   {
    "default": "1",

@@ -20,6 +20,7 @@
   "capabilities_section",
   "app_version",
   "form_schema_version",
+  "api_base_mode",
   "capabilities_col",
   "field_kinds",
   "capabilities_reported_at",
@@ -123,6 +124,13 @@
    "fieldtype": "Int",
    "label": "Form Schema Version",
    "read_only": 1
+  },
+  {
+   "fieldname": "api_base_mode",
+   "fieldtype": "Data",
+   "label": "API Base Mode",
+   "read_only": 1,
+   "description": "Which address this phone is calling: 'farmops' (https://host/farmops/api) or 'legacy' (through /erpnext). Reported by the app from 0.27.0; empty on older builds."
   },
   {
    "fieldname": "capabilities_col",

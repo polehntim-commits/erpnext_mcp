@@ -121,6 +121,38 @@ def public_url() -> str:
 	return str(_value("public_url") or "").strip()
 
 
+def farmops_public_url() -> str:
+	"""The address PHONES use — `https://<host>`, no path. v0.216.0.
+
+	Separate from `public_url` because the two stopped being the same address:
+	`public_url` is where the MCP endpoint and the Desk live (`…/erpnext`, soon
+	tailnet-only), and this is the one thing left on the public Funnel. The
+	sidecar is reached at `<this>/farmops/api`.
+	"""
+	return str(_value("farmops_public_url") or "").strip().rstrip("/")
+
+
+def allow_legacy_erpnext_paths() -> bool:
+	"""May a card or a tag still be issued on a base that carries a path? v0.216.0.
+
+	ON until the phones have moved. A site that has never saved the field — the
+	release is installed and migrate has not run — reads as ON, because the
+	other answer stops `generate_mobile_login_qr` on an upgrade.
+	"""
+	# The FIELD is `legacy_erpnext_paths`: `allow_` on this form means "a tool
+	# switch", and the console files, counts and bulk-toggles everything so named.
+	raw = _value("legacy_erpnext_paths")
+	return True if raw is None else as_bool(raw)
+
+
+def mobile_base_url() -> str:
+	"""What a login card, an enrolment QR and a tag are built on. "" when unset.
+
+	`farmops_public_url`, else `public_url` while the legacy switch is on.
+	"""
+	return farmops_public_url() or (public_url().rstrip("/") if allow_legacy_erpnext_paths() else "")
+
+
 def farm_ops_mobile_enabled() -> bool:
 	"""The kill switch for the whole Farm Ops mobile HTTP surface.
 

@@ -78,13 +78,25 @@ class AssetRegister(Document):
 
 
 def _build_qr_url(asset_name: str) -> str:
-	"""The URL the QR code encodes: /scan/<asset_name> on the site's public URL."""
+	"""The URL the QR code encodes.
+
+	v0.216.0: `<farmops_public_url>/farmops/api/scan/<name>` when that setting is
+	filled in — a page the sidecar really serves, so a tag needs nothing under
+	/erpnext to be public. Otherwise `<public_url>/scan/<name>` as before. Either
+	shape is unwound by `universal_scan.scan_target`, so every printed tag keeps
+	resolving in the app.
+	"""
+	from urllib.parse import quote
+
 	try:
 		from erpnext_mcp import settings
 
+		farmops = settings.farmops_public_url()
 		public_url = settings.public_url()
 	except Exception:
-		public_url = ""
+		farmops = public_url = ""
+	if farmops:
+		return f"{farmops}/farmops/api/scan/{quote(asset_name, safe='')}"
 	base = (public_url or "").rstrip("/")
 	if not base:
 		base = frappe.utils.get_url()

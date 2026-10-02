@@ -20847,6 +20847,13 @@ takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_s
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
 
+## v0.216.0 — Farm Ops over /farmops/api only
+
+No new tools. `get_server_status` gains `erpnext_funnel` (`ready_to_close_erpnext_funnel`);
+`validate_public_endpoint probe_routes=true` gains `erpnext` and `farmops_only`;
+`list_sidecar_routes` gains `gate`, `gate_note` and `mutating_ungated`. Contract:
+`docs/design/farmops_only_funnel.md`.
+
 ## v0.215.0 — backup status
 
 | Tool | What it does |

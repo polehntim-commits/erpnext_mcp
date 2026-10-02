@@ -13209,7 +13209,12 @@ TOOLS = {
 		"does, the request stops at the proxy, which means no log line, no audit "
 		"row and no traceback on this side. Three releases shipped that way; the "
 		"first report was a foreman holding a signed screen being told the task no "
-		"longer existed.",
+		"longer existed.\n\n"
+		"v0.216.0: with `probe_routes` the routes are asked for at Farm Ops Public "
+		"URL when that is set (the address a phone uses), health and the tag page "
+		"are checked too, and `erpnext` / `farmops_only` say whether ERPNext "
+		"itself is still public on that host and whether /erpnext can leave the "
+		"Funnel yet. Only three fixed /erpnext paths are fetched for that.",
 		{
 			"url": _field(
 				_STRING,
@@ -28871,7 +28876,11 @@ TOOLS = {
 		"`last_patch_applied` IS NOT THE LAST MIGRATE. A migrate with no new "
 		"patches writes no row, which is the ordinary case for a release that "
 		"adds only tools — so an old stamp here is not evidence that a deploy "
-		"failed. `erpnext_mcp_version` is that evidence.",
+		"failed. `erpnext_mcp_version` is that evidence.\n\n"
+		"`erpnext_funnel` (v0.216.0): the address phones are given, whether the "
+		"legacy /erpnext path is still allowed, each enrolled phone's app version "
+		"and which base it reports using, and `ready_to_close_erpnext_funnel` "
+		"with the reasons when it is false.",
 		{},
 		title="Get server status",
 	),
@@ -29058,13 +29067,15 @@ TOOLS = {
 		diagnostics.list_sidecar_routes,
 		"Every path the farmops sidecar publishes, what each one is called, "
 		"whether it writes, and which body keys it accepts. Read-only.\n\n"
-		"THIS IS NOT AN ACCESS MAP, and the missing column is the important one. "
-		"It says which paths EXIST and which of them write. WHO may call each is "
-		"one line inside that route's own wrapper body — `require_dispatch_role`, "
-		"`require_hr_role`, or nothing at all — and is not an attribute of "
-		"anything readable from here. There is no gate column rather than an "
-		"incomplete one, because a route missing from a gate column reads as "
-		"open.\n\n"
+		"THIS IS NOT AN ACCESS MAP. It says which paths EXIST and which of them "
+		"write. `gate` (v0.216.0) names the `require_*` checks each route's own "
+		"wrapper runs — `require_scope`, `require_dispatch_role`, "
+		"`require_hr_role` — read off the source, so it says which checks RUN "
+		"and not what each decides for a given person. Every route also needs an "
+		"enrolled caller. `gate_note` explains the two upload routes that are "
+		"caller-scoped on purpose, and `mutating_ungated` lists any writing route "
+		"with neither — it should be empty, and the test suite fails if it is "
+		"not.\n\n"
 		"`arguments` IS THE FILTER ITSELF, not documentation of it. The transport "
 		"drops every body key not on that list, so a key absent from it is "
 		"unreachable rather than merely undocumented. `user` is never on it: the "

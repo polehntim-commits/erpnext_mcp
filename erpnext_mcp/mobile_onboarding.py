@@ -398,7 +398,7 @@ def _hours(value, default: int) -> int:
 
 def _endpoint(mobile) -> str:
 	try:
-		return str(mobile._endpoint_url({}) or "")
+		return str(mobile._mobile_base_url({}) or "")
 	except Exception:  # pragma: no cover - settings unreadable
 		return ""
 

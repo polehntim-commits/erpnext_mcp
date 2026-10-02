@@ -455,6 +455,41 @@ def _clear_token(user: str, reason: str = "credential revoked") -> bool:
 	return bool(revoked) or cleared
 
 
+def _mobile_base_url(args: dict | None = None, strict: bool = False) -> str:
+	"""The base URL a PHONE is given. v0.216.0 — docs/design/farmops_only_funnel.md §2.
+
+	An explicit `url`, else `farmops_public_url`, else `public_url` while
+	`allow_legacy_erpnext_paths` is on, else the site URL. `_endpoint_url` below
+	is still what the MCP endpoint is printed on: the two are different addresses
+	once /erpnext leaves the public Funnel.
+
+	`strict` is for the two tools that DRAW a QR, which check before they write:
+	with the legacy switch off they refuse a base that carries a path. The tools
+	that merely record or print the address never raise from here.
+	"""
+	explicit = as_str(args or {}, "url")
+	if explicit:
+		return explicit.rstrip("/")
+	farmops = settings.farmops_public_url()
+	if farmops:
+		return farmops
+	configured = settings.public_url().rstrip("/")
+	if configured:
+		from urllib.parse import urlsplit
+
+		if strict and urlsplit(configured).path.strip("/") and not settings.allow_legacy_erpnext_paths():
+			raise ToolError(
+				f"public_url is {configured!r}, which carries a path, and 'Allow legacy /erpnext paths "
+				"for phones' is off — so there is no address to give a phone. Fill in Farm Ops Public URL on ERPNext "
+				"MCP Settings (https://<host>, no path) or pass `url`. Nothing was written."
+			)
+		return configured
+	try:
+		return str(frappe.utils.get_url() or "").rstrip("/")
+	except Exception:  # pragma: no cover
+		return ""
+
+
 def _endpoint_url(args: dict | None = None) -> str:
 	"""The base URL a phone should call. The operator's public_url wins.
 
@@ -561,7 +596,7 @@ def create_mobile_user(args: dict) -> ToolResult:
 		"preferred_company": preferred,
 		"entity_access": "\n".join(entities),
 		"notes": as_str(args, "notes"),
-		"endpoint_url": _endpoint_url(args),
+		"endpoint_url": _mobile_base_url(args),
 		"revocation_reason": "",
 		"revoked_on": None,
 		"revoked_by": None,
@@ -964,7 +999,7 @@ def generate_api_token(args: dict) -> ToolResult:
 				"revoked_by": None,
 				"entity_access": existing.get("entity_access") or "\n".join(roles.companies_for(email)),
 				"preferred_company": existing.get("preferred_company") or roles.default_company_for(email),
-				"endpoint_url": existing.get("endpoint_url") or _endpoint_url(args),
+				"endpoint_url": existing.get("endpoint_url") or _mobile_base_url(args),
 			},
 		)
 
@@ -983,7 +1018,7 @@ def generate_api_token(args: dict) -> ToolResult:
 			#: the same thing in all three tools that emit it; this is the first
 			#: URL the Farm Ops app hits with this credential, and the one an
 			#: operator should curl before handing a phone to somebody.
-			"mobile_endpoint": f"{_endpoint_url(args)}{LOGIN_PROBE_PATH}",
+			"mobile_endpoint": f"{_mobile_base_url(args)}{LOGIN_PROBE_PATH}",
 			"replaced_previous_token": replaced,
 			"token_review_due": review_due,
 			"review_days": review_days,
@@ -1206,7 +1241,7 @@ def generate_mobile_login_qr(args: dict) -> ToolResult:
 			"card somebody will scan in a field and blame the app for. Nothing was changed."
 		)
 
-	url = _endpoint_url(args)
+	url = _mobile_base_url(args, strict=True)
 	if not url:
 		raise ToolError(
 			"this site does not know its own public URL, so the QR would point a phone at "
@@ -1848,7 +1883,7 @@ def recover_mobile_access(args: dict) -> ToolResult:
 		"api_secret": token["api_secret"],
 		"auth_header": f"Authorization: token {token['api_key']}:{token['api_secret']}",
 		"farmops_auth_header": f"X-FarmOps-Token: {token['api_key']}:{token['api_secret']}",
-		"mobile_endpoint": f"{_endpoint_url(args)}{LOGIN_PROBE_PATH}",
+		"mobile_endpoint": f"{_mobile_base_url(args)}{LOGIN_PROBE_PATH}",
 		"token_review_due": review_due,
 		"entity_access": roles.companies_for(email),
 		"roles_held": roles.roles_of(email),
@@ -1934,7 +1969,7 @@ def open_device_enrollment(args: dict) -> ToolResult:
 		)
 	email = (as_str(args, "user", required=True) or "").strip().lower()
 	_user_row(email)
-	url = _endpoint_url(args)
+	url = _mobile_base_url(args, strict=True)
 	if not str(url).lower().startswith("https://"):
 		raise ToolError(
 			f"the endpoint URL is {url or 'unset'!r}, which is not HTTPS. The phone would send its "

@@ -203,6 +203,11 @@ def _permissions_by_role() -> dict:
 		rows = frappe.db.get_all(doctype, fields=fields, limit=20000)
 		for row in rows:
 			target = row.get("parent")
+			if not target:
+				# v0.216.0. An orphaned permission row — a doctype deleted from
+				# under it — has no parent. It grants nothing, and a None beside
+				# the doctype names is what crashed the sort in the report.
+				continue
 			if doctype == "Custom DocPerm":
 				customised.add(target)
 			elif target in customised:
@@ -238,6 +243,26 @@ def _last_access_review(company: str) -> dict:
 		limit=1,
 	)
 	return dict(rows[0]) if rows else {}
+
+
+#: `Backup Record.location` is a Data field.
+LOCATION_LIMIT = 140
+
+
+def _resolve_user(named: str) -> tuple[str, str]:
+	"""(User docname, "") for a user id, email or full name; else (caller, named)."""
+	if frappe.db.exists("User", named):
+		return named, ""
+	lowered = named.lower()
+	if frappe.db.exists("User", lowered):
+		return lowered, ""
+	for field in ("email", "full_name"):
+		if not compat.has_field("User", field):
+			continue
+		matches = frappe.db.get_all("User", filters={field: named}, fields=["name"], limit=2)
+		if len(matches) == 1:
+			return str(matches[0]["name"]), ""
+	return str(frappe.session.user or ""), named
 
 
 def generate_access_control_report(args: dict) -> ToolResult:
@@ -310,7 +335,7 @@ def generate_access_control_report(args: dict) -> ToolResult:
 			}
 		)
 
-	report.sort(key=lambda row: (not row["privileged"], row["user"]))
+	report.sort(key=lambda row: (not row["privileged"], str(row["user"] or "")))
 	review = _last_access_review(company) if company else {}
 	last_review_on = str(review.get("change_date") or "")[:10] or None
 	days_since_review = frappe.utils.date_diff(today, last_review_on) if last_review_on else None
@@ -357,7 +382,7 @@ def generate_access_control_report(args: dict) -> ToolResult:
 			for row in report
 			if row["flags"] and row["flags"] != ["privileged"]
 		],
-		"roles_in_use": sorted({role for row in report for role in row["roles"]}),
+		"roles_in_use": sorted({str(role) for row in report for role in row["roles"] if role}),
 		"last_access_review": (
 			{
 				"change_management_log": review.get("name"),
@@ -769,6 +794,13 @@ def create_backup_record(args: dict) -> ToolResult:
 	status = as_choice(BACKUP, "status", as_str(args, "status") or "Success", "status")
 	started_at = as_str(args, "started_at") or frappe.utils.now()
 	location = as_str(args, "location", required=True)
+	# v0.216.0. `location` is a Data column: 140 characters. A path on another
+	# box with a dated set name is longer than that, and the insert failed on
+	# it. The field keeps what fits and the notes keep the whole thing.
+	full_location = ""
+	if len(location) > LOCATION_LIMIT:
+		full_location = location
+		location = location[: LOCATION_LIMIT - 1].rstrip() + "…"
 
 	doc = frappe.new_doc(BACKUP)
 	doc.company = company
@@ -790,6 +822,8 @@ def create_backup_record(args: dict) -> ToolResult:
 		if value is not None:
 			doc.set(field, value)
 	notes = as_str(args, "notes")
+	if full_location:
+		notes = f"{notes}\n\nFull location: {full_location}".strip()
 	if notes:
 		doc.notes = notes
 	doc.insert()
@@ -908,11 +942,18 @@ def record_backup_test(args: dict) -> ToolResult:
 	doc = frappe.get_doc(BACKUP, name)
 	doc.test_restore_result = result
 	doc.test_restore_on = tested_on
-	doc.test_restore_by = as_str(args, "test_restore_by") or frappe.session.user
+	# v0.216.0. A Link to User: "Tim Polehn" is a person and not a docname, and
+	# the save refused it. A user id, an email or a full name is resolved; a name
+	# that is nobody's ("erp-backup@umbrellocal") is kept in the notes instead.
+	named = as_str(args, "test_restore_by").strip()
+	tester, unresolved = _resolve_user(named) if named else (str(frappe.session.user or ""), "")
+	doc.test_restore_by = tester
 	duration = as_int(args, "restore_duration_minutes", default=None)
 	if duration is not None:
 		doc.restore_duration_minutes = duration
 	notes = as_str(args, "test_restore_notes")
+	if unresolved:
+		notes = f"{notes}\n\nTested by: {unresolved}".strip()
 	if notes:
 		doc.test_restore_notes = notes
 	doc.save()

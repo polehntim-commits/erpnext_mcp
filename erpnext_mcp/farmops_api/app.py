@@ -180,8 +180,26 @@ ENROLL_DESCRIBED_ROUTE = {
 #: phones enrolling through one funnel address must never lock each other out.
 ENROLL_FAILURE_LIMIT = 30
 
+#: `GET /scan/<code>` — what a printed tag's QR opens in a browser. v0.216.0.
+#: See `_scan_page`.
+SCAN_PREFIX = f"{PREFIX}/scan/"
+
+SCAN_DESCRIBED_ROUTE = {
+	"path": f"{SCAN_PREFIX}{{code}}",
+	"method": "scan_page",
+	"group": "scan",
+	"mutating": False,
+	"arguments": ["code"],
+}
+
 #: Every route `routes.ROUTES` cannot describe, for `list_sidecar_routes`.
-DESCRIBED_ROUTES = (DESCRIBED_ROUTE, TILE_DESCRIBED_ROUTE, GRADE_TILE_DESCRIBED_ROUTE, ENROLL_DESCRIBED_ROUTE)
+DESCRIBED_ROUTES = (
+	DESCRIBED_ROUTE,
+	TILE_DESCRIBED_ROUTE,
+	GRADE_TILE_DESCRIBED_ROUTE,
+	ENROLL_DESCRIBED_ROUTE,
+	SCAN_DESCRIBED_ROUTE,
+)
 
 _MAX_BODY = auth.MAX_BODY_BYTES
 
@@ -572,7 +590,7 @@ def _enroll_device(request: Request) -> Response:
 			commit=True,
 		)
 		logger.info("farmops-api 200 %s user=%s device=%s", ENROLL_PATH, issued["user"], issued.get("device"))
-		base = mobile_tools._endpoint_url({})
+		base = mobile_tools._mobile_base_url({})
 		return _success(
 			{
 				"type": "farm_ops_login",
@@ -723,6 +741,45 @@ def _terrain_tile(
 		return _png(png, "private, max-age=86400")
 
 
+_SCAN_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Farm Ops tag</title>
+<style>body{{font:17px -apple-system,system-ui,sans-serif;margin:0;padding:32px 24px;color:#1c1c1e;background:#f5f5f2}}
+main{{max-width:28em;margin:0 auto}}h1{{font-size:22px}}code{{display:inline-block;padding:6px 10px;border-radius:8px;background:#e6e6e0;font-size:16px}}
+p{{line-height:1.45}}.es{{color:#55554f}}</style></head><body><main>
+<h1>Farm Ops tag</h1>
+<p><code>{code}</code></p>
+<p>Open the <strong>Farm Ops</strong> app and scan this tag with the app&rsquo;s scanner.</p>
+<p class="es">Abra la aplicaci&oacute;n <strong>Farm Ops</strong> y escanee esta etiqueta con el esc&aacute;ner de la aplicaci&oacute;n.</p>
+</main></body></html>"""
+
+
+def _scan_page(path: str) -> Response:
+	"""What a tag's QR shows a phone camera that is not the app. v0.216.0.
+
+	PUBLIC, STATIC, AND IT LOOKS NOTHING UP. The code in the URL is echoed back,
+	escaped, and that is the whole of what an anonymous caller learns: whether
+	the tag is real, what it is on and where are answered only by
+	`universal_scan`, to an enrolled caller. No session is opened and nothing is
+	read, so this cannot be used to enumerate the register.
+
+	It exists so a tag does not need `/erpnext/scan/...` on the public Funnel —
+	a path that never had a page behind it and answered Frappe's 404.
+	"""
+	from html import escape
+	from urllib.parse import unquote
+
+	code = unquote(path[len(SCAN_PREFIX) :]).strip()[:140]
+	body = _SCAN_PAGE.format(code=escape(code) or "&mdash;")
+	response = Response(body, status=200, mimetype="text/html")
+	response.headers["Cache-Control"] = "public, max-age=3600"
+	response.headers["X-Content-Type-Options"] = "nosniff"
+	response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+	return response
+
+
 def dispatch(request: Request) -> Response:
 	"""One request, start to finish. Returns a JSON response for every outcome."""
 	path = (request.path or "").rstrip("/") or "/"
@@ -737,6 +794,9 @@ def dispatch(request: Request) -> Response:
 
 	if path == ENROLL_PATH:
 		return _enroll_device(request)
+
+	if path.startswith(SCAN_PREFIX) and request.method == "GET":
+		return _scan_page(path)
 
 	if path.startswith(TILE_PREFIX):
 		return _slope_aspect_tile(request, path)

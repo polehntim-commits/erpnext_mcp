@@ -23,7 +23,7 @@ So no new data route is needed. What changes is the base URL, and how to move it
 | field | type | default | meaning |
 |---|---|---|---|
 | `farmops_public_url` | Data | empty | The address phones use: `https://<host>` with **no path**. The sidecar is reached at `<this>/farmops/api`. |
-| `allow_legacy_erpnext_paths` | Check | **1** | On: with `farmops_public_url` empty, cards and tags are still built on `public_url` as before. Off: nothing new is issued on a base that has a path; the tools refuse and say to fill in `farmops_public_url`. |
+| `legacy_erpnext_paths` (label "Allow legacy /erpnext paths for phones"; reported as `allow_legacy_erpnext_paths`) | Check | **1** | On: with `farmops_public_url` empty, cards and tags are still built on `public_url` as before. Off: nothing new is issued on a base that has a path; the tools refuse and say to fill in `farmops_public_url`. |
 
 `farmops_public_url` with a path, a query or a non-https scheme is refused on save.
 
@@ -47,9 +47,10 @@ Given the credential's `url` **U**:
 2. `GET <root>/farmops/api/health` (5 s). An answer with `service == "farmops-api"` → the app
    uses **root**. That is the version check: a server that answers there can be used there.
 3. Otherwise the app uses **U** exactly as today (legacy).
-4. The choice is remembered per credential. While on legacy it is re-checked at launch and at
-   most every 6 hours. While on root, a response that is not the service's (a proxy 404 / non-JSON)
-   triggers one re-check, and the app falls back to U if U's health answers.
+4. The choice is remembered per credential and used at launch without asking. While on legacy,
+   root is tried again at most every 6 hours. While on root it is re-checked in the background at
+   launch and on return to the foreground (at most every 15 minutes), and the app falls back to U
+   only if root does not answer **and** U's health does — no signal never moves a phone.
 5. The credential itself is never rewritten; signing out and scanning a new card starts clean.
 
 `api_base_mode` is `"farmops"` when the base in use has no path, `"legacy"` otherwise.

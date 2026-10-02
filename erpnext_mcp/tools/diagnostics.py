@@ -101,10 +101,11 @@ import sys
 
 import frappe
 
-from .. import __version__, compat
+from .. import __version__, compat, funnel_readiness
 from ..args import as_int, as_limit, as_str
 from ..errors import ToolError
 from ..farmops_api import app as sidecar_app
+from ..farmops_api import gates as sidecar_gates
 from ..farmops_api import routes as sidecar_routes
 from ..result import ToolResult
 
@@ -207,6 +208,8 @@ def get_server_status(args: dict) -> ToolResult:
 		"worker_started_at": _STARTED_AT or None,
 		"worker_uptime_seconds": uptime,
 		"last_patch_applied": patch,
+		# v0.216.0 — docs/design/farmops_only_funnel.md §4.
+		"erpnext_funnel": funnel_readiness.status(),
 		"notes": [
 			"worker_uptime_seconds IS THIS PROCESS, NOT THE BENCH. A Frappe bench runs "
 			"several workers and this call was answered by one of them, so two consecutive "
@@ -699,6 +702,7 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 				"group": section,
 				"mutating": mutating,
 				"arguments": sorted(sidecar_routes.accepted_arguments(route.handler)),
+				**sidecar_gates.describe(route),
 			}
 		)
 
@@ -720,20 +724,28 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 
 	described.sort(key=lambda entry: entry["path"])
 	writes = sum(1 for entry in described if entry["mutating"])
+	ungated = sidecar_gates.ungated_mutating()
 	data = {
 		"prefix": sidecar_routes.PREFIX,
 		"count": len(described),
 		"total_routes": total_routes,
 		"mutating_count": writes,
 		"read_count": len(described) - writes,
+		# v0.216.0. Across the WHOLE table, whatever the filters: a number that
+		# moved with `contains` would read as zero on the wrong question.
+		"mutating_ungated": ungated,
 		"by_group": dict(sorted(by_group.items())),
 		"routes": described,
 		"notes": [
 			"THIS IS NOT AN ACCESS MAP. It says which paths exist and which of them write. "
-			"WHO may call each one is a line inside that route's own wrapper body — "
-			"require_dispatch_role, require_hr_role, or nothing at all — and is not an "
-			"attribute of anything readable from here. There is no gate column rather than "
-			"an incomplete one, because a route missing from a gate column reads as open.",
+			"`gate` (v0.216.0) names the require_* checks found in each route's own wrapper and "
+			"in the module helpers it calls — require_scope, require_dispatch_role, "
+			"require_hr_role and so on. It is read off the source, so it says which checks "
+			"RUN, not what each one decides for a given person, and a tool the wrapper "
+			"delegates to may check more. Every route also requires an enrolled caller "
+			"(guard.endpoint), which is not repeated per row. `gate_note` explains the few "
+			"mutating routes that are caller-scoped on purpose; `mutating_ungated` lists any "
+			"that are neither, and the test suite fails if that list is not empty.",
 			"`arguments` is read off each wrapper's signature, which IS the filter: the "
 			"transport drops every body key that is not in this list, so a key absent here "
 			"is unreachable rather than merely undocumented. `user` is never in it — the "

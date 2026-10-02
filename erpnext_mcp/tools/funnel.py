@@ -156,12 +156,19 @@ def validate_public_endpoint(args: dict) -> ToolResult:
 	data.update(_verdict(data))
 
 	if as_bool(args, "probe_routes", False):
-		data["routes"] = _route_report(url, timeout)
+		# v0.216.0: the phones' address is no longer necessarily the MCP's. An
+		# explicit `url` is probed as given; otherwise the routes are asked for
+		# where a phone will ask for them.
+		route_base = url if as_str(args, "url").strip() else (settings.farmops_public_url() or url)
+		data["routes"] = _route_report(route_base, timeout)
 		if data["routes"]["unpublished"]:
 			data["summary"] = (
 				f"{data['summary']} — and {len(data['routes']['unpublished'])} of "
 				f"{data['routes']['checked']} phone routes are NOT published"
 			)
+		data["erpnext"] = _erpnext_report(route_base, timeout)
+		data["farmops_only"] = _farmops_only(data["routes"], data["erpnext"])
+		data["summary"] = f"{data['summary']} — {data['farmops_only']['verdict']}"
 
 	return ToolResult(data=data, summary=data["summary"])
 
@@ -169,7 +176,18 @@ def validate_public_endpoint(args: dict) -> ToolResult:
 def _target_url(args: dict) -> str:
 	"""The URL to probe, allowlisted. See the module docstring on why this is strict."""
 	explicit = as_str(args, "url").strip()
-	url = (explicit or settings.public_url() or "").strip().rstrip("/")
+	configured = (settings.public_url() or "").strip().rstrip("/")
+	if not explicit and configured:
+		# The operator's own setting is trusted as written, path and all:
+		# `https://host/erpnext` is what a site behind a path mount has to say.
+		# The rules below are for a URL that arrived as an ARGUMENT.
+		if not configured.lower().startswith("https://"):
+			raise ToolError(
+				f"public_url is {configured!r}, which is not an https:// URL. This tool exists to "
+				"prove a PUBLIC endpoint is serving valid TLS. Nothing was sent."
+			)
+		return configured
+	url = (explicit or settings.farmops_public_url() or "").strip().rstrip("/")
 	if not url:
 		raise ToolError(
 			"this site has no public_url configured and no `url` was passed, so there is nothing "
@@ -248,7 +266,13 @@ def _route_report(url: str, timeout: int) -> dict:
 		outcome = _probe_route(f"{base}{PREFIX}{route.path}", timeout)
 		(published if outcome["published"] else unpublished).append(outcome)
 
+	# v0.216.0. The two GETs a phone and a tag rely on that are not in ROUTES.
+	health = _get(f"{base}{PREFIX}/health", timeout)
+	scan = _get(f"{base}{PREFIX}/scan/probe", timeout)
 	report = {
+		"base": base,
+		"health_ok": health.get("status") == 200 and "farmops-api" in str(health.get("body") or ""),
+		"scan_page_ok": scan.get("status") == 200 and "html" in str(scan.get("content_type") or "").lower(),
 		"checked": len(ROUTES),
 		"published": [row["path"] for row in published],
 		"unpublished": unpublished,
@@ -317,6 +341,100 @@ def _probe_route(endpoint: str, timeout: int) -> dict:
 			else f"reached something that answered {status} rather than the service's 401"
 		)
 	return row
+
+
+def _get(endpoint: str, timeout: int) -> dict:
+	"""One unauthenticated GET, redirects not followed. Never raises."""
+	request = urllib.request.Request(endpoint, headers={"Accept": "*/*"}, method="GET")
+	try:
+		opener = urllib.request.build_opener(_NoRedirect)
+		with opener.open(request, timeout=timeout) as response:
+			status, headers, payload = response.status, response.headers, response.read(2048)
+	except urllib.error.HTTPError as exc:
+		status, headers = exc.code, exc.headers
+		try:
+			payload = exc.read(2048)
+		except Exception:  # pragma: no cover
+			payload = b""
+	except Exception as exc:
+		return {"status": None, "error": f"{type(exc).__name__}: {exc}"}
+	return {
+		"status": status,
+		"content_type": ((headers.get("Content-Type") if headers else "") or "") or None,
+		"body": payload[:200].decode("utf-8", "replace"),
+	}
+
+
+#: What a phone or a browser could reach if the public /erpnext mount is still
+#: there. Fixed paths: this tool fetches nothing a caller names.
+ERPNEXT_PROBES = ("/erpnext/login", "/erpnext/api/method/ping", "/erpnext/farmops/api/health")
+
+
+def _erpnext_report(url: str, timeout: int) -> dict:
+	"""Is ERPNext itself still public on this host? v0.216.0.
+
+	CLOSED MEANS THE PROXY ANSWERED, NOT FRAPPE. Tailscale answers an unmounted
+	path with a plain-text 404; Frappe answers its own 404 as an HTML page. The
+	second one proves the mount is still there, so the status alone is not read.
+	"""
+	parsed = urllib.parse.urlsplit(url)
+	origin = f"{parsed.scheme}://{parsed.netloc}"
+	probes = []
+	for path in ERPNEXT_PROBES:
+		answer = _get(f"{origin}{path}", timeout)
+		status = answer.get("status")
+		kind = str(answer.get("content_type") or "").lower()
+		if status is None:
+			closed = None
+		else:
+			closed = status == 404 and "html" not in kind and "json" not in kind
+		probes.append(
+			{"path": path, "status": status, "content_type": answer.get("content_type"), "closed": closed}
+		)
+	return {
+		"origin": origin,
+		"probes": probes,
+		"erpnext_public": any(row["closed"] is False for row in probes),
+		"undetermined": [row["path"] for row in probes if row["closed"] is None],
+	}
+
+
+def _farmops_only(routes: dict, erpnext: dict) -> dict:
+	"""One answer to "can /erpnext leave the Funnel, and has it?" v0.216.0."""
+	from .. import funnel_readiness
+
+	readiness = funnel_readiness.status()
+	routes_ok = not routes["unpublished"] and bool(routes.get("health_ok"))
+	on_root = not urllib.parse.urlsplit(routes["base"]).path.strip("/")
+	closed = not erpnext["erpnext_public"] and not erpnext["undetermined"]
+	ready = bool(readiness["ready_to_close_erpnext_funnel"])
+	if not on_root:
+		verdict = (
+			f"the routes were probed at {routes['base']}, which is itself under a path — set Farm Ops "
+			"Public URL to https://<host> and mount /farmops on the Funnel first"
+		)
+	elif not routes_ok:
+		verdict = (
+			f"/farmops/api is NOT fully published at {routes['base']} — mount /farmops on the Funnel "
+			"(docs/deploy/v0.216.0_farmops_only_funnel.md, step C2) before touching /erpnext"
+		)
+	elif closed:
+		verdict = "cutover complete: every phone route answers at /farmops/api and /erpnext is not public"
+	elif ready:
+		verdict = "every phone route answers at /farmops/api and every phone has moved — /erpnext can be removed from the Funnel"
+	else:
+		verdict = (
+			"every phone route answers at /farmops/api, but /erpnext must stay until the phones move: "
+			+ "; ".join(readiness["reasons"][:3])
+		)
+	return {
+		"routes_ok": routes_ok,
+		"scan_page_ok": bool(routes.get("scan_page_ok")),
+		"erpnext_closed": closed,
+		"ready_to_close_erpnext_funnel": ready,
+		"reasons": readiness["reasons"],
+		"verdict": verdict,
+	}
 
 
 def _tls_report(host: str, port: int, timeout: int) -> dict:

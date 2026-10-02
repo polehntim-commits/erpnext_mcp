@@ -12514,7 +12514,12 @@ def search_link(user: str, doctype=None, txt=None, filters=None, limit=None) -> 
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("report_device_capabilities", mutating=True, limit=guard.WRITE_LIMIT)
 def report_device_capabilities(
-	user: str, device_identifier=None, app_version=None, schema_version=None, field_kinds=None
+	user: str,
+	device_identifier=None,
+	app_version=None,
+	schema_version=None,
+	field_kinds=None,
+	api_base_mode=None,
 ) -> dict:
 	"""What this app build renders (v0.205.0, B4) — stored on the caller's device row."""
 	from .. import device_capabilities
@@ -12522,7 +12527,12 @@ def report_device_capabilities(
 	guard.require_scope(user)
 	kinds = _json_argument(field_kinds, "field_kinds") if isinstance(field_kinds, str) else field_kinds
 	return device_capabilities.report(
-		user, str(device_identifier or ""), str(app_version or ""), schema_version, kinds or []
+		user,
+		str(device_identifier or ""),
+		str(app_version or ""),
+		schema_version,
+		kinds or [],
+		str(api_base_mode or ""),
 	)
 
 
