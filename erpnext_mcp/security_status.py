@@ -332,7 +332,26 @@ def _client_ip_check() -> dict:
 	)
 
 
+#: v0.223.1. The two logs an investigation reads, and the least they should keep.
+#: Error Log is reported but not judged: 30 days of tracebacks is a normal choice.
+RETAINED_LOGS = ("Activity Log", "Access Log")
+RETENTION_MIN_DAYS = 90
+LOG_SETTINGS_FIX = (
+	"Desk → Log Settings (/app/log-settings) → the Logs to Clear table. Set 'Clear Logs After (days)' to at "
+	"least 90 on the {names} row. Access Log has NO row by default, which means it is never cleared; it "
+	"only needs a row (Add Row → Log DocType = Access Log) if you want a limit, and then at least 90."
+)
+
+
 def _log_retention() -> dict:
+	"""Activity and Access Log kept at least 90 days. FOREVER PASSES. v0.223.1.
+
+	In Log Settings' Logs to Clear table, a doctype with no row is never
+	cleared, and a row with 0 days is not a limit either — both are "forever",
+	which satisfies "at least 90". Only a positive number under 90 on one of
+	RETAINED_LOGS warns. Error Log is shown, never judged (v0.217.0 judged it,
+	so OML's 30-day Error Log warned while the fix text named the other two).
+	"""
 	if not compat.doctype_exists("Log Settings"):
 		return _check("log_retention", INFO, "This site has no Log Settings.")
 	try:
@@ -342,13 +361,19 @@ def _log_retention() -> dict:
 		}
 	except Exception:
 		rows = {}
-	wanted = ("Error Log", "Activity Log", "Access Log")
-	short = [f"{name} {rows[name]} days" for name in wanted if name in rows and 0 < rows[name] < 90]
+
+	def kept(name: str) -> str:
+		days = rows.get(name)
+		if not days:
+			return f"{name} forever" + ("" if name in rows else " (no row)")
+		return f"{name} {days} days"
+
+	short = [name for name in RETAINED_LOGS if 0 < (rows.get(name) or 0) < RETENTION_MIN_DAYS]
 	return _check(
 		"log_retention",
 		WARN if short else PASS,
-		"Kept: " + (", ".join(f"{name} {rows.get(name, 'forever')}" for name in wanted)),
-		"Log Settings: keep Activity and Access Log at least 90 days." if short else "",
+		"Kept: " + ", ".join(kept(name) for name in ("Error Log", *RETAINED_LOGS)) + ".",
+		LOG_SETTINGS_FIX.format(names=" and ".join(short)) if short else "",
 	)
 
 

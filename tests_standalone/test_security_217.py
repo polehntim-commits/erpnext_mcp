@@ -286,3 +286,36 @@ class TimeBoxedSwitches(SecurityCase):
 			hasattr(switches.enable_for, "__wrapped_whitelisted__") or callable(switches.enable_for)
 		)
 		self.assertIn("frappe.only_for", open(switches.__file__).read())
+
+
+# ── v0.223.1: log retention ─────────────────────────────────────────────────
+class LogRetention(SecurityCase):
+	def check(self, rows):
+		from unittest import mock
+
+		doc = frappe._dict(logs_to_clear=[frappe._dict(ref_doctype=d, days=n) for d, n in rows])
+		real = security_status.compat.doctype_exists
+		with (
+			mock.patch.object(
+				security_status.compat, "doctype_exists", side_effect=lambda d: d == "Log Settings" or real(d)
+			),
+			mock.patch.object(frappe, "get_single", return_value=doc, create=True),
+		):
+			return security_status._log_retention()
+
+	def test_omls_settings_pass(self):
+		"""Error Log 30, Activity Log 365, Access Log with no row (forever)."""
+		got = self.check([("Error Log", 30), ("Activity Log", 365)])
+		self.assertEqual(got["status"], "pass")
+		self.assertIn("Access Log forever (no row)", got["finding"])
+		self.assertIsNone(got["fix"])
+
+	def test_zero_is_forever_and_passes(self):
+		self.assertEqual(self.check([("Activity Log", 0), ("Access Log", 0)])["status"], "pass")
+
+	def test_a_short_limit_warns_and_names_the_place(self):
+		got = self.check([("Activity Log", 30), ("Access Log", 400)])
+		self.assertEqual(got["status"], "warn")
+		self.assertIn("Activity Log row", got["fix"])
+		self.assertIn("/app/log-settings", got["fix"])
+		self.assertIn("Log DocType = Access Log", got["fix"])

@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.223.1 — 2026-10-03 — get_security_status: log retention judged correctly
+
+**1005 tools** (unchanged). Deploy `docs/deploy/v0.223.1_log_retention.md`.
+
+- `log_retention` warned on OML ("Error Log 30, Activity Log 365, Access Log forever") because Error
+  Log was held to the 90-day minimum meant for Activity and Access Log. Only those two are judged now;
+  no row or 0 days is "forever" and passes; Error Log is shown, not judged.
+- The fix text names the place: Desk → Log Settings → Logs to Clear, and says that Access Log has no
+  row by default (never cleared) — add one (Log DocType = Access Log) only to set a limit.
+
 ## 0.223.0 — 2026-10-03 — the Employee file; login cards are never filed permanently
 
 **1005 tools** (488 read, 517 write): + `get_employee_file` (read), `export_employee_file_packet`
