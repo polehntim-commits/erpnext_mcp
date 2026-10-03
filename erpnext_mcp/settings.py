@@ -200,6 +200,21 @@ def drift_report_email() -> str:
 	return str(_value("drift_report_email") or "").strip()
 
 
+def trusted_proxy_cidrs() -> list[str]:
+	"""Proxy ranges to skip when finding the client in X-Forwarded-For. v0.217.0. [] = off.
+
+	docs/design/security_status_and_alerts.md §4. Empty keeps the old rule (the
+	rightmost hop). Set it only after the real client range is in allowed_cidrs.
+	"""
+	raw = str(_value("trusted_proxy_cidrs") or "")
+	out = []
+	for chunk in raw.replace("\n", ",").split(","):
+		entry = chunk.split("#", 1)[0].strip()
+		if entry:
+			out.append(entry)
+	return out
+
+
 def pdf_base_url() -> str:
 	"""Where wkhtmltopdf fetches print assets from. v0.216.1. "" = detect; "off" = Frappe's own.
 

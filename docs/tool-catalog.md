@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 985 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 987 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 479 read tools are **on** by default and can be switched off individually. A
+All 481 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,15 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.217.0 — security status
+
+| Tool | What it does |
+| --- | --- |
+| `get_security_status` | One scored checklist of the site's security posture, with a fix for each finding. Read |
+| `list_mcp_switches` | Every tool switch, on or off, with its danger tier and any time limit. Read |
+
+Contract: `docs/design/security_status_and_alerts.md`.
 
 ## v0.216.1 — Security Alert Recipients; PDFs inside the container; email branding
 

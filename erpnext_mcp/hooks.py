@@ -270,6 +270,12 @@ scheduler_events = {
 		#: (three tries, then Failed). docs/design/card_print_queue.md §4.3.
 		"*/5 * * * *": [
 			"erpnext_mcp.card_print.sweep_stuck",
+			#: v0.217.0. Security alerts read from Activity Log and Version
+			#: (writes nothing but the alert's own audit row), and time-boxed
+			#: tool switches turned off when their time is up.
+			#: docs/design/security_status_and_alerts.md §3, §5.
+			"erpnext_mcp.security_watch.scan",
+			"erpnext_mcp.switch_timer.revert_expired",
 		],
 		#: v0.19.6. The KPI history sweep, at two in the morning. See the
 		#: docstring above for why it is a cron rather than `daily` — Frappe's

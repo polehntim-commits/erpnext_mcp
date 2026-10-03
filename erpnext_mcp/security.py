@@ -169,14 +169,44 @@ def caller_ip() -> str:
 
 	Rightmost `X-Forwarded-For` hop when proxied, else the socket peer. See the
 	module docstring for why rightmost and not `frappe.local.request_ip` (which
-	is the leftmost, i.e. spoofable, entry).
+	is the leftmost, i.e. spoofable, entry). v0.217.0: with Trusted Proxy Ranges
+	set, hops inside those ranges are skipped — see `client_ip`.
 	"""
 	forwarded = frappe.get_request_header("X-Forwarded-For") or ""
-	hops = [h.strip() for h in forwarded.split(",") if h.strip()]
-	if hops:
-		return hops[-1]
 	request = getattr(frappe.local, "request", None)
-	return getattr(request, "remote_addr", "") or ""
+	return client_ip(forwarded, getattr(request, "remote_addr", "") or "")
+
+
+def client_ip(forwarded: str, peer: str, trusted=None) -> str:
+	"""The client address from an X-Forwarded-For chain and the socket peer. v0.217.0.
+
+	`trusted` empty (the default setting): the rightmost hop, else the peer —
+	exactly the rule before v0.217.0. Set: walk from the right — the peer first,
+	then each hop — skipping addresses inside a trusted proxy range; the first
+	one outside is the client. A hop that does not parse ends the walk (it is
+	somebody's claim, not a proxy's), and it is returned so it is seen. If every
+	address is a proxy, the leftmost is returned.
+	"""
+	hops = [hop.strip() for hop in str(forwarded or "").split(",") if hop.strip()]
+	if trusted is None:
+		trusted = settings.trusted_proxy_cidrs()
+	if not trusted:
+		return hops[-1] if hops else str(peer or "")
+	networks = []
+	for entry in trusted:
+		try:
+			networks.append(ipaddress.ip_network(entry, strict=False))
+		except ValueError:
+			continue
+	chain = [*hops, str(peer or "")] if peer else hops
+	for address in reversed(chain):
+		try:
+			parsed = ipaddress.ip_address(address)
+		except ValueError:
+			return address
+		if not any(parsed.version == net.version and parsed in net for net in networks):
+			return address
+	return chain[0] if chain else ""
 
 
 def _network_allowed(ip: str) -> bool:

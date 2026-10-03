@@ -697,6 +697,10 @@ ERPNEXT_SCHEMA = {
 		"footer",
 		"brand_logo",
 	],
+	# v0.217.0. What Frappe records about logins and changes; `security_watch`
+	# and `security_status` read them.
+	"Activity Log": ["name", "user", "operation", "status", "ip_address", "creation", "full_name"],
+	"Version": ["name", "ref_doctype", "docname", "data", "owner", "creation"],
 	"Comment": [
 		"name",
 		"comment_type",

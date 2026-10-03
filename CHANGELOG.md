@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.217.0 — 2026-10-03 — security status, switch inventory, alerts, client IP, time-boxed switches
+
+**987 tools** (481 read, 506 write): + `get_security_status`, `list_mcp_switches`. Contract
+`docs/design/security_status_and_alerts.md`; deploy `docs/deploy/v0.217.0_security.md`. Security
+review 2026-10-02 §7 items 1, 2, 5, 6, 9.
+
+- **`get_security_status`** (read): one scored checklist (0–100) — two-factor, password policy,
+  login lockout, email-link login, session expiry, the MCP System User and its roles, dangerous
+  switches on, users with Frappe API keys (names only), Administrator logins, failed-login bursts,
+  MCP-updatable fields on people or money, alert recipients, how the client address resolves, log
+  retention, Frappe version vs the Administrator-2FA regression, and optionally the public surface.
+- **`list_mcp_switches`** (read): every switch with its tier (read / write / credential /
+  financial / destructive), default, availability and any time limit; `dangerous_enabled`.
+- **Security alerts** (every 5 min, read-only): Administrator login; more than 5 failed logins for a
+  user in an hour; ERPNext MCP Settings or System Settings changed (fields named, `allow_*` on/off,
+  never a secret); a Frappe API key generated — to Security Alert Recipients, an audit row, and the
+  `erpnext_mcp_security_alert` hook.
+- **Trusted Proxy Ranges** (`trusted_proxy_cidrs`, empty = unchanged): skip proxy hops in
+  X-Forwarded-For to find the real client — for the MCP allowlist, audit rows and the sidecar's
+  per-address limits. Add the client range to Allowed CIDRs first.
+- **Enable a tool for N minutes** (ERPNext MCP Settings button, System Manager): a switch that is off
+  goes on for 1–240 minutes and off again by itself, with an alert both times. No MCP tool can turn
+  a switch on.
+
 ## 0.216.1 — 2026-10-02 — Security Alert Recipients; PDFs inside the container; email branding; CI
 
 Patch on 0.216.0. **985 tools** (479 read, 506 write): + `test_pdf_rendering`,

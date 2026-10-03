@@ -8,6 +8,9 @@
 frappe.ui.form.on("ERPNext MCP Settings", {
 	refresh(frm) {
 		frm.add_custom_button(__("Test Configuration"), () => show_selftest(frm));
+		// v0.217.0. A dangerous switch for as long as the job takes, then off
+		// again by itself. docs/design/security_status_and_alerts.md §5.
+		frm.add_custom_button(__("Enable a tool for N minutes"), () => enable_for(frm));
 		set_headline(frm);
 		render_connect_panel(frm);
 		render_tool_console(frm);
@@ -745,4 +748,40 @@ function show_profile_dialog(frm, plan) {
 		},
 	});
 	dialog.show();
+}
+
+
+// v0.217.0. Turn one switch on that is off now, for 1–240 minutes. A job turns it
+// off again; a security alert goes out both times. System Manager only.
+function enable_for(frm) {
+	frappe.prompt(
+		[
+			{
+				fieldname: "tool",
+				fieldtype: "Data",
+				label: __("Tool"),
+				reqd: 1,
+				description: __("The tool name, e.g. create_journal_entry"),
+			},
+			{ fieldname: "minutes", fieldtype: "Int", label: __("Minutes"), reqd: 1, default: 30 },
+		],
+		(values) => {
+			frappe
+				.call({
+					method: "erpnext_mcp.api.switches.enable_for",
+					args: values,
+					freeze: true,
+				})
+				.then((r) => {
+					if (!r || !r.message) return;
+					frappe.show_alert({
+						message: __("{0} is on until {1}", [r.message.tool, r.message.expires_at]),
+						indicator: "orange",
+					});
+					frm.reload_doc();
+				});
+		},
+		__("Enable a tool for a limited time"),
+		__("Enable")
+	);
 }

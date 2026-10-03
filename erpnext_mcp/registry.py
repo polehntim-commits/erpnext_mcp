@@ -187,6 +187,7 @@ from .tools import moments as moment_tools
 from .tools import pest_control as pest_control_tools
 from .tools import phone_configs as phone_config_tools
 from .tools import programs as program_tools
+from .tools import security_status as security_status_tools
 
 _STRING = {"type": "string"}
 _NUMBER = {"type": "number"}
@@ -28904,6 +28905,34 @@ TOOLS = {
 		requires="the Shadow Log Entry DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── v0.129.0: what the install is doing, rather than what the farm is ────
+	"get_security_status": _tool(
+		security_status_tools.get_security_status,
+		"v0.217.0. HOW EXPOSED IS THIS SITE? One scored checklist (0–100): two-factor auth, the "
+		"password policy, the login lockout, login by email link, session expiry, the MCP System "
+		"User and its roles, every dangerous tool switch that is on, users holding a Frappe API key "
+		"(names only — never a key), Administrator logins in 30 days, failed-login bursts this week, "
+		"MCP-updatable fields on people or money, who receives security alerts, how the client "
+		"address is resolved, log retention, and the Frappe version against the Administrator-2FA "
+		"lockout regression. Each check says pass / warn / fail / info and how to fix it. With "
+		"`probe_public: true` it also asks the Farm Ops address from outside whether anything but "
+		"/farmops answers. Read-only; nothing secret is returned.",
+		{"probe_public": _field(_BOOLEAN, "Also probe the public address from outside. Default false.")},
+		title="Security status",
+	),
+	"list_mcp_switches": _tool(
+		security_status_tools.list_mcp_switches,
+		"v0.217.0. Every MCP tool switch without opening the Desk: on or off, its default, whether "
+		"the tool can run here, its danger tier — read, write, credential (mints a login), financial "
+		"(posts or moves money), destructive (deletes or revokes) — and when a time-limited switch "
+		"goes off. `dangerous_enabled` lists the credential/financial/destructive switches that are "
+		"on. Read-only: no tool can turn a switch on; that is a person's act in the Desk.",
+		{
+			"tier": _field(_STRING, "read, write, credential, financial or destructive."),
+			"enabled": _field(_BOOLEAN, "true for only the switches that are on."),
+			"contains": _field(_STRING, "Substring of the tool name."),
+		},
+		title="MCP switches",
+	),
 	"get_server_status": _tool(
 		diagnostics.get_server_status,
 		"What this deployment is running: the erpnext_mcp version, Python and "

@@ -264,10 +264,15 @@ def _peer(request: Request) -> str:
 	nearest proxy appended, and the leftmost is whatever the client typed. Read
 	off the request itself so it works before a Frappe session is open.
 	"""
-	hops = [
-		hop.strip() for hop in str(request.headers.get("X-Forwarded-For") or "").split(",") if hop.strip()
-	]
-	return hops[-1] if hops else str(request.remote_addr or "")
+	forwarded = str(request.headers.get("X-Forwarded-For") or "")
+	peer = str(request.remote_addr or "")
+	# v0.217.0: the same rule as the MCP allowlist and the audit rows, trusted
+	# proxy ranges included. Before a Frappe session is open the setting cannot
+	# be read, and the old rule (rightmost hop) applies.
+	try:
+		return security.client_ip(forwarded, peer)
+	except Exception:
+		return security.client_ip(forwarded, peer, trusted=[])
 
 
 def _open_route_limited(request: Request) -> bool:

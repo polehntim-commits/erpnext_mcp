@@ -568,7 +568,14 @@ class TheScheduledJobs(unittest.TestCase):
 					# this app's own Card Print Job, moves a job a station never
 					# reported on back to Queued (or Failed after three tries), and
 					# never raises. Five minutes, so "within ten" is kept.
-					"*/5 * * * *": ["erpnext_mcp.card_print.sweep_stuck"],
+					# v0.217.0. The security watch reads Activity Log and Version and
+					# writes only its own alert rows; the switch timer turns off
+					# switches it turned on itself. Neither raises.
+					"*/5 * * * *": [
+						"erpnext_mcp.card_print.sweep_stuck",
+						"erpnext_mcp.security_watch.scan",
+						"erpnext_mcp.switch_timer.revert_expired",
+					],
 					"0 2 * * *": ["erpnext_mcp.services.windowed_reports.recompute_kpi_history_incremental"],
 					"0 3 * * *": ["erpnext_mcp.services.kpi_engine.refresh_all_kpi_caches"],
 					"15 3 * * *": ["erpnext_mcp.tools.budget.refresh_all_active_budgets"],

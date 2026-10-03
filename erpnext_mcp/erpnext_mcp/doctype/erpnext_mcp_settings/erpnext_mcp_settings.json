@@ -26,6 +26,8 @@
   "drift_report_email",
   "security_alert_email",
   "pdf_base_url",
+  "trusted_proxy_cidrs",
+  "switch_expiry",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -968,6 +970,8 @@
   "allow_create_change_management_log",
   "allow_get_backup_status",
   "allow_test_pdf_rendering",
+  "allow_get_security_status",
+  "allow_list_mcp_switches",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1349,6 +1353,21 @@
    "fieldname": "pdf_base_url",
    "fieldtype": "Data",
    "label": "PDF Asset Base URL"
+  },
+  {
+   "description": "Proxy address ranges (CIDRs, one per line or comma-separated) to skip when finding the real client in X-Forwarded-For. Empty: the rightmost forwarded address is the client, as before. BEFORE setting it, add the real clients' range (on a Tailscale site 100.64.0.0/10) to Allowed CIDRs — the MCP allowlist then sees the real client. get_security_status shows what the current request resolves to.",
+   "fieldname": "trusted_proxy_cidrs",
+   "fieldtype": "Small Text",
+   "label": "Trusted Proxy Ranges"
+  },
+  {
+   "description": "Tool switches turned on for a limited time, and when each goes off. Written by 'Enable a tool for N minutes'; do not edit by hand.",
+   "fieldname": "switch_expiry",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "Time-limited switches",
+   "options": "JSON",
+   "read_only": 1
   },
   {
    "fieldname": "attribution_section",
@@ -7620,6 +7639,20 @@
    "fieldname": "allow_test_pdf_rendering",
    "fieldtype": "Check",
    "label": "Test PDF Rendering"
+  },
+  {
+   "default": "1",
+   "description": "One scored checklist of this site's security posture: 2FA, password policy, the MCP System User, dangerous switches, API keys, Administrator logins, failed logins, log retention, and (on request) the public surface. Names users, never keys.",
+   "fieldname": "allow_get_security_status",
+   "fieldtype": "Check",
+   "label": "Get Security Status"
+  },
+  {
+   "default": "1",
+   "description": "Every MCP tool switch: on or off, its danger tier (read, write, credential, financial, destructive) and any time limit.",
+   "fieldname": "allow_list_mcp_switches",
+   "fieldtype": "Check",
+   "label": "List MCP Switches"
   },
   {
    "default": "0",
