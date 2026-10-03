@@ -1,10 +1,25 @@
 # Device & client enrollment — design and contract
 
-**Status: FROZEN FOR REVIEW (2026-10-02).** Nothing is built. Building starts after v0.216.0 is
-deployed and the `/farmops`-only cutover is done, and after Tim has answered §14. Any change to
-this contract after approval goes back to Tim.
+**Status: FROZEN (2026-10-03).** Tim, overnight: "get it done … with code as well". Built in phases
+on top of v0.217.0, **everything OFF by default**: deploying changes nothing until Tim turns it on,
+and the legacy login cards, device api_key/api_secret pairs and the static X-MCP-Token keep working
+until he turns them off after the cutover. The §14 decisions are taken at their recommended defaults
+and can be changed before enabling.
 
-Releases: server **v0.217.0 → v0.219.0**, app **0.28.0 → 0.29.0** (phases in §12).
+**Switches that turn it on** (ERPNext MCP Settings; none named `allow_*`):
+
+| Setting | Default | Turns on |
+|---|---|---|
+| `device_keys_enabled` | off | §3–§5, §7 on the phone side: pickup links, key-bound auth, the silent upgrade |
+| `phone_approval_enabled` | off | §6.2: a new phone asks, a manager approves on their phone |
+| `mcp_oauth_enabled` | off | §6.3: OAuth 2.1 for MCP clients |
+| `legacy_device_secrets` | **on** | the old login cards and device secrets keep working |
+| `legacy_static_mcp_token` | **on** | the static X-MCP-Token keeps working |
+
+With `device_keys_enabled` off the new sidecar paths answer exactly as paths that do not exist.
+
+Releases: server **v0.218.0 → v0.220.0**, app **0.28.0 → 0.29.0** (phases in §12). Renumbered on
+2026-10-03: v0.217.0 became the security-status release.
 
 Ground rules carried over: every phone is a crew phone with no Tailscale; the phone talks only to
 `/farmops/api`; nothing under `/farmops` answers HTML; the app uses Apple's stack only (CryptoKit,
@@ -373,9 +388,9 @@ attestation chain in `attestation`.
 | Phase | Server | App | Content |
 |---|---|---|---|
 | 0 | v0.216.x | — | `security_alert_email` (if not already shipped) |
-| 1 | **v0.217.0** | **0.28.0** | pickup links; Secure Enclave keys; DPoP; access tokens; Face ID; silent upgrade of existing phones; inventory; revoke; lost device; `device_revoked` wipe |
-| 2 | **v0.218.0** | **0.29.0** | approve-from-phone for new phones (§6.2) |
-| 3 | **v0.219.0** | 0.29.x | MCP OAuth 2.1 + phone/Desk consent; `mcp-agent` user; scopes; refresh rotation; static token behind setting |
+| 1 | **v0.218.0** | **0.28.0** | pickup links; Secure Enclave keys; DPoP; access tokens; Face ID; silent upgrade of existing phones; inventory; revoke; lost device; `device_revoked` wipe |
+| 2 | **v0.219.0** | **0.29.0** | approve-from-phone for new phones (§6.2) |
+| 3 | **v0.220.0** | 0.29.x | MCP OAuth 2.1 + phone/Desk consent; `mcp-agent` user; scopes; refresh rotation; static token behind setting |
 | 4 | settings only | — | turn off `legacy_device_secrets` when inventory shows no `legacy_secret` phone; turn off `legacy_static_mcp_token` when the flag says ready; passkey memo |
 
 Each phase: contract section frozen (this doc), tests on both sides, deploy file, verification on
