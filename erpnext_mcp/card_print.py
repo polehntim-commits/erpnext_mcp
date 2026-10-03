@@ -51,6 +51,10 @@ PER_DAY = 100
 READY = "Ready"
 STATION_STATES = (READY, "Paused", "Printer error", "Offline", MANUAL)
 DEFAULT_STATION = "primacy2-main"
+#: v0.226.0. How an asset tag is made: Card on the card printer; the other two from a QR sheet.
+CARD, OUTDOOR, SHEET = "Card", "Outdoor label", "Sheet"
+TAG_FORMATS = (CARD, OUTDOOR, SHEET)
+HOUSING_UNIT = "Housing Unit"
 REPRINT_MARKER = "reprint_reason_required"
 ROW_FIELDS = [
 	"name",
@@ -288,6 +292,12 @@ def describe(row, user: str = "") -> dict:
 		"can_print_back": bool(allowed and status == PRINTED and compat.checked(get("back_pending"))),
 		"can_mark_printed": bool(allowed and status in (QUEUED, DOWNLOADED, FAILED)),
 		"can_mark_failed": bool(allowed and status in (QUEUED, DOWNLOADED)),
+		# v0.226.0. On an asset tag only, so the frozen ID-card shape is unchanged.
+		**(
+			{"tag_format": get("tag_format") or CARD, "location_label": get("location_label") or None}
+			if get("job_type") == "Asset Tag"
+			else {}
+		),
 	}
 
 
@@ -348,12 +358,45 @@ def _employee_card(row: dict, company: str, allow_issue: bool = True) -> dict:
 	return badges._card(row, badge_id, company, rendered)
 
 
+def tag_subject(reference: str) -> tuple:
+	"""v0.226.0. `(doctype, name, title, company, row, location)` for an asset or a housing unit,
+	by docname or by the UUID on its tag."""
+	from . import offline_create
+
+	reference = str(reference or "").strip()
+	if offline_create.is_uuid(reference):
+		_doctype, found = offline_create.resolve(reference)
+		if found:
+			reference = found
+	if (
+		reference
+		and not frappe.db.exists("Asset Register", reference)
+		and frappe.db.exists(HOUSING_UNIT, reference)
+	):
+		fields = compat.existing_fields(
+			HOUSING_UNIT, ("name", "unit_name", "unit_type", "parcel", "owning_entity", "tag_uuid")
+		)
+		row = dict(frappe.db.get_value(HOUSING_UNIT, reference, fields, as_dict=True) or {})
+		row["name"] = reference
+		title = row.get("unit_name") or reference
+		return (
+			HOUSING_UNIT,
+			reference,
+			title,
+			str(row.get("owning_entity") or ""),
+			row,
+			str(row.get("parcel") or ""),
+		)
+	name, title, company, row = _asset(reference)
+	return "Asset Register", name, title, company, row, str(row.get("location") or "")
+
+
 def _asset(reference: str) -> tuple:
 	doctype = "Asset Register"
 	if not reference or not frappe.db.exists(doctype, reference):
 		raise CardPrintError(f"no asset called {reference!r}. Nothing was queued.", "not_found")
 	fields = compat.existing_fields(
-		doctype, ("name", "asset_type", "company", "description", "qr_url", "retired_at")
+		doctype, ("name", "asset_type", "company", "description", "qr_url", "retired_at", "location")
 	)
 	row = dict(frappe.db.get_value(doctype, reference, fields, as_dict=True) or {})
 	row["name"] = reference
@@ -669,8 +712,13 @@ def request(
 	reprint_reason: str = "",
 	requested_from: str = "API",
 	may_read=None,
+	tag_format: str = "",
 ) -> dict:
-	"""Create a Queued job, or return the one this request already made. §4.1."""
+	"""Create a Queued job, or return the one this request already made. §4.1.
+
+	v0.226.0. `tag_format` for an asset tag: Card (default — the card printer),
+	Outdoor label or Sheet (no station: printed from a QR sheet by location, see
+	`print_for_location`). A housing unit takes an Outdoor label or a Sheet."""
 	if not ready():
 		raise CardPrintError("this site has no card print queue yet — run `bench --site <site> migrate`.")
 	key = str(client_request_id or "").strip()
@@ -698,13 +746,21 @@ def request(
 	if not 1 <= copies <= MAX_COPIES:
 		raise CardPrintError(f"copies must be 1 to {MAX_COPIES}. Nothing was queued.")
 
-	name, title, company, row = (_employee if job_type == "Employee ID" else _asset)(
-		str(reference_name or "")
-	)
-	if may_read is not None and not may_read(JOB_TYPES[job_type], name, company):
-		raise CardPrintError(
-			f"no {JOB_TYPES[job_type]} called {reference_name!r}. Nothing was queued.", "not_found"
-		)
+	fmt, doctype, location = "", JOB_TYPES[job_type], ""
+	if job_type == "Employee ID":
+		name, title, company, row = _employee(str(reference_name or ""))
+	else:
+		fmt = str(tag_format or CARD).strip()
+		if fmt not in TAG_FORMATS:
+			raise CardPrintError(f"tag_format is one of {', '.join(TAG_FORMATS)}. Nothing was queued.")
+		doctype, name, title, company, row, location = tag_subject(str(reference_name or ""))
+		if doctype == HOUSING_UNIT and fmt == CARD:
+			raise CardPrintError(
+				"a housing unit's tag is an Outdoor label or a Sheet — the card printer makes asset cards. "
+				"Nothing was queued."
+			)
+	if may_read is not None and not may_read(doctype, name, company):
+		raise CardPrintError(f"no {doctype} called {reference_name!r}. Nothing was queued.", "not_found")
 
 	open_job = frappe.db.get_value(
 		JOB,
@@ -727,34 +783,43 @@ def request(
 			f"being reprinted (Lost, Damaged, Details changed, or Other). Nothing was queued. ({REPRINT_MARKER})"
 		)
 	_rate_check(user)
-	station = station_for(job_type, company)
-	pages = pages_for(sides, station)
-	pdf, warnings = render_artwork(job_type, row, company, pages, station)
+	on_card = fmt in ("", CARD)
+	if on_card:
+		station = station_for(job_type, company)
+		pages = pages_for(sides, station)
+		pdf, warnings = render_artwork(job_type, row, company, pages, station)
+	else:
+		# A label or a sheet never goes to the card printer: no station, no card art.
+		station, pages, pdf, warnings, sides = None, "Front", b"", [], "Single"
 
 	doc = frappe.new_doc(JOB)
 	doc.job_type = job_type
-	doc.reference_doctype = JOB_TYPES[job_type]
+	doc.reference_doctype = doctype
 	doc.reference_name = name
 	doc.reference_title = str(title)[:140]
 	doc.company = company or None
 	doc.status = QUEUED
-	doc.print_station = station["name"]
+	doc.print_station = station["name"] if station else None
 	doc.copies = copies
 	doc.sides = sides
 	doc.pages = pages
+	if fmt and compat.has_field(JOB, "tag_format"):
+		doc.tag_format = fmt
+		doc.location_label = (location or "")[:140] or None
 	doc.requested_by = user
 	doc.requested_from = requested_from if requested_from in SOURCES else "API"
 	doc.client_request_id = key
 	doc.attempts = 0
 	doc.is_reprint = 1 if printed else 0
 	doc.reprint_reason = reason if printed else None
-	doc.artwork_sha256 = hashlib.sha256(pdf).hexdigest()
+	doc.artwork_sha256 = hashlib.sha256(pdf).hexdigest() if pdf else None
 	doc.flags.ignore_permissions = True
 	doc.insert(ignore_permissions=True)
 
 	from .tools import artifacts
 
-	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
+	if pdf:
+		artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
 	answer = _answer(frappe.get_doc(JOB, doc.name), user, created=True, warnings=warnings)
 	# v0.214.0. A CARD ASKED FOR WITH NO PHOTO RAISES THE BADGE PHOTO TASK. The
 	# card still queues — initials print — and the answer says a photo has been
@@ -918,6 +983,100 @@ def list_jobs(
 		"count": len(rows),
 		"stations": [station_state(s) for s in stations() if compat.checked(s.get("enabled"))],
 		"can_request": can_request(user),
+	}
+
+
+def _tag_rows(companies=None, location: str = "", statuses=(QUEUED, FAILED)) -> list:
+	filters: dict = {"job_type": "Asset Tag", "status": ("in", list(statuses))}
+	if location and compat.has_field(JOB, "location_label"):
+		filters["location_label"] = location
+	if companies:
+		filters["company"] = ("in", list(companies))
+	fields = compat.existing_fields(JOB, (*ROW_FIELDS, "tag_format", "location_label"))
+	rows = frappe.db.get_all(JOB, filters=filters, fields=fields, order_by="creation asc", limit=500)
+	return sorted((dict(r) for r in rows or []), key=lambda r: str(r.get("creation") or ""))
+
+
+def list_tag_queue(user: str, companies=None) -> dict:
+	"""v0.226.0. Asset and housing tags waiting to print, grouped by where they are."""
+	require_requester(user)
+	if not ready():
+		return {"locations": [], "count": 0}
+	groups: dict = {}
+	for row in _tag_rows(companies):
+		key = str(row.get("location_label") or "")
+		group = groups.setdefault(key, {"location": key or None, "jobs": [], "formats": {}})
+		job = describe(row, user)
+		group["jobs"].append(job)
+		group["formats"][job["tag_format"]] = group["formats"].get(job["tag_format"], 0) + 1
+	locations = sorted(groups.values(), key=lambda g: (g["location"] is None, str(g["location"] or "")))
+	for group in locations:
+		group["count"] = len(group["jobs"])
+	return {"locations": locations, "count": sum(g["count"] for g in locations)}
+
+
+def print_for_location(user: str, companies=None, location: str = "", template: str = "") -> dict:
+	"""v0.226.0. Print every waiting tag for one location.
+
+	Card jobs are already in the card printer's queue (a Failed one is put back);
+	Outdoor label and Sheet jobs become ONE QR sheet, and are marked Printed — the
+	reprint rule (`is_reprint`, a reason) then applies to any later copy."""
+	require_requester(user)
+	location = str(location or "").strip()
+	rows = _tag_rows(companies, location) if location else []
+	if location and not compat.has_field(JOB, "location_label"):
+		raise CardPrintError("this site has no tag locations yet — run `bench --site <site> migrate`.")
+	cards, sheet = [], []
+	for row in rows:
+		(cards if (row.get("tag_format") or CARD) == CARD else sheet).append(row)
+	for row in cards:
+		if row.get("status") == FAILED:
+			retry(row["name"], user, companies)
+	labels, errors = [], []
+	if sheet:
+		from . import asset_tag_sheet
+		from .erpnext_mcp.doctype.asset_register.asset_register import _build_qr_url
+		from .render import qr
+
+		for row in sheet:
+			reference = str(row.get("reference_name") or "")
+			doctype = str(row.get("reference_doctype") or "Asset Register")
+			tag = ""
+			if compat.has_field(doctype, "tag_uuid"):
+				tag = str(frappe.db.get_value(doctype, reference, "tag_uuid") or "")
+			url = _build_qr_url(tag or reference)
+			try:
+				rendered = qr.render(url)
+				labels.append(
+					{
+						"asset_name": row.get("reference_title") or reference,
+						"location": location,
+						"qr_url": url,
+						"png_base64": base64.b64encode(rendered["png"]).decode("ascii"),
+						"modules": rendered["modules"],
+					}
+				)
+			except Exception as exc:
+				errors.append({"asset_name": reference, "error": str(exc)})
+		html = asset_tag_sheet.sheet_html(labels, errors, template or asset_tag_sheet.DEFAULT_TEMPLATE)
+		for row in sheet:
+			doc = _job(row["name"])
+			doc.claimed_by = user
+			doc.claimed_at = frappe.utils.now()
+			_printed(doc)
+			_save(doc)
+	else:
+		html = ""
+	return {
+		"location": location or None,
+		"cards_queued": len(cards),
+		"sheet_labels": len(labels),
+		"sheet_html": html or None,
+		"errors": errors,
+		"note": (
+			f"{len(cards)} card(s) are in the card printer's queue; "
+			f"{len(labels)} label(s) on the sheet — print it at 100 % on the label stock."
+		),
 	}
 
 

@@ -511,6 +511,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/cancel_card_print_job",
 		"/mobile/retry_card_print_job",
 		"/mobile/request_card_back",
+		"/mobile/list_tag_print_queue",
+		"/mobile/print_tags_for_location",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -586,6 +588,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/render_training_sign_in_sheet",
 		"/files/stage_file_chunk",
 		"/files/finalize_staged_file",
+		"/files/get_staged_upload",
 		# v0.91.0. Direct deposit. The read is the caller's own accounts and the
 		# two writes are their own account — no `employee` argument on any of
 		# the three, which is what keeps a shared company scope from becoming a
@@ -3101,6 +3104,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"cancel_card_print_job",
 		"retry_card_print_job",
 		"request_card_back",
+		# v0.226.0. The tag print queue by location — the same role and scope.
+		"list_tag_print_queue",
+		"print_tags_for_location",
 		# v0.165.0. Filing a title on a truck, both docnames scoped. Open like
 		# `create_expense_receipt`, which makes the same link by VIN at capture.
 		"link_title_to_asset",
@@ -3291,7 +3297,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 181, "a method is named in two sets at once")
+		self.assertEqual(len(named), 183, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

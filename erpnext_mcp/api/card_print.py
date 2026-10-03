@@ -36,7 +36,13 @@ def _companies():
 # ── requester ───────────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 def request_card_print(
-	job_type=None, reference_name=None, copies=1, sides=None, client_request_id=None, reprint_reason=None
+	job_type=None,
+	reference_name=None,
+	copies=1,
+	sides=None,
+	client_request_id=None,
+	reprint_reason=None,
+	tag_format=None,
 ):
 	return card_print.desk(
 		card_print.request,
@@ -49,6 +55,21 @@ def request_card_print(
 		reprint_reason=str(reprint_reason or ""),
 		requested_from="Desk",
 		may_read=_may_read,
+		tag_format=str(tag_format or ""),
+	)
+
+
+@frappe.whitelist()
+def list_tag_print_queue():
+	"""v0.226.0. Tags waiting to print, grouped by location."""
+	return card_print.desk(card_print.list_tag_queue, _user(), _companies())
+
+
+@frappe.whitelist(methods=["POST"])
+def print_tags_for_location(location=None, template=None):
+	"""v0.226.0. Print all for one location: cards to the card printer, labels as one QR sheet."""
+	return card_print.desk(
+		card_print.print_for_location, _user(), _companies(), str(location or ""), str(template or "")
 	)
 
 

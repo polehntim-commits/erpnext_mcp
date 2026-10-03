@@ -65,7 +65,8 @@ class AssetRegister(Document):
 
 		asset_moves.guard(self)
 
-		self.qr_url = _build_qr_url(self.name)
+		# v0.226.0. A tag minted on a phone encodes its UUID, and keeps it.
+		self.qr_url = _build_qr_url(self.get("tag_uuid") or self.name)
 
 	def before_save(self):
 		if self.current_state and isinstance(self.current_state, str):

@@ -165,6 +165,12 @@ def finalize_staged_file(user: str, upload_id=None, file_name=None, sha256=None,
 	session = _session(upload_id)
 	name = _file_name(file_name)
 
+	# v0.226.0. A finalize whose reply was lost: the session is gone because it
+	# worked, so the second call answers with the File the first one made.
+	done = _committed(session)
+	if done and not frappe.db.exists(uploads.SESSION_DOCTYPE, {"session_id": session}):
+		return done
+
 	uploads.declare_expectations(session, expected_sha256=sha256, expected_size=total_bytes)
 	result = uploads.commit_staged_file(
 		{
@@ -182,7 +188,7 @@ def finalize_staged_file(user: str, upload_id=None, file_name=None, sha256=None,
 	if not token:
 		raise ToolError("the upload committed but produced no File record. Nothing was attached.")
 
-	return {
+	answer = {
 		"file_token": token,
 		"file_url": str(frappe.db.get_value("File", token, "file_url") or ""),
 		"file_name": committed.get("file_name"),
@@ -191,3 +197,71 @@ def finalize_staged_file(user: str, upload_id=None, file_name=None, sha256=None,
 		"total_bytes": committed.get("file_size"),
 		"is_private": True,
 	}
+	_remember_committed(session, answer)
+	return answer
+
+
+# ── v0.226.0: which pieces arrived, so an interrupted upload resumes ─────────
+#: How long a finished upload's answer is kept for a phone that lost the reply.
+COMMITTED_TTL = uploads.SESSION_TTL_HOURS * 3600
+_LOCAL_COMMITTED: dict = {}
+
+
+def _committed_key(session: str) -> str:
+	return f"erpnext_mcp:committed_upload:{session}"
+
+
+def _remember_committed(session: str, answer: dict) -> None:
+	value = {**answer, "owner": str(frappe.session.user)}
+	try:
+		frappe.cache().set_value(_committed_key(session), value, expires_in_sec=COMMITTED_TTL)
+	except Exception:
+		_LOCAL_COMMITTED[_committed_key(session)] = value
+
+
+def _committed(session: str) -> dict:
+	"""The answer a finished upload gave, to the user who finished it — else {}."""
+	try:
+		value = frappe.cache().get_value(_committed_key(session))
+	except Exception:
+		value = None
+	value = value or _LOCAL_COMMITTED.get(_committed_key(session))
+	if not isinstance(value, dict) or value.get("owner") != str(frappe.session.user):
+		return {}
+	if not frappe.db.exists("File", value.get("file_token")):
+		return {}
+	return {key: item for key, item in value.items() if key != "owner"}
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_staged_upload", limit=guard.UPLOAD_LIMIT)
+def get_staged_upload(user: str, upload_id=None) -> dict:
+	"""Where one of the caller's uploads stands: the pieces that arrived, or the File it became.
+
+	THE PHONE SENDS ONLY WHAT IS MISSING. A photo sent over one bar of signal is
+	cut off half way more often than not; with a stable `upload_id` the phone
+	asks this first and skips every piece the server already holds. Read-only,
+	and the caller's own uploads only — the staging layer's owner check.
+	"""
+	session = _session(upload_id)
+	row = frappe.db.get_value(
+		uploads.SESSION_DOCTYPE, {"session_id": session}, ["name", "total_chunks", "owner"], as_dict=True
+	)
+	if row:
+		uploads._assert_owner(row, session, "Nothing was read.")
+		total = int(row.get("total_chunks") or 0)
+		# The pieces hang off the session's row, not its id.
+		received = uploads._received_indexes(row["name"])
+		missing = uploads._missing_indexes(received, total)
+		return {
+			"upload_id": str(upload_id),
+			"state": "partial",
+			"chunk_count": total,
+			"received": received,
+			"missing": missing,
+			"complete": total > 0 and not missing,
+		}
+	done = _committed(session)
+	if done:
+		return {"upload_id": str(upload_id), "state": "committed", **done}
+	return {"upload_id": str(upload_id), "state": "none", "received": [], "missing": [], "complete": False}

@@ -884,6 +884,9 @@ ROUTES = (
 	Route("/mobile", mobile_api.retry_card_print_job),
 	# v0.209.0. The back of a card printed on a simplex printer.
 	Route("/mobile", mobile_api.request_card_back),
+	# v0.226.0. The tag print queue by location; print all for one place.
+	Route("/mobile", mobile_api.list_tag_print_queue),
+	Route("/mobile", mobile_api.print_tags_for_location),
 	# v0.91.0. The last unrouted wizard submit target. A wizard names its own
 	# `submit_method` and four of the five seeded ones already had a route here —
 	# `create_employee`, `register_asset`, `create_accident_report` and
@@ -1036,6 +1039,8 @@ ROUTES = (
 	Route("/mobile", mobile_api.render_training_sign_in_sheet),
 	Route("/files", files_api.stage_file_chunk),
 	Route("/files", files_api.finalize_staged_file),
+	# v0.226.0. Which pieces of an upload arrived, so a cut-off photo resumes.
+	Route("/files", files_api.get_staged_upload),
 	# Direct deposit. The worker's OWN bank details and nobody else's —
 	# these three resolve the subject from the caller's login rather than
 	# from an `employee` argument, because company scope is shared by

@@ -50,6 +50,7 @@ def request_card_print(args: dict) -> ToolResult:
 		reprint_reason=as_str(args, "reprint_reason"),
 		requested_from="API",
 		may_read=may_read,
+		tag_format=as_str(args, "tag_format"),
 	)
 	job = data["job"]
 	verb = (
@@ -74,6 +75,32 @@ def list_card_print_jobs(args: dict) -> ToolResult:
 		args.get("limit") or 50,
 	)
 	return ToolResult(data=data, summary=f"{data['count']} print job(s)")
+
+
+def list_tag_print_queue(args: dict) -> ToolResult:
+	"""v0.226.0. Asset and housing tags waiting to print, grouped by location."""
+	actor = _actor()
+	data = _run(card_print.list_tag_queue, actor, _companies(actor))
+	return ToolResult(
+		data=data, summary=f"{data['count']} tag(s) waiting in {len(data['locations'])} location(s)"
+	)
+
+
+def print_tags_for_location(args: dict) -> ToolResult:
+	"""v0.226.0. Print all for one location: cards stay queued for the card printer; labels become one sheet."""
+	actor = _actor()
+	data = _run(
+		card_print.print_for_location,
+		actor,
+		_companies(actor),
+		as_str(args, "location", required=True),
+		as_str(args, "template"),
+	)
+	return ToolResult(
+		data=data,
+		summary=f"{data['location']}: {data['cards_queued']} card(s) queued, {data['sheet_labels']} label(s) on a sheet",
+		docstatus_delta="0 → 0 (updated)" if data["sheet_labels"] else "",
+	)
 
 
 def list_card_print_stations(args: dict) -> ToolResult:

@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.226.0 — 2026-10-03 — offline Add Asset (Mill Creek)
+
+**1009 tools** (491 read, 518 write): + `list_tag_print_queue`, `print_tags_for_location`. **183 mobile
+methods**: + `list_tag_print_queue`, `print_tags_for_location`; and `/files/get_staged_upload`.
+Contract `docs/design/offline_add_asset.md`. Deploy `docs/deploy/v0.226.0_offline_add_asset.md`. App 0.33.0.
+
+- **A tag minted on the phone** (`tag_uuid`) is kept for good: `qr_url` encodes it, and
+  `universal_scan`, `scan_asset` and the card queue resolve it (and `tag_aliases`).
+- **Same request, same result**: `register_asset` / `create_housing_unit` with a `request_id` already
+  recorded answer `replayed` with the record it made. A tag on another record is `tag_in_use`.
+- **Duplicates go to a person**: same serial, or the same name in the same place, creates nothing and
+  answers `possible_duplicate` with the candidates; `confirm_new` keeps it, `link_to_existing` adds the
+  tag to the existing record. Never merged automatically.
+- **Needs attention keys** for the phone: `error.asset.name_taken`, `error.asset.unknown_type`,
+  `error.asset.tag_in_use`. A parent typed offline and not found is filed as no parent with
+  `needs_review` and a note.
+- **Logged**: `created_offline`, `device_created_at` (phone time), `created_device`, a comment and an
+  audit row. New collapsed section on Asset Register and Housing Unit.
+- **Houses and cabins**: `create_housing_unit` takes the same arguments plus its GPS fix.
+- **Resumable uploads**: `get_staged_upload` says which pieces arrived (or the File it became); a
+  finalize whose reply was lost answers with the same File.
+- **Tag print queue** (optional, nothing queued unless asked): Card Print Job `tag_format` (Card /
+  Outdoor label / Sheet) and `location_label`; a label or sheet never goes to the card printer; the queue
+  groups by location on the phone, the Desk (list button) and MCP; **Print all** for a location makes one
+  QR sheet and marks those Printed, so a later copy is a logged reprint. Housing units take a label or
+  sheet.
+
 ## 0.225.0 — 2026-10-03 — secure direct-deposit setup (OFF by default)
 
 **1007 tools** (490 read, 517 write): + `list_direct_deposit_changes`. **181 mobile methods**: +

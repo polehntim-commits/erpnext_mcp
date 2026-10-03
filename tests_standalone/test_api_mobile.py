@@ -335,7 +335,7 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# existed. It decodes `ActiveREI`, mirrored in `test_ios_contract`.
 		"get_active_rei",
 	}
-	FILES: ClassVar[set[str]] = {"stage_file_chunk", "finalize_staged_file"}
+	FILES: ClassVar[set[str]] = {"stage_file_chunk", "finalize_staged_file", "get_staged_upload"}
 
 	#: v0.52.0. `get_active_model` / `get_model_file_chunk` ship server-side
 	#: ahead of the client that will call them — `ModelDownloadService.swift`'s
@@ -407,6 +407,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
+		# v0.226.0. The tag print queue by location: app 0.33.0 calls these.
+		# v0.226.0. Upload status for a resumable photo: app 0.33.0 reads it as a
+		# plain dictionary (`OfflineAssetSync`), so there is no Codable to mirror.
+		"get_staged_upload",
+		"list_tag_print_queue",
+		"print_tags_for_location",
 		# v0.223.0. The Employee file: app 0.31.0 calls it.
 		"get_employee_file",
 		# v0.225.0. Direct deposit: app 0.32.0 calls these.

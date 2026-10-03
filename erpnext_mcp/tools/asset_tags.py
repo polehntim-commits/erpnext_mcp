@@ -22,7 +22,17 @@ import json
 
 import frappe
 
-from .. import asset_mirror, asset_moves, asset_types, compat, geo, rodent_bait, slope_grade, timezones
+from .. import (
+	asset_mirror,
+	asset_moves,
+	asset_types,
+	compat,
+	geo,
+	offline_create,
+	rodent_bait,
+	slope_grade,
+	timezones,
+)
 from ..args import as_bool, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..render import qr
@@ -277,6 +287,12 @@ def asset_row(asset_name: str, company: str = "") -> dict:
 	if not asset_name:
 		raise ToolError("asset_name is required (an Asset Register docname, e.g. 'MC-Valve-05')")
 	fields = compat.existing_fields(ASSET_REGISTER, _ASSET_FIELDS)
+
+	# v0.226.0. A tag minted on a phone: its UUID (or an alias) names the record.
+	if offline_create.is_uuid(asset_name) and not frappe.db.exists(ASSET_REGISTER, asset_name):
+		doctype, found = offline_create.resolve(asset_name)
+		if doctype == ASSET_REGISTER:
+			asset_name = found
 
 	if frappe.db.exists(ASSET_REGISTER, asset_name):
 		row = dict(frappe.db.get_value(ASSET_REGISTER, asset_name, fields, as_dict=True) or {})
@@ -1298,11 +1314,43 @@ def register_asset(args: dict) -> ToolResult:
 	company = _company(args, required=True)
 	name = as_str(args, "name", required=True)
 
+	# v0.226.0. A RECORD MADE ON A PHONE WITH NO SIGNAL (`offline_create`). The
+	# replay comes first: a resend of a request that already worked answers with
+	# what it made, before any rule that the first send has since made untrue.
+	offline = offline_create.options(args)
+	if offline["active"]:
+		offline_create.require_ready(ASSET_REGISTER)
+		done = offline_create.replayed(ASSET_REGISTER, offline)
+		if done:
+			return _replayed(done)
+		if offline["link_to_existing"]:
+			data = offline_create.link(ASSET_REGISTER, offline["link_to_existing"], offline, company)
+			return ToolResult(data=data, summary=f"tag {offline['tag_uuid']} linked to {data['name']}")
+		offline_create.claim_tag(offline)
+		if not offline["confirm_new"]:
+			found = offline_create.asset_duplicates(
+				name,
+				as_str(args, "location") or as_str(args, "parent_asset"),
+				as_str(args, "serial_number"),
+				company,
+			)
+			if found:
+				return ToolResult(
+					data=offline_create.candidates(ASSET_REGISTER, found),
+					summary=f"{name}: possible duplicate of {', '.join(row['name'] for row in found)}; nothing created",
+				)
+
 	if frappe.db.exists(ASSET_REGISTER, name):
 		raise ToolError(
 			f"Asset Register already has a record called {name!r}. The docname IS the "
 			"printable tag ID, and two tags with the same string is two tags that resolve "
 			"to the same record. Nothing was created."
+			+ (
+				" Rename it on the phone and send it again — the tag stays the same."
+				if offline["active"]
+				else ""
+			),
+			"error.asset.name_taken" if offline["active"] else "",
 		)
 
 	# v0.162.0. THE REGISTER DECIDES, NOT A TUPLE IN THIS MODULE. `as_choice`
@@ -1313,9 +1361,20 @@ def register_asset(args: dict) -> ToolResult:
 	try:
 		asset_type = asset_types.require(asset_type, "asset_type", creating=True)
 	except ValueError as exc:
-		raise ToolError(str(exc)) from exc
+		raise ToolError(str(exc), "error.asset.unknown_type" if offline["active"] else "") from exc
 
-	location = _parent(args, "created")
+	# A parent typed on a phone with no cache of the register is filed as no
+	# parent and flagged for a person, rather than refusing the whole asset.
+	review = ""
+	try:
+		location = _parent(args, "created")
+	except ToolError:
+		if not offline["active"]:
+			raise
+		location = ""
+		review = (
+			f"Parent typed offline and not found: {as_str(args, 'location') or as_str(args, 'parent_asset')}"
+		)
 	title_values = _title_fields(args, asset_type, company)
 	rating_sent, rating = _slope_rating(args, asset_type, "Nothing was created.")
 
@@ -1345,7 +1404,10 @@ def register_asset(args: dict) -> ToolResult:
 		if flag is not None and compat.has_field(ASSET_REGISTER, key):
 			doc.set(key, 1 if flag else 0)
 
+	offline_create.stamp(doc, ASSET_REGISTER, offline, review)
+
 	doc.insert(ignore_permissions=True)
+	offline_create.record(ASSET_REGISTER, doc.name, offline)
 
 	photo, photo_error = "", ""
 	try:
@@ -1376,6 +1438,17 @@ def register_asset(args: dict) -> ToolResult:
 		dict(doc.as_dict()), location=as_str(args, "asset_location"), photo_file=photo
 	)
 	described = _with_mirror(described, verdict)
+	if offline["active"]:
+		described.update(
+			{
+				"created": True,
+				"outcome": "created",
+				"replayed": False,
+				"tag_uuid": offline["tag_uuid"] or None,
+			}
+		)
+		if review:
+			described["needs_review"] = review
 
 	return ToolResult(
 		data=described,
@@ -1384,6 +1457,18 @@ def register_asset(args: dict) -> ToolResult:
 		+ (", photo attached" if photo else "")
 		+ (f", ERPNext Asset {verdict['asset']}" if verdict.get("created") else ""),
 		docstatus_delta="none → 0 (created)",
+	)
+
+
+def _replayed(name: str) -> ToolResult:
+	"""The answer to a request this site already carried out: the record, unchanged."""
+	fields = compat.existing_fields(ASSET_REGISTER, (*_ASSET_FIELDS, "tag_uuid"))
+	row = dict(frappe.db.get_value(ASSET_REGISTER, name, fields, as_dict=True) or {})
+	row["name"] = name
+	data = _describe_asset(row)
+	data.update({"created": False, "outcome": "replayed", "replayed": True, "tag_uuid": row.get("tag_uuid")})
+	return ToolResult(
+		data=data, summary=f"{name} was already registered by this request; nothing new written"
 	)
 
 

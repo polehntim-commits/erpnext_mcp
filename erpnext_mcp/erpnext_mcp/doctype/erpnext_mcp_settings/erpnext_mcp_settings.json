@@ -1156,6 +1156,8 @@
   "allow_request_card_print",
   "allow_cancel_card_print_job",
   "allow_retry_card_print_job",
+  "allow_list_tag_print_queue",
+  "allow_print_tags_for_location",
   "allow_download_card_pdf",
   "allow_request_card_back",
   "allow_mark_card_print_job",
@@ -8953,6 +8955,20 @@
    "fieldname": "allow_retry_card_print_job",
    "fieldtype": "Check",
    "label": "Retry Card Print Job"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.226.0. Asset and housing tags waiting to print, grouped by location.",
+   "fieldname": "allow_list_tag_print_queue",
+   "fieldtype": "Check",
+   "label": "List Tag Print Queue"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.226.0. Print all tags for one location: cards to the card printer, labels as one QR sheet (marked Printed). Card Print Requester.",
+   "fieldname": "allow_print_tags_for_location",
+   "fieldtype": "Check",
+   "label": "Print Tags For Location"
   },
   {
    "default": "0",

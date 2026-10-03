@@ -104,6 +104,7 @@ from .. import (
 	compat,
 	datetimes,
 	locations,
+	offline_create,
 	overlays,
 	pay_stub_pdf,
 	slope_aspect,
@@ -8733,12 +8734,22 @@ def _create_one_location(user: str, register: str, arguments: dict) -> dict:
 			inner[key] = value
 	# v0.203.0. A cabin occupied at takeover, or a building people work in.
 	if register == "Housing Unit":
-		for key in ("occupied", "people_work_here"):
+		for key in (
+			"occupied",
+			"people_work_here",
+			"gps_latitude",
+			"gps_longitude",
+			*offline_create.ARGUMENTS,
+		):
 			if arguments.get(key) not in (None, ""):
 				inner[key] = arguments[key]
 
-	result = getattr(_LOCATION_TOOLS[register], spec["tool"])(inner)
-	data = dict(result.data)
+	data = dict(
+		_answered_offline(inner, lambda: getattr(_LOCATION_TOOLS[register], spec["tool"])(inner).data)
+	)
+	if data.get("outcome") in (offline_create.POSSIBLE_DUPLICATE, "linked", "refused"):
+		# v0.226.0. Nothing was created, so there is no new option to select.
+		return {**data, "doctype": register, "location_type": register}
 	# THE ANSWER IS A LOCATION OPTION AS WELL AS THE RECORD. The screen that
 	# posted this is a picker, and the next thing it does is select what it just
 	# made — so it is handed the pair it will send back as `location_doctype` and
@@ -9010,8 +9021,22 @@ def create_housing_unit(
 	notes=None,
 	occupied=None,
 	people_work_here=None,
+	gps_latitude=None,
+	gps_longitude=None,
+	tag_uuid=None,
+	request_id=None,
+	device_created_at=None,
+	offline=None,
+	created_device=None,
+	review_note=None,
+	confirm_new=None,
+	link_to_existing=None,
 ) -> dict:
 	"""Register one building on a camp.
+
+	v0.226.0. A house or cabin with its beds (`capacity`) can be made on a phone
+	with no signal, with the same `tag_uuid` / `request_id` rules as
+	`register_asset`, and its GPS fix.
 
 	NO ACREAGE — a cabin is measured in beds and square feet, not acres, and
 	`LOCATION_REGISTERS["Housing Unit"]["acres_argument"]` is None so an `acres`
@@ -9037,6 +9062,16 @@ def create_housing_unit(
 			# v0.203.0. The rodent bait program's occupancy flags.
 			"occupied": occupied,
 			"people_work_here": people_work_here,
+			"gps_latitude": gps_latitude,
+			"gps_longitude": gps_longitude,
+			"tag_uuid": tag_uuid,
+			"request_id": request_id,
+			"device_created_at": device_created_at,
+			"offline": offline,
+			"created_device": created_device,
+			"review_note": review_note,
+			"confirm_new": confirm_new,
+			"link_to_existing": link_to_existing,
 		},
 	)
 
@@ -9712,6 +9747,12 @@ ATTACHABLE_DOCTYPES = (
 	ACCIDENT_REPORT,
 )
 
+#: v0.226.0. Registers a handset may attach to that are scoped by a column other
+#: than `company` — a house or cabin belongs to its parcel's entity
+#: (`owning_entity`). Adding one is the location role's job (`create_housing_unit`),
+#: so photographing one for its record is too.
+ENTITY_SCOPED_ATTACHABLE = {"Housing Unit": "owning_entity"}
+
 #: Most bytes one attach carries in a request body. The chunked upload path
 #: (`stage_file_chunk` → `finalize_staged_file`) is what a photograph should go
 #: through — it verifies a SHA-256 before anything is written — and this ceiling
@@ -9776,8 +9817,22 @@ def register_asset(
 	lien_holder=None,
 	occupied=None,
 	people_work_here=None,
+	tag_uuid=None,
+	request_id=None,
+	device_created_at=None,
+	offline=None,
+	created_device=None,
+	review_note=None,
+	confirm_new=None,
+	link_to_existing=None,
 ) -> dict:
 	"""Register a new asset from the field. The docname IS the printed tag ID.
+
+	v0.226.0. MADE ON A PHONE WITH NO SIGNAL: `tag_uuid` (the QR the phone
+	already printed or showed), `request_id` (the same on every resend — a
+	resend answers `replayed`), `device_created_at`, `offline`, `review_note`,
+	and the person's answer to a `possible_duplicate`: `confirm_new` or
+	`link_to_existing`. See `offline_create`.
 
 	THE COMPANY IS THE CALLER'S, not the body's, wherever the body does not name
 	one the caller can reach. `guard.require_company` is what makes that true —
@@ -9845,8 +9900,53 @@ def register_asset(
 	):
 		if value is not None:
 			inner[key] = value
+	_offline_arguments(
+		inner,
+		tag_uuid=tag_uuid,
+		request_id=request_id,
+		device_created_at=device_created_at,
+		offline=offline,
+		created_device=created_device,
+		review_note=review_note,
+		confirm_new=confirm_new,
+		link_to_existing=link_to_existing,
+	)
 
-	return asset_tags.register_asset(inner).data
+	return _answered_offline(inner, lambda: asset_tags.register_asset(inner).data)
+
+
+def _answered_offline(arguments: dict, create):
+	"""v0.226.0. A refusal a phone can act on, as an answer rather than an error.
+
+	The sidecar hands a phone the sentence of a refusal and not its key, and a
+	queue on a phone has to tell "rename it" from "pick a type" from "try again
+	later". So for an offline create (one carrying `tag_uuid` or `request_id`),
+	the three refusals the person can fix come back as `outcome: refused` with a
+	`code`; everything else still raises. Nothing was written in any of them.
+	"""
+	try:
+		return create()
+	except ToolError as exc:
+		key = str(getattr(exc, "translation_key", "") or "")
+		if not (arguments.get("tag_uuid") or arguments.get("request_id")) or key not in _OFFLINE_REFUSALS:
+			raise
+		return {"created": False, "outcome": "refused", "code": _OFFLINE_REFUSALS[key], "message": str(exc)}
+
+
+#: The refusals an offline create answers rather than raises (`_answered_offline`).
+_OFFLINE_REFUSALS = {
+	"error.asset.name_taken": "name_taken",
+	"error.asset.unknown_type": "unknown_type",
+	"error.asset.tag_in_use": "tag_in_use",
+	"error.asset.bad_tag": "bad_tag",
+}
+
+
+def _offline_arguments(inner: dict, **given) -> None:
+	"""v0.226.0. The offline-create arguments, forwarded as sent (`offline_create` checks them)."""
+	for key, value in given.items():
+		if value not in (None, ""):
+			inner[key] = value
 
 
 # ── 72. generate_asset_qr ────────────────────────────────────────────────────
@@ -10019,7 +10119,7 @@ def attach_file_to_document(
 	target = str(doctype or "").strip()
 	if not target:
 		frappe.throw("doctype is required.", frappe.ValidationError)
-	if target not in ATTACHABLE_DOCTYPES:
+	if target not in ATTACHABLE_DOCTYPES and target not in ENTITY_SCOPED_ATTACHABLE:
 		frappe.throw(
 			f"{target} is not something this app may attach to from a handset. The registers a "
 			f"field device may file evidence against are: {', '.join(ATTACHABLE_DOCTYPES)}. "
@@ -10028,7 +10128,18 @@ def attach_file_to_document(
 			frappe.PermissionError,
 		)
 
-	docname = guard.require_scoped_doc(target, name, "name", allowed)
+	if target in ENTITY_SCOPED_ATTACHABLE:
+		guard.require_location_role(user, f"Adding photos to a {target}")
+		docname = str(name or "").strip()
+		entity = frappe.db.get_value(target, docname, ENTITY_SCOPED_ATTACHABLE[target]) if docname else None
+		if (
+			not docname
+			or not frappe.db.exists(target, docname)
+			or (allowed and str(entity or "") not in allowed)
+		):
+			frappe.throw(f"{target} {docname!r} was not found.", frappe.DoesNotExistError)
+	else:
+		docname = guard.require_scoped_doc(target, name, "name", allowed)
 	label = str(file_name or "").strip()
 	if not label:
 		frappe.throw("file_name is required.", frappe.ValidationError)
@@ -13109,8 +13220,12 @@ def request_card_print(
 	sides=None,
 	client_request_id=None,
 	reprint_reason=None,
+	tag_format=None,
 ) -> dict:
-	"""Ask for an ID card or an asset tag. Idempotent on `client_request_id`."""
+	"""Ask for an ID card or an asset tag. Idempotent on `client_request_id`.
+
+	v0.226.0. `tag_format` (asset tags): Card, Outdoor label or Sheet. A tag can be
+	asked for by the UUID the phone printed it with, and for a housing unit."""
 	from .. import card_print
 
 	allowed = guard.require_scope(user)
@@ -13130,7 +13245,28 @@ def request_card_print(
 		reprint_reason=str(reprint_reason or ""),
 		requested_from="iOS",
 		may_read=may_read,
+		tag_format=str(tag_format or ""),
 	)
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_tag_print_queue", limit=guard.READ_LIMIT)
+def list_tag_print_queue(user: str) -> dict:
+	"""v0.226.0. Tags waiting to print, grouped by location, in the caller's companies."""
+	from .. import card_print
+
+	allowed = guard.require_scope(user)
+	return _card_print(card_print.list_tag_queue, user, allowed)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("print_tags_for_location", mutating=True, limit=guard.WRITE_LIMIT)
+def print_tags_for_location(user: str, location=None, template=None) -> dict:
+	"""v0.226.0. Print all for this location: cards to the card printer, the rest as one QR sheet."""
+	from .. import card_print
+
+	allowed = guard.require_scope(user)
+	return _card_print(card_print.print_for_location, user, allowed, str(location or ""), str(template or ""))
 
 
 @frappe.whitelist(methods=["POST", "GET"])

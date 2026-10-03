@@ -1099,6 +1099,26 @@ _MATERIALS_USED_FIELD = _field(
 )
 
 
+#: v0.226.0. A record made on a phone with no signal (`offline_create`): the same
+#: arguments on `register_asset` and `create_housing_unit`.
+_OFFLINE_CREATE_PROPS = {
+	"tag_uuid": _field(
+		_STRING, "v0.226.0. The UUID on the tag the phone already printed or showed; kept for good."
+	),
+	"request_id": _field(
+		_STRING, "v0.226.0. The same on every resend: a resend answers replayed, nothing new."
+	),
+	"device_created_at": _field(_STRING, "v0.226.0. When the phone saved it (ISO 8601)."),
+	"offline": _field(_BOOLEAN, "v0.226.0. Saved with no signal."),
+	"created_device": _field(_STRING, "v0.226.0. The phone's name."),
+	"review_note": _field(_STRING, "v0.226.0. What was typed offline that a person should check."),
+	"confirm_new": _field(_BOOLEAN, "v0.226.0. After possible_duplicate: keep as a new record."),
+	"link_to_existing": _field(
+		_STRING, "v0.226.0. After possible_duplicate: it's the same one — add this tag to that record."
+	),
+}
+
+
 TOOLS = {
 	# ── read-only ───────────────────────────────────────────────────────────
 	"get_company_topology": _tool(
@@ -8854,6 +8874,7 @@ TOOLS = {
 			"smoke_detector_last_test": _field(_STRING, "YYYY-MM-DD."),
 			"co_detector_last_test": _field(_STRING, "YYYY-MM-DD."),
 			"notes": _field(_STRING, "Anything the fields cannot hold."),
+			**_OFFLINE_CREATE_PROPS,
 		},
 		required=("parcel", "unit_name"),
 		mutating=True,
@@ -12023,10 +12044,36 @@ TOOLS = {
 			"copies": _field(_INTEGER, "1 to 5. Default 1."),
 			"sides": _field(_STRING, "Dual (default: front and back) or Single (front only)."),
 			"reprint_reason": _field(_STRING, "Lost, Damaged, Details changed, or Other: …"),
+			"tag_format": _field(
+				_STRING,
+				"v0.226.0. Asset tags: Card (default, the card printer), Outdoor label or Sheet (printed "
+				"from a QR sheet with print_tags_for_location). A housing unit takes a label or a sheet.",
+			),
 		},
 		required=("job_type", "reference_name", "client_request_id"),
 		mutating=True,
 		title="Request a card print",
+	),
+	"list_tag_print_queue": _tool(
+		card_print_tools.list_tag_print_queue,
+		"v0.226.0. Asset and housing-unit tags waiting to print (Queued or Failed), grouped by "
+		"location (the parent asset or parcel), with each job's tag format. Read-only.",
+		{},
+		title="List the tag print queue",
+	),
+	"print_tags_for_location": _tool(
+		card_print_tools.print_tags_for_location,
+		"MUTATING (default OFF; Card Print Requester). v0.226.0. Print every waiting tag for one "
+		"location: Card jobs stay queued for the card printer (a Failed one is put back); Outdoor label "
+		"and Sheet jobs become ONE QR sheet (HTML, print at 100 %) and are marked Printed, so a later "
+		"copy is a logged reprint.",
+		{
+			"location": _field(_STRING, "The location_label from list_tag_print_queue."),
+			"template": _field(_STRING, "Label sheet template; default avery_5160."),
+		},
+		required=("location",),
+		mutating=True,
+		title="Print tags for a location",
 	),
 	"download_card_pdf": _tool(
 		card_print_tools.download_card_pdf,
@@ -22961,6 +23008,7 @@ TOOLS = {
 				"20 for an ATV/UTV. get_slope_grade_layer colours the ground against it. Omitted, the "
 				"type's cautious figure applies.",
 			),
+			**_OFFLINE_CREATE_PROPS,
 		},
 		required=("name", "asset_type", "company"),
 		mutating=True,

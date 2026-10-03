@@ -69,7 +69,7 @@ from urllib.parse import unquote
 
 import frappe
 
-from .. import bucket_bridge, compat
+from .. import bucket_bridge, compat, offline_create
 from .. import shifts as shift_register
 from ..args import as_int, as_str
 from ..erpnext_mcp.doctype.farm_task.farm_task import STATES, TERMINAL_STATES
@@ -252,10 +252,16 @@ def scan_target(content: str) -> str:
 	"""
 	text = (content or "").strip()
 	marker = "/scan/"
-	if marker not in text:
-		return text
-	tail = text.split(marker, 1)[1].split("?", 1)[0].split("#", 1)[0].strip("/")
-	return unquote(tail) if tail else text
+	if marker in text:
+		tail = text.split(marker, 1)[1].split("?", 1)[0].split("#", 1)[0].strip("/")
+		text = unquote(tail) if tail else text
+	# v0.226.0. A tag minted on a phone before the record reached the server
+	# carries a UUID, not the docname; the record keeps it (or an alias of it).
+	if offline_create.is_uuid(text):
+		_doctype, found = offline_create.resolve(text)
+		if found:
+			return found
+	return text
 
 
 #: What makes a scanned STRING a credential document rather than a tag: a JSON

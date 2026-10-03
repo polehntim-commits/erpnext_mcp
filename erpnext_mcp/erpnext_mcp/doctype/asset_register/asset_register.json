@@ -76,7 +76,17 @@
   "boundary_col",
   "boundary_bbox_geojson",
   "h3_cells",
-  "area_computed_acres"
+  "area_computed_acres",
+  "offline_section",
+  "tag_uuid",
+  "tag_aliases",
+  "request_id",
+  "offline_col",
+  "created_offline",
+  "device_created_at",
+  "created_device",
+  "needs_review",
+  "review_note"
  ],
  "fields": [
   {
@@ -543,11 +553,85 @@
    "label": "Computed Area (acres)",
    "precision": "4",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "offline_section",
+   "fieldtype": "Section Break",
+   "label": "Made on a phone (v0.226.0)"
+  },
+  {
+   "description": "The UUID on the printed tag, minted on the phone before the record reached the server. Never changes.",
+   "fieldname": "tag_uuid",
+   "fieldtype": "Data",
+   "label": "Tag UUID",
+   "length": 36,
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "description": "Other tag UUIDs that scan to this record (a person said a second tag was the same one). One per line.",
+   "fieldname": "tag_aliases",
+   "fieldtype": "Small Text",
+   "label": "Tag aliases",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "description": "The phone's request ID. A resend of the same request answers with this record.",
+   "fieldname": "request_id",
+   "fieldtype": "Data",
+   "label": "Request ID",
+   "no_copy": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "offline_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "created_offline",
+   "fieldtype": "Check",
+   "label": "Created offline",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "description": "When the phone saved it (phone clock, site time zone).",
+   "fieldname": "device_created_at",
+   "fieldtype": "Datetime",
+   "label": "Saved on phone at",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "created_device",
+   "fieldtype": "Data",
+   "label": "Phone",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Something was typed on the phone that the server could not match (a parent, a type). Check and clear.",
+   "fieldname": "needs_review",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Needs review"
+  },
+  {
+   "depends_on": "needs_review",
+   "fieldname": "review_note",
+   "fieldtype": "Small Text",
+   "label": "Review note"
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-04 12:00:00.000000",
+ "modified": "2026-10-03 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Asset Register",

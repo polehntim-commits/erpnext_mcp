@@ -36,7 +36,7 @@ in question — and those are the three moments the record exists for.
 
 import frappe
 
-from .. import compat, rodent_bait
+from .. import compat, offline_create, rodent_bait
 from ..args import as_bool, as_choice, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..erpnext_mcp.doctype.housing_assignment.housing_assignment import overlaps
 from ..erpnext_mcp.doctype.housing_unit.housing_unit import (
@@ -510,12 +510,46 @@ def create_housing_unit(args: dict) -> ToolResult:
 	parcel = str(parcel_row(as_str(args, "parcel", required=True), company or "")["name"])
 	unit_name = as_str(args, "unit_name", required=True)
 
+	# v0.226.0. Made on a phone with no signal — see `offline_create`. A resend
+	# answers with what the first send made; a cabin of the same name on the same
+	# parcel goes to a person (It's the same one), never merged here.
+	offline = offline_create.options(args)
+	if offline["active"]:
+		offline_create.require_ready(HOUSING_UNIT)
+		done = offline_create.replayed(HOUSING_UNIT, offline)
+		if done:
+			data = _describe_unit(dict(frappe.get_doc(HOUSING_UNIT, done).as_dict()), frappe.utils.today())
+			data.update(
+				{
+					"created": False,
+					"outcome": "replayed",
+					"replayed": True,
+					"tag_uuid": offline["tag_uuid"] or None,
+				}
+			)
+			return ToolResult(
+				data=data, summary=f"{done} was already registered by this request; nothing new written"
+			)
+		if offline["link_to_existing"]:
+			data = offline_create.link(HOUSING_UNIT, offline["link_to_existing"], offline)
+			return ToolResult(data=data, summary=f"tag {offline['tag_uuid']} linked to {data['name']}")
+		offline_create.claim_tag(offline)
+
 	existing = frappe.db.get_value(HOUSING_UNIT, {"unit_name": unit_name, "parcel": parcel}, "name")
+	if existing and offline["active"] and not offline["confirm_new"]:
+		row = _describe_unit(dict(frappe.get_doc(HOUSING_UNIT, existing).as_dict()), frappe.utils.today())
+		found = offline_create.candidates(HOUSING_UNIT, [{**row, "why": "same name on the same parcel"}])
+		# The docname is built from the parcel and the name, so "keep as new" needs a new name.
+		found["can_keep_new"] = False
+		return ToolResult(
+			data=found, summary=f"{unit_name}: possible duplicate of {existing}; nothing created"
+		)
 	if existing:
 		raise ToolError(
 			f"{parcel} already has a unit called {unit_name!r} ({existing}). Every camp numbers "
 			"its cabins from one, which is why the parcel is part of the docname and the name "
-			"has to be unique inside it. Nothing was created."
+			"has to be unique inside it. Nothing was created.",
+			"error.asset.name_taken" if offline["active"] else "",
 		)
 
 	doc = frappe.new_doc(HOUSING_UNIT)
@@ -563,7 +597,9 @@ def create_housing_unit(args: dict) -> ToolResult:
 		if flag is not None and compat.has_field(HOUSING_UNIT, key):
 			doc.set(key, 1 if flag else 0)
 
+	offline_create.stamp(doc, HOUSING_UNIT, offline)
 	doc.insert(ignore_permissions=True)
+	offline_create.record(HOUSING_UNIT, doc.name, offline)
 	described = _describe_unit(dict(doc.as_dict()), frappe.utils.today())
 
 	warnings = list(_unit_notes(described))
@@ -594,6 +630,15 @@ def create_housing_unit(args: dict) -> ToolResult:
 	}
 	if warnings:
 		data["warnings"] = warnings
+	if offline["active"]:
+		data.update(
+			{
+				"created": True,
+				"outcome": "created",
+				"replayed": False,
+				"tag_uuid": offline["tag_uuid"] or None,
+			}
+		)
 	return ToolResult(
 		data=data,
 		summary=(
