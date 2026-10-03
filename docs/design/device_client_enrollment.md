@@ -18,7 +18,7 @@ and can be changed before enabling.
 
 With `device_keys_enabled` off the new sidecar paths answer exactly as paths that do not exist.
 
-Releases: server **v0.218.0 → v0.220.0**, app **0.28.0 → 0.29.0** (phases in §12). Renumbered on
+Releases: server **v0.218.0 → v0.220.0**, app **0.28.0 → 0.30.0** (phases in §12). Renumbered on
 2026-10-03: v0.217.0 became the security-status release.
 
 Ground rules carried over: every phone is a crew phone with no Tailscale; the phone talks only to
@@ -286,6 +286,54 @@ hashed at rest.
 Device authorization grant (RFC 8628) is **not** built: no Claude client uses it. It can be added
 later for a headless client without changing anything here.
 
+**Build notes (v0.220.0, frozen with the code):**
+
+- **The Bearer token is read by an `auth_hooks` entry, not by the endpoint.** Frappe v15's
+  `validate_auth` raises `AuthenticationError` for any two-part `Authorization` header that leaves
+  the session Guest, before a whitelisted method runs. `erpnext_mcp.oauth.authenticate` turns a live
+  access token into the MCP OAuth user **for `/api/method/erpnext_mcp.mcp.handle` only** — the token
+  opens no other Frappe path. It never raises and never overrides an identity Frappe set.
+- **Registration writes nothing.** The `client_id` is the client's name and redirect URIs, signed
+  with a key derived from the site's encryption key (`fo1.<payload>.<mac>`). An open endpoint that
+  inserted a row per call would be a table anybody could grow. The Pending row is written by
+  `authorize` (10 an hour per address, 50 open site-wide, 10 minutes) — that is the
+  `Farm Access Request` of kind `mcp_client`, and once approved it **is** the client: inventory lists
+  it, revoking it ends every token it holds. CIMD is not built (`client_id_metadata_document_supported:
+  false`); Claude Code and claude.ai use DCR.
+- **Redirect URIs**: https, or http on localhost / 127.0.0.1 / [::1] (port may differ at authorize,
+  RFC 8252 §7.3); no fragment; at most 5.
+- **`resource`** is checked by **path** (`/api/method/erpnext_mcp.mcp.handle`), not host: proxies
+  rewrite scheme and host, and the token is valid at this one endpoint anyway.
+- **Issuer** = setting `mcp_oauth_issuer` (the tailnet `https://<host>:8443` origin — set it), else
+  the Public URL's origin, else the request's forwarded scheme/host. Discovery: `/.well-known/
+  oauth-protected-resource[/…]` and `/.well-known/oauth-authorization-server[/…]` via a
+  `page_renderer` hook (`oauth.WellKnownPage`); proven on umbrel.local that `/.well-known/` reaches
+  Frappe (its own 404 page, not nginx's). A 401 from the MCP endpoint carries
+  `WWW-Authenticate: Bearer resource_metadata="<issuer>/.well-known/oauth-protected-resource/api/method/erpnext_mcp.mcp.handle"`.
+- **Approving**: the same code paths as §6.2 — `peek_access_request` / `approve_access_request`
+  (phone, key-bound, Face ID signature over `farmops-approve|<request>|<sorted scopes>|<decision>`)
+  and `erpnext_mcp.api.access.decide` (Desk, System Manager), each taking `profile`
+  (`read`, `read_farm`) or `scopes`. Granted = chosen ∩ requested, never more. System Manager may
+  grant anything; Farm Manager only `mcp:read`. **No MCP tool approves.**
+- **Codes and tokens**: one auth code per approval (the consent page's poll secret is single use),
+  60 s, PKCE S256 (verifier 43–128). Access 60 min; refresh rotated on every use, idle
+  `mcp_refresh_days` (30), absolute 90 days from approval. A code or refresh token presented twice
+  revokes its whole family and raises a security alert. Revoke endpoint (RFC 7009) ends the family.
+- **Who it runs as**: setting `mcp_oauth_user` (the "mcp-agent" user Tim creates; empty → the MCP
+  System User, as the static token does today). Audit rows carry `oauth <client> (approved by …)` in
+  `agent_session` when the client sent no `X-Agent-Session`. Per-user (mobile) scoping is never
+  derived from an OAuth call.
+- **Static token**: `legacy_static_mcp_token` (on) is read only while `mcp_oauth_enabled` is on —
+  with OAuth off the static token is the only door and always works. Its last use is recorded once
+  a day; `get_server_status.mcp_auth.ready_to_disable_static_mcp_token` needs OAuth on, one approved
+  client, 14 days of tracking and no static use in them.
+- **New MCP tool** `revoke_mcp_client` (write, destructive tier, default OFF). `list_access_inventory`
+  gains `clients`.
+- **Phones' `Authorization: FarmOps`** is also accepted as `X-FarmOps-Authorization` (the app sends
+  both). Tailscale serve's proxy deletes only its own `Tailscale-*` headers (checked in its source),
+  but the v0.17.2 lesson is that some hop on the phone path has eaten `Authorization` before, and a
+  second header costs nothing.
+
 ### 6.4 Scopes
 
 | Scope | Grants |
@@ -408,7 +456,7 @@ attestation chain in `attestation`.
 | 0 | v0.216.x | — | `security_alert_email` (if not already shipped) |
 | 1 | **v0.218.0** | **0.28.0** | pickup links; Secure Enclave keys; DPoP; access tokens; Face ID; silent upgrade of existing phones; inventory; revoke; lost device; `device_revoked` wipe |
 | 2 | **v0.219.0** | **0.29.0** | approve-from-phone for new phones (§6.2) |
-| 3 | **v0.220.0** | 0.29.x | MCP OAuth 2.1 + phone/Desk consent; `mcp-agent` user; scopes; refresh rotation; static token behind setting |
+| 3 | **v0.220.0** | **0.30.0** | MCP OAuth 2.1 + phone/Desk consent; `mcp-agent` user; scopes; refresh rotation; static token behind setting |
 | 4 | settings only | — | turn off `legacy_device_secrets` when inventory shows no `legacy_secret` phone; turn off `legacy_static_mcp_token` when the flag says ready; passkey memo |
 
 Each phase: contract section frozen (this doc), tests on both sides, deploy file, verification on
