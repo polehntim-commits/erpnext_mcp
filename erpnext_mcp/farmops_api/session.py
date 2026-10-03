@@ -81,6 +81,10 @@ _SCRATCH = (
 	"erpnext_mcp_calling_user",
 	"erpnext_mcp_fallback_auth_source",
 	"form_dict",
+	# v0.218.0 / v0.219.0. Which device authenticated, and whether by its keys.
+	# An approval reads both; neither may outlive the request that set it.
+	"erpnext_mcp_device",
+	"erpnext_mcp_key_bound",
 )
 
 

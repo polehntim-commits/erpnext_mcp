@@ -425,6 +425,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Crop",
 				"Extraction Config",
 				# v0.218.0. A hashed short-lived credential; System Manager only.
+				"Farm Access Request",
 				"Farm Access Token",
 				"Farm Asset Type",
 				"Farm Config Version",

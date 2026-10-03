@@ -1719,6 +1719,8 @@ APP_DOCTYPES = {
 	"Mobile Push Token": "mobile_push_token",
 	# v0.218.0. Hashed short-lived tokens: device_keys (and later MCP OAuth).
 	"Farm Access Token": "farm_access_token",
+	# v0.219.0. A new phone's request to be let in.
+	"Farm Access Request": "farm_access_request",
 	"Farm Salary Structure": "farm_salary_structure",
 	"Farm Payroll Deduction": "farm_payroll_deduction",
 	# The court order the deduction above exists under. Separate because a

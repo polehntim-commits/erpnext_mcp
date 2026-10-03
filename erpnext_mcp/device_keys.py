@@ -519,6 +519,8 @@ def resolve(headers, method: str, path: str, body: bytes) -> tuple:
 		raise Refused("device no longer live", revoked_device=_revoked_by_key(row, proof_jwk))
 	try:
 		frappe.local.erpnext_mcp_device = row["name"]
+		# v0.219.0: approvals need a key-bound (Face ID) caller, not a legacy secret.
+		frappe.local.erpnext_mcp_key_bound = True
 	except Exception:  # pragma: no cover
 		pass
 	return user, row["name"]
@@ -641,3 +643,285 @@ def report_lost(user: str, device: str = "", by: str = "", note: str = "") -> di
 		f"{by or 'Somebody'} reported {len(devices)} device(s) of {user} lost and revoked them ({tokens} token(s) ended).",
 	)
 	return {"user": user, "revoked_devices": devices, "tokens_revoked": tokens}
+
+
+# ── §6.2 a new phone, approved on a manager's phone (v0.219.0) ──────────────
+REQUEST_DOCTYPE = "Farm Access Request"
+#: No 0/O/1/I/L: a code read aloud across a yard.
+CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+CODE_LENGTH = 8
+REQUEST_MINUTES = 15
+MAX_OPEN_REQUESTS = 50
+REQUESTS_PER_HOUR_PER_ADDRESS = 5
+WRONG_CODES_PER_MINUTE = 5
+APPROVER_ROLES = ("HR Manager", "HR User", "Farm Manager", "System Manager")
+#: Accounts holding one of these need a System Manager (or a holder of the same role).
+ELEVATED_ROLES = ("HR Manager", "HR User", "Farm Manager", "System Manager")
+
+
+def approval_enabled() -> bool:
+	return enabled() and settings.as_bool(_setting("phone_approval_enabled", 0))
+
+
+def _normal_code(code: str) -> str:
+	return "".join(ch for ch in str(code or "").upper() if ch.isalnum())
+
+
+def _code_hash(code: str) -> str:
+	return hashlib.sha256(_normal_code(code).encode()).hexdigest()
+
+
+def _new_code() -> str:
+	raw = "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
+	return f"{raw[:4]}-{raw[4:]}"
+
+
+def request_access(body: dict, proof_jwk: dict, ip: str) -> dict:
+	"""A new phone asks to be let in. Answers the code to show. Raises Refused."""
+	from .api import guard
+
+	if guard._count(f"access_request:{ip or 'unknown'}", 3600) > REQUESTS_PER_HOUR_PER_ADDRESS:
+		raise Refused("too many requests from this address")
+	now = _stamp()
+	open_count = len(
+		frappe.db.get_all(
+			REQUEST_DOCTYPE,
+			filters={"status": "Pending", "expires_at": [">", now]},
+			pluck="name",
+			limit=MAX_OPEN_REQUESTS + 1,
+		)
+	)
+	if open_count >= MAX_OPEN_REQUESTS:
+		raise Refused("too many open requests")
+	jkt = thumbprint(proof_jwk)
+	unlock = jwk_of(body.get("unlock_public_key"))
+	if thumbprint(jwk_of(body.get("proof_public_key"))) != jkt:
+		raise Refused("proof key in the body is not the signer")
+	if not verify_es256(unlock, f"farmops-request|{jkt}".encode(), str(body.get("unlock_signature") or "")):
+		raise Refused("unlock signature does not verify")
+	code = _new_code()
+	protection = str(body.get("key_protection") or "").strip().lower()
+	doc = frappe.get_doc(
+		{
+			"doctype": REQUEST_DOCTYPE,
+			"kind": "device",
+			"status": "Pending",
+			"display_name": str(body.get("device_name") or "New phone")[:120],
+			"code_hash": _code_hash(code),
+			"expires_at": _stamp(REQUEST_MINUTES * 60),
+			"ip": str(ip or "")[:60],
+			"platform": str(body.get("platform") or "")[:20],
+			"os_version": str(body.get("os_version") or "")[:60],
+			"app_version": str(body.get("app_version") or "")[:60],
+			"key_protection": protection if protection in KEY_PROTECTIONS else "software",
+			"unlock_public_key": json.dumps(unlock, sort_keys=True),
+			"proof_public_key": json.dumps(jwk_of(body.get("proof_public_key")), sort_keys=True),
+			"jkt": jkt,
+		}
+	)
+	doc.flags.ignore_permissions = True
+	doc.insert(ignore_permissions=True)
+	return {"request": doc.name, "code": code, "expires_at": doc.expires_at, "server_time": int(_now_epoch())}
+
+
+def access_status(request: str, proof_jwk: dict) -> dict:
+	"""The requesting phone collects. Only its own proof key may ask. Raises Refused."""
+	row = frappe.db.get_value(
+		REQUEST_DOCTYPE,
+		{"name": str(request or ""), "kind": "device"},
+		["name", "status", "jkt", "expires_at", "subject_user", "device"],
+		as_dict=True,
+		for_update=True,
+	)
+	if not row or str(row.get("jkt") or "") != thumbprint(proof_jwk):
+		raise Refused("unknown request or not this phone")
+	if row["status"] == "Pending":
+		if str(row.get("expires_at") or "") <= _stamp():
+			frappe.db.set_value(REQUEST_DOCTYPE, row["name"], "status", "Expired", update_modified=False)
+			raise Refused("expired")
+		return {"status": "pending", "server_time": int(_now_epoch())}
+	if row["status"] != "Approved":
+		raise Refused(f"request {row['status']}")
+	frappe.db.set_value(REQUEST_DOCTYPE, row["name"], "status", "Used", update_modified=False)
+	device = str(row.get("device") or "")
+	return {
+		"status": "approved",
+		**_answer(str(row.get("subject_user") or ""), device, thumbprint(proof_jwk)),
+	}
+
+
+def _pending_by_code(code: str):
+	return frappe.db.get_value(
+		REQUEST_DOCTYPE,
+		{"code_hash": _code_hash(code), "status": "Pending", "kind": "device", "expires_at": [">", _stamp()]},
+		[
+			"name",
+			"display_name",
+			"platform",
+			"os_version",
+			"app_version",
+			"key_protection",
+			"ip",
+			"creation",
+			"jkt",
+			"unlock_public_key",
+			"proof_public_key",
+		],
+		as_dict=True,
+		for_update=True,
+	)
+
+
+def may_approve_for(approver: str, subject: str) -> bool:
+	if not approver or not subject or approver == subject:
+		return False
+	mine = set(frappe.get_roles(approver) or [])
+	if not mine & set(APPROVER_ROLES):
+		return False
+	theirs = set(frappe.get_roles(subject) or [])
+	elevated = theirs & set(ELEVATED_ROLES)
+	if elevated and "System Manager" not in mine and not (elevated & mine):
+		return False
+	return True
+
+
+def approvable_people(approver: str) -> list:
+	"""Active mobile accounts this approver may let a phone in for."""
+	if not set(frappe.get_roles(approver) or []) & set(APPROVER_ROLES):
+		return []
+	rows = frappe.db.get_all(GRANT, filters={"state": "Active"}, fields=["user", "full_name"], limit=2000)
+	return sorted(
+		(
+			{"user": row["user"], "full_name": row.get("full_name") or row["user"]}
+			for row in rows
+			if may_approve_for(approver, row["user"])
+		),
+		key=lambda row: str(row["full_name"]).lower(),
+	)
+
+
+def peek(approver: str, code: str) -> dict:
+	"""What a manager sees after typing or scanning the code — before deciding."""
+	from .api import guard
+
+	if guard._count(f"approve_code:{approver}", 60) > WRONG_CODES_PER_MINUTE:
+		raise device_enrollment.EnrollmentRefused("too many codes tried; wait a minute.")
+	row = _pending_by_code(code)
+	if not row:
+		raise device_enrollment.EnrollmentRefused(
+			"no open request has that code. Check it, or ask the new phone for a new one."
+		)
+	return {
+		"request": row["name"],
+		"device_name": row.get("display_name"),
+		"platform": row.get("platform"),
+		"os_version": row.get("os_version"),
+		"app_version": row.get("app_version"),
+		"key_protection": row.get("key_protection"),
+		"from_address": row.get("ip"),
+		"requested_at": str(row.get("creation") or "")[:19],
+	}
+
+
+def decide(
+	approver: str,
+	code: str,
+	subject: str,
+	decision: str,
+	via: str,
+	signature: str = "",
+	approver_device: str = "",
+) -> dict:
+	"""Approve or deny. On a phone the approver's unlock key signs (Face ID). Raises EnrollmentRefused."""
+	from . import security_alerts
+	from .api import guard
+
+	decision = str(decision or "").strip().lower()
+	if decision not in ("approve", "deny"):
+		raise device_enrollment.EnrollmentRefused("decision must be approve or deny.")
+	if guard._count(f"approve_code:{approver}", 60) > WRONG_CODES_PER_MINUTE:
+		raise device_enrollment.EnrollmentRefused("too many codes tried; wait a minute.")
+	row = _pending_by_code(code)
+	if not row:
+		raise device_enrollment.EnrollmentRefused("no open request has that code. Nothing was changed.")
+	subject = str(subject or "").strip().lower()
+	if decision == "approve" and not may_approve_for(approver, subject):
+		raise device_enrollment.EnrollmentRefused(
+			f"you may not let a phone in for {subject or 'nobody'}: it takes HR or a Farm Manager, a System "
+			"Manager for a manager's own phone, and never your own account. Nothing was changed."
+		)
+	if via == "phone":
+		approver_row = _row(approver_device)
+		if (
+			not approver_row
+			or not _live(approver_row)
+			or _user_of(approver_row) != approver
+			or not approver_row.get("unlock_public_key")
+		):
+			raise device_enrollment.EnrollmentRefused(
+				"approving takes a phone signed in with Face ID. Nothing was changed."
+			)
+		unlock = jwk_of(approver_row.get("unlock_public_key"))
+		message = f"farmops-approve|{row['name']}|{subject}|{decision}".encode()
+		if not verify_es256(unlock, message, str(signature or "")):
+			raise device_enrollment.EnrollmentRefused(
+				"the Face ID signature does not verify. Nothing was changed."
+			)
+	now = _stamp()
+	if decision == "deny":
+		frappe.db.set_value(
+			REQUEST_DOCTYPE,
+			row["name"],
+			{"status": "Denied", "approved_by": approver, "approved_at": now, "approved_via": via},
+			update_modified=False,
+		)
+		return {"request": row["name"], "decision": "deny"}
+	grant = device_enrollment._grant_doc(subject)
+	if str(grant.get("state") or "") != "Active":
+		raise device_enrollment.EnrollmentRefused(
+			f"{subject} has no active mobile account. Nothing was changed."
+		)
+	grant.append(
+		device_enrollment.TABLE_FIELD,
+		{
+			"device_name": str(row.get("display_name") or "New phone")[:120],
+			"enrollment_status": device_enrollment.ENROLLED,
+			"enrolled_at": now,
+			"issued_by": approver,
+		},
+	)
+	device_enrollment._save(grant)
+	device = device_enrollment._get(device_enrollment._rows(grant)[-1], "name")
+	_set_row(
+		device,
+		{
+			"unlock_public_key": row.get("unlock_public_key"),
+			"proof_public_key": row.get("proof_public_key"),
+			"key_thumbprint": row.get("jkt"),
+			"key_protection": row.get("key_protection"),
+			"platform": row.get("platform"),
+			"os_version": row.get("os_version"),
+			"app_version": row.get("app_version"),
+			"approval_method": "phone_approval" if via == "phone" else "desk_approval",
+			"approved_by": approver,
+			"approved_at": now,
+		},
+	)
+	frappe.db.set_value(
+		REQUEST_DOCTYPE,
+		row["name"],
+		{
+			"status": "Approved",
+			"subject_user": subject,
+			"approved_by": approver,
+			"approved_at": now,
+			"approved_via": via,
+			"device": device,
+		},
+		update_modified=False,
+	)
+	security_alerts.send(
+		"Farm Ops: a new phone was let in",
+		f"{approver} approved {row.get('display_name')} ({row.get('platform')}) for {subject} on {via}.",
+	)
+	return {"request": row["name"], "decision": "approve", "user": subject, "device": device}

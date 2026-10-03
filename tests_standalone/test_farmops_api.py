@@ -708,6 +708,11 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/issue_enrollment_link",
 		"/mobile/list_access_inventory",
 		"/mobile/report_lost_device",
+		# v0.219.0. Phone approval.
+		"/mobile/list_approvable_people",
+		"/mobile/peek_access_request",
+		"/mobile/approve_access_request",
+		"/mobile/deny_access_request",
 		"/mobile/move_asset",
 		"/mobile/undo_asset_move",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
@@ -3246,6 +3251,12 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"list_access_inventory",
 		"report_lost_device",
 		"issue_enrollment_link",
+		# v0.219.0. Approving a phone: HR / Farm Manager / System Manager, and a
+		# key-bound caller, checked in the wrapper (`_require_access_role`, `_decide`).
+		"list_approvable_people",
+		"peek_access_request",
+		"approve_access_request",
+		"deny_access_request",
 		# v0.195.0. The caller's own housing (no arguments, so no one else's);
 		# spray history, which WPS requires be displayed to workers; and filing a
 		# spray, which is never refused for the role of the applicator filing it.
@@ -3262,7 +3273,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 171, "a method is named in two sets at once")
+		self.assertEqual(len(named), 175, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

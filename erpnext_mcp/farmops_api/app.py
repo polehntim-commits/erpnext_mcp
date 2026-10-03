@@ -219,6 +219,9 @@ BRAND_MAX_BYTES = 2_000_000
 PICKUP_PREFIX = f"{PREFIX}/enroll/"
 CHALLENGE_PATH = f"{PREFIX}/auth/challenge"
 TOKEN_PATH = f"{PREFIX}/auth/token"
+#: v0.219.0. A new phone asks; the same phone collects (§6.2). OFF until phone_approval_enabled.
+ACCESS_REQUEST_PATH = f"{PREFIX}/access/request"
+ACCESS_STATUS_PATH = f"{PREFIX}/access/status"
 
 _PICKUP_PAGE = (
 	"Farm Ops sign-in code\n\n"
@@ -256,6 +259,29 @@ TOKEN_DESCRIBED_ROUTE = {
 	"mutating": True,
 	"arguments": ["device", "challenge", "signature"],
 }
+ACCESS_REQUEST_DESCRIBED_ROUTE = {
+	"path": ACCESS_REQUEST_PATH,
+	"method": "access_request",
+	"group": "auth",
+	"mutating": True,
+	"arguments": [
+		"device_name",
+		"platform",
+		"os_version",
+		"app_version",
+		"unlock_public_key",
+		"proof_public_key",
+		"key_protection",
+		"unlock_signature",
+	],
+}
+ACCESS_STATUS_DESCRIBED_ROUTE = {
+	"path": ACCESS_STATUS_PATH,
+	"method": "access_status",
+	"group": "auth",
+	"mutating": True,
+	"arguments": ["request"],
+}
 
 
 #: Every route `routes.ROUTES` cannot describe, for `list_sidecar_routes`.
@@ -269,6 +295,8 @@ DESCRIBED_ROUTES = (
 	PICKUP_DESCRIBED_ROUTE,
 	CHALLENGE_DESCRIBED_ROUTE,
 	TOKEN_DESCRIBED_ROUTE,
+	ACCESS_REQUEST_DESCRIBED_ROUTE,
+	ACCESS_STATUS_DESCRIBED_ROUTE,
 )
 
 _MAX_BODY = auth.MAX_BODY_BYTES
@@ -1050,6 +1078,8 @@ def _device_key_route(request: Request, path: str):
 	with session.request_session(request=request, body=body):
 		if not device_keys.enabled():
 			return None
+		if path in (ACCESS_REQUEST_PATH, ACCESS_STATUS_PATH) and not device_keys.approval_enabled():
+			return None
 		if path.startswith(PICKUP_PREFIX) and request.method == "GET":
 			if _open_route_limited(request):
 				return _failure(429, TOO_MANY)
@@ -1061,7 +1091,11 @@ def _device_key_route(request: Request, path: str):
 			)
 		if request.method != "POST":
 			return None
-		status = 404 if path.startswith(PICKUP_PREFIX) else 401
+		status = (
+			404
+			if path.startswith(PICKUP_PREFIX) or path in (ACCESS_REQUEST_PATH, ACCESS_STATUS_PATH)
+			else 401
+		)
 		try:
 			proof = device_keys.verify_dpop(str(request.headers.get("DPoP") or ""), "POST", request.path, raw)
 			if path.startswith(PICKUP_PREFIX):
@@ -1074,6 +1108,10 @@ def _device_key_route(request: Request, path: str):
 					caller_ip=_peer(request),
 					commit=False,
 				)
+			elif path == ACCESS_REQUEST_PATH:
+				answer = device_keys.request_access(body, proof, _peer(request))
+			elif path == ACCESS_STATUS_PATH:
+				answer = device_keys.access_status(str(body.get("request") or ""), proof)
 			elif path == CHALLENGE_PATH:
 				answer = device_keys.challenge(str(body.get("device") or ""), proof)
 			else:
@@ -1166,7 +1204,12 @@ def _dispatch(request: Request, path: str) -> Response:
 			return _failure(429, TOO_MANY)
 		return _scan_page(path)
 
-	if path.startswith(PICKUP_PREFIX) or path in (CHALLENGE_PATH, TOKEN_PATH):
+	if path.startswith(PICKUP_PREFIX) or path in (
+		CHALLENGE_PATH,
+		TOKEN_PATH,
+		ACCESS_REQUEST_PATH,
+		ACCESS_STATUS_PATH,
+	):
 		answer = _device_key_route(request, path)
 		if answer is not None:
 			return answer

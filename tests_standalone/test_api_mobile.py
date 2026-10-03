@@ -413,6 +413,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"issue_enrollment_link",
 		"list_access_inventory",
 		"report_lost_device",
+		"list_approvable_people",
+		"peek_access_request",
+		"approve_access_request",
+		"deny_access_request",
 		# v0.106.0. The certificate register's two reads, HERE FOR THIS SET'S
 		# ORDINARY REASON — `MobileAPI.swift` names neither yet. The server side
 		# is published so the iOS half is a client change rather than a release

@@ -1896,6 +1896,81 @@ def report_lost_device(user: str, for_user=None, device=None, note=None) -> dict
 	return device_key_tools.report_lost_device({"user": target, "device": device, "note": note}).data
 
 
+# ── phone approval ── v0.219.0 ────────────────────────────────────────────
+# docs/design/device_client_enrollment.md §6.2. Deciding needs a key-bound
+# (Face ID) caller; there is no MCP tool that approves a phone.
+def _require_phone_approval_on() -> None:
+	from .. import device_keys
+
+	if not device_keys.approval_enabled():
+		frappe.throw("Approving phones from a phone is switched off on this farm.", frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_approvable_people", limit=guard.READ_LIMIT)
+def list_approvable_people(user: str) -> dict:
+	"""Whom this manager may let a new phone in for (never themselves)."""
+	from .. import device_keys
+
+	guard.require_scope(user)
+	_require_access_role(user, "Approving phones")
+	return {"people": device_keys.approvable_people(user)}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("peek_access_request", mutating=True, limit=guard.WRITE_LIMIT)
+def peek_access_request(user: str, code=None) -> dict:
+	"""What a code belongs to, before deciding. Wrong codes are counted."""
+	from .. import device_enrollment, device_keys
+
+	guard.require_scope(user)
+	_require_access_role(user, "Approving phones")
+	_require_phone_approval_on()
+	try:
+		return device_keys.peek(user, str(code or ""))
+	except device_enrollment.EnrollmentRefused as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+def _decide(user: str, code, for_user, decision: str, signature) -> dict:
+	from .. import device_enrollment, device_keys
+
+	guard.require_scope(user)
+	_require_access_role(user, "Approving phones")
+	_require_phone_approval_on()
+	if not getattr(frappe.local, "erpnext_mcp_key_bound", False):
+		frappe.throw(
+			"Approving a phone takes a phone signed in with Face ID (device keys). Nothing was changed.",
+			frappe.PermissionError,
+		)
+	try:
+		return device_keys.decide(
+			user,
+			str(code or ""),
+			str(for_user or ""),
+			decision,
+			"phone",
+			signature=str(signature or ""),
+			approver_device=str(getattr(frappe.local, "erpnext_mcp_device", "") or ""),
+		)
+	except device_enrollment.EnrollmentRefused as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("approve_access_request", mutating=True, limit=guard.WRITE_LIMIT)
+def approve_access_request(user: str, code=None, for_user=None, signature=None) -> dict:
+	"""Let a new phone in for a person. Signed by this phone's unlock key (Face ID)."""
+	return _decide(user, code, for_user, "approve", signature)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("deny_access_request", mutating=True, limit=guard.WRITE_LIMIT)
+def deny_access_request(user: str, code=None, signature=None) -> dict:
+	"""Turn a new phone's request away."""
+	return _decide(user, code, "", "deny", signature)
+
+
 # ── request_badge_photo ── v0.214.0 ──────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("request_badge_photo", mutating=True, limit=guard.WRITE_LIMIT)

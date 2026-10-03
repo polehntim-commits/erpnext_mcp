@@ -30,6 +30,7 @@
   "switch_expiry",
   "device_keys_section",
   "device_keys_enabled",
+  "phone_approval_enabled",
   "legacy_device_secrets",
   "enrollment_link_minutes",
   "device_reauth_minutes",
@@ -1388,6 +1389,13 @@
    "fieldname": "device_keys_enabled",
    "fieldtype": "Check",
    "label": "Device keys enabled"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On (with Device keys enabled): a new phone with no card can ask to be let in — it shows a code; a manager approves it on their own phone with Face ID, or a System Manager in the Desk. No MCP tool can approve a phone.",
+   "fieldname": "phone_approval_enabled",
+   "fieldtype": "Check",
+   "label": "Approve new phones from a phone"
   },
   {
    "default": "1",

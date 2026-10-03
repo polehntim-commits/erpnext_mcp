@@ -1,0 +1,235 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-03 00:00:00.000000",
+ "description": "A request to let a new phone (or, once MCP OAuth is on, an MCP client) in. A manager approves it on their phone with Face ID, or a System Manager in the Desk; nothing approves it automatically and no MCP tool can. The short code people read is stored only as its hash.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "kind",
+  "status",
+  "display_name",
+  "subject_user",
+  "code_hash",
+  "expires_at",
+  "ip",
+  "col_device",
+  "platform",
+  "os_version",
+  "app_version",
+  "key_protection",
+  "unlock_public_key",
+  "proof_public_key",
+  "jkt",
+  "decision_section",
+  "approved_by",
+  "approved_at",
+  "approved_via",
+  "device",
+  "decided_reason",
+  "client_section",
+  "client_id",
+  "redirect_uris",
+  "requested_scopes",
+  "granted_scopes",
+  "client_metadata"
+ ],
+ "fields": [
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "read_only": 1,
+   "options": "device\nmcp_client",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "read_only": 1,
+   "options": "Pending\nApproved\nDenied\nExpired\nUsed",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "subject_user",
+   "fieldtype": "Link",
+   "label": "For",
+   "read_only": 1,
+   "options": "User",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "code_hash",
+   "fieldtype": "Data",
+   "label": "Code hash",
+   "read_only": 1,
+   "description": "SHA-256 of the short code. The code itself is never stored."
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ip",
+   "fieldtype": "Data",
+   "label": "Requested from",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_device",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "platform",
+   "fieldtype": "Data",
+   "label": "Platform",
+   "read_only": 1
+  },
+  {
+   "fieldname": "os_version",
+   "fieldtype": "Data",
+   "label": "OS version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "app_version",
+   "fieldtype": "Data",
+   "label": "App version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "key_protection",
+   "fieldtype": "Data",
+   "label": "Key protection",
+   "read_only": 1
+  },
+  {
+   "fieldname": "unlock_public_key",
+   "fieldtype": "Small Text",
+   "label": "Unlock key (public)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "proof_public_key",
+   "fieldtype": "Small Text",
+   "label": "Proof key (public)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "jkt",
+   "fieldtype": "Data",
+   "label": "Key thumbprint",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decision_section",
+   "fieldtype": "Section Break",
+   "label": "Decision"
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Decided by",
+   "read_only": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "Decided at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_via",
+   "fieldtype": "Data",
+   "label": "Decided on",
+   "read_only": 1,
+   "description": "phone (Face ID), desk"
+  },
+  {
+   "fieldname": "device",
+   "fieldtype": "Data",
+   "label": "Device row made",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decided_reason",
+   "fieldtype": "Data",
+   "label": "Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_section",
+   "fieldtype": "Section Break",
+   "label": "MCP client (OAuth)"
+  },
+  {
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "label": "Client ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "redirect_uris",
+   "fieldtype": "Small Text",
+   "label": "Redirect URIs",
+   "read_only": 1
+  },
+  {
+   "fieldname": "requested_scopes",
+   "fieldtype": "Small Text",
+   "label": "Requested scopes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "granted_scopes",
+   "fieldtype": "Small Text",
+   "label": "Granted scopes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_metadata",
+   "fieldtype": "Code",
+   "label": "Client metadata",
+   "read_only": 1,
+   "options": "JSON"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Access Request",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "quick_entry": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "display_name",
+ "track_changes": 1
+}

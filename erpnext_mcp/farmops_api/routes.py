@@ -119,6 +119,11 @@ ROUTES = (
 	Route("/mobile", mobile_api.issue_enrollment_link),
 	Route("/mobile", mobile_api.list_access_inventory),
 	Route("/mobile", mobile_api.report_lost_device),
+	# v0.219.0. Phone approval; refuse while off.
+	Route("/mobile", mobile_api.list_approvable_people),
+	Route("/mobile", mobile_api.peek_access_request),
+	Route("/mobile", mobile_api.approve_access_request),
+	Route("/mobile", mobile_api.deny_access_request),
 	Route("/mobile", mobile_api.move_asset),
 	Route("/mobile", mobile_api.undo_asset_move),
 	Route("/mobile", mobile_api.log_asset_state_change),

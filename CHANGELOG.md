@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.219.0 — 2026-10-03 — device keys, phase 2: approve a new phone from a phone (OFF by default)
+
+**990 tools** (unchanged). **175 mobile methods**: + `list_approvable_people`, `peek_access_request`,
+`approve_access_request`, `deny_access_request`. Contract `docs/design/device_client_enrollment.md`
+§6.1–§6.2 (with build notes). Deploy `docs/deploy/v0.219.0_phone_approval.md`.
+
+- New setting **Approve new phones from a phone** (`phone_approval_enabled`, off; needs device keys).
+- A phone with no card shows a code (8 characters, no 0/O/1/I/L; hashed at rest) after
+  `POST /farmops/api/access/request` (its keys, Face ID-signed; 5 an hour per address, 50 open,
+  15 minutes). A manager types or scans it, sees the phone's name, platform, app and address, picks
+  the person (`list_approvable_people` — never themselves; a manager's phone needs a System
+  Manager), and approves with a **Face ID signature** — a legacy secret cannot approve. The phone
+  collects with `/access/status`, from its own proof key only, once.
+- Desk fallback for a System Manager: `erpnext_mcp.api.access.decide`. **No MCP tool approves a
+  phone.**
+- New doctype **Farm Access Request** (System Manager read only). Alert on every approval.
+
 ## 0.218.0 — 2026-10-03 — device keys, phase 1 (OFF by default)
 
 **990 tools** (482 read, 508 write): + `issue_enrollment_link`, `list_access_inventory`,
