@@ -600,6 +600,8 @@ class TheScheduledJobs(unittest.TestCase):
 				"daily": [
 					"erpnext_mcp.tools.uploads.collect_expired_sessions",
 					"erpnext_mcp.tools.mobile.sweep_idle_grants",
+					# v0.224.0. Payroll reminders, off unless enabled.
+					"erpnext_mcp.payroll_calendar.send_reminders",
 				],
 				"weekly": ["erpnext_mcp.drift.scan"],
 			},

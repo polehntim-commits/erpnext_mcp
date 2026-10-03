@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.224.0 — 2026-10-03 — payroll and bookkeeping windows; the payroll calendar (OFF by default)
+
+**1006 tools** (489 read, 517 write): + `get_payroll_calendar`. Contract `docs/design/payroll_windows.md`.
+Deploy `docs/deploy/v0.224.0_payroll_windows.md`.
+
+- **Windows**: ERPNext MCP Settings → **Open a window** (System Manager) turns a whole group of tool
+  switches on for a limited time (default 2 hours, max 4) through the v0.217.0 switch timer, which turns
+  them off again; audit row and security alert both ways. **Payroll** (calculate/run/submit payroll,
+  post to GL, payroll accounts and taxes, pay stubs, NACHA and prenote files, tax forms and PDFs, 1099
+  prefill) and **Bookkeeping** (journal entries, purchase and sales invoices, payment entries). Groups are
+  data (`switch_windows`). A switch already on by hand is left alone; `mark_tax_form_filed` and credential
+  tools are never opened; no MCP tool opens a window. Money movement and filing stay human.
+- **Payroll calendar**: tile (HR, Accounts, System Managers; hidden until `payroll_calendar_enabled`) and
+  `get_payroll_calendar`: federal deposits (semiweekly/monthly, holiday-shifted; Oregon withholding the
+  same dates), 941 and Oregon OQ + 132 quarterly, FUTA quarters, and the 31 January annuals (W-2/W-3, 940,
+  943, 1099-NEC, Oregon WR) — overdue / due / upcoming / done (a Tax Form marked Filed). Daily reminder
+  email + push at `payroll_reminder_days` (7, 1) and once when overdue.
+- Tiles: a `list_query` tile whose query is switched off by a setting is hidden (`tile_queries.AVAILABLE`).
+- Not built: Form 940 and W-3 generation (`get_futa_summary` has the 940 figures).
+
 ## 0.223.3 — 2026-10-03 — emailed links: flag a host_name nobody can open
 
 **1005 tools** (unchanged). Deploy `docs/deploy/v0.223.3_emailed_links.md` (with the one-time OML fix).

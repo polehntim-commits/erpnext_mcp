@@ -414,6 +414,8 @@ scheduler_events = {
 	"daily": [
 		"erpnext_mcp.tools.uploads.collect_expired_sessions",
 		"erpnext_mcp.tools.mobile.sweep_idle_grants",
+		# v0.224.0. Payroll deposit and filing reminders; off unless payroll_calendar_enabled.
+		"erpnext_mcp.payroll_calendar.send_reminders",
 	],
 	"weekly": [
 		"erpnext_mcp.drift.scan",

@@ -11,6 +11,8 @@ frappe.ui.form.on("ERPNext MCP Settings", {
 		// v0.217.0. A dangerous switch for as long as the job takes, then off
 		// again by itself. docs/design/security_status_and_alerts.md §5.
 		frm.add_custom_button(__("Enable a tool for N minutes"), () => enable_for(frm));
+		// v0.224.0. A payroll or bookkeeping window. docs/design/payroll_windows.md §1.
+		frm.add_custom_button(__("Open a window"), () => open_window(frm));
 		// v0.219.0 / v0.220.0. The Desk fallback for a code shown by a new phone
 		// or by an AI client's sign-in page. docs/design/device_client_enrollment.md §6.
 		if (frm.doc.phone_approval_enabled || frm.doc.mcp_oauth_enabled) {
@@ -870,4 +872,33 @@ function decide_access(frm, code, request) {
 		});
 	}
 	dialog.show();
+}
+
+
+// v0.224.0. Turn a group of tools on for a limited time (default 2 hours). The
+// timer job turns them off again; a security alert goes out both times.
+function open_window(frm) {
+	frappe.call({ method: "erpnext_mcp.api.switches.window_groups" }).then((r) => {
+		const answer = (r && r.message) || {};
+		const names = Object.keys(answer.groups || {});
+		frappe.prompt(
+			[
+				{ fieldname: "group", fieldtype: "Select", label: __("Window"), options: names.join("\n"), default: names[0], reqd: 1 },
+				{ fieldname: "minutes", fieldtype: "Int", label: __("Minutes"), default: answer.default_minutes || 120, reqd: 1 },
+			],
+			(values) => {
+				frappe
+					.call({ method: "erpnext_mcp.api.switches.open_window", args: values, freeze: true })
+					.then((res) => {
+						const out = (res && res.message) || {};
+						frappe.msgprint(
+							__("The {0} window is open until {1}: {2}", [out.group, out.expires_at, (out.opened || []).join(", ")])
+						);
+						frm.reload_doc();
+					});
+			},
+			__("Open a window"),
+			__("Open")
+		);
+	});
 }

@@ -222,6 +222,31 @@ def my_print_jobs(user, company, params):
 	)
 
 
+def payroll_calendar(user, company, params):
+	"""v0.224.0. Tax deposits and filings: overdue, due, upcoming. docs/design/payroll_windows.md §2."""
+	from . import payroll_calendar as calendar
+
+	if not calendar.enabled():
+		return _answer([])
+	companies = [company] if company else calendar._companies_of(user)
+	rows = [
+		{
+			"doctype": None,
+			"name": r["name"],
+			"title": r["title"],
+			"subtitle": r["subtitle"],
+			"state": r["state"],
+			"due_date": r["due_date"],
+		}
+		for r in calendar.items(companies)
+		if r["state"] != "done"
+	]
+	urgent = [r for r in rows if r["state"] in ("overdue", "due")]
+	answer = _answer(rows, "critical" if any(r["state"] == "overdue" for r in rows) else "")
+	answer["count"] = len(urgent)
+	return answer
+
+
 #: id → (function, params schema {name: type}, roles gate or ()).
 QUERIES = {
 	"my_tasks_open": (my_tasks_open, {}, ()),
@@ -234,7 +259,31 @@ QUERIES = {
 	"my_feedback_answered": (my_feedback_answered, {}, ()),
 	"triage_queue": (triage_queue, {}, MANAGER_ROLES),
 	"my_print_jobs": (my_print_jobs, {}, ("Card Print Requester", "Farm Manager", "System Manager")),
+	# v0.224.0. Off until `payroll_calendar_enabled`; see AVAILABLE.
+	"payroll_calendar": (
+		payroll_calendar,
+		{},
+		("System Manager", "HR Manager", "HR User", "Accounts Manager"),
+	),
 }
+
+
+#: v0.224.0. A query switched off by a setting hides its tile entirely (tiles.hidden_reason).
+def _payroll_calendar_on() -> bool:
+	from . import payroll_calendar
+
+	return payroll_calendar.enabled()
+
+
+AVAILABLE = {"payroll_calendar": _payroll_calendar_on}
+
+
+def available(query: str) -> bool:
+	check = AVAILABLE.get(str(query or ""))
+	try:
+		return True if check is None else bool(check())
+	except Exception:
+		return False
 
 
 def problems(spec, audience: dict) -> list:

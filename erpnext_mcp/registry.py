@@ -187,6 +187,7 @@ from .tools import email_branding as email_branding_tools
 from .tools import employee_file as employee_file_tools
 from .tools import moments as moment_tools
 from .tools import office_mail as office_mail_tools
+from .tools import payroll_calendar as payroll_calendar_tools
 from .tools import pest_control as pest_control_tools
 from .tools import phone_configs as phone_config_tools
 from .tools import programs as program_tools
@@ -29010,6 +29011,16 @@ TOOLS = {
 		required=("employee",),
 		mutating=True,
 		title="Export employee file packet",
+	),
+	"get_payroll_calendar": _tool(
+		payroll_calendar_tools.get_payroll_calendar,
+		"v0.224.0. WHAT IS DUE FOR PAYROLL: every federal tax deposit (semiweekly or monthly per the "
+		"lookback, holiday-shifted — Oregon withholding is deposited on the same dates), the quarterly 941 "
+		"and Oregon OQ + Form 132, FUTA quarters, and the 31 January annuals (W-2/W-3, 940, 943, 1099-NEC, "
+		"Oregon WR), overdue and the next 60 days, each overdue / due / upcoming / done (a Tax Form marked "
+		"Filed). Read-only: paying and filing stay with a person.",
+		{"company": _field(_STRING, "One company. Default every company you can see.")},
+		title="Payroll calendar",
 	),
 	"get_mail_status": _tool(
 		office_mail_tools.get_mail_status,

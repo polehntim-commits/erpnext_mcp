@@ -51,6 +51,11 @@
   "employee_file_section",
   "login_card_archive_enabled",
   "employee_file_expiry_windows",
+  "payroll_windows_section",
+  "switch_windows",
+  "payroll_calendar_enabled",
+  "payroll_reminder_days",
+  "payroll_reminder_recipients",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -1013,6 +1018,7 @@
   "allow_redraft_mail",
   "allow_get_employee_file",
   "allow_export_employee_file_packet",
+  "allow_get_payroll_calendar",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1558,6 +1564,45 @@
    "fieldtype": "Code",
    "label": "Expiry warning windows (days)",
    "options": "JSON"
+  },
+  {
+   "fieldname": "payroll_windows_section",
+   "fieldtype": "Section Break",
+   "label": "Payroll windows and calendar"
+  },
+  {
+   "description": "Extra or replacement tool windows as JSON, e.g. {\"payroll\": [\"calculate_payroll\", ...]}. Empty: the built-in payroll and bookkeeping windows. Open one with 'Open a window' above (System Manager; default 2 hours, auto-off). No window ever opens mark_tax_form_filed or a credential tool. docs/design/payroll_windows.md.",
+   "fieldname": "switch_windows",
+   "fieldtype": "Code",
+   "label": "Tool windows",
+   "options": "JSON"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On: the Payroll calendar tile (HR, Accounts and System Managers) and the daily reminders of tax deposits and filings. Paying and filing stay with a person.",
+   "fieldname": "payroll_calendar_enabled",
+   "fieldtype": "Check",
+   "label": "Payroll calendar and reminders"
+  },
+  {
+   "default": "7,1",
+   "description": "Days before a due date to remind, comma-separated. Overdue items are reminded once.",
+   "fieldname": "payroll_reminder_days",
+   "fieldtype": "Data",
+   "label": "Remind days before"
+  },
+  {
+   "description": "Who gets the reminders (emails, comma-separated). Empty: every HR Manager and System Manager.",
+   "fieldname": "payroll_reminder_recipients",
+   "fieldtype": "Small Text",
+   "label": "Payroll reminder recipients"
+  },
+  {
+   "default": "1",
+   "description": "READ. Tax deposits and filings due: overdue, due, upcoming, done.",
+   "fieldname": "allow_get_payroll_calendar",
+   "fieldtype": "Check",
+   "label": "Get Payroll Calendar"
   },
   {
    "default": "1",

@@ -256,6 +256,13 @@ def hidden_reason(body: dict, person: dict, company: str, app_version, asset: di
 			return "occupancy"
 	if show_if.get("asset_types") and asset.get("asset_type") not in show_if["asset_types"]:
 		return "asset type"
+	# v0.224.0. A list tile whose query is switched off by a setting is not shown.
+	target = body.get("target") or {}
+	if target.get("kind") == "list_query":
+		from . import tile_queries
+
+		if not tile_queries.available(target.get("query")):
+			return f"{target.get('query')} is switched off"
 	return ""
 
 
@@ -396,8 +403,29 @@ CREW_TILES = {
 }
 
 
+#: v0.224.0 (docs/design/payroll_windows.md §2). Hidden until `payroll_calendar_enabled`.
+PAYROLL_TILES = {
+	"payroll_calendar": {
+		"surface": "today",
+		"title": {"en": "Payroll calendar", "es": "Calendario de nómina"},
+		"subtitle": {"en": "Tax deposits and filings", "es": "Depósitos y declaraciones"},
+		"icon": "calendar.badge.clock",
+		"order": 70,
+		"target": {"kind": "list_query", "query": "payroll_calendar", "params": {}},
+		"audience": {"roles": ["System Manager", "HR Manager", "HR User", "Accounts Manager"]},
+		"badge": {"query": "payroll_calendar", "params": {}},
+		"show_if": {},
+		"min_app_version": "0.21.0",
+	},
+}
+
+
 def seed() -> list:
 	made = []
+	for key, body in PAYROLL_TILES.items():
+		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.224.0).")
+		if name:
+			made.append(name)
 	for key, body in SEEDS.items():
 		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.207.0).")
 		if name:
