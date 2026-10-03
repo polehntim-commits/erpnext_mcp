@@ -213,6 +213,8 @@ def get_server_status(args: dict) -> ToolResult:
 		# v0.216.1. Configuration only — test_pdf_rendering is what renders.
 		"pdf": pdf_base.status(),
 		"email": mail_status.status(),
+		# v0.220.0. MCP OAuth and when the static token can go.
+		"mcp_auth": _mcp_auth(),
 		"notes": [
 			"worker_uptime_seconds IS THIS PROCESS, NOT THE BENCH. A Frappe bench runs "
 			"several workers and this call was answered by one of them, so two consecutive "
@@ -236,6 +238,15 @@ def get_server_status(args: dict) -> ToolResult:
 			+ (f", worker up {uptime}s" if uptime is not None else "")
 		),
 	)
+
+
+def _mcp_auth() -> dict:
+	try:
+		from .. import oauth
+
+		return oauth.static_token_status()
+	except Exception as exc:  # pragma: no cover - a status block must not fail the call
+		return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 # ════════════════════════════════════════════════════════════════════════════

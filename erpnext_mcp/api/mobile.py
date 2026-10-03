@@ -1902,7 +1902,8 @@ def report_lost_device(user: str, for_user=None, device=None, note=None) -> dict
 def _require_phone_approval_on() -> None:
 	from .. import device_keys
 
-	if not device_keys.approval_enabled():
+	# v0.220.0: or an AI client's OAuth request (each kind is gated again by its own switch).
+	if not device_keys.any_approval_enabled():
 		frappe.throw("Approving phones from a phone is switched off on this farm.", frappe.ValidationError)
 
 
@@ -1932,7 +1933,7 @@ def peek_access_request(user: str, code=None) -> dict:
 		frappe.throw(str(exc), frappe.ValidationError)
 
 
-def _decide(user: str, code, for_user, decision: str, signature) -> dict:
+def _decide(user: str, code, for_user, decision: str, signature, scopes=None, profile=None) -> dict:
 	from .. import device_enrollment, device_keys
 
 	guard.require_scope(user)
@@ -1952,6 +1953,8 @@ def _decide(user: str, code, for_user, decision: str, signature) -> dict:
 			"phone",
 			signature=str(signature or ""),
 			approver_device=str(getattr(frappe.local, "erpnext_mcp_device", "") or ""),
+			scopes=str(scopes or ""),
+			profile=str(profile or ""),
 		)
 	except device_enrollment.EnrollmentRefused as exc:
 		frappe.throw(str(exc), frappe.ValidationError)
@@ -1959,9 +1962,12 @@ def _decide(user: str, code, for_user, decision: str, signature) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("approve_access_request", mutating=True, limit=guard.WRITE_LIMIT)
-def approve_access_request(user: str, code=None, for_user=None, signature=None) -> dict:
-	"""Let a new phone in for a person. Signed by this phone's unlock key (Face ID)."""
-	return _decide(user, code, for_user, "approve", signature)
+def approve_access_request(
+	user: str, code=None, for_user=None, signature=None, scopes=None, profile=None
+) -> dict:
+	"""Let a new phone in for a person — or (v0.220.0) an AI client in with `scopes` /
+	`profile`. Signed by this phone's unlock key (Face ID)."""
+	return _decide(user, code, for_user, "approve", signature, scopes, profile)
 
 
 @frappe.whitelist(methods=["POST"])

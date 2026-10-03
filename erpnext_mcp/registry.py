@@ -35,7 +35,7 @@ import json
 
 import frappe
 
-from . import audit, backup_status, form_pdf_renderer, geo, i9_pdf, settings, w4_pdf
+from . import audit, backup_status, form_pdf_renderer, geo, i9_pdf, oauth, settings, w4_pdf
 from .compat import doctype_exists, traceback_text
 from .errors import ToolError
 from .render import qr
@@ -28928,7 +28928,8 @@ TOOLS = {
 		"protection (secure_enclave / software), how it was approved and by whom, last seen and from "
 		"where, and whether it is KEY-BOUND or still holds a legacy api_key/api_secret. "
 		"`ready_to_disable_legacy_secrets` is true when no live phone holds a legacy secret. "
-		"Read-only; never a key or secret.",
+		"v0.220.0: `clients` lists every AI client approved through OAuth — name, scopes, who "
+		"approved it and when, last token. Read-only; never a key, secret or token.",
 		{
 			"user": _field(_STRING, "One account. Default every account."),
 			"include_revoked": _field(_BOOLEAN, "Include revoked devices. Default false."),
@@ -28950,6 +28951,21 @@ TOOLS = {
 		mutating=True,
 		destructive=True,
 		title="Report lost device",
+	),
+	"revoke_mcp_client": _tool(
+		device_key_tools.revoke_mcp_client,
+		"MUTATING (default OFF). v0.220.0. End an AI client that signed in with OAuth: its approval "
+		"becomes Revoked, every access and refresh token it holds stops working on the next call, and "
+		"Security Alert Recipients are told. `client` is the name list_access_inventory shows under "
+		"`clients`. Approving a client is never an MCP tool — it takes a manager's phone or the Desk.",
+		{
+			"client": _field(_STRING, "The client (a Farm Access Request name from list_access_inventory)."),
+			"reason": _field(_STRING, "Optional: why."),
+		},
+		required=("client",),
+		mutating=True,
+		destructive=True,
+		title="Revoke MCP client",
 	),
 	"get_security_status": _tool(
 		security_status_tools.get_security_status,
@@ -34101,7 +34117,7 @@ def tools_list() -> dict:
 				"annotations": spec["annotations"],
 			}
 			for name, spec in TOOLS.items()
-			if settings.tool_enabled(name) and is_available(name)
+			if settings.tool_enabled(name) and oauth.permits(name) and is_available(name)
 		]
 	}
 
@@ -34153,6 +34169,20 @@ def dispatch(tool_name: str, arguments: dict, caller_ip: str = "") -> dict:
 			f"the {kind} tool {tool_name!r} is switched off on this site. An "
 			f"operator must tick 'allow_{tool_name}' in ERPNext MCP Settings "
 			"to enable it."
+		)
+
+	if not oauth.permits(tool_name):
+		# v0.220.0. The switch is on, but this OAuth client was not granted it.
+		audit.record(
+			tool_name,
+			arguments,
+			audit.STATUS_BLOCKED,
+			"blocked: outside the scopes granted to this OAuth client",
+			caller_ip=caller_ip,
+		)
+		return error_result(
+			f"the tool {tool_name!r} is outside the scopes this client was granted. A manager can "
+			"approve the client again with more scopes; the site's switches still apply."
 		)
 
 	try:

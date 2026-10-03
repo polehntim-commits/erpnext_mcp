@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 990 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 991 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20846,6 +20846,15 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.220.0 — OAuth for MCP clients (off by default)
+
+| Tool | What it does |
+| --- | --- |
+| `revoke_mcp_client` | End an AI client approved through OAuth and every token it holds; alerts. Write |
+
+`list_access_inventory` gains `clients`. Approving a client is never a tool: a manager's phone or the
+Desk. Contract: `docs/design/device_client_enrollment.md` §6.3.
 
 ## v0.218.0 — device keys (phase 1, off by default)
 

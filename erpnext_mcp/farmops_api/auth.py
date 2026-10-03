@@ -96,7 +96,11 @@ def resolve(headers, body, method: str = "", path: str = "", raw: bytes = b"") -
 	# Only when device keys are on; a Refused is anonymous, like every failure
 	# here — except a provably revoked device, which the caller reads from
 	# `revoked_device` to tell the phone to wipe itself (§4.3).
-	if str(headers.get(AUTHORIZATION) or "").startswith("FarmOps "):
+	# v0.220.0: also as `X-FarmOps-Authorization`, which no proxy strips.
+	key_bound = str(headers.get(AUTHORIZATION) or "")
+	if not key_bound.startswith("FarmOps "):
+		key_bound = str(headers.get("X-FarmOps-Authorization") or "")
+	if key_bound.startswith("FarmOps "):
 		from .. import device_keys
 
 		if not device_keys.enabled():

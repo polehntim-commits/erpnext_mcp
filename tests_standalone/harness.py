@@ -5994,7 +5994,12 @@ class MCPTestCase(unittest.TestCase):
 		# `form_dict` goes with them. Real Frappe rebuilds it from THIS request's
 		# body in `make_form_dict`, so one request's arguments cannot be read by
 		# the next — and v0.17.2 reads `_auth` out of it.
-		for scratch in ("erpnext_mcp_calling_user", "erpnext_mcp_fallback_auth_source", "form_dict"):
+		for scratch in (
+			"erpnext_mcp_calling_user",
+			"erpnext_mcp_fallback_auth_source",
+			"erpnext_mcp_oauth",
+			"form_dict",
+		):
 			frappe.local.pop(scratch, None)
 		all_headers = {"Content-Type": "application/json"}
 		if token is not False:

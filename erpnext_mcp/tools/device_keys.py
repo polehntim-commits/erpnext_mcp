@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 """issue_enrollment_link, list_access_inventory, report_lost_device. v0.218.0.
 
+v0.220.0: revoke_mcp_client, and `clients` in the inventory.
+
 docs/design/device_client_enrollment.md §3, §7. The two writes ship OFF like
 every mutating tool; `issue_enrollment_link` also needs `device_keys_enabled`.
 """
@@ -11,7 +13,7 @@ import base64
 
 import frappe
 
-from .. import device_enrollment, device_keys
+from .. import device_enrollment, device_keys, oauth
 from ..args import as_bool, as_int, as_str
 from ..errors import ToolError
 from ..render import qr
@@ -47,10 +49,12 @@ def list_access_inventory(args: dict) -> ToolResult:
 		as_str(args, "user").strip().lower(), as_bool(args, "include_revoked", False)
 	)
 	legacy = [row for row in rows if row["legacy_secret"]]
+	clients = oauth.clients(as_bool(args, "include_revoked", False))
 	return ToolResult(
 		data={
 			"count": len(rows),
 			"devices": rows,
+			"clients": clients,
 			"key_bound": sum(1 for row in rows if row["key_bound"]),
 			"legacy_secret": len(legacy),
 			"ready_to_disable_legacy_secrets": not legacy,
@@ -69,4 +73,16 @@ def report_lost_device(args: dict) -> ToolResult:
 		raise ToolError(str(exc)) from None
 	return ToolResult(
 		data=answer, summary=f"{len(answer['revoked_devices'])} device(s) of {user} revoked as lost"
+	)
+
+
+def revoke_mcp_client(args: dict) -> ToolResult:
+	"""End an OAuth AI client and every token it holds. v0.220.0."""
+	client = as_str(args, "client", required=True).strip()
+	try:
+		answer = oauth.revoke_client(client, str(frappe.session.user or ""), as_str(args, "reason"))
+	except device_enrollment.EnrollmentRefused as exc:
+		raise ToolError(str(exc)) from None
+	return ToolResult(
+		data=answer, summary=f"MCP client {client} revoked; {answer['tokens_revoked']} token(s) ended"
 	)

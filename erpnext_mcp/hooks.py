@@ -29,6 +29,11 @@ it acts on `/api/method/erpnext_mcp.api.*` and nothing else, it never overrides
 an identity Frappe already established, it grants no permission of any kind, and
 it cannot raise. See the note above the declaration, and `api/fallback_auth.py`.
 
+v0.220.0 ADDS A SECOND `auth_hooks` ENTRY AND A `page_renderer`, both for MCP
+OAuth and both inert until `mcp_oauth_enabled` is ticked: the hook honours a
+Bearer token on the MCP endpoint only, and the renderer serves two
+`/.well-known/` discovery documents and nothing else. See `oauth.py`.
+
 v0.216.1 IS THE THIRD EXCEPTION, AND THE FIRST THAT CHANGES FRAPPE'S OWN
 BEHAVIOUR. `before_request` / `before_job` install `pdf_base`, which replaces
 two functions inside `frappe.utils.pdf` (`scrub_urls`, `get_cookie_options`)
@@ -614,7 +619,19 @@ doctype_js = {
 #: A BARE DOTTED PATH IN A LIST, which is the shape `frappe.get_hooks` returns
 #: and `validate_auth_via_hooks` iterates. Same `frappe.get_attr` rule as every
 #: other path in this file: no colon, no name prefix.
-auth_hooks = ["erpnext_mcp.api.fallback_auth.authenticate"]
+#:
+#: v0.220.0 ADDS A SECOND ENTRY, bounded the same way: `oauth.authenticate` acts on
+#: `/api/method/erpnext_mcp.mcp.handle` with a Bearer token and nothing else, and
+#: only while `mcp_oauth_enabled` is ticked. Frappe v15 refuses any two-part
+#: `Authorization` header that leaves the session Guest before a method runs, so
+#: an OAuth access token can only be honoured here.
+auth_hooks = ["erpnext_mcp.api.fallback_auth.authenticate", "erpnext_mcp.oauth.authenticate"]
+
+#: v0.220.0. The two OAuth discovery documents (RFC 9728, RFC 8414) under
+#: `/.well-known/`, which an MCP client fetches from the site root. The renderer
+#: claims those two paths only, and only while `mcp_oauth_enabled` is ticked;
+#: every other path falls through to Frappe's own renderers untouched.
+page_renderer = ["erpnext_mcp.oauth.WellKnownPage"]
 
 #: v0.216.1. A PDF-ONLY base URL for wkhtmltopdf, so print stylesheets and
 #: images are fetched from an address the container itself serves instead of

@@ -34,6 +34,13 @@
   "legacy_device_secrets",
   "enrollment_link_minutes",
   "device_reauth_minutes",
+  "mcp_oauth_section",
+  "mcp_oauth_enabled",
+  "legacy_static_mcp_token",
+  "mcp_oauth_issuer",
+  "mcp_oauth_user",
+  "mcp_access_token_minutes",
+  "mcp_refresh_days",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -981,6 +988,7 @@
   "allow_issue_enrollment_link",
   "allow_list_access_inventory",
   "allow_report_lost_device",
+  "allow_revoke_mcp_client",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1417,6 +1425,59 @@
    "fieldname": "device_reauth_minutes",
    "fieldtype": "Int",
    "label": "Re-authenticate every (minutes)"
+  },
+  {
+   "fieldname": "mcp_oauth_section",
+   "fieldtype": "Section Break",
+   "label": "AI clients (OAuth)"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On: an AI client (Claude Code, a claude.ai connector) signs in with OAuth 2.1 instead of the shared token. Its browser shows a code; a System Manager approves it on their phone with Face ID, or in the Desk, choosing what it may do (a Farm Manager may grant read-only). No MCP tool can approve a client. docs/design/device_client_enrollment.md section 6.3.",
+   "fieldname": "mcp_oauth_enabled",
+   "fieldtype": "Check",
+   "label": "OAuth for MCP clients"
+  },
+  {
+   "default": "1",
+   "description": "On (default). Only read while OAuth is on: untick it once get_server_status says ready_to_disable_static_mcp_token. With OAuth off the static token is the only way in and always works.",
+   "fieldname": "legacy_static_mcp_token",
+   "fieldtype": "Check",
+   "label": "Keep the static MCP token working"
+  },
+  {
+   "description": "The address AI clients reach this site at, origin only, e.g. https://<host>.ts.net:8443. Empty: the Public URL's origin, else what the request says. Set it: proxies rewrite scheme and host, and a client refuses metadata whose issuer does not match.",
+   "fieldname": "mcp_oauth_issuer",
+   "fieldtype": "Data",
+   "label": "OAuth issuer (https origin)"
+  },
+  {
+   "description": "A dedicated service user (e.g. mcp-agent@..., no System Manager, no Administrator). Empty: the MCP System User, like the static token. The approving manager is recorded on every audit row.",
+   "fieldname": "mcp_oauth_user",
+   "fieldtype": "Link",
+   "label": "OAuth clients run as",
+   "options": "User"
+  },
+  {
+   "default": "60",
+   "description": "5-1440. The client refreshes silently.",
+   "fieldname": "mcp_access_token_minutes",
+   "fieldtype": "Int",
+   "label": "Access token life (minutes)"
+  },
+  {
+   "default": "30",
+   "description": "1-90. Rotated on every use; a client must be approved again 90 days after approval whatever this says. A refresh token used twice ends the whole sign-in and alerts.",
+   "fieldname": "mcp_refresh_days",
+   "fieldtype": "Int",
+   "label": "Refresh token idle life (days)"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). End an approved OAuth AI client and every token it holds; alerts.",
+   "fieldname": "allow_revoke_mcp_client",
+   "fieldtype": "Check",
+   "label": "Revoke MCP Client"
   },
   {
    "fieldname": "attribution_section",

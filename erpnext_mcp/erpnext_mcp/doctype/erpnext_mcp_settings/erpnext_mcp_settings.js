@@ -11,6 +11,11 @@ frappe.ui.form.on("ERPNext MCP Settings", {
 		// v0.217.0. A dangerous switch for as long as the job takes, then off
 		// again by itself. docs/design/security_status_and_alerts.md §5.
 		frm.add_custom_button(__("Enable a tool for N minutes"), () => enable_for(frm));
+		// v0.219.0 / v0.220.0. The Desk fallback for a code shown by a new phone
+		// or by an AI client's sign-in page. docs/design/device_client_enrollment.md §6.
+		if (frm.doc.phone_approval_enabled || frm.doc.mcp_oauth_enabled) {
+			frm.add_custom_button(__("Approve an access request"), () => approve_access(frm));
+		}
 		set_headline(frm);
 		render_connect_panel(frm);
 		render_tool_console(frm);
@@ -784,4 +789,85 @@ function enable_for(frm) {
 		__("Enable a tool for a limited time"),
 		__("Enable")
 	);
+}
+
+
+// v0.219.0 / v0.220.0. Type the code a new phone or an AI client's sign-in page
+// shows, see what it is, then approve or deny. Never more than it asked for.
+function approve_access(frm) {
+	frappe.prompt(
+		[{ fieldname: "code", fieldtype: "Data", label: __("Code"), reqd: 1 }],
+		(values) => {
+			frappe
+				.call({ method: "erpnext_mcp.api.access.peek", args: { code: values.code } })
+				.then((r) => r && r.message && decide_access(frm, values.code, r.message));
+		},
+		__("Approve an access request"),
+		__("Look up")
+	);
+}
+
+function decide_access(frm, code, request) {
+	const client = request.kind === "mcp_client";
+	const fields = [
+		{
+			fieldtype: "HTML",
+			options: client
+				? `<p><b>${frappe.utils.escape_html(request.client_name || "")}</b> (returns to ${frappe.utils.escape_html(
+						request.returns_to || ""
+				  )}) asks for: <code>${frappe.utils.escape_html(
+						(request.requested_scopes || []).join(" ")
+				  )}</code>. It will run as ${frappe.utils.escape_html(request.runs_as || "")}.</p>`
+				: `<p>${frappe.utils.escape_html(request.device_name || "")} — ${frappe.utils.escape_html(
+						request.platform || ""
+				  )} ${frappe.utils.escape_html(request.app_version || "")}, from ${frappe.utils.escape_html(
+						request.from_address || ""
+				  )}</p>`,
+		},
+	];
+	if (client) {
+		fields.push(
+			{
+				fieldname: "profile",
+				fieldtype: "Select",
+				label: __("Grant"),
+				options: "read\nread_farm\ncustom",
+				default: "read",
+				description: __("read: read tools only. read_farm: plus farm write tools. Always limited to what it asked for and to the switches on this form."),
+			},
+			{ fieldname: "scopes", fieldtype: "Data", label: __("Custom scopes"), depends_on: "eval:doc.profile=='custom'" }
+		);
+	} else {
+		fields.push({ fieldname: "user", fieldtype: "Link", options: "User", label: __("For"), reqd: 1 });
+	}
+	const dialog = new frappe.ui.Dialog({
+		title: client ? __("Let an AI client in?") : __("Let a phone in?"),
+		fields,
+		primary_action_label: __("Approve"),
+		primary_action(values) {
+			send(values, "approve");
+		},
+		secondary_action_label: __("Deny"),
+		secondary_action() {
+			send(dialog.get_values(true) || {}, "deny");
+		},
+	});
+	function send(values, decision) {
+		dialog.hide();
+		const args = { code, decision };
+		if (client) {
+			if (values.profile === "custom") args.scopes = values.scopes || "";
+			else args.profile = values.profile || "read";
+		} else {
+			args.user = values.user || "";
+		}
+		frappe.call({ method: "erpnext_mcp.api.access.decide", args }).then((r) => {
+			if (!r || !r.message) return;
+			frappe.show_alert({
+				message: decision === "approve" ? __("Approved") : __("Denied"),
+				indicator: decision === "approve" ? "green" : "orange",
+			});
+		});
+	}
+	dialog.show();
 }

@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.220.0 — 2026-10-03 — OAuth 2.1 for MCP clients, approved on a phone (OFF by default)
+
+**991 tools** (482 read, 509 write): + `revoke_mcp_client`. **175 mobile methods** (unchanged;
+`peek_access_request` / `approve_access_request` also take an AI client's code). Contract
+`docs/design/device_client_enrollment.md` §6.3–§6.4 (with build notes). Deploy
+`docs/deploy/v0.220.0_mcp_oauth.md`.
+
+**Deploying changes nothing**: `mcp_oauth_enabled` ships off; with it off the static X-MCP-Token is
+the only way in, exactly as before, and every OAuth path answers 404.
+
+- Discovery (RFC 9728 / RFC 8414) under `/.well-known/` (a `page_renderer`), and a
+  `WWW-Authenticate: Bearer resource_metadata=…` on the MCP endpoint's 401.
+- Dynamic Client Registration that writes nothing (signed client id); `authorize` shows a code + QR
+  and no password; a System Manager approves on their phone with Face ID or in the Desk
+  (**ERPNext MCP Settings → Approve an access request**), choosing Read only / Read + farm / custom —
+  never more than the client asked for; a Farm Manager may grant read-only. **No MCP tool approves.**
+- Auth code (60 s, PKCE S256, exact redirect), access token 60 min, refresh rotated on every use,
+  30 days idle / 90 absolute; a code or refresh token used twice ends the sign-in and alerts.
+  RFC 7009 revoke. Every token hashed at rest.
+- The Bearer token is honoured by a second `auth_hooks` entry, **on the MCP endpoint only**. The
+  client runs as **OAuth clients run as** (`mcp_oauth_user`; empty → the MCP System User), sees
+  its scopes ∩ the `allow_` switches, and every audit row names it and its approver.
+- `legacy_static_mcp_token` (on) keeps the static token while OAuth is on;
+  `get_server_status.mcp_auth.ready_to_disable_static_mcp_token` says when it can go.
+  `get_security_status` gains `mcp_oauth_user` and a sharper `static_mcp_token`.
+- `list_access_inventory` gains `clients`; `revoke_mcp_client` (write, OFF) and a Desk method end one.
+- Phones: the sidecar also reads `X-FarmOps-Authorization: FarmOps <token>` (app 0.30.0 sends both).
+
 ## 0.219.0 — 2026-10-03 — device keys, phase 2: approve a new phone from a phone (OFF by default)
 
 **990 tools** (unchanged). **175 mobile methods**: + `list_approvable_people`, `peek_access_request`,

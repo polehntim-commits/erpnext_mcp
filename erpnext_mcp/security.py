@@ -66,20 +66,32 @@ def authorize() -> str:
 	"""
 	ip = caller_ip()
 
+	from . import oauth
+
 	if not settings.is_enabled():
 		raise AuthError("not found", http_status=404, log_reason="master switch (enabled) is off")
 
-	configured = settings.auth_token()
-	if not configured:
-		raise AuthError("not found", http_status=404, log_reason="no auth_token configured")
+	# v0.220.0. An OAuth client was already identified by the `auth_hooks`
+	# entry (oauth.authenticate); it still has to pass the network allowlist.
+	if oauth.current() is None:
+		configured = settings.auth_token()
+		if not configured and not oauth.enabled():
+			raise AuthError("not found", http_status=404, log_reason="no auth_token configured")
 
-	presented = presented_token()
-	if not presented or not hmac.compare_digest(presented, configured):
-		raise AuthError(
-			_OPAQUE,
-			http_status=401,
-			log_reason="auth token missing or incorrect",
-		)
+		presented = presented_token()
+		if not presented or not configured or not hmac.compare_digest(presented, configured):
+			raise AuthError(
+				_OPAQUE,
+				http_status=401,
+				log_reason="auth token missing or incorrect",
+			)
+		if not oauth.legacy_static_allowed():
+			raise AuthError(
+				_OPAQUE,
+				http_status=401,
+				log_reason="static X-MCP-Token presented, but legacy_static_mcp_token is off",
+			)
+		oauth.note_static_use()
 
 	if not _network_allowed(ip):
 		raise AuthError(
@@ -123,6 +135,14 @@ def capture_calling_user() -> str:
 	except Exception:  # pragma: no cover - a local that refuses attributes
 		return ""
 	return user
+
+
+def forget_calling_user() -> None:
+	"""v0.220.0. No per-user identity for this request (an OAuth client's)."""
+	try:
+		setattr(frappe.local, _CALLING_USER_KEY, "")
+	except Exception:  # pragma: no cover
+		pass
 
 
 def caller_identity() -> str:

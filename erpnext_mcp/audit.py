@@ -129,6 +129,14 @@ def agent_identity() -> tuple[str, str]:
 		session = frappe.get_request_header(AGENT_SESSION_HEADER) or ""
 	except Exception:
 		return "", ""
+	if not session:
+		# v0.220.0: an OAuth client is named by its grant — client and approver.
+		try:
+			from . import oauth
+
+			session = oauth.audit_label()
+		except Exception:  # pragma: no cover
+			session = ""
 	return _clean_agent(model), _clean_agent(session)
 
 

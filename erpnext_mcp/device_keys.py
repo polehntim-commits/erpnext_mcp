@@ -54,6 +54,8 @@ LINK_MIN, LINK_MAX, LINK_DEFAULT = 2, 60, 10
 REAUTH_MIN, REAUTH_MAX, REAUTH_DEFAULT = 5, 1440, 480
 
 PICKUP_PATH = "/farmops/api/enroll/"
+#: v0.220.0. `Authorization: FarmOps …` repeated where no proxy will strip it.
+FALLBACK_HEADER = "X-FarmOps-Authorization"
 KEY_PROTECTIONS = ("secure_enclave", "strongbox", "tee", "software")
 PLATFORMS = ("ios", "android")
 
@@ -506,6 +508,9 @@ def resolve(headers, method: str, path: str, body: bytes) -> tuple:
 	"""(user, device) for a key-bound request, or raises Refused. Revocation read every call."""
 	authorization = str(headers.get("Authorization") or "")
 	if not authorization.startswith("FarmOps "):
+		# v0.220.0: the same value in a header no proxy has an opinion about.
+		authorization = str(headers.get(FALLBACK_HEADER) or "")
+	if not authorization.startswith("FarmOps "):
 		raise Refused("not a key-bound request")
 	token = authorization[len("FarmOps ") :].strip()
 	proof_jwk = verify_dpop(str(headers.get("DPoP") or ""), method, path, body, access_token=token)
@@ -751,11 +756,15 @@ def access_status(request: str, proof_jwk: dict) -> dict:
 
 
 def _pending_by_code(code: str):
+	"""The open request a code names — a phone's, or (v0.220.0) an MCP client's."""
 	return frappe.db.get_value(
 		REQUEST_DOCTYPE,
-		{"code_hash": _code_hash(code), "status": "Pending", "kind": "device", "expires_at": [">", _stamp()]},
+		{"code_hash": _code_hash(code), "status": "Pending", "expires_at": [">", _stamp()]},
 		[
 			"name",
+			"kind",
+			"requested_scopes",
+			"client_metadata",
 			"display_name",
 			"platform",
 			"os_version",
@@ -811,8 +820,19 @@ def peek(approver: str, code: str) -> dict:
 		raise device_enrollment.EnrollmentRefused(
 			"no open request has that code. Check it, or ask the new phone for a new one."
 		)
+	_require_kind_on(row)
+	if row.get("kind") == "mcp_client":
+		from . import oauth
+
+		return {
+			"request": row["name"],
+			**oauth.describe(row),
+			"from_address": row.get("ip"),
+			"requested_at": str(row.get("creation") or "")[:19],
+		}
 	return {
 		"request": row["name"],
+		"kind": "device",
 		"device_name": row.get("display_name"),
 		"platform": row.get("platform"),
 		"os_version": row.get("os_version"),
@@ -823,6 +843,41 @@ def peek(approver: str, code: str) -> dict:
 	}
 
 
+def any_approval_enabled() -> bool:
+	"""Either kind of request can be decided: a phone's, or (v0.220.0) an MCP client's."""
+	from . import oauth
+
+	return approval_enabled() or oauth.enabled()
+
+
+def _require_kind_on(row) -> None:
+	"""A code for a kind whose switch is off is a code for nothing."""
+	from . import oauth
+
+	on = oauth.enabled() if row.get("kind") == "mcp_client" else approval_enabled()
+	if not on:
+		raise device_enrollment.EnrollmentRefused("no open request has that code. Nothing was changed.")
+
+
+def _verify_approver(approver: str, approver_device: str, message: str, signature: str) -> None:
+	"""The approver's own live, key-bound phone signed `message` with its unlock key (Face ID)."""
+	approver_row = _row(approver_device)
+	if (
+		not approver_row
+		or not _live(approver_row)
+		or _user_of(approver_row) != approver
+		or not approver_row.get("unlock_public_key")
+	):
+		raise device_enrollment.EnrollmentRefused(
+			"approving takes a phone signed in with Face ID. Nothing was changed."
+		)
+	unlock = jwk_of(approver_row.get("unlock_public_key"))
+	if not verify_es256(unlock, message.encode(), str(signature or "")):
+		raise device_enrollment.EnrollmentRefused(
+			"the Face ID signature does not verify. Nothing was changed."
+		)
+
+
 def decide(
 	approver: str,
 	code: str,
@@ -831,8 +886,14 @@ def decide(
 	via: str,
 	signature: str = "",
 	approver_device: str = "",
+	scopes: str = "",
+	profile: str = "",
 ) -> dict:
-	"""Approve or deny. On a phone the approver's unlock key signs (Face ID). Raises EnrollmentRefused."""
+	"""Approve or deny. On a phone the approver's unlock key signs (Face ID). Raises EnrollmentRefused.
+
+	v0.220.0: a code may name an MCP client's request instead; then `scopes` /
+	`profile` say what it gets and `subject` is ignored (see `oauth.decide_client`).
+	"""
 	from . import security_alerts
 	from .api import guard
 
@@ -844,6 +905,20 @@ def decide(
 	row = _pending_by_code(code)
 	if not row:
 		raise device_enrollment.EnrollmentRefused("no open request has that code. Nothing was changed.")
+	_require_kind_on(row)
+	if row.get("kind") == "mcp_client":
+		from . import oauth
+
+		return oauth.decide_client(
+			approver,
+			row,
+			decision,
+			via,
+			scopes=scopes,
+			profile=profile,
+			signature=signature,
+			approver_device=approver_device,
+		)
 	subject = str(subject or "").strip().lower()
 	if decision == "approve" and not may_approve_for(approver, subject):
 		raise device_enrollment.EnrollmentRefused(
@@ -851,22 +926,9 @@ def decide(
 			"Manager for a manager's own phone, and never your own account. Nothing was changed."
 		)
 	if via == "phone":
-		approver_row = _row(approver_device)
-		if (
-			not approver_row
-			or not _live(approver_row)
-			or _user_of(approver_row) != approver
-			or not approver_row.get("unlock_public_key")
-		):
-			raise device_enrollment.EnrollmentRefused(
-				"approving takes a phone signed in with Face ID. Nothing was changed."
-			)
-		unlock = jwk_of(approver_row.get("unlock_public_key"))
-		message = f"farmops-approve|{row['name']}|{subject}|{decision}".encode()
-		if not verify_es256(unlock, message, str(signature or "")):
-			raise device_enrollment.EnrollmentRefused(
-				"the Face ID signature does not verify. Nothing was changed."
-			)
+		_verify_approver(
+			approver, approver_device, f"farmops-approve|{row['name']}|{subject}|{decision}", signature
+		)
 	now = _stamp()
 	if decision == "deny":
 		frappe.db.set_value(

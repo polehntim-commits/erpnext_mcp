@@ -515,4 +515,8 @@ class TheHookMindsItsOwnBusiness(FallbackTestCase):
 		"""A resolver nothing calls is a resolver that does not run. See hooks.py."""
 		from erpnext_mcp import hooks
 
-		self.assertEqual(hooks.auth_hooks, ["erpnext_mcp.api.fallback_auth.authenticate"])
+		# v0.220.0 appends the MCP OAuth hook; this one stays first.
+		self.assertEqual(
+			hooks.auth_hooks,
+			["erpnext_mcp.api.fallback_auth.authenticate", "erpnext_mcp.oauth.authenticate"],
+		)

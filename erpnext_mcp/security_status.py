@@ -193,13 +193,8 @@ def checks(probe_public: bool = False) -> list:
 		)
 	)
 
-	out.append(
-		_check(
-			"static_mcp_token",
-			INFO,
-			"A static MCP token is configured." if settings.auth_token() else "No MCP token is configured.",
-		)
-	)
+	out.append(_static_token_check())
+	out.append(_oauth_user_check())
 
 	try:
 		holders = frappe.db.get_all(
@@ -418,3 +413,51 @@ def report(probe_public: bool = False) -> dict:
 		+ (f"; failing: {', '.join(fails)}" if fails else "")
 		+ (f"; warnings: {', '.join(warns)}" if warns else ""),
 	}
+
+
+def _static_token_check() -> dict:
+	"""v0.220.0: informational until OAuth is on; then a warning while both doors are open."""
+	from . import oauth
+
+	configured = bool(settings.auth_token())
+	if not oauth.enabled():
+		return _check(
+			"static_mcp_token",
+			INFO,
+			"A static MCP token is configured (OAuth for MCP clients is off)."
+			if configured
+			else "No MCP token is configured.",
+		)
+	if not configured or not oauth.legacy_static_allowed():
+		return _check("static_mcp_token", PASS, "OAuth only: the static MCP token is not accepted.")
+	ready = oauth.static_token_status()
+	return _check(
+		"static_mcp_token",
+		WARN if ready["ready_to_disable_static_mcp_token"] else INFO,
+		"OAuth is on and the static MCP token still works"
+		+ (" — and nothing has used it in 14 days." if ready["ready_to_disable_static_mcp_token"] else "."),
+		"Untick 'Keep the static MCP token working' on ERPNext MCP Settings."
+		if ready["ready_to_disable_static_mcp_token"]
+		else "",
+	)
+
+
+def _oauth_user_check() -> dict:
+	"""v0.220.0: who an OAuth client runs as, and whether that user is too strong."""
+	from . import oauth
+
+	if not oauth.enabled():
+		return _check("mcp_oauth_user", INFO, "OAuth for MCP clients is off.")
+	user = oauth.agent_user()
+	roles = set(frappe.get_roles(user) or [])
+	strong = user == "Administrator" or "System Manager" in roles
+	return _check(
+		"mcp_oauth_user",
+		FAIL if strong else PASS,
+		f"OAuth clients run as {user}" + (" — Administrator or a System Manager." if strong else "."),
+		"Create a dedicated user (e.g. mcp-agent) with only the roles the tools need and choose it in "
+		"'OAuth clients run as' on ERPNext MCP Settings."
+		if strong
+		else "",
+		weight=2,
+	)

@@ -36,7 +36,7 @@ import json
 import frappe
 from werkzeug.wrappers import Response
 
-from . import audit, protocol, security, settings
+from . import audit, oauth, protocol, security, settings
 from .errors import AuthError
 
 _JSON = "application/json"
@@ -67,15 +67,28 @@ def handle():
 		caller_ip = security.authorize()
 	except AuthError as exc:
 		_audit_rejection(exc)
-		return _respond(protocol.rpc_error(None, protocol.INVALID_REQUEST, str(exc)), exc.http_status)
+		headers = {}
+		if exc.http_status == 401 and oauth.enabled():
+			# v0.220.0: what sends an MCP client to OAuth discovery (RFC 9728 §5.1).
+			headers["WWW-Authenticate"] = oauth.www_authenticate()
+		return _respond(
+			protocol.rpc_error(None, protocol.INVALID_REQUEST, str(exc)), exc.http_status, headers
+		)
 
 	# ORDER MATTERS, AND IT IS THE ONLY PLACE IT DOES. Frappe has already
 	# authenticated whatever `Authorization: token <key>:<secret>` the caller
 	# sent, so `frappe.session.user` is the mobile worker RIGHT NOW and is the
 	# MCP System User one line later. v0.17.0's per-user scoping reads what this
 	# saves. See `security.capture_calling_user`.
-	security.capture_calling_user()
-	frappe.set_user(settings.effective_user())
+	#
+	# v0.220.0: an OAuth client is nobody's phone. Its session user is the MCP
+	# OAuth user the auth hook set, never a person to scope by.
+	if oauth.current() is not None:
+		security.forget_calling_user()
+		frappe.set_user(oauth.agent_user())
+	else:
+		security.capture_calling_user()
+		frappe.set_user(settings.effective_user())
 
 	try:
 		payload = json.loads(frappe.request.get_data(as_text=True) or "")
@@ -149,7 +162,7 @@ def _audit_rejection(exc: AuthError) -> None:
 	at will. Once the endpoint is live, a rejected call is a real event and worth
 	a row.
 	"""
-	if not settings.is_enabled() or not settings.auth_token():
+	if not settings.is_enabled() or not (settings.auth_token() or oauth.enabled()):
 		return
 	audit.record(
 		"<transport>",
@@ -161,9 +174,10 @@ def _audit_rejection(exc: AuthError) -> None:
 	)
 
 
-def _respond(body, status: int) -> Response:
+def _respond(body, status: int, headers: dict | None = None) -> Response:
 	"""Serialise a JSON-RPC body, as SSE when the client asked for it."""
 	text = json.dumps(body, default=str)
+	headers = headers or {}
 	if _SSE in (frappe.get_request_header("Accept") or ""):
 		# One `message` event carrying the whole response. Streamable HTTP
 		# permits a single-frame stream, and clients that set this Accept header
@@ -172,6 +186,6 @@ def _respond(body, status: int) -> Response:
 			f"event: message\ndata: {text}\n\n",
 			status=status,
 			content_type=f"{_SSE}; charset=utf-8",
-			headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+			headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", **headers},
 		)
-	return Response(text, status=status, content_type=f"{_JSON}; charset=utf-8")
+	return Response(text, status=status, content_type=f"{_JSON}; charset=utf-8", headers=headers)

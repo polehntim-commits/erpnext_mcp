@@ -53,7 +53,7 @@
    "fieldtype": "Select",
    "label": "Status",
    "read_only": 1,
-   "options": "Pending\nApproved\nDenied\nExpired\nUsed",
+   "options": "Pending\nApproved\nDenied\nExpired\nUsed\nRevoked",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
