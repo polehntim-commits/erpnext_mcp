@@ -118,6 +118,8 @@ ROUTES = (
 	Route("/mobile", mobile_api.upgrade_device_key),
 	Route("/mobile", mobile_api.issue_enrollment_link),
 	Route("/mobile", mobile_api.list_access_inventory),
+	# v0.223.0. The Employee file — docs/design/employee_file.md.
+	Route("/mobile", mobile_api.get_employee_file),
 	Route("/mobile", mobile_api.report_lost_device),
 	# v0.219.0. Phone approval; refuse while off.
 	Route("/mobile", mobile_api.list_approvable_people),

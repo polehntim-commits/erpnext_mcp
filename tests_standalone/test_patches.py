@@ -49,6 +49,7 @@ from erpnext_mcp.patches import (
 	move_rodent_settings_to_data,
 	normalize_app_feedback_timestamps,
 	normalize_phone_timestamps,
+	purge_filed_login_cards,
 	rebuild_rodent_templates,
 	reclassify_feature_requests,
 	recompute_2026_dependents_credit,
@@ -119,6 +120,8 @@ PATCHES = (
 	("erpnext_mcp.patches.zoho_accounts_send_as_account", zoho_accounts_send_as_account),
 	# v0.216.1. Pinned in `test_pdf_and_mail.TheBranding`.
 	("erpnext_mcp.patches.transactional_mail_without_unsubscribe", transactional_mail_without_unsubscribe),
+	# v0.223.0. Pinned in `test_employee_file.LoginCards`.
+	("erpnext_mcp.patches.purge_filed_login_cards", purge_filed_login_cards),
 )
 
 

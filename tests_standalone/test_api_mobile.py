@@ -407,6 +407,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
+		# v0.223.0. The Employee file: app 0.31.0 calls it.
+		"get_employee_file",
 		# v0.218.0. Device keys: app 0.28.0 calls these once device_keys_enabled
 		# is on; their Codables move into test_ios_contract with that build.
 		"upgrade_device_key",

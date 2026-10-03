@@ -274,6 +274,13 @@ def _card_print() -> None:
 		# v0.216.1. Farm Tasks under the Employee form's Connections.
 		if badge_photo.seed_employee_connection().get("created"):
 			made.append("Employee connection 'Farm Task'")
+		# v0.223.0. The Employee file: its button and its Connections group.
+		from . import employee_file
+
+		if employee_file.seed_desk_button().get("created"):
+			made.append(f"button {employee_file.SCRIPT_NAME!r}")
+		for doctype in employee_file.seed_connections():
+			made.append(f"Employee connection {doctype!r}")
 		from . import card_print_format
 
 		for report in card_print_format.seed_card_print_formats():
@@ -2129,6 +2136,10 @@ def before_uninstall() -> None:
 	"""
 	_remove_badge_list_action()
 	_remove_badge_form_action()
+	# v0.223.0. The "Employee file" button.
+	from . import employee_file
+
+	employee_file.remove_desk_button()
 	_remove_card_print_form_actions()
 	_remove_onboard_worker_action()
 	_remove_asset_tag_list_action()

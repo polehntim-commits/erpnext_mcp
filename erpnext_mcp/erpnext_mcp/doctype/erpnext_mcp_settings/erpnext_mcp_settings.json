@@ -48,6 +48,9 @@
   "office_mail_regulator_domains",
   "office_mail_draft_classes",
   "mail_approver_roles",
+  "employee_file_section",
+  "login_card_archive_enabled",
+  "employee_file_expiry_windows",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -1008,6 +1011,8 @@
   "allow_approve_mail_draft",
   "allow_discard_mail_draft",
   "allow_redraft_mail",
+  "allow_get_employee_file",
+  "allow_export_employee_file_packet",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1534,6 +1539,39 @@
    "fieldtype": "Code",
    "label": "Reply approvers by class",
    "options": "JSON"
+  },
+  {
+   "fieldname": "employee_file_section",
+   "fieldtype": "Section Break",
+   "label": "Employee file"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On (and only with device keys OFF): generate_mobile_login_qr may file the card PNG \u2014 a live credential \u2014 on a Governance Document, privately. A filed card deletes itself on its first sign-in or when it expires. With device keys on nothing is ever filed. docs/design/employee_file.md section 1.",
+   "fieldname": "login_card_archive_enabled",
+   "fieldtype": "Check",
+   "label": "File login cards"
+  },
+  {
+   "description": "Days before a date counts as expiring, by kind, as JSON. Empty: {\"work_authorization\": 90, \"i9_document\": 60, \"i9_receipt\": 30, \"training\": 30, \"certification\": 60}.",
+   "fieldname": "employee_file_expiry_windows",
+   "fieldtype": "Code",
+   "label": "Expiry warning windows (days)",
+   "options": "JSON"
+  },
+  {
+   "default": "1",
+   "description": "READ. Everything about one person: identity, badge, access, training, signed documents, housing, tasks \u2014 as the caller may see it; expiries flagged; never a secret or full SSN.",
+   "fieldname": "allow_get_employee_file",
+   "fieldtype": "Check",
+   "label": "Get Employee File"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). One PDF of a person's file and sealed documents, filed privately on the Employee. HR Manager or System Manager.",
+   "fieldname": "allow_export_employee_file_packet",
+   "fieldtype": "Check",
+   "label": "Export Employee File Packet"
   },
   {
    "default": "1",

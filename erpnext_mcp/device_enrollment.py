@@ -263,7 +263,7 @@ def verify(api_key: str, api_secret: str) -> str:
 		frappe.db.get_all(
 			DEVICE,
 			filters={"api_key": api_key, "parenttype": GRANT},
-			fields=["name", "parent", "enrollment_status", "last_seen_on"],
+			fields=["name", "parent", "enrollment_status", "last_seen_on", "device_name"],
 			limit=2,
 		)
 		or []
@@ -289,22 +289,28 @@ def verify(api_key: str, api_secret: str) -> str:
 	except Exception:  # pragma: no cover
 		pass
 
-	_stamp_last_seen(str(row.get("name")), row.get("last_seen_on"))
+	if _stamp_last_seen(str(row.get("name")), row.get("last_seen_on")):
+		# v0.223.0: a filed login card has done its job once its phone signs in.
+		from . import login_cards
+
+		login_cards.on_sign_in(str(row.get("parent") or ""), str(row.get("device_name") or ""))
 	return user
 
 
-def _stamp_last_seen(row_name: str, previous) -> None:
+def _stamp_last_seen(row_name: str, previous) -> bool:
+	"""Stamp `last_seen_on` at most once an hour. True when it stamped."""
 	now = _now()
 	try:
 		threshold = str(frappe.utils.add_to_date(now, minutes=-LAST_SEEN_INTERVAL_MINUTES))
 	except Exception:  # pragma: no cover - a frappe with no add_to_date
 		threshold = ""
 	if previous and str(previous) >= threshold:
-		return
+		return False
 	try:
 		frappe.db.set_value(DEVICE, row_name, "last_seen_on", now, update_modified=False)
 	except Exception:  # pragma: no cover - a stamp must never refuse a good credential
-		pass
+		return False
+	return True
 
 
 # ── opening a window ────────────────────────────────────────────────────────

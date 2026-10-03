@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.223.0 — 2026-10-03 — the Employee file; login cards are never filed permanently
+
+**1005 tools** (488 read, 517 write): + `get_employee_file` (read), `export_employee_file_packet`
+(write, OFF). **176 mobile methods**: + `get_employee_file`. Contract `docs/design/employee_file.md`.
+Deploy `docs/deploy/v0.223.0_employee_file.md`.
+
+- **Login cards.** `generate_mobile_login_qr(archive=true)` is refused while device keys are on, and in
+  legacy mode unless the new setting **File login cards** is ticked (off). A filed card deletes itself
+  on its first sign-in or when it expires (inline, and an hourly job); the patch deletes every card
+  already filed that has expired, been used, or been superseded. Only this app's own card documents
+  are ever touched. **Mobile Access Grant** gains `employee` (filled from `user_id`), so the grant
+  and its devices — the durable, secret-free record — show on the Employee.
+- **The Employee file**: identity (I-9, work authorization, W-4 — SSN and document numbers last 4
+  only), badge, access (devices, roles, sign-ins), training and certifications, signed documents
+  (discipline, policy acknowledgments, signing evidence), housing, tasks (incl. badge photo tasks);
+  every lapsing date flagged by configurable windows. The person sees their own; HR Manager / System
+  Manager everything; HR User all but discipline; Farm Manager the operational sections.
+- Surfaces: MCP `get_employee_file`; Desk **Employee file** button (dialog + **Export audit packet**)
+  and an **Employee file** Connections group; phone `get_employee_file` (app 0.31.0: My records → My
+  file, Employees → a person → File).
+- **Audit packet**: one PDF of the file plus sealed discipline / signing-evidence PDFs and attended
+  sessions' PDFs, filed PRIVATE on the Employee. I-9 and W-4 forms are never appended.
+
 ## 0.222.1 — 2026-10-03 — get_backup_status: no standby alerts for a box without a standby
 
 **1003 tools** (unchanged). Deploy `docs/deploy/v0.222.1_backup_standby.md`.

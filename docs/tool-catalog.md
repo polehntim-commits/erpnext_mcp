@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1003 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1005 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 487 read tools are **on** by default and can be switched off individually. A
+All 488 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,15 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.223.0 — the Employee file
+
+| Tool | What it does |
+| --- | --- |
+| `get_employee_file` | Everything about one person, as the caller may see it; expiries flagged; nothing secret. Read |
+| `export_employee_file_packet` | One PDF of the file and sealed documents, filed privately on the Employee. Write |
+
+Contract: `docs/design/employee_file.md`.
 
 ## v0.222.0 — office@ reply drafts (off by default; sent only by a person)
 

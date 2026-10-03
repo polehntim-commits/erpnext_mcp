@@ -184,6 +184,7 @@ from .tools import card_prints as card_print_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
 from .tools import email_branding as email_branding_tools
+from .tools import employee_file as employee_file_tools
 from .tools import moments as moment_tools
 from .tools import office_mail as office_mail_tools
 from .tools import pest_control as pest_control_tools
@@ -21986,10 +21987,11 @@ TOOLS = {
 		"URL would put it on the wire in the clear at every call, forever. Refuses "
 		"a disabled user, and refuses when the site does not know its own public "
 		"URL — fill in `public_url` with the Tailscale Funnel address.\n\n"
-		"`archive=true` files it as a PRIVATE attachment on a Governance Document, "
-		"which is the offline distribution path for a camp office at the end of a "
-		"gravel road. Delete that document once the phone is enrolled: the durable "
-		"record is the Mobile Access Grant, and it holds no secret.",
+		"`archive=true` (v0.223.0) is REFUSED while device keys are on — use "
+		"issue_enrollment_link, whose link carries no credential — and refused in legacy "
+		"mode unless 'File login cards' is ticked. A card that is filed is PRIVATE and "
+		"deletes itself on its first sign-in or when it expires; the durable record is "
+		"the Mobile Access Grant, linked to the Employee, and it holds no secret.",
 		{
 			"user": _field(_STRING, "The account to enrol."),
 			"expiry_hours": _field(_INTEGER, "How long the QR stays valid to enrol with. 1–168, default 24."),
@@ -22000,7 +22002,9 @@ TOOLS = {
 			),
 			"url": _field(_STRING, "Public base URL for the card. Defaults to public_url. Must be https."),
 			"archive": _field(
-				_BOOLEAN, "Also file it as a private attachment on a Governance Document. Default false."
+				_BOOLEAN,
+				"Also file it (private, self-deleting) on a Governance Document. Default false; refused "
+				"with device keys on or 'File login cards' off.",
 			),
 			"company": _field(_STRING, "Which entity to file the archived copy under."),
 			"error_correction": _field(_STRING, "L, M, Q or H. Default M."),
@@ -28971,6 +28975,41 @@ TOOLS = {
 		mutating=True,
 		destructive=True,
 		title="Revoke MCP client",
+	),
+	"get_employee_file": _tool(
+		employee_file_tools.get_employee_file,
+		"v0.223.0. EVERYTHING ABOUT ONE PERSON, ON ONE CALL — the Employee file. Sections: identity "
+		"(I-9 status, documents and expiries, work authorization, W-4 — SSN and document numbers as the "
+		"LAST 4 ONLY), badge (badge IDs, photo, card print jobs), access (mobile grant and devices: issued, "
+		"by whom, app version, last seen, revoked; roles; recent sign-ins), training (records, sessions, "
+		"certifications with expiry), signed documents (discipline, policy acknowledgments, signing "
+		"evidence), housing, tasks (including badge photo tasks). Every expired or expiring item is in "
+		"`flags` (windows: setting employee_file_expiry_windows, or warning_days). WHO SEES WHAT: the "
+		"person themself everything; HR Manager / System Manager everything; HR User all but discipline; "
+		"Farm Manager badge, devices, training, housing, tasks. Never a secret, bank number or full SSN. "
+		"Read-only.",
+		{
+			"employee": _field(_STRING, "Employee docname, number, name or login."),
+			"sections": _field(
+				_STRING,
+				"Comma-separated subset: identity, badge, access, training, signed_documents, housing, tasks.",
+			),
+			"warning_days": _field(_INTEGER, "One expiry warning window for every kind, in days."),
+		},
+		required=("employee",),
+		title="Employee file",
+	),
+	"export_employee_file_packet": _tool(
+		employee_file_tools.export_employee_file_packet,
+		"MUTATING (default OFF). v0.223.0. The per-person AUDIT PACKET: one PDF of the Employee file "
+		"(with its expiry flags) followed by the person's sealed discipline and signing-evidence PDFs and "
+		"the PDFs of training sessions they attended. I-9 and W-4 forms are NEVER appended — they carry the "
+		"full SSN. Filed PRIVATE on the Employee; returns the File, not the bytes. HR Manager or System "
+		"Manager.",
+		{"employee": _field(_STRING, "Employee docname, number, name or login.")},
+		required=("employee",),
+		mutating=True,
+		title="Export employee file packet",
 	),
 	"get_mail_status": _tool(
 		office_mail_tools.get_mail_status,

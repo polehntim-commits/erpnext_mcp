@@ -1864,6 +1864,38 @@ def issue_enrollment_link(user: str, for_user=None, device_name=None, minutes=No
 
 
 @frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_employee_file", limit=guard.READ_LIMIT)
+def get_employee_file(user: str, employee=None, sections=None) -> dict:
+	"""v0.223.0. The Employee file — your own, or anyone's for HR / a Farm Manager.
+
+	docs/design/employee_file.md §2.3: `employee_file.visible_sections` decides
+	what this person may see, exactly as on the Desk and MCP. No `employee` means
+	your own file.
+	"""
+	from .. import employee_file
+	from ..tools import employee as employee_tool
+
+	guard.require_scope(user)
+	own = employee_file.employee_of_user(user)
+	wanted = str(employee or "").strip()
+	person = employee_tool.resolve_employee(wanted) if wanted else own
+	if not person:
+		frappe.throw(
+			"Your account is not linked to an Employee, so there is no file to show.",
+			frappe.DoesNotExistError,
+		)
+	company = str(frappe.db.get_value("Employee", person, "company") or "")
+	if person != own and company:
+		guard.require_company(user, company)
+	try:
+		return employee_file.build(
+			person, user, sections=[s.strip() for s in str(sections or "").split(",") if s.strip()] or None
+		)
+	except employee_file.NotAllowed as exc:
+		frappe.throw(str(exc), frappe.PermissionError)
+
+
+@frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("list_access_inventory", limit=guard.READ_LIMIT)
 def list_access_inventory(user: str, for_user=None, include_revoked=None) -> dict:
 	"""Every phone: who, what, last seen, key-bound or not (§7). Your own, or everyone's for a manager."""

@@ -735,13 +735,15 @@ class TheLoginCard(MobileTestCase):
 		self.assertNotIn(data["payload"]["api_secret"], json.dumps(row, default=str))
 
 	def test_archiving_files_it_private_on_a_governance_document(self):
+		"""v0.223.0: only with 'File login cards' ticked, and it deletes itself."""
 		self.make()
+		STORE.singles["ERPNext MCP Settings"]["login_card_archive_enabled"] = 1
 		data = self.card(archive=True, company=MAIN)
 		archive = data["archive"]
 		self.assertTrue(archive["archived"])
 		self.assertTrue(archive["attachment"]["is_private"])
 		self.assertTrue(frappe.db.exists("Governance Document", archive["governance_document"]))
-		self.assertIn("Delete this document", archive["note"])
+		self.assertIn("deletes itself", archive["note"])
 
 	def test_it_is_off_out_of_the_box(self):
 		self.configure(enabled=1, public_url=FUNNEL)

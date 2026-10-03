@@ -1270,6 +1270,9 @@ def generate_mobile_login_qr(args: dict) -> ToolResult:
 			"sitting in somebody's photo roll."
 		)
 
+	if as_bool(args, "archive", False):
+		_refuse_archive()
+
 	rotate = as_bool(args, "rotate_token", True)
 	if rotate:
 		token = _issue_token(email, device_name=device_enrollment.LOGIN_CARD_DEVICE_NAME)
@@ -1475,6 +1478,30 @@ def mobile_login_payload(url: str, user: str, api_key: str, api_secret: str, exp
 	}
 
 
+def _refuse_archive() -> None:
+	"""v0.223.0. A login card is a live credential; it is not filed unless asked for twice.
+
+	docs/design/employee_file.md §1. Refused outright while device keys are on
+	(their pickup link carries no credential, so there is nothing to file), and
+	refused in legacy mode unless `login_card_archive_enabled` is ticked. A card
+	that IS filed deletes itself on first sign-in or at expiry (`login_cards`).
+	Checked BEFORE a token is touched, so a refusal changes nothing.
+	"""
+	from .. import device_keys, login_cards
+
+	if device_keys.enabled():
+		raise ToolError(
+			"archive=true is refused: device keys are on, so nothing is filed. Use "
+			"issue_enrollment_link — its single-use link carries no credential. Nothing was changed."
+		)
+	if not login_cards.archive_enabled():
+		raise ToolError(
+			"archive=true is refused: a login card is a live credential and filing it is off "
+			"('File login cards' on ERPNext MCP Settings). Print or show the card instead; the "
+			"Mobile Access Grant is the record. Nothing was changed."
+		)
+
+
 def _archive_card(user: str, png: bytes, url: str, expires_at, args: dict) -> dict:
 	"""File the card in the governance archive, as a PRIVATE attachment.
 
@@ -1529,8 +1556,8 @@ def _archive_card(user: str, png: bytes, url: str, expires_at, args: dict) -> di
 		"company": company,
 		"attachment": artifacts.describe_attachment(attachment, png),
 		"note": (
-			"Filed PRIVATE. Delete this document once the phone is enrolled — the durable record "
-			"is the Mobile Access Grant, and it holds no secret."
+			"Filed PRIVATE, and it deletes itself on the card's first sign-in or when it expires "
+			"(v0.223.0) — the durable record is the Mobile Access Grant, which holds no secret."
 		),
 	}
 

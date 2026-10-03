@@ -104,6 +104,15 @@ class MobileAccessGrant(Document):
 
 		self.entity_access = _tidy_lines(self.entity_access)
 
+		# v0.223.0. The durable record of a phone's access belongs on the person's
+		# Employee file: filled from Employee.user_id on every write.
+		if not self.get("employee"):
+			try:
+				if frappe.db.exists("DocType", "Employee"):
+					self.employee = frappe.db.get_value("Employee", {"user_id": self.user}, "name") or None
+			except Exception:  # pragma: no cover - a site mid-migrate
+				pass
+
 
 def _tidy_lines(raw) -> str:
 	"""One entity per line, in order, with the blanks and duplicates gone.

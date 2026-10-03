@@ -393,6 +393,9 @@ scheduler_events = {
 		# mail has gone quiet or incoming was switched off. Off unless
 		# `office_mail_watchdog` is ticked; writes nothing.
 		"erpnext_mcp.office_mail.watchdog",
+		# v0.223.0. A filed login card (a live credential) deletes itself once it
+		# has expired or its phone has signed in. Writes nothing else; never raises.
+		"erpnext_mcp.login_cards.purge_due",
 		#: v0.78.0. Close restricted-entry windows whose moment has passed.
 		#:
 		#: HOURLY BECAUSE AN REI IS MEASURED IN HOURS. A four-hour window that

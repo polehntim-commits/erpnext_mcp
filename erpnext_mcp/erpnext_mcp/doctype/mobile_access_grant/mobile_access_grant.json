@@ -10,6 +10,7 @@
  "field_order": [
   "user",
   "full_name",
+  "employee",
   "mobile_role",
   "identity_col",
   "state",
@@ -87,6 +88,14 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Full Name"
+  },
+  {
+   "description": "The person this account belongs to (from Employee.user_id), so the grant and its devices appear on their Employee file. v0.223.0.",
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "read_only": 1
   },
   {
    "description": "Which of the six mobile roles this account was made for: Field Worker, Foreman, Compliance Officer, Farm Manager, Family Member or Advisor. The authority on what they may actually do is the Has Role table; this records what the account was FOR, which is the question 'why does this person have a login' asks.",
