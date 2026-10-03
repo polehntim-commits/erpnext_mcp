@@ -27,6 +27,7 @@ decode is reported on the answer and the task still closes.
 from __future__ import annotations
 
 import io
+import json
 
 import frappe
 
@@ -59,6 +60,11 @@ SEED_TEMPLATE = {
 	"estimated_duration_minutes": 5,
 	"dispatch_mode": "Either",
 	"default_urgency": "Normal",
+	# The portrait IS the photo this contract asks for: the phone counts a photo
+	# taken on the form toward it. v0.216.1 (FT-2026-10-00001): app 0.27.1 hides
+	# its generic before/after frames and signature pad when the form takes the
+	# photo, and the handler falls back to the last photo filed when a phone
+	# sent no form. An empty contract is refused by Farm Task on purpose.
 	"evidence_required": {"photos": True},
 	"instructions": (
 		"Stand in front of a plain wall, in even light. Face the camera, head and shoulders in the "
@@ -372,14 +378,70 @@ def is_badge_photo(task: dict) -> bool:
 
 
 def subject(task: dict, answers: dict | None = None) -> str:
+	"""Whose photo. The task's subject, else the form's answer, else WHO IT IS ASSIGNED TO.
+
+	v0.216.1. The last fallback is FT-2026-10-00001: a foreman raised "Badge photo"
+	from the template on the Work screen, so the task had no subject and the phone
+	sent no form — and the handler had nobody to give the photo to. A badge photo
+	task assigned to a person, with nothing else said, is that person's.
+	"""
 	if str(task.get("subject_doctype") or "") == EMPLOYEE and task.get("subject_docname"):
 		return str(task["subject_docname"])
-	return str((answers or {}).get("employee") or "")
+	named = str((answers or {}).get("employee") or "")
+	if named:
+		return named
+	holder = str(task.get("assigned_to") or "")
+	if holder and frappe.db.exists(EMPLOYEE, holder):
+		return holder
+	return ""
 
 
-def precheck(task: dict, worker: str, actor: str) -> None:
-	"""Before anything is written: their own photo, or a role that may take somebody else's."""
-	who = subject(task)
+def _answers(raw) -> dict:
+	if isinstance(raw, str):
+		try:
+			raw = json.loads(raw) if raw.strip() else {}
+		except ValueError:
+			return {}
+	return raw if isinstance(raw, dict) else {}
+
+
+def _is_photo(row: dict) -> bool:
+	kind = str(row.get("evidence_type") or row.get("kind") or "").lower()
+	if kind:
+		return kind == "photo"
+	name = str(row.get("file_name") or row.get("file_url") or row.get("caption") or "").lower()
+	return name.endswith((".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp"))
+
+
+def portrait(answers: dict | None, evidence=None):
+	"""The photograph to use. The form's portrait field; else the LAST photo filed.
+
+	v0.216.1. An app that drew the generic evidence screen instead of the form
+	files the picture as evidence — "before" at pickup, "after" at completion —
+	and the after one, taken last, is the portrait (Tim's FT-2026-10-00001: the
+	file set by hand was the after photo). A signature is never a portrait.
+	"""
+	photo = _answers(answers).get("photo")
+	if isinstance(photo, (list, tuple)):
+		photo = photo[0] if photo else None
+	if photo:
+		return photo
+	rows = [row for row in (evidence or []) if isinstance(row, dict) and _is_photo(row)]
+	if not rows:
+		return None
+	after = [row for row in rows if str(row.get("phase") or "").lower() != "before"]
+	return (after or rows)[-1]
+
+
+def precheck(task: dict, worker: str, actor: str, answers=None, evidence=None) -> None:
+	"""Before anything is written: there is a portrait, and it is theirs or a supervisor's to take."""
+	if answers is not None or evidence is not None:
+		if not portrait(answers, evidence):
+			raise ToolError(
+				f"{task.get('name')} is a badge photo, and no photograph came with it. Take the "
+				"portrait — one photo, face to the camera — and complete it again. Nothing was changed."
+			)
+	who = subject(task, _answers(answers))
 	if not who or worker == who:
 		return
 	if may_for_others(actor):
@@ -390,22 +452,60 @@ def precheck(task: dict, worker: str, actor: str) -> None:
 	)
 
 
-def on_completed(task: dict, answers: dict | None, worker: str, actor: str) -> dict:
-	"""Turn the completed form into `Employee.image`. NEVER RAISES."""
+def on_completed(task: dict, answers: dict | None, worker: str, actor: str, evidence=None) -> dict:
+	"""Turn the completed task into `Employee.image`. NEVER RAISES.
+
+	v0.216.1: the portrait is the form's photo or else the last photo filed
+	(`portrait`); the person is the subject, the form's answer or the assignee
+	(`subject`). The task is given its subject if it had none, so it shows on the
+	Employee's Farm Tasks. A failure is no longer only a key in an answer nobody
+	reads: it is a comment on the task and on the Employee.
+	"""
+	answers = _answers(answers)
 	out: dict = {"employee": subject(task, answers) or None}
+	who = ""
 	try:
 		who = subject(task, answers)
 		if not who:
-			raise ToolError("the task names no employee.")
-		photo = (answers or {}).get("photo")
-		if isinstance(photo, (list, tuple)):
-			photo = photo[0] if photo else None
-		out.update(set_photo(who, photo, actor))
-		if compat.checked((answers or {}).get("request_card_print")):
+			raise ToolError("the task names no employee and is assigned to nobody.")
+		picture = portrait(answers, evidence)
+		if not picture:
+			raise ToolError("no photograph was filed with it.")
+		out.update(set_photo(who, picture, actor))
+		out["source"] = "form" if answers.get("photo") else "evidence"
+		_give_subject(task, who)
+		if compat.checked(answers.get("request_card_print")):
 			out["card_print"] = _card(who, str(task.get("name") or ""), actor)
 	except Exception as exc:
 		out["error"] = str(exc) or type(exc).__name__
+		_report_failure(task, who, out["error"])
 	return out
+
+
+def _give_subject(task: dict, employee: str) -> None:
+	name = str(task.get("name") or "")
+	if not name or task.get("subject_docname"):
+		return
+	try:
+		frappe.db.set_value(
+			FARM_TASK, name, {"subject_doctype": EMPLOYEE, "subject_docname": employee}, update_modified=False
+		)
+	except Exception:  # pragma: no cover - a column a site lacks
+		pass
+
+
+def _report_failure(task: dict, employee: str, reason: str) -> None:
+	text = (
+		f"Badge photo was NOT set from {task.get('name')}: {reason} The task is complete; set the "
+		"photo with set_employee_photo, or raise a new badge photo task."
+	)
+	for doctype, name in ((FARM_TASK, task.get("name")), (EMPLOYEE, employee)):
+		if not name:
+			continue
+		try:
+			frappe.get_doc(doctype, name).add_comment("Comment", text)
+		except Exception:  # pragma: no cover - a comment is a courtesy
+			pass
 
 
 def _card(employee: str, task: str, actor: str) -> dict:
@@ -457,6 +557,45 @@ frappe.ui.form.on("Employee", {
 	},
 });
 """.replace("%(method)s", DESK_METHOD)
+
+
+#: v0.216.1. The Employee form's Connections: the Farm Tasks assigned to that
+#: person — a badge photo task among them. Tim could not find FT-2026-10-00001
+#: from the Desk. A custom DocType Link (Customize Form → Links), seeded once.
+CONNECTION_GROUP = "Farm Ops"
+
+
+def seed_employee_connection() -> dict:
+	"""Add "Farm Task" to the Employee form's Connections. Never raises; never duplicates."""
+	report = {"created": False, "reason": ""}
+	try:
+		if not frappe.db.exists("DocType", "DocType Link") or not frappe.db.exists("DocType", EMPLOYEE):
+			report["reason"] = "this site has no DocType Link or Employee doctype"
+			return report
+		if frappe.db.exists("DocType Link", {"parent": EMPLOYEE, "link_doctype": FARM_TASK}):
+			report["reason"] = "already present"
+			return report
+		doc = frappe.get_doc(
+			{
+				"doctype": "DocType Link",
+				"parent": EMPLOYEE,
+				"parenttype": "DocType",
+				"parentfield": "links",
+				"link_doctype": FARM_TASK,
+				"link_fieldname": "assigned_to",
+				"group": CONNECTION_GROUP,
+				"custom": 1,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		try:
+			frappe.clear_cache(doctype=EMPLOYEE)
+		except Exception:  # pragma: no cover
+			pass
+		report["created"] = True
+	except Exception as exc:  # pragma: no cover - a site mid-migrate
+		report["reason"] = f"{type(exc).__name__}: {exc}"
+	return report
 
 
 def seed_desk_button() -> dict:

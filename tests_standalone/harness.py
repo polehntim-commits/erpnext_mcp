@@ -1173,6 +1173,17 @@ ERPNEXT_SCHEMA = {
 	],
 	"Workspace Number Card": ["name", "number_card_name", "label"],
 	"Workspace Chart": ["name", "chart_name", "label"],
+	# v0.216.1. A custom row of an Employee form's Connections.
+	"DocType Link": [
+		"name",
+		"parent",
+		"parenttype",
+		"parentfield",
+		"link_doctype",
+		"link_fieldname",
+		"group",
+		"custom",
+	],
 	"Client Script": [
 		"name",
 		"dt",

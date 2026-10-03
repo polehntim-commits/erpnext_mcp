@@ -713,6 +713,16 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 	doc.origin = origin or ORIGIN_FOREMAN_DISPATCH
 	for key, value in (fields or {}).items():
 		doc.set(key, value)
+	# v0.216.1 (FT-2026-10-00001). A "Badge photo" raised straight from the
+	# template — the Work screen's assign flow — is about the person it is given
+	# to: say so on the task, so it reads "Badge photo — Tim Polehn" on the board
+	# and appears under that Employee in the Desk.
+	if (row.get("template_name") or name) == "Badge photo" and worker and not doc.get("subject_docname"):
+		doc.subject_doctype = "Employee"
+		doc.subject_docname = worker
+		if not as_str(args, "task_name"):
+			person = frappe.db.get_value("Employee", worker, "employee_name") or worker
+			doc.task_name = f"Badge photo — {person}"[:140]
 	doc.urgency = (
 		as_choice(FARM_TASK, "urgency", as_str(args, "urgency"), "urgency")
 		if args.get("urgency")

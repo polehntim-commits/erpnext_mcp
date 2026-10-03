@@ -2465,7 +2465,11 @@ def complete_farm_task(args: dict) -> ToolResult:
 		from .. import security
 
 		badge_photo.precheck(
-			task, worker, security.caller_identity() or str(getattr(frappe.session, "user", "") or "")
+			task,
+			worker,
+			security.caller_identity() or str(getattr(frappe.session, "user", "") or ""),
+			answers=args.get("form_answers") or {},
+			evidence=evidence,
 		)
 	form_answers = task_forms.check_completion(task, args)
 	args["_form_answers"] = form_answers
@@ -2843,6 +2847,7 @@ def complete_farm_task(args: dict) -> ToolResult:
 			form_answers,
 			worker,
 			security.caller_identity() or str(getattr(frappe.session, "user", "") or ""),
+			evidence=evidence,
 		)
 
 	# v0.85.0. THE COMPLETION GOES UP THE CHAIN, FROZEN. It runs last, after the

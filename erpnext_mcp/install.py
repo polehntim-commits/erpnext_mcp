@@ -271,6 +271,9 @@ def _card_print() -> None:
 
 		if badge_photo.seed_desk_button().get("created"):
 			made.append(f"button {badge_photo.SCRIPT_NAME!r}")
+		# v0.216.1. Farm Tasks under the Employee form's Connections.
+		if badge_photo.seed_employee_connection().get("created"):
+			made.append("Employee connection 'Farm Task'")
 		from . import card_print_format
 
 		for report in card_print_format.seed_card_print_formats():

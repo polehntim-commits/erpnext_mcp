@@ -79,6 +79,13 @@ Security review 2026-10-02: C1 (public `/erpnext`), L4 (route gates), and three 
   - health and the tag page are limited to 120 a minute per address; health no longer states the
     version; the tag page is `text/plain` — nothing under `/farmops` answers HTML;
   - no file is served by URL (pinned by a test); revocation was already checked on every call.
+- **Badge photo task (FT-2026-10-00001).** Completing a "Badge photo" task now sets Employee.image
+  even when the phone sent no form: the person is the subject, the form's answer or the assignee;
+  the picture is the form's portrait or else the last photo filed (never a "before" frame or a
+  signature); no photo at all is refused before anything is written; a failure is a comment on the
+  task and the Employee. Raised from the template with an assignee, the task names its person.
+  Employee form → Connections → Farm Task. App 0.27.1 hides the generic before/after/signature
+  capture when the form takes the photo.
 - **Fixes:** `generate_access_control_report` no longer crashes on an orphaned permission row; `record_backup_test.test_restore_by`
   accepts a user id, email or full name, and keeps anything else in the notes;
   `create_backup_record.location` over 140 characters is shortened, with the full text in the notes.

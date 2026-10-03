@@ -28,9 +28,9 @@ CAL = "EMP-CAL"
 ON = {f"allow_{name}": 1 for name in ("request_badge_photo", "set_employee_photo")}
 
 
-def a_photo(width=1200, height=900, with_gps=True) -> bytes:
+def a_photo(width=1200, height=900, with_gps=True, color=(40, 120, 200)) -> bytes:
 	"""A landscape JPEG that carries EXIF — a GPS block and a camera make."""
-	image = Image.new("RGB", (width, height), (40, 120, 200))
+	image = Image.new("RGB", (width, height), color)
 	exif = Image.Exif()
 	exif[0x010F] = "FarmPhone"  # Make
 	if with_gps:
@@ -293,4 +293,96 @@ class SettingItDirectly(BadgePhotoCase):
 		self.assertIn(
 			"is not a File",
 			self.tool_error("set_employee_photo", {"employee": CAL, "file_url": "/files/nope.jpg"}),
+		)
+
+
+class FT_2026_10_00001(BadgePhotoCase):
+	"""v0.216.1. The task a foreman raised from the template on the Work screen:
+	no subject, no form answers, and the phone filed a before photo, an after
+	photo and a signature through the generic completion screen. The handler had
+	nobody and no picture, so Employee.image was never set."""
+
+	def raise_from_template(self):
+		self.be("Administrator")
+		from erpnext_mcp.tools import tasktemplates
+
+		task = tasktemplates.create_task_from_template(
+			{"template": badge_photo.TEMPLATE, "assigned_to": WORKER_EMPLOYEE}, origin="foreman_dispatch"
+		).data["name"]
+		STORE.commit()
+		return task
+
+	def complete_generically(self, task, evidence):
+		mobile_api.start_task(task=task)
+		return mobile_api.complete_task_via_mobile(task=task, evidence_files=evidence)
+
+	def test_the_after_photo_becomes_the_assignees_badge_photo(self):
+		before = self.a_file("FT_photo_before_A.jpg")
+		after = self.a_file("FT_photo_after_B.jpg", a_photo(color=(10, 200, 10)))
+		signature = self.a_file("FT_signature_C.png")
+		task = self.raise_from_template()
+		self.picker()
+		answer = self.complete_generically(
+			task,
+			[
+				{
+					"file_token": before,
+					"file_name": "FT_photo_before_A.jpg",
+					"kind": "photo",
+					"phase": "before",
+				},
+				{"file_token": after, "file_name": "FT_photo_after_B.jpg", "kind": "photo", "phase": "after"},
+				{"file_token": signature, "file_name": "FT_signature_C.png", "kind": "signature"},
+			],
+		)
+		self.assertTrue(answer)
+		self.assertTrue(STORE.get_raw("Employee", WORKER_EMPLOYEE).get("image"), "Employee.image was set")
+		image = Image.open(io.BytesIO(self.image_of(WORKER_EMPLOYEE))).convert("RGB")
+		self.assertGreater(image.getpixel((300, 375))[1], 150, "the AFTER photo, not the before one")
+		# The task now names its subject, so it shows under the Employee.
+		row = STORE.get_raw("Farm Task", task)
+		self.assertEqual((row["subject_doctype"], row["subject_docname"]), ("Employee", WORKER_EMPLOYEE))
+
+	def test_raised_from_the_template_it_names_the_person(self):
+		task = self.raise_from_template()
+		row = STORE.get_raw("Farm Task", task)
+		self.assertEqual((row["subject_doctype"], row["subject_docname"]), ("Employee", WORKER_EMPLOYEE))
+		self.assertTrue(row["task_name"].startswith("Badge photo — "))
+
+	def test_no_photograph_at_all_is_refused_before_anything_is_written(self):
+		task = self.raise_from_template()
+		self.picker()
+		STORE.commit()
+		with self.assertRaises(Exception) as caught:
+			self.complete_generically(task, [])
+		self.assertIn("no photograph came with it", str(caught.exception))
+		self.assertNotEqual(STORE.get_raw("Farm Task", task)["state"], "Completed")
+
+	def test_the_form_portrait_still_wins_over_evidence(self):
+		portrait_file = self.a_file("portrait.jpg", a_photo(color=(10, 200, 10)))
+		other = self.a_file("FT_photo_after_X.jpg")
+		self.assertEqual(
+			badge_photo.portrait({"photo": [portrait_file]}, [{"file": other, "evidence_type": "Photo"}]),
+			portrait_file,
+		)
+
+	def test_a_signature_is_never_the_portrait(self):
+		self.assertIsNone(badge_photo.portrait({}, [{"file": "S", "evidence_type": "Signature"}]))
+
+	def test_a_failure_is_written_on_the_task_and_the_employee(self):
+		task = {"name": "FT-X", "template": badge_photo.TEMPLATE, "assigned_to": WORKER_EMPLOYEE}
+		STORE.seed("Farm Task", [{"name": "FT-X", "task_name": "Badge photo", "state": "Completed"}])
+		answer = badge_photo.on_completed(task, {}, WORKER_EMPLOYEE, "Administrator", evidence=[])
+		self.assertIn("no photograph", answer["error"])
+		texts = [row.get("content") or "" for row in STORE.rows("Comment")]
+		self.assertTrue(any("Badge photo was NOT set from FT-X" in text for text in texts))
+
+
+class EmployeeConnections(BadgePhotoCase):
+	def test_farm_tasks_appear_on_the_employee_form_once(self):
+		self.assertTrue(badge_photo.seed_employee_connection()["created"])
+		self.assertEqual(badge_photo.seed_employee_connection()["reason"], "already present")
+		row = next(r for r in STORE.rows("DocType Link") if r.get("parent") == "Employee")
+		self.assertEqual(
+			(row["link_doctype"], row["link_fieldname"], row["custom"]), ("Farm Task", "assigned_to", 1)
 		)

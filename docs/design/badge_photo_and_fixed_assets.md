@@ -161,3 +161,33 @@ mutating, default OFF). 978 → **982** (477 read, 505 write). Mobile routes: `r
 3. **The badge photo is cropped about its centre** when the phone did not frame it (an older
    build, or a photo set from Desk). There is no face detection on the server.
 4. **A photo is auto-requested** when a card is asked for with none on file. The flag turns it off.
+
+---
+
+## Addendum v0.216.1 — FT-2026-10-00001 (badge photo not set)
+
+**What happened.** A foreman raised "Badge photo" straight from the template on the Work screen
+(`origin: foreman_dispatch`): no subject, no pre-answered employee. App 0.26.0 completed it through
+its generic screen — a "before" frame at pickup, an "after" frame and a signature — and sent **no
+form answers** (`form_answers` empty on both the task and the assignment). The server accepted that,
+because a form is only checked when answers arrive (older apps send none). The handler then had no
+employee and no `photo` answer; its error went into a key on the completion answer that nothing
+shows. Employee.image stayed empty.
+
+**Now:**
+
+- **Whose photo:** the task's subject, else the form's `employee`, else **the employee the task is
+  assigned to**. Raising "Badge photo" from the template with an assignee now sets the subject and
+  names the task "Badge photo — <name>".
+- **Which photo:** the form's portrait field, else **the last photo filed** with the completion
+  that is not a "before" frame. A signature is never a portrait.
+- **No photograph at all** → the completion is refused before anything is written.
+- **A failure is visible:** a comment on the task and on the Employee saying the photo was not set
+  and why.
+- **App 0.27.1:** when a task's form takes the photo (a `photo` field) and the contract does not
+  also demand a signature, the generic before frame, the after photos and the signature pad are not
+  shown — one portrait and the consent. If the form could not be read they stay, as the fallback.
+- The contract stays `{"photos": true}`: Farm Task refuses an empty contract on purpose, and a photo
+  taken on the form counts toward it.
+- **Desk:** the Employee form's Connections gain **Farm Task** (by `assigned_to`, group "Farm Ops"),
+  seeded once at migrate.
