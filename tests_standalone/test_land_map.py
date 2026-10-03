@@ -27,8 +27,8 @@ from typing import ClassVar
 
 import frappe
 
+from erpnext_mcp import geo, surveying
 from erpnext_mcp import land_adjustment as land
-from erpnext_mcp import surveying
 from erpnext_mcp.api import land_map
 from erpnext_mcp.errors import ToolError
 
@@ -311,7 +311,15 @@ class TheDrawnLine(LandMapTestCase):
 
 
 # ── 3 ───────────────────────────────────────────────────────────────────────
+#: v0.216.1. These four save a drawn polygon, and a polygon is validated with
+#: shapely before anything else is looked at — so on a bench without it they
+#: are told "install shapely", which is that code's correct answer. CI's first
+#: run has no shapely on purpose; these belong to its second run.
+NEEDS_GEO = "saving a drawn boundary validates it with shapely and h3"
+
+
 class TheSave(LandMapTestCase):
+	@unittest.skipUnless(geo.available(), NEEDS_GEO)
 	def test_it_writes_the_proposal_onto_an_existing_adjustment(self):
 		name = self.an_adjustment()
 		answer = land_map._save_proposal(
@@ -323,6 +331,7 @@ class TheSave(LandMapTestCase):
 		stored = frappe.db.get_value(land.LOT_LINE_ADJUSTMENT, name, "proposed_geometry")
 		self.assertEqual(json.loads(stored)["type"], "Polygon")
 
+	@unittest.skipUnless(geo.available(), NEEDS_GEO)
 	def test_it_goes_through_the_tool_so_the_role_gate_applies(self):
 		"""`lla_update` carries the role gate, the status machine and the
 		after-submit lock. A Desk method writing the document itself would be a
@@ -333,6 +342,7 @@ class TheSave(LandMapTestCase):
 			land_map._save_proposal(adjustment=name, proposed_geometry=surveying.polygon(DRAWN))
 		self.assertIn(land.LAND_AGREEMENTS_ROLE, str(caught.exception))
 
+	@unittest.skipUnless(geo.available(), NEEDS_GEO)
 	def test_it_can_create_one_when_given_a_title(self):
 		answer = land_map._save_proposal(
 			title="Drawn on the map",
@@ -344,6 +354,7 @@ class TheSave(LandMapTestCase):
 			frappe.db.get_value(land.LOT_LINE_ADJUSTMENT, answer["name"], "title"), "Drawn on the map"
 		)
 
+	@unittest.skipUnless(geo.available(), NEEDS_GEO)
 	def test_creating_without_a_title_is_refused_by_name(self):
 		with self.assertRaises(ToolError) as caught:
 			land_map._save_proposal(proposed_geometry=surveying.polygon(DRAWN))

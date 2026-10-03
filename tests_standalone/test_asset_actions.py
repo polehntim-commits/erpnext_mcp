@@ -167,7 +167,9 @@ class StockMovesThroughATask(AssetActionsTestCase):
 		set_roles(WORKER, ["Field Worker"])
 		self.be()
 		self.assertTrue(
-			mobile_api.record_asset_stock_movement(asset=SHED, direction="in", item_code=SPRAY, qty=1)["task"]["name"]
+			mobile_api.record_asset_stock_movement(asset=SHED, direction="in", item_code=SPRAY, qty=1)[
+				"task"
+			]["name"]
 		)
 
 
@@ -210,7 +212,6 @@ def _serving(*responses):
 
 
 class DocumentsGoThroughATask(AssetActionsTestCase):
-
 	def test_an_uploaded_file_lands_on_the_asset_through_a_completed_task(self):
 		self.be()
 		token = self.staged()
@@ -252,8 +253,9 @@ class DocumentsGoThroughATask(AssetActionsTestCase):
 
 	def test_a_link_is_downloaded_and_stored_as_bytes(self):
 		self.be()
-		with mock.patch("socket.getaddrinfo", _public_dns), _serving(
-			_Response(200, PDF, {"Content-Type": "application/octet-stream"})
+		with (
+			mock.patch("socket.getaddrinfo", _public_dns),
+			_serving(_Response(200, PDF, {"Content-Type": "application/octet-stream"})),
 		):
 			answer = mobile_api.attach_asset_document(
 				asset=SHED, url="https://example.com/docs/op-manual.pdf?v=2", title="Operator's manual"
@@ -355,7 +357,12 @@ class TheFetchStaysOnThePublicInternet(AssetActionsTestCase):
 
 	def test_other_schemes_are_refused_before_any_lookup(self):
 		with mock.patch("socket.getaddrinfo") as looked_up:
-			for url in ("file:///etc/passwd", "ftp://example.com/manual.pdf", "gopher://x/", "javascript:alert(1)"):
+			for url in (
+				"file:///etc/passwd",
+				"ftp://example.com/manual.pdf",
+				"gopher://x/",
+				"javascript:alert(1)",
+			):
 				with self.subTest(url=url):
 					self.assertIn("not an http or https link", self.refused(url))
 			looked_up.assert_not_called()
@@ -369,8 +376,9 @@ class TheFetchStaysOnThePublicInternet(AssetActionsTestCase):
 			opened.assert_not_called()
 
 	def test_a_redirect_is_checked_again(self):
-		with mock.patch("socket.getaddrinfo", _public_dns), _serving(
-			_Response(302, b"", {"Location": "http://127.0.0.1/admin"})
+		with (
+			mock.patch("socket.getaddrinfo", _public_dns),
+			_serving(_Response(302, b"", {"Location": "http://127.0.0.1/admin"})),
 		):
 			self.assertIn("not on the public internet", self.refused("https://example.com/a.pdf"))
 
@@ -378,10 +386,13 @@ class TheFetchStaysOnThePublicInternet(AssetActionsTestCase):
 		hop = _Response(301, b"", {"Location": "/next"})
 		with mock.patch("socket.getaddrinfo", _public_dns), _serving(*[hop] * 5):
 			self.assertIn("redirected more than", self.refused("https://example.com/a.pdf", max_redirects=3))
-		with mock.patch("socket.getaddrinfo", _public_dns), _serving(
-			_Response(301, b"", {"Location": "https://cdn.example.com/b.pdf"}), _Response(200, PDF)
+		with (
+			mock.patch("socket.getaddrinfo", _public_dns),
+			_serving(_Response(301, b"", {"Location": "https://cdn.example.com/b.pdf"}), _Response(200, PDF)),
 		):
-			self.assertEqual(url_fetch.fetch("http://example.com/a.pdf").final_url, "https://cdn.example.com/b.pdf")
+			self.assertEqual(
+				url_fetch.fetch("http://example.com/a.pdf").final_url, "https://cdn.example.com/b.pdf"
+			)
 
 	def test_a_body_over_the_cap_is_refused_while_it_streams(self):
 		body = b"%PDF-" + b"x" * 5000
@@ -403,9 +414,11 @@ class TheFetchStaysOnThePublicInternet(AssetActionsTestCase):
 			(b"PK\x03\x04zipfile", "application/zip"),
 			(b"MZ\x90\x00exe", "application/octet-stream"),
 		):
-			with self.subTest(content_type=content_type), mock.patch(
-				"socket.getaddrinfo", _public_dns
-			), _serving(_Response(200, body, {"Content-Type": content_type})):
+			with (
+				self.subTest(content_type=content_type),
+				mock.patch("socket.getaddrinfo", _public_dns),
+				_serving(_Response(200, body, {"Content-Type": content_type})),
+			):
 				self.assertIn("not a PDF", self.refused("https://example.com/a.pdf"))
 
 	def test_the_documents_it_does_take_are_sniffed(self):
@@ -427,10 +440,16 @@ class TheFetchStaysOnThePublicInternet(AssetActionsTestCase):
 
 	def test_file_names_are_sanitized_and_take_the_sniffed_extension(self):
 		self.assertEqual(url_fetch.safe_file_name("../../etc/passwd", "", "", "pdf"), "passwd.pdf")
-		self.assertEqual(url_fetch.safe_file_name("", "https://x.com/a/Op%20Manual.html", "", "pdf"), "Op Manual.pdf")
 		self.assertEqual(
-			url_fetch.safe_file_name("", "https://x.com/dl", url_fetch.disposition_file_name(
-				'attachment; filename="WM-200 spec.pdf"'), "pdf"),
+			url_fetch.safe_file_name("", "https://x.com/a/Op%20Manual.html", "", "pdf"), "Op Manual.pdf"
+		)
+		self.assertEqual(
+			url_fetch.safe_file_name(
+				"",
+				"https://x.com/dl",
+				url_fetch.disposition_file_name('attachment; filename="WM-200 spec.pdf"'),
+				"pdf",
+			),
 			"WM-200 spec.pdf",
 		)
 		self.assertEqual(url_fetch.safe_file_name("", "https://x.com/", "", "png"), "document.png")

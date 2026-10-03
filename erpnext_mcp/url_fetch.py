@@ -392,7 +392,7 @@ def safe_file_name(title: str, url: str, disposition_name: str, extension: str) 
 def _clean_stem(value: str) -> str:
 	text = str(value or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
 	base, dot, tail = text.rpartition(".")
-	if dot and tail.lower() in DOCUMENT_EXTENSIONS + ("htm", "html", "php", "aspx", "bin"):
+	if dot and tail.lower() in (*DOCUMENT_EXTENSIONS, "htm", "html", "php", "aspx", "bin"):
 		text = base
 	text = re.sub(r"[^A-Za-z0-9 ._()\-]+", " ", text)
 	text = re.sub(r"\s+", " ", text).strip(" .-")

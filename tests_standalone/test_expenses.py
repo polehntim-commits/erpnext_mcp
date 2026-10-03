@@ -623,8 +623,7 @@ class Listing(ExpenseTestCase):
 		ten I filed"; under the review order above, a limit of ten answers the ten
 		LEAST CONFIDENT receipts in the register, which is neither the last ten
 		nor a page of anything. v0.176.3."""
-		data = self.tool_data(
-			"list_expense_receipts", {"company": MAIN, "newest_first": True})
+		data = self.tool_data("list_expense_receipts", {"company": MAIN, "newest_first": True})
 		dates = [row["receipt_date"] for row in data["receipts"]]
 		self.assertEqual(dates, sorted(dates, reverse=True), dates)
 
@@ -638,8 +637,7 @@ class Listing(ExpenseTestCase):
 		for the newest N, then ask again with `to_date` set to the oldest row it
 		got. A cursor a caller can see, rather than a page number that shifts
 		under them when somebody files a receipt mid-scroll."""
-		first = self.tool_data(
-			"list_expense_receipts", {"company": MAIN, "newest_first": True, "limit": 2})
+		first = self.tool_data("list_expense_receipts", {"company": MAIN, "newest_first": True, "limit": 2})
 		self.assertEqual(first["count"], 2)
 
 		oldest = first["receipts"][-1]["receipt_date"]
@@ -647,8 +645,7 @@ class Listing(ExpenseTestCase):
 			"list_expense_receipts",
 			{"company": MAIN, "newest_first": True, "limit": 2, "to_date": oldest},
 		)
-		self.assertTrue(
-			all(row["receipt_date"] <= oldest for row in older["receipts"]), older["receipts"])
+		self.assertTrue(all(row["receipt_date"] <= oldest for row in older["receipts"]), older["receipts"])
 
 	def test_it_filters_by_employee(self):
 		data = self.tool_data("list_expense_receipts", {"company": MAIN, "employee": "HR-EMP-00002"})

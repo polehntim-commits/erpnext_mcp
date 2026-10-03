@@ -89,7 +89,13 @@ class TrainingTaskTestCase(V12TestCase):
 			BADGE_DOCTYPE,
 			[
 				{"name": BEN_BADGE, "badge_id": BEN_BADGE, "employee": TRAINEE, "company": MAIN, "active": 1},
-				{"name": THIRD_BADGE, "badge_id": THIRD_BADGE, "employee": SECOND, "company": MAIN, "active": 1},
+				{
+					"name": THIRD_BADGE,
+					"badge_id": THIRD_BADGE,
+					"employee": SECOND,
+					"company": MAIN,
+					"active": 1,
+				},
 			],
 		)
 

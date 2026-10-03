@@ -847,8 +847,16 @@ class BothStampsAreSiteLocal(AppFeedbackTestCase):
 			APP_FEEDBACK,
 			[
 				{"name": "AFB-OLD", "timestamp": "2026-09-27 19:53:43", "received_at": "2026-09-27 12:53:44"},
-				{"name": "AFB-QUEUED", "timestamp": "2026-09-25 08:00:00", "received_at": "2026-09-27 12:00:00"},
-				{"name": "AFB-SKEW", "timestamp": "2026-09-27 12:58:00", "received_at": "2026-09-27 12:53:44"},
+				{
+					"name": "AFB-QUEUED",
+					"timestamp": "2026-09-25 08:00:00",
+					"received_at": "2026-09-27 12:00:00",
+				},
+				{
+					"name": "AFB-SKEW",
+					"timestamp": "2026-09-27 12:58:00",
+					"received_at": "2026-09-27 12:53:44",
+				},
 			],
 		)
 		first = patch.normalize_app_feedback_timestamps()

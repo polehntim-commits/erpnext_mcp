@@ -49,6 +49,18 @@ GEO_TOOLS = (
 	"find_fields_containing_point",
 	"find_fields_by_h3_cell",
 	"import_field_boundary_geojson",
+	# v0.216.1. Gated on `_geo_ready("Field")` like the six above; it was never
+	# added here, so this list was right only on a bench that had shapely.
+	"import_fsa_clu_boundaries",
+)
+
+#: v0.216.1. The terrain layers need numpy (`registry._slope_aspect_available`).
+#: CI installs no numpy in either run, so on a bare runner these are
+#: unavailable — and this list was right only on a machine that had it.
+TERRAIN_TOOLS = (
+	"build_slope_aspect_layer",
+	"get_slope_aspect_layer",
+	"get_slope_grade_layer",
 )
 
 #: v0.36.0. Tools that need reportlab, for the same reason and with the same
@@ -564,6 +576,8 @@ class SelfTest(SeededTestCase):
 			out += list(I9_PDF_TOOLS)
 		if not w4_pdf.available():
 			out += list(W4_PDF_TOOLS)
+		if not registry._slope_aspect_available():
+			out += list(TERRAIN_TOOLS)
 		# v0.68.0. This fixture is a plain `SeededTestCase` site: it never
 		# registers the Purchase Invoice doctype (only `PurchasingTestCase`
 		# does, for the tests that need to insert one), so the one tool that

@@ -186,10 +186,14 @@ class WhichFileIsThePhotograph(ReceiptImageTestCase):
 		"""`receipt_image` naming the PDF is somebody having SAID which file the
 		slip is, and a newer attachment does not overrule it."""
 		receipt = self.receipt(receipt_image="/private/files/invoice.pdf")
-		self.a_file("file-invoice", receipt, b"%PDF-1.7", file_name="invoice.pdf",
-		            file_url="/private/files/invoice.pdf")
-		self.a_file("file-later", receipt, JPEG, file_name="later.jpg",
-		            creation="2027-01-01 10:00:00")
+		self.a_file(
+			"file-invoice",
+			receipt,
+			b"%PDF-1.7",
+			file_name="invoice.pdf",
+			file_url="/private/files/invoice.pdf",
+		)
+		self.a_file("file-later", receipt, JPEG, file_name="later.jpg", creation="2027-01-01 10:00:00")
 
 		self.assertEqual(mobile_api.get_receipt_image(receipt=receipt)["file"], "file-invoice")
 
