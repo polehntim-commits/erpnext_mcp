@@ -41,6 +41,12 @@
   "mcp_oauth_user",
   "mcp_access_token_minutes",
   "mcp_refresh_days",
+  "office_mail_section",
+  "office_mail_enabled",
+  "office_mail_watchdog",
+  "office_mail_accounts",
+  "office_mail_regulator_domains",
+  "office_mail_draft_classes",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -989,6 +995,11 @@
   "allow_list_access_inventory",
   "allow_report_lost_device",
   "allow_revoke_mcp_client",
+  "allow_get_mail_status",
+  "allow_list_mail_drafts",
+  "allow_get_mail_draft",
+  "allow_fix_incoming_mail_sync",
+  "allow_triage_mail",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1471,6 +1482,78 @@
    "fieldname": "mcp_refresh_days",
    "fieldtype": "Int",
    "label": "Refresh token idle life (days)"
+  },
+  {
+   "fieldname": "office_mail_section",
+   "fieldtype": "Section Break",
+   "label": "office@ mail"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On: every 5 minutes each new email on the office accounts gets an Office Mail row: a class (customer, supplier, invoice, compliance, training, personal, spam, other), the record it belongs to, and phishing flags. Nothing is relinked, drafted or sent. docs/design/office_reply_drafts.md.",
+   "fieldname": "office_mail_enabled",
+   "fieldtype": "Check",
+   "label": "Triage office mail"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On: an hourly check alerts Security Alert Recipients (once a day) when an office account has received nothing for 24 hours, has incoming switched off, or failed to connect 3+ times today.",
+   "fieldname": "office_mail_watchdog",
+   "fieldtype": "Check",
+   "label": "Alert when office mail goes quiet"
+  },
+  {
+   "description": "Email Account names to treat as office accounts, one per line. Empty: every account with incoming on.",
+   "fieldname": "office_mail_accounts",
+   "fieldtype": "Small Text",
+   "label": "Office mail accounts"
+  },
+  {
+   "description": "Sender domains that mean a regulator (one per line; a subdomain matches). Empty: wa.gov, epa.gov, usda.gov, osha.gov, dol.gov, fda.gov, irs.gov, ssa.gov, uscis.gov, dhs.gov and the Washington agencies.",
+   "fieldname": "office_mail_regulator_domains",
+   "fieldtype": "Small Text",
+   "label": "Regulator domains"
+  },
+  {
+   "description": "Classes a reply may be drafted for, space-separated. Empty: all but spam and personal. Suspicious mail and payment-change requests are never drafted whatever this says.",
+   "fieldname": "office_mail_draft_classes",
+   "fieldtype": "Data",
+   "label": "Draft replies for"
+  },
+  {
+   "default": "1",
+   "description": "READ. Is office@ mail arriving, and if not, why: sync rule, incoming on/off, failed connects, last mail received, errors, scheduler. Never a password.",
+   "fieldname": "allow_get_mail_status",
+   "fieldtype": "Check",
+   "label": "Get Mail Status"
+  },
+  {
+   "default": "1",
+   "description": "READ. The office mail queue: class, state, flags, link.",
+   "fieldname": "allow_list_mail_drafts",
+   "fieldtype": "Check",
+   "label": "List Mail Drafts"
+  },
+  {
+   "default": "1",
+   "description": "READ. One office email (its text marked untrusted), flags, link, draft and audit.",
+   "fieldname": "allow_get_mail_draft",
+   "fieldtype": "Check",
+   "label": "Get Mail Draft"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). Set an office account to sync rule ALL with incoming on and its failure counters cleared. Dry run by default; refuses when ALL would import the mailbox's oldest mail.",
+   "fieldname": "allow_fix_incoming_mail_sync",
+   "fieldtype": "Check",
+   "label": "Fix Incoming Mail Sync"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). Triage new office mail now, or re-triage one email. Writes only Office Mail rows; never relinks, drafts or sends.",
+   "fieldname": "allow_triage_mail",
+   "fieldtype": "Check",
+   "label": "Triage Mail"
   },
   {
    "default": "0",

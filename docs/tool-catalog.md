@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 991 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 996 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 482 read tools are **on** by default and can be switched off individually. A
+All 485 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,18 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.221.0 — office@ mail: status, sync fix, triage (off by default)
+
+| Tool | What it does |
+| --- | --- |
+| `get_mail_status` | Is office mail arriving; sync rule, failures, last mail, what ALL would import. Read |
+| `list_mail_drafts` | The office mail queue by state and class. Read |
+| `get_mail_draft` | One office email (text marked untrusted), flags, link, draft, audit. Read |
+| `fix_incoming_mail_sync` | Sync rule ALL, incoming on, counters cleared; dry run by default. Write |
+| `triage_mail` | Triage new office mail now, or re-triage one. Write |
+
+Contract: `docs/design/office_reply_drafts.md`.
 
 ## v0.220.0 — OAuth for MCP clients (off by default)
 

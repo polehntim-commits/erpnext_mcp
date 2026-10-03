@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.221.0 — 2026-10-03 — office@: incoming that keeps working, triage, phishing flags (OFF by default)
+
+**996 tools** (485 read, 511 write): + `get_mail_status`, `list_mail_drafts`, `get_mail_draft`,
+`fix_incoming_mail_sync`, `triage_mail`. Contract `docs/design/office_reply_drafts.md` (frozen, with
+build notes). Deploy `docs/deploy/v0.221.0_office_mail.md`.
+
+**Deploying changes nothing**: `office_mail_enabled` and `office_mail_watchdog` ship off, both writes
+ship off, and nothing is ever relinked, drafted or sent by this release.
+
+- `get_mail_status` (also `get_server_status.incoming_mail`): per office account — incoming on/off
+  (Frappe switches it off itself after repeated connect failures), sync rule (UNSEEN never imports mail
+  already read in Zoho), failed connects, last mail received, errors in 7 days, the scheduler, and what
+  sync rule ALL would import next. Never a password.
+- `fix_incoming_mail_sync`: ALL + incoming on + counters cleared, dry run by default; refuses when ALL
+  would pull the mailbox's oldest mail.
+- New doctype **Office Mail**; a 5-minute triage job classes each new email (customer, supplier,
+  invoice_receipt, compliance_regulatory, training, personal, spam, other), proposes the record it
+  belongs to, and flags look-alike domains, borrowed display names, **payment/bank-detail changes**,
+  urgent money requests from first-time senders, mismatched links and risky attachments. Flagged mail
+  is `Needs person` and can never be drafted.
+- Hourly watchdog: an alert (once a day) when office mail goes quiet or incoming is off.
+
 ## 0.220.0 — 2026-10-03 — OAuth 2.1 for MCP clients, approved on a phone (OFF by default)
 
 **991 tools** (482 read, 509 write): + `revoke_mcp_client`. **175 mobile methods** (unchanged;

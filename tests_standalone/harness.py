@@ -696,7 +696,23 @@ ERPNEXT_SCHEMA = {
 		"send_unsubscribe_message",
 		"footer",
 		"brand_logo",
+		# v0.221.0. Incoming: what `office_mail.incoming_status` reads and
+		# `fix_sync` writes (never the password).
+		"enable_incoming",
+		"use_imap",
+		"email_server",
+		"incoming_port",
+		"use_ssl",
+		"email_sync_option",
+		"initial_sync_count",
+		"no_failed",
+		"uidnext",
+		"uidvalidity",
+		"awaiting_password",
 	],
+	# v0.221.0. Who an office email is from: a Contact's addresses and links.
+	"Contact Email": ["name", "parent", "parenttype", "email_id", "is_primary"],
+	"Dynamic Link": ["name", "parent", "parenttype", "link_doctype", "link_name"],
 	# v0.217.0. What Frappe records about logins and changes; `security_watch`
 	# and `security_status` read them.
 	"Activity Log": ["name", "user", "operation", "status", "ip_address", "creation", "full_name"],
@@ -733,6 +749,12 @@ ERPNEXT_SCHEMA = {
 		"reference_name",
 		"email_account",
 		"has_attachment",
+		# v0.221.0. Office mail: the medium, the IMAP UID Frappe's ALL rule
+		# resumes from, and the thread a reply goes into.
+		"communication_medium",
+		"uid",
+		"message_id",
+		"in_reply_to",
 		"owner",
 		"creation",
 		"modified",
@@ -773,6 +795,8 @@ ERPNEXT_SCHEMA = {
 		# column" and every test saw a card falling back to initials.
 		"image",
 		"personal_email",
+		# v0.221.0. Office mail triage: an email from an employee.
+		"company_email",
 		"cell_number",
 		# v0.62.0 joined these three to `employee.WRITABLE` so the mobile
 		# surface's `set_employee_contact_fields` had somewhere to put the two
@@ -920,6 +944,8 @@ ERPNEXT_SCHEMA = {
 		"country",
 		"disabled",
 		"is_transporter",
+		# v0.221.0. Office mail triage matches a sender to a supplier by it.
+		"email_id",
 	],
 	"Purchase Order": [
 		"name",
@@ -1427,6 +1453,8 @@ ERPNEXT_SCHEMA = {
 	# reporting untestable.
 	"Customer": [
 		"name",
+		# v0.221.0. Office mail triage matches a sender to a customer by it.
+		"email_id",
 		"customer_name",
 		"customer_group",
 		"customer_type",
@@ -1721,6 +1749,8 @@ APP_DOCTYPES = {
 	"Farm Access Token": "farm_access_token",
 	# v0.219.0. A new phone's request to be let in.
 	"Farm Access Request": "farm_access_request",
+	# v0.221.0. One received office@ email, triaged (and later, its reply draft).
+	"Office Mail": "office_mail",
 	"Farm Salary Structure": "farm_salary_structure",
 	"Farm Payroll Deduction": "farm_payroll_deduction",
 	# The court order the deduction above exists under. Separate because a

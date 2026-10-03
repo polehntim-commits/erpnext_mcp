@@ -215,6 +215,8 @@ def get_server_status(args: dict) -> ToolResult:
 		"email": mail_status.status(),
 		# v0.220.0. MCP OAuth and when the static token can go.
 		"mcp_auth": _mcp_auth(),
+		# v0.221.0. Is office@ mail arriving?
+		"incoming_mail": _incoming_mail(),
 		"notes": [
 			"worker_uptime_seconds IS THIS PROCESS, NOT THE BENCH. A Frappe bench runs "
 			"several workers and this call was answered by one of them, so two consecutive "
@@ -238,6 +240,20 @@ def get_server_status(args: dict) -> ToolResult:
 			+ (f", worker up {uptime}s" if uptime is not None else "")
 		),
 	)
+
+
+def _incoming_mail() -> dict:
+	try:
+		from .. import office_mail
+
+		status = office_mail.incoming_status()
+		return {
+			"summary": status["summary"],
+			"triage_enabled": status["triage_enabled"],
+			"watchdog_enabled": status["watchdog_enabled"],
+		}
+	except Exception as exc:  # pragma: no cover - a status block must not fail the call
+		return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 def _mcp_auth() -> dict:

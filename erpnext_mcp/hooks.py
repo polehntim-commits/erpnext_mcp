@@ -281,6 +281,10 @@ scheduler_events = {
 			#: docs/design/security_status_and_alerts.md §3, §5.
 			"erpnext_mcp.security_watch.scan",
 			"erpnext_mcp.switch_timer.revert_expired",
+			#: v0.221.0. office@ triage: one Office Mail row per new received
+			#: email; does nothing unless `office_mail_enabled` is ticked, writes
+			#: nothing but its own rows, never sends. docs/design/office_reply_drafts.md.
+			"erpnext_mcp.office_mail.run_triage",
 		],
 		#: v0.19.6. The KPI history sweep, at two in the morning. See the
 		#: docstring above for why it is a cron rather than `daily` — Frappe's
@@ -385,6 +389,10 @@ scheduler_events = {
 		# per (box, set, kind): reading the same file every hour writes nothing twice.
 		"erpnext_mcp.backup_status.ingest_scheduled",
 		"erpnext_mcp.alerts.sweep",
+		# v0.221.0. office@ incoming watchdog: an alert (once a day) when office
+		# mail has gone quiet or incoming was switched off. Off unless
+		# `office_mail_watchdog` is ticked; writes nothing.
+		"erpnext_mcp.office_mail.watchdog",
 		#: v0.78.0. Close restricted-entry windows whose moment has passed.
 		#:
 		#: HOURLY BECAUSE AN REI IS MEASURED IN HOURS. A four-hour window that

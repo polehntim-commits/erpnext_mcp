@@ -577,6 +577,8 @@ class TheScheduledJobs(unittest.TestCase):
 						"erpnext_mcp.card_print.sweep_stuck",
 						"erpnext_mcp.security_watch.scan",
 						"erpnext_mcp.switch_timer.revert_expired",
+						# v0.221.0. office@ triage, off unless office_mail_enabled.
+						"erpnext_mcp.office_mail.run_triage",
 					],
 					"0 2 * * *": ["erpnext_mcp.services.windowed_reports.recompute_kpi_history_incremental"],
 					"0 3 * * *": ["erpnext_mcp.services.kpi_engine.refresh_all_kpi_caches"],
@@ -589,6 +591,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.training_courses.send_reminders",
 					"erpnext_mcp.backup_status.ingest_scheduled",
 					"erpnext_mcp.alerts.sweep",
+					# v0.221.0. office@ watchdog, off unless office_mail_watchdog.
+					"erpnext_mcp.office_mail.watchdog",
 					"erpnext_mcp.tools.spray_rei.close_expired_reis",
 				],
 				"daily": [

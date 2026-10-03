@@ -206,6 +206,8 @@ DYNAMIC_REFERRERS = (
 	("Farm Task", "parent_task", "parent_doctype"),
 	("Farm Task", "subject_docname", "subject_doctype"),
 	("Inspection Session", "location", "location_doctype"),
+	# v0.221.0. A triaged office email names the record it belongs to.
+	("Office Mail", "linked_name", "linked_doctype"),
 	# v0.204.0. A pest control application record is about a housing unit or building.
 	("Pest Control Application", "location", "location_doctype"),
 	("IPM Recommendation", "block", "block_doctype"),
