@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1006 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1007 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 489 read tools are **on** by default and can be switched off individually. A
+All 490 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,14 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.225.0 — direct deposit
+
+| Tool | What it does |
+| --- | --- |
+| `list_direct_deposit_changes` | Workers' direct-deposit changes in progress or turned down, last 4 only. Read |
+
+Approval is the Desk's; no tool approves a bank change. Contract: `docs/design/direct_deposit_setup.md`.
 
 ## v0.224.0 — payroll calendar
 

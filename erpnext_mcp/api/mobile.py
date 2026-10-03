@@ -1863,6 +1863,115 @@ def issue_enrollment_link(user: str, for_user=None, device_name=None, minutes=No
 	).data
 
 
+# ── direct deposit (v0.225.0) ── docs/design/direct_deposit_setup.md ──────────
+# Your OWN account only: no argument names a person. Off until
+# `direct_deposit_self_service`. Numbers come back masked to the last 4.
+def _dd(call):
+	from .. import direct_deposit
+
+	try:
+		return call(direct_deposit)
+	except direct_deposit.Refused as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+def _dd_caller() -> dict:
+	return {
+		"device": str(getattr(frappe.local, "erpnext_mcp_device", "") or ""),
+		"key_bound": bool(getattr(frappe.local, "erpnext_mcp_key_bound", False)),
+		"ip": str(getattr(frappe.local, "request_ip", "") or ""),
+	}
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_my_direct_deposit", limit=guard.READ_LIMIT)
+def get_my_direct_deposit(user: str) -> dict:
+	"""Your direct-deposit accounts (masked) and any change in progress."""
+	guard.require_scope(user)
+	return _dd(lambda dd: dd.mine(user))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("submit_direct_deposit_change", mutating=True, limit=guard.WRITE_LIMIT)
+def submit_direct_deposit_change(
+	user: str,
+	routing_number=None,
+	account_number=None,
+	account_number_confirm=None,
+	account_type=None,
+	bank_name=None,
+	signature=None,
+) -> dict:
+	"""A new account for your pay — Pending until verified, approved and held."""
+	guard.require_scope(user)
+	body = {
+		"routing_number": routing_number,
+		"account_number": account_number,
+		"account_number_confirm": account_number_confirm,
+		"account_type": account_type,
+		"bank_name": bank_name,
+		"signature": signature,
+	}
+	caller = _dd_caller()
+	return _dd(lambda dd: dd.submit(user, body, caller["device"], caller["key_bound"], caller["ip"]))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("start_bank_verification", mutating=True, limit=guard.WRITE_LIMIT)
+def start_bank_verification(user: str, account=None) -> dict:
+	"""A Plaid Hosted Link URL for your own pending account."""
+	guard.require_scope(user)
+	from .. import plaid_link
+
+	try:
+		return _dd(lambda dd: dd.start_plaid(user, str(account or "")))
+	except plaid_link.PlaidError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("finish_bank_verification", mutating=True, limit=guard.WRITE_LIMIT)
+def finish_bank_verification(user: str, account=None) -> dict:
+	"""After Plaid: compare the bank's numbers and owner name with what you entered."""
+	guard.require_scope(user)
+	from .. import plaid_link
+
+	try:
+		return _dd(lambda dd: dd.finish_plaid(user, str(account or "")))
+	except plaid_link.PlaidError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("upload_bank_form", mutating=True, limit=guard.WRITE_LIMIT)
+def upload_bank_form(
+	user: str,
+	account=None,
+	file_name=None,
+	content_base64=None,
+	extracted_routing=None,
+	extracted_account=None,
+) -> dict:
+	"""Your bank's direct-deposit form; the numbers read on the phone must match."""
+	import base64
+
+	guard.require_scope(user)
+	try:
+		content = base64.b64decode(str(content_base64 or ""), validate=True)
+	except Exception:
+		frappe.throw("the file did not arrive intact. Nothing was changed.", frappe.ValidationError)
+	return _dd(
+		lambda dd: dd.upload_form(
+			user,
+			str(account or ""),
+			str(file_name or ""),
+			content,
+			str(extracted_routing or ""),
+			str(extracted_account or ""),
+		)
+	)
+
+
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("get_employee_file", limit=guard.READ_LIMIT)
 def get_employee_file(user: str, employee=None, sections=None) -> dict:

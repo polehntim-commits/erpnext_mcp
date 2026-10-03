@@ -120,6 +120,12 @@ ROUTES = (
 	Route("/mobile", mobile_api.list_access_inventory),
 	# v0.223.0. The Employee file — docs/design/employee_file.md.
 	Route("/mobile", mobile_api.get_employee_file),
+	# v0.225.0. Direct deposit, your own — docs/design/direct_deposit_setup.md.
+	Route("/mobile", mobile_api.get_my_direct_deposit),
+	Route("/mobile", mobile_api.submit_direct_deposit_change),
+	Route("/mobile", mobile_api.start_bank_verification),
+	Route("/mobile", mobile_api.finish_bank_verification),
+	Route("/mobile", mobile_api.upload_bank_form),
 	Route("/mobile", mobile_api.report_lost_device),
 	# v0.219.0. Phone approval; refuse while off.
 	Route("/mobile", mobile_api.list_approvable_people),

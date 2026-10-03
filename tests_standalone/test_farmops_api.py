@@ -715,6 +715,12 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/deny_access_request",
 		# v0.223.0. The Employee file.
 		"/mobile/get_employee_file",
+		# v0.225.0. Direct deposit.
+		"/mobile/get_my_direct_deposit",
+		"/mobile/submit_direct_deposit_change",
+		"/mobile/start_bank_verification",
+		"/mobile/finish_bank_verification",
+		"/mobile/upload_bank_form",
 		"/mobile/move_asset",
 		"/mobile/undo_asset_move",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
@@ -3262,6 +3268,13 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# v0.223.0. Your OWN file needs no role; anybody else's is HR / Farm Manager /
 		# System Manager, decided in `employee_file.visible_sections`.
 		"get_employee_file",
+		# v0.225.0. Your OWN direct deposit only — no argument names a person; off
+		# until direct_deposit_self_service, gated in `direct_deposit`.
+		"get_my_direct_deposit",
+		"submit_direct_deposit_change",
+		"start_bank_verification",
+		"finish_bank_verification",
+		"upload_bank_form",
 		# v0.195.0. The caller's own housing (no arguments, so no one else's);
 		# spray history, which WPS requires be displayed to workers; and filing a
 		# spray, which is never refused for the role of the applicator filing it.
@@ -3278,7 +3291,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 176, "a method is named in two sets at once")
+		self.assertEqual(len(named), 181, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

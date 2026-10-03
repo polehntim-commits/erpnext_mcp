@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.225.0 — 2026-10-03 — secure direct-deposit setup (OFF by default)
+
+**1007 tools** (490 read, 517 write): + `list_direct_deposit_changes`. **181 mobile methods**: +
+`get_my_direct_deposit`, `submit_direct_deposit_change`, `start_bank_verification`,
+`finish_bank_verification`, `upload_bank_form`. Contract `docs/design/direct_deposit_setup.md`. Deploy
+`docs/deploy/v0.225.0_direct_deposit.md`. App 0.32.0.
+
+- A worker changes their own direct deposit **in the app only** (Face ID when device keys are on;
+  Signing Evidence over a message that carries only a hash of the account number). The new account is an
+  Employee Bank Account with status **Pending**, which NACHA never pays; the account it replaces keeps
+  being paid.
+- **Verification**: Plaid Hosted Link (Auth + Identity — routing, account and the owner's first and
+  last name must match; the Item is always removed; nothing of Plaid's is kept), or the bank's own
+  direct-deposit form (Cash App, Chime and any bank Plaid does not support): read on the phone, re-read
+  from a text PDF on the server, photos `Needs review` by eye. Stored private with its SHA-256.
+- **Controls**: HR Manager / System Manager approval in the Desk (never the employee themself; no MCP
+  tool approves); notice to the email on file and the worker's phones on submit and on activation;
+  prenote (`generate_prenote_file` now includes approved Pending accounts); paid from prenote +
+  `direct_deposit_hold_days` (14); a returned prenote rejects it; one open change per person.
+- **Masked everywhere**: routing and account as the last 4 in every answer, list, email, push and log.
+- office@ triage's payment-change flag now says direct-deposit changes are made only in the app.
+- Settings: `direct_deposit_self_service` (off), `direct_deposit_plaid_enabled` (off), `plaid_client_id`,
+  `plaid_secret`, `plaid_env`, `direct_deposit_hold_days`. Daily job `direct_deposit.activate_due`.
+
 ## 0.224.0 — 2026-10-03 — payroll and bookkeeping windows; the payroll calendar (OFF by default)
 
 **1006 tools** (489 read, 517 write): + `get_payroll_calendar`. Contract `docs/design/payroll_windows.md`.

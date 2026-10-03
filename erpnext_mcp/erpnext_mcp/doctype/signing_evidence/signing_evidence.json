@@ -82,7 +82,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Verification Method",
-   "options": "\nBadge QR\nEmployee ID\nPhoto",
+   "options": "\nBadge QR\nEmployee ID\nPhoto\nFace ID (device key)\nApp sign-in",
    "read_only": 1
   },
   {

@@ -28,7 +28,25 @@
   "prenote_sent",
   "prenote_date",
   "col_break_prenote",
-  "last_deposit_date"
+  "last_deposit_date",
+  "verification_section",
+  "verification_state",
+  "verification_method",
+  "verification_detail",
+  "name_match",
+  "submitted_via",
+  "submitted_at",
+  "signing_evidence",
+  "evidence_file",
+  "evidence_sha256",
+  "col_change",
+  "replaces",
+  "approved_by",
+  "approved_at",
+  "prenote_returned",
+  "activates_on",
+  "notice_sent_to",
+  "plaid_request"
  ],
  "fields": [
   {
@@ -78,7 +96,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Active\nInactive",
+   "options": "Active\nInactive\nPending\nRejected",
    "reqd": 1,
    "search_index": 1
   },
@@ -184,6 +202,117 @@
    "fieldname": "last_deposit_date",
    "fieldtype": "Date",
    "label": "Last Deposit Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "verification_section",
+   "fieldtype": "Section Break",
+   "label": "Self-service change (v0.225.0)"
+  },
+  {
+   "fieldname": "verification_state",
+   "fieldtype": "Select",
+   "label": "Verification",
+   "options": "\nSubmitted\nVerified\nNeeds review\nFailed",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "verification_method",
+   "fieldtype": "Select",
+   "label": "Verified by",
+   "options": "\nPlaid\nBank form",
+   "read_only": 1
+  },
+  {
+   "fieldname": "verification_detail",
+   "fieldtype": "Data",
+   "label": "What matched",
+   "read_only": 1
+  },
+  {
+   "fieldname": "name_match",
+   "fieldtype": "Check",
+   "label": "Owner name matches",
+   "read_only": 1
+  },
+  {
+   "fieldname": "submitted_via",
+   "fieldtype": "Data",
+   "label": "Submitted via",
+   "read_only": 1
+  },
+  {
+   "fieldname": "submitted_at",
+   "fieldtype": "Datetime",
+   "label": "Submitted at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "signing_evidence",
+   "fieldtype": "Link",
+   "label": "Signature",
+   "options": "Signing Evidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence_file",
+   "fieldtype": "Attach",
+   "label": "Bank form",
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence_sha256",
+   "fieldtype": "Data",
+   "label": "Bank form SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_change",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "replaces",
+   "fieldtype": "Link",
+   "label": "Replaces",
+   "options": "Employee Bank Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Approved by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "Approved at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prenote_returned",
+   "fieldtype": "Check",
+   "label": "Prenote returned by the bank",
+   "read_only": 1
+  },
+  {
+   "fieldname": "activates_on",
+   "fieldtype": "Date",
+   "label": "Paid from",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notice_sent_to",
+   "fieldtype": "Data",
+   "label": "Notice sent to",
+   "read_only": 1
+  },
+  {
+   "fieldname": "plaid_request",
+   "fieldtype": "Data",
+   "label": "Plaid request id",
    "read_only": 1
   }
  ],

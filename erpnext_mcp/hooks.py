@@ -416,6 +416,9 @@ scheduler_events = {
 		"erpnext_mcp.tools.mobile.sweep_idle_grants",
 		# v0.224.0. Payroll deposit and filing reminders; off unless payroll_calendar_enabled.
 		"erpnext_mcp.payroll_calendar.send_reminders",
+		# v0.225.0. A verified, approved, prenoted direct-deposit account becomes the one paid
+		# once its hold passes. Writes only Employee Bank Account rows; never raises.
+		"erpnext_mcp.direct_deposit.activate_due",
 	],
 	"weekly": [
 		"erpnext_mcp.drift.scan",

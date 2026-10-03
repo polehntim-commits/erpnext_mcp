@@ -409,6 +409,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
 		# v0.223.0. The Employee file: app 0.31.0 calls it.
 		"get_employee_file",
+		# v0.225.0. Direct deposit: app 0.32.0 calls these.
+		"get_my_direct_deposit",
+		"submit_direct_deposit_change",
+		"start_bank_verification",
+		"finish_bank_verification",
+		"upload_bank_form",
 		# v0.218.0. Device keys: app 0.28.0 calls these once device_keys_enabled
 		# is on; their Codables move into test_ios_contract with that build.
 		"upgrade_device_key",

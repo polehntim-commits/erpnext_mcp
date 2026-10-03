@@ -56,6 +56,13 @@
   "payroll_calendar_enabled",
   "payroll_reminder_days",
   "payroll_reminder_recipients",
+  "self_service_deposit_section",
+  "direct_deposit_self_service",
+  "direct_deposit_hold_days",
+  "direct_deposit_plaid_enabled",
+  "plaid_client_id",
+  "plaid_secret",
+  "plaid_env",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -1019,6 +1026,7 @@
   "allow_get_employee_file",
   "allow_export_employee_file_packet",
   "allow_get_payroll_calendar",
+  "allow_list_direct_deposit_changes",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1596,6 +1604,58 @@
    "fieldname": "payroll_reminder_recipients",
    "fieldtype": "Small Text",
    "label": "Payroll reminder recipients"
+  },
+  {
+   "fieldname": "self_service_deposit_section",
+   "fieldtype": "Section Break",
+   "label": "Direct deposit (self-service)"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On: a worker can change their own direct deposit in the app (never by email): Face ID when device keys are on, verified by Plaid or the bank's own form, approved by HR, prenoted, and paid only after the hold. docs/design/direct_deposit_setup.md.",
+   "fieldname": "direct_deposit_self_service",
+   "fieldtype": "Check",
+   "label": "Workers change direct deposit in the app"
+  },
+  {
+   "default": "14",
+   "description": "Days after the prenote before a new account is paid (one biweekly pay cycle by default). The old account keeps being paid until then.",
+   "fieldname": "direct_deposit_hold_days",
+   "fieldtype": "Int",
+   "label": "Hold after prenote (days)"
+  },
+  {
+   "default": "0",
+   "description": "Off (default). On: workers can verify their bank through Plaid (Auth + Identity, Hosted Link). Banks Plaid does not support (e.g. Cash App) use the bank-form upload.",
+   "fieldname": "direct_deposit_plaid_enabled",
+   "fieldtype": "Check",
+   "label": "Verify with Plaid"
+  },
+  {
+   "description": "Plaid client id (a separate Plaid use case from Bank Bridge's \u2014 see the design section 4).",
+   "fieldname": "plaid_client_id",
+   "fieldtype": "Data",
+   "label": "Plaid client id"
+  },
+  {
+   "description": "Plaid secret. Stored encrypted; never shown again.",
+   "fieldname": "plaid_secret",
+   "fieldtype": "Password",
+   "label": "Plaid secret"
+  },
+  {
+   "default": "sandbox",
+   "fieldname": "plaid_env",
+   "fieldtype": "Select",
+   "label": "Plaid environment",
+   "options": "sandbox\nproduction"
+  },
+  {
+   "default": "1",
+   "description": "READ. Direct-deposit changes in progress or turned down \u2014 masked to the last 4.",
+   "fieldname": "allow_list_direct_deposit_changes",
+   "fieldtype": "Check",
+   "label": "List Direct Deposit Changes"
   },
   {
    "default": "1",

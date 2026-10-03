@@ -183,6 +183,7 @@ from .tools import (
 from .tools import card_prints as card_print_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
+from .tools import direct_deposit as direct_deposit_tools
 from .tools import email_branding as email_branding_tools
 from .tools import employee_file as employee_file_tools
 from .tools import moments as moment_tools
@@ -29011,6 +29012,15 @@ TOOLS = {
 		required=("employee",),
 		mutating=True,
 		title="Export employee file packet",
+	),
+	"list_direct_deposit_changes": _tool(
+		direct_deposit_tools.list_direct_deposit_changes,
+		"v0.225.0. Workers' self-service direct-deposit changes in progress or turned down: who, bank, "
+		"routing and account as the LAST 4 only, verification (Plaid / bank form) and what matched, approved, "
+		"prenoted, the date it is paid from. Approving is the Desk's (HR Manager); no tool approves a bank "
+		"change. Read-only.",
+		{"limit": _field(_INTEGER, "Rows.")},
+		title="Direct deposit changes",
 	),
 	"get_payroll_calendar": _tool(
 		payroll_calendar_tools.get_payroll_calendar,

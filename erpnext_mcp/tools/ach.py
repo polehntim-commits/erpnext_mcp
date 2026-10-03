@@ -429,7 +429,9 @@ def generate_prenote_file(args: dict) -> ToolResult:
 	originator = _load_originator(company)
 	effective = _effective_date(args, originator)
 
-	filters = {"company": company, "status": "Active"}
+	# v0.225.0: an approved self-service account (status Pending) is prenoted too —
+	# it is never PAID until its hold passes (direct_deposit.activate_due).
+	filters = {"company": company, "status": ("in", ["Active", "Pending"])}
 	employee = as_str(args, "employee")
 	if employee:
 		filters["employee"] = _resolve_employee(args)
@@ -446,6 +448,11 @@ def generate_prenote_file(args: dict) -> ToolResult:
 	if names:
 		wanted = {n.strip() for n in str(names).split(",") if n.strip()}
 		rows = [r for r in rows if r["name"] in wanted]
+	rows = [
+		r
+		for r in rows
+		if r.get("status") == "Active" or frappe.db.get_value(EMPLOYEE_BANK_ACCOUNT, r["name"], "approved_by")
+	]
 	if not rows:
 		raise ToolError(
 			f"no active bank accounts for {company} are awaiting a prenote. Pass resend=true to "
@@ -491,6 +498,9 @@ def generate_prenote_file(args: dict) -> ToolResult:
 				{"prenote_sent": 1, "prenote_date": today},
 			)
 			marked.append(row["name"])
+		from .. import direct_deposit
+
+		direct_deposit.on_prenote(marked, str(today))
 
 	data = {
 		"company": company,

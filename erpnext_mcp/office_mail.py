@@ -406,7 +406,13 @@ def flags_for(row: dict, text: str, party: tuple, known: dict, first_time: bool)
 	if host.startswith("xn--") or ".xn--" in host:
 		out.append({"flag": "lookalike_domain", "detail": f"@{host} is an encoded (international) domain"})
 	if PAYMENT_CHANGE.search(blob):
-		out.append({"flag": "payment_change", "detail": "asks to change payment or bank details"})
+		out.append(
+			{
+				"flag": "payment_change",
+				"detail": "asks to change payment or bank details — verify by phone on the number on file; "
+				"a worker's direct-deposit change is made only in the Farm Ops app",
+			}
+		)
 	if first_time and URGENT.search(blob) and MONEY.search(blob):
 		out.append(
 			{
