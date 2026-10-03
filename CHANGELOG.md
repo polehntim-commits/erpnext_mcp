@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.223.2 — 2026-10-03 — compliance inbox: no more "Unknown column 'regime'"
+
+**1005 tools** (unchanged). Deploy `docs/deploy/v0.223.2_inbox_regime.md`.
+
+- The compliance_inbox tile (and `get_compliance_inbox`) failed on every load on OML with
+  `OperationalError (1054, "Unknown column 'regime' in 'SELECT'")`. Not an OML-only schema gap:
+  Compliance Alert.regime is a **Table MultiSelect** — a child table (Compliance Regime Link) with no
+  column on the alert's table on ANY site — and `compliance_loop.inbox` selected it as a column since
+  v0.207.0. No patch can add that column; the inbox now reads the regimes from the child table in one
+  query, and an item's `regulation` is their names joined ("WPS, OR-OSHA"), or null.
+- New `compat.column_fields`: `existing_fields` minus child-table fields, for `get_all(fields=…)`.
+- The test double now fails a child-table field selected as a column with the same 1054 a real site
+  raises, so this class of bug cannot pass the suite again. A full run found no other instance.
+
 ## 0.223.1 — 2026-10-03 — get_security_status: log retention judged correctly
 
 **1005 tools** (unchanged). Deploy `docs/deploy/v0.223.1_log_retention.md`.

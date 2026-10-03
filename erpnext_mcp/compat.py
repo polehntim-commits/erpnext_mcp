@@ -91,6 +91,31 @@ def existing_fields(doctype: str, candidates) -> list[str]:
 	return [f for f in candidates if has_field(doctype, f)]
 
 
+#: Field types that are child tables: the parent's table has no column for them.
+TABLE_FIELDTYPES = frozenset({"Table", "Table MultiSelect"})
+
+
+def column_fields(doctype: str, candidates) -> list[str]:
+	"""`existing_fields`, minus child-table fields. v0.223.2.
+
+	For `frappe.db.get_all(fields=...)`. A Table or Table MultiSelect field IS on
+	the meta — so `existing_fields` keeps it — but it is a child doctype with no
+	column on the parent's table, and selecting it is `OperationalError 1054` on
+	every site. Read such a field from its child doctype instead.
+	"""
+	out = []
+	for fieldname in existing_fields(doctype, candidates):
+		field = field_meta(doctype, fieldname)
+		if (
+			field is not None
+			and (field.get("fieldtype") if hasattr(field, "get") else getattr(field, "fieldtype", ""))
+			in TABLE_FIELDTYPES
+		):
+			continue
+		out.append(fieldname)
+	return out
+
+
 def checked(value) -> bool:
 	"""Whether a Check field is ticked. NEVER use a bare `bool()` for this.
 

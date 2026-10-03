@@ -470,6 +470,32 @@ class TheComplianceLoop(PhoneConfigCase):
 			"template being rewritten", STORE.get_raw("Compliance Rule", self.rule)["loop_gap_accepted"]
 		)
 
+	def test_the_inbox_reads_regimes_from_their_child_table(self):
+		"""v0.223.2. OML: `Unknown column 'regime' in 'SELECT'` on every inbox load.
+
+		Compliance Alert.regime is a Table MultiSelect — a child doctype with no
+		column on the alert's table on ANY site — so selecting it is a 1054. The
+		double now fails the same way, and the inbox reads the child rows.
+		"""
+		from erpnext_mcp import compat
+
+		from .harness import OperationalError
+
+		with self.assertRaises(OperationalError):
+			frappe.db.get_all("Compliance Alert", fields=["name", "regime"])
+		self.assertNotIn("regime", compat.column_fields("Compliance Alert", ["name", "regime", "severity"]))
+		STORE.get_raw("Compliance Alert", "ALERT-1")["regime"] = [
+			{"regime": "WPS", "idx": 1},
+			{"regime": "OR-OSHA", "idx": 2},
+		]
+		STORE.commit()
+		self.be()
+		box = mobile_api.get_compliance_inbox()
+		self.assertEqual(box["overdue"][0]["regulation"], "WPS, OR-OSHA")
+		tiles_answer = mobile_api.get_tiles(surface="today", app_version="0.21.0")
+		inbox = next(t for t in tiles_answer["tiles"] if t["key"] == "compliance_inbox")
+		self.assertGreaterEqual(inbox["badge"]["count"], 1)
+
 	def test_the_inbox_and_starting_the_work(self):
 		self.be()
 		box = mobile_api.get_compliance_inbox()

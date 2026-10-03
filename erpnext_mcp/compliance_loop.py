@@ -432,6 +432,26 @@ def _reason(code: str) -> dict:
 	return {"en": en.format(what=what), "es": es.format(what=what)}
 
 
+REGIME_LINK = "Compliance Regime Link"
+
+
+def _regimes_of(alerts: list) -> dict:
+	"""{alert: [regime, …]} from the `regime` child table, in one query. v0.223.2."""
+	if not alerts or not compat.doctype_exists(REGIME_LINK):
+		return {}
+	out: dict = {}
+	for row in frappe.db.get_all(
+		REGIME_LINK,
+		filters={"parenttype": ALERT, "parentfield": "regime", "parent": ("in", alerts)},
+		fields=["parent", "regime"],
+		order_by="idx asc",
+		limit=len(alerts) * 10,
+	):
+		if row.get("regime"):
+			out.setdefault(str(row.get("parent")), []).append(str(row["regime"]))
+	return out
+
+
 def inbox(user: str, company: str = "") -> dict:
 
 	person = phone_config.person_of(user)
@@ -442,22 +462,28 @@ def inbox(user: str, company: str = "") -> dict:
 		return out
 	today = str(frappe.utils.today())
 	horizon = str(frappe.utils.add_days(today, _due_days()))
+	# v0.223.2. `regime` is a Table MultiSelect — a child table with NO column on
+	# Compliance Alert — so it is read from its child doctype below, never
+	# selected here (selecting it was a 1054 on every load, OML 2026-10-03).
 	alerts = frappe.db.get_all(
 		ALERT,
 		filters={"dismissed": 0, "company": ("in", companies)},
-		fields=[
-			"name",
-			"alert_type",
-			"alert_message",
-			"due_date",
-			"company",
-			"subject_employee",
-			"snoozed_until",
-			"severity",
-			"regime",
-		],
+		fields=compat.column_fields(
+			ALERT,
+			[
+				"name",
+				"alert_type",
+				"alert_message",
+				"due_date",
+				"company",
+				"subject_employee",
+				"snoozed_until",
+				"severity",
+			],
+		),
 		limit=2000,
 	)
+	regimes = _regimes_of([a["name"] for a in alerts])
 	tasks = {}
 	for task in frappe.db.get_all(
 		"Farm Task",
@@ -513,7 +539,7 @@ def inbox(user: str, company: str = "") -> dict:
 			"title": alert.get("alert_message"),
 			"due_date": str(alert.get("due_date") or "") or None,
 			"severity": alert.get("severity"),
-			"regulation": alert.get("regime"),
+			"regulation": ", ".join(regimes.get(alert["name"], [])) or None,
 			"subject": alert.get("subject_employee"),
 			"company": alert.get("company"),
 			"action": action,

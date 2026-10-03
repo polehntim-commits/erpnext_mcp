@@ -4602,6 +4602,31 @@ def _reject_default_ordering(doctype: str, order_by) -> None:
 	)
 
 
+#: Field types that are child tables: no column on the parent's table.
+TABLE_FIELDTYPES = frozenset({"Table", "Table MultiSelect"})
+
+
+def _reject_table_fields(doctype: str, fields) -> None:
+	"""Fail the way MariaDB does when a query SELECTs a child-table field. v0.223.2.
+
+	A Table / Table MultiSelect field is a child doctype; the parent's table has
+	no column for it, so `frappe.db.get_all(parent, fields=[that])` is
+	`OperationalError (1054, "Unknown column … in 'SELECT'")` on every real site.
+	This double used to answer it with None, which is how `compliance_loop.inbox`
+	shipped selecting Compliance Alert.regime and failed on OML at every load.
+	"""
+	meta = META.get(doctype)
+	if meta is None or not fields or isinstance(fields, str):
+		return
+	tables = {f.get("fieldname") for f in (meta.fields or []) if f.get("fieldtype") in TABLE_FIELDTYPES}
+	bad = [f for f in fields if isinstance(f, str) and f in tables]
+	if bad:
+		raise OperationalError(
+			f"(1054, \"Unknown column '{bad[0]}' in 'SELECT'\") — {doctype}.{bad[0]} is a child table, not a "
+			"column. Query its child doctype (parenttype/parentfield/parent) instead."
+		)
+
+
 def _stub_get_decrypted_password(doctype, name, fieldname="password", raise_exception=True):
 	value = STORE.passwords.get((doctype, name, fieldname))
 	if value is None and raise_exception:
@@ -4643,6 +4668,7 @@ class FakeDB:
 		group_by=None,
 		**kwargs,
 	):
+		_reject_table_fields(doctype, fields)
 		rows = [row for row in STORE.rows(doctype) if _match(row, filters)]
 		if doctype in CHILD_TABLE_SOURCES:
 			rows = [row for row in _child_rows(doctype) if _match(row, filters)]
@@ -4683,6 +4709,7 @@ class FakeDB:
 		# Real `get_value` is `get_values(..., limit=1)`, so it inherits the same
 		# default ordering and the same failure on a frameworkless table.
 		_reject_default_ordering(doctype, order_by)
+		_reject_table_fields(doctype, fieldname if isinstance(fieldname, (list, tuple)) else [fieldname])
 		rows = self.get_all(doctype, filters=filters)
 		if not rows:
 			return None
