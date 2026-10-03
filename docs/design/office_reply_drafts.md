@@ -1,8 +1,17 @@
 # office@ reply drafts — design and contract
 
-**Status: FROZEN FOR REVIEW (2026-10-02).** Nothing is built. Queued after the `/farmops`-only
-cutover and the "Device & client enrollment" batch. Building starts after Tim has answered §12.
-Server **v0.220.0 →**, app **0.30.0** (versions are placeholders until the batches ahead ship).
+**Status: FROZEN (2026-10-03).** Tim, overnight: build it too, OFF by default, never auto-send,
+no bank-change confirmations, phishing flags on. Built as **v0.221.0** (Phase 0–1) and **v0.222.0**
+(Phase 2); the phone tile (Phase 3) and style learning beyond examples + notes (Phase 4) follow.
+The §12 decisions are taken at their recommended defaults and can be changed before enabling.
+
+**Switches that turn it on** (ERPNext MCP Settings; none named `allow_*`):
+
+| Setting | Default | Turns on |
+|---|---|---|
+| `office_mail_enabled` | off | the triage job (every 5 min) writing Office Mail rows |
+| `office_mail_watchdog` | off | the hourly incoming-mail alert |
+| `allow_fix_incoming_mail_sync` and the six draft/send tools | off | each write, separately |
 
 Ground rules: **nothing is ever sent without a named person approving it**; inbound mail is
 untrusted input; the phone talks only to `/farmops/api`; mutating MCP tools ship OFF; avoid table
@@ -204,11 +213,11 @@ Flags; examples are Office Mail rows. Settings: `office_mail_accounts`, `mail_ap
 
 | Phase | Server | App | Content |
 |---|---|---|---|
-| 0 | v0.220.0 | — | incoming status, watchdog, sync-rule fix tool; verified on umbrel.local, applied on OML by Tim |
-| 1 | v0.221.0 | — | Office Mail doctype, triage job, linking, flags, Desk list, MCP read tools |
-| 2 | v0.222.0 | — | context packs, drafting via MCP (A), review/approve/send via MCP and Desk, audit |
-| 3 | v0.223.0 | 0.30.0 | phone tile "Replies to review", approve from phone (Face ID after enrollment) |
-| 4 | v0.224.0 | — | style learning (diffs, examples, notes); optional server-side provider (B) |
+| 0 | **v0.221.0** | — | incoming status, watchdog, sync-rule fix tool; verify on umbrel.local, Tim applies on OML |
+| 1 | **v0.221.0** | — | Office Mail doctype, triage job, link proposal, flags, Desk list, MCP read tools |
+| 2 | **v0.222.0** | — | context packs, drafting via MCP (A), review/approve/send via MCP and Desk, audit; style notes + examples |
+| 3 | v0.223.0 | 0.31.0 | phone tile "Replies to review", approve from phone with Face ID |
+| 4 | v0.224.0 | — | style learning beyond examples; optional server-side provider (B) |
 
 ## 9. Surfaces (estimate)
 
@@ -244,3 +253,37 @@ other people's mailboxes.
 6. **A Farm Task for payment-change requests** to the accounts person — on or off.
 7. **Header capture for SPF/DKIM** — worth a small pull-time addition if Frappe allows it without a
    core patch; otherwise content-based flags only.
+
+---
+
+## 13. Build notes (v0.221.0 – v0.222.0, frozen with the code)
+
+- **§12 taken at the defaults:** (1) the sync-rule fix is a tool, OFF, dry run by default — Tim runs
+  it; (2) drafting mode A only, no provider and no API key on the box; (3) the approver map of §3,
+  overridable by `mail_approver_roles` (JSON); (4) drafts for every class except `spam` and
+  `personal` (`office_mail_draft_classes`); (5) the financial second confirmation on every surface;
+  (6) no Farm Task for payment changes (state `Needs person` only); (7) no header capture — flags are
+  content- and sender-based.
+- **The sync fix, as Frappe 15 actually behaves** (read in `email_account.py` / `receive.py`):
+  `ALL` asks the server for `UID <last imported UID + 1>:*`, and a Message-ID already in
+  Communication is skipped, so mail read in Zoho since the last import arrives once. If **no**
+  imported message carries a UID, `ALL` fetches the mailbox's **oldest** `initial_sync_count`
+  messages — the tool reports that and refuses unless `accept_initial_import`. It writes with
+  `set_value` (`email_sync_option`, `enable_incoming`, `no_failed`) and clears the cached
+  failed-attempt counter; it never saves the Email Account (whose validate connects to the server).
+  Frappe disables incoming by itself after more than 5 failed connects (and assigns a ToDo to the
+  System Managers) — `get_mail_status` reports that state.
+- **Triage proposes the link; it does not relink.** The Communication is untouched (a save can flip
+  the parent's status). The link is used for the context pack and as the reply's reference; filing
+  attachments stays `route_incoming_document`.
+- **Classes** gain `other` (no rule matched; drafted, since a person approves anyway).
+- **Who approves on MCP:** `security.caller_identity()` — the person whose credential reached the
+  MCP (a phone token). The static-token client, the MCP System User and an OAuth client's service
+  user are refused: approval is a person's act, in the Desk (Office Mail → **Approve and send**) or
+  on a phone.
+- **Attachments a reply may carry:** files already on the linked record, each ticked. The sender's
+  own attachments never go back out.
+- **Sending:** `frappe.core.doctype.communication.email.make` as the approver (so Frappe's `email`
+  permission is the approver's), `sender` = the office account's address, `in_reply_to` = the
+  received Communication, referenced to the linked record. `mail_drafts._send` is the only send;
+  `approve` its only caller.
