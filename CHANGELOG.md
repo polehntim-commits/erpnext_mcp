@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.222.0 — 2026-10-03 — office@ reply drafts: drafted by Claude, sent only by a person (OFF by default)
+
+**1003 tools** (487 read, 516 write): + `list_mail_needing_drafts`, `get_mail_context` (read);
+`save_mail_draft`, `update_mail_draft`, `approve_mail_draft`, `discard_mail_draft`, `redraft_mail`
+(write, all OFF). Contract `docs/design/office_reply_drafts.md` §2–§5. Deploy
+`docs/deploy/v0.222.0_mail_drafts.md`.
+
+**Nothing is ever sent without a named person approving it.** `mail_drafts._send` is the only send
+and `approve` its only caller (a test pins it). The approver must be a person — never the MCP
+service user or an OAuth client — hold a role for the email's class (`mail_approver_roles`), and
+pass Frappe's own `email` permission on the linked record. Flagged mail (payment/bank changes,
+look-alike senders, first-time money requests …), spam and personal mail are never drafted.
+
+- Drafting mode A: a Claude client pulls `list_mail_needing_drafts` → `get_mail_context` (rules, the
+  message marked untrusted, ERPNext facts by class, style notes from the Feature Flag
+  `mail_style_notes`, recent approved replies as examples) → `save_mail_draft`. No model and no API
+  key on the server.
+- Desk: Office Mail → **Approve and send** (edit, tick attachments one by one, confirm financial
+  details when the reply has amounts or account numbers) or **Discard**.
+- Sending is Frappe's own Reply path (`communication.email.make`) as the approver, from the office
+  account, into the email's thread, referenced to the linked record. Every send records the
+  approver, surface, final text, attachments, the outgoing Communication, the diff from the draft
+  and an edit ratio, plus an MCP Action Log row.
+
 ## 0.221.0 — 2026-10-03 — office@: incoming that keeps working, triage, phishing flags (OFF by default)
 
 **996 tools** (485 read, 511 write): + `get_mail_status`, `list_mail_drafts`, `get_mail_draft`,

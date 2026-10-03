@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 996 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1003 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 485 read tools are **on** by default and can be switched off individually. A
+All 487 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,18 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.222.0 — office@ reply drafts (off by default; sent only by a person)
+
+| Tool | What it does |
+| --- | --- |
+| `list_mail_needing_drafts` | Office mail waiting for a draft (never flagged mail). Read |
+| `get_mail_context` | Rules, the message (untrusted), ERPNext facts, style notes, examples. Read |
+| `save_mail_draft` | Store a reply draft; never sends. Write |
+| `update_mail_draft` | A person corrects a draft, class or link. Write |
+| `approve_mail_draft` | A PERSON approves and sends one reply; service users refused. Write |
+| `discard_mail_draft` | A person discards a reply. Write |
+| `redraft_mail` | Back to the drafting queue. Write |
 
 ## v0.221.0 — office@ mail: status, sync fix, triage (off by default)
 

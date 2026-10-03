@@ -47,6 +47,7 @@
   "office_mail_accounts",
   "office_mail_regulator_domains",
   "office_mail_draft_classes",
+  "mail_approver_roles",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -1000,6 +1001,13 @@
   "allow_get_mail_draft",
   "allow_fix_incoming_mail_sync",
   "allow_triage_mail",
+  "allow_list_mail_needing_drafts",
+  "allow_get_mail_context",
+  "allow_save_mail_draft",
+  "allow_update_mail_draft",
+  "allow_approve_mail_draft",
+  "allow_discard_mail_draft",
+  "allow_redraft_mail",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1519,6 +1527,62 @@
    "fieldname": "office_mail_draft_classes",
    "fieldtype": "Data",
    "label": "Draft replies for"
+  },
+  {
+   "description": "Who may approve and send a reply, by class, as JSON, e.g. {\"customer\": [\"Accounts Manager\", \"Accounts User\"]}. Empty: Accounts Manager/User for customer, supplier and invoice mail; HR Manager for training and personal; Compliance Officer/Farm Manager for compliance; System Manager always. The approver also needs Frappe's email permission on the linked record.",
+   "fieldname": "mail_approver_roles",
+   "fieldtype": "Code",
+   "label": "Reply approvers by class",
+   "options": "JSON"
+  },
+  {
+   "default": "1",
+   "description": "READ. Office mail waiting for a reply draft (never flagged mail).",
+   "fieldname": "allow_list_mail_needing_drafts",
+   "fieldtype": "Check",
+   "label": "List Mail Needing Drafts"
+  },
+  {
+   "default": "1",
+   "description": "READ. The drafting rules, the message (untrusted), ERPNext facts, style notes and examples for one office email.",
+   "fieldname": "allow_get_mail_context",
+   "fieldtype": "Check",
+   "label": "Get Mail Context"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). Store a reply draft. Never sends; refuses flagged, spam and personal mail.",
+   "fieldname": "allow_save_mail_draft",
+   "fieldtype": "Check",
+   "label": "Save Mail Draft"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). A person corrects a draft, its class or its record.",
+   "fieldname": "allow_update_mail_draft",
+   "fieldtype": "Check",
+   "label": "Update Mail Draft"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). A PERSON approves and sends one reply. The MCP service user and OAuth clients are refused.",
+   "fieldname": "allow_approve_mail_draft",
+   "fieldtype": "Check",
+   "label": "Approve Mail Draft"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). A person discards a reply.",
+   "fieldname": "allow_discard_mail_draft",
+   "fieldtype": "Check",
+   "label": "Discard Mail Draft"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). Send an email back to the drafting queue.",
+   "fieldname": "allow_redraft_mail",
+   "fieldtype": "Check",
+   "label": "Redraft Mail"
   },
   {
    "default": "1",
