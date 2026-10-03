@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.223.3 — 2026-10-03 — emailed links: flag a host_name nobody can open
+
+**1005 tools** (unchanged). Deploy `docs/deploy/v0.223.3_emailed_links.md` (with the one-time OML fix).
+
+- OML's password-reset emails linked to `http://frontend/update-password?…`: `host_name` is unset, so
+  Frappe used the request host, which behind the image's nginx is the site name. The fix is Frappe's
+  own `bench --site frontend set-config host_name https://<host>.ts.net:8443` — one command, in the
+  deploy doc and as cutover step C10b. PDFs (internal base), phones (Farm Ops Public URL) and the MCP
+  (Public URL) do not move.
+- New `get_server_status.email_links` and `get_security_status.emailed_links`: fail when `host_name`
+  is unset, the site name or loopback; warn for the Funnel origin, a bare Umbrel IP, or a mismatch with
+  Public URL; each answer carries the exact fix command.
+
 ## 0.223.2 — 2026-10-03 — compliance inbox: no more "Unknown column 'regime'"
 
 **1005 tools** (unchanged). Deploy `docs/deploy/v0.223.2_inbox_regime.md`.

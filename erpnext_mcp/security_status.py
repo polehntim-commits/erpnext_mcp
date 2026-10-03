@@ -269,6 +269,7 @@ def checks(probe_public: bool = False) -> list:
 
 	out.append(_client_ip_check())
 	out.append(_log_retention())
+	out.append(_emailed_links())
 	out.append(_frappe_version(two_factor))
 
 	if probe_public:
@@ -375,6 +376,33 @@ def _log_retention() -> dict:
 		"Kept: " + ", ".join(kept(name) for name in ("Error Log", *RETAINED_LOGS)) + ".",
 		LOG_SETTINGS_FIX.format(names=" and ".join(short)) if short else "",
 	)
+
+
+def _emailed_links() -> dict:
+	"""v0.223.3. A password-reset link nobody can open is a lockout. See `site_url`."""
+	from . import site_url
+
+	found = site_url.status()
+	if "error" in found:
+		return _check("emailed_links", INFO, f"Could not read the site's link address: {found['error']}.")
+	if found["problems"]:
+		return _check(
+			"emailed_links",
+			FAIL,
+			"Emailed links (password reset, 2FA QR, notifications) cannot be opened: "
+			+ "; ".join(found["problems"])
+			+ ".",
+			f"Set the site's external Desk URL once: {found['fix']} (docs/deploy/v0.223.3_emailed_links.md).",
+			weight=2,
+		)
+	if found["warnings"]:
+		return _check(
+			"emailed_links",
+			WARN,
+			f"Emailed links use {found['host_name']}: " + "; ".join(found["warnings"]) + ".",
+			f"If the Desk is elsewhere: {found['fix']}",
+		)
+	return _check("emailed_links", PASS, f"Emailed links use {found['host_name']}.")
 
 
 def _frappe_version(two_factor) -> dict:

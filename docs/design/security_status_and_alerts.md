@@ -43,6 +43,7 @@ share of weighted checks passing; `summary` names the fails.
 | `updatable_fields` | MCP-updatable fields on doctypes holding PII or money |
 | `security_alert_recipients` | set, or falling back to System Managers |
 | `client_ip` | trusted proxy range set (§4); the address the current request resolved to |
+| `emailed_links` | v0.223.3: the address password-reset, 2FA and notification emails link to (`host_name`); fail when unset, the site name or loopback; warn for the Funnel origin, a bare Umbrel IP, or a mismatch with Public URL |
 | `log_retention` | Log Settings retention: Activity Log and Access Log at least 90 days (no row or 0 = forever = pass); Error Log shown, not judged (v0.223.1) |
 | `frappe_version` | the version, with a warning when it is in the range of the v15.118.0 Administrator-2FA lockout regression (frappe/frappe#42852) and 2FA is on for Administrator |
 | `public_surface` | optional `probe_public: true`: unauthenticated GETs of `/erpnext/login`, `/erpnext/api/method/ping`, `/`, `/bankbridge` (expect 404) and a POST to one farmops route (expect 401) on the Farm Ops address |

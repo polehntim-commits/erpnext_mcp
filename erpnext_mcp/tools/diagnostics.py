@@ -217,6 +217,8 @@ def get_server_status(args: dict) -> ToolResult:
 		"mcp_auth": _mcp_auth(),
 		# v0.221.0. Is office@ mail arriving?
 		"incoming_mail": _incoming_mail(),
+		# v0.223.3. The address emailed links carry (password reset, 2FA, notifications).
+		"email_links": _email_links(),
 		"notes": [
 			"worker_uptime_seconds IS THIS PROCESS, NOT THE BENCH. A Frappe bench runs "
 			"several workers and this call was answered by one of them, so two consecutive "
@@ -240,6 +242,12 @@ def get_server_status(args: dict) -> ToolResult:
 			+ (f", worker up {uptime}s" if uptime is not None else "")
 		),
 	)
+
+
+def _email_links() -> dict:
+	from .. import site_url
+
+	return site_url.status()
 
 
 def _incoming_mail() -> dict:
