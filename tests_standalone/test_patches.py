@@ -56,6 +56,7 @@ from erpnext_mcp.patches import (
 	rename_discipline_record,
 	repoint_producer_task_template,
 	set_default_tool_switches,
+	transactional_mail_without_unsubscribe,
 	triage_existing_feedback,
 	widen_i9_attestation_filters,
 	widen_pesticide_field_visibility,
@@ -116,6 +117,8 @@ PATCHES = (
 	("erpnext_mcp.patches.flag_fixed_asset_types", flag_fixed_asset_types),
 	# v0.216.1. Pinned in `test_pdf_and_mail.ZohoSendsAsTheAccount`.
 	("erpnext_mcp.patches.zoho_accounts_send_as_account", zoho_accounts_send_as_account),
+	# v0.216.1. Pinned in `test_pdf_and_mail.TheBranding`.
+	("erpnext_mcp.patches.transactional_mail_without_unsubscribe", transactional_mail_without_unsubscribe),
 )
 
 

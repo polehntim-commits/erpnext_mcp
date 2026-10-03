@@ -693,6 +693,9 @@ ERPNEXT_SCHEMA = {
 		"default_outgoing",
 		"always_use_account_email_id_as_sender",
 		"always_use_account_name_as_sender_name",
+		"send_unsubscribe_message",
+		"footer",
+		"brand_logo",
 	],
 	"Comment": [
 		"name",

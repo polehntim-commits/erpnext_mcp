@@ -182,6 +182,7 @@ from .tools import (
 )
 from .tools import card_prints as card_print_tools
 from .tools import crew_tasks as crew_task_tools
+from .tools import email_branding as email_branding_tools
 from .tools import moments as moment_tools
 from .tools import pest_control as pest_control_tools
 from .tools import phone_configs as phone_config_tools
@@ -27961,6 +27962,28 @@ TOOLS = {
 			"print_format": _field(_STRING, "Optional. A Print Format; default the doctype's own."),
 		},
 		title="Test PDF rendering",
+	),
+	"apply_email_branding": _tool(
+		email_branding_tools.apply_email_branding,
+		"MUTATING (default OFF). v0.216.1. Brand one outgoing Email Account for a company: a footer "
+		"with the company's logo, name, address and the account's address (and an optional phone) is "
+		"written into the account's Footer Content, and its 'Send unsubscribe message in email' is "
+		"turned off so document and notification emails no longer say 'Leave this conversation' "
+		"(newsletters keep their unsubscribe link). The logo is a PUBLIC url on the Farm Ops address "
+		"(/farmops/api/brand/<company>), because an image on the site's own tailnet address is a "
+		"broken icon for every recipient; with no Farm Ops Public URL the footer goes out without a "
+		"logo. Only its own marked block of the footer is replaced on a re-run. Dry run by default "
+		"— pass dry_run=false to write. The 'Sent via ERPNext' line is System Settings → Disable "
+		"Standard Email Footer, left to the operator.",
+		{
+			"email_account": _field(_STRING, "The Email Account. Default: the one Default Outgoing account."),
+			"company": _field(_STRING, "The company the footer is for. Default: the site's default company."),
+			"phone": _field(_STRING, "Optional phone for the footer. Default: the Company's phone."),
+			"dry_run": _field(_BOOLEAN, "true (default) shows the footer and changes nothing."),
+		},
+		mutating=True,
+		idempotent=True,
+		title="Apply email branding",
 	),
 	"create_backup_record": _tool(
 		itgc.create_backup_record,

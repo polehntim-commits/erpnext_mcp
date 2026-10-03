@@ -70,10 +70,40 @@ mailbox (553), so those emails fail in Email Queue while system emails go throug
   `always_use_account_email_id_as_sender` on enabled outgoing accounts whose SMTP server contains
   `zoho`. Every other account is untouched.
 
+## 6. Email branding (Tim, 2026-10-02)
+
+All three through Frappe's own Email Account / System Settings fields — no core patch.
+
+- **No unsubscribe link on transactional mail.** "Leave this conversation" is added by
+  `Communication.get_unsubscribe_message` only when the outgoing Email Account has **Send unsubscribe
+  message in email** (`send_unsubscribe_message`, Frappe default ON). Patch
+  `transactional_mail_without_unsubscribe` unticks it on every enabled outgoing account, once.
+  Newsletters (and Email Group mailings) keep their link: Frappe always adds it when the reference
+  is a Newsletter (CAN-SPAM).
+- **Company footer.** `apply_email_branding(email_account?, company?, phone?, dry_run=true)` —
+  mutating, default OFF — writes a footer into the account's **Footer Content** (rendered on every
+  email the account sends, by `email_body.get_footer`): logo, company name, address (the Company's
+  Address, preferring "Your company address"), the account's address as a mailto link, optional
+  phone. Only its own marked block is replaced on a re-run; other footer content is kept. It also
+  unticks the unsubscribe setting and sets the account's **Brand Logo** (header logo) to the public
+  logo URL when that field is empty or already ours.
+- **"Sent via ERPNext".** System Settings → **Disable Standard Email Footer** — Tim ticks it.
+- **Images a recipient can load.** A relative image in an email is made absolute on the site's own
+  address (`http://100.69.162.122/…`) — the broken-image icon. The logo is served at
+  **`GET /farmops/api/brand/<company>`** on the public Farm Ops address: that Company's `badge_logo`,
+  else `company_logo`, PNG/JPEG/GIF by its own bytes only (never SVG), cached a day, metered per
+  address; any miss is a plain 404; a POST is the uniform 401. It names a company, never a file.
+  With no Farm Ops Public URL the footer is written **without** a logo rather than with a broken one.
+- **Status.** `get_server_status.email` per account: `branding` (unsubscribe on/off, company footer
+  present, every footer/brand image and whether a recipient can load it — public / inline /
+  external / unreachable), `standard_footer_disabled`, and warnings.
+
 ## Surfaces
 
-MCP tools 984 (+1 read: `test_pdf_rendering`). Settings: `pdf_base_url`, `allow_test_pdf_rendering`.
-Hooks: `before_request`, `before_job`. Patch: `zoho_accounts_send_as_account`. Mobile routes unchanged.
+MCP tools 985 (+1 read: `test_pdf_rendering`; +1 write: `apply_email_branding`). Settings:
+`pdf_base_url`, `allow_test_pdf_rendering`, `allow_apply_email_branding`. Hooks: `before_request`,
+`before_job`. Patches: `zoho_accounts_send_as_account`, `transactional_mail_without_unsubscribe`.
+Sidecar: `GET /farmops/api/brand/<company>` (public, image only). Mobile methods unchanged.
 
 ## Decisions for Tim
 
@@ -85,3 +115,8 @@ Hooks: `before_request`, `before_job`. Patch: `zoho_accounts_send_as_account`. M
 2. **Missing images are tolerated** (`load-media-error-handling: ignore`) once the base is in use:
    an unreachable external image is left out instead of failing an emailed invoice.
 3. **The Zoho tick is set by migrate**, on Zoho accounts only.
+4. **The unsubscribe link goes by migrate** on every outgoing account; newsletters keep theirs.
+5. **The logo is a public URL, not an inline (CID) image.** Frappe inlines only `<img embed=…>`,
+   and its HTML sanitizer strips `embed` the first time somebody saves the Email Account in the
+   Desk — the logo would silently vanish. An https URL survives. Some mail clients show remote
+   images only after the reader allows them; the footer has alt text for that case.

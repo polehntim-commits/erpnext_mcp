@@ -193,6 +193,28 @@ SCAN_DESCRIBED_ROUTE = {
 	"arguments": ["code"],
 }
 
+#: `GET /brand/<company>` — the company's logo, for email. v0.216.1. See `_brand_image`.
+BRAND_PREFIX = f"{PREFIX}/brand/"
+
+BRAND_DESCRIBED_ROUTE = {
+	"path": f"{BRAND_PREFIX}{{company}}",
+	"method": "brand_image",
+	"group": "brand",
+	"mutating": False,
+	"arguments": ["company"],
+}
+
+#: The magic numbers of the only things `_brand_image` will serve.
+_IMAGE_SIGNATURES = (
+	(b"\x89PNG\r\n\x1a\n", "image/png"),
+	(b"\xff\xd8\xff", "image/jpeg"),
+	(b"GIF87a", "image/gif"),
+	(b"GIF89a", "image/gif"),
+)
+
+#: A logo larger than this is not served (a mail client would not want it either).
+BRAND_MAX_BYTES = 2_000_000
+
 #: Every route `routes.ROUTES` cannot describe, for `list_sidecar_routes`.
 DESCRIBED_ROUTES = (
 	DESCRIBED_ROUTE,
@@ -200,6 +222,7 @@ DESCRIBED_ROUTES = (
 	GRADE_TILE_DESCRIBED_ROUTE,
 	ENROLL_DESCRIBED_ROUTE,
 	SCAN_DESCRIBED_ROUTE,
+	BRAND_DESCRIBED_ROUTE,
 )
 
 _MAX_BODY = auth.MAX_BODY_BYTES
@@ -905,6 +928,47 @@ _SCAN_PAGE = (
 )
 
 
+def _brand_image(request: Request, path: str) -> Response:
+	"""`GET /brand/<company>` — that company's logo, for the email footer. v0.216.1.
+
+	PUBLIC ON PURPOSE AND NARROW ON PURPOSE. A logo in an email is fetched by the
+	recipient's mail client (or Gmail's image proxy) from the open internet, and
+	the site's own address is a tailnet address nobody outside can reach — the
+	broken-image icon Tim saw. So the one public path serves this one thing: the
+	Company's `badge_logo`, else its `company_logo` — the mark already printed on
+	every card and letterhead — and only when it is a PNG, JPEG or GIF by its
+	own bytes (never SVG, which can carry script). It is not a file server: the
+	path names a Company, not a file, and nothing else on the site is reachable
+	through it. Metered per address like the other open routes. Every miss — no
+	such company, no logo, not an image — is the same plain 404.
+	"""
+	from urllib.parse import unquote
+
+	if _open_route_limited(request):
+		return _failure(429, TOO_MANY)
+	company = unquote(path[len(BRAND_PREFIX) :]).strip()[:140]
+	if not company or "/" in company:
+		return _failure(404, NOT_FOUND)
+	with session.request_session(request=request, body={}):
+		try:
+			from .. import card_print
+
+			if not frappe.db.exists("Company", company):
+				return _failure(404, NOT_FOUND)
+			data = card_print.company_logo(company) or b""
+		except Exception:  # pragma: no cover - a site mid-migrate
+			data = b""
+	mime = next((kind for magic, kind in _IMAGE_SIGNATURES if data.startswith(magic)), "")
+	if not mime or len(data) > BRAND_MAX_BYTES:
+		return _failure(404, NOT_FOUND)
+	return Response(
+		data,
+		status=200,
+		content_type=mime,
+		headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"},
+	)
+
+
 def _scan_page(path: str) -> Response:
 	"""What a tag's QR shows a phone camera that is not the app. v0.216.0.
 
@@ -965,6 +1029,9 @@ def _dispatch(request: Request, path: str) -> Response:
 		if _open_route_limited(request):
 			return _failure(429, TOO_MANY)
 		return _json({"ok": True, "service": "farmops-api"})
+
+	if path.startswith(BRAND_PREFIX) and request.method in ("GET", "HEAD"):
+		return _brand_image(request, path)
 
 	if path.startswith(SCAN_PREFIX) and request.method == "GET":
 		if _open_route_limited(request):

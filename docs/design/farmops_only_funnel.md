@@ -191,8 +191,10 @@ Enrolled, the login enabled, the grant Active — for routes, tiles and uploads 
 
 ## H6. Files
 
-No file is served by URL and none will be: there is no GET that returns a private file, and no
-signed or short-lived link. File bytes travel inside the answer of an authenticated, role-gated
+No file is served by URL: there is no GET that returns a private file, and no signed or
+short-lived link. v0.216.1 adds one deliberate exception, `GET /farmops/api/brand/<company>` — that
+Company's logo (badge_logo, else company_logo), PNG/JPEG/GIF only, for the email footer
+(`docs/design/pdf_base_and_mail.md` §6). It names a company, never a file. File bytes travel inside the answer of an authenticated, role-gated
 call. A test holds the surface to that. (Decision 4 below.)
 
 ## H7. No HTML

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import frappe
 
-from . import compat
+from . import compat, email_branding
 
 ACCOUNT = "Email Account"
 SENDER_FIELD = "always_use_account_email_id_as_sender"
@@ -42,6 +42,9 @@ def _outgoing() -> list:
 			"default_outgoing",
 			SENDER_FIELD,
 			NAME_FIELD,
+			"send_unsubscribe_message",
+			"footer",
+			"brand_logo",
 		),
 	)
 	try:
@@ -72,8 +75,13 @@ def status() -> dict:
 					"always_use_account_email_as_sender": own_sender,
 					"always_use_account_name_as_sender_name": bool(int(row.get(NAME_FIELD) or 0)),
 					"provider_requires_account_sender": strict,
+					# v0.216.1: footer, logo and unsubscribe — `email_branding`.
+					"branding": email_branding.account_status(row),
 				}
 			)
+			warnings += [
+				f"{row.get('name')}: {line}" for line in email_branding.account_status(row)["warnings"]
+			]
 			if not own_sender:
 				warnings.append(
 					f"{row.get('name')} ({row.get('smtp_server') or 'no SMTP server'}): "
@@ -89,7 +97,11 @@ def status() -> dict:
 			warnings.append("No enabled outgoing Email Account: nothing this site emails will be sent.")
 		elif not any(account["default_outgoing"] for account in accounts):
 			warnings.append("No outgoing Email Account is marked Default Outgoing.")
-		return {"outgoing_accounts": accounts, "warnings": warnings}
+		return {
+			"outgoing_accounts": accounts,
+			"standard_footer_disabled": email_branding.standard_footer_disabled(),
+			"warnings": warnings,
+		}
 	except Exception as exc:  # pragma: no cover
 		return {"error": str(exc)}
 

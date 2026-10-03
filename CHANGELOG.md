@@ -3,10 +3,10 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
-## 0.216.1 — 2026-10-02 — Security Alert Recipients; PDFs inside the container
+## 0.216.1 — 2026-10-02 — Security Alert Recipients; PDFs inside the container; email branding; CI
 
-Patch on 0.216.0. **984 tools** (479 read, 505 write): + `test_pdf_rendering`. **167 mobile
-methods** — unchanged. Contract `docs/design/pdf_base_and_mail.md`. Deploy
+Patch on 0.216.0. **985 tools** (479 read, 506 write): + `test_pdf_rendering`,
+`apply_email_branding`. **167 mobile methods** — unchanged. Contract `docs/design/pdf_base_and_mail.md`. Deploy
 `docs/deploy/v0.216.1_security_alert_recipients.md`.
 
 - **PDFs: HostNotFoundError in Email Queue, blank Desk PDFs — fixed.** `get_pdf` made every print
@@ -20,6 +20,17 @@ methods** — unchanged. Contract `docs/design/pdf_base_and_mail.md`. Deploy
 - **`test_pdf_rendering`** (read, on by default): renders a test page — and optionally one
   document's print — through `get_pdf`, and reports ok/pages/time or wkhtmltopdf's error with a
   diagnosis. `get_server_status` gains `pdf` and `email`.
+- **Email branding.** Patch `transactional_mail_without_unsubscribe` turns off "Send unsubscribe
+  message in email" on outgoing accounts — no more "Leave this conversation" on replies,
+  notifications and document emails; newsletters keep their link. `apply_email_branding`
+  (mutating, default OFF, dry run by default) writes a company footer — logo, name, address,
+  office@ link, phone — into the account's Footer Content and points its Brand Logo at
+  `GET /farmops/api/brand/<company>`, a public, image-only sidecar path, so no recipient sees a
+  broken image. "Sent via ERPNext" is System Settings → Disable Standard Email Footer.
+- **CI green again.** The "tests" workflow had failed on every push since v0.204.0: ruff (one
+  RUF005 in `url_fetch.py`, six files not formatted), two `test_settings` / four `test_land_map`
+  tests that assumed numpy and shapely (CI's first run installs neither on purpose), and four empty
+  `__init__.py` files without the SPDX header the last step checks.
 - **Outgoing mail sender.** `get_server_status.email` lists outgoing Email Accounts and warns when
   "Always use this email address as sender" is off. Patch `zoho_accounts_send_as_account` ticks it
   on Zoho accounts (Zoho refuses any other From:).

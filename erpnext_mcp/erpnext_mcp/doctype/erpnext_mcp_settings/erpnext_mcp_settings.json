@@ -968,6 +968,7 @@
   "allow_create_change_management_log",
   "allow_get_backup_status",
   "allow_test_pdf_rendering",
+  "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
   "allow_create_reporting_template",
@@ -7619,6 +7620,13 @@
    "fieldname": "allow_test_pdf_rendering",
    "fieldtype": "Check",
    "label": "Test PDF Rendering"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). Put a company footer (logo, name, address, office contact) on one outgoing Email Account and turn off its 'Leave this conversation' unsubscribe link. Dry run by default.",
+   "fieldname": "allow_apply_email_branding",
+   "fieldtype": "Check",
+   "label": "Apply Email Branding"
   },
   {
    "default": "0",

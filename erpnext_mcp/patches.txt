@@ -40,3 +40,4 @@ erpnext_mcp.patches.card_stations_printed_by_hand
 erpnext_mcp.patches.legacy_badge_prints_use_cr80
 erpnext_mcp.patches.flag_fixed_asset_types
 erpnext_mcp.patches.zoho_accounts_send_as_account
+erpnext_mcp.patches.transactional_mail_without_unsubscribe

@@ -267,7 +267,9 @@ class ZohoSendsAsTheAccount(SeededTestCase):
 
 	def test_after_the_patch_zoho_has_no_warning(self):
 		zoho_accounts_send_as_account.execute()
-		self.assertFalse(any("Farm Mail" in line for line in mail_status.status()["warnings"]))
+		self.assertFalse(
+			any("Farm Mail" in line and "as sender" in line for line in mail_status.status()["warnings"])
+		)
 
 	def test_no_outgoing_account_is_said(self):
 		for name in ("Farm Mail", "Backup Mail"):
@@ -276,3 +278,137 @@ class ZohoSendsAsTheAccount(SeededTestCase):
 
 	def test_get_server_status_carries_it(self):
 		self.assertIn("outgoing_accounts", self.tool_data("get_server_status", {})["email"])
+
+
+# ── v0.216.1 email branding ─────────────────────────────────────────────────
+from erpnext_mcp import email_branding  # noqa: E402
+from erpnext_mcp.farmops_api import app as sidecar_app  # noqa: E402
+from erpnext_mcp.patches import transactional_mail_without_unsubscribe  # noqa: E402
+
+from .fixtures import MAIN  # noqa: E402
+from .test_farmops_api import FarmOpsAPITestCase  # noqa: E402
+
+FARMOPS = "https://farm.tail1234.ts.net"
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+OFFICE = dict(
+	ZOHO,
+	name="Office",
+	email_id="office@orchardmeadow.net",
+	send_unsubscribe_message=1,
+	footer="",
+	brand_logo="",
+)
+
+
+class TheBranding(SeededTestCase):
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, farmops_public_url=FARMOPS, allow_apply_email_branding=1)
+		STORE.seed("Email Account", [dict(OFFICE)])
+		frappe.local.session.user = "Administrator"
+
+	def apply(self, **arguments):
+		return self.tool_data("apply_email_branding", {"company": MAIN, **arguments})
+
+	def test_the_footer_names_the_company_and_the_office_address_and_a_public_logo(self):
+		html = email_branding.footer_html(MAIN, "office@orchardmeadow.net", "509-555-0100")
+		self.assertIn(MAIN, html)
+		self.assertIn("mailto:office@orchardmeadow.net", html)
+		self.assertIn("509-555-0100", html)
+		self.assertIn(f'src="{FARMOPS}/farmops/api/brand/', html)
+		self.assertEqual([image["verdict"] for image in email_branding.image_audit(html)], ["public"])
+
+	def test_no_public_address_means_no_logo_rather_than_a_broken_one(self):
+		self.configure(enabled=1, farmops_public_url="", allow_apply_email_branding=1)
+		html = email_branding.footer_html(MAIN, "office@orchardmeadow.net")
+		self.assertNotIn("<img", html)
+		data = self.apply()
+		self.assertIn("No logo", " ".join(data["notes"]))
+
+	def test_the_site_address_is_reported_unreachable(self):
+		audit = email_branding.image_audit(
+			'<img src="http://100.69.162.122/files/logo.png"><img src="cid:abc">'
+		)
+		self.assertEqual([image["verdict"] for image in audit], ["unreachable", "inline"])
+
+	def test_dry_run_is_the_default_and_writes_nothing(self):
+		data = self.apply()
+		self.assertTrue(data["dry_run"])
+		self.assertEqual(frappe.db.get_value("Email Account", "Office", "footer"), "")
+		self.assertEqual(int(frappe.db.get_value("Email Account", "Office", "send_unsubscribe_message")), 1)
+
+	def test_applying_writes_the_footer_logo_and_turns_unsubscribe_off(self):
+		data = self.apply(dry_run=False, phone="509-555-0100")
+		self.assertFalse(data["dry_run"])
+		footer = frappe.db.get_value("Email Account", "Office", "footer")
+		self.assertIn(email_branding.MARK_START, footer)
+		self.assertEqual(int(frappe.db.get_value("Email Account", "Office", "send_unsubscribe_message")), 0)
+		self.assertTrue(
+			frappe.db.get_value("Email Account", "Office", "brand_logo").startswith(
+				FARMOPS + "/farmops/api/brand/"
+			)
+		)
+
+	def test_a_rerun_replaces_only_its_own_block(self):
+		frappe.db.set_value("Email Account", "Office", "footer", "<p>Tim's own line</p>")
+		self.apply(dry_run=False)
+		self.apply(dry_run=False, phone="509-555-0100")
+		footer = frappe.db.get_value("Email Account", "Office", "footer")
+		self.assertTrue(footer.startswith("<p>Tim's own line</p>"))
+		self.assertEqual(footer.count(email_branding.MARK_START), 1)
+		self.assertIn("509-555-0100", footer)
+
+	def test_somebody_elses_brand_logo_is_left_alone(self):
+		frappe.db.set_value("Email Account", "Office", "brand_logo", "https://cdn.example.com/mark.png")
+		self.apply(dry_run=False)
+		self.assertEqual(
+			frappe.db.get_value("Email Account", "Office", "brand_logo"), "https://cdn.example.com/mark.png"
+		)
+
+	def test_the_patch_turns_unsubscribe_off_on_outgoing_accounts_once(self):
+		self.assertEqual(transactional_mail_without_unsubscribe.run(), ["Office"])
+		self.assertEqual(transactional_mail_without_unsubscribe.run(), [])
+
+	def test_status_warns_until_it_is_branded(self):
+		warnings = " ".join(mail_status.status()["warnings"])
+		self.assertIn("Leave this conversation", warnings)
+		self.assertIn("No company footer", warnings)
+		self.apply(dry_run=False)
+		after = mail_status.status()
+		office = after["outgoing_accounts"][0]["branding"]
+		self.assertFalse(office["send_unsubscribe_message"])
+		self.assertTrue(office["company_footer"])
+		self.assertFalse(any("Office: " in line and "unsubscribe" in line for line in after["warnings"]))
+
+
+class TheBrandImage(FarmOpsAPITestCase):
+	def setUp(self):
+		super().setUp()
+		from erpnext_mcp import card_print
+
+		original = card_print.company_logo
+		self.logo = PNG
+		card_print.company_logo = lambda company: self.logo
+		self.addCleanup(lambda: setattr(card_print, "company_logo", original))
+		sidecar_app._ALERTED.clear()
+
+	def get(self, path):
+		return self.post(path, credential=False, method="GET")
+
+	def test_a_companys_logo_is_served_to_anybody_as_an_image(self):
+		response = self.get(f"/farmops/api/brand/{MAIN.replace(' ', '%20')}")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.headers["Content-Type"], "image/png")
+		self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+		self.assertEqual(response.get_data(), PNG)
+
+	def test_not_an_image_by_its_own_bytes_is_not_served(self):
+		self.logo = b"<svg onload='x'></svg>"
+		self.assertEqual(self.get(f"/farmops/api/brand/{MAIN.replace(' ', '%20')}").status_code, 404)
+
+	def test_an_unknown_company_and_a_path_are_the_same_404(self):
+		self.assertEqual(self.get("/farmops/api/brand/Nobody%20LLC").status_code, 404)
+		self.assertEqual(self.get("/farmops/api/brand/..%2F..%2Fsite_config.json").status_code, 404)
+
+	def test_a_post_there_is_the_uniform_401(self):
+		self.assertEqual(self.post(f"/farmops/api/brand/{MAIN}", credential=False).status_code, 401)

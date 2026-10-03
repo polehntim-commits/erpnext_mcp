@@ -437,7 +437,9 @@ class TheSidecarIsTheWholePublicSurface(FarmOpsAPITestCase):
 		gets = [
 			route
 			for route in sidecar_app.DESCRIBED_ROUTES
-			if route["group"] not in ("mobile", "tiles", "scan")
+			# v0.216.1: `brand` serves ONE thing, a Company's logo for email, by
+			# company name — never a file path. `test_pdf_and_mail.TheBrandImage`.
+			if route["group"] not in ("mobile", "tiles", "scan", "brand")
 		]
 		self.assertEqual(gets, [], "a new GET route group appeared — is it serving files?")
 

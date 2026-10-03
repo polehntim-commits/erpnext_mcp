@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 984 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 985 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20847,10 +20847,11 @@ takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_s
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
 
-## v0.216.1 — Security Alert Recipients; PDFs inside the container
+## v0.216.1 — Security Alert Recipients; PDFs inside the container; email branding
 
 | Tool | What it does |
 | --- | --- |
+| `apply_email_branding` | Company footer (logo, name, address, office@, phone) on one outgoing Email Account; unsubscribe link off; logo served from the public Farm Ops address. Dry run by default. Write |
 | `test_pdf_rendering` | Render a test PDF (and optionally one document's print) the way the Desk and Email Queue do; report ok, pages, time, wkhtmltopdf's error and what it means. Read |
 
 `get_server_status` gains `pdf` (the PDF-only asset base URL) and `email` (outgoing accounts and
