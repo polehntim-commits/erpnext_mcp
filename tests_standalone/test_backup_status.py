@@ -207,6 +207,31 @@ class TheTool(BackupStatusCase):
 			{"of": "oml", "at": body["standby_of_peer"]["at"], "result": "Partial"},
 		)
 
+	def test_a_box_without_the_standby_role_is_not_judged_on_one(self):
+		"""v0.222.1. OML: STANDBY_ENABLED=0, roles.standby false, an empty standby block."""
+		body = all_ok()
+		body["standby_of_peer"] = {"result": "", "at": None}
+		body["alerts"] = [{"level": "warning", "code": "STANDBY_CHECK_NOT_PASS", "message": "kit says so"}]
+		self.write(body)
+		backup_status.run_ingest()
+		answer = self.tool_data("get_backup_status", {})
+		self.assertEqual((answer["overall"], answer["alerts"]), ("ok", []))
+		self.assertIsNone(answer["boxes"][0]["standby_held_here"])
+		self.assertFalse(answer["boxes"][0]["holds_standby"])
+
+	def test_the_peer_is_named_as_not_reported_here(self):
+		self.write(all_ok())
+		answer = self.tool_data("get_backup_status", {})
+		self.assertEqual([p["box"] for p in answer["peers_not_reported"]], ["umbrellocal"])
+		peer = all_ok(box="umbrellocal", peer="oml")
+		peer["roles"] = {"send": True, "receive": True, "standby": True}
+		peer["standby_of_peer"] = {"result": "Pass", "at": ago(2), "set": "2026-10-02_0230"}
+		self.write(peer)
+		self.flags[backup_status.FLAG_BOX] = "oml"
+		answer = self.tool_data("get_backup_status", {})
+		self.assertEqual(answer["peers_not_reported"], [])
+		self.assertEqual(len(answer["boxes"]), 2)
+
 	def test_only_status_files_in_the_one_directory_are_read(self):
 		self.write(all_ok())
 		self.write({"schema": "something-else/1", "box": "evil"}, "evil.json")

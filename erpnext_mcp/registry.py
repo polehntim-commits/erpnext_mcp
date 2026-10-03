@@ -27940,7 +27940,11 @@ TOOLS = {
 		"<box>.json`) and the Backup Record register. ALERTS ARE RECOMPUTED FROM THE TIMESTAMPS, "
 		"so a stale file cannot hide a problem: REPORTER_DEAD means the file itself is over 26 h "
 		"old — the timers are gone — and NO_STATUS_FILE means there is none. `overall` is ok, "
-		"warning or critical. It never writes, never shells out and reads no other path.",
+		"warning or critical. It never writes, never shells out and reads no other path.\n\n"
+		"v0.222.1: a box whose role has no standby (`roles.standby` false — OML) is never judged on "
+		"one (`holds_standby`). `peers_not_reported` names a peer whose own file is not on this site: "
+		"each box's kit copies only its own status into its own container, so a peer's backups are "
+		"read with get_backup_status on the peer's site.",
 		{
 			"box": _field(_STRING, "One box (e.g. 'oml'). Default: every status file present."),
 			"stale_hours": _field(_NUMBER, "How old is too old. Default 30."),

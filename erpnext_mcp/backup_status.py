@@ -164,6 +164,26 @@ def _block(body: dict, key: str) -> dict:
 
 
 # ── alerts ──────────────────────────────────────────────────────────────────
+#: The kit's own alert codes about holding a standby of the peer.
+STANDBY_CODES = frozenset({"STANDBY_FAILED", "STANDBY_STALE", "STANDBY_CHECK_NOT_PASS"})
+
+
+def holds_standby(body: dict) -> bool:
+	"""Whether this box's role includes a standby of its peer. v0.222.1.
+
+	`roles.standby` decides when the file states it: a box set up with
+	STANDBY_ENABLED=0 / ALLOW_STANDBY=0 (OML) still writes an empty
+	`standby_of_peer` block, and judging that block raised STANDBY_STALE ("None h
+	old") and STANDBY_CHECK_NOT_PASS for a standby nobody runs. Only a file that
+	does not state the role falls back to "a standby block means a standby".
+	"""
+	roles = _block(body, "roles")
+	if "standby" in roles:
+		return _yes(roles.get("standby"))
+	standby = _block(body, "standby_of_peer")
+	return bool(standby.get("at") or standby.get("result"))
+
+
 def _alert(code: str, message: str, box: str = "") -> dict:
 	return {
 		"level": CRITICAL if code in CRITICAL_CODES else WARNING,
@@ -275,7 +295,7 @@ def box_alerts(body: dict, stale_hours: float, now=None) -> list:
 			)
 
 	standby = _block(body, "standby_of_peer")
-	if roles.get("standby") or standby:
+	if holds_standby(body):
 		result = str(standby.get("result") or "")
 		if result.upper() == "FAIL":
 			out.append(
@@ -317,6 +337,8 @@ def box_alerts(body: dict, stale_hours: float, now=None) -> list:
 		if not isinstance(entry, dict):
 			continue
 		code = str(entry.get("code") or "")
+		if code in STANDBY_CODES and not holds_standby(body):
+			continue
 		if code and code not in have:
 			have.add(code)
 			out.append(
@@ -400,9 +422,10 @@ def describe_box(body: dict, stale_hours: float, now=None) -> dict:
 				"at": standby.get("at") or None,
 				"result": standby.get("result") or None,
 			}
-			if standby
+			if standby and holds_standby(body)
 			else None
 		),
+		"holds_standby": holds_standby(body),
 		"promoted": body.get("promoted") or None,
 		"fenced": bool(body.get("fenced")),
 		"alerts": box_alerts(body, stale_hours, now),
@@ -463,6 +486,10 @@ def status(box: str = "", stale_hours: float = STALE_HOURS, include_raw: bool = 
 		files = {name: body for name, body in files.items() if name == wanted}
 	boxes = [describe_box(body, stale_hours, now) for _name, body in sorted(files.items())]
 	alerts: list = []
+	present = {str(b.get("box") or "") for b in boxes}
+	peers_not_reported = sorted(
+		{str(body.get("peer")) for body in files.values() if body.get("peer")} - present
+	)
 	if not boxes:
 		alerts.append(
 			_alert(
@@ -508,6 +535,17 @@ def status(box: str = "", stale_hours: float = STALE_HOURS, include_raw: bool = 
 		"erpnext_records": records,
 		"alerts": alerts,
 		"skipped": skipped,
+		# v0.222.1. A peer's own file lives on the peer's site: each box's kit
+		# copies only its OWN status into its own container, and this app reads
+		# that one directory and never reaches across the network. The peer's
+		# receipts about THIS box's data are already above (last_standby_restore,
+		# offsite_copy); for the peer's own backups, ask get_backup_status on the
+		# peer's site — or have the kit also copy the peer's file here, and it is
+		# reported with no change to this app.
+		"peers_not_reported": [
+			{"box": peer, "why": "its status file is on its own site, not this one"}
+			for peer in peers_not_reported
+		],
 	}
 	if include_raw:
 		out["raw"] = files

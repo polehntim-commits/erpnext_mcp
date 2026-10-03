@@ -148,3 +148,19 @@ Frozen before code. Where this section and the spec above differ, this section i
     present. The kit's own alerts are kept; a code the tool recomputed replaces the kit's.
 
 Tools: 982 → **983** (478 read, 505 write). No mobile route. No iOS change.
+
+## Amendment (v0.222.1)
+
+- **No standby role, no standby alerts.** `roles.standby` decides when the file states it. OML runs
+  with STANDBY_ENABLED=0 / ALLOW_STANDBY=0 and still writes an empty `standby_of_peer`; judging it
+  raised STANDBY_STALE ("None h old") and STANDBY_CHECK_NOT_PASS. With the role false, the tool
+  raises neither, drops the kit's own STANDBY_* alerts, and shows `standby_held_here: null`,
+  `holds_standby: false`. A file that does not state the role falls back to "a standby block with a
+  date or result means a standby".
+- **Why only the site's own box is reported.** Each box's kit copies only its own status into its own
+  ERPNext container, and this app reads only `sites/erp_backup_status/` — never the network. OML's
+  answer therefore covers `oml`; the peer's receipts about OML's data are in it
+  (`last_standby_restore`, `offsite_copy`). `peers_not_reported` names the peer. umbrel.local's
+  own backups are read with `get_backup_status` on umbrel.local's site, or — with no change to this
+  app — by having the kit also copy the peer's file into the directory.
+

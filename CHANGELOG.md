@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.222.1 — 2026-10-03 — get_backup_status: no standby alerts for a box without a standby
+
+**1003 tools** (unchanged). Deploy `docs/deploy/v0.222.1_backup_standby.md`.
+
+- A box whose `roles.standby` is false (OML: STANDBY_ENABLED=0 / ALLOW_STANDBY=0) no longer raises
+  STANDBY_STALE ("None h old") or STANDBY_CHECK_NOT_PASS, its kit's own STANDBY_* alerts are dropped,
+  and `standby_held_here` is null with `holds_standby: false`. A healthy OML now reads `overall: ok`.
+- New `peers_not_reported`: the peer whose own status file is not on this site, and why — each kit
+  copies only its own file into its own container; read the peer on its own site.
+
 ## 0.222.0 — 2026-10-03 — office@ reply drafts: drafted by Claude, sent only by a person (OFF by default)
 
 **1003 tools** (487 read, 516 write): + `list_mail_needing_drafts`, `get_mail_context` (read);
