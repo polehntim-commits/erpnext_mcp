@@ -1190,7 +1190,20 @@ def get_current_user_context(user: str) -> dict:
 	"""
 	guard.require_scope(user)
 	result = mobile_tools.get_current_user_context({})
-	return shape.user_context(result.data, user)
+	context = shape.user_context(result.data, user)
+	# v0.218.0. What the phone should do about its own credential: move to
+	# device keys when they are on (docs/design/device_client_enrollment.md §4.5).
+	try:
+		from .. import device_keys
+
+		context["device_keys"] = {
+			"enabled": device_keys.enabled(),
+			"reauth_seconds": device_keys.reauth_minutes() * 60,
+			"legacy_secrets_allowed": device_keys.legacy_secrets_allowed(),
+		}
+	except Exception:  # pragma: no cover - never cost the context call
+		pass
+	return context
 
 
 # ── 2. list_my_tasks ────────────────────────────────────────────────────────
@@ -1784,6 +1797,103 @@ def get_asset_detail(user: str, asset_name=None) -> dict:
 	if owner and owner not in set(allowed):
 		frappe.throw(f"asset_name {asset_name} was not found.", frappe.DoesNotExistError)
 	return result.data
+
+
+# ── device keys ── v0.218.0 ───────────────────────────────────────────────
+# docs/design/device_client_enrollment.md §3, §4.5, §7. All four refuse while
+# `device_keys_enabled` is off, except the inventory, which is a read.
+_ACCESS_ROLES = ("HR Manager", "HR User", "Farm Manager", "System Manager")
+
+
+def _require_access_role(user: str, action: str) -> None:
+	if not set(frappe.get_roles(user) or []) & set(_ACCESS_ROLES):
+		frappe.throw(
+			f"{action} is for {', '.join(_ACCESS_ROLES)}. Nothing was changed.", frappe.PermissionError
+		)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("upgrade_device_key", mutating=True, limit=guard.WRITE_LIMIT)
+def upgrade_device_key(
+	user: str,
+	unlock_public_key=None,
+	proof_public_key=None,
+	key_protection=None,
+	platform=None,
+	os_version=None,
+	app_version=None,
+	unlock_signature=None,
+	proof_signature=None,
+) -> dict:
+	"""Move THIS phone from its api_key/api_secret to device keys, and destroy the secret (§4.5)."""
+	from .. import device_enrollment, device_keys
+
+	guard.require_scope(user)
+	device = str(getattr(frappe.local, "erpnext_mcp_device", "") or "")
+	body = {
+		"unlock_public_key": _json_argument(unlock_public_key, "unlock_public_key")
+		if isinstance(unlock_public_key, str)
+		else unlock_public_key,
+		"proof_public_key": _json_argument(proof_public_key, "proof_public_key")
+		if isinstance(proof_public_key, str)
+		else proof_public_key,
+		"key_protection": key_protection,
+		"platform": platform,
+		"os_version": os_version,
+		"app_version": app_version,
+		"unlock_signature": unlock_signature,
+		"proof_signature": proof_signature,
+	}
+	try:
+		return device_keys.upgrade(user, device, body)
+	except (device_enrollment.EnrollmentRefused, device_keys.Refused) as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("issue_enrollment_link", mutating=True, limit=guard.WRITE_LIMIT)
+def issue_enrollment_link(user: str, for_user=None, device_name=None, minutes=None) -> dict:
+	"""A pickup link for somebody's new phone, from a manager's phone (§3.1)."""
+	from ..tools import device_keys as device_key_tools
+
+	guard.require_scope(user)
+	_require_access_role(user, "Issuing a sign-in code for a phone")
+	return device_key_tools.issue_enrollment_link(
+		{"user": for_user, "device_name": device_name, "minutes": minutes}
+	).data
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_access_inventory", limit=guard.READ_LIMIT)
+def list_access_inventory(user: str, for_user=None, include_revoked=None) -> dict:
+	"""Every phone: who, what, last seen, key-bound or not (§7). Your own, or everyone's for a manager."""
+	from ..tools import device_keys as device_key_tools
+
+	guard.require_scope(user)
+	wanted = str(for_user or "").strip().lower()
+	if wanted != user:
+		_require_access_role(user, "Seeing other people's phones")
+	return device_key_tools.list_access_inventory(
+		{
+			"user": wanted
+			if wanted
+			else ("" if set(frappe.get_roles(user) or []) & set(_ACCESS_ROLES) else user),
+			"include_revoked": include_revoked,
+		}
+	).data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("report_lost_device", mutating=True, limit=guard.WRITE_LIMIT)
+def report_lost_device(user: str, for_user=None, device=None, note=None) -> dict:
+	"""A lost phone: your own, or anybody's for a manager. Revoked at once; its tokens end (§7)."""
+	from ..tools import device_keys as device_key_tools
+
+	guard.require_scope(user)
+	target = str(for_user or "").strip().lower() or user
+	if target != user:
+		_require_access_role(user, "Reporting somebody else's phone lost")
+	return device_key_tools.report_lost_device({"user": target, "device": device, "note": note}).data
 
 
 # ── request_badge_photo ── v0.214.0 ──────────────────────────────────────────

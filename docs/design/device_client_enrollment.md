@@ -178,9 +178,11 @@ passes Face ID. Nothing is lost; the queue already survives this.
 
 App 0.28 on a phone holding a legacy `api_key`/`api_secret`: on first launch it creates both keys,
 prompts Face ID once, and calls `POST /mobile/upgrade_device_key` (authenticated the old way) with
-the two public keys + the unlock signature. The server binds the keys to **that same device row**,
-**destroys the stored secret**, sets `approval_method = "upgraded"`, and returns an access token.
-The app deletes the secret from its Keychain. The worker sees one Face ID prompt.
+the two public keys and signatures by both keys over `farmops-upgrade|<the api_key it holds>|<proof thumbprint>`. The server binds the keys to **that same device row**,
+**destroys the stored secret**, sets `approval_method = "upgraded"`, and answers `{upgraded, device,
+next}` — no token: the mobile transport strips every token-shaped key from its answers, on purpose.
+The phone then signs in through `/auth/challenge` and `/auth/token` inside the same Face ID
+context, and deletes the secret from its Keychain. The worker sees one Face ID prompt.
 
 ---
 

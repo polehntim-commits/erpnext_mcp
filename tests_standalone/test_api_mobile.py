@@ -407,6 +407,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
+		# v0.218.0. Device keys: app 0.28.0 calls these once device_keys_enabled
+		# is on; their Codables move into test_ios_contract with that build.
+		"upgrade_device_key",
+		"issue_enrollment_link",
+		"list_access_inventory",
+		"report_lost_device",
 		# v0.106.0. The certificate register's two reads, HERE FOR THIS SET'S
 		# ORDINARY REASON — `MobileAPI.swift` names neither yet. The server side
 		# is published so the iOS half is a client change rather than a release

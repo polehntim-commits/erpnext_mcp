@@ -252,6 +252,12 @@ def verify(api_key: str, api_secret: str) -> str:
 		return ""
 	if not frappe.db.exists("DocType", DEVICE):
 		return ""
+	# v0.218.0: Tim turns the old pairs off after every phone has moved to keys.
+	# Until then (the default) they work exactly as before.
+	from . import device_keys
+
+	if not device_keys.legacy_secrets_allowed():
+		return ""
 
 	rows = (
 		frappe.db.get_all(
@@ -277,6 +283,11 @@ def verify(api_key: str, api_secret: str) -> str:
 	stored = read_secret(str(row.get("name")))
 	if not stored or not hmac.compare_digest(stored, api_secret):
 		return ""
+	# v0.218.0: which handset this is, for `upgrade_device_key`.
+	try:
+		frappe.local.erpnext_mcp_device = str(row.get("name"))
+	except Exception:  # pragma: no cover
+		pass
 
 	_stamp_last_seen(str(row.get("name")), row.get("last_seen_on"))
 	return user

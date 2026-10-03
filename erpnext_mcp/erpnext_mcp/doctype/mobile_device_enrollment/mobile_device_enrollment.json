@@ -21,6 +21,17 @@
   "app_version",
   "form_schema_version",
   "api_base_mode",
+  "unlock_public_key",
+  "proof_public_key",
+  "key_thumbprint",
+  "key_protection",
+  "platform",
+  "os_version",
+  "approval_method",
+  "approved_by",
+  "approved_at",
+  "last_ip",
+  "revocation_kind",
   "capabilities_col",
   "field_kinds",
   "capabilities_reported_at",
@@ -131,6 +142,83 @@
    "label": "API Base Mode",
    "read_only": 1,
    "description": "Which address this phone is calling: 'farmops' (https://host/farmops/api) or 'legacy' (through /erpnext). Reported by the app from 0.27.0; empty on older builds."
+  },
+  {
+   "fieldname": "unlock_public_key",
+   "fieldtype": "Small Text",
+   "label": "Unlock key (public)",
+   "read_only": 1,
+   "description": "v0.218.0. The public half (JWK) of the Secure Enclave key that needs Face ID / Touch ID. It signs sign-ins and approvals."
+  },
+  {
+   "fieldname": "proof_public_key",
+   "fieldtype": "Small Text",
+   "label": "Proof key (public)",
+   "read_only": 1,
+   "description": "v0.218.0. The public half (JWK) of the key that signs every request (DPoP). The private halves never leave the phone."
+  },
+  {
+   "fieldname": "key_thumbprint",
+   "fieldtype": "Data",
+   "label": "Key thumbprint",
+   "read_only": 1,
+   "description": "RFC 7638 thumbprint of the proof key; every access token for this phone is bound to it."
+  },
+  {
+   "fieldname": "key_protection",
+   "fieldtype": "Data",
+   "label": "Key protection",
+   "read_only": 1,
+   "description": "secure_enclave, strongbox, tee or software — as the phone reported it."
+  },
+  {
+   "fieldname": "platform",
+   "fieldtype": "Data",
+   "label": "Platform",
+   "read_only": 1,
+   "description": "ios or android."
+  },
+  {
+   "fieldname": "os_version",
+   "fieldtype": "Data",
+   "label": "OS version",
+   "read_only": 1,
+   "description": ""
+  },
+  {
+   "fieldname": "approval_method",
+   "fieldtype": "Data",
+   "label": "Approved by way of",
+   "read_only": 1,
+   "description": "pickup_link, phone_approval, upgraded (an old login card moved to keys), or legacy."
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Data",
+   "label": "Approved by",
+   "read_only": 1,
+   "description": ""
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "Approved at",
+   "read_only": 1,
+   "description": ""
+  },
+  {
+   "fieldname": "last_ip",
+   "fieldtype": "Data",
+   "label": "Last address",
+   "read_only": 1,
+   "description": "The address of its last key-bound request."
+  },
+  {
+   "fieldname": "revocation_kind",
+   "fieldtype": "Data",
+   "label": "Revoked as",
+   "read_only": 1,
+   "description": "lost, when it was revoked through the lost-device flow."
   },
   {
    "fieldname": "capabilities_col",

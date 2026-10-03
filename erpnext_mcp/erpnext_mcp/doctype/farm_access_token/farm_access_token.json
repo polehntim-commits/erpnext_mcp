@@ -1,0 +1,145 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-03 00:00:00.000000",
+ "description": "One short-lived credential — a phone's access token bound to its device key, a sign-in challenge, or (once MCP OAuth is on) an MCP client's access or refresh token or authorization code. Only the SHA-256 of the token is stored; the token itself exists only in the answer that issued it. Written by erpnext_mcp; revoke by revoking the device or client, not by editing rows.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "in_create": 1,
+ "field_order": [
+  "token_hash",
+  "kind",
+  "user",
+  "device",
+  "client",
+  "jkt",
+  "scopes",
+  "family",
+  "col1",
+  "issued_at",
+  "expires_at",
+  "used_at",
+  "revoked_at",
+  "revoked_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "token_hash",
+   "fieldtype": "Data",
+   "label": "Token Hash",
+   "unique": 1,
+   "read_only": 1,
+   "reqd": 1,
+   "description": "SHA-256 of the token. The token is never stored."
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "access\nchallenge\nrefresh\nauth_code",
+   "read_only": 1,
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "device",
+   "fieldtype": "Data",
+   "label": "Device (Mobile Device Enrollment)",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "client",
+   "fieldtype": "Data",
+   "label": "Client (Farm Access Request)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "jkt",
+   "fieldtype": "Data",
+   "label": "Key thumbprint",
+   "read_only": 1,
+   "description": "RFC 7638 thumbprint of the key this token is bound to."
+  },
+  {
+   "fieldname": "scopes",
+   "fieldtype": "Small Text",
+   "label": "Scopes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "family",
+   "fieldtype": "Data",
+   "label": "Refresh family",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issued_at",
+   "fieldtype": "Datetime",
+   "label": "Issued",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "used_at",
+   "fieldtype": "Datetime",
+   "label": "Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_at",
+   "fieldtype": "Datetime",
+   "label": "Revoked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_reason",
+   "fieldtype": "Data",
+   "label": "Revoked because",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Access Token",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "delete": 1
+  }
+ ],
+ "quick_entry": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "kind",
+ "track_changes": 0
+}

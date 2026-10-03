@@ -28,6 +28,11 @@
   "pdf_base_url",
   "trusted_proxy_cidrs",
   "switch_expiry",
+  "device_keys_section",
+  "device_keys_enabled",
+  "legacy_device_secrets",
+  "enrollment_link_minutes",
+  "device_reauth_minutes",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -972,6 +977,9 @@
   "allow_test_pdf_rendering",
   "allow_get_security_status",
   "allow_list_mcp_switches",
+  "allow_issue_enrollment_link",
+  "allow_list_access_inventory",
+  "allow_report_lost_device",
   "allow_apply_email_branding",
   "allow_create_backup_record",
   "allow_record_backup_test",
@@ -1368,6 +1376,39 @@
    "label": "Time-limited switches",
    "options": "JSON",
    "read_only": 1
+  },
+  {
+   "fieldname": "device_keys_section",
+   "fieldtype": "Section Break",
+   "label": "Phone sign-in (device keys)"
+  },
+  {
+   "default": "0",
+   "description": "Off (default): phones sign in with login cards and api_key/api_secret exactly as before. On: one-time pickup links (issue_enrollment_link), Secure Enclave keys on the phone, Face ID, every request signed, short-lived tokens; phones on app 0.28+ move over by themselves. docs/design/device_client_enrollment.md.",
+   "fieldname": "device_keys_enabled",
+   "fieldtype": "Check",
+   "label": "Device keys enabled"
+  },
+  {
+   "default": "1",
+   "description": "On (default): old login cards and phones holding an api_key/api_secret keep working. Turn off only when list_access_inventory says ready_to_disable_legacy_secrets.",
+   "fieldname": "legacy_device_secrets",
+   "fieldtype": "Check",
+   "label": "Allow legacy phone secrets"
+  },
+  {
+   "default": "10",
+   "description": "How long a pickup link lives, 2–60 minutes.",
+   "fieldname": "enrollment_link_minutes",
+   "fieldtype": "Int",
+   "label": "Pickup link minutes"
+  },
+  {
+   "default": "480",
+   "description": "How often a phone asks for Face ID / Touch ID again (the life of its access token), 5–1440 minutes. 480 = once a shift.",
+   "fieldname": "device_reauth_minutes",
+   "fieldtype": "Int",
+   "label": "Re-authenticate every (minutes)"
   },
   {
    "fieldname": "attribution_section",
@@ -7653,6 +7694,27 @@
    "fieldname": "allow_list_mcp_switches",
    "fieldtype": "Check",
    "label": "List MCP Switches"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). A single-use, 10-minute pickup link and QR for one account's new phone. Needs Device keys enabled.",
+   "fieldname": "allow_issue_enrollment_link",
+   "fieldtype": "Check",
+   "label": "Issue Enrollment Link"
+  },
+  {
+   "default": "1",
+   "description": "Every phone: who, what, last seen, key-bound or still on a legacy secret.",
+   "fieldname": "allow_list_access_inventory",
+   "fieldtype": "Check",
+   "label": "List Access Inventory"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING (default OFF). Revoke a lost phone (or all of a person's), end its tokens, alert.",
+   "fieldname": "allow_report_lost_device",
+   "fieldtype": "Check",
+   "label": "Report Lost Device"
   },
   {
    "default": "0",

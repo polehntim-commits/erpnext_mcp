@@ -83,7 +83,7 @@ def presented(headers, body) -> tuple:
 	return "", "", ""
 
 
-def resolve(headers, body) -> tuple:
+def resolve(headers, body, method: str = "", path: str = "", raw: bytes = b"") -> tuple:
 	"""(user, source). `("", "")` means nobody, whichever way it failed.
 
 	Called with a live Frappe connection — the verifier reads `User` and the
@@ -92,6 +92,22 @@ def resolve(headers, body) -> tuple:
 	fine and is what Frappe's own api-key validator does: reading a User row to
 	decide who somebody is cannot itself be gated on knowing who they are.
 	"""
+	# v0.218.0. A key-bound request (`Authorization: FarmOps <token>` + `DPoP`).
+	# Only when device keys are on; a Refused is anonymous, like every failure
+	# here — except a provably revoked device, which the caller reads from
+	# `revoked_device` to tell the phone to wipe itself (§4.3).
+	if str(headers.get(AUTHORIZATION) or "").startswith("FarmOps "):
+		from .. import device_keys
+
+		if not device_keys.enabled():
+			return "", ""
+		try:
+			user, _device = device_keys.resolve(headers, method, path, raw)
+			return user, "device_key"
+		except device_keys.Refused as exc:
+			if exc.revoked_device:
+				return "", "revoked_device"
+			return "", ""
 	api_key, api_secret, source = presented(headers, body)
 	if not (api_key and api_secret):
 		return "", ""

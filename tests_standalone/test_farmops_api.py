@@ -703,6 +703,11 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/list_crew_task_members",
 		"/mobile/list_crew_tasks",
 		"/mobile/request_badge_photo",
+		# v0.218.0. Device keys — docs/design/device_client_enrollment.md.
+		"/mobile/upgrade_device_key",
+		"/mobile/issue_enrollment_link",
+		"/mobile/list_access_inventory",
+		"/mobile/report_lost_device",
 		"/mobile/move_asset",
 		"/mobile/undo_asset_move",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
@@ -3234,6 +3239,13 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# v0.214.0. A person's OWN badge photo task needs no role; somebody else's
 		# is HR / Farm Manager / Foreman, gated in the tool (`badge_photo.require_may`).
 		"request_badge_photo",
+		# v0.218.0. Your OWN phone: moving it to keys, seeing it, reporting it
+		# lost. Anybody else's takes HR / Farm Manager / System Manager, checked
+		# in the wrapper (`_require_access_role`); `issue_enrollment_link` always.
+		"upgrade_device_key",
+		"list_access_inventory",
+		"report_lost_device",
+		"issue_enrollment_link",
 		# v0.195.0. The caller's own housing (no arguments, so no one else's);
 		# spray history, which WPS requires be displayed to workers; and filing a
 		# spray, which is never refused for the role of the applicator filing it.
@@ -3250,7 +3262,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 167, "a method is named in two sets at once")
+		self.assertEqual(len(named), 171, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

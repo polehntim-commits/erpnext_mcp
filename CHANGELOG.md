@@ -3,6 +3,31 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.218.0 — 2026-10-03 — device keys, phase 1 (OFF by default)
+
+**990 tools** (482 read, 508 write): + `issue_enrollment_link`, `list_access_inventory`,
+`report_lost_device`. **171 mobile methods**: + `upgrade_device_key`, `issue_enrollment_link`,
+`list_access_inventory`, `report_lost_device`. Contract `docs/design/device_client_enrollment.md`
+§3–§5, §7–§9; deploy `docs/deploy/v0.218.0_device_keys.md`.
+
+**Deploying changes nothing**: `device_keys_enabled` ships off, and `legacy_device_secrets` ships on
+— login cards and api_key/api_secret phones work exactly as before until Tim turns them off.
+
+- **Pickup links** (`issue_enrollment_link`): `<Farm Ops address>/farmops/api/enroll/<nonce>`,
+  single use, 10 minutes (2–60), nonce hashed at rest; a GET never spends it and reads the same for
+  any value; every failure is one 404, counted per address.
+- **Device-bound keys**: the phone sends two P-256 public keys (unlock: Face ID; proof: every
+  request). Requests carry `Authorization: FarmOps <token>` and a DPoP proof (ES256, method, path,
+  time ±120 s, unique jti for 300 s, body hash, token hash). Tokens are random, last the re-auth
+  interval (`device_reauth_minutes`, default 480), and are stored as hashes (`Farm Access Token`).
+  Revocation is read on every call; a revoked phone holding its own key is told so (and wipes itself).
+- **Sign-in again**: `/farmops/api/auth/challenge` + `/auth/token` — the unlock key (Face ID) signs.
+- **Silent upgrade**: `upgrade_device_key` moves an api_key/api_secret phone to keys and destroys the
+  secret.
+- **Inventory and lost devices**: `list_access_inventory` (key-bound vs legacy,
+  `ready_to_disable_legacy_secrets`), `report_lost_device` (revoke, end tokens, alert).
+- `get_current_user_context.device_keys` tells the app whether to move.
+
 ## 0.217.0 — 2026-10-03 — security status, switch inventory, alerts, client IP, time-boxed switches
 
 **987 tools** (481 read, 506 write): + `get_security_status`, `list_mcp_switches`. Contract

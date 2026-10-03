@@ -215,6 +215,49 @@ _IMAGE_SIGNATURES = (
 #: A logo larger than this is not served (a mail client would not want it either).
 BRAND_MAX_BYTES = 2_000_000
 
+#: v0.218.0 device keys — see `_device_key_route`.
+PICKUP_PREFIX = f"{PREFIX}/enroll/"
+CHALLENGE_PATH = f"{PREFIX}/auth/challenge"
+TOKEN_PATH = f"{PREFIX}/auth/token"
+
+_PICKUP_PAGE = (
+	"Farm Ops sign-in code\n\n"
+	"Open the Farm Ops app and scan this code from its sign-in screen.\n\n"
+	"Abra la aplicación Farm Ops y escanee este código desde la pantalla de inicio de sesión.\n"
+)
+
+PICKUP_DESCRIBED_ROUTE = {
+	"path": f"{PICKUP_PREFIX}{{nonce}}",
+	"method": "enroll_pickup",
+	"group": "auth",
+	"mutating": True,
+	"arguments": [
+		"device_name",
+		"platform",
+		"os_version",
+		"app_version",
+		"unlock_public_key",
+		"proof_public_key",
+		"key_protection",
+		"unlock_signature",
+	],
+}
+CHALLENGE_DESCRIBED_ROUTE = {
+	"path": CHALLENGE_PATH,
+	"method": "auth_challenge",
+	"group": "auth",
+	"mutating": True,
+	"arguments": ["device"],
+}
+TOKEN_DESCRIBED_ROUTE = {
+	"path": TOKEN_PATH,
+	"method": "auth_token",
+	"group": "auth",
+	"mutating": True,
+	"arguments": ["device", "challenge", "signature"],
+}
+
+
 #: Every route `routes.ROUTES` cannot describe, for `list_sidecar_routes`.
 DESCRIBED_ROUTES = (
 	DESCRIBED_ROUTE,
@@ -223,6 +266,9 @@ DESCRIBED_ROUTES = (
 	ENROLL_DESCRIBED_ROUTE,
 	SCAN_DESCRIBED_ROUTE,
 	BRAND_DESCRIBED_ROUTE,
+	PICKUP_DESCRIBED_ROUTE,
+	CHALLENGE_DESCRIBED_ROUTE,
+	TOKEN_DESCRIBED_ROUTE,
 )
 
 _MAX_BODY = auth.MAX_BODY_BYTES
@@ -579,7 +625,9 @@ def _body(request: Request) -> dict:
 	try:
 		if (request.mimetype or "") in _MULTIPART:
 			return _multipart(request)
-		raw = request.get_data(cache=False, as_text=True) or ""
+		# v0.218.0: cached, because a key-bound request's DPoP proof signs the
+		# body's hash and `auth.resolve` reads the same bytes again.
+		raw = request.get_data(cache=True, as_text=True) or ""
 	except RequestEntityTooLarge:
 		# v0.216.0 (H2): `dispatch` set the ceiling and answers this with 413.
 		raise
@@ -623,7 +671,7 @@ def _login_qr_image(request: Request) -> Response:
 
 		# v0.216.0 (H1): WHO, before WHAT. The method and the argument are only
 		# discussed with somebody holding a credential.
-		caller, _source = auth.resolve(request.headers, {})
+		caller, _source = auth.resolve(request.headers, {}, request.method, request.path, b"")
 		if not caller:
 			return _unauthenticated(request, QR_IMAGE_PATH)
 
@@ -869,7 +917,7 @@ def _terrain_tile(
 			return _failure(503, "The Farm Ops mobile API is switched off on this site.")
 
 		# v0.216.0 (H1): the credential first; the pattern and the method after.
-		caller, _source = auth.resolve(request.headers, {})
+		caller, _source = auth.resolve(request.headers, {}, request.method, request.path, b"")
 		if not caller:
 			return _unauthenticated(request, path)
 
@@ -974,6 +1022,81 @@ def _brand_image(request: Request, path: str) -> Response:
 	)
 
 
+# ── v0.218.0 device keys: pickup, challenge, token ─────────────────────────
+#: docs/design/device_client_enrollment.md §3–§4. OFF until `device_keys_enabled`:
+#: then these paths fall through to the uniform answer of a path that does not exist.
+def _revoked_device() -> Response:
+	"""The uniform 401, plus the one fact only the real device can earn (§4.3)."""
+	response = _failure(401, UNAUTHORIZED)
+	payload = json.loads(response.get_data(as_text=True))
+	payload["device_revoked"] = True
+	return _json(payload, 401)
+
+
+def _device_key_refused(request: Request, path: str, status: int) -> Response:
+	"""Counted like every failed sign-in; uniform; never says why."""
+	refused = _unauthenticated(request, path)
+	if refused.status_code == 429 or status == 401:
+		return refused
+	return _failure(404, NOT_FOUND)
+
+
+def _device_key_route(request: Request, path: str):
+	"""The three key routes, or None when device keys are off (the uniform path answers)."""
+	from .. import device_keys
+
+	raw = request.get_data(cache=True)
+	body = _body(request)
+	with session.request_session(request=request, body=body):
+		if not device_keys.enabled():
+			return None
+		if path.startswith(PICKUP_PREFIX) and request.method == "GET":
+			if _open_route_limited(request):
+				return _failure(429, TOO_MANY)
+			return Response(
+				_PICKUP_PAGE,
+				status=200,
+				content_type="text/plain; charset=utf-8",
+				headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+			)
+		if request.method != "POST":
+			return None
+		status = 404 if path.startswith(PICKUP_PREFIX) else 401
+		try:
+			proof = device_keys.verify_dpop(str(request.headers.get("DPoP") or ""), "POST", request.path, raw)
+			if path.startswith(PICKUP_PREFIX):
+				answer = device_keys.redeem(path[len(PICKUP_PREFIX) :], body, proof)
+				audit.record(
+					"mobile:enroll_pickup",
+					{"device": answer["device"]},
+					audit.STATUS_SUCCESS,
+					f"Success — {answer['user']} picked up device {answer['device']} with a pickup link",
+					caller_ip=_peer(request),
+					commit=False,
+				)
+			elif path == CHALLENGE_PATH:
+				answer = device_keys.challenge(str(body.get("device") or ""), proof)
+			else:
+				answer = device_keys.mint(
+					str(body.get("device") or ""),
+					str(body.get("challenge") or ""),
+					str(body.get("signature") or ""),
+					proof,
+				)
+		except device_keys.Refused as exc:
+			session.rollback()
+			logger.info("farmops-api device-key refusal %s: %s", path[:60], exc)
+			if exc.revoked_device:
+				return _revoked_device()
+			return _device_key_refused(request, path, status)
+		except Exception:
+			session.rollback()
+			logger.error("farmops-api device-key error %s\n%s", path[:60], traceback.format_exc())
+			return _device_key_refused(request, path, status)
+		session.commit()
+		return _success(answer)
+
+
 def _scan_page(path: str) -> Response:
 	"""What a tag's QR shows a phone camera that is not the app. v0.216.0.
 
@@ -1043,6 +1166,11 @@ def _dispatch(request: Request, path: str) -> Response:
 			return _failure(429, TOO_MANY)
 		return _scan_page(path)
 
+	if path.startswith(PICKUP_PREFIX) or path in (CHALLENGE_PATH, TOKEN_PATH):
+		answer = _device_key_route(request, path)
+		if answer is not None:
+			return answer
+
 	if path == ENROLL_PATH:
 		return _enroll_device(request)
 
@@ -1063,7 +1191,11 @@ def _dispatch(request: Request, path: str) -> Response:
 	body = _body(request)
 
 	with session.request_session(request=request, body=body):
-		user, source = auth.resolve(request.headers, body)
+		user, source = auth.resolve(
+			request.headers, body, request.method, request.path, request.get_data(cache=True)
+		)
+		if source == "revoked_device":
+			return _revoked_device()
 		if not user:
 			# Nothing was opened as anybody, so there is nothing to roll back.
 			# One refusal is not audited — `guard` audits per method on an

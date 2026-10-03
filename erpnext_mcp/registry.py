@@ -182,6 +182,7 @@ from .tools import (
 )
 from .tools import card_prints as card_print_tools
 from .tools import crew_tasks as crew_task_tools
+from .tools import device_keys as device_key_tools
 from .tools import email_branding as email_branding_tools
 from .tools import moments as moment_tools
 from .tools import pest_control as pest_control_tools
@@ -28905,6 +28906,51 @@ TOOLS = {
 		requires="the Shadow Log Entry DocType, which ships with erpnext_mcp — run `bench migrate`",
 	),
 	# ── v0.129.0: what the install is doing, rather than what the farm is ────
+	"issue_enrollment_link": _tool(
+		device_key_tools.issue_enrollment_link,
+		"MUTATING (default OFF). v0.218.0. A single-use pickup link — and its QR — for one account's "
+		"new phone: `<Farm Ops address>/farmops/api/enroll/<random>`. It dies on first use or after "
+		"`minutes` (default 10). It carries NO credential: the phone makes two Secure Enclave keys and "
+		"sends only their public halves; Face ID signs the pickup. Needs device_keys_enabled on ERPNext "
+		"MCP Settings. The nonce is in this answer only; the server keeps its hash.",
+		{
+			"user": _field(_STRING, "The account (login email) the phone is for."),
+			"device_name": _field(_STRING, "Optional label, e.g. 'Ana's iPhone'."),
+			"minutes": _field(_NUMBER, "2–60. Default the site's setting (10)."),
+		},
+		required=("user",),
+		mutating=True,
+		title="Issue enrollment link",
+	),
+	"list_access_inventory": _tool(
+		device_key_tools.list_access_inventory,
+		"v0.218.0. Every phone with access: whose, its name, status, platform and app version, key "
+		"protection (secure_enclave / software), how it was approved and by whom, last seen and from "
+		"where, and whether it is KEY-BOUND or still holds a legacy api_key/api_secret. "
+		"`ready_to_disable_legacy_secrets` is true when no live phone holds a legacy secret. "
+		"Read-only; never a key or secret.",
+		{
+			"user": _field(_STRING, "One account. Default every account."),
+			"include_revoked": _field(_BOOLEAN, "Include revoked devices. Default false."),
+		},
+		title="Access inventory",
+	),
+	"report_lost_device": _tool(
+		device_key_tools.report_lost_device,
+		"MUTATING (default OFF). v0.218.0. A phone is lost: revoke it — or every phone of `user` "
+		"when `device` is omitted — end all its tokens, mark it lost, and alert Security Alert "
+		"Recipients. If the lost phone ever calls again with its own key it is told it was revoked and "
+		"wipes itself.",
+		{
+			"user": _field(_STRING, "The account."),
+			"device": _field(_STRING, "One device (list_access_inventory names). Omit for all."),
+			"note": _field(_STRING, "Optional: where and when."),
+		},
+		required=("user",),
+		mutating=True,
+		destructive=True,
+		title="Report lost device",
+	),
 	"get_security_status": _tool(
 		security_status_tools.get_security_status,
 		"v0.217.0. HOW EXPOSED IS THIS SITE? One scored checklist (0–100): two-factor auth, the "

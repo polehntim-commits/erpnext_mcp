@@ -114,6 +114,11 @@ ROUTES = (
 	# v0.214.0. A scan no longer moves a fixed asset; these are the only doors.
 	# v0.214.0. The badge photo, as a task the phone can raise for its own user.
 	Route("/mobile", mobile_api.request_badge_photo),
+	# v0.218.0. Device keys (docs/design/device_client_enrollment.md); refuse while off.
+	Route("/mobile", mobile_api.upgrade_device_key),
+	Route("/mobile", mobile_api.issue_enrollment_link),
+	Route("/mobile", mobile_api.list_access_inventory),
+	Route("/mobile", mobile_api.report_lost_device),
 	Route("/mobile", mobile_api.move_asset),
 	Route("/mobile", mobile_api.undo_asset_move),
 	Route("/mobile", mobile_api.log_asset_state_change),

@@ -1717,6 +1717,8 @@ APP_DOCTYPES = {
 	# register would make every one of those a silently-empty lookup rather
 	# than a real query.
 	"Mobile Push Token": "mobile_push_token",
+	# v0.218.0. Hashed short-lived tokens: device_keys (and later MCP OAuth).
+	"Farm Access Token": "farm_access_token",
 	"Farm Salary Structure": "farm_salary_structure",
 	"Farm Payroll Deduction": "farm_payroll_deduction",
 	# The court order the deduction above exists under. Separate because a

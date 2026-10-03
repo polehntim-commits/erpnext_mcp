@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 987 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 990 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 481 read tools are **on** by default and can be switched off individually. A
+All 482 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,16 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.218.0 — device keys (phase 1, off by default)
+
+| Tool | What it does |
+| --- | --- |
+| `issue_enrollment_link` | A single-use, short-lived pickup link and QR for one account's new phone. Write |
+| `list_access_inventory` | Every phone: key-bound or legacy, how approved, last seen. Read |
+| `report_lost_device` | Revoke a lost phone, end its tokens, alert. Write |
+
+Contract: `docs/design/device_client_enrollment.md`.
 
 ## v0.217.0 — security status
 
