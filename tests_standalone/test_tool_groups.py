@@ -47,6 +47,7 @@ NON_TOOL_FIELDS = (
 	"farm_ops_mobile_enabled",
 	"mobile_grant_idle_days",
 	"drift_report_email",
+	"security_alert_email",
 	"trade_document_enforcement",
 	"enable_kpi_history_sweep",
 	"allow_reconciliation_packet",

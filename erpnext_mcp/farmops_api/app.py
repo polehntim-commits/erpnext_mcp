@@ -86,7 +86,7 @@ import frappe
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.wrappers import Request, Response
 
-from .. import audit, device_enrollment, security, settings, slope_aspect, slope_grade
+from .. import audit, device_enrollment, security, security_alerts, slope_aspect, slope_grade
 from ..api import fallback_auth, guard
 from ..errors import ToolError
 from ..tools import employee as personnel
@@ -352,15 +352,11 @@ def _raise_auth_alert(ip: str, failures: int, path: str) -> None:
 			listener(dict(payload))
 		except Exception:
 			logger.error("farmops-api auth alert hook %r failed\n%s", listener, traceback.format_exc())
+	# v0.216.1: Security Alert Recipients (empty → the System Managers). Until
+	# then this read the drift report's field, emailed nobody when it was empty
+	# and sent a comma-separated list as one address.
 	try:
-		to = settings.drift_report_email()
-		if to:
-			frappe.sendmail(
-				recipients=[to],
-				subject="Farm Ops: repeated failed sign-ins",
-				message=summary,
-				now=False,
-			)
+		if security_alerts.send("Farm Ops: repeated failed sign-ins", summary):
 			frappe.db.commit()
 	except Exception:  # pragma: no cover - mail is best effort
 		logger.error("farmops-api auth alert: mail failed\n%s", traceback.format_exc())

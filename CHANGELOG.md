@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.216.1 — 2026-10-02 — Security Alert Recipients
+
+Patch on 0.216.0. **983 tools**, **167 mobile methods** — unchanged. Deploy
+`docs/deploy/v0.216.1_security_alert_recipients.md`.
+
+- **New field on ERPNext MCP Settings: Security Alert Recipients** (`security_alert_email`).
+  Comma- or semicolon-separated; empty → every enabled System Manager (not Administrator).
+- **The failed-sign-in alert uses it.** In 0.216.0 it read Drift Report Recipients, emailed
+  nobody when that was empty, and sent a comma-separated list as one address. The audit row and
+  the `farmops_auth_alert` hook are unchanged; with no mail account the message lands in the Error Log.
+- **The drift report is unchanged** and still reads only Drift Report Recipients.
+
 ## 0.216.0 — 2026-10-02 — Farm Ops over /farmops/api only
 
 **983 tools**, **167 mobile methods** — both unchanged. Contract `docs/design/farmops_only_funnel.md`;

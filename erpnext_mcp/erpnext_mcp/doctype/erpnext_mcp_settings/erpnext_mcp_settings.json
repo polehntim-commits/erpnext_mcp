@@ -24,6 +24,7 @@
   "farm_ops_mobile_enabled",
   "mobile_grant_idle_days",
   "drift_report_email",
+  "security_alert_email",
   "attribution_section",
   "require_user_context",
   "mcp_system_user",
@@ -1331,6 +1332,13 @@
    "fieldname": "drift_report_email",
    "fieldtype": "Data",
    "label": "Drift Report Recipients",
+   "options": "Email"
+  },
+  {
+   "description": "Who is emailed about security events — today, repeated failed Farm Ops sign-ins from one address (at most once an hour per address). Comma- or semicolon-separated; leave empty and it goes to every enabled System Manager on the site. Separate from Drift Report Recipients, which is about the ledger. The same events are always written to MCP Action Log, whether or not mail is configured.",
+   "fieldname": "security_alert_email",
+   "fieldtype": "Data",
+   "label": "Security Alert Recipients",
    "options": "Email"
   },
   {

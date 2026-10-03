@@ -200,6 +200,17 @@ def drift_report_email() -> str:
 	return str(_value("drift_report_email") or "").strip()
 
 
+def security_alert_email() -> str:
+	"""Who is emailed about security events. v0.216.1. May be empty.
+
+	Empty falls back to the enabled System Managers — `security_alerts.recipients`
+	— for the reason `drift_report_email` does: they are the people able to act.
+	A separate field from the drift report because the two go to different
+	people on a real farm: the bookkeeper wants the ledger, not the sign-ins.
+	"""
+	return str(_value("security_alert_email") or "").strip()
+
+
 def kpi_history_sweep_enabled() -> bool:
 	"""Whether the overnight Financial KPI History sweep runs at all. v0.19.6.
 

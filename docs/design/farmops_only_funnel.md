@@ -181,7 +181,8 @@ Action Log (status Blocked) and the alert hook, at most once an hour per address
 
 - every method named in the Frappe hook `farmops_auth_alert` is called with
   `{ip, failures, window_seconds, path, at}`;
-- if `drift_report_email` is set on ERPNext MCP Settings, one email goes there.
+- one email to **Security Alert Recipients** (`security_alert_email`; empty → the enabled System
+  Managers). v0.216.1 — in v0.216.0 this read `drift_report_email`.
 
 ## H5. Revocation
 
