@@ -200,6 +200,15 @@ def drift_report_email() -> str:
 	return str(_value("drift_report_email") or "").strip()
 
 
+def pdf_base_url() -> str:
+	"""Where wkhtmltopdf fetches print assets from. v0.216.1. "" = detect; "off" = Frappe's own.
+
+	See `pdf_base.py`. An address the ERPNext container itself serves, never the
+	public one: `http://127.0.0.1:8080` in the fafo-erpnext image.
+	"""
+	return str(_value("pdf_base_url") or "").strip()
+
+
 def security_alert_email() -> str:
 	"""Who is emailed about security events. v0.216.1. May be empty.
 

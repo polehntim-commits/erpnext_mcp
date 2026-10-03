@@ -7,7 +7,6 @@ its own field, with the drift report's fallback, and the drift report is
 untouched.
 """
 
-
 from erpnext_mcp import drift, security_alerts
 from erpnext_mcp.farmops_api import app as sidecar_app
 

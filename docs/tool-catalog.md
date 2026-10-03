@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 983 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 984 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 478 read tools are **on** by default and can be switched off individually. A
+All 479 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -20846,6 +20846,15 @@ print agent: `download_card_pdf`, print, then `mark_card_print_job`.
 takes `latitude`, `longitude`, `location_accuracy_m` or `location_point`. `get_stock_ledger` rows
 carry `item_name`; `list_items` search matches the code too. `get_training_curriculum` rows carry
 `attachment_count`.
+
+## v0.216.1 — Security Alert Recipients; PDFs inside the container
+
+| Tool | What it does |
+| --- | --- |
+| `test_pdf_rendering` | Render a test PDF (and optionally one document's print) the way the Desk and Email Queue do; report ok, pages, time, wkhtmltopdf's error and what it means. Read |
+
+`get_server_status` gains `pdf` (the PDF-only asset base URL) and `email` (outgoing accounts and
+their sender policy). Contract: `docs/design/pdf_base_and_mail.md`.
 
 ## v0.216.0 — Farm Ops over /farmops/api only
 

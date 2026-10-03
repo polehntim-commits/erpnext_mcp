@@ -129,6 +129,7 @@ from .tools import (
 	payroll,
 	payroll_deductions,
 	payroll_gl,
+	pdf_check,
 	printing,
 	purchasing,
 	push,
@@ -27943,6 +27944,24 @@ TOOLS = {
 		},
 		title="Backup status",
 	),
+	"test_pdf_rendering": _tool(
+		pdf_check.test_pdf_rendering,
+		"v0.216.1. DOES PRINT → PDF WORK ON THIS SITE? Renders a one-page test PDF through "
+		"frappe.utils.pdf.get_pdf — the function behind Print → PDF in the Desk, "
+		"download_multi_pdf and every email with a print attached — with a stylesheet linked the "
+		"way a real print links it, and reports ok, pages, milliseconds, the wkhtmltopdf version "
+		"and, on failure, wkhtmltopdf's error and what it means (HostNotFoundError = a print "
+		"asset URL names a host the container cannot resolve). With `doctype` and `name` it also "
+		"renders that document's real print (print permission required). Also reports the "
+		"PDF-only asset base URL in use and whether the container's own web server answers on it. "
+		"Read-only: nothing is saved, attached or sent.",
+		{
+			"doctype": _field(_STRING, "Optional. A document to print, e.g. 'Employee'."),
+			"name": _field(_STRING, "Optional, with doctype. The document's name."),
+			"print_format": _field(_STRING, "Optional. A Print Format; default the doctype's own."),
+		},
+		title="Test PDF rendering",
+	),
 	"create_backup_record": _tool(
 		itgc.create_backup_record,
 		"MUTATING (default OFF). Record that a backup ran: what kind, when, where it "
@@ -28880,7 +28899,11 @@ TOOLS = {
 		"`erpnext_funnel` (v0.216.0): the address phones are given, whether the "
 		"legacy /erpnext path is still allowed, each enrolled phone's app version "
 		"and which base it reports using, and `ready_to_close_erpnext_funnel` "
-		"with the reasons when it is false.",
+		"with the reasons when it is false.\n\n"
+		"`pdf` (v0.216.1): the PDF-only asset base URL wkhtmltopdf fetches from and where it came "
+		"from (setting / auto / off / none) — test_pdf_rendering renders. `email`: every enabled "
+		"outgoing Email Account, whether it always sends as the account address, and a warning "
+		"when it does not (Zoho refuses any other sender).",
 		{},
 		title="Get server status",
 	),

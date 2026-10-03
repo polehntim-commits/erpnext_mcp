@@ -3,10 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
-## 0.216.1 — 2026-10-02 — Security Alert Recipients
+## 0.216.1 — 2026-10-02 — Security Alert Recipients; PDFs inside the container
 
-Patch on 0.216.0. **983 tools**, **167 mobile methods** — unchanged. Deploy
+Patch on 0.216.0. **984 tools** (479 read, 505 write): + `test_pdf_rendering`. **167 mobile
+methods** — unchanged. Contract `docs/design/pdf_base_and_mail.md`. Deploy
 `docs/deploy/v0.216.1_security_alert_recipients.md`.
+
+- **PDFs: HostNotFoundError in Email Queue, blank Desk PDFs — fixed.** `get_pdf` made every print
+  asset URL absolute on the site's PUBLIC address (`host_name`, or the browser's host), and
+  wkhtmltopdf, running inside the container, could not reach it. A **PDF-only asset base URL**
+  (`pdf_base_url`; empty = detect the container's own nginx on 127.0.0.1:8080; `off` = Frappe's own)
+  is now used for PDFs only: resources are fetched from it, links in the PDF keep the public
+  address, and `host_name` and every emailed link are unchanged. Installed via `before_request` /
+  `before_job`, so Desk prints, downloads, `download_multi_pdf` and Email Queue attachments all
+  get it. Unreachable external images are left out instead of failing the PDF.
+- **`test_pdf_rendering`** (read, on by default): renders a test page — and optionally one
+  document's print — through `get_pdf`, and reports ok/pages/time or wkhtmltopdf's error with a
+  diagnosis. `get_server_status` gains `pdf` and `email`.
+- **Outgoing mail sender.** `get_server_status.email` lists outgoing Email Accounts and warns when
+  "Always use this email address as sender" is off. Patch `zoho_accounts_send_as_account` ticks it
+  on Zoho accounts (Zoho refuses any other From:).
 
 - **New field on ERPNext MCP Settings: Security Alert Recipients** (`security_alert_email`).
   Comma- or semicolon-separated; empty → every enabled System Manager (not Administrator).

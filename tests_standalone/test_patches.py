@@ -60,6 +60,7 @@ from erpnext_mcp.patches import (
 	widen_i9_attestation_filters,
 	widen_pesticide_field_visibility,
 	wizards_to_config_versions,
+	zoho_accounts_send_as_account,
 )
 from erpnext_mcp.tools import company
 
@@ -113,6 +114,8 @@ PATCHES = (
 	("erpnext_mcp.patches.legacy_badge_prints_use_cr80", legacy_badge_prints_use_cr80),
 	# v0.214.0. Pinned in `test_asset_moves.WhatIsFixed`.
 	("erpnext_mcp.patches.flag_fixed_asset_types", flag_fixed_asset_types),
+	# v0.216.1. Pinned in `test_pdf_and_mail.ZohoSendsAsTheAccount`.
+	("erpnext_mcp.patches.zoho_accounts_send_as_account", zoho_accounts_send_as_account),
 )
 
 

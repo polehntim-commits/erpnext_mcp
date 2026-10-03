@@ -29,6 +29,15 @@ it acts on `/api/method/erpnext_mcp.api.*` and nothing else, it never overrides
 an identity Frappe already established, it grants no permission of any kind, and
 it cannot raise. See the note above the declaration, and `api/fallback_auth.py`.
 
+v0.216.1 IS THE THIRD EXCEPTION, AND THE FIRST THAT CHANGES FRAPPE'S OWN
+BEHAVIOUR. `before_request` / `before_job` install `pdf_base`, which replaces
+two functions inside `frappe.utils.pdf` (`scrub_urls`, `get_cookie_options`)
+so that wkhtmltopdf fetches a print's assets from an address the container
+itself serves. Without it every emailed print and many Desk PDFs fail on this
+image (HostNotFoundError). It touches PDF rendering and nothing else, leaves
+`host_name` and every emailed link alone, and `pdf_base_url = off` on ERPNext
+MCP Settings puts Frappe's own behaviour back without a deploy.
+
 THERE ARE EXACTLY SEVEN SCHEDULED JOBS, and the count is in this docstring
 because it is a number somebody should have to change on purpose. Every one of
 them runs on somebody's site with nobody watching, so each has had to clear the
@@ -600,3 +609,13 @@ doctype_js = {
 #: and `validate_auth_via_hooks` iterates. Same `frappe.get_attr` rule as every
 #: other path in this file: no colon, no name prefix.
 auth_hooks = ["erpnext_mcp.api.fallback_auth.authenticate"]
+
+#: v0.216.1. A PDF-ONLY base URL for wkhtmltopdf, so print stylesheets and
+#: images are fetched from an address the container itself serves instead of
+#: the public `host_name` (HostNotFoundError in Email Queue; blank Desk PDFs).
+#: Installed in the web workers and in the queue workers that send Email Queue;
+#: `pdf_base.install` is idempotent and costs one boolean check after the first
+#: call. It replaces two names inside `frappe.utils.pdf` only — `get_url()`
+#: and every link the site emails are untouched. See `pdf_base.py`.
+before_request = ["erpnext_mcp.pdf_base.install"]
+before_job = ["erpnext_mcp.pdf_base.install"]

@@ -101,7 +101,7 @@ import sys
 
 import frappe
 
-from .. import __version__, compat, funnel_readiness
+from .. import __version__, compat, funnel_readiness, mail_status, pdf_base
 from ..args import as_int, as_limit, as_str
 from ..errors import ToolError
 from ..farmops_api import app as sidecar_app
@@ -210,6 +210,9 @@ def get_server_status(args: dict) -> ToolResult:
 		"last_patch_applied": patch,
 		# v0.216.0 — docs/design/farmops_only_funnel.md §4.
 		"erpnext_funnel": funnel_readiness.status(),
+		# v0.216.1. Configuration only — test_pdf_rendering is what renders.
+		"pdf": pdf_base.status(),
+		"email": mail_status.status(),
 		"notes": [
 			"worker_uptime_seconds IS THIS PROCESS, NOT THE BENCH. A Frappe bench runs "
 			"several workers and this call was answered by one of them, so two consecutive "

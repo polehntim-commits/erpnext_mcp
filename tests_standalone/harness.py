@@ -682,6 +682,18 @@ ERPNEXT_SCHEMA = {
 		"creation",
 		"modified",
 	],
+	# v0.216.1. Frappe's own outgoing-mail account. `mail_status` reads these
+	# through `compat.existing_fields`, and the Zoho patch writes the first.
+	"Email Account": [
+		"name",
+		"email_account_name",
+		"email_id",
+		"smtp_server",
+		"enable_outgoing",
+		"default_outgoing",
+		"always_use_account_email_id_as_sender",
+		"always_use_account_name_as_sender_name",
+	],
 	"Comment": [
 		"name",
 		"comment_type",

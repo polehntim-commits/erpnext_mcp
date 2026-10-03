@@ -94,6 +94,9 @@ KNOWN_HOOKS = {
 	"permission_query_conditions": "path_dict",
 	"has_permission": "path_dict",
 	"auth_hooks": "path_list",
+	# v0.216.1. Both install `pdf_base` (a PDF-only asset base URL) and nothing else.
+	"before_request": "path_list",
+	"before_job": "path_list",
 	"doctype_js": "asset_map",
 }
 
