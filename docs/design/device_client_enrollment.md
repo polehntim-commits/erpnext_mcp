@@ -231,6 +231,22 @@ request for their own account.
 The approval is recorded on the device row: `approved_by`, `approved_at`,
 `approval_method = "phone_approval"`, the approver's device.
 
+**Build notes (v0.219.0, frozen with the code):**
+
+- **Where the new phone learns the farm's address.** It has no card. A signed-in phone shows a
+  **Join** QR, `farmops-join:<https://host>` — an address, nothing secret — or the person types the
+  host. Only then does the new phone make its request.
+- **Approving needs a key-bound approver.** `approve_access_request` and `deny_access_request` refuse
+  a caller that did not authenticate with device keys: the approval is the manager's unlock-key
+  (Face ID) signature. The Desk fallback is a System Manager logged into the Desk
+  (`erpnext_mcp.api.access.decide`). There is **no MCP tool** that approves a device: an AI client
+  must not be able to let a phone in.
+- **Who can be chosen.** `list_approvable_people`: the active mobile accounts the approver may approve
+  for (§6.1), never the approver's own.
+- **The person must already have a Mobile Access Grant** (made by `create_mobile_user` or onboarding).
+  Approval adds a device to it; it creates no account.
+- Codes are stored hashed; a request is single use; status answers only to the requesting proof key.
+
 ### 6.3 MCP clients — OAuth 2.1
 
 Per the MCP authorization spec (2025-11-25) and what Claude clients support (Claude Code and
