@@ -86,3 +86,68 @@ class ASprayResendIsTheSameSpray(MobileAPITestCase):
 			answer = mobile_api.record_spray_application(blocks=["X"], client_request_id="spray-req-1")
 		self.assertEqual(answer, {"application": "SPRAY-1", "replayed": True})
 		self.assertEqual(seen.call_args.args[0], "record_spray_application")
+
+
+class OfflineResendsAreTheSameWrite(MobileAPITestCase):
+	"""v0.231.1. An asset report or a shift start resent after a lost reply filed a
+	second task / opened a second shift. Both now answer with the first."""
+
+	def _replays(self, route, keyed_as=None, **kwargs):
+		from unittest import mock
+
+		from erpnext_mcp import request_receipts
+
+		self.be()
+		with mock.patch.object(request_receipts, "earlier", return_value={"name": "FIRST"}) as seen:
+			answer = getattr(mobile_api, route)(client_request_id=f"{route}-1", **kwargs)
+		self.assertEqual(answer, {"name": "FIRST", "replayed": True})
+		self.assertEqual(seen.call_args.args[0], keyed_as or route)
+
+	def test_an_asset_report_resend_is_the_first_report(self):
+		# Shares report_field_task's receipts: the phone's queued retry of a live
+		# asset report goes there.
+		self._replays("report_asset_issue", keyed_as="report_field_task",
+		              asset_name="TC-TRAKHOE-1", description="hydraulic leak")
+
+	def test_a_shift_start_resend_is_the_first_shift(self):
+		self._replays("start_shift", location="Home-7", start_datetime="2026-10-04 06:01:12")
+
+
+class AShiftStartsWhenThePhoneOpenedIt(MobileAPITestCase):
+	"""v0.231.1. The phone's start stands inside the offline window; outside it, or
+	ahead of the server, the server's time is used and the answer says so."""
+
+	def _start(self, start_datetime):
+		from unittest import mock
+
+		from erpnext_mcp.tools import shifts
+
+		self.be()
+		seen = {}
+
+		class Result:
+			data = {"name": "SHIFT-1"}
+
+		def fake(inner):
+			seen.update(inner)
+			return Result()
+
+		with mock.patch.object(shifts, "start_shift", side_effect=fake), \
+			mock.patch("frappe.utils.now", return_value="2026-10-04 14:40:00"):
+			answer = mobile_api.start_shift(location="Home-7", start_datetime=start_datetime)
+		return seen, answer
+
+	def test_a_start_inside_the_window_is_the_phones(self):
+		seen, answer = self._start("2026-10-04 06:02:00")
+		self.assertEqual(seen["start_datetime"], "2026-10-04 06:02:00")
+		self.assertNotIn("start_time_note", answer)
+
+	def test_a_start_older_than_the_window_uses_the_servers_time(self):
+		seen, answer = self._start("2026-10-01 06:02:00")
+		self.assertNotIn("start_datetime", seen)
+		self.assertIn("offline window", answer["start_time_note"])
+
+	def test_a_phone_clock_ahead_uses_the_servers_time(self):
+		seen, answer = self._start("2026-10-04 18:00:00")
+		self.assertNotIn("start_datetime", seen)
+		self.assertIn("phone clock may be wrong", answer["start_time_note"])

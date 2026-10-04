@@ -121,6 +121,9 @@ def build(companies, with_badges: bool = False) -> dict:
 			"tags": [t for t in [str(row.get("tag_uuid") or "").lower()] if t]
 			+ [a.lower() for a in _aliases(row.get("tag_aliases"))],
 			"retired": bool(row.get("retired_at")),
+			# v0.231.1. The phone routes a tag by type (a valve opens the valve screen);
+			# without it an offline valve scan opened as a generic asset card.
+			"asset_type": row.get("asset_type") or "",
 			"pending_tasks": pending,
 			"overdue_task_count": sum(1 for t in pending if t.get("overdue")),
 		}

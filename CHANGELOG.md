@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.231.1 — 2026-10-04 — offline: a late shift start is the tap; report resends are one task; offline valve scans
+
+No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.1_offline.md`. App 0.38.1.
+
+- **`start_shift` (phone) uses the phone's `start_datetime` inside the offline window.** A crew clock opened with no
+  signal started the shift when the phone found Wi-Fi. The same test as a punch (`punch_times.judge`): a start
+  older than `offline_punch_window_hours`, or a phone clock running ahead, uses the server's time and the answer
+  carries `start_time_note`. Also idempotent on `client_request_id` (the app sends `shift-<id>`).
+- **`report_asset_issue` is idempotent on `client_request_id`, keyed with `report_field_task`.** The app files an
+  asset issue live there and its queued retry goes to `report_field_task`; one request ID is now one task across
+  both.
+- **The offline scan pack carries `asset_type`.** A valve tag scanned with no signal opened as a generic asset
+  card; app 0.38.1 routes it to the valve screen.
+
 ## 0.231.0 — 2026-10-04 — business card → Contact (AFB-2026-00031)
 
 **Migrate needed** (six Contact custom fields, two settings switches). Two new MCP tools, both off. Deploy

@@ -166,3 +166,6 @@ class TheScanPack(FieldRecordCase):
 		self.assertEqual([t["name"] for t in by_name[self.unit]["pending_tasks"]], [task])
 		self.assertIn("4 beds", by_name[self.unit]["subtitle"])
 		self.assertTrue(pack["generated_at"])
+		# v0.231.1: the type rides along so an offline valve scan opens the valve screen.
+		self.assertEqual(by_name["MC-Pump-01"]["asset_type"], "General")
+		self.assertEqual(by_name[self.unit]["asset_type"], "")

@@ -2263,6 +2263,10 @@ def get_available_actions(user: str, asset_name=None) -> dict:
 # ── 16. report_asset_issue ──────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("report_asset_issue", mutating=True, limit=guard.WRITE_LIMIT)
+# Keyed as `report_field_task` ON PURPOSE: the phone files an asset issue live
+# here, but its queued retry goes to `report_field_task` with `asset` — one
+# request ID across both routes is one task.
+@request_receipts.idempotent("report_field_task")
 def report_asset_issue(
 	user: str,
 	asset_name=None,
@@ -2273,9 +2277,14 @@ def report_asset_issue(
 	skill_required=None,
 	gps_lat=None,
 	gps_lon=None,
+	client_request_id=None,
 ) -> dict:
 	"""Report a problem on a specific asset. Convenience wrapper that auto-fills
-	location and skill from the asset, then creates a Farm Task."""
+	location and skill from the asset, then creates a Farm Task.
+
+	v0.231.1. `client_request_id`: a resend after a lost reply (the report was filed,
+	the answer never reached the phone) gets the first answer, not a second task —
+	whether the resend comes here or, from the phone's queue, to `report_field_task`."""
 	allowed = guard.require_scope(user)
 	employee = _employee(user)
 
@@ -3399,6 +3408,7 @@ def sync_bucket_entries(user: str, entries=None, company=None, shift=None) -> di
 # ── 29. start_shift ─────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("start_shift", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("start_shift")
 def start_shift(
 	user: str,
 	company=None,
@@ -3409,6 +3419,7 @@ def start_shift(
 	crew_employees=None,
 	latitude=None,
 	longitude=None,
+	client_request_id=None,
 ) -> dict:
 	"""Open a shift: a crew, a place, and the exposure period compliance is read against.
 
@@ -3440,7 +3451,6 @@ def start_shift(
 	for key, value in (
 		("location", location),
 		("shift_type", shift_type),
-		("start_datetime", start_datetime),
 	):
 		if value is not None:
 			inner[key] = value
@@ -3448,8 +3458,25 @@ def start_shift(
 	if gps:
 		inner["farm_location_gps"] = gps
 
+	# v0.231.1. THE PHONE'S START STANDS INSIDE THE OFFLINE WINDOW. App 0.38.1 sends
+	# the moment the crew clock opened, so a shift opened with no signal starts when
+	# it did, not when the phone found Wi-Fi. The same test as a punch
+	# (`punch_times.judge`): a phone clock running ahead, or a start older than the
+	# window, uses the server's time and says so — a shift has no review row.
+	from .. import punch_times
+
+	time_note = ""
+	tapped = punch_times.device_time(start_datetime)
+	if tapped:
+		time_note = punch_times.judge(tapped, frappe.utils.now())
+		if not time_note:
+			inner["start_datetime"] = tapped
+
 	result = shifts.start_shift(inner)
-	return result.data
+	data = result.data
+	if time_note and isinstance(data, dict):
+		data = {**data, "start_time_note": f"{time_note} The shift starts at the server's time."}
+	return data
 
 
 # ── 30. add_worker_to_shift ─────────────────────────────────────────────────
