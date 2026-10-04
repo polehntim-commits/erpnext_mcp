@@ -1,7 +1,13 @@
 # One-time upload links
 
-**Status: PROPOSED (2026-10-03). Not approved; nothing built.** Queued after the training quiz. This doc is also
+**Status: PROPOSED (2026-10-03). Not approved; nothing built.** Queued 6th (2026-10-04 order): first build after notes approval. This doc is also
 the threat model the security review asks for.
+
+**At a glance**
+
+- **Effort:** S — one server release (phone use in a later app release).
+- **Risks:** It opens one route past the 4 MB body check — only after a single-use token is verified; streams to disk with caps and magic-byte checks; threat model in §7.
+- **Open questions for Tim:** Video cap 2 GB? Public files need an extra admin switch? Test multi-GB uploads over Funnel on umbrel.local first. Unblocks the 5.2 MB OML Operating Agreement (Governance Document 1vtr8fpkbb), SOP PDFs and training videos.
 
 ## 1. Why
 

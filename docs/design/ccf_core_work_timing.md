@@ -5,6 +5,12 @@ keep the Configurable Compliance Framework as the core; grow it with data, not c
 contract to approve before any code. Companion: `config_lifecycle_and_tool_consolidation.md` (how rules are
 staged, previewed and published). Decisions for Tim are collected in `open_decisions_2026_10.md`.
 
+**At a glance**
+
+- **Effort:** L — one server release for the core evaluator + providers, then mostly rules and phone screens per feature.
+- **Risks:** A rule bug can wrongly Hold (or wrongly Go) real work — mitigated by shadow mode and a regression test that the 14 existing rules alert identically; forecast skill drops past ~7 days, so the 14-day strict variant is advisory; the 48 h dry-since figure is local judgment, not published.
+- **Open questions for Tim:** Default pruning-window values OK as written? Enforced or Advisory at launch? Who may override a Hold (supervisor only?) — see open_decisions_2026_10.md.
+
 ## 0. The boundary
 
 **Data only** (through the existing MCP rule tools, no release): new rules, thresholds, windows, schedules,

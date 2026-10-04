@@ -4,6 +4,12 @@
 earlier note's v0.230.0 / 0.37.0 went to durable task photos). Quiz content comes from Tim's separate document.
 Updated for the shared config lifecycle and the CCF core.
 
+**At a glance**
+
+- **Effort:** M — one server release + one app release.
+- **Risks:** % watched is approximate (the player can't tell if anyone was looking) — labelled as such; YouTube can't be cached offline; an over-strict video minimum could block training — off by default.
+- **Open questions for Tim:** One Training Evidence doctype? Shuffle answers? Require videos before the quiz (recommend no)? Sign-off on phone, Desk or both? Spanish video URL per entry?.
+
 ## 1. What the app does today
 
 `get_training_curriculum` returns `video_url`; the app only shows a **"Has a film"** label and counts the course

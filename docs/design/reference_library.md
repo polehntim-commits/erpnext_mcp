@@ -5,6 +5,12 @@ Tim's decisions: (1) OCR Mac-side with Apple Vision — text PDFs are indexed on
 show **OCR pending** until the Mac job posts their text; (2) tag values editable in settings; (3) build before
 SOP approval.
 
+**At a glance**
+
+- **Effort:** M — one server release, a small Mac OCR job, one app release.
+- **Risks:** Copyright: PDFs stay private on the farm server and are cited, not republished; scanned PDFs are unsearchable until the Mac OCR job runs.
+- **Open questions for Tim:** Decided: Mac-side Apple Vision OCR, tag values editable in settings, built before SOP approval. Open: first load from ~/Documents/Farm-Training/Cherry-Pruning/ (folder not created yet).
+
 ## 1. Purpose
 
 A searchable library of PDFs — OSU/WSU extension guides, research papers, labels, manuals, regulations,

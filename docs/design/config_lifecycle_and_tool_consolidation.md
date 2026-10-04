@@ -5,6 +5,12 @@ feature behaves the same way — staged → previewed → published → rollback
 human publishes, preview on real data — and the tool surface shrinks. Built in step 1 of the queue, with the
 CCF core (`ccf_core_work_timing.md`), after the current offline work.
 
+**At a glance**
+
+- **Effort:** L — one patch copies existing versions into Farm Config Version; generic tools land beside the old ones before any are removed.
+- **Risks:** Moving Compliance Rule / Inspection Template / Extraction Config history must not change what the sweep or phones serve (regression test asserts identical results); removing tools can break saved MCP prompts — old names stay as deprecated aliases for a release first.
+- **Open questions for Tim:** Approve the replacement map and the switch trim; payroll settings preview by rerunning a recent payroll — which run is the reference? (Payroll transactions stay out of scope.).
+
 ## 1. The shared mechanism already exists
 
 `Farm Config Version` (`phone_config.py`, v0.207.0) holds every version of every Wizard, Tile and Label

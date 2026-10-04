@@ -3,6 +3,12 @@
 **Status: PROPOSED (2026-10-03). Not approved; nothing built.** Queued after the Reference Library (SOPs cite
 references from day one). Built on the CCF core and the shared config lifecycle.
 
+**At a glance**
+
+- **Effort:** M — one server release + one app release.
+- **Risks:** An SOP gate can stop real tasks starting if a version is left In Review — the gate is a CCF rule, so it can run Advisory first.
+- **Open questions for Tim:** Tim as sole approver to start (configurable later)? Acknowledge tap required or optional for workers?.
+
 ## 1. What exists today (reused)
 
 - **Compliance Policy**: `policy_name`, `category` (Spray SOP, Worker Safety, Equipment Sanitation, …),
