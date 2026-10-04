@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.229.0 — 2026-10-03 — ending a shift, running a class and reporting a problem with no signal
+
+No migrate. Contract `docs/design/offline_mill_creek.md` §5–6, §8. Deploy
+`docs/deploy/v0.229.0_end_of_day_offline.md`. App 0.36.0.
+
+- **Same request, same result** (`request_receipts`): `client_request_id` on `end_shift`, `clock_out_worker`,
+  `add_session_attendee`, `sign_session_attendance`, `complete_training_session` and `report_field_task`. A
+  resend answers with the first answer (`replayed: true`) and writes nothing; the receipt is an MCP Action Log
+  row written in the request's own transaction, so a rolled-back write leaves none.
+- `get_offline_scan_pack` adds `badges` (badge → person) for the shift roles, so the crew clock and the class
+  door name who they scanned with no signal.
+
 ## 0.228.0 — 2026-10-03 — the doorway walk and detector test; scanning with no signal
 
 **188 mobile methods**: + `create_housing_inspection`, `create_detector_test`, `get_offline_scan_pack`.

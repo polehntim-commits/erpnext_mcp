@@ -37,7 +37,43 @@ def _aliases(value) -> list:
 	return [line.strip() for line in str(value or "").replace(",", "\n").splitlines() if line.strip()]
 
 
-def build(companies) -> dict:
+BADGE_MAP = "Bucket Log Badge Map"
+
+
+def badges(companies) -> list:
+	"""v0.229.0. Active badge → person, for a crew lead's phone with no signal (the
+	crew clock and the class door name who they scanned). Only for callers who hold
+	a shift role — the same people `resolve_badge` answers."""
+	if not compat.doctype_exists(BADGE_MAP):
+		return []
+	filters = {"active": 1}
+	if companies and compat.has_field(BADGE_MAP, "company"):
+		filters["company"] = ("in", list(companies))
+	rows = frappe.db.get_all(
+		BADGE_MAP,
+		filters=filters,
+		fields=compat.existing_fields(BADGE_MAP, ("badge_id", "employee", "company")),
+		limit=CAP,
+	)
+	out = []
+	for row in rows or []:
+		employee = str(row.get("employee") or "")
+		if not employee or not row.get("badge_id"):
+			continue
+		info = frappe.db.get_value("Employee", employee, ["employee_name", "designation"], as_dict=True) or {}
+		out.append(
+			{
+				"badge_id": row["badge_id"],
+				"employee": employee,
+				"employee_name": info.get("employee_name") or employee,
+				"designation": info.get("designation"),
+				"company": row.get("company"),
+			}
+		)
+	return out
+
+
+def build(companies, with_badges: bool = False) -> dict:
 	companies = list(companies or [])
 	asset_filters = {"company": ("in", companies)} if companies else {}
 	assets = _rows(
@@ -104,6 +140,7 @@ def build(companies) -> dict:
 		for r in units
 	]
 	return {
+		"badges": badges(companies) if with_badges else [],
 		"generated_at": str(frappe.utils.now())[:19],
 		"entities": entities,
 		"count": len(entities),

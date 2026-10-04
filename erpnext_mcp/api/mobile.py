@@ -107,6 +107,7 @@ from .. import (
 	offline_create,
 	overlays,
 	pay_stub_pdf,
+	request_receipts,
 	slope_aspect,
 	slope_grade,
 	timezones,
@@ -1585,6 +1586,7 @@ def reject_task(user: str, task=None, task_assignment=None, reason=None) -> dict
 # ── 10. report_field_task ───────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("report_field_task", limit=guard.WRITE_LIMIT, mutating=True)
+@request_receipts.idempotent("report_field_task")
 def report_field_task(
 	user: str,
 	location_doctype=None,
@@ -1599,6 +1601,7 @@ def report_field_task(
 	affected_block=None,
 	observed_at=None,
 	estimated_duration_minutes=None,
+	client_request_id=None,
 ) -> dict:
 	"""A worker in the field flags a problem on the spot.
 
@@ -3479,6 +3482,7 @@ def add_worker_to_shift(user: str, shift=None, employee=None, role=None, joined_
 # ── 31. end_shift ───────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("end_shift", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("end_shift")
 def end_shift(
 	user: str,
 	shift=None,
@@ -3487,6 +3491,7 @@ def end_shift(
 	supervisor_signature_file_token=None,
 	reviewed_on=None,
 	foreman_notes=None,
+	client_request_id=None,
 ) -> dict:
 	"""Close a shift with the supervisor's signature, and write the crew's payroll rows.
 
@@ -5612,7 +5617,10 @@ def get_break_schedule(user: str, shift=None, farm_shift=None, planned_hours=Non
 # ── 42. clock_out_worker ──────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("clock_out_worker", mutating=True, limit=guard.WRITE_LIMIT)
-def clock_out_worker(user: str, shift=None, employee=None, left_at=None, notes=None) -> dict:
+@request_receipts.idempotent("clock_out_worker")
+def clock_out_worker(
+	user: str, shift=None, employee=None, left_at=None, notes=None, client_request_id=None
+) -> dict:
 	"""End one worker's time on a shift that continues without them.
 
 	Named `clock_out_worker` on this surface rather than `remove_worker_from_shift`,
@@ -14234,6 +14242,7 @@ def create_training_session(
 # ── 127. add_session_attendee ────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("add_session_attendee", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("add_session_attendee")
 def add_session_attendee(
 	user: str,
 	session=None,
@@ -14245,6 +14254,7 @@ def add_session_attendee(
 	scanned_at=None,
 	attended=None,
 	notes=None,
+	client_request_id=None,
 ) -> dict:
 	"""Scan somebody in at the shed door.
 
@@ -14278,6 +14288,7 @@ def add_session_attendee(
 # ── 128. sign_session_attendance ─────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("sign_session_attendance", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("sign_session_attendance")
 def sign_session_attendance(
 	user: str,
 	session=None,
@@ -14291,6 +14302,7 @@ def sign_session_attendance(
 	device_id=None,
 	gps_latitude=None,
 	gps_longitude=None,
+	client_request_id=None,
 ) -> dict:
 	"""Take a worker's signature on the pad they are holding.
 
@@ -14332,6 +14344,7 @@ def sign_session_attendance(
 # ── 129. complete_training_session ───────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("complete_training_session", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("complete_training_session")
 def complete_training_session(
 	user: str,
 	session=None,
@@ -14340,6 +14353,7 @@ def complete_training_session(
 	expires_date=None,
 	skip_incomplete=None,
 	completed_at=None,
+	client_request_id=None,
 ) -> dict:
 	"""Turn the sheet into training records, standing where the sheet was filled in.
 
@@ -24310,4 +24324,8 @@ def get_offline_scan_pack(user: str) -> dict:
 	from .. import offline_scan_pack
 
 	allowed = guard.require_scope(user)
-	return offline_scan_pack.build(allowed)
+	# v0.229.0. The badge list only for the shift roles (crew clock, class door).
+	from ..tools import employee as employee_tool
+
+	shift_roles = set(employee_tool.SHIFT_ROLES) | set(guard.DISPATCH_ROLES)
+	return offline_scan_pack.build(allowed, with_badges=bool(guard.roles_held(user) & shift_roles))
