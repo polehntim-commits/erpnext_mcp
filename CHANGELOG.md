@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.230.5 — 2026-10-04 — slope limits and service defaults are data on Asset Type
+
+**Migrate needed** (four columns on Farm Asset Type, one fetched flag on Asset Register, one patch). No new tools,
+no settings. Deploy `docs/deploy/v0.230.5_asset_type_defaults.md`.
+
+- **"Has a slope limit" is a field, not a list.** `max_safe_slope_degrees` was allowed only on Tractor, Vehicle,
+  Sprayer and Implement (`slope_grade.TYPE_DEFAULTS`). Farm Asset Type now carries `has_slope_limit` and
+  `default_max_safe_slope_degrees`; the patch writes today's answer on those four (15° / 20° / 12° / 15°), and the
+  Asset Register form shows the field from the type's (fetched) flag. A new machine type — Mini Excavator — is a
+  tick through `update_asset_type`.
+- **Per-type service intervals.** `default_service_interval_hours` / `_days` on Farm Asset Type are given to a new
+  asset of that type, or one moved to it, that has no interval of its own; a figure somebody set is never
+  overwritten.
+- **`update_registered_asset` declares `service_interval_hours`, `service_interval_days`, `last_service_hours`,
+  `last_service_date` and `irrigation_zone`.** The tool always applied them; its schema did not list them, so an
+  MCP client could not send them.
+
 ## 0.230.4 — 2026-10-04 — asset tags point at Farm Ops, not the closed /erpnext path
 
 Code plus a step that runs on migrate (no schema change, no tools, no settings). Deploy

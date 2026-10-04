@@ -22787,6 +22787,24 @@ TOOLS = {
 				_BOOLEAN,
 				"Defaults to true. Pass false to stage a type before it is in use.",
 			),
+			"has_slope_limit": _field(
+				_BOOLEAN,
+				"v0.230.5. Machines of this type have a safe-slope limit: their Asset Register rows take "
+				"max_safe_slope_degrees and the slope grade map colours ground against it.",
+			),
+			"default_max_safe_slope_degrees": _field(
+				_NUMBER,
+				"v0.230.5. The cautious limit (1–45°) for an asset of this type with none of its own. "
+				"null clears it.",
+			),
+			"default_service_interval_hours": _field(
+				_NUMBER,
+				"v0.230.5. Given to a new asset of this type, or one moved to it, that has no hours "
+				"interval yet — e.g. 50 for a mini excavator. null clears it.",
+			),
+			"default_service_interval_days": _field(
+				_NUMBER, "v0.230.5. The same, in days. null clears it."
+			),
 		},
 		required=("type_name",),
 		mutating=True,
@@ -22852,6 +22870,24 @@ TOOLS = {
 				_BOOLEAN,
 				"v0.214.0. Assets of this type do not move: a scan never changes their position, "
 				"and moving one needs move_asset (or update_registered_asset with a reason).",
+			),
+			"has_slope_limit": _field(
+				_BOOLEAN,
+				"v0.230.5. Machines of this type have a safe-slope limit: their Asset Register rows take "
+				"max_safe_slope_degrees and the slope grade map colours ground against it.",
+			),
+			"default_max_safe_slope_degrees": _field(
+				_NUMBER,
+				"v0.230.5. The cautious limit (1–45°) for an asset of this type with none of its own. "
+				"null clears it.",
+			),
+			"default_service_interval_hours": _field(
+				_NUMBER,
+				"v0.230.5. Given to a new asset of this type, or one moved to it, that has no hours "
+				"interval yet — e.g. 50 for a mini excavator. null clears it.",
+			),
+			"default_service_interval_days": _field(
+				_NUMBER, "v0.230.5. The same, in days. null clears it."
 			),
 		},
 		required=("name",),
@@ -23044,7 +23080,8 @@ TOOLS = {
 			),
 			"max_safe_slope_degrees": _field(
 				_NUMBER,
-				"v0.168.0. Tractor, Vehicle, Sprayer or Implement only. The steepest slope in degrees "
+				"v0.168.0. Only on a type with a slope limit (has_slope_limit on Farm Asset Type — v0.230.5; "
+				"seeded on Tractor, Vehicle, Sprayer and Implement). The steepest slope in degrees "
 				"the machine can safely work, 1–45 — e.g. 25 for a tractor with ROPS, 15 without, "
 				"20 for an ATV/UTV. get_slope_grade_layer colours the ground against it. Omitted, the "
 				"type's cautious figure applies.",
@@ -23111,6 +23148,17 @@ TOOLS = {
 				"20 for an ATV/UTV. get_slope_grade_layer colours the ground against it. null clears it "
 				"and the type's cautious figure applies again.",
 			),
+			"service_interval_hours": _field(
+				_NUMBER,
+				"v0.230.5 (accepted since v0.78.0, now declared). Hours of running between services; "
+				"0 or null = not on an hours schedule.",
+			),
+			"service_interval_days": _field(
+				_NUMBER, "v0.230.5. Days between services; 0 or null = not on a calendar schedule."
+			),
+			"last_service_hours": _field(_NUMBER, "Engine hours at the last service."),
+			"last_service_date": _field(_STRING, "YYYY-MM-DD of the last service."),
+			"irrigation_zone": _field(_STRING, "The Irrigation Zone this asset serves, or '' to clear."),
 			"reason": _field(
 				_STRING,
 				"v0.214.0. Why the position is changing. REQUIRED to change gps_latitude / "

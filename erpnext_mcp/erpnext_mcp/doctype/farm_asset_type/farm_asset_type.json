@@ -15,7 +15,13 @@
   "people_present",
   "fixed_location",
   "detail_section",
-  "description"
+  "description",
+  "defaults_section",
+  "has_slope_limit",
+  "default_max_safe_slope_degrees",
+  "defaults_col",
+  "default_service_interval_hours",
+  "default_service_interval_days"
  ],
  "fields": [
   {
@@ -75,6 +81,44 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Defaults for assets of this type",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "has_slope_limit",
+   "fieldtype": "Check",
+   "label": "Has a Slope Limit",
+   "default": "0",
+   "description": "v0.230.5. Machines of this type work ground with a safe-slope limit. Their Asset Register rows show Max Safe Slope, and the slope grade map colours ground against it. Data, not code: a new kind of machine is ticked here."
+  },
+  {
+   "fieldname": "default_max_safe_slope_degrees",
+   "fieldtype": "Float",
+   "precision": "1",
+   "label": "Default Max Safe Slope (degrees)",
+   "depends_on": "eval:doc.has_slope_limit",
+   "description": "The cautious figure used for an asset of this type that has no limit of its own. Empty means each asset must carry its own."
+  },
+  {
+   "fieldname": "defaults_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_service_interval_hours",
+   "fieldtype": "Float",
+   "precision": "1",
+   "label": "Default Service Interval (Hours)",
+   "description": "Given to a new asset of this type (or one moved to it) that has no hours interval yet, e.g. 50 for a mini excavator. Zero or empty: not on an hours schedule."
+  },
+  {
+   "fieldname": "default_service_interval_days",
+   "fieldtype": "Int",
+   "label": "Default Service Interval (Days)",
+   "description": "The same, in days."
   }
  ],
  "index_web_pages_for_search": 0,

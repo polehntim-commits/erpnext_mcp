@@ -29,6 +29,7 @@
   "lien_holder",
   "title_receipt",
   "slope_section",
+  "type_has_slope_limit",
   "max_safe_slope_degrees",
   "tag_section",
   "qr_url",
@@ -236,13 +237,22 @@
    "options": "Expense Receipt"
   },
   {
-   "depends_on": "eval:[\"Tractor\",\"Vehicle\",\"Sprayer\",\"Implement\"].includes(doc.asset_type)",
+   "depends_on": "eval:doc.type_has_slope_limit || doc.max_safe_slope_degrees",
    "fieldname": "slope_section",
    "fieldtype": "Section Break",
    "label": "Slope Safety"
   },
   {
-   "depends_on": "eval:[\"Tractor\",\"Vehicle\",\"Sprayer\",\"Implement\"].includes(doc.asset_type)",
+   "fieldname": "type_has_slope_limit",
+   "fieldtype": "Check",
+   "label": "Type Has a Slope Limit",
+   "read_only": 1,
+   "hidden": 1,
+   "fetch_from": "asset_type.has_slope_limit",
+   "description": "v0.230.5. Fetched from the Farm Asset Type; decides whether Max Safe Slope shows."
+  },
+  {
+   "depends_on": "eval:doc.type_has_slope_limit || doc.max_safe_slope_degrees",
    "description": "The steepest slope, in degrees, this machine can safely work. Common figures: tractor with ROPS 25, tractor without ROPS 15, ATV/UTV 20, sprayer 12, mower 15 — use the manufacturer's figure where there is one. Left empty, the slope grade map uses the cautious figure for the asset type (a Tractor is treated as having no ROPS).",
    "fieldname": "max_safe_slope_degrees",
    "fieldtype": "Float",

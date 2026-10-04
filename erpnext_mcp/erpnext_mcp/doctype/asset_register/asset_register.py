@@ -68,6 +68,33 @@ class AssetRegister(Document):
 		# v0.226.0. A tag minted on a phone encodes its UUID, and keeps it.
 		self.qr_url = _build_qr_url(self.get("tag_uuid") or self.name)
 
+		self._service_defaults_from_type()
+
+	def _service_defaults_from_type(self):
+		"""v0.230.5. A new asset, or one moved to another type, starts from that type's
+		service interval — only where it has none of its own. A figure somebody set
+		is never overwritten, and a type with no default changes nothing."""
+		from erpnext_mcp import compat
+
+		if not compat.has_field("Farm Asset Type", "default_service_interval_hours"):
+			return
+		if not self.is_new():
+			before = frappe.db.get_value("Asset Register", self.name, "asset_type")
+			if before == self.asset_type:
+				return
+		defaults = frappe.db.get_value(
+			"Farm Asset Type",
+			self.asset_type,
+			["default_service_interval_hours", "default_service_interval_days"],
+			as_dict=True,
+		) or {}
+		for field, default in (
+			("service_interval_hours", defaults.get("default_service_interval_hours")),
+			("service_interval_days", defaults.get("default_service_interval_days")),
+		):
+			if default and not self.get(field):
+				self.set(field, default)
+
 	def before_save(self):
 		if self.current_state and isinstance(self.current_state, str):
 			import json

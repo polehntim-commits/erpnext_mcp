@@ -127,6 +127,48 @@ TYPE_DEFAULTS = {
 }
 SLOPE_RATED_ASSET_TYPES = tuple(TYPE_DEFAULTS)
 
+#: v0.230.5. THE LIST ABOVE IS NOW SEED DATA, NOT THE RULE. Whether a type has a
+#: slope limit, and its cautious default, are fields on Farm Asset Type
+#: (`has_slope_limit`, `default_max_safe_slope_degrees`) — a "Mini Excavator" is a
+#: tick, not a release. The tuple and dict above are what the patch seeds and what a
+#: site that has not migrated yet still answers from.
+TYPE_DOCTYPE = "Farm Asset Type"
+
+
+def _type_fields_ready() -> bool:
+	return compat.doctype_exists(TYPE_DOCTYPE) and compat.has_field(TYPE_DOCTYPE, "has_slope_limit")
+
+
+def is_slope_rated(asset_type) -> bool:
+	"""Whether machines of this type carry a safe-slope limit."""
+	if not asset_type:
+		return False
+	if _type_fields_ready():
+		return compat.checked(frappe.db.get_value(TYPE_DOCTYPE, asset_type, "has_slope_limit"))
+	return asset_type in TYPE_DEFAULTS
+
+
+def type_default(asset_type):
+	"""The cautious limit for an asset of this type with none of its own, or None."""
+	if not asset_type:
+		return None
+	if _type_fields_ready():
+		row = frappe.db.get_value(
+			TYPE_DOCTYPE, asset_type, ["has_slope_limit", "default_max_safe_slope_degrees"], as_dict=True
+		)
+		if not row or not compat.checked(row.get("has_slope_limit")):
+			return None
+		value = row.get("default_max_safe_slope_degrees")
+		return float(value) if value not in (None, "") and float(value) > 0 else None
+	return TYPE_DEFAULTS.get(asset_type)
+
+
+def rated_types() -> list:
+	"""Every type with a slope limit, for a message that names them."""
+	if _type_fields_ready():
+		return sorted(frappe.db.get_all(TYPE_DOCTYPE, filters={"has_slope_limit": 1}, pluck="name") or [])
+	return list(SLOPE_RATED_ASSET_TYPES)
+
 
 class AssetNotRated(ToolError):
 	"""An asset with no limit and a type with no fallback. A 400, not a 404."""
@@ -238,15 +280,17 @@ def rating_of(row: dict) -> dict:
 	raw = row.get(RATING_FIELD)
 	own = float(raw) if raw not in (None, "") else 0.0
 	asset_type = row.get("asset_type") or None
+	fallback = type_default(asset_type) if own <= 0 else None
 	if own > 0:
 		limit, source = own, "asset"
-	elif asset_type in TYPE_DEFAULTS:
-		limit, source = TYPE_DEFAULTS[asset_type], "type_default"
+	elif fallback:
+		limit, source = fallback, "type_default"
 	else:
+		rated = rated_types()
 		raise AssetNotRated(
 			f"{row.get('name')} is a {asset_type or 'asset with no type'} and has no max_safe_slope_degrees, "
-			f"so there is no limit to colour the ground against. Set one with update_registered_asset, "
-			f"or pick a {', '.join(SLOPE_RATED_ASSET_TYPES[:-1])} or {SLOPE_RATED_ASSET_TYPES[-1]}."
+			f"so there is no limit to colour the ground against. Set one with update_registered_asset"
+			+ (f", or pick a type with a slope limit ({', '.join(rated)})." if rated else ".")
 		)
 	return {
 		"asset": row.get("name"),
@@ -287,7 +331,7 @@ def validate_rating(value, tail: str):
 
 def asset_slope_rating(row: dict) -> dict:
 	"""For `get_asset_detail`: the stored limit and the one in effect. Empty off a rated type."""
-	if row.get("asset_type") not in TYPE_DEFAULTS and not compat.has_field(ASSET_REGISTER, RATING_FIELD):
+	if not is_slope_rated(row.get("asset_type")) and not compat.has_field(ASSET_REGISTER, RATING_FIELD):
 		return {}
 	stored = None
 	if compat.has_field(ASSET_REGISTER, RATING_FIELD):

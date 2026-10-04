@@ -210,11 +210,9 @@ class TheLimitComesFromTheMachine(unittest.TestCase):
 		path = Path(slope_grade.__file__).parent / "erpnext_mcp/doctype/asset_register/asset_register.json"
 		data = json.loads(path.read_text(encoding="utf-8"))
 		by_name = {field["fieldname"]: field for field in data["fields"]}
-		wanted = (
-			"eval:"
-			+ json.dumps(list(slope_grade.SLOPE_RATED_ASSET_TYPES), separators=(",", ":"))
-			+ ".includes(doc.asset_type)"
-		)
+		# v0.230.5: the form follows the TYPE'S flag (fetched), not a list in the JSON.
+		wanted = "eval:doc.type_has_slope_limit || doc.max_safe_slope_degrees"
+		self.assertEqual(by_name["type_has_slope_limit"]["fetch_from"], "asset_type.has_slope_limit")
 		for field in ("slope_section", "max_safe_slope_degrees"):
 			with self.subTest(field=field):
 				self.assertIn(field, data["field_order"])
@@ -582,3 +580,59 @@ class ThePhone(GradeSiteMixin, FarmOpsAPITestCase):
 		self.build()
 		self.machine("OT-Tractor-01", "Tractor", company=OTHER)
 		self.assertEqual(self.refusal(LAYER, {"asset": "OT-Tractor-01"})[0], 404)
+
+
+class ASlopeLimitIsATick(GradeSiteMixin, V12TestCase):
+	"""v0.230.5. OML: the track hoe is a Mini Excavator with a 10° limit and a 50-hour
+	service interval, and moving it to that type would have dropped the limit —
+	the rated types were a list in code. Now they are data on Farm Asset Type."""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(
+			enabled=1, **SWITCHES, allow_create_asset_type=1, allow_update_asset_type=1, allow_get_asset_type=1
+		)
+		self.tool_data("register_asset", {"name": "TC-TRAKHOE-1", "asset_type": "Tractor", "company": MAIN,
+			"max_safe_slope_degrees": 10})
+		self.tool_data("create_asset_type", {"type_name": "Mini Excavator", "has_slope_limit": True,
+			"default_max_safe_slope_degrees": 12, "default_service_interval_hours": 50})
+
+	def test_the_track_hoe_moves_type_and_keeps_its_own_limit_and_gains_the_interval(self):
+		self.tool_data("update_registered_asset", {"asset_name": "TC-TRAKHOE-1", "asset_type": "Mini Excavator"})
+		detail = self.tool_data("get_asset_detail", {"asset_name": "TC-TRAKHOE-1"})
+		self.assertEqual(detail["asset_type"], "Mini Excavator")
+		self.assertEqual(detail["slope_rating"]["max_safe_slope_degrees"], 10.0)
+		self.assertEqual(detail["slope_rating"]["max_safe_slope_source"], "asset")
+		self.assertEqual(detail["service_interval_hours"], 50.0)
+
+	def test_the_types_default_applies_to_an_asset_without_its_own(self):
+		self.tool_data("register_asset", {"name": "MX-2", "asset_type": "Mini Excavator", "company": MAIN})
+		rating = slope_grade.asset_rating("MX-2")
+		self.assertEqual((rating["max_safe_slope_degrees"], rating["max_safe_slope_source"]), (12.0, "type_default"))
+
+	def test_an_interval_somebody_set_is_kept(self):
+		self.tool_data("update_registered_asset", {"asset_name": "TC-TRAKHOE-1", "service_interval_hours": 40})
+		self.tool_data("update_registered_asset", {"asset_name": "TC-TRAKHOE-1", "asset_type": "Mini Excavator"})
+		self.assertEqual(frappe.db.get_value("Asset Register", "TC-TRAKHOE-1", "service_interval_hours"), 40.0)
+
+	def test_the_service_fields_are_settable_and_declared(self):
+		from erpnext_mcp import registry
+
+		props = registry.TOOLS["update_registered_asset"]["inputSchema"]["properties"]
+		self.assertTrue({"service_interval_hours", "service_interval_days"} <= set(props))
+		self.tool_data("update_registered_asset", {"asset_name": "TC-TRAKHOE-1", "service_interval_days": 180})
+		self.assertEqual(frappe.db.get_value("Asset Register", "TC-TRAKHOE-1", "service_interval_days"), 180)
+
+	def test_unticking_the_type_stops_new_limits_and_says_how(self):
+		self.tool_data("update_asset_type", {"name": "Mini Excavator", "has_slope_limit": False})
+		error = self.tool_error("register_asset", {"name": "MX-3", "asset_type": "Mini Excavator", "company": MAIN,
+			"max_safe_slope_degrees": 10})
+		self.assertIn("Tick has_slope_limit on Mini Excavator", error)
+
+	def test_the_patch_writes_todays_answer_once(self):
+		from erpnext_mcp.patches import asset_type_slope_defaults as patch
+
+		frappe.db.set_value("Farm Asset Type", "Tractor", {"has_slope_limit": 0, "default_max_safe_slope_degrees": None})
+		self.assertIn("Tractor", patch.run()["types"])
+		self.assertEqual(slope_grade.type_default("Tractor"), 15.0)
+		self.assertEqual(patch.run()["types"], [])

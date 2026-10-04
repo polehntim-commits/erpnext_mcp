@@ -284,6 +284,12 @@ def seed(*, extra: list | None = None) -> dict:
 			# v0.214.0. Whether a scan may move it (`asset_moves`). On CREATE only.
 			if name in asset_moves.FIXED_TYPES and compat.has_field(DOCTYPE, "fixed_location"):
 				doc.fixed_location = 1
+			# v0.230.5. The slope-rated types, as data, on CREATE only.
+			from . import slope_grade
+
+			if name in slope_grade.TYPE_DEFAULTS and compat.has_field(DOCTYPE, "has_slope_limit"):
+				doc.has_slope_limit = 1
+				doc.default_max_safe_slope_degrees = slope_grade.TYPE_DEFAULTS[name]
 			doc.flags.ignore_permissions = True
 			doc.insert(ignore_permissions=True)
 			report["created"].append(name)

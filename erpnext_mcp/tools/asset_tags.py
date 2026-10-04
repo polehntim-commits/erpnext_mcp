@@ -476,6 +476,11 @@ def _type_out(row: dict, *, with_usage: bool = False) -> dict:
 		# v0.214.0. Whether assets of this type stay put — a scan never moves one.
 		"fixed_location": asset_moves.is_fixed(name),
 	}
+	# v0.230.5. The defaults an asset of this type starts from.
+	for key in TYPE_DEFAULT_FIELDS:
+		if key in row:
+			value = row.get(key)
+			out[key] = compat.checked(value) if key == "has_slope_limit" else (value if value not in (None, "", 0, "0") else None)
 	if with_usage:
 		# THE NUMBER THAT DECIDES WHETHER A DELETE CAN HAPPEN, on the read that
 		# somebody makes before trying one. A caller who has to attempt the
@@ -495,7 +500,8 @@ def _type_row(args: dict, *, label: str = "name") -> dict:
 	row = frappe.db.get_value(
 		asset_types.DOCTYPE,
 		wanted,
-		["name", "type_name", "icon", "display_order", "description", "enabled"],
+		["name", "type_name", "icon", "display_order", "description", "enabled",
+		 *compat.existing_fields(asset_types.DOCTYPE, TYPE_DEFAULT_FIELDS)],
 		as_dict=True,
 	)
 	if not row:
@@ -552,6 +558,9 @@ def create_asset_type(args: dict) -> ToolResult:
 	# somebody has to notice a second field about. Passing false explicitly is
 	# how you stage one before it is in use.
 	doc.enabled = 1 if as_bool(args, "enabled", True) else 0
+	for key in TYPE_DEFAULT_FIELDS:
+		if key in args:
+			doc.set(key, _type_default_value(args, key))
 	doc.flags.ignore_permissions = True
 	doc.insert(ignore_permissions=True)
 
@@ -598,7 +607,34 @@ def get_asset_type(args: dict) -> ToolResult:
 #: What `update_asset_type` may change, apart from the name. Deliberately every
 #: column the doctype has that is not the identity — there is nothing on this
 #: record an operator should have to open the Desk for.
-UPDATABLE_TYPE_FIELDS = ("icon", "description", "display_order", "enabled", "fixed_location")
+#: v0.230.5. What an asset of a type starts from — data, not a list in code.
+TYPE_DEFAULT_FIELDS = (
+	"has_slope_limit",
+	"default_max_safe_slope_degrees",
+	"default_service_interval_hours",
+	"default_service_interval_days",
+)
+UPDATABLE_TYPE_FIELDS = ("icon", "description", "display_order", "enabled", "fixed_location", *TYPE_DEFAULT_FIELDS)
+
+
+def _type_default_value(args: dict, key: str):
+	"""One of TYPE_DEFAULT_FIELDS off the arguments, checked. None clears it."""
+	if not compat.has_field(asset_types.DOCTYPE, key):
+		raise ToolError(f"this site has no {key} column yet — run `bench --site <site> migrate`. Nothing was changed.")
+	value = args.get(key)
+	if key == "has_slope_limit":
+		return 1 if as_bool(args, key, False) else 0
+	if value in (None, ""):
+		return None
+	if key == "default_max_safe_slope_degrees":
+		return slope_grade.validate_rating(value, "Nothing was changed.")
+	if key == "default_service_interval_days":
+		number = as_int(args, key)
+	else:
+		number = as_float(value, key)
+	if number < 0:
+		raise ToolError(f"{key} cannot be negative. Nothing was changed.")
+	return number
 
 
 def update_asset_type(args: dict) -> ToolResult:
@@ -643,6 +679,8 @@ def update_asset_type(args: dict) -> ToolResult:
 			# that dropped it would refuse to retire anything while reporting
 			# that it had.
 			value = 1 if as_bool(args, "enabled", True) else 0
+		elif key in TYPE_DEFAULT_FIELDS:
+			value = _type_default_value(args, key)
 		elif key == "fixed_location":
 			if not asset_moves.ready():
 				raise ToolError(
@@ -660,6 +698,12 @@ def update_asset_type(args: dict) -> ToolResult:
 			current = 1 if current else 0
 		elif key == "display_order":
 			current = int(current or 0)
+		elif key == "has_slope_limit":
+			current = 1 if compat.checked(current) else 0
+		elif key in TYPE_DEFAULT_FIELDS:
+			current = current if current not in ("", 0) else None
+			if current is not None and value is not None and float(current) == float(value):
+				continue
 		else:
 			current = str(current or "")
 		if str(value) == str(current):
@@ -1294,10 +1338,12 @@ def _slope_rating(args: dict, asset_type: str, tail: str):
 	if slope_grade.RATING_FIELD not in args:
 		return False, None
 	value = slope_grade.validate_rating(args.get(slope_grade.RATING_FIELD), tail)
-	if value is not None and asset_type not in slope_grade.SLOPE_RATED_ASSET_TYPES:
+	if value is not None and not slope_grade.is_slope_rated(asset_type):
+		# v0.230.5: the types are data — `has_slope_limit` on Farm Asset Type.
 		raise ToolError(
-			f"max_safe_slope_degrees is recorded on a {', '.join(slope_grade.SLOPE_RATED_ASSET_TYPES)}, "
-			f"and this asset is a {asset_type}. {tail}"
+			f"max_safe_slope_degrees is recorded on a type with a slope limit "
+			f"({', '.join(slope_grade.rated_types()) or 'none yet'}), and this asset is a {asset_type}. "
+			f"Tick has_slope_limit on {asset_type} with update_asset_type to allow it. {tail}"
 		)
 	if not compat.has_field(ASSET_REGISTER, slope_grade.RATING_FIELD):
 		raise ToolError(

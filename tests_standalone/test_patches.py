@@ -50,6 +50,7 @@ from erpnext_mcp.patches import (
 	normalize_app_feedback_timestamps,
 	normalize_phone_timestamps,
 	purge_filed_login_cards,
+	asset_type_slope_defaults,
 	rebuild_rodent_templates,
 	reclassify_feature_requests,
 	recompute_2026_dependents_credit,
@@ -122,6 +123,7 @@ PATCHES = (
 	("erpnext_mcp.patches.transactional_mail_without_unsubscribe", transactional_mail_without_unsubscribe),
 	# v0.223.0. Pinned in `test_employee_file.LoginCards`.
 	("erpnext_mcp.patches.purge_filed_login_cards", purge_filed_login_cards),
+	("erpnext_mcp.patches.asset_type_slope_defaults", asset_type_slope_defaults),
 )
 
 
