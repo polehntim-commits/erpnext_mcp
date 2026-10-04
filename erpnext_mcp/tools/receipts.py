@@ -59,6 +59,7 @@ able to freeze them. One switch cannot express that; two can.
 
 from __future__ import annotations
 
+import contextvars
 import difflib
 import re
 
@@ -78,6 +79,7 @@ CUSTOMER = "Customer"
 FIELD = "Field"
 CUSTOM_FIELD = "Custom Field"
 MERCHANT_ALIAS = "Merchant Alias"
+EXPENSE_RECEIPT_DOCTYPE = "Expense Receipt"
 
 #: Scale Ticket statuses, and the Settlement Statement's. Both are computed by
 #: their controllers from docstatus; these exist so a filter argument can be
@@ -2266,6 +2268,12 @@ def _linked_receipt_rows(fieldname: str) -> list[dict]:
 		return []
 
 
+#: v0.229.1. Receipts the corpus must not count — set by `repair_placeholder_phones`
+#: for the receipt it is re-resolving, whose own (possibly wrong) supplier link
+#: would otherwise vouch for itself.
+_CORPUS_EXCLUDE: contextvars.ContextVar = contextvars.ContextVar("corpus_exclude", default=frozenset())
+
+
 def _corpus_supplier(fieldname: str, wanted: str, compare) -> dict | None:
 	"""The Supplier most receipts with this signal were coded to, and how many.
 
@@ -2275,7 +2283,10 @@ def _corpus_supplier(fieldname: str, wanted: str, compare) -> dict | None:
 	claimed there is no answer, and inventing one is worse than saying so.
 	"""
 	counts: dict = {}
+	excluded = _CORPUS_EXCLUDE.get()
 	for row in _linked_receipt_rows(fieldname):
+		if row.get("name") in excluded:
+			continue
 		if compare(str(row.get(fieldname) or ""), wanted):
 			supplier = str(row.get("supplier") or "")
 			if supplier:
@@ -3349,4 +3360,124 @@ def create_purchase_invoice_from_receipt(args: dict) -> ToolResult:
 		summary=f"created draft Purchase Invoice {pi_name} for {supplier} ({amount}) from "
 		f"expense receipt {receipt_name}",
 		docstatus_delta="none → 0 (draft)",
+	)
+
+
+# ── v0.229.1: repairing receipts resolved on a placeholder phone ─────────────
+#: A caller's or a person's own answer. Their resolution is kept; only the junk
+#: phone is cleared.
+_KEPT_METHODS = ("Manual", "LLM", "Alias")
+
+
+def placeholder_phone_receipts(limit: int = 500) -> list:
+	"""Expense Receipts whose stored phone is filler (0000000000 and the like)."""
+	if not compat.has_field(EXPENSE_RECEIPT_DOCTYPE, MERCHANT_PHONE_FIELD):
+		return []
+	fields = compat.existing_fields(
+		EXPENSE_RECEIPT_DOCTYPE,
+		(
+			"name",
+			"merchant",
+			"supplier",
+			"ocr_raw_text",
+			MERCHANT_PHONE_FIELD,
+			MERCHANT_URL_FIELD,
+			STORE_NUMBER_FIELD,
+			CARD_LAST_FOUR_FIELD,
+			RESOLVED_MERCHANT_FIELD,
+			RESOLUTION_METHOD_FIELD,
+			RESOLUTION_CONFIDENCE_FIELD,
+		),
+	)
+	rows = frappe.db.get_all(
+		EXPENSE_RECEIPT_DOCTYPE,
+		filters={MERCHANT_PHONE_FIELD: ("is", "set")},
+		fields=fields,
+		limit=max(1, min(int(limit or 500), 5000)),
+	)
+	out = []
+	for row in rows or []:
+		raw = str(row.get(MERCHANT_PHONE_FIELD) or "")
+		if raw and (placeholder_phone(raw) or not plausible_phone(normalize_phone(raw))):
+			out.append(dict(row))
+	return out
+
+
+def repair_placeholder_phones(apply: bool = False, limit: int = 500) -> dict:
+	"""Clear placeholder phones and re-resolve the receipts that matched on one.
+
+	A DRY RUN UNLESS `apply`. The answer lists every receipt with its old and new
+	resolution, so a person sees EXR-2026-0015 move from Sawyer's Hardware (Phone)
+	to whatever its domain or printed name says before anything is written. The
+	`supplier` link is never touched — it is a person's decision and is reported
+	where it disagrees with the new answer.
+	"""
+	changes = []
+	for row in placeholder_phone_receipts(limit):
+		before = {
+			"resolved_merchant": row.get(RESOLVED_MERCHANT_FIELD),
+			"method": row.get(RESOLUTION_METHOD_FIELD),
+			"confidence": row.get(RESOLUTION_CONFIDENCE_FIELD),
+		}
+		values = {MERCHANT_PHONE_FIELD: None}
+		after = dict(before)
+		kept = str(before["method"] or "") in _KEPT_METHODS
+		if not kept:
+			# Its own supplier link is not evidence about itself: a receipt linked
+			# on the strength of the zeros would otherwise vouch for its own domain.
+			token = _CORPUS_EXCLUDE.set(frozenset({row["name"]}))
+			try:
+				fresh = resolve_merchant(
+					str(row.get("merchant") or ""),
+					merchant_url=str(row.get(MERCHANT_URL_FIELD) or ""),
+					store_number=str(row.get(STORE_NUMBER_FIELD) or ""),
+					card_last_four=str(row.get(CARD_LAST_FOUR_FIELD) or ""),
+					ocr_raw_text=str(row.get("ocr_raw_text") or ""),
+				)
+			finally:
+				_CORPUS_EXCLUDE.reset(token)
+			after = {
+				"resolved_merchant": fresh.get("resolved_merchant"),
+				"method": fresh.get("method"),
+				"confidence": fresh.get("confidence") or None,
+				"supplier": fresh.get("supplier"),
+			}
+			values.update(
+				{
+					RESOLVED_MERCHANT_FIELD: after["resolved_merchant"],
+					RESOLUTION_METHOD_FIELD: after["method"],
+					RESOLUTION_CONFIDENCE_FIELD: after["confidence"],
+				}
+			)
+		entry = {
+			"receipt": row["name"],
+			"merchant": row.get("merchant"),
+			"placeholder_phone": row.get(MERCHANT_PHONE_FIELD),
+			"before": before,
+			"after": after,
+			"resolution_kept": kept,
+		}
+		linked = str(row.get("supplier") or "")
+		if linked and not kept and linked != str(after.get("supplier") or ""):
+			entry["supplier_note"] = (
+				f"{row['name']} is linked to Supplier {linked!r}; the new answer is "
+				f"{after.get('resolved_merchant') or 'nothing'}. The link was left as it is — check it."
+			)
+		if apply:
+			frappe.db.set_value(EXPENSE_RECEIPT_DOCTYPE, row["name"], values, update_modified=False)
+		changes.append(entry)
+	return {"applied": bool(apply), "count": len(changes), "receipts": changes}
+
+
+def repair_placeholder_phones_tool(args: dict) -> ToolResult:
+	"""MCP: clear placeholder phones and re-resolve; a dry run unless apply is true."""
+	from ..args import as_bool
+
+	apply = as_bool(args, "apply", False)
+	data = repair_placeholder_phones(apply=apply, limit=as_limit(args) if args.get("limit") else 500)
+	verb = "repaired" if apply else "would repair"
+	return ToolResult(
+		data=data,
+		summary=f"{verb} {data['count']} receipt(s) carrying a placeholder phone",
+		docstatus_delta="0 → 0 (updated)" if apply and data["count"] else "",
 	)

@@ -17370,6 +17370,22 @@ TOOLS = {
 		title="Classify receipt",
 	),
 	# ── v0.68.0: merchant ↔ Supplier matching, and the bill a receipt becomes ─
+	"repair_placeholder_phones": _tool(
+		receipts.repair_placeholder_phones_tool,
+		"MUTATING (default OFF). v0.229.1. Finds Expense Receipts whose stored merchant_phone is a "
+		"placeholder (0000000000, one digit repeated, 1234567890, 555-01xx) — which matched every "
+		"other receipt carrying the same filler (EXR-2026-0015 resolved to Sawyer's Hardware that "
+		"way) — clears the phone and re-runs merchant resolution so the domain or the printed name "
+		"decides. A DRY RUN unless apply is true: the answer lists each receipt's old and new "
+		"resolution. A Manual / LLM / Alias answer is kept (only the phone is cleared); a linked "
+		"supplier is never changed, only reported where it disagrees.",
+		{
+			"apply": _field(_BOOLEAN, "Write the changes. Default false: report what would change."),
+			"limit": _field(_INTEGER, "How many receipts to look at (default 500)."),
+		},
+		mutating=True,
+		title="Repair placeholder receipt phones",
+	),
 	"normalize_merchant": _tool(
 		receipts.normalize_merchant,
 		"The best-matching Supplier for a merchant string, and how confident "

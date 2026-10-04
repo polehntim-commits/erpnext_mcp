@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.229.1 — 2026-10-03 — receipts resolved on a placeholder phone are repaired
+
+**1012 tools** (492 read, 520 write): + `repair_placeholder_phones`. Deploy
+`docs/deploy/v0.229.1_placeholder_phones.md`.
+
+- EXR-2026-0015 (Coastal Farm Stores, coastalcountry.com) kept `resolved_merchant` Sawyer's Hardware Llc by
+  Phone (0.83) because EXR-2026-0014 also carried 0000000000. Capture has dropped such numbers since
+  v0.183.0 / v0.190.0 (empty, one digit repeated, counting runs), but rows resolved earlier kept the wrong
+  answer. `repair_placeholder_phones` (dry run unless `apply`) clears the filler phone and re-resolves, so the
+  URL or the printed name wins; Manual / LLM / Alias answers are kept; the supplier link is never changed,
+  only reported.
+- Re-resolving a receipt no longer counts its own supplier link as evidence for its own domain or phone.
+
 ## 0.229.0 — 2026-10-03 — ending a shift, running a class and reporting a problem with no signal
 
 No migrate. Contract `docs/design/offline_mill_creek.md` §5–6, §8. Deploy

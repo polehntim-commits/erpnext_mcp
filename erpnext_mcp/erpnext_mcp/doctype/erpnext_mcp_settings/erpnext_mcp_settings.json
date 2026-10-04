@@ -1160,6 +1160,7 @@
   "allow_print_tags_for_location",
   "allow_list_punch_reviews",
   "allow_resolve_punch_review",
+  "allow_repair_placeholder_phones",
   "allow_download_card_pdf",
   "allow_request_card_back",
   "allow_mark_card_print_job",
@@ -8987,6 +8988,13 @@
    "fieldname": "allow_resolve_punch_review",
    "fieldtype": "Check",
    "label": "Resolve Punch Review"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.229.1. Clear placeholder phones (0000000000…) on Expense Receipts and re-resolve the merchant. Dry run unless apply.",
+   "fieldname": "allow_repair_placeholder_phones",
+   "fieldtype": "Check",
+   "label": "Repair Placeholder Phones"
   },
   {
    "default": "0",
