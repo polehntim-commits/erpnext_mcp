@@ -1426,3 +1426,32 @@ class TheAlertReachesTheSupervisors(PushTestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TheMissingKeyIsSaidOnce(PushTestCase):
+	"""v0.230.1. umbrel.local logged the no-APNs paragraph ten times in forty
+	seconds — once per push. It is a fact about the site, said once a window."""
+
+	tokens = SendingAndFailing.tokens
+
+	def setUp(self):
+		super().setUp()
+		push_service._LOGGED_AT.clear()
+
+	def pushed_logs(self) -> list:
+		return [e for e in STORE.errors if e["title"] == "erpnext_mcp: push"]
+
+	def test_many_pushes_one_row_and_every_report_still_says_why(self):
+		tokens = self.tokens()
+		for _ in range(5):
+			report = push_service.send_push(tokens, {"aps": {}}, transport=Recorder(), conf={})
+			self.assertEqual(report["reason"], "not_configured")
+		self.assertEqual(len(self.pushed_logs()), 1)
+		self.assertIn("once every 6 hours", self.pushed_logs()[0]["message"])
+
+	def test_after_the_window_it_is_said_again(self):
+		tokens = self.tokens()
+		push_service.send_push(tokens, {"aps": {}}, transport=Recorder(), conf={})
+		push_service._LOGGED_AT["not_configured"] -= push_service.NOT_CONFIGURED_LOG_HOURS * 3600 + 1
+		push_service.send_push(tokens, {"aps": {}}, transport=Recorder(), conf={})
+		self.assertEqual(len(self.pushed_logs()), 2)

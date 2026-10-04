@@ -469,3 +469,94 @@ class TheStartIsTheLastDoor(PhiTestCase):
 		self.tool_data("claim_farm_task", {"task": task, "worker_id": WORKER})
 		self.a_spray(blocks=(BLOCK_TWO,))
 		self.assertEqual(self.start(task)["assignment"]["state"], "In-Progress")
+
+
+class AWindowWithNoCompanyStillCounts(PhiTestCase):
+	"""v0.230.1. `company` is optional on a Spray Application and a Farm Task. The
+	readers filtered on equality, so a spray filed without one vanished from every
+	company-scoped harvest guard — the block read as pickable."""
+
+	def test_an_application_without_a_company_is_in_the_companys_answer(self):
+		self.a_spray()
+		STORE.rows("Spray Application")[-1]["company"] = None
+		windows = spray_tools.phi_windows_for_blocks([BLOCK], MAIN)
+		self.assertEqual(len(windows), 1)
+
+	def test_a_spray_task_without_a_company_is_in_the_companys_answer(self):
+		STORE.seed(
+			"Farm Task",
+			[
+				{
+					"name": "FT-SPRAY-NC",
+					"task_name": "Cover 1",
+					"task_type": "Spray",
+					"state": "Completed",
+					"company": None,
+					"location_doctype": "Field",
+					"location": BLOCK_TWO,
+					"phi_clears_on": self.days_from_today(9),
+					"phi_source_item": SPRAY,
+				}
+			],
+		)
+		self.assertEqual(len(spray_tools.phi_windows_for_blocks([BLOCK_TWO], MAIN)), 1)
+
+	def test_another_companys_window_is_still_left_out(self):
+		self.a_spray()
+		STORE.rows("Spray Application")[-1]["company"] = "Some Other Entity"
+		self.assertEqual(spray_tools.phi_windows_for_blocks([BLOCK], MAIN), [])
+
+
+class ABlankIntervalIsSaidOutLoud(PhiTestCase):
+	"""v0.230.1. A blank `phi_days` stamped no window and said nothing, so the
+	harvest guard read the block as pickable the day it was sprayed."""
+
+	def notes(self, data) -> str:
+		return "\n".join(data.get("notes_for_caller") or [])
+
+	def test_no_phi_on_the_tank_is_a_note(self):
+		STORE.get_raw("Item", SPRAY)["phi_days"] = 0
+		data = self.a_spray()
+		self.assertIn("No product in this tank has a PHI", self.notes(data))
+
+	def test_a_registered_product_with_no_phi_is_named(self):
+		from erpnext_mcp import compat
+
+		if not compat.has_field("Item", "epa_registration_number"):
+			self.skipTest("this site's Item has no EPA registration number column")
+		item = STORE.get_raw("Item", SPRAY)
+		item["phi_days"] = 0
+		item["epa_registration_number"] = "100-1234"
+		data = self.a_spray()
+		self.assertIn(f"{SPRAY} has an EPA registration number but no PHI", self.notes(data))
+
+	def test_a_labelled_product_says_nothing_extra(self):
+		data = self.a_spray()
+		self.assertNotIn("No product in this tank has a PHI", self.notes(data))
+		self.assertNotIn("CHECK THE LABEL", self.notes(data))
+
+
+class WeatherIsANumber(PhiTestCase):
+	"""v0.230.1. "12 mph" was stored as 0.0 and read as dead calm."""
+
+	def test_text_is_refused_by_name(self):
+		message = self.tool_error(
+			"create_spray_application",
+			{"blocks": [BLOCK], "company": MAIN, "wind_speed_mph": "12 mph",
+			 "products": [{"item_code": SPRAY, "rate_per_acre": 5, "rate_uom": "Lb"}]},
+		)
+		self.assertIn("wind_speed_mph must be a number", message)
+		self.assertEqual(STORE.rows("Spray Application"), [])
+
+	def test_humidity_over_100_is_refused(self):
+		message = self.tool_error(
+			"create_spray_application",
+			{"blocks": [BLOCK], "company": MAIN, "humidity_pct": 140,
+			 "products": [{"item_code": SPRAY, "rate_per_acre": 5, "rate_uom": "Lb"}]},
+		)
+		self.assertIn("humidity_pct must be between 0 and 100", message)
+
+	def test_numbers_and_absences_are_kept(self):
+		data = self.a_spray(wind_speed_mph="4.5", temperature_f=61)
+		self.assertEqual(data["weather"]["wind_speed_mph"], 4.5)
+		self.assertIsNone(data["weather"]["humidity_pct"])

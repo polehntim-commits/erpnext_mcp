@@ -13620,7 +13620,7 @@ def get_active_rei(user: str, block=None, block_doctype=None, company=None) -> d
 	clear, and so should anything else that calls this.
 	"""
 	allowed = guard.require_scope(user)
-	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	entity = _rei_entity(user, company, allowed)
 
 	inner: dict = {"company": entity, "block": block}
 	if block_doctype not in (None, ""):
@@ -13650,7 +13650,7 @@ def list_active_reis(
 	`spray_tasks_included` says which.
 	"""
 	allowed = guard.require_scope(user)
-	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	entity = _rei_entity(user, company, allowed)
 
 	inner: dict = {"company": entity}
 	for key, value in (
@@ -13663,7 +13663,40 @@ def list_active_reis(
 		if value not in (None, ""):
 			inner[key] = value
 
-	return spray_rei_tools.list_active_reis(inner).data
+	data = spray_rei_tools.list_active_reis(inner).data
+	if not entity and len(allowed) > 1:
+		data = _rei_board_for(data, allowed)
+	return data
+
+
+def _rei_entity(user: str, company, allowed: list) -> str:
+	"""The company an REI read is scoped to.
+
+	v0.230.1. A caller with more than one entity who names none is answered for ALL
+	of them (""), not for the first — `allowed[0]` told a worker on entity 2's
+	block that it was clear. A named company is still checked against the caller.
+	"""
+	named = guard.require_company(user, company, allowed)
+	if named:
+		return named
+	return allowed[0] if len(allowed) == 1 else ""
+
+
+def _rei_board_for(data: dict, allowed: list) -> dict:
+	"""The board answered across all companies, cut back to the caller's — plus windows with none."""
+	keep = set(allowed)
+	reis = [w for w in data.get("reis") or [] if not w.get("company") or w.get("company") in keep]
+	active = [w for w in reis if w.get("active")]
+	blocks = sorted({str(w.get("block")) for w in active})
+	return {
+		**data,
+		"reis": reis,
+		"rei_count": len(reis),
+		"active_count": len(active),
+		"restricted_blocks": blocks,
+		"restricted_block_count": len(blocks),
+		"companies": sorted(keep),
+	}
 
 
 # ── Direct deposit: a worker's own bank details, and nobody else's ──────────

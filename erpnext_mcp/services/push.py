@@ -189,6 +189,32 @@ def _log(message: str) -> None:
 		pass
 
 
+#: v0.230.1. A site with no APNs key logged the same paragraph once per push —
+#: ten rows in forty seconds on umbrel.local when a crew clocked in. The fact does
+#: not change between pushes, so it is said once per window.
+NOT_CONFIGURED_LOG_HOURS = 6
+_LOGGED_AT: dict = {}
+
+
+def _first_in_window(kind: str) -> bool:
+	"""True the first time `kind` is seen in the window — across workers when the cache answers."""
+	key = f"erpnext_mcp:push:logged:{kind}"
+	window = NOT_CONFIGURED_LOG_HOURS * 3600
+	try:
+		cache = frappe.cache()
+		if cache.get_value(key):
+			return False
+		cache.set_value(key, 1, expires_in_sec=window)
+		return True
+	except Exception:
+		now = time.monotonic()
+		last = _LOGGED_AT.get(kind)
+		if last is not None and now - last < window:
+			return False
+		_LOGGED_AT[kind] = now
+		return True
+
+
 # ── configuration ───────────────────────────────────────────────────────────
 
 
@@ -853,10 +879,13 @@ def send_push(
 	if not config["configured"]:
 		report["skipped"] = len(tokens)
 		report["reason"] = "not_configured"
-		_log(
-			f"{len(tokens)} handset(s) would have been pushed to, and this site has no APNs "
-			f"configuration: missing {', '.join(_missing(config))}. It needs {APNS_REQUIREMENTS}"
-		)
+		if _first_in_window("not_configured"):
+			_log(
+				f"{len(tokens)} handset(s) would have been pushed to, and this site has no APNs "
+				f"configuration: missing {', '.join(_missing(config))}. It needs {APNS_REQUIREMENTS} "
+				f"(Logged once every {NOT_CONFIGURED_LOG_HOURS} hours; the skips in between are counted "
+				"in each caller's report.)"
+			)
 		return report
 
 	jwt = provider_token(config)

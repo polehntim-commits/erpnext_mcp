@@ -752,3 +752,35 @@ class AnOlderPhoneStillGetsJudged(BaitTestCase):
 		)
 		self.assertEqual(found[0]["section"], "Habitability walk")
 		self.assertIn("NOT cleared", submitted["Habitability walk"]["notes"])
+
+
+class TheBaitQuantityIsWhatWasSaid(BaitTestCase):
+	"""v0.230.1. "2 blocks" in the quantity box crashed task completion (500), and a
+	unit the site did not know was replaced by the Item's stock unit ("2 Pound")."""
+
+	def build(self, quantity):
+		import types
+
+		from erpnext_mcp import pest_control
+
+		if not STORE.get_raw("Farm Task", "FT-BAIT-1"):
+			STORE.seed("Farm Task", [{"name": "FT-BAIT-1", "task_name": "Bait", "task_type": "Inspection", "company": MAIN}])
+		task = {"name": "FT-BAIT-1", "company": MAIN, "bait_product": "BAIT-1"}
+		done = types.SimpleNamespace(assigned_to="EMP-001", assigned_to_name="Ana", findings_text="")
+		name = pest_control.build_application(task, done, {"quantity": quantity})
+		return STORE.get_raw("Pest Control Application", name)
+
+	def test_text_in_the_number_box_is_kept_for_a_person_not_a_crash(self):
+		row = self.build({"value": "2 blocks", "uom": ""})
+		self.assertIsNone(row.get("quantity"))
+		self.assertIn("'2 blocks', which is not a number", row.get("notes") or "")
+
+	def test_an_unknown_unit_is_left_blank_not_replaced(self):
+		row = self.build({"value": 2, "uom": "zorbles"})
+		self.assertEqual(row.get("quantity"), 2.0)
+		self.assertFalse(row.get("uom"))
+		self.assertIn("'zorbles'", row.get("notes") or "")
+
+	def test_no_unit_named_still_falls_back_to_the_stock_unit(self):
+		row = self.build({"value": 3})
+		self.assertEqual(row.get("uom"), "Nos")

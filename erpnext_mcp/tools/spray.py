@@ -240,6 +240,17 @@ PHI_TASK_STATES = ("Awaiting-Review", "Completed")
 PHI_CAP = 100
 
 
+def _kept_for_company(row: dict, company: str) -> bool:
+	"""Whether a pre-harvest window belongs in an answer scoped to `company`.
+
+	v0.230.1. A WINDOW WITH NO COMPANY IS KEPT — the rule `spray_rei._for_company`
+	keeps for REI, for the same reason. `company` is optional on a Spray Application
+	and on a Farm Task; an equality filter dropped a spray filed without one, and on
+	the harvest guard dropping a window means telling somebody a block can be picked.
+	"""
+	return not company or not row.get("company") or row.get("company") == company
+
+
 def _phi_from_applications(names: list, company: str, today: str) -> list[dict]:
 	"""Live pre-harvest windows off Spray Application, one query plus one.
 
@@ -250,9 +261,8 @@ def _phi_from_applications(names: list, company: str, today: str) -> list[dict]:
 	"""
 	if not compat.doctype_exists(APPLICATION):
 		return []
+	# v0.230.1. Company is NOT a query filter — see `_kept_for_company`.
 	filters: dict = {"status": APPLIED, "phi_clears_on": (">=", today)}
-	if company:
-		filters["company"] = company
 	try:
 		rows = frappe.db.get_all(
 			APPLICATION,
@@ -266,7 +276,7 @@ def _phi_from_applications(names: list, company: str, today: str) -> list[dict]:
 		)
 	except Exception:  # pragma: no cover - a site shaping these columns differently
 		return []
-	rows = [dict(row) for row in rows or []]
+	rows = [dict(row) for row in rows or [] if _kept_for_company(dict(row), company)]
 	if not rows:
 		return []
 
@@ -309,8 +319,6 @@ def _phi_from_tasks(names: list, company: str, today: str) -> list[dict]:
 		"phi_clears_on": (">=", today),
 		"location": ("in", names),
 	}
-	if company:
-		filters["company"] = company
 	try:
 		rows = frappe.db.get_all(
 			FARM_TASK,
@@ -345,7 +353,11 @@ def _phi_from_tasks(names: list, company: str, today: str) -> list[dict]:
 				)
 				or []
 			)
-		rows = [row for row in rows or [] if str(dict(row).get("name") or "") not in cited]
+		rows = [
+			row
+			for row in rows or []
+			if str(dict(row).get("name") or "") not in cited and _kept_for_company(dict(row), company)
+		]
 	except Exception:  # pragma: no cover
 		return []
 	return [
@@ -905,8 +917,8 @@ def create_spray_application(args: dict) -> ToolResult:
 			"tank mixed at the machine. Nothing was recorded."
 		)
 
-	completed_at = as_str(args, "completed_at") or _now()
-	started_at = as_str(args, "started_at") or completed_at
+	completed_at = spray_rei._moment(args, "completed_at") or _now()
+	started_at = spray_rei._moment(args, "started_at") or completed_at
 	if str(completed_at) < str(started_at):
 		raise ToolError(
 			f"completed_at ({completed_at}) is before started_at ({started_at}). Every "
@@ -979,10 +991,10 @@ def create_spray_application(args: dict) -> ToolResult:
 	doc.set_b_purpose = as_str(args, "set_b_purpose") or (mix or {}).get("set_b_purpose") or None
 	doc.flip_performed = 1 if as_bool(args, "flip_performed", False) else 0
 	doc.flip_at = as_str(args, "flip_at") or None
-	doc.wind_speed_mph = args.get("wind_speed_mph")
+	doc.wind_speed_mph = _reading(args, "wind_speed_mph", 0, 200)
 	doc.wind_direction = as_str(args, "wind_direction") or None
-	doc.temperature_f = args.get("temperature_f")
-	doc.humidity_pct = args.get("humidity_pct")
+	doc.temperature_f = _reading(args, "temperature_f", -60, 140)
+	doc.humidity_pct = _reading(args, "humidity_pct", 0, 100)
 	doc.sky_conditions = as_str(args, "sky_conditions") or None
 	weather_source = as_str(args, "weather_source")
 	if weather_source:
@@ -1170,6 +1182,21 @@ def _application_notes(doc, mix, products, rei_hours, status, rei_errors) -> lis
 			"correct. For a pesticide it means a label interval has not been entered — set "
 			"rei_hours on the product's Item, or pass rei_hours here for a state interval."
 		)
+	if status != PLANNED and not doc.get("phi_clears_on"):
+		notes.append(
+			"No product in this tank has a PHI on its Item, so no pre-harvest interval was recorded "
+			"and the harvest guard treats these blocks as pickable. For a foliar nutrient that is "
+			"correct. For a pesticide it means the label's PHI has not been entered — set phi_days "
+			"on the product's Item."
+		)
+	unlabelled = _registered_without_intervals(products)
+	if status != PLANNED and unlabelled:
+		notes.append(
+			"CHECK THE LABEL: "
+			+ "; ".join(f"{item} has an EPA registration number but no {', '.join(gaps)}" for item, gaps in unlabelled)
+			+ ". A registered pesticide almost always carries both intervals; until they are on the Item, "
+			"this pass restricts less than the label does."
+		)
 	if doc.weather_advisories:
 		notes.extend(str(doc.weather_advisories).split("\n"))
 	if mix and _mix_differs(mix.get("products") or [], products):
@@ -1190,6 +1217,51 @@ def _application_notes(doc, mix, products, rei_hours, status, rei_errors) -> lis
 			"pesticide record inspection."
 		)
 	return notes
+
+
+def _reading(args: dict, key: str, low: float, high: float):
+	"""One weather number off the arguments: None when absent, refused when it is not one.
+
+	v0.230.1. Taken raw, "12 mph" was stored as 0.0 — dead calm, on the line of a
+	spray record an inspector reads first — and raised a false inversion advisory.
+	"""
+	raw = args.get(key)
+	if raw in (None, ""):
+		return None
+	try:
+		value = float(raw)
+	except (TypeError, ValueError):
+		raise ToolError(f"{key} must be a number, got {raw!r}. Nothing was recorded.") from None
+	if not low <= value <= high:
+		raise ToolError(f"{key} must be between {low:g} and {high:g}, got {value:g}. Nothing was recorded.")
+	return value
+
+
+def _registered_without_intervals(products: list[dict]) -> list[tuple[str, list[str]]]:
+	"""`[(item, ["REI", "PHI"])]` for products with an EPA registration number and a blank interval.
+
+	v0.230.1. A blank `rei_hours` / `phi_days` reads as "nothing to restrict", which is
+	right for a foliar nutrient and wrong for a registered pesticide. Never raises.
+	"""
+	wanted = [f for f in ("epa_registration_number", "rei_hours", "phi_days") if compat.has_field("Item", f)]
+	if "epa_registration_number" not in wanted:
+		return []
+	items = sorted({str(line.get("item") or "") for line in products or []} - {""})
+	if not items:
+		return []
+	try:
+		rows = frappe.db.get_all("Item", filters={"name": ("in", items)}, fields=["name", *wanted]) or []
+	except Exception:  # pragma: no cover
+		return []
+	out = []
+	for row in rows:
+		row = dict(row)
+		if not str(row.get("epa_registration_number") or "").strip():
+			continue
+		gaps = [label for label, field in (("REI", "rei_hours"), ("PHI", "phi_days")) if field in wanted and _number(row.get(field)) <= 0]
+		if gaps:
+			out.append((str(row["name"]), gaps))
+	return sorted(out)
 
 
 def _mix_differs(mix_products: list[dict], applied: list[dict]) -> bool:

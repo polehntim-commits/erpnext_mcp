@@ -511,6 +511,13 @@ def _requested_doctype(args: dict) -> str:
 	return doctype
 
 
+def _is_single(doctype: str) -> bool:
+	try:
+		return bool(int(getattr(frappe.get_meta(doctype), "issingle", 0) or 0))
+	except Exception:
+		return False
+
+
 def _requested_fields(doctype: str, args: dict) -> list:
 	"""The columns to select, validated against the doctype and against secrecy."""
 	raw = args.get("fields")
@@ -636,17 +643,28 @@ def query_doctype(args: dict) -> ToolResult:
 	# guard 1 in the module docstring: every other read here decides for itself
 	# what it returns and is gated by its switch; this one cannot decide, so it
 	# asks the framework, and `get_list` is the call that asks.
+	single = _is_single(doctype)
 	try:
-		rows = (
-			frappe.get_list(
-				doctype,
-				filters=filters,
-				fields=selected,
-				order_by=order_by,
-				limit=limit + 1,
+		if single:
+			# v0.230.1. A SINGLE HAS NO TABLE TO LIST — `get_list` on System Settings
+			# went to the database for `tabSystem Settings` and came back a 500
+			# (umbrel.local, 2026-09-27). Its one record is read whole, behind the same
+			# read permission `get_list` would have asked for; filters and order have
+			# nothing to act on and are ignored.
+			frappe.has_permission(doctype, "read", throw=True)
+			record = frappe.get_single(doctype)
+			rows = [{field: record.get(field) for field in selected}]
+		else:
+			rows = (
+				frappe.get_list(
+					doctype,
+					filters=filters,
+					fields=selected,
+					order_by=order_by,
+					limit=limit + 1,
+				)
+				or []
 			)
-			or []
-		)
 	except frappe.PermissionError as exc:
 		raise ToolError(
 			f"this account may not read {doctype}: {exc}. THE ACCOUNT IS THE ONE THE OPERATOR "
@@ -667,6 +685,7 @@ def query_doctype(args: dict) -> ToolResult:
 		"filters": filters,
 		"order_by": order_by,
 		"records": records,
+		"single": single,
 		"acting_user": principal or None,
 		"permissions_bounding": bounding,
 		"note": (

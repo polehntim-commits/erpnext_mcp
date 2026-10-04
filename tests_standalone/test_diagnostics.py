@@ -641,3 +641,29 @@ class TheToolsAreRegistered(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class ASingleIsReadWhole(DiagnosticsTestCase):
+	"""v0.230.1. `query_doctype` on a Single went to `get_list`, which asked the
+	database for a table that does not exist — a 500 on umbrel.local for
+	`{'doctype': 'System Settings', 'fields': ['name', 'time_zone']}`."""
+
+	def setUp(self):
+		super().setUp()
+		STORE.singles["Weather Settings"] = {"fetch_interval_minutes": 15, "enabled": 1}
+
+	def test_its_one_record_comes_back(self):
+		result = self.query(doctype="Weather Settings", fields=["name", "fetch_interval_minutes"])
+		self.assertTrue(result["single"])
+		self.assertEqual(result["count"], 1)
+		self.assertEqual(result["records"][0]["fetch_interval_minutes"], 15)
+		self.assertEqual(result["records"][0]["name"], "Weather Settings")
+
+	def test_the_read_permission_still_applies(self):
+		STORE.denied_permissions.add(("Weather Settings", "read"))
+		with self.assertRaises(ToolError) as caught:
+			self.query(doctype="Weather Settings", fields=["fetch_interval_minutes"])
+		self.assertIn("may not read Weather Settings", str(caught.exception))
+
+	def test_an_ordinary_register_is_not_single(self):
+		self.assertFalse(self.query(doctype="Company", fields=["name"])["single"])

@@ -298,6 +298,25 @@ def active_rows(
 	return [dict(row) for row in rows or [] if _for_company(dict(row), company)][: min(limit, REGISTER_CAP)]
 
 
+def _moment(args: dict, key: str) -> str:
+	"""A date and time off the arguments as `YYYY-MM-DD HH:MM:SS`, or "" when absent.
+
+	v0.230.1. Taken raw, "10/03/2026 14:00" reached `add_to_date` after the
+	application was inserted and came back a 500; mixed spellings ("…T08:00" and
+	"… 09:00:00") also compared wrongly as strings. Normalised once here, refused
+	with the argument's name when it does not parse.
+	"""
+	raw = as_str(args, key)
+	if not raw:
+		return ""
+	try:
+		return frappe.utils.get_datetime(raw).strftime("%Y-%m-%d %H:%M:%S")
+	except (TypeError, ValueError, AttributeError):
+		raise ToolError(
+			f"{key} must be a date and time like '2026-10-03 14:00:00', got {raw!r}. Nothing was recorded."
+		) from None
+
+
 def _for_company(row: dict, company: str) -> bool:
 	"""Whether a window belongs in an answer scoped to `company`.
 
@@ -323,9 +342,10 @@ def active_for_blocks(blocks: list, company: str = "") -> list[dict]:
 		return []
 	close_expired_reis()
 	now = _now()
+	# v0.230.1. NO COMPANY FILTER IN THE QUERY: a window recorded without a company
+	# still restricts the block, and `_for_company` keeps it. An equality filter here
+	# told the dispatch warning, the map and the scan that a sprayed block was clear.
 	filters: dict = {"status": ACTIVE, "expires_at": (">", now), "block": ("in", names)}
-	if company:
-		filters["company"] = company
 	try:
 		rows = frappe.db.get_all(
 			SPRAY_REI,
@@ -336,7 +356,7 @@ def active_for_blocks(blocks: list, company: str = "") -> list[dict]:
 		)
 	except Exception:  # pragma: no cover
 		return []
-	return [_describe(dict(row), now) for row in rows or []]
+	return [_describe(dict(row), now) for row in rows or [] if _for_company(dict(row), company)]
 
 
 #: Farm Task states whose REI stamp is a spray that happened. The same pair
@@ -949,7 +969,7 @@ def record_spray_application(args: dict) -> ToolResult:
 		resolved.append((docname, doctype))
 
 	materials, detailed = _tank(args)
-	completed_at = as_str(args, "completed_at") or _now()
+	completed_at = _moment(args, "completed_at") or _now()
 
 	stated = args.get("rei_hours")
 	if stated is not None:

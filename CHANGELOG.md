@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.230.1 — 2026-10-03 — polish: spray restrictions read right, fewer 500s
+
+No migrate, no new tools, no settings. Deploy `docs/deploy/v0.230.1_spray_polish.md`. App 0.37.1.
+
+- **Restrictions with no company count.** `active_for_blocks` (map, dispatch warning, scan) and the PHI readers
+  filtered `company` by equality, so a spray recorded without a company read as a clear block on every
+  company-scoped surface. A window with no company is now kept, as `_for_company` always said.
+- **A phone with several entities sees all of them.** `get_active_rei` / `list_active_reis` scoped a caller
+  who named no company to the first one; a block owned by the second read as clear.
+- **A blank PHI is said out loud.** An applied spray whose tank has no PHI says the harvest guard treats the
+  blocks as pickable; a product with an EPA registration number and a blank REI or PHI is named.
+- **Times and weather are checked before anything is written.** A malformed `completed_at` / `started_at`
+  was a 500 after the application was inserted; it is now refused by name, and ISO spellings are normalised.
+  Wind, temperature and humidity given as text ("12 mph") were stored as 0 — dead calm; now refused, and
+  humidity must be 0–100.
+- **Rodent bait completion no longer crashes on "2 blocks".** The record is written with the quantity left for
+  a person and a note; a unit the site does not know is left blank instead of becoming the Item's stock unit.
+- **`query_doctype` reads a Single** (System Settings, Weather Settings) as its one record instead of a 500.
+- **The "no APNs key" warning is logged once every 6 hours,** not once per push (ten rows in forty seconds on
+  umbrel.local).
+- (App 0.37.1: "Harvest from" is the day after the PHI's last day — it was one day early; 44 pt tap targets,
+  two VoiceOver labels, three large texts scale with Dynamic Type.)
+
 ## 0.230.0 — 2026-10-03 — Farm Task photos, per photo
 
 No migrate. Contract `docs/design/offline_mill_creek.md` §1b. Deploy

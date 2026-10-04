@@ -19,7 +19,13 @@ def _quantity(fields: list, answers: dict) -> tuple:
 	"""`(quantity, uom, stations)` from the answers: a `quantity` measurement, else a `stations` group."""
 	value = answers.get("quantity")
 	if isinstance(value, dict) and value.get("value") not in (None, ""):
-		return float(value["value"]), str(value.get("uom") or ""), None
+		# v0.230.1. "2 blocks" in the number box raised here, inside task
+		# completion, and the whole completion came back a 500. The record is
+		# still written; the quantity is left for a person, and the notes say so.
+		try:
+			return float(value["value"]), str(value.get("uom") or ""), None
+		except (TypeError, ValueError):
+			return None, str(value.get("uom") or ""), None
 	for field in fields:
 		if field.get("type") != "group":
 			continue
@@ -61,10 +67,24 @@ def build_application(task: dict, assignment_doc, answers: dict | None) -> str:
 	doc.occupancy = task.get("occupancy_at_creation") or None
 	doc.product = product or None
 	doc.quantity = quantity
-	if uom and frappe.db.exists("UOM", uom):
-		doc.uom = uom
+	unit_note = ""
+	if uom:
+		# v0.230.1. A unit the worker NAMED is resolved, never replaced: "blocks"
+		# used to fall through to the Item's stock unit and the record said
+		# "2 Pound" for two blocks of bait.
+		from . import uom_resolve
+
+		resolved = uom_resolve.resolve_unit(uom).get("uom")
+		doc.uom = resolved or None
+		if not resolved:
+			unit_note = f"Unit stated as {uom!r}, which is not on this site's unit list — set it by hand."
 	elif product:
 		doc.uom = frappe.db.get_value("Item", product, "stock_uom") or None
+	raw_quantity = (answers.get("quantity") or {}).get("value") if isinstance(answers.get("quantity"), dict) else None
+	if quantity is None and raw_quantity not in (None, ""):
+		unit_note = (unit_note + " " if unit_note else "") + (
+			f"Quantity stated as {raw_quantity!r}, which is not a number — set it by hand."
+		)
 	doc.stations = stations or 0
 	doc.applicator = worker
 	doc.applicator_name = str(getattr(assignment_doc, "assigned_to_name", "") or worker)
@@ -78,7 +98,9 @@ def build_application(task: dict, assignment_doc, answers: dict | None) -> str:
 	doc.label_available = 1 if available else 0
 	views = task_forms._json(task.get("label_views"), [])
 	doc.label_viewed = 1 if any(row.get("item_code") == product for row in views) else 0
-	doc.notes = str(getattr(assignment_doc, "findings_text", "") or "")[:1000]
+	doc.notes = "\n".join(
+		part for part in (str(getattr(assignment_doc, "findings_text", "") or ""), unit_note) if part
+	)[:1000]
 	doc.insert(ignore_permissions=True)
 	return doc.name
 

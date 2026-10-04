@@ -812,3 +812,66 @@ class ACompletedSprayTaskOpensTheRegister(REITestCase):
 			frappe.new_doc = original
 		self.assertEqual(data["final_state"], "Completed")
 		self.assertEqual(data["spray_reis"]["errors"][0]["block"], BLOCK)
+
+
+from erpnext_mcp.tools import spray_rei  # noqa: E402
+
+
+class ARestrictionWithNoCompanyStillCounts(REITestCase):
+	"""v0.230.1. `active_for_blocks` — the map's red layer, the dispatch warning and
+	the scan — filtered company by equality, so a window recorded without a company
+	read as a clear block on every company-scoped surface."""
+
+	def test_it_is_in_the_companys_answer(self):
+		self.spray()
+		for row in self.rei_rows():
+			row["company"] = None
+		self.assertEqual(len(spray_rei.active_for_blocks([BLOCK], MAIN)), 1)
+
+	def test_another_companys_window_is_still_left_out(self):
+		self.spray()
+		for row in self.rei_rows():
+			row["company"] = OTHER
+		self.assertEqual(spray_rei.active_for_blocks([BLOCK], MAIN), [])
+
+
+class APhoneWithTwoEntitiesSeesBoth(REITestCase):
+	"""v0.230.1. The phone's REI reads scoped a caller with several entities and no
+	`company` to the FIRST — a block owned by the second read as clear."""
+
+	def test_no_company_named_reads_every_entity_the_caller_has(self):
+		from erpnext_mcp.api import mobile as mobile_api
+
+		self.assertEqual(mobile_api._rei_entity("u", None, [MAIN]), MAIN)
+		self.assertEqual(mobile_api._rei_entity("u", None, [MAIN, OTHER]), "")
+		self.assertEqual(mobile_api._rei_entity("u", OTHER, [MAIN, OTHER]), OTHER)
+
+	def test_the_all_entities_board_is_cut_back_to_the_callers(self):
+		from erpnext_mcp.api import mobile as mobile_api
+
+		self.spray(blocks=(BLOCK,))
+		self.spray(blocks=(BLOCK_TWO,), company=OTHER)
+		every = self.tool_data("list_active_reis", {})
+		self.assertEqual(every["restricted_block_count"], 2)
+		mine = mobile_api._rei_board_for(every, [MAIN, OTHER])
+		self.assertEqual(mine["restricted_block_count"], 2)
+		only_main = mobile_api._rei_board_for(every, [MAIN, "Third Entity"])
+		self.assertEqual(only_main["restricted_blocks"], [BLOCK])
+		self.assertEqual(only_main["active_count"], 1)
+
+
+class AMalformedTimeIsRefusedByName(REITestCase):
+	"""v0.230.1. "10/03/2026 14:00" reached add_to_date raw and came back a 500."""
+
+	def test_record_spray_application_names_the_argument(self):
+		message = self.tool_error(
+			"record_spray_application",
+			{"blocks": [BLOCK], "materials_used": [{"item_code": SPRAY, "qty": 5}], "company": MAIN,
+			 "completed_at": "yesterday 3pm"},
+		)
+		self.assertIn("completed_at must be a date and time", message)
+		self.assertEqual(self.rei_rows(), [])
+
+	def test_an_iso_spelling_is_accepted_and_normalised(self):
+		data = self.spray(completed_at="2026-10-03T08:15:00")
+		self.assertEqual(str(data["completed_at"])[:19], "2026-10-03 08:15:00")
