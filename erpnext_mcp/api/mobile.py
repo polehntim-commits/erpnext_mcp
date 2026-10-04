@@ -1388,11 +1388,41 @@ def claim_task(user: str, task=None) -> dict:
 	return shape.task(task_row, result.data.get("assignment") or {})
 
 
+def _tap_time(tapped_at) -> tuple[str, str]:
+	"""v0.231.2. The phone's tap as the official time, inside the offline window.
+
+	Returns `(time, note)`: the site-zone time to record, or "" to let the tool use
+	now; and why the tap was not used, or "". The punch rule (`punch_times.judge`):
+	a tap older than the window, or a phone clock running ahead, uses the server's
+	time and says so.
+	"""
+	from .. import punch_times
+
+	tapped = punch_times.device_time(tapped_at)
+	if not tapped:
+		return "", ""
+	note = punch_times.judge(tapped, frappe.utils.now())
+	if note:
+		return "", f"{note} The server's time was used."
+	return tapped, ""
+
+
+def _with_time_note(data, note: str):
+	if note and isinstance(data, dict):
+		return {**data, "time_note": note}
+	return data
+
+
 # ── 6. start_task ───────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("start_task", limit=guard.WRITE_LIMIT, mutating=True)
-def start_task(user: str, task=None, task_assignment=None) -> dict:
-	"""Clock in on one claimed task. `started_at` is what duration counts from."""
+@request_receipts.idempotent("start_task")
+def start_task(user: str, task=None, task_assignment=None, tapped_at=None, client_request_id=None) -> dict:
+	"""Clock in on one claimed task. `started_at` is what duration counts from.
+
+	v0.231.2. `tapped_at`: app 0.38.3 queues a start made with no signal, and the
+	minutes count from the tap (`_tap_time`); `client_request_id` makes a resend the
+	same start."""
 	allowed = guard.require_scope(user)
 	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
 	assignment = _assignment(name, task_assignment, allowed)
@@ -1400,8 +1430,11 @@ def start_task(user: str, task=None, task_assignment=None) -> dict:
 	inner = {"task": name}
 	if assignment:
 		inner["assignment"] = assignment
+	when, note = _tap_time(tapped_at)
+	if when:
+		inner["started_at"] = when
 	result = fieldwork.start_task_via_mobile(inner)
-	return shape.task(result.data.get("task") or {}, result.data.get("assignment") or {})
+	return _with_time_note(shape.task(result.data.get("task") or {}, result.data.get("assignment") or {}), note)
 
 
 # ── 7. complete_task_via_mobile ─────────────────────────────────────────────
@@ -10247,7 +10280,10 @@ def attach_file_to_document(
 # ── 74. pause_task_via_mobile ────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("pause_task_via_mobile", mutating=True, limit=guard.WRITE_LIMIT)
-def pause_task_via_mobile(user: str, task=None, task_assignment=None, reason=None) -> dict:
+@request_receipts.idempotent("pause_task_via_mobile")
+def pause_task_via_mobile(
+	user: str, task=None, task_assignment=None, reason=None, tapped_at=None, client_request_id=None
+) -> dict:
 	"""Stop the clock on a job this worker is coming back to.
 
 	SCOPED TO THE CALLER'S OWN WORK. `worker_id` is not on this signature, so
@@ -10266,14 +10302,19 @@ def pause_task_via_mobile(user: str, task=None, task_assignment=None, reason=Non
 		inner["task"] = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
 	if reason:
 		inner["reason"] = str(reason).strip()
+	# v0.231.2: a pause queued with no signal stops the clock at the tap.
+	when, note = _tap_time(tapped_at)
+	if when:
+		inner["paused_at"] = when
 
-	return dispatch.pause_farm_task(inner).data
+	return _with_time_note(dispatch.pause_farm_task(inner).data, note)
 
 
 # ── 75. resume_task_via_mobile ───────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("resume_task_via_mobile", mutating=True, limit=guard.WRITE_LIMIT)
-def resume_task_via_mobile(user: str, task=None, task_assignment=None) -> dict:
+@request_receipts.idempotent("resume_task_via_mobile")
+def resume_task_via_mobile(user: str, task=None, task_assignment=None, tapped_at=None, client_request_id=None) -> dict:
 	"""Pick a paused job back up. Whatever else was running is stood down."""
 	allowed = guard.require_scope(user)
 	employee = _employee(user)
@@ -10284,8 +10325,12 @@ def resume_task_via_mobile(user: str, task=None, task_assignment=None) -> dict:
 		inner["assignment"] = assignment
 	else:
 		inner["task"] = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+	# v0.231.2: a resume queued with no signal restarts the clock at the tap.
+	when, note = _tap_time(tapped_at)
+	if when:
+		inner["resumed_at"] = when
 
-	return dispatch.resume_farm_task(inner).data
+	return _with_time_note(dispatch.resume_farm_task(inner).data, note)
 
 
 # ── 76. link_tasks_via_mobile ────────────────────────────────────────────────

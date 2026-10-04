@@ -151,3 +151,67 @@ class AShiftStartsWhenThePhoneOpenedIt(MobileAPITestCase):
 		seen, answer = self._start("2026-10-04 18:00:00")
 		self.assertNotIn("start_datetime", seen)
 		self.assertIn("phone clock may be wrong", answer["start_time_note"])
+
+
+class TaskClocksQueuedOfflineCountFromTheTap(MobileAPITestCase):
+	"""v0.231.2. Start, pause and resume queued with no signal carry the tap; inside the
+	offline window it is the time recorded, outside it the server's time is, with a note."""
+
+	NOW = "2026-10-04 14:40:00"
+
+	def _call(self, route, tool_path, time_key, tapped_at):
+		from unittest import mock
+
+		from erpnext_mcp import request_receipts
+		from erpnext_mcp.api import guard
+
+		self.be()
+		seen = {}
+
+		class Result:
+			data = {"task": {"name": "FT-1"}, "assignment": {}, "state": "ok"}
+
+		def fake(inner):
+			seen.update(inner)
+			return Result()
+
+		module, attr = tool_path
+		with mock.patch.object(module, attr, side_effect=fake), \
+			mock.patch.object(guard, "require_scoped_doc", side_effect=lambda dt, v, *a: v), \
+			mock.patch.object(mobile_api, "_employee", return_value="HR-EMP-1"), \
+			mock.patch.object(request_receipts, "earlier", return_value=None), \
+			mock.patch.object(request_receipts, "remember"), \
+			mock.patch("frappe.utils.now", return_value=self.NOW):
+			answer = getattr(mobile_api, route)(task="FT-1", tapped_at=tapped_at, client_request_id=f"{route}-1")
+		return seen.get(time_key), answer
+
+	def _each(self):
+		from erpnext_mcp.tools import dispatch, fieldwork
+
+		return (
+			("start_task", (fieldwork, "start_task_via_mobile"), "started_at"),
+			("pause_task_via_mobile", (dispatch, "pause_farm_task"), "paused_at"),
+			("resume_task_via_mobile", (dispatch, "resume_farm_task"), "resumed_at"),
+		)
+
+	def test_a_tap_inside_the_window_is_the_time_recorded(self):
+		for route, tool, key in self._each():
+			with self.subTest(route):
+				when, answer = self._call(route, tool, key, "2026-10-04 09:15:00")
+				self.assertEqual(when, "2026-10-04 09:15:00")
+				self.assertNotIn("time_note", answer)
+
+	def test_a_stale_or_future_tap_uses_the_servers_time_and_says_so(self):
+		for route, tool, key in self._each():
+			for tapped in ("2026-10-01 09:15:00", "2026-10-04 18:00:00"):
+				with self.subTest(route=route, tapped=tapped):
+					when, answer = self._call(route, tool, key, tapped)
+					self.assertIsNone(when)
+					self.assertIn("server's time was used", answer["time_note"])
+
+	def test_no_tap_is_the_old_behaviour(self):
+		for route, tool, key in self._each():
+			with self.subTest(route):
+				when, answer = self._call(route, tool, key, None)
+				self.assertIsNone(when)
+				self.assertNotIn("time_note", answer)

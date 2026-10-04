@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.231.2 — 2026-10-04 — offline: a task started, paused or resumed with no signal counts from the tap
+
+No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.2_offline_tasks.md`. App 0.38.3.
+
+- **`start_task`, `pause_task_via_mobile`, `resume_task_via_mobile` take `tapped_at` and `client_request_id`.** App
+  0.38.3 queues these with no signal; the task's minutes start, stop and restart at the tap inside the offline window
+  (`punch_times.judge`, the clock-in rule). Older than the window, or a phone clock ahead: the server's time, and
+  the answer carries `time_note`. A resend after a lost reply is the same action (`request_receipts`).
+- `claim_task` is unchanged and still never queued: two workers offline could both believe they hold the same job.
+
 ## 0.231.1 — 2026-10-04 — offline: a late shift start is the tap; report resends are one task; offline valve scans
 
 No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.1_offline.md`. App 0.38.1.
