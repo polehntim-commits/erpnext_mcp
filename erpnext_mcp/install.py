@@ -223,6 +223,7 @@ def after_migrate() -> None:
 	_receipt_intelligence_fields()
 	_wizard_definitions()
 	_trade_documents()
+	_asset_tag_urls()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -721,6 +722,24 @@ def _reporting_templates() -> None:
 	if report.get("failed"):
 		print(
 			f"erpnext_mcp: {len(report['failed'])} reporting template(s) could not be seeded: {report['failed']}"
+		)
+
+
+def _asset_tag_urls() -> None:
+	"""v0.230.4. Point every stored asset `qr_url` at today's settings. Never raises."""
+	try:
+		from .erpnext_mcp.doctype.asset_register.asset_register import regenerate_qr_urls
+
+		report = regenerate_qr_urls()
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: asset tag URLs were not refreshed — {type(exc).__name__}: {exc}")
+		return
+	if report["changed"]:
+		example = report["examples"][0]
+		print(
+			f"erpnext_mcp: {report['changed']} of {report['checked']} asset tag URL(s) now point at "
+			f"{example['now'].rsplit('/', 1)[0]}/… (was e.g. {example['was']}). A tag already PRINTED "
+			"with the old address still scans in the app; reprint it for phone cameras."
 		)
 
 

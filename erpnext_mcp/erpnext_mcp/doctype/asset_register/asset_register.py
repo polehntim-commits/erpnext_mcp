@@ -104,3 +104,39 @@ def _build_qr_url(asset_name: str) -> str:
 	from urllib.parse import quote
 
 	return f"{base}/scan/{quote(asset_name, safe='')}"
+
+
+def tag_url(row: dict) -> str:
+	"""What a tag for this asset encodes NOW, from the current settings.
+
+	v0.230.4. Every renderer asks this rather than trusting the stored `qr_url`. The
+	stored value is written only on save, so an asset saved before the Farm Ops
+	cutover kept `<public url>/scan/<name>` — on OML `…/erpnext/scan/…`, a path no
+	longer on the public Funnel — and a card printed from it opened nothing in a
+	phone's camera.
+	"""
+	return _build_qr_url(str(row.get("tag_uuid") or row.get("name") or ""))
+
+
+def regenerate_qr_urls() -> dict:
+	"""Rewrite every stored `qr_url` that is not what `tag_url` says now. Idempotent.
+
+	Runs after every migrate. A row already right is not touched; `modified` is not
+	moved, because nothing about the asset changed — only where its tag points.
+	"""
+	from erpnext_mcp import compat
+
+	report = {"checked": 0, "changed": 0, "examples": []}
+	if not compat.doctype_exists("Asset Register"):
+		return report
+	fields = compat.existing_fields("Asset Register", ("name", "tag_uuid", "qr_url"))
+	for row in frappe.db.get_all("Asset Register", fields=fields, limit=100000) or []:
+		row = dict(row)
+		report["checked"] += 1
+		wanted = tag_url(row)
+		if wanted and row.get("qr_url") != wanted:
+			frappe.db.set_value("Asset Register", row["name"], "qr_url", wanted, update_modified=False)
+			report["changed"] += 1
+			if len(report["examples"]) < 3:
+				report["examples"].append({"asset": row["name"], "was": row.get("qr_url"), "now": wanted})
+	return report

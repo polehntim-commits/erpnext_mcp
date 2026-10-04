@@ -868,3 +868,54 @@ class OnlyRequesters(CardPrintCase):
 				call()
 			self.assertIn("in a minute", str(caught.exception))
 		self.assertEqual(len(STORE.rows("Card Print Job")), card_print.PER_MINUTE)
+
+
+# ── v0.230.4: a tag points where the farm is NOW ────────────────────────────
+LEGACY_BASE = "https://farm.tail1234.ts.net/erpnext"
+FARMOPS_BASE = "https://farm.tail1234.ts.net"
+
+
+@unittest.skipUnless(card_art.reportlab_available() and qr.available(), "needs reportlab and segno")
+class ATagPointsAtFarmOps(CardPrintCase):
+	"""OML, 2026-10-04: TC-TRAKHOE-1 was saved before the Farm Ops cutover, so its stored
+	qr_url read `…/erpnext/scan/TC-TRAKHOE-1` — a path no longer on the public Funnel —
+	and card job CPJ-2026-00004 encoded exactly that."""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **ON, public_url=LEGACY_BASE)
+		self.tool_data("register_asset", {"name": "TC-TRAKHOE-1", "asset_type": "Tractor", "company": MAIN})
+		# The cutover happens after the asset was saved.
+		self.configure(enabled=1, **ON, public_url=LEGACY_BASE, farmops_public_url=FARMOPS_BASE,
+			legacy_erpnext_paths=0)
+		self.assertIn("/erpnext/scan/", STORE.get_raw("Asset Register", "TC-TRAKHOE-1")["qr_url"])
+		STORE.commit()
+
+	def test_the_card_encodes_the_farm_ops_page(self):
+		from unittest import mock
+
+		seen = []
+		real = card_print._matrix
+		with mock.patch.object(card_print, "_matrix", side_effect=lambda text, ec: seen.append(text) or real(text, ec)):
+			answer = card_print.request(WORKER, "Asset Tag", "TC-TRAKHOE-1", uid(7))
+			self.pdf_of(answer["job"]["name"])
+		self.assertIn(f"{FARMOPS_BASE}/farmops/api/scan/TC-TRAKHOE-1", seen)
+		self.assertFalse([text for text in seen if "/erpnext/" in text])
+
+	def test_the_qr_tools_and_the_detail_say_the_same(self):
+		self.configure(enabled=1, **ON, public_url=LEGACY_BASE, farmops_public_url=FARMOPS_BASE,
+			legacy_erpnext_paths=0, allow_generate_asset_qr=1, allow_get_asset_detail=1)
+		want = f"{FARMOPS_BASE}/farmops/api/scan/TC-TRAKHOE-1"
+		self.assertEqual(self.tool_data("generate_asset_qr", {"asset_name": "TC-TRAKHOE-1"})["qr_url"], want)
+		self.assertEqual(self.tool_data("get_asset_detail", {"asset_name": "TC-TRAKHOE-1"})["qr_url"], want)
+
+	def test_a_migrate_rewrites_the_stored_url_once(self):
+		from erpnext_mcp.erpnext_mcp.doctype.asset_register import asset_register
+
+		first = asset_register.regenerate_qr_urls()
+		self.assertGreaterEqual(first["changed"], 1)
+		self.assertEqual(
+			STORE.get_raw("Asset Register", "TC-TRAKHOE-1")["qr_url"],
+			f"{FARMOPS_BASE}/farmops/api/scan/TC-TRAKHOE-1",
+		)
+		self.assertEqual(asset_register.regenerate_qr_urls()["changed"], 0)

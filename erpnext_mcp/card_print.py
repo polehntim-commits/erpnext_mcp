@@ -396,7 +396,7 @@ def _asset(reference: str) -> tuple:
 	if not reference or not frappe.db.exists(doctype, reference):
 		raise CardPrintError(f"no asset called {reference!r}. Nothing was queued.", "not_found")
 	fields = compat.existing_fields(
-		doctype, ("name", "asset_type", "company", "description", "qr_url", "retired_at", "location")
+		doctype, ("name", "asset_type", "company", "description", "qr_url", "tag_uuid", "retired_at", "location")
 	)
 	row = dict(frappe.db.get_value(doctype, reference, fields, as_dict=True) or {})
 	row["name"] = reference
@@ -595,7 +595,10 @@ def card_sides(job_type: str, row: dict, company: str, allow_issue: bool = True)
 			}
 		)
 	else:
-		matrix = _matrix(str(row.get("qr_url") or f"/scan/{row['name']}"), "M")
+		from .erpnext_mcp.doctype.asset_register.asset_register import tag_url
+
+		# v0.230.4: built from the current settings, never the stored qr_url.
+		matrix = _matrix(tag_url(row), "M")
 		description = str(row.get("description") or "").strip().splitlines()
 		sides = card_art.asset_sides(
 			{

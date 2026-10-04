@@ -200,7 +200,8 @@ def _describe_asset(row: dict) -> dict:
 		# tree was. Renaming the column would break every stored filter and
 		# every client reading it.
 		"parent_asset": row.get("location") or None,
-		"qr_url": row.get("qr_url") or None,
+		# v0.230.4: what a tag printed now encodes, not what was stored at the last save.
+		"qr_url": _tag_url(row) or None,
 		"nfc_uid": row.get("nfc_uid") or None,
 		"current_state": _parse_state(row.get("current_state")),
 		"last_scan_at": str(row.get("last_scan_at") or "") or None,
@@ -279,6 +280,14 @@ def _occupancy_block(row: dict) -> dict:
 		"rodent_bait_state": row.get("rodent_bait_state") or None,
 		"rodent_bait_state_since": str(row.get("rodent_bait_state_since") or "") or None,
 	}
+
+
+def _tag_url(row: dict) -> str:
+	from ..erpnext_mcp.doctype.asset_register.asset_register import tag_url
+
+	if "tag_uuid" not in row and row.get("name") and compat.has_field(ASSET_REGISTER, "tag_uuid"):
+		row = {**row, "tag_uuid": frappe.db.get_value(ASSET_REGISTER, row["name"], "tag_uuid")}
+	return tag_url(row)
 
 
 def asset_row(asset_name: str, company: str = "") -> dict:
@@ -1941,7 +1950,7 @@ def generate_asset_qr(args: dict) -> ToolResult:
 	_require()
 	name = as_str(args, "asset_name", required=True)
 	row = asset_row(name)
-	url = row.get("qr_url") or f"/scan/{row['name']}"
+	url = _tag_url(row)
 
 	fmt = as_str(args, "format") or "png"
 	if fmt not in ("png", "matrix"):
@@ -1991,7 +2000,8 @@ def generate_asset_qr_sheet(args: dict) -> ToolResult:
 		if not frappe.db.exists(ASSET_REGISTER, name):
 			errors.append({"asset_name": name, "error": "not found"})
 			continue
-		url_val = frappe.db.get_value(ASSET_REGISTER, name, "qr_url") or f"/scan/{name}"
+		tag = frappe.db.get_value(ASSET_REGISTER, name, "tag_uuid") if compat.has_field(ASSET_REGISTER, "tag_uuid") else ""
+		url_val = _tag_url({"name": name, "tag_uuid": tag})
 		try:
 			rendered = qr.render(url_val)
 			labels.append(

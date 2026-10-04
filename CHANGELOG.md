@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.230.4 — 2026-10-04 — asset tags point at Farm Ops, not the closed /erpnext path
+
+Code plus a step that runs on migrate (no schema change, no tools, no settings). Deploy
+`docs/deploy/v0.230.4_tag_urls.md`.
+
+- OML: TC-TRAKHOE-1's stored `qr_url` was `https://orchardmeadow-umbrel.tail2b0bb0.ts.net/erpnext/scan/TC-TRAKHOE-1`
+  — written when the asset was saved, before the Farm Ops cutover — and card job CPJ-2026-00004 encoded it. With
+  `/erpnext` off the public Funnel, a phone camera opening that tag reached nothing. The card, `generate_asset_qr`,
+  `generate_asset_qr_sheet` and `get_asset_detail` now build the URL from the current settings
+  (`<farmops_public_url>/farmops/api/scan/<name or tag UUID>`), never the stored value.
+- After every migrate, stored `qr_url`s that differ are rewritten (idempotent; `modified` untouched) and one line
+  says how many.
+- Tags already printed with `/erpnext/scan/…` still resolve in the Farm Ops app (the scanner unwraps any
+  `…/scan/<name>`, online and offline); only a phone's own camera needs the new address.
+
 ## 0.230.3 — 2026-10-04 — polish: lost shifts found, no 500s on bad input, a faster Today, spray reads right
 
 No migrate, no new tools, no settings. Deploy `docs/deploy/v0.230.3_polish.md`. App 0.37.3.
