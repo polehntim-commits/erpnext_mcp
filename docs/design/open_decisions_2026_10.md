@@ -72,3 +72,10 @@ enough. Nothing here is built until approved.
 47. Upload links: video cap 2 GB?
 48. Upload links: private-only by default; public needs an extra admin switch?
 49. Test multi-GB uploads over Funnel on umbrel.local first?
+
+## Business card → Contact — `business_card_contacts.md`
+
+50. Entry point: classifier switch in Receipt Capture **and** a direct "Scan business card" action?
+51. Unmatched company: offer create supplier / customer / leave unlinked?
+52. "Where met": GPS-suggested place, editable — or free text?
+53. May Crew Leaders capture (not browse) cards?
