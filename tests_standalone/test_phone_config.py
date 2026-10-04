@@ -610,6 +610,23 @@ class LabelDrivenCompliance(PhoneConfigCase):
 		listed = self.tool_data("list_label_compliance", {"item": "RESTRICTO"})["items"][0]
 		self.assertEqual((listed["profiles"], listed["proposal"]), ([], None))
 
+	def test_approving_runs_only_what_is_still_needed(self):
+		"""v0.230.6. The stored proposal is a snapshot. A manual step a person has since
+		done by hand stopped every approval at "do it by hand", for ever."""
+		from unittest import mock
+
+		label_compliance.attach("BAIT")
+		frappe.db.set_value("Item", "BAIT", "compliance_proposal_json", json.dumps(
+			{"calls": [{"tool": "(none)", "arguments": {}, "why": "done by hand since"}]}
+		))
+		STORE.commit()
+		now_done = {"item": "BAIT", "matched": label_compliance.evaluate("BAIT")["matched"], "proposed_calls": [],
+			"state": "Active"}
+		with mock.patch.object(label_compliance, "evaluate", return_value=now_done):
+			answer = self.tool_data("approve_label_compliance", {"item": "BAIT"})
+		self.assertTrue(answer["ok"])
+		self.assertEqual(answer["results"], [])
+
 	def test_a_new_program_is_a_proposal(self):
 		result = label_compliance.attach("BAIT")
 		self.assertEqual(result["state"], "Proposed")

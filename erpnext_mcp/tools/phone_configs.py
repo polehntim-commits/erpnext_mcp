@@ -475,9 +475,20 @@ def approve_label_compliance(args: dict) -> ToolResult:
 		raise ToolError(
 			f"{item} has no pending proposal (it is {row.get('compliance_state') or 'unmatched'})."
 		)
-	proposal = json.loads(row.get("compliance_proposal_json") or "{}")
+	proposal = _json_or(row.get("compliance_proposal_json"), {})
+	proposal = proposal if isinstance(proposal, dict) else {}
+	# v0.230.6. WHAT IS STILL NEEDED, NOT WHAT WAS PROPOSED. The stored proposal is a
+	# snapshot: once a person did a manual step by hand, replaying it stopped at that
+	# step for ever ("do it by hand"). The product is re-read, and only the calls it
+	# still needs are run.
+	try:
+		calls = label_compliance.evaluate(item).get("proposed_calls")
+	except Exception:
+		calls = None
+	if calls is None:
+		calls = proposal.get("calls") or []
 	results = []
-	for call in proposal.get("calls") or []:
+	for call in calls:
 		if call.get("tool") not in registry.TOOLS:
 			results.append(
 				{"tool": call.get("tool"), "ok": False, "summary": "not an automatic step — do it by hand"}

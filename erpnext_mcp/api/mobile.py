@@ -24041,6 +24041,7 @@ def _spray_materials(materials_used) -> list:
 
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("record_spray_application", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("record_spray_application")
 def record_spray_application(
 	user: str,
 	blocks=None,
@@ -24056,8 +24057,13 @@ def record_spray_application(
 	source_task=None,
 	notes=None,
 	company=None,
+	client_request_id=None,
 ) -> dict:
 	"""File a spray from the phone, through a Farm Task. v0.195.0, SERVER_CHANGES §43.
+
+	v0.230.6. `client_request_id`: a resend after a lost reply gets the first answer
+	back (`replayed: true`) — not a second application, task, set of REIs and stock
+	drawdown.
 
 	WRITES A SPRAY APPLICATION, NOT ONLY A RESTRICTION. The MCP tool of this name
 	(`spray_rei.record_spray_application`) writes Spray REI rows and nothing

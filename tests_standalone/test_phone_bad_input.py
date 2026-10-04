@@ -70,3 +70,19 @@ class APartlyMeasuredTankSaysSo(MobileAPITestCase):
 		self.assertIn("TAG-8 has no acreage", lines[0])
 		self.assertEqual(mobile_api._unmeasured_blocks_warning([{"block": "Home-7", "acres": 10.0}], 10.0), [])
 		self.assertEqual(mobile_api._unmeasured_blocks_warning([{"block": "TAG-8"}], 0), [])
+
+
+class ASprayResendIsTheSameSpray(MobileAPITestCase):
+	"""v0.230.6. A phone spray resent after a lost reply filed a second application,
+	task, REI set and stock drawdown. It now answers with the first."""
+
+	def test_a_known_request_id_answers_from_the_receipt(self):
+		from unittest import mock
+
+		from erpnext_mcp import request_receipts
+
+		self.be()
+		with mock.patch.object(request_receipts, "earlier", return_value={"application": "SPRAY-1"}) as seen:
+			answer = mobile_api.record_spray_application(blocks=["X"], client_request_id="spray-req-1")
+		self.assertEqual(answer, {"application": "SPRAY-1", "replayed": True})
+		self.assertEqual(seen.call_args.args[0], "record_spray_application")

@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.230.6 — 2026-10-04 — polish: label approvals run what is still needed; a phone spray resend is the same spray
+
+No migrate, no new tools, no settings. Deploy `docs/deploy/v0.230.6_polish.md`. App 0.37.4.
+
+- `approve_label_compliance` re-reads the product and runs only the calls it still needs. It replayed the stored
+  proposal, so a manual step a person had since done by hand ("do it by hand") stopped every approval for good.
+- `record_spray_application` (phone) takes `client_request_id`: a resend after a lost reply answers with the first
+  (`replayed: true`) instead of filing a second application, task, REI set and stock drawdown. App 0.37.4 sends it.
+
 ## 0.230.5 — 2026-10-04 — slope limits and service defaults are data on Asset Type
 
 **Migrate needed** (four columns on Farm Asset Type, one fetched flag on Asset Register, one patch). No new tools,
