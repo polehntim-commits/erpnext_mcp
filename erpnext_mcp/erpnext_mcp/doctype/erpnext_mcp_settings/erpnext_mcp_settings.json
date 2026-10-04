@@ -1158,6 +1158,8 @@
   "allow_retry_card_print_job",
   "allow_list_tag_print_queue",
   "allow_print_tags_for_location",
+  "allow_list_punch_reviews",
+  "allow_resolve_punch_review",
   "allow_download_card_pdf",
   "allow_request_card_back",
   "allow_mark_card_print_job",
@@ -1282,7 +1284,9 @@
   "update_document_section",
   "allow_update_document",
   "allow_manage_updatable_fields",
-  "update_document_fields"
+  "update_document_fields",
+  "offline_punch_section",
+  "offline_punch_window_hours"
  ],
  "fields": [
   {
@@ -8971,6 +8975,20 @@
    "label": "Print Tags For Location"
   },
   {
+   "default": "1",
+   "description": "READ. v0.227.0. Punch times received long after the phone's tap, waiting for a manager.",
+   "fieldname": "allow_list_punch_reviews",
+   "fieldtype": "Check",
+   "label": "List Punch Reviews"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.227.0. Decide a flagged punch: phone time stands, server time used, or corrected. Farm Manager / HR / System Manager.",
+   "fieldname": "allow_resolve_punch_review",
+   "fieldtype": "Check",
+   "label": "Resolve Punch Review"
+  },
+  {
    "default": "0",
    "description": "WRITE. Render one card PDF to print by hand and record it as Downloaded. Card Print Requester.",
    "fieldname": "allow_download_card_pdf",
@@ -9811,6 +9829,19 @@
    "fieldtype": "Table",
    "label": "Updatable Fields",
    "options": "MCP Update Document Field"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "offline_punch_section",
+   "fieldtype": "Section Break",
+   "label": "Punch times from phones with no signal (v0.227.0)"
+  },
+  {
+   "default": "12",
+   "description": "The phone's tap is the official clock-in, clock-out or class check-in time. If the server receives it more than this many hours later (or the tap is after the receipt), it is flagged for a manager. Both times are kept.",
+   "fieldname": "offline_punch_window_hours",
+   "fieldtype": "Float",
+   "label": "Offline window (hours)"
   }
  ],
  "index_web_pages_for_search": 0,

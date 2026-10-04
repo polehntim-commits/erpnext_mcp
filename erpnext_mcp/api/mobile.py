@@ -23333,8 +23333,14 @@ def clock_in_crew(
 	latitude=None,
 	longitude=None,
 	client_request_id=None,
+	tapped_at=None,
 ) -> dict:
 	"""Clock several people onto a shift in one call. v0.212.0.
+
+	v0.227.0. `tapped_at` is the phone's clock when the foreman tapped — the
+	official clock-in time for everyone on the call. The server's receipt is
+	kept beside it, and a gap over the offline window goes to a manager
+	(`punch_times`).
 
 	JOINS OR STARTS. `shift` when named; else the caller's own open shift; else
 	a new one, with the caller as foreman — and then `location` is required, for
@@ -23405,6 +23411,14 @@ def clock_in_crew(
 				frappe.ValidationError,
 			)
 		inner = {"foreman": me, "company": entity, "location": str(location).strip(), "crew_employees": []}
+		# v0.227.0. A shift started by a clock-in made with no signal starts when the
+		# foreman tapped, not when the phone found signal — otherwise the crew it
+		# clocks in would be "before the shift started" and refused.
+		from .. import punch_times
+
+		tapped = punch_times.device_time(tapped_at)
+		if tapped:
+			inner["start_datetime"] = tapped
 		if shift_type:
 			inner["shift_type"] = shift_type
 		gps = _location(None, latitude, longitude)
@@ -23423,7 +23437,9 @@ def clock_in_crew(
 		if badge:
 			line["badge_id"] = badge
 		try:
-			shifts.add_worker_to_shift({"shift": target, "employee": person})
+			shifts.add_worker_to_shift(
+				{"shift": target, "employee": person, **({"joined_at": tapped_at} if tapped_at else {})}
+			)
 			line["outcome"] = "added"
 		except ToolError as exc:
 			if "already on this crew" in str(exc):
@@ -23722,8 +23738,12 @@ def check_in_training_day(
 	longitude=None,
 	accuracy_meters=None,
 	client_request_id=None,
+	tapped_at=None,
 ) -> dict:
 	"""Mark the caller present on a class day they are registered for. v0.212.0.
+
+	v0.227.0. `tapped_at` (the phone's clock) is the official check-in time and is
+	what the open window is judged at; the receipt is kept beside it.
 
 	THE CALLER'S OWN ROW AND NO OTHER — there is no employee argument. The phone
 	it arrives from is the identification (`scan_source = Self`), the same kind of
@@ -23746,6 +23766,7 @@ def check_in_training_day(
 			latitude,
 			longitude,
 			accuracy_meters,
+			tapped_at=tapped_at,
 		)
 	except training_courses.CheckInError as exc:
 		errors = {"forbidden": frappe.PermissionError, "not_found": frappe.DoesNotExistError}
@@ -24110,3 +24131,48 @@ def get_spray_application(user: str, name=None) -> dict:
 	allowed = guard.require_scope(user)
 	target = guard.require_scoped_doc(spray_tools.APPLICATION, name, "name", allowed)
 	return _spray_row(target)
+
+
+# ── v0.227.0. Punch times a manager should look at ──────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_punch_reviews", limit=guard.READ_LIMIT)
+def list_punch_reviews(user: str) -> dict:
+	"""Clock-ins, clock-outs and class check-ins sent long after the tap, waiting for a manager."""
+	from .. import punch_times
+
+	allowed = guard.require_scope(user)
+	try:
+		punch_times.require_reviewer(user)
+	except ToolError as exc:
+		frappe.throw(str(exc), frappe.PermissionError)
+	rows = punch_times.pending(allowed)
+	return {"punches": rows, "count": len(rows), "window_hours": punch_times.window_hours()}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("resolve_punch_review", mutating=True, limit=guard.WRITE_LIMIT)
+def resolve_punch_review(
+	user: str, row=None, resolution=None, kind=None, corrected_at=None, note=None
+) -> dict:
+	"""Phone time stands, Server time used, or Corrected (with a time). The phone's and the server's
+	times are kept either way."""
+	from .. import punch_times
+
+	allowed = guard.require_scope(user)
+	try:
+		return punch_times.resolve(
+			user,
+			str(row or "").strip(),
+			str(resolution or "").strip(),
+			kind=str(kind or "").strip(),
+			corrected_at=corrected_at,
+			note=str(note or ""),
+			companies=allowed,
+		)
+	except ToolError as exc:
+		key = getattr(exc, "translation_key", "")
+		errors = {
+			"error.punch.forbidden": frappe.PermissionError,
+			"error.punch.not_found": frappe.DoesNotExistError,
+		}
+		frappe.throw(str(exc), errors.get(key, frappe.ValidationError))

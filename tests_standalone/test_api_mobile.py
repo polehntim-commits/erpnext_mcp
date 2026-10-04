@@ -407,6 +407,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
+		# v0.227.0. Punch reviews: the manager tile reads them through tiles; a
+		# screen of its own comes with the app.
+		"list_punch_reviews",
+		"resolve_punch_review",
 		# v0.226.0. The tag print queue by location: app 0.33.0 calls these.
 		# v0.226.0. Upload status for a resumable photo: app 0.33.0 reads it as a
 		# plain dictionary (`OfflineAssetSync`), so there is no Codable to mirror.

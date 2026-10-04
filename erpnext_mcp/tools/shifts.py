@@ -69,7 +69,7 @@ import itertools
 import frappe
 
 from .. import breaks as breaks_mod
-from .. import compat, crew_tasks, geo, minors, shifts, timezones
+from .. import compat, crew_tasks, geo, minors, punch_times, shifts, timezones
 from ..args import as_bool, as_choice, as_date, as_float, as_int, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -729,6 +729,11 @@ def add_worker_to_shift(args: dict) -> ToolResult:
 	# RIGHT FOR THE SAME REASON. A worker rostered at the beginning was there at
 	# the beginning; a worker added mid-shift arrived when somebody said so.
 	joined = _when(args, "joined_at")
+	# v0.227.0. A time the phone sent is the official punch, in the site's zone;
+	# the server's receipt is kept beside it (`punch_times`).
+	tapped = punch_times.device_time(args.get("joined_at"))
+	if tapped:
+		joined = tapped
 
 	# v0.98.0. AND THIS IS WHERE A MINOR'S DAY IS CHECKED, before the append and
 	# after everything cheaper. It REFUSES here and merely reports in
@@ -751,6 +756,7 @@ def add_worker_to_shift(args: dict) -> ToolResult:
 			"notes": as_str(args, "notes"),
 		},
 	)
+	review = punch_times.stamp(doc.crew[-1], "in", tapped)
 	doc.flags.ignore_permissions = True
 	doc.save(ignore_permissions=True)
 
@@ -764,6 +770,7 @@ def add_worker_to_shift(args: dict) -> ToolResult:
 			"employee_name": theirs.get("employee_name") or person,
 			"joined_at": joined,
 			"hours_after_shift_start": late,
+			"punch_review": review or None,
 		},
 		"note": (
 			f"{theirs.get('employee_name') or person} is on the crew from {joined}. Their "
@@ -847,7 +854,11 @@ def remove_worker_from_shift(args: dict) -> ToolResult:
 		)
 
 	left = _when(args, "left_at")
+	tapped = punch_times.device_time(args.get("left_at"))
+	if tapped:
+		left = tapped
 	target.left_at = left
+	review = punch_times.stamp(target, "out", tapped)
 	if as_str(args, "notes"):
 		target.notes = as_str(args, "notes")
 	doc.flags.ignore_permissions = True
@@ -867,6 +878,7 @@ def remove_worker_from_shift(args: dict) -> ToolResult:
 				"joined_at": str(target.get("joined_at") or "") or None,
 				"left_at": left,
 				"hours_present": hours,
+				"punch_review": review or None,
 			},
 			"note": (
 				f"{target.get('employee_name') or person} is off the shift from {left}. THE ROW IS "

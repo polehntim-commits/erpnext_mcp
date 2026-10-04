@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.227.0 — 2026-10-03 — punch times from phones with no signal
+
+**1011 tools** (492 read, 519 write): + `list_punch_reviews`, `resolve_punch_review`. **185 mobile
+methods**: + the same two. Contract `docs/design/offline_mill_creek.md` §4. Deploy
+`docs/deploy/v0.227.0_punch_times.md`. App 0.34.0.
+
+- **The phone's tap is the official time**: `clock_in_crew` and `check_in_training_day` take `tapped_at`;
+  the crew clock's `joined_at` / `left_at` already carried it. The class check-in window is judged at the
+  tap.
+- **The server's receipt is kept beside it**: `joined_device_at` / `joined_received_at`,
+  `left_device_at` / `left_received_at` (Farm Shift Crew Member), `device_scanned_at` / `received_at`
+  (Training Session Attendee). Never overwritten.
+- **Flagged for a manager** (`punch_review` + reason) when received more than `offline_punch_window_hours`
+  (12) after the tap, or tapped after it was received. **Resolved by a person**: Phone time stands /
+  Server time used / Corrected (+ who, note); the witnesses stay. Manager tile **Punch times to review**.
+- Fix: a `clock_in_crew` that starts a shift starts it at the tapped time, so an offline clock-in synced
+  later no longer refuses the whole crew as "before the shift started".
+
 ## 0.226.0 — 2026-10-03 — offline Add Asset (Mill Creek)
 
 **1009 tools** (491 read, 518 write): + `list_tag_print_queue`, `print_tags_for_location`. **183 mobile

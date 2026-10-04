@@ -192,6 +192,7 @@ from .tools import payroll_calendar as payroll_calendar_tools
 from .tools import pest_control as pest_control_tools
 from .tools import phone_configs as phone_config_tools
 from .tools import programs as program_tools
+from .tools import punch_reviews as punch_review_tools
 from .tools import security_status as security_status_tools
 
 _STRING = {"type": "string"}
@@ -12023,6 +12024,30 @@ TOOLS = {
 			"limit": _LIMIT,
 		},
 		title="List card print jobs",
+	),
+	"list_punch_reviews": _tool(
+		punch_review_tools.list_punch_reviews,
+		"v0.227.0. Clock-ins, clock-outs and class check-ins received more than the offline window "
+		"(offline_punch_window_hours, default 12) after the phone's tap — or tapped after they were "
+		"received — with the phone's time (official), the server's receipt and the reason. Read-only.",
+		{},
+		title="List punch times to review",
+	),
+	"resolve_punch_review": _tool(
+		punch_review_tools.resolve_punch_review,
+		"MUTATING (default OFF; Farm Manager / HR / System Manager). v0.227.0. Decide one flagged "
+		"punch: 'Phone time stands', 'Server time used', or 'Corrected' with corrected_at. The phone's "
+		"and the server's times are kept either way; only the last two change the official time.",
+		{
+			"row": _field(_STRING, "The punch's row, from list_punch_reviews."),
+			"resolution": _field(_STRING, "Phone time stands, Server time used, or Corrected."),
+			"kind": _field(_STRING, "For a shift row: 'in' or 'out' (required with Corrected)."),
+			"corrected_at": _field(_STRING, "With Corrected: the right time (ISO 8601 or site time)."),
+			"note": _field(_STRING, "Why."),
+		},
+		required=("row", "resolution"),
+		mutating=True,
+		title="Resolve a punch time",
 	),
 	"list_card_print_stations": _tool(
 		card_print_tools.list_card_print_stations,

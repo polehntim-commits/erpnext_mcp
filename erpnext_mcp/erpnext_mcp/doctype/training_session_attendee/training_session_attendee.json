@@ -28,7 +28,16 @@
   "training_record",
   "signing_evidence",
   "notes_section",
-  "notes"
+  "notes",
+  "punch_section",
+  "device_scanned_at",
+  "received_at",
+  "punch_col",
+  "punch_review",
+  "punch_review_reason",
+  "punch_resolution",
+  "punch_reviewed_by",
+  "punch_review_note"
  ],
  "fields": [
   {
@@ -179,12 +188,73 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "punch_section",
+   "fieldtype": "Section Break",
+   "label": "Phone and server times (v0.227.0)"
+  },
+  {
+   "fieldname": "device_scanned_at",
+   "fieldtype": "Datetime",
+   "label": "Checked in on the phone",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received by the server",
+   "read_only": 1
+  },
+  {
+   "fieldname": "punch_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Received more than the offline window after the phone's tap, or tapped after it was received. A manager decides.",
+   "fieldname": "punch_review",
+   "fieldtype": "Check",
+   "in_list_view": 0,
+   "label": "Punch time to review",
+   "read_only": 1
+  },
+  {
+   "depends_on": "punch_review",
+   "fieldname": "punch_review_reason",
+   "fieldtype": "Small Text",
+   "label": "Why",
+   "read_only": 1
+  },
+  {
+   "depends_on": "punch_review",
+   "fieldname": "punch_resolution",
+   "fieldtype": "Select",
+   "label": "Decision",
+   "options": "\nPhone time stands\nServer time used\nCorrected",
+   "read_only": 1
+  },
+  {
+   "depends_on": "punch_resolution",
+   "fieldname": "punch_reviewed_by",
+   "fieldtype": "Link",
+   "label": "Decided by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "depends_on": "punch_resolution",
+   "fieldname": "punch_review_note",
+   "fieldtype": "Small Text",
+   "label": "Decision note",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-08-17 14:00:00.000000",
+ "modified": "2026-10-03 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Training Session Attendee",

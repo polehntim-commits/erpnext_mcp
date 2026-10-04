@@ -598,7 +598,9 @@ class CheckInError(Exception):
 		self.kind = kind
 
 
-def check_in(session: str, user: str, employee: str, latitude=None, longitude=None, accuracy=None) -> dict:
+def check_in(
+	session: str, user: str, employee: str, latitude=None, longitude=None, accuracy=None, tapped_at=None
+) -> dict:
 	"""The caller marks their own row present on a day they are registered for."""
 	if not ready():
 		raise CheckInError("this farm's server has no multi-day classes yet.")
@@ -628,13 +630,19 @@ def check_in(session: str, user: str, employee: str, latitude=None, longitude=No
 		raise CheckInError(f"{session} is {status}; check-in is closed. Nothing was changed.")
 	company = str(row.get("company") or "")
 	opens, closes = check_in_window(row, company, user)
-	now = _now()
+	# v0.227.0. The phone's tap is the official time — judged against the window
+	# at the moment it was made, not when a phone with no signal finally sent it.
+	from . import punch_times
+
+	tapped = punch_times.device_time(tapped_at)
+	now = punch_times._parse(tapped) if tapped else _now()
 	if opens is None or not opens <= now <= closes:
 		when = f"from {opens.strftime('%H:%M')} on {row.get('session_date')}" if opens else "on the day"
 		raise CheckInError(f"check-in for {row.get('training_type')} is open {when}. Nothing was changed.")
 	mine.attended = 1
-	mine.scanned_at = frappe.utils.now()
+	mine.scanned_at = tapped or frappe.utils.now()
 	mine.scan_source = SELF
+	review = punch_times.stamp(mine, "class", tapped)
 	if latitude not in (None, "") and longitude not in (None, ""):
 		try:
 			mine.scan_latitude, mine.scan_longitude = float(latitude), float(longitude)
@@ -655,6 +663,7 @@ def check_in(session: str, user: str, employee: str, latitude=None, longitude=No
 		"day_number": fields["day_number"] or 1,
 		"day_count": fields["day_count"],
 		"note": "You are checked in. Your signature is taken at the end of the class.",
+		"punch_review": review or None,
 	}
 
 

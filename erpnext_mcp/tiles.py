@@ -417,6 +417,20 @@ PAYROLL_TILES = {
 		"show_if": {},
 		"min_app_version": "0.21.0",
 	},
+	# v0.227.0 (docs/design/offline_mill_creek.md §4). Empty, and so quiet, until a phone
+	# sends a punch long after the tap.
+	"punch_reviews": {
+		"surface": "today",
+		"title": {"en": "Punch times to review", "es": "Horas para revisar"},
+		"subtitle": {"en": "Sent long after the tap", "es": "Enviadas mucho después"},
+		"icon": "clock.badge.exclamationmark",
+		"order": 72,
+		"target": {"kind": "list_query", "query": "punch_reviews", "params": {}},
+		"audience": {"roles": ["Farm Manager", "HR Manager", "HR User", "System Manager"]},
+		"badge": {"query": "punch_reviews", "params": {}},
+		"show_if": {},
+		"min_app_version": "0.21.0",
+	},
 }
 
 

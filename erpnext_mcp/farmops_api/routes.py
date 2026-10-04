@@ -458,6 +458,9 @@ ROUTES = (
 	Route("/mobile", mobile_api.list_crew_task_members),
 	Route("/mobile", mobile_api.list_crew_tasks),
 	Route("/mobile", mobile_api.check_in_training_day),
+	# v0.227.0. Punches sent long after the tap, for a manager.
+	Route("/mobile", mobile_api.list_punch_reviews),
+	Route("/mobile", mobile_api.resolve_punch_review),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

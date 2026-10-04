@@ -247,6 +247,25 @@ def payroll_calendar(user, company, params):
 	return answer
 
 
+def punch_reviews(user, company, params):
+	"""v0.227.0. Punch times received long after the tap, waiting for a manager."""
+	from . import punch_times
+
+	rows = [
+		{
+			"doctype": None,
+			"name": r["row"],
+			"title": r.get("employee_name") or r.get("employee") or r["row"],
+			"subtitle": r.get("reason") or "",
+			"state": "due",
+		}
+		for r in punch_times.pending([company] if company else None)
+	]
+	answer = _answer(rows)
+	answer["count"] = len(rows)
+	return answer
+
+
 #: id → (function, params schema {name: type}, roles gate or ()).
 QUERIES = {
 	"my_tasks_open": (my_tasks_open, {}, ()),
@@ -265,6 +284,8 @@ QUERIES = {
 		{},
 		("System Manager", "HR Manager", "HR User", "Accounts Manager"),
 	),
+	# v0.227.0. Punches to review (`punch_times`).
+	"punch_reviews": (punch_reviews, {}, ("Farm Manager", "HR Manager", "HR User", "System Manager")),
 }
 
 
