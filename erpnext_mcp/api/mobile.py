@@ -1407,6 +1407,7 @@ def start_task(user: str, task=None, task_assignment=None) -> dict:
 # ── 7. complete_task_via_mobile ─────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("complete_task_via_mobile", limit=guard.COMPLETE_LIMIT, mutating=True)
+@request_receipts.idempotent("complete_task_via_mobile")
 def complete_task_via_mobile(
 	user: str,
 	task=None,
@@ -1434,6 +1435,7 @@ def complete_task_via_mobile(
 	language=None,
 	client_capabilities=None,
 	feature_flags=None,
+	client_request_id=None,
 ) -> dict:
 	"""Finish one task: file the evidence, write the compliance record.
 

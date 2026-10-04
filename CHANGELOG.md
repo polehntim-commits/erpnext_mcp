@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.230.0 — 2026-10-03 — Farm Task photos, per photo
+
+No migrate. Contract `docs/design/offline_mill_creek.md` §1b. Deploy
+`docs/deploy/v0.230.0_durable_task_photos.md`. App 0.37.0.
+
+- `complete_task_via_mobile` takes `client_request_id` (the phone's queued completion's own ID): a resend after
+  a lost reply answers with the first answer (`replayed: true`) and files nothing twice.
+- (App 0.37.0: per-photo Saved on phone / Uploading / Uploaded; "Completed — photos pending"; the completion
+  queue also sends the moment the connection returns.)
+
 ## 0.229.1 — 2026-10-03 — receipts resolved on a placeholder phone are repaired
 
 **1012 tools** (492 read, 520 write): + `repair_placeholder_phones`. Deploy

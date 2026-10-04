@@ -17,6 +17,18 @@ A `PendingOperation` left `syncing` by a killed app is put back to `pending` whe
 resent with its own `client_request_id` / `client_reference`, which the server already treats as the same
 request). Settings shows Retry on any row that is not actually being sent.
 
+### 1b. Farm Task photos are durable, per photo (Tim, 2026-10-03 — Release D: v0.230.0 / app 0.37.0)
+Already true: each photo is on disk from capture; the completion is in the on-disk queue before any network
+call; photos upload first and the completion is sent only with all of them, so the farm never records a
+completed task without its photos; uploads resume (0.35.0). Added:
+- `complete_task_via_mobile` takes `client_request_id` (the queued completion's own ID): a resend answers the
+  first answer (`request_receipts`), never a second completion.
+- Each photo shows **Saved on phone / Uploading / Uploaded** on the task and in Settings.
+- A task completed with photos still on the phone shows **Completed — photos pending (n of m uploaded)** and
+  becomes Completed when the farm confirms.
+- The completion queue also drains the moment the connection returns (as well as launch, foreground, the
+  60-second timer and Sync now).
+
 ### 4. Punch times: the phone's tap is official, the server's receipt is kept beside it
 - `clock_in_crew` and `check_in_training_day` take `tapped_at` (ISO 8601, the phone's clock at the tap).
   The crew clock's `add_worker_to_shift` / `clock_out_worker` already send `joined_at` / `left_at`.
