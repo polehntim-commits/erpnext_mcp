@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.230.2 — 2026-10-03 — a re-run migrate is quiet about trade documents it already has
+
+No migrate needed (the fix runs on the next one), no tools, no settings. Deploy
+`docs/deploy/v0.230.2_trade_seed_quiet.md`.
+
+- OML's migrate to v0.226.0 printed ~26 "could not seed trade document … already has a rule requiring …"
+  lines. The shipped destination requirements were already there (3sbg03jp26 and others), but stamped with a
+  company and a NULL country; the seeder looked only for company "" / country "", missed them, tried to
+  insert, and the controller's duplicate check refused each. The seeder now treats any rule for the same
+  destination and document as present (any company; blank country = "" or NULL) and skips it silently; a
+  duplicate refusal is counted as present, never printed as a failure.
+
 ## 0.230.1 — 2026-10-03 — polish: spray restrictions read right, fewer 500s
 
 No migrate, no new tools, no settings. Deploy `docs/deploy/v0.230.1_spray_polish.md`. App 0.37.1.

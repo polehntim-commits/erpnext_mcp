@@ -2566,13 +2566,17 @@ def install_trade_documents(overwrite: bool = False) -> dict:
 				# ENABLED IS NOT IN THE FILTER. A rule an operator disabled is a
 				# decision, and a seeder that re-created it would overrule them
 				# on every upgrade.
+				# v0.230.2. ANY COMPANY, AND A BLANK COUNTRY IS BLANK WHETHER IT IS
+				# "" OR NULL. OML's rules were seeded with a company stamped on them
+				# and NULL countries; a filter for company "" / country "" missed every
+				# one, the insert below hit the controller's duplicate check, and a
+				# migrate printed ~26 "could not seed" lines for rules that were there.
 				clash = frappe.db.get_all(
 					REQUIREMENT,
 					filters={
 						"destination_tier": tier,
-						"destination_country": country or "",
+						"destination_country": country if country else ("is", "not set"),
 						"trade_document_template": template,
-						"company": "",
 					},
 					fields=["name"],
 					limit=1,
@@ -2592,6 +2596,11 @@ def install_trade_documents(overwrite: bool = False) -> dict:
 				doc.insert(ignore_permissions=True)
 				report["requirements_created"].append(label)
 			except Exception as exc:  # pragma: no cover
+				# The controller's own duplicate refusal means the rule is there in a
+				# shape the lookup above did not match — present, not failed.
+				if "already has a rule requiring" in str(exc):
+					report["requirements_existing"].append(label)
+					continue
 				report["failed"].append({"requirement": label, "reason": f"{type(exc).__name__}: {exc}"})
 
 	return report

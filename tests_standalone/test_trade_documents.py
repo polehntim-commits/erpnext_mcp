@@ -288,6 +288,29 @@ class ConfigNotCode(TradeTestCase):
 		self.assertNotIn("Delivery Receipt", {entry["template"] for entry in answer["requirements"]})
 
 
+class ReSeedingIsQuiet(TradeTestCase):
+	"""v0.230.2. OML's migrate to v0.226.0 printed ~26 "could not seed trade document
+	… already has a rule requiring …" lines: the rules seeded earlier carried a company
+	and a NULL country, the seeder looked only for company "" / country "", missed
+	them, tried to insert, and the controller's duplicate check refused each one."""
+
+	def test_rules_stamped_with_a_company_and_a_null_country_are_skipped_not_failed(self):
+		for row in STORE.rows("Destination Document Requirement"):
+			row["company"] = MAIN
+			if not row.get("destination_country"):
+				row["destination_country"] = None
+		before = len(STORE.rows("Destination Document Requirement"))
+		report = self.tools.install_trade_documents()
+		self.assertEqual(report["failed"], [])
+		self.assertEqual(report["requirements_created"], [])
+		self.assertTrue(report["requirements_existing"])
+		self.assertEqual(len(STORE.rows("Destination Document Requirement")), before)
+
+	def test_a_second_run_creates_nothing_and_fails_nothing(self):
+		report = self.tools.install_trade_documents()
+		self.assertEqual((report["failed"], report["requirements_created"]), ([], []))
+
+
 # ── 3 ───────────────────────────────────────────────────────────────────────
 class AdvisoryUnlessTurnedOn(TradeTestCase):
 	def test_the_site_default_is_advisory_and_the_truck_goes(self):
