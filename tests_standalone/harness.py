@@ -5994,6 +5994,57 @@ def seed_asset_types() -> None:
 		pass
 
 
+#: The instant every test's rate-limit windows are read at. Thirty seconds into
+#: a minute and nowhere near an hour boundary, though once it is frozen neither
+#: matters — it is a constant so a failure reproduces on any day at any time.
+RATE_LIMIT_EPOCH = 1_800_000_030.0
+
+
+def pin_rate_limit_clock(test: unittest.TestCase) -> None:
+	"""Empty the in-process rate-limit counters and stop their windows rolling.
+
+	`guard._count` and `fallback_auth._failure_slot` key every bucket on
+	`int(time.time() // window)`, a window aligned to the WALL CLOCK. A test that
+	made a limit's worth of real calls and then asserted the next one was refused
+	passed or failed on what second it started: a loop that crossed `:00` landed
+	its last call in a fresh, empty bucket, and the call that should have been
+	throttled went on to the next gate instead. Anything that slows the loop —
+	two interpreters' suites sharing one machine — widens the odds. That is how
+	`RefusalsAreMeteredToo` was seen to raise "requires an enrolled Farm Ops
+	credential" where it expected `RateLimited`.
+
+	FROZEN RATHER THAN MOCKED PER TEST, so every limit test in the suite is
+	deterministic without having to know it needs to be, and CLEARED HERE because
+	a frozen window never prunes: without the clear, buckets would carry from one
+	test to the next. They could before, too, whenever two tests shared a real
+	minute (or, for `device_keys`' hourly window, an hour) — so this removes an
+	order dependence as well as a timing one.
+
+	Only the module-level `time` name in those two modules is replaced, and the
+	stand-in delegates every other attribute to the real module, so nothing else
+	in the process sees a stopped clock.
+	"""
+	import time as real_time
+	from unittest import mock
+
+	from erpnext_mcp.api import fallback_auth, guard
+
+	class _PinnedClock(types.ModuleType):
+		def time(self) -> float:
+			return RATE_LIMIT_EPOCH
+
+		def __getattr__(self, name):
+			return getattr(real_time, name)
+
+	clock = _PinnedClock("time")
+	for module in (guard, fallback_auth):
+		patcher = mock.patch.object(module, "time", clock)
+		patcher.start()
+		test.addCleanup(patcher.stop)
+	guard._BUCKETS.clear()
+	fallback_auth._FAILURES.clear()
+
+
 class MCPTestCase(unittest.TestCase):
 	"""Resets the fake site, and gives every test a configured-but-off server."""
 
@@ -6012,6 +6063,7 @@ class MCPTestCase(unittest.TestCase):
 		frappe.local.session = FrappeDict(user="Administrator", data=FrappeDict())
 		seed_compliance_regimes()
 		seed_asset_types()
+		pin_rate_limit_clock(self)
 		self.configure()
 
 	def configure(self, **overrides):

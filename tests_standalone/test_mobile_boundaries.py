@@ -471,6 +471,8 @@ class TheRoutesAreMounted(BoundaryTestCase):
 		call that should have been refused sails through. Two tests already in this
 		suite are written that way and both have been seen to fail on a green
 		tree — see `test_fallback_auth.test_the_rate_limit_still_meters_a_fallback_caller`.
+		Filling alone narrowed that gap without closing it; what closed it is
+		`harness.pin_rate_limit_clock`, which every test now runs under.
 
 		FILLING IT THROUGH `_count` RATHER THAN WRITING `_BUCKETS` DIRECTLY is what
 		keeps the key derivation in one place. A test that built the slot string
