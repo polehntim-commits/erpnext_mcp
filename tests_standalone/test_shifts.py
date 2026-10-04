@@ -1193,6 +1193,17 @@ class ReadingItBack(ShiftTestCase):
 		self.assertEqual(self.tool_data("list_shifts", {"status": "Closed"})["count"], 1)
 		self.assertEqual(self.tool_data("list_shifts", {"status": "Active"})["count"], 1)
 
+	def test_an_old_open_shift_is_found_behind_many_newer_closed_ones(self):
+		"""v0.230.3. Active was filtered in Python AFTER reading the newest limit*2
+		rows, so an open shift older than those was invisible to the very filter
+		that exists to find a lost one."""
+		lost = self.start(start_datetime=at(1), crew_employees=[])["name"]
+		for row in range(6):
+			name = self.start(start_datetime=at(2 + row), crew_employees=[])["name"]
+			self.close(name, end_datetime=at(2 + row, 30))
+		data = self.tool_data("list_shifts", {"status": "Active", "limit": 2})
+		self.assertEqual([entry["name"] for entry in data["shifts"]], [lost])
+
 	def test_an_unknown_status_is_refused_with_the_three_that_exist(self):
 		message = self.tool_error("list_shifts", {"status": "Finished"})
 		self.assertIn("Active, Closed, Cancelled", message)

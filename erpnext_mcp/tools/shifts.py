@@ -1362,11 +1362,8 @@ def list_shifts(args: dict) -> ToolResult:
 	if shift_type:
 		filters["shift_type"] = as_choice(DOCTYPE, "shift_type", shift_type, "shift_type")
 
-	clock = timezones.Renderer(args)
-	found = shifts.rows(filters, limit=max(limit * 2, limit))
-	described = [shifts.describe(row, clock=clock) for row in found]
-
 	status = as_str(args, "status")
+	wanted = ""
 	if status:
 		wanted = {
 			option.lower(): option
@@ -1379,6 +1376,15 @@ def list_shifts(args: dict) -> ToolResult:
 				"record saved in March holds March's answer, and an open shift is what the weather "
 				"sweep walks."
 			)
+		# v0.230.3. THE END TIME GOES INTO THE QUERY. Filtering only in Python after
+		# reading the newest `limit*2` shifts left an open shift older than those
+		# invisible — the "lost shift" this filter exists to find.
+		filters["end_datetime"] = ("is", "not set") if wanted == shifts.STATUS_ACTIVE else ("is", "set")
+
+	clock = timezones.Renderer(args)
+	found = shifts.rows(filters, limit=max(limit * 2, limit))
+	described = [shifts.describe(row, clock=clock) for row in found]
+	if wanted:
 		described = [entry for entry in described if entry["status"] == wanted]
 
 	if as_str(args, "employee"):

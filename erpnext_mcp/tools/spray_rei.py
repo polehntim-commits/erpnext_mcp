@@ -795,7 +795,7 @@ def list_active_reis(args: dict) -> ToolResult:
 		)
 		or []
 	)
-	windows = [_describe_window(dict(row), now) for row in rows if _for_company(dict(row), company)][:limit]
+	windows = [_describe_window(dict(row), now) for row in rows if _for_company(dict(row), company)]
 	# Spray tasks finished on a phone, which open no Spray REI row. No sprayer is
 	# recorded on a task, so a board filtered to one machine cannot include them
 	# and says so rather than going quiet.
@@ -810,8 +810,13 @@ def list_active_reis(args: dict) -> ToolResult:
 				limit=limit,
 			)
 		]
-		windows.sort(key=lambda window: str(window.get("expires_at") or ""))
-		windows = windows[:limit]
+
+	# v0.230.3. WHEN THE BOARD IS CUT, THE LONGEST RESTRICTIONS STAY. Cut soonest-
+	# to-clear first, the blocks shut longest were the ones dropped — silently. Now
+	# the cut keeps the latest-expiring windows and says it cut.
+	truncated = len(windows) > limit
+	windows.sort(key=lambda window: str(window.get("expires_at") or ""), reverse=True)
+	windows = sorted(windows[:limit], key=lambda window: str(window.get("expires_at") or ""))
 
 	clock = timezones.Renderer(args)
 	for window in windows:
@@ -833,6 +838,7 @@ def list_active_reis(args: dict) -> ToolResult:
 			# "cleared in the last day" view reads one list rather than two.
 			"reis": windows,
 			"rei_count": len(windows),
+			"truncated": truncated,
 			"included_expired": include_expired,
 			"spray_tasks_included": not tasks_left_out,
 			**clock.block(),
@@ -1107,6 +1113,15 @@ def record_spray_application(args: dict) -> ToolResult:
 			"interval is not the same as a zero one — check the label if any of these is a "
 			"restricted-use product."
 		)
+
+	# v0.230.3. THIS TOOL RECORDS ENTRY ONLY. It writes Spray REI rows; the harvest
+	# guard reads pre-harvest intervals off Spray Applications and spray tasks, so a
+	# pass filed only here opens none — said, rather than left for the harvest crew.
+	warnings.append(
+		"No pre-harvest interval was recorded: this tool records the restricted-entry window only. "
+		"File the pass with create_spray_application (or complete its Spray task) so the harvest "
+		"guard knows when these blocks can be picked."
+	)
 
 	clock = timezones.Renderer(args)
 	data = {

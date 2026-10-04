@@ -847,6 +847,11 @@ def _application_blocks(args: dict) -> list[dict]:
 		acres_value = _number(acres)
 		if acres_value < 0:
 			raise ToolError(f"acres on block {docname!r} cannot be negative. Nothing was recorded.")
+		if acres in (None, "") and doctype == "Field" and compat.has_field("Field", "acreage"):
+			# v0.230.3. A bare name used to mean 0 acres, so the use report put
+			# rate × 0 = 0 on a pass that covered the whole block. The phone route
+			# already reads the Field's acreage; the tool now does too.
+			acres_value = _number(frappe.db.get_value("Field", docname, "acreage"))
 
 		out.append(
 			{
@@ -958,7 +963,11 @@ def create_spray_application(args: dict) -> ToolResult:
 		# register cannot cover: a product this site has not entered yet, and a
 		# state or certifier interval longer than the federal label. It does NOT
 		# override the PHI, which is a separate label fact with its own argument.
-		rei_hours = _number(stated)
+		try:
+			rei_hours = float(stated)
+		except (TypeError, ValueError):
+			# v0.230.3: "abc" became 0 and was answered as "must be greater than zero".
+			raise ToolError(f"rei_hours must be a number of hours, got {stated!r}. Nothing was recorded.") from None
 		if rei_hours <= 0:
 			raise ToolError(
 				"rei_hours must be greater than zero when stated. To record a spray that restricts "

@@ -560,3 +560,25 @@ class WeatherIsANumber(PhiTestCase):
 		data = self.a_spray(wind_speed_mph="4.5", temperature_f=61)
 		self.assertEqual(data["weather"]["wind_speed_mph"], 4.5)
 		self.assertIsNone(data["weather"]["humidity_pct"])
+
+
+class AStatedREIIsANumber(PhiTestCase):
+	def test_text_is_refused_as_text(self):
+		message = self.tool_error(
+			"create_spray_application",
+			{"blocks": [BLOCK], "company": MAIN, "rei_hours": "abc",
+			 "products": [{"item_code": SPRAY, "rate_per_acre": 5, "rate_uom": "Lb"}]},
+		)
+		self.assertIn("rei_hours must be a number of hours", message)
+
+
+class ABareBlockNameCarriesItsAcreage(PhiTestCase):
+	"""v0.230.3. Blocks given by name were 0 acres, so the use report said 0 applied."""
+
+	def test_the_fields_acreage_is_used(self):
+		data = self.a_spray(blocks=[BLOCK])
+		self.assertEqual(data["total_acres"], 12.5)
+
+	def test_stated_acres_still_win(self):
+		data = self.a_spray(blocks=[{"block": BLOCK, "acres": 4}])
+		self.assertEqual(data["total_acres"], 4)

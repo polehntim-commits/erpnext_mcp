@@ -408,7 +408,24 @@ def preview_label_profile(args: dict) -> ToolResult:
 	)
 
 
+def _json_or(raw, default):
+	"""A stored JSON column, or `default` when it is blank or hand-edited past parsing."""
+	if raw in (None, ""):
+		return default
+	try:
+		return json.loads(raw)
+	except (TypeError, ValueError):
+		return default
+
+
 def list_label_compliance(args: dict) -> ToolResult:
+	# v0.230.3. A site whose installer has not added the compliance columns, or one
+	# corrupt row, made this a 500. The first is said; the second is read as empty.
+	if not compat.has_field("Item", "compliance_state"):
+		raise ToolError(
+			"this site's Item has no label-compliance columns yet. Run install_compliance_fields, "
+			"then ask again."
+		)
 	filters: dict = {"compliance_state": ("in", list(label_compliance.STATES))}
 	if as_str(args, "state"):
 		filters["compliance_state"] = as_str(args, "state")
@@ -429,15 +446,16 @@ def list_label_compliance(args: dict) -> ToolResult:
 	live = {phone_config.version_string(doc) for doc, _b in label_compliance.profiles()}
 	out = []
 	for row in rows:
-		profiles = json.loads(row.get("compliance_profiles_json") or "[]")
+		profiles = _json_or(row.get("compliance_profiles_json"), [])
+		profiles = [p for p in profiles if isinstance(p, dict)] if isinstance(profiles, list) else []
 		out.append(
 			{
 				"item": row["name"],
 				"item_name": row.get("item_name"),
 				"state": row.get("compliance_state") or None,
 				"profiles": profiles,
-				"proposal": json.loads(row.get("compliance_proposal_json") or "null"),
-				"stale": [p["config_version"] for p in profiles if p.get("config_version") not in live],
+				"proposal": _json_or(row.get("compliance_proposal_json"), None),
+				"stale": [p.get("config_version") for p in profiles if p.get("config_version") not in live],
 			}
 		)
 	return ToolResult(

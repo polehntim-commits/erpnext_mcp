@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.230.3 — 2026-10-04 — polish: lost shifts found, no 500s on bad input, a faster Today, spray reads right
+
+No migrate, no new tools, no settings. Deploy `docs/deploy/v0.230.3_polish.md`. App 0.37.3.
+
+- **An old open shift is found.** `list_shifts` with `status: Active` read the newest `limit×2` shifts and filtered
+  in Python, so an open shift older than those was invisible — the lost shift the filter exists for. The end time
+  now goes into the query.
+- **Eight phone inputs that were 500s are 400s that name the argument:** `search_link` (`limit="abc"`, a filter on
+  a column the doctype lacks), `list_my_inspections` (`limit`), `submit_app_feedback` (`roles` as a plain string
+  is now one role; a number is ignored), `submit_wizard_via_mobile` (`context` not an object),
+  `register_product_label` (`extracted_fields` not an object), `clock_in_crew` (`employees` / `badge_ids` not a
+  list), `report_device_capabilities` (`field_kinds` not a list).
+- **Today on a Pi:** `get_tiles` looked a person up by building EVERY phone user (3–4 queries each), per badge tile,
+  two or three times a launch — now one grant lookup. A worker's own classes are asked for through the attendee
+  table instead of describing 4×limit sessions (800 for the phone) and filtering — which also finds an older class
+  that fell outside that window.
+- **Spray:** the REI board keeps the LONGEST restrictions when it is cut, and says `truncated`; an MRL lookup for a
+  company finds the site-wide limit and never another entity's; blocks given to `create_spray_application` by name
+  carry their Field acreage (the use report said 0 applied); a phone spray over some blocks without acreage says
+  the per-acre rate reads high; `rei_hours="abc"` is refused as not a number; `list_label_compliance` reads a
+  corrupt row as empty and names a site without the columns; the MCP `record_spray_application` says it records no
+  pre-harvest interval.
+
 ## 0.230.2 — 2026-10-03 — a re-run migrate is quiet about trade documents it already has
 
 No migrate needed (the fix runs on the next one), no tools, no settings. Deploy

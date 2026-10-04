@@ -348,16 +348,22 @@ def get_mrl_for_chemical_crop_market(args: dict) -> ToolResult:
 
 	filters = {"chemical": chemical, "crop": crop, "market": market}
 	company = as_str(args, "company")
-	if company:
-		filters["company"] = resolve_company(company, required=True)
+	company = resolve_company(company, required=True) if company else ""
 
-	rows = frappe.db.get_all(
+	# v0.230.3. THE ENTITY'S OWN ROW FIRST, THEN THE SITE-WIDE ONE (no company), and
+	# never another entity's. An equality filter on `company` missed every site-wide
+	# limit ("found: False" for a lane that is on file), and with no company the
+	# newest row of ANY entity answered.
+	candidates = frappe.db.get_all(
 		MRL,
 		filters=filters,
-		fields=compat.existing_fields(MRL, _MRL_FIELDS),
+		fields=compat.existing_fields(MRL, (*_MRL_FIELDS, "company")),
 		order_by="modified desc",
-		limit=2,
-	)
+		limit=50,
+	) or []
+	own = [row for row in candidates if company and dict(row).get("company") == company]
+	shared = [row for row in candidates if not dict(row).get("company")]
+	rows = own or shared or ([] if company else candidates[:1])
 	if rows:
 		described = _describe_mrl(dict(rows[0]))
 		return ToolResult(

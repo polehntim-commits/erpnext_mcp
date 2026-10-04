@@ -875,3 +875,26 @@ class AMalformedTimeIsRefusedByName(REITestCase):
 	def test_an_iso_spelling_is_accepted_and_normalised(self):
 		data = self.spray(completed_at="2026-10-03T08:15:00")
 		self.assertEqual(str(data["completed_at"])[:19], "2026-10-03 08:15:00")
+
+
+class ACutBoardKeepsTheLongestAndSaysSo(REITestCase):
+	"""v0.230.3. Cut soonest-to-clear first at `limit`, with no flag: on a busy day the
+	blocks closed longest fell off the board."""
+
+	def test_the_latest_expiring_windows_stay_and_truncated_is_set(self):
+		self.spray(blocks=(BLOCK,), completed_at="2026-10-03 06:00:00")
+		self.spray(blocks=(BLOCK_TWO,), completed_at="2026-10-03 09:00:00")
+		data = self.tool_data("list_active_reis", {"company": MAIN, "limit": 1, "include_expired": True,
+			"expired_within_hours": 100000})
+		self.assertTrue(data["truncated"])
+		self.assertEqual([row["block"] for row in data["reis"]], [BLOCK_TWO])
+
+	def test_an_uncut_board_says_it_is_whole(self):
+		self.spray()
+		self.assertFalse(self.tool_data("list_active_reis", {"company": MAIN})["truncated"])
+
+
+class EntryOnlyIsSaid(REITestCase):
+	def test_the_tool_says_it_recorded_no_pre_harvest_interval(self):
+		data = self.spray()
+		self.assertTrue(any("No pre-harvest interval was recorded" in line for line in data["warnings"]))

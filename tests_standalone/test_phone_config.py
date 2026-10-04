@@ -602,6 +602,14 @@ class LabelDrivenCompliance(PhoneConfigCase):
 		self.assertEqual(label_compliance.requirements("RESTRICTO")["certifications"], ["Applicator License"])
 		self.assertEqual(label_compliance.evaluate("PLAIN")["matched"], [])
 
+	def test_a_corrupt_row_is_read_as_empty_not_a_500(self):
+		"""v0.230.3. One hand-edited JSON column made list_label_compliance a 500."""
+		STORE.get_raw("Item", "RESTRICTO").update(
+			{"compliance_state": "Active", "compliance_profiles_json": "{not json", "compliance_proposal_json": "oops"}
+		)
+		listed = self.tool_data("list_label_compliance", {"item": "RESTRICTO"})["items"][0]
+		self.assertEqual((listed["profiles"], listed["proposal"]), ([], None))
+
 	def test_a_new_program_is_a_proposal(self):
 		result = label_compliance.attach("BAIT")
 		self.assertEqual(result["state"], "Proposed")
@@ -715,3 +723,20 @@ class InspectionsFromTheScan(PhoneConfigCase):
 		self.assertTrue(again["duplicate"])
 		row = next(r for r in mobile_api.list_my_inspections()["sessions"] if r["name"] == session)
 		self.assertIn("farm_task", row)
+
+
+class OnePersonIsOneLookup(MobileAPITestCase):
+	"""v0.230.3. `person_of` built every phone user on the farm to find one — 3–4
+	queries per grant, per badge tile, two or three times a launch on a Pi."""
+
+	def test_the_same_answer_without_walking_everyone(self):
+		from unittest import mock
+
+		everyone = {p["user"]: p for p in phone_config.mobile_people()}
+		with mock.patch.object(phone_config, "mobile_people", side_effect=AssertionError("walked everyone")):
+			me = phone_config.person_of(WORKER)
+		self.assertEqual(me, everyone[WORKER])
+
+	def test_a_user_with_no_grant_still_gets_their_roles(self):
+		me = phone_config.person_of("nobody@example.test")
+		self.assertEqual((me["user"], me["companies"]), ("nobody@example.test", []))

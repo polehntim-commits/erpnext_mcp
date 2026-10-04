@@ -1290,3 +1290,21 @@ class TheSignInSheetIsAPageAndThenASealedOne(TrainingSessionTestCase):
 		# cross-filed into a personnel folder — the same honest answer a Tax Form
 		# gets, rather than an invented link.
 		self.assertFalse(data["employee_copy"]["filed"])
+
+
+class OnePersonsClassesAreAskedFor(TrainingSessionTestCase):
+	"""v0.230.3. The phone's "my classes" read 4×limit sessions and filtered in Python
+	— 800 described sessions on a Pi, and an older class past them was never seen."""
+
+	def test_an_older_class_is_found_behind_newer_ones(self):
+		mine = self.open_session(session_date=days_out(-30))["name"]
+		self.tool_data("add_session_attendee", {"session": mine, "employee": TRAINEE, "attended": False})
+		for offset in range(6):
+			self.open_session(session_date=days_out(offset))
+		data = self.tool_data("list_training_sessions", {"employee": TRAINEE, "limit": 1, "view": "all"})
+		self.assertEqual([row["name"] for row in data["sessions"]], [mine])
+
+	def test_someone_on_no_class_gets_none(self):
+		self.open_session()
+		data = self.tool_data("list_training_sessions", {"employee": SECOND, "view": "all"})
+		self.assertEqual(data["sessions"], [])

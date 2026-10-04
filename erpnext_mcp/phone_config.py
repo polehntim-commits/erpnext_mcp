@@ -218,10 +218,34 @@ def language_findings(body: dict, for_publish: bool) -> tuple:
 
 
 # ── audience: who a body reaches ────────────────────────────────────────────
-def mobile_people(company: str = "") -> list:
-	"""Every active user with a live Mobile Access Grant: {user, employee, companies, roles, skills}."""
+def _person(user: str) -> dict:
+	"""{user, employee, companies, roles, skills} for one user with a live grant."""
 	from .api import guard
 
+	try:
+		companies = guard.accessible_companies(user)
+	except Exception:
+		companies = []
+	employee = ""
+	skills: list = []
+	if compat.doctype_exists("Employee"):
+		employee = frappe.db.get_value("Employee", {"user_id": user}, "name") or ""
+		if employee:
+			from .tools import fieldwork
+
+			field = compat.first_field("Employee", *fieldwork._SKILL_FIELDS)
+			if field:
+				listed = str(frappe.db.get_value("Employee", employee, field) or "")
+				skills = [s.strip() for s in re.split(r"[,\n;]", listed) if s.strip()]
+	try:
+		roles = list(frappe.get_roles(user) or [])
+	except Exception:
+		roles = []
+	return {"user": user, "employee": employee, "companies": companies, "roles": roles, "skills": skills}
+
+
+def mobile_people(company: str = "") -> list:
+	"""Every active user with a live Mobile Access Grant: {user, employee, companies, roles, skills}."""
 	out = []
 	if not compat.doctype_exists("Mobile Access Grant"):
 		return out
@@ -231,37 +255,24 @@ def mobile_people(company: str = "") -> list:
 		user = grant.get("user")
 		if not user:
 			continue
-		try:
-			companies = guard.accessible_companies(user)
-		except Exception:
-			companies = []
-		if company and company not in companies:
+		person = _person(user)
+		if company and company not in person["companies"]:
 			continue
-		employee = ""
-		skills: list = []
-		if compat.doctype_exists("Employee"):
-			employee = frappe.db.get_value("Employee", {"user_id": user}, "name") or ""
-			if employee:
-				from .tools import fieldwork
-
-				field = compat.first_field("Employee", *fieldwork._SKILL_FIELDS)
-				if field:
-					listed = str(frappe.db.get_value("Employee", employee, field) or "")
-					skills = [s.strip() for s in re.split(r"[,\n;]", listed) if s.strip()]
-		try:
-			roles = list(frappe.get_roles(user) or [])
-		except Exception:
-			roles = []
-		out.append(
-			{"user": user, "employee": employee, "companies": companies, "roles": roles, "skills": skills}
-		)
+		out.append(person)
 	return out
 
 
 def person_of(user: str) -> dict:
-	for person in mobile_people():
-		if person["user"] == user:
-			return person
+	"""One user, as `mobile_people` would describe them.
+
+	v0.230.3. IT ASKS FOR THE ONE GRANT. It used to build `mobile_people()` — 3–4
+	queries for EVERY phone user on the farm — and then pick one out; `get_tiles`
+	calls it per badge tile, two or three times per app launch, on a Pi.
+	"""
+	if user and compat.doctype_exists("Mobile Access Grant") and frappe.db.exists(
+		"Mobile Access Grant", {"user": user, "state": "Active"}
+	):
+		return _person(user)
 	try:
 		roles = list(frappe.get_roles(user) or [])
 	except Exception:

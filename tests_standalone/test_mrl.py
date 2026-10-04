@@ -24,7 +24,7 @@
    result, and refuses to fuzzy-match names that must not be bridged.
 """
 
-from .fixtures import V12TestCase, seed_masters
+from .fixtures import MAIN, OTHER, V12TestCase, seed_masters
 
 ALL_ON = {
 	f"allow_{name}": 1
@@ -359,3 +359,28 @@ class TheIPMReferenceIsLiterature(MRLTestCase):
 		book = self.tool_data("get_ipm_reference", {"pest": "Brown Rot"})
 		self.assertIn("label in the applicator's hand governs", book["caveat"])
 		self.assertTrue(any("UC IPM" in source for source in book["sources"]))
+
+
+class TheEntityRowThenTheSiteRow(MRLTestCase):
+	"""v0.230.3. With a company, an equality filter missed every site-wide limit; with
+	none, whichever entity's row was edited last answered."""
+
+	def lookup(self, **kw):
+		return self.tool_data(
+			"get_mrl_for_chemical_crop_market",
+			{"chemical": "spinetoram", "crop": CHERRY, "market": JAPAN, **kw},
+		)
+
+	def test_a_site_wide_limit_answers_for_a_company(self):
+		self.a_limit(mrl_ppm=0.7)
+		answer = self.lookup(company=MAIN)
+		self.assertTrue(answer["found"])
+		self.assertEqual(answer["mrl_ppm"], 0.7)
+
+	def test_the_entitys_own_row_wins_and_another_entitys_never_does(self):
+		from .harness import STORE
+
+		self.a_limit(mrl_ppm=0.7)
+		STORE.rows("MRL Record")[-1]["company"] = OTHER
+		self.assertFalse(self.lookup(company=MAIN)["found"])
+		self.assertEqual(self.lookup(company=OTHER)["mrl_ppm"], 0.7)

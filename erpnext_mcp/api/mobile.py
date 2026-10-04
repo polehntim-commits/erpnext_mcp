@@ -11699,7 +11699,7 @@ def _submit_config_wizard(user, key, answers, config_version, client_reference, 
 	given = _wizard_answers(raw)
 	if len(json.dumps(given, default=str).encode()) > wizard_config.MAX_ANSWER_BYTES:
 		raise ToolError("the answers are over 256 KB; send files with stage_file_chunk. Nothing was filed.")
-	ctx = _json_argument(context, "context") if isinstance(context, str) else (context or {})
+	ctx = _object_argument(context, "context")
 	ctx = {
 		k: str(v) for k, v in (ctx or {}).items() if k in wizard_config.CONTEXT_KEYS and v not in (None, "")
 	}
@@ -12777,7 +12777,7 @@ def list_my_inspections(user: str, state=None, limit=None) -> dict:
 			),
 		),
 		order_by="creation desc",
-		limit=min(int(limit or 50), 200),
+		limit=_limit_argument(limit, 50, 200, "limit"),
 	)
 	rows = [dict(row) for row in rows or [] if not row.get("company") or row.get("company") in allowed]
 	rows.sort(
@@ -12927,6 +12927,14 @@ def search_link(user: str, doctype=None, txt=None, filters=None, limit=None) -> 
 	given = _json_argument(filters, "filters") if isinstance(filters, str) else (filters or {})
 	if not isinstance(given, dict) or any(isinstance(value, (list, dict)) for value in given.values()):
 		frappe.throw("filters must be an object of equality filters.", frappe.ValidationError)
+	# v0.230.3. A filter on a column the doctype does not have went straight to the
+	# database and came back a 500. Refused by name instead.
+	unknown = [key for key in given if key != "name" and not compat.has_field(wanted, key)]
+	if unknown:
+		frappe.throw(
+			f"{wanted} has no field {', '.join(sorted(map(str, unknown)))} to filter on.", frappe.ValidationError
+		)
+	wanted_limit = _limit_argument(limit, 20, 50, "limit")
 	meta = frappe.get_meta(wanted)
 	title_field = str(getattr(meta, "title_field", "") or "")
 	if wanted == "Employee":
@@ -12958,7 +12966,7 @@ def search_link(user: str, doctype=None, txt=None, filters=None, limit=None) -> 
 			)
 		)
 		out.append({"name": row["name"], "title": title or row["name"], "description": description or None})
-		if len(out) >= min(int(limit or 20), 50):
+		if len(out) >= wanted_limit:
 			break
 	return {"doctype": wanted, "results": out, "count": len(out)}
 
@@ -12978,7 +12986,7 @@ def report_device_capabilities(
 	from .. import device_capabilities
 
 	guard.require_scope(user)
-	kinds = _json_argument(field_kinds, "field_kinds") if isinstance(field_kinds, str) else field_kinds
+	kinds = _list_argument(field_kinds, "field_kinds")
 	return device_capabilities.report(
 		user,
 		str(device_identifier or ""),
@@ -15695,7 +15703,16 @@ def submit_app_feedback(
 	# set should still land in that filter rather than under a blank.
 	active_role = str(role or "").strip()
 	if not active_role and roles:
-		listed = roles if isinstance(roles, list) else json.loads(roles or "[]")
+		# v0.230.3: "Field Worker" (not JSON) or a bare number was a 500. A plain
+		# string is one role; anything else that is not a list is ignored.
+		if isinstance(roles, list):
+			listed = roles
+		else:
+			try:
+				parsed = json.loads(roles) if isinstance(roles, str) else roles
+			except ValueError:
+				parsed = [roles]
+			listed = parsed if isinstance(parsed, list) else [parsed] if isinstance(parsed, str) else []
 		active_role = ", ".join(str(item).strip() for item in listed if str(item or "").strip())
 
 	answer = feedback_tools.submit_app_feedback(
@@ -21946,7 +21963,7 @@ def register_product_label(
 		)
 	tokens = _label_tokens(file_tokens)
 	text = str(ocr_text or "").strip()
-	fields = _json_argument(extracted_fields, "extracted_fields") or {}
+	fields = _object_argument(extracted_fields, "extracted_fields")
 	if not tokens and not text:
 		frappe.throw(
 			"send the label: file_tokens (the photos, uploaded with stage_file_chunk and "
@@ -22112,6 +22129,37 @@ def _json_argument(raw, label: str):
 		return json.loads(raw)
 	except (TypeError, ValueError):
 		frappe.throw(f"{label} must be JSON. Nothing was filed.", frappe.ValidationError)
+
+
+# v0.230.3. THE THREE SHAPES A PHONE ARGUMENT TAKES, CHECKED ONCE. Each of these
+# was a 500 somewhere when the wrong shape arrived — `.items()` on a list,
+# `int("abc")`, iterating a number — and each is now a 400 that names the argument.
+def _list_argument(raw, label: str) -> list:
+	value = _json_argument(raw, label) if isinstance(raw, str) else raw
+	if value in (None, ""):
+		return []
+	if not isinstance(value, list):
+		frappe.throw(f"{label} must be a list. Nothing was changed.", frappe.ValidationError)
+	return value
+
+
+def _object_argument(raw, label: str) -> dict:
+	value = _json_argument(raw, label) if isinstance(raw, str) else raw
+	if value in (None, ""):
+		return {}
+	if not isinstance(value, dict):
+		frappe.throw(f"{label} must be an object. Nothing was changed.", frappe.ValidationError)
+	return value
+
+
+def _limit_argument(raw, default: int, cap: int, label: str = "limit") -> int:
+	if raw in (None, ""):
+		return default
+	try:
+		value = int(raw)
+	except (TypeError, ValueError):
+		frappe.throw(f"{label} must be a whole number, got {raw!r}.", frappe.ValidationError)
+	return max(1, min(value, cap))
 
 
 def _label_blanks(item_code: str, fields: dict, record, result: dict, ocr_text: str = "") -> tuple:
@@ -23412,8 +23460,8 @@ def clock_in_crew(
 	me = _employee(user)
 	key = str(client_request_id or "").strip()[:140]
 
-	people = _json_argument(employees, "employees") if isinstance(employees, str) else employees
-	badges_in = _json_argument(badge_ids, "badge_ids") if isinstance(badge_ids, str) else badge_ids
+	people = _list_argument(employees, "employees")
+	badges_in = _list_argument(badge_ids, "badge_ids")
 	people = [str(p).strip() for p in (people or []) if str(p).strip()]
 	badges_in = [str(b).strip() for b in (badges_in or []) if str(b).strip()]
 	if not people and not badges_in:
@@ -23926,6 +23974,19 @@ def _spray_blocks(blocks) -> list:
 	return out
 
 
+def _unmeasured_blocks_warning(rows: list, acres: float) -> list:
+	"""v0.230.3. Some blocks measured and some not: the tank was divided by the measured
+	acres only, so the per-acre rate reads high — it used to say nothing."""
+	unmeasured = [row["block"] for row in rows if not float(row.get("acres") or 0)]
+	if not acres or not unmeasured:
+		return []
+	return [
+		f"{', '.join(unmeasured)} {'has' if len(unmeasured) == 1 else 'have'} no acreage on record, so "
+		f"the per-acre rate was worked out over the {acres:g} acres that are on file and reads higher "
+		"than what went on. Set the acreage and the next spray's rate is right; REI and PHI are unaffected."
+	]
+
+
 def _spray_products(materials_used, acres: float) -> tuple[list, list]:
 	"""(products, warnings) — the phone's tank TOTALS as the per-acre rates the record keeps."""
 	if isinstance(materials_used, str):
@@ -24027,6 +24088,7 @@ def record_spray_application(
 	rows = _spray_blocks(blocks)
 	acres = sum(float(row.get("acres") or 0) for row in rows)
 	products, warnings = _spray_products(materials_used, acres)
+	warnings += _unmeasured_blocks_warning(rows, acres)
 	if sprayer:
 		guard.require_scoped_doc(asset_tags.ASSET_REGISTER, sprayer, "sprayer", allowed)
 

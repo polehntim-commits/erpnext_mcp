@@ -1728,15 +1728,32 @@ def list_training_sessions(args: dict) -> ToolResult:
 	elif to_date:
 		filters["session_date"] = ("<=", to_date)
 
+	person = as_str(args, "employee")
+	wanted = employee_tool.resolve_employee(person) if person else ""
+	if wanted:
+		# v0.230.3. THE PERSON GOES INTO THE QUERY, through the attendee table. The
+		# phone asks for its own classes with limit 200, and this read 800 sessions
+		# (each described with its own queries) to keep the few with this person on
+		# them — and an older class of theirs past those 800 was never seen.
+		parents = (
+			frappe.db.get_all(
+				training_sessions.ATTENDEE_DOCTYPE,
+				filters={"parenttype": training_sessions.DOCTYPE, "parentfield": "attendees", "employee": wanted},
+				pluck="parent",
+				limit=training_sessions.SESSION_CAP * 4,
+			)
+			if compat.doctype_exists(training_sessions.ATTENDEE_DOCTYPE)
+			else []
+		)
+		filters["name"] = ("in", sorted(set(parents or [])) or ["-"])
+
 	found = training_sessions.rows(filters, limit=max(limit * 4, limit))
 	attendees = training_sessions.attendees_for_parents([entry.get("name") for entry in found])
 	described = [
 		training_sessions.describe(entry, attendees.get(str(entry.get("name") or ""), [])) for entry in found
 	]
 
-	person = as_str(args, "employee")
-	if person:
-		wanted = employee_tool.resolve_employee(person)
+	if wanted:
 		described = [
 			entry for entry in described if any(item["employee"] == wanted for item in entry["attendee_rows"])
 		]
