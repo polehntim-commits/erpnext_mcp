@@ -24176,3 +24176,138 @@ def resolve_punch_review(
 			"error.punch.not_found": frappe.DoesNotExistError,
 		}
 		frappe.throw(str(exc), errors.get(key, frappe.ValidationError))
+
+
+# ── v0.228.0. A housing walk and a detector test, filed from a cabin doorway ─
+#: docs/design/offline_mill_creek.md §2. The app has called both names since
+#: 0.19 and been answered 404; the tools have existed all along.
+FIELD_RECORD_TOOLS = {
+	"Housing Inspection": ("create_housing_inspection", "inspector", "inspection_date"),
+	"Detector Test": ("create_detector_test", "tester", "test_date"),
+}
+
+
+def _file_field_record(user: str, doctype: str, unit, client_request_id, tapped_at, fields: dict) -> dict:
+	"""Gate, scope, replay, stamp, delegate. One implementation for both records.
+
+	FOREMAN OR ABOVE — the people who walk cabins. The unit must be in the
+	caller's entities (a Housing Unit's is `owning_entity`). THE PHONE'S TAP DATES
+	THE RECORD, and the tap and the receipt are both kept. SAME REQUEST, SAME
+	RESULT: a `client_request_id` already filed answers with that record.
+	"""
+	from .. import punch_times
+	from ..tools import inspections
+
+	guard.require_dispatch_role(user, f"Filing a {doctype}")
+	allowed = guard.require_scope(user)
+	name = str(unit or "").strip()
+	entity = frappe.db.get_value("Housing Unit", name, "owning_entity") if name else None
+	if (
+		not name
+		or not frappe.db.exists("Housing Unit", name)
+		or (allowed and str(entity or "") not in allowed)
+	):
+		frappe.throw(f"Housing Unit {name!r} was not found. Nothing was filed.", frappe.DoesNotExistError)
+
+	tool, person_key, date_key = FIELD_RECORD_TOOLS[doctype]
+	key = str(client_request_id or "").strip()[:140]
+	if key and compat.has_field(doctype, "client_request_id"):
+		done = frappe.db.get_value(doctype, {"client_request_id": key}, "name")
+		if done:
+			row = dict(frappe.get_doc(doctype, done).as_dict())
+			return {**inspections._describe(doctype, row, with_evidence=True), "replayed": True}
+
+	tapped = punch_times.device_time(tapped_at)
+	args = {k: v for k, v in fields.items() if v not in (None, "", [])}
+	args["unit"] = name
+	args[person_key] = _employee(user)
+	if tapped:
+		args[date_key] = tapped[:10]
+	data = dict(getattr(inspections, tool)(args).data)
+	stamp = {
+		"client_request_id": key or None,
+		"device_recorded_at": tapped or None,
+		"received_at": frappe.utils.now(),
+	}
+	stamp = {k: v for k, v in stamp.items() if compat.has_field(doctype, k)}
+	if stamp and data.get("name"):
+		frappe.db.set_value(doctype, data["name"], stamp, update_modified=False)
+	return {**data, "replayed": False}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_housing_inspection", mutating=True, limit=guard.WRITE_LIMIT)
+def create_housing_inspection(
+	user: str,
+	unit=None,
+	findings=None,
+	corrective_action=None,
+	notes=None,
+	signature=None,
+	photos=None,
+	source_task=None,
+	client_request_id=None,
+	tapped_at=None,
+) -> dict:
+	"""One habitability walk from the doorway. `photos` are staged File tokens."""
+	return _file_field_record(
+		user,
+		"Housing Inspection",
+		unit,
+		client_request_id,
+		tapped_at,
+		{
+			"findings": findings,
+			"corrective_action": corrective_action,
+			"notes": notes,
+			"signature": signature,
+			"photos": _json_argument(photos, "photos") if isinstance(photos, str) else photos,
+			"source_task": source_task,
+		},
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_detector_test", mutating=True, limit=guard.WRITE_LIMIT)
+def create_detector_test(
+	user: str,
+	unit=None,
+	smoke_detector_result=None,
+	co_detector_result=None,
+	replacement_needed=None,
+	findings=None,
+	notes=None,
+	photos=None,
+	source_task=None,
+	client_request_id=None,
+	tapped_at=None,
+) -> dict:
+	"""One smoke and CO detector test. A failed or missing detector raises its replacement task."""
+	return _file_field_record(
+		user,
+		"Detector Test",
+		unit,
+		client_request_id,
+		tapped_at,
+		{
+			"smoke_detector_result": smoke_detector_result,
+			"co_detector_result": co_detector_result,
+			"replacement_needed": replacement_needed,
+			"findings": findings,
+			"notes": notes,
+			"photos": _json_argument(photos, "photos") if isinstance(photos, str) else photos,
+			"source_task": source_task,
+		},
+	)
+
+
+# ── v0.228.0. Answering a scan with no signal ───────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_offline_scan_pack", limit=guard.READ_LIMIT)
+def get_offline_scan_pack(user: str) -> dict:
+	"""Every tagged asset and housing unit in the caller's entities, with their tags and live
+	tasks — what Prepare for offline keeps so a scan in a dead spot still answers."""
+	from .. import offline_scan_pack
+
+	allowed = guard.require_scope(user)
+	return offline_scan_pack.build(allowed)

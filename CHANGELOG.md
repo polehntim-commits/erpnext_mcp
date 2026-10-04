@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.228.0 — 2026-10-03 — the doorway walk and detector test; scanning with no signal
+
+**188 mobile methods**: + `create_housing_inspection`, `create_detector_test`, `get_offline_scan_pack`.
+Contract `docs/design/offline_mill_creek.md` §2–3. Deploy `docs/deploy/v0.228.0_walk_and_scan.md`. App 0.35.0.
+
+- **A housing walk and a detector test can be filed from a phone** — the app has called both names since
+  0.19 and been answered 404. Foreman or above; the cabin must be in the caller's entities; idempotent on
+  `client_request_id` (a resend answers `replayed` with the same record); `tapped_at` dates the record; the
+  phone time and the receipt are kept (`device_recorded_at`, `received_at`) on both doctypes.
+- **`get_offline_scan_pack`**: every tagged asset and housing unit in the caller's entities, with their
+  tag UUIDs and aliases and the live Farm Tasks on each — what Prepare for offline keeps so a scan in a
+  dead spot still answers.
+
 ## 0.227.0 — 2026-10-03 — punch times from phones with no signal
 
 **1011 tools** (492 read, 519 write): + `list_punch_reviews`, `resolve_punch_review`. **185 mobile

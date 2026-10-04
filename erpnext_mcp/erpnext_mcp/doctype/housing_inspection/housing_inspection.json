@@ -27,7 +27,12 @@
   "signature",
   "photos",
   "notes_section",
-  "notes"
+  "notes",
+  "phone_section",
+  "client_request_id",
+  "phone_col",
+  "device_recorded_at",
+  "received_at"
  ],
  "fields": [
   {
@@ -170,11 +175,45 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "phone_section",
+   "fieldtype": "Section Break",
+   "label": "Filed from a phone (v0.228.0)"
+  },
+  {
+   "description": "The phone's request ID. A resend of the same walk answers with this record.",
+   "fieldname": "client_request_id",
+   "fieldtype": "Data",
+   "label": "Request ID",
+   "no_copy": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "phone_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The phone's clock when it was done (site time).",
+   "fieldname": "device_recorded_at",
+   "fieldtype": "Datetime",
+   "label": "Done on the phone at",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received by the server",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-07-31 18:00:00.000000",
+ "modified": "2026-10-03 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Housing Inspection",

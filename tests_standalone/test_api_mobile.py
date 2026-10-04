@@ -407,6 +407,11 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
+		# v0.228.0. The doorway walk, the detector test and the offline scan pack: app
+		# 0.35.0 sends the first two through its queue and reads the third as a dictionary.
+		"create_housing_inspection",
+		"create_detector_test",
+		"get_offline_scan_pack",
 		# v0.227.0. Punch reviews: the manager tile reads them through tiles; a
 		# screen of its own comes with the app.
 		"list_punch_reviews",

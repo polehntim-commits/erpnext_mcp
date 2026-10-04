@@ -515,6 +515,9 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/print_tags_for_location",
 		"/mobile/list_punch_reviews",
 		"/mobile/resolve_punch_review",
+		"/mobile/create_housing_inspection",
+		"/mobile/create_detector_test",
+		"/mobile/get_offline_scan_pack",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2957,6 +2960,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.228.0. Filing a housing walk or a detector test: Foreman or above.
+		"create_housing_inspection",
+		"create_detector_test",
 		# v0.181.0. An Item is a master every stock line and spray record points
 		# at, and which product a retail code belongs to is the same decision.
 		"link_item_barcode",
@@ -3112,6 +3118,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# v0.227.0. Punch reviews: the reviewer roles are checked in `punch_times`.
 		"list_punch_reviews",
 		"resolve_punch_review",
+		# v0.228.0. The caller's own entities' tags and tasks, for a scan with no signal.
+		"get_offline_scan_pack",
 		# v0.165.0. Filing a title on a truck, both docnames scoped. Open like
 		# `create_expense_receipt`, which makes the same link by VIN at capture.
 		"link_title_to_asset",
@@ -3302,7 +3310,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 185, "a method is named in two sets at once")
+		self.assertEqual(len(named), 188, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

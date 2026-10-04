@@ -461,6 +461,10 @@ ROUTES = (
 	# v0.227.0. Punches sent long after the tap, for a manager.
 	Route("/mobile", mobile_api.list_punch_reviews),
 	Route("/mobile", mobile_api.resolve_punch_review),
+	# v0.228.0. A housing walk and a detector test from the doorway, queued offline.
+	Route("/mobile", mobile_api.create_housing_inspection),
+	Route("/mobile", mobile_api.create_detector_test),
+	Route("/mobile", mobile_api.get_offline_scan_pack),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),
