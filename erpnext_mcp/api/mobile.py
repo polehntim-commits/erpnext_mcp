@@ -24432,3 +24432,51 @@ def get_offline_scan_pack(user: str) -> dict:
 
 	shift_roles = set(employee_tool.SHIFT_ROLES) | set(guard.DISPATCH_ROLES)
 	return offline_scan_pack.build(allowed, with_badges=bool(guard.roles_held(user) & shift_roles))
+
+
+# ── v0.231.0. A business card becomes a Contact ─────────────────────────────
+# docs/design/business_card_contacts.md (AFB-2026-00031). The phone reads the card
+# (Apple Vision + the on-device model), a person confirms the fields, and these two
+# routes do the rest. Farm Manager / bookkeeper / System Manager only.
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("preview_business_card", limit=guard.READ_LIMIT)
+def preview_business_card(user: str, card=None) -> dict:
+	"""The duplicates and the suggested Supplier / Customer / Company. Writes nothing."""
+	from .. import business_cards
+
+	business_cards.require_role(user)
+	guard.require_scope(user)
+	return business_cards.preview(_object_argument(card, "card"))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("save_business_card", mutating=True, limit=guard.WRITE_LIMIT)
+def save_business_card(
+	user: str,
+	card=None,
+	merge_into=None,
+	save_as_new=None,
+	link_to=None,
+	create_party=None,
+	photos=None,
+	client_request_id=None,
+) -> dict:
+	"""Create or update the Contact. A duplicate needs merge_into or save_as_new; a link is only
+	what `link_to` / `create_party` name. Same `client_request_id`, same contact."""
+	from .. import business_cards
+
+	business_cards.require_role(user)
+	guard.require_scope(user)
+	decision = {
+		"merge_into": merge_into,
+		"save_as_new": str(save_as_new).lower() in ("1", "true", "yes") if save_as_new not in (None, "") else False,
+		"link_to": _object_argument(link_to, "link_to") if link_to not in (None, "") else None,
+		"create_party": create_party,
+	}
+	return business_cards.save(
+		user,
+		_object_argument(card, "card"),
+		{k: v for k, v in decision.items() if v not in (None, "", False)},
+		str(client_request_id or ""),
+		_list_argument(photos, "photos"),
+	)

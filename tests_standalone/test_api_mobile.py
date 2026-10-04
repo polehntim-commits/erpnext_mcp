@@ -407,6 +407,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
+		# v0.231.0. Business card → Contact: app 0.38.0 calls these and reads the answer
+		# as a dictionary (the contact form fills from what it sent).
+		"preview_business_card",
+		"save_business_card",
 		# v0.228.0. The doorway walk, the detector test and the offline scan pack: app
 		# 0.35.0 sends the first two through its queue and reads the third as a dictionary.
 		"create_housing_inspection",

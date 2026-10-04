@@ -465,6 +465,8 @@ ROUTES = (
 	Route("/mobile", mobile_api.create_housing_inspection),
 	Route("/mobile", mobile_api.create_detector_test),
 	Route("/mobile", mobile_api.get_offline_scan_pack),
+	Route("/mobile", mobile_api.preview_business_card),
+	Route("/mobile", mobile_api.save_business_card),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

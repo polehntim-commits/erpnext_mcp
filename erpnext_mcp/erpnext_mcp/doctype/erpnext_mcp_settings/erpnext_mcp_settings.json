@@ -1161,6 +1161,8 @@
   "allow_list_punch_reviews",
   "allow_resolve_punch_review",
   "allow_repair_placeholder_phones",
+  "allow_search_contacts",
+  "allow_save_contact",
   "allow_download_card_pdf",
   "allow_request_card_back",
   "allow_mark_card_print_job",
@@ -8995,6 +8997,20 @@
    "fieldname": "allow_repair_placeholder_phones",
    "fieldtype": "Check",
    "label": "Repair Placeholder Phones"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.231.0. Search the farm's contacts (business cards and the Desk) by name, company, email, phone or where met.",
+   "fieldname": "allow_search_contacts",
+   "fieldtype": "Check",
+   "label": "Search Contacts"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.231.0. Create or update a Contact (with Address, notes, photos) from a confirmed business card. A duplicate needs merge_into or save_as_new; nothing is linked unless named.",
+   "fieldname": "allow_save_contact",
+   "fieldtype": "Check",
+   "label": "Save Contact"
   },
   {
    "default": "0",

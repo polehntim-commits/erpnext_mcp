@@ -181,6 +181,7 @@ from .tools import (
 	workflow,
 )
 from .tools import card_prints as card_print_tools
+from .tools import contacts as contact_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
 from .tools import direct_deposit as direct_deposit_tools
@@ -17370,6 +17371,47 @@ TOOLS = {
 		title="Classify receipt",
 	),
 	# ── v0.68.0: merchant ↔ Supplier matching, and the bill a receipt becomes ─
+	"search_contacts": _tool(
+		contact_tools.search_contacts,
+		"v0.231.0. The farm's contacts — people met and filed from a business card, or entered "
+		"in the Desk — by name, company, email, phone (any spelling of the number) or where they "
+		"were met. Each answer carries emails, phones, the Supplier / Customer / Company it is "
+		"linked to, and how it was captured. Farm Manager, bookkeeper (Accounts Manager / "
+		"Accounts User) or System Manager.",
+		{
+			"query": _field(_STRING, "Text in the name, company, email, title or where met; or a phone number."),
+			"company": _field(_STRING, "Only contacts whose company name contains this."),
+			"met_at": _field(_STRING, "Only contacts met at a place containing this, e.g. 'Hort Expo'."),
+			"limit": _field(_INTEGER, "At most this many (default 50, max 200)."),
+		},
+		title="Search contacts",
+	),
+	"save_contact": _tool(
+		contact_tools.save_contact,
+		"MUTATING (default OFF). v0.231.0. Create or update an ERPNext Contact (with Address, "
+		"notes as a comment, and photos) from a confirmed business card — the same path as the "
+		"phone's Scan business card. TWO DECISIONS ARE THE CALLER'S: an existing contact with the "
+		"same email or phone is refused until you pass merge_into (update it) or save_as_new; and "
+		"nothing is linked to a Supplier / Customer / Company unless you pass link_to, or "
+		"create_party to make one. dry_run returns the duplicates and the suggested match (the "
+		"merchant resolver's domain / phone / name cascade) without writing.",
+		{
+			"card": _field(
+				_OBJECT,
+				"first_name, last_name, title, company, emails [..], phones [{number, kind: mobile|work|fax}], "
+				"website, address {line1, line2, city, state, postal_code, country}, notes, met_at, met_on (YYYY-MM-DD).",
+			),
+			"dry_run": _field(_BOOLEAN, "Preview only: duplicates and the suggested link. Writes nothing."),
+			"merge_into": _field(_STRING, "An existing Contact to update instead of creating one."),
+			"save_as_new": _field(_BOOLEAN, "Create a new contact even though one matches."),
+			"link_to": _field(_OBJECT, "{doctype: Supplier|Customer|Company, name} to link the contact (and address) to."),
+			"create_party": _field(_STRING, "Supplier or Customer: create one named after the card's company and link it."),
+			"photos": _field(_STRING_ARRAY, "Staged File docnames (front, back) to attach, private."),
+			"client_request_id": _field(_STRING, "The same id again answers with the contact already saved."),
+		},
+		mutating=True,
+		title="Save contact",
+	),
 	"repair_placeholder_phones": _tool(
 		receipts.repair_placeholder_phones_tool,
 		"MUTATING (default OFF). v0.229.1. Finds Expense Receipts whose stored merchant_phone is a "

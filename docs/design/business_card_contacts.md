@@ -1,6 +1,6 @@
 # Business card capture → Contact
 
-**Status: PROPOSED (2026-10-04). Not approved; nothing built.** From Tell the Farm AFB-2026-00031 (Tim, Receipt
+**Status: BUILT — erpnext_mcp v0.231.0 + app 0.38.0 (2026-10-04; Tim approved building it).** From Tell the Farm AFB-2026-00031 (Tim, Receipt
 Capture, app 0.36.0): "This is a business card I thought we had a way of building that in via receipts." Today
 nothing is filed: the receipt classifier has no business-card kind. Queued after the current polish releases.
 Principle: collect once, use everywhere — the card becomes the ERPNext **Contact** every other screen already

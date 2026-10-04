@@ -518,6 +518,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/create_housing_inspection",
 		"/mobile/create_detector_test",
 		"/mobile/get_offline_scan_pack",
+		"/mobile/preview_business_card",
+		"/mobile/save_business_card",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2960,6 +2962,10 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.231.0. A business card becomes a Contact: Farm Manager, bookkeeper or
+		# System Manager (`business_cards.require_role`) — a picker is refused.
+		"preview_business_card",
+		"save_business_card",
 		# v0.228.0. Filing a housing walk or a detector test: Foreman or above.
 		"create_housing_inspection",
 		"create_detector_test",
@@ -3310,7 +3316,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 188, "a method is named in two sets at once")
+		self.assertEqual(len(named), 190, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

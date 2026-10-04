@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.231.0 — 2026-10-04 — business card → Contact (AFB-2026-00031)
+
+**Migrate needed** (six Contact custom fields, two settings switches). Two new MCP tools, both off. Deploy
+`docs/deploy/v0.231.0_business_cards.md`. App 0.38.0. Design: `docs/design/business_card_contacts.md`.
+
+- **Phone routes `preview_business_card` and `save_business_card`** (Farm Manager, Accounts Manager, Accounts User,
+  System Manager). Preview writes nothing: it returns contacts already on file with the same email or phone and the
+  Supplier / Customer / Company the card's company resolves to (`receipts.resolve_merchant`). Save files an ERPNext
+  Contact with its emails, phones, address, a note and the card photos; it is idempotent on `client_request_id`.
+- **The person decides duplicates and links.** `merge_into` fills only what the existing contact is missing (it never
+  overwrites); `save_as_new` keeps both; `link_to` adds a Dynamic Link to an existing Supplier / Customer / Company;
+  `create_party` makes a new Supplier or Customer through the same path as `create_supplier` / `create_customer`.
+- **Contact fields** `card_source`, `card_met_on`, `card_met_at`, `card_website`, `card_captured_by`,
+  `card_client_request_id` (added in `after_migrate`).
+- **MCP tools `search_contacts` and `save_contact`** (`dry_run` previews), both default off
+  (`allow_search_contacts`, `allow_save_contact`).
+
 ## 0.230.6 — 2026-10-04 — polish: label approvals run what is still needed; a phone spray resend is the same spray
 
 No migrate, no new tools, no settings. Deploy `docs/deploy/v0.230.6_polish.md`. App 0.37.4.

@@ -224,6 +224,7 @@ def after_migrate() -> None:
 	_wizard_definitions()
 	_trade_documents()
 	_asset_tag_urls()
+	_business_card_fields()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -723,6 +724,17 @@ def _reporting_templates() -> None:
 		print(
 			f"erpnext_mcp: {len(report['failed'])} reporting template(s) could not be seeded: {report['failed']}"
 		)
+
+
+def _business_card_fields() -> None:
+	"""v0.231.0. The Contact columns a business card is filed with. Never raises."""
+	try:
+		from . import business_cards
+
+		if not business_cards.ensure_fields():
+			print("erpnext_mcp: Contact did not take the business-card fields; save_business_card still files the contact.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: business-card fields were not added — {type(exc).__name__}: {exc}")
 
 
 def _asset_tag_urls() -> None:
