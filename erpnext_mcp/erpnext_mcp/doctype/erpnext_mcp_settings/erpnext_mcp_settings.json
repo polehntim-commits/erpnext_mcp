@@ -1182,6 +1182,12 @@
   "allow_record_growth_stage",
   "allow_get_stage_timeline",
   "allow_list_suggested_tasks",
+  "work_notices_enabled",
+  "work_notice_cutoff",
+  "work_notice_supervisor_lead_minutes",
+  "work_notice_managers",
+  "allow_list_work_notices",
+  "allow_send_work_notice",
   "allow_search_references",
   "allow_get_reference",
   "allow_list_references",
@@ -9170,6 +9176,50 @@
    "fieldname": "allow_list_suggested_tasks",
    "fieldtype": "Check",
    "label": "List Suggested Tasks"
+  },
+  {
+   "default": "0",
+   "description": "v0.243.0. No-work notices: when an Enforced Work Timing rule holds tomorrow's work, draft a notice for the supervisor at the cutoff minus the lead, and escalate it to management at the cutoff if unanswered. Never sent automatically (decision 34).",
+   "fieldname": "work_notices_enabled",
+   "fieldtype": "Check",
+   "label": "No-Work Notices"
+  },
+  {
+   "default": "18:00:00",
+   "depends_on": "work_notices_enabled",
+   "description": "v0.243.0. The crew's cutoff: an unanswered notice is escalated to management then.",
+   "fieldname": "work_notice_cutoff",
+   "fieldtype": "Time",
+   "label": "No-Work Notice Cutoff"
+  },
+  {
+   "default": "60",
+   "depends_on": "work_notices_enabled",
+   "description": "v0.243.0. Minutes before the cutoff that the supervisor is asked.",
+   "fieldname": "work_notice_supervisor_lead_minutes",
+   "fieldtype": "Int",
+   "label": "Supervisor Lead (minutes)"
+  },
+  {
+   "depends_on": "work_notices_enabled",
+   "description": "v0.243.0. Users an unanswered notice escalates to, one per line. Blank: every Farm Manager.",
+   "fieldname": "work_notice_managers",
+   "fieldtype": "Small Text",
+   "label": "Escalate To"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.243.0. No-work notices: drafted, escalated, sent — who was told what, and who was not reached.",
+   "fieldname": "allow_list_work_notices",
+   "fieldtype": "Check",
+   "label": "List Work Notices"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.243.0. Answer a no-work notice: send it, send it with other work, decide no notice, or send a resume.",
+   "fieldname": "allow_send_work_notice",
+   "fieldtype": "Check",
+   "label": "Send Work Notice"
   },
   {
    "default": "1",

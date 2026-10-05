@@ -1,0 +1,87 @@
+{
+ "actions": [],
+ "creation": "2026-10-04 23:00:00.000000",
+ "description": "v0.243.0. One person a Work Notice is for, in their language, and whether it reached them.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "language",
+  "text",
+  "sent",
+  "sent_at",
+  "reached",
+  "opened_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Data",
+   "label": "Language",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "text",
+   "fieldtype": "Small Text",
+   "label": "Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sent",
+   "fieldtype": "Check",
+   "label": "Sent",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "label": "Sent At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reached",
+   "fieldtype": "Check",
+   "label": "Reached",
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "A push reached a handset. Not reached: call them."
+  },
+  {
+   "fieldname": "opened_at",
+   "fieldtype": "Datetime",
+   "label": "Opened At",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-04 23:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Work Notice Recipient",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

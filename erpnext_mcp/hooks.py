@@ -418,6 +418,10 @@ scheduler_events = {
 		#: query behind `list_active_reis`; it is deliberately NOT the only thing
 		#: standing between a worker and a stale restriction.
 		"erpnext_mcp.tools.spray_rei.close_expired_reis",
+		#: v0.243.0. No-work notices: drafts for the supervisor at the cutoff minus the lead,
+		#: escalation to management at the cutoff (decision 34). Hourly because the cutoff is the
+		#: farm's setting. Off unless `work_notices_enabled`; never sends a notice; never raises.
+		"erpnext_mcp.work_notices.hourly",
 	],
 	"daily": [
 		"erpnext_mcp.tools.uploads.collect_expired_sessions",

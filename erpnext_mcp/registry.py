@@ -187,6 +187,7 @@ from .tools import references as reference_tools
 from .tools import gohold as go_hold_tools
 from .tools import stages as stage_tools
 from .tools import taskdates as task_date_tools
+from .tools import worknotices as work_notice_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
 from .tools import direct_deposit as direct_deposit_tools
@@ -17652,6 +17653,37 @@ TOOLS = {
 		},
 		required=("block",),
 		title="Get stage timeline",
+	),
+	# ── v0.243.0: no-work notices ───────────────────────────────────────────
+	"list_work_notices": _tool(
+		work_notice_tools.list_work_notices,
+		"v0.243.0. No-work notices (Work Notice): drafted the evening before when an Enforced Work Timing rule holds "
+		"tomorrow's task, for the supervisor to decide; escalated to management at the cutoff if unanswered; never "
+		"sent automatically (decision 34). Each with the reasons, rules and versions, next possible day, the text in "
+		"English and Spanish, and per recipient: sent, reached by push, opened. status 'open' = needs an answer.",
+		{
+			"status": _field(_STRING, "open, Awaiting Supervisor, Escalated, Sent, Other Work Sent, No Notice, Lifted, Resume Sent."),
+			"for_date": _field(_STRING, "YYYY-MM-DD — the work day."),
+			"company": _field(_STRING, "Only one company."),
+			"limit": _field(_INTEGER, "At most this many (default 100)."),
+		},
+		title="List work notices",
+	),
+	"send_work_notice": _tool(
+		work_notice_tools.send_work_notice,
+		"MUTATING (default OFF). v0.243.0. Answer a no-work notice as its supervisor or a manager: 'send' (push each "
+		"recipient the notice in their language), 'other_work' (send it with other work — text or alternative_task; "
+		"see list_suggested_tasks), 'no_notice' (nothing is sent), or 'resume' (after a Hold lifted: tell the crew "
+		"the work is on). Returns who was not reached by push — call them.",
+		{
+			"notice": _field(_STRING, "The Work Notice, e.g. WN-2026-00001."),
+			"choice": _field(_STRING, "send, other_work, no_notice or resume."),
+			"alternative": _field(_STRING, "The other work, e.g. 'brush pickup, Block 9, 7 am'."),
+			"alternative_task": _field(_STRING, "Or a Farm Task to offer instead."),
+		},
+		required=("notice", "choice"),
+		mutating=True,
+		title="Send work notice",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

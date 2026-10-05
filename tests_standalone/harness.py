@@ -1712,6 +1712,9 @@ APP_DOCTYPES = {
 	"Reference Document": "reference_document",
 	"Reference Page": "reference_page",
 	"Reference Citation": "reference_citation",
+	# v0.243.0. No-work notices and their recipients.
+	"Work Notice": "work_notice",
+	"Work Notice Recipient": "work_notice_recipient",
 	# v0.79.0. The two registers this release exists for. Both are on the SCAN
 	# and TASK paths — a discipline chain is read from a mobile wrapper and an
 	# accident report spawns sub-tasks — so they are registered here rather than
@@ -2631,6 +2634,7 @@ CHILD_TABLES = {
 	("Farm Task Assignment", "time_segments"): "Task Time Segment",
 	("Farm Task", "linked_tasks"): "Farm Task Link",
 	("Reference Document", "pages"): "Reference Page",
+	("Work Notice", "recipients"): "Work Notice Recipient",
 	("Compliance Policy", "references"): "Reference Citation",
 	("Farm Task Template", "references"): "Reference Citation",
 	("Training Type", "references"): "Reference Citation",

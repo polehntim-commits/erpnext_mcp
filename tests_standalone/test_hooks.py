@@ -598,6 +598,8 @@ class TheScheduledJobs(unittest.TestCase):
 					# v0.223.0. Filed login cards delete themselves.
 					"erpnext_mcp.login_cards.purge_due",
 					"erpnext_mcp.tools.spray_rei.close_expired_reis",
+					# v0.243.0. No-work notice drafts and escalation; off unless enabled.
+					"erpnext_mcp.work_notices.hourly",
 				],
 				"daily": [
 					"erpnext_mcp.tools.uploads.collect_expired_sessions",

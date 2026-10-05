@@ -1,0 +1,241 @@
+{
+ "actions": [],
+ "creation": "2026-10-04 23:00:00.000000",
+ "description": "v0.243.0. A no-work notice for one task and one day: drafted when an Enforced Work Timing rule holds tomorrow's work, decided by the supervisor (send / other work / no notice), escalated to management if unanswered by the cutoff, never sent automatically. Labor evidence. docs/design/ccf_core_work_timing.md §8.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "for_date",
+  "status",
+  "task",
+  "task_name",
+  "location",
+  "col_a",
+  "supervisor",
+  "supervisor_user",
+  "answer_by",
+  "escalated_to",
+  "escalated_at",
+  "why_section",
+  "hold_reasons",
+  "rules",
+  "next_possible",
+  "answer_section",
+  "choice",
+  "alternative",
+  "alternative_task",
+  "answered_by",
+  "answered_at",
+  "text_en",
+  "text_es",
+  "recipients_section",
+  "recipients"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "for_date",
+   "fieldtype": "Date",
+   "label": "For",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The work day the notice is about (tomorrow, when drafted)."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Awaiting Supervisor\nEscalated\nSent\nOther Work Sent\nNo Notice\nLifted\nResume Sent",
+   "default": "Awaiting Supervisor",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "label": "Task",
+   "options": "Farm Task",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "task_name",
+   "fieldtype": "Data",
+   "label": "Task Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "Block",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "supervisor",
+   "fieldtype": "Link",
+   "label": "Supervisor",
+   "options": "Employee",
+   "description": "Decision 29: the assignee's Reports To; else whoever dispatched the task."
+  },
+  {
+   "fieldname": "supervisor_user",
+   "fieldtype": "Link",
+   "label": "Supervisor User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "answer_by",
+   "fieldtype": "Datetime",
+   "label": "Answer By",
+   "read_only": 1,
+   "description": "The crew's cutoff. Unanswered by then: escalated to management (decision 34). Never sent automatically."
+  },
+  {
+   "fieldname": "escalated_to",
+   "fieldtype": "Small Text",
+   "label": "Escalated To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "escalated_at",
+   "fieldtype": "Datetime",
+   "label": "Escalated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "why_section",
+   "fieldtype": "Section Break",
+   "label": "Why"
+  },
+  {
+   "fieldname": "hold_reasons",
+   "fieldtype": "Small Text",
+   "label": "Hold Reasons",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rules",
+   "fieldtype": "Code",
+   "label": "Rules (id, version)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_possible",
+   "fieldtype": "Date",
+   "label": "Next Possible",
+   "read_only": 1,
+   "description": "The first forecast day every rule passes; blank = we'll confirm."
+  },
+  {
+   "fieldname": "answer_section",
+   "fieldtype": "Section Break",
+   "label": "Answer"
+  },
+  {
+   "fieldname": "choice",
+   "fieldtype": "Select",
+   "label": "Choice",
+   "options": "\nsend\nother_work\nno_notice\nresume",
+   "read_only": 1
+  },
+  {
+   "fieldname": "alternative",
+   "fieldtype": "Small Text",
+   "label": "Other Work",
+   "description": "e.g. brush pickup, Block 9, 7 am."
+  },
+  {
+   "fieldname": "alternative_task",
+   "fieldtype": "Link",
+   "label": "Other Work Task",
+   "options": "Farm Task"
+  },
+  {
+   "fieldname": "answered_by",
+   "fieldtype": "Link",
+   "label": "Answered By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "answered_at",
+   "fieldtype": "Datetime",
+   "label": "Answered At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "text_en",
+   "fieldtype": "Small Text",
+   "label": "Text (English)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "text_es",
+   "fieldtype": "Small Text",
+   "label": "Text (Spanish)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recipients_section",
+   "fieldtype": "Section Break",
+   "label": "Recipients"
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Table",
+   "label": "Recipients",
+   "options": "Work Notice Recipient"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-04 23:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Work Notice",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Foreman"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "format:WN-{YYYY}-{#####}",
+ "title_field": "task_name",
+ "track_changes": 1
+}

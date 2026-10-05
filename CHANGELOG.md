@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.243.0 — 2026-10-04 — no-work notices (approved queue item 5, part 5)
+
+**Migrate needed** (two doctypes: Work Notice and its Recipient rows; six settings fields). Two new MCP tools (one read
+on, one write off). Deploy `docs/deploy/v0.243.0_work_notices.md`. Design: `docs/design/ccf_core_work_timing.md` §8,
+with Tim's decision 34: **if the supervisor has not answered by the cutoff, escalate to management — never
+auto-send.**
+
+- **Drafted the evening before** (cutoff minus the supervisor lead, default 17:00): an open, assigned task under an
+  **Enforced** Work Timing rule (`block_start`) that holds TOMORROW gets one Work Notice — reasons, rules and
+  versions, next possible day (first forecast day every rule passes), recipients (assignee and crew members) each in
+  their own language, and the text in English and Spanish (tú). Advisory rules never draft anything.
+- **The supervisor decides** (decision 29: the assignee's Reports To, else whoever dispatched the task; pushed):
+  send, send with other work (`list_suggested_tasks` helps), or no notice — `send_work_notice`.
+- **At the cutoff** (default 18:00) an unanswered notice is **Escalated** to the users in settings, else every Farm
+  Manager. Nothing reaches a worker without a person's answer.
+- **Lifted**: a sent notice whose day turns Go is flagged and the supervisor asked to send a **resume** notice.
+- **Evidence**: per recipient — language, text, sent, reached by push. Anyone not reached is returned to call.
+- **Off by default** (`work_notices_enabled`). Hourly job `work_notices.hourly`. The phone's Today card follows in an
+  app release.
+
 ## 0.242.0 — 2026-10-04 — suggested tasks (approved queue item 5, part 4)
 
 **No migrate** beyond one switch field. One new MCP tool (read, on). Deploy `docs/deploy/v0.242.0_suggested_tasks.md`.
