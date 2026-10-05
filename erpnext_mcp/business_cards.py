@@ -41,7 +41,8 @@ ADDRESS = "Address"
 CUSTOM_FIELD = "Custom Field"
 #: Farm Manager, plus the roles behind the Owner and Bookkeeper personas
 #: (`sidebar.PERSONAS`) and System Manager. Not Family Member: that role is broad.
-ROLES = ("Farm Manager", "Accounts Manager", "Accounts User", "System Manager")
+#: v0.234.1 (Tim's decision 53): Foreman and above capture and browse; a Crew Leader does not.
+ROLES = ("Foreman", "Farm Manager", "Accounts Manager", "Accounts User", "System Manager")
 LINKABLE = ("Supplier", "Customer", "Company")
 SOURCE = "Business card"
 MAX_EMAILS = 6

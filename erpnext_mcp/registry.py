@@ -17466,6 +17466,73 @@ TOOLS = {
 		required=("kind",),
 		title="Preview config",
 	),
+	# ── v0.234.1: one config lifecycle — the generic writes ────────────────
+	"draft_config": _tool(
+		config_tools.draft_config,
+		"MUTATING (default OFF). v0.234.1. Create or change a DRAFT of any configuration kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule), "
+		"routed to the specific tool so every check still runs. Over MCP a draft is always AI-proposed: it "
+		"can be previewed (preview_config) and staged, and it is PUBLISHED ONLY IN THE DESK OR ON THE PHONE "
+		"(Tim's decision 5). Phone kinds and extraction configs take `body`; rules and templates take "
+		"`fields` (the same arguments their create/propose/update tools take).",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Which config (key, document type, template name or rule_id)."),
+			"body": _field(_OBJECT, "Phone kinds / extraction config: the whole body."),
+			"fields": _field(_OBJECT, "Rules and templates: the fields to set, e.g. {\"condition_tree\": {…}}."),
+			"notes": _field(_STRING, "Why this draft exists."),
+		},
+		required=("kind", "key"),
+		mutating=True,
+		title="Draft config",
+	),
+	"stage_config": _tool(
+		config_tools.stage_config,
+		"MUTATING (default OFF). v0.234.1. Put a draft in front of a chosen audience first — it takes REAL "
+		"effect for them (decision 4). Phone kinds: users / roles / companies; extraction configs: users. "
+		"Rules and templates have no staged audience yet.",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Which config."),
+			"version": _field(_INTEGER, "The draft's version."),
+			"change_note": _field(_STRING, "Why (phone kinds)."),
+			"users": _field(_STRING_ARRAY, "Who sees it first."),
+			"roles": _field(_STRING_ARRAY, "Phone kinds: roles that see it first."),
+			"companies": _field(_STRING_ARRAY, "Phone kinds: companies that see it first."),
+		},
+		required=("kind", "key"),
+		mutating=True,
+		title="Stage config",
+	),
+	"publish_config": _tool(
+		config_tools.publish_config,
+		"MUTATING (default OFF). v0.234.1. Publish a version a PERSON wrote. An AI-proposed version is "
+		"refused here and published in the Desk (Publish / Approve button) or on the phone — Tim's decision "
+		"5, for every kind. Rules: approve; inspection templates: approve; phone kinds and extraction: "
+		"publish the version named.",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Which config."),
+			"version": _field(_INTEGER, "Phone kinds / extraction: the version."),
+			"change_note": _field(_STRING, "Why (phone kinds)."),
+		},
+		required=("kind", "key"),
+		mutating=True,
+		title="Publish config",
+	),
+	"rollback_config": _tool(
+		config_tools.rollback_config,
+		"MUTATING (default OFF). v0.234.1. Back to the previous published version (phone kinds), or `to: "
+		"none` to retire a phone config or switch off a rule / inspection template. History is kept.",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Which config."),
+			"to": _field(_STRING, "'none' to retire / deactivate instead of rolling back."),
+			"change_note": _field(_STRING, "Why."),
+		},
+		required=("kind", "key", "change_note"),
+		mutating=True,
+		title="Roll back config",
+	),
 	"search_contacts": _tool(
 		contact_tools.search_contacts,
 		"v0.231.0. The farm's contacts — people met and filed from a business card, or entered "

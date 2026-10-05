@@ -191,6 +191,9 @@ CATEGORIES = (
 	# rule using it. The REI and PHI window rules are the first two.
 	"Spray and Pesticides",
 	"Water and Sanitation",
+	# v0.234.1. Go/Hold rules on work (docs/design/ccf_core_work_timing.md §3). New in
+	# the alert doctype too.
+	"Work Timing",
 	"Workforce",
 )
 

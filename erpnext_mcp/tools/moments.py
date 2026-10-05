@@ -20,7 +20,7 @@ import json
 
 import frappe
 
-from .. import compat, extraction_config, flags, security, triage
+from .. import compat, config_lifecycle, extraction_config, flags, security, triage
 from ..args import as_bool, as_limit, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -193,6 +193,10 @@ def publish_extraction_config(args: dict) -> ToolResult:
 	actor = triage.require_manager("publish an extraction config")
 	document_type = _document_type(args)
 	version = as_str(args, "version", required=True)
+	# v0.234.1 (decision 5): an AI-proposed version goes live only in the Desk or on the phone.
+	candidate = extraction_config.row(document_type, version)
+	if candidate is not None:
+		config_lifecycle.refuse_ai_publish(candidate.get("authored_by"), candidate.get("name") or document_type)
 	try:
 		doc, previous = extraction_config.publish(document_type, version, actor)
 	except (LookupError, ValueError) as exc:

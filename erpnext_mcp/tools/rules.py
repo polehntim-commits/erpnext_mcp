@@ -55,7 +55,7 @@ import json
 
 import frappe
 
-from .. import ccf, compat, compliance_rules, proposals
+from .. import ccf, compat, compliance_rules, config_lifecycle, proposals
 from .. import training as regimes_vocabulary
 from ..alerts import engine, sandbox
 from ..args import as_bool, as_date, as_int, as_limit, as_str
@@ -307,6 +307,8 @@ def approve_compliance_rule(args: dict) -> ToolResult:
 	except ValueError as exc:
 		raise ToolError(str(exc)) from None
 
+	# v0.234.1 (decision 5): an AI-proposed rule is approved only in the Desk or on the phone.
+	config_lifecycle.refuse_ai_publish(row.get("authored_by"), f"Compliance Rule {name} ({row.get('rule_id')})")
 	if str(row.get("superseded_by") or "").strip():
 		raise ToolError(
 			f"Compliance Rule {name} was superseded by {row['superseded_by']} and cannot be "

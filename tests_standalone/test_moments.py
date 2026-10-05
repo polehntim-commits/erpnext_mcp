@@ -190,6 +190,13 @@ ON = {
 class ExtractionConfigRecords(MobileAPITestCase):
 	def setUp(self):
 		super().setUp()
+		# v0.234.1 (Tim's decision 5): an AI-proposed version is published only in the Desk;
+		# these tests are about what publishing does, so they publish as the Desk does.
+		from erpnext_mcp import config_lifecycle
+
+		desk = config_lifecycle.desk_action()
+		desk.__enter__()
+		self.addCleanup(desk.__exit__, None, None, None)
 		self.configure(enabled=1, **ON)
 		self.be("Administrator")
 		extraction_config.seed()

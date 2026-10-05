@@ -124,13 +124,27 @@ class PhoneConfigCase(MobileAPITestCase):
 		return self.tool_data(tool, {"key": key, "body": body, "notes": "test", **extra})
 
 	def publish(self, kind, key, version):
-		return self.tool_data(
-			"publish_phone_config", {"kind": kind, "key": key, "version": str(version), "change_note": "test"}
-		)
+		# v0.234.1 (decision 5): an AI-proposed version is published in the Desk.
+		from erpnext_mcp import config_lifecycle
+
+		with config_lifecycle.desk_action():
+			return self.tool_data(
+				"publish_phone_config", {"kind": kind, "key": key, "version": str(version), "change_note": "test"}
+			)
 
 
 # ── §1 lifecycle ────────────────────────────────────────────────────────────
 class TheLifecycle(PhoneConfigCase):
+
+	def setUp(self):
+		super().setUp()
+		# v0.234.1 (Tim's decision 5): an AI-proposed version is published only in the Desk;
+		# these tests are about what publishing does, so they publish as the Desk does.
+		from erpnext_mcp import config_lifecycle
+
+		desk = config_lifecycle.desk_action()
+		desk.__enter__()
+		self.addCleanup(desk.__exit__, None, None, None)
 	def test_draft_stage_publish_rollback_retire(self):
 		one = self.draft("create_wizard_definition", "near_miss", NEAR_MISS)
 		self.assertEqual((one["name"], one["status"]), ("wizard:near_miss@1", "Draft"))
@@ -253,6 +267,13 @@ class WizardsAreChecked(unittest.TestCase):
 class WizardsOnThePhone(PhoneConfigCase):
 	def setUp(self):
 		super().setUp()
+		# v0.234.1 (Tim's decision 5): an AI-proposed version is published only in the Desk;
+		# these tests are about what publishing does, so they publish as the Desk does.
+		from erpnext_mcp import config_lifecycle
+
+		desk = config_lifecycle.desk_action()
+		desk.__enter__()
+		self.addCleanup(desk.__exit__, None, None, None)
 		self.draft("create_wizard_definition", "near_miss", NEAR_MISS)
 		self.publish("Wizard", "near_miss", 1)
 		STORE.commit()
@@ -357,6 +378,16 @@ class WizardsOnThePhone(PhoneConfigCase):
 
 # ── §3 tiles ────────────────────────────────────────────────────────────────
 class TilesAreChecked(PhoneConfigCase):
+
+	def setUp(self):
+		super().setUp()
+		# v0.234.1 (Tim's decision 5): an AI-proposed version is published only in the Desk;
+		# these tests are about what publishing does, so they publish as the Desk does.
+		from erpnext_mcp import config_lifecycle
+
+		desk = config_lifecycle.desk_action()
+		desk.__enter__()
+		self.addCleanup(desk.__exit__, None, None, None)
 	def test_every_part_of_a_tile_is_checked(self):
 		bad = copy.deepcopy(INBOX_TILE)
 		bad.update(

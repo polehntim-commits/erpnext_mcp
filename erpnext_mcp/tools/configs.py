@@ -183,7 +183,7 @@ def _rule_preview(kind: str, key: str, args: dict) -> dict:
 		raise ToolError("patch is an object of rule fields, e.g. {\"condition_tree\": {...}}.")
 	company = as_str(args, "company")
 	start = as_date(args, "as_of") or frappe.utils.today()
-	days = max(1, min(as_int(args, "days", 1) or 1, MAX_PREVIEW_DAYS))
+	days = max(1, min(as_int(args, "days", 1), MAX_PREVIEW_DAYS))
 	row = _patched_rule(key, patch)
 	live = compliance_rules.rule_row(compliance_rules.resolve(key)) if args.get("compare_to") == "live" else None
 	out = []
@@ -239,3 +239,145 @@ def preview_config(args: dict) -> ToolResult:
 
 def describe_kinds() -> list:
 	return [{"kind": kind, **spec} for kind, spec in KINDS.items()]
+
+
+# ── the write side (v0.234.1) ───────────────────────────────────────────────
+#
+# Each action routes to the specific tool for its kind, so every check that tool makes
+# — validation, roles, Spanish completeness, the sandbox — still runs. Over MCP a draft
+# is always AI-proposed, and an AI-proposed version is published only in the Desk or on
+# the phone (decision 5): `publish_config` refuses it and says where to go.
+ACTIONS = ("draft", "stage", "publish", "rollback")
+
+
+def _kinds_allowed(action: str) -> list:
+	"""The per-kind allow list for an action (ERPNext MCP Settings). Blank = every kind."""
+	from .. import settings
+
+	raw = str(settings.get_settings().get(f"config_{action}_kinds") or "")
+	return [line.strip() for line in raw.replace(",", "\n").splitlines() if line.strip()]
+
+
+def _require_kind_allowed(action: str, kind: str) -> None:
+	allowed = _kinds_allowed(action)
+	if allowed and kind not in allowed:
+		raise ToolError(
+			f"{action}_config is not allowed for {kind} on this site (ERPNext MCP Settings → "
+			f"config_{action}_kinds lists {', '.join(allowed)}). Nothing was changed."
+		)
+
+
+_PHONE_DRAFT = {
+	"wizard": ("create_wizard_definition", "update_wizard_definition"),
+	"tile": ("create_tile", "update_tile"),
+	"label_profile": (None, "update_label_profile"),
+}
+
+
+def draft_config(args: dict) -> ToolResult:
+	"""Create or change a Draft of any kind. Over MCP it is always AI-proposed."""
+	kind = kind_of(args)
+	_require_kind_allowed("draft", kind)
+	key = as_str(args, "key", required=True)
+	fields = dict(args.get("fields") or {})
+	notes = as_str(args, "notes")
+	if kind in PHONE_KINDS:
+		from .. import phone_config
+
+		body = args.get("body")
+		if body is None:
+			raise ToolError("body is required for a phone config draft.")
+		create, update = _PHONE_DRAFT[kind]
+		exists = bool(phone_config.rows(phone_config.SLUG_KINDS[kind], key))
+		handler = getattr(phone_configs, update if exists or not create else create)
+		data = _data(handler({"key": key, "body": body, "notes": notes or "Drafted through draft_config.",
+		                      "authored_by": "AI-proposed"}))
+	elif kind == "extraction_config":
+		data = _data(moments.update_extraction_config(
+			{"document_type": key, "config": args.get("body") or fields.get("config"), "notes": notes or "Drafted through draft_config.",
+			 "authored_by": "AI-proposed"}))
+	elif kind in RULE_KINDS:
+		inner = {**fields, "authored_by": "AI-proposed"}
+		inner.setdefault("rule_id", key)
+		if kind == "trigger_rule":
+			inner.setdefault("category", "Work Timing")
+		data = _data(rules.propose_compliance_rule(inner))
+	elif kind == "inspection_template":
+		data = _data(sessions.update_inspection_template({**fields, "name": key}))
+	else:
+		exists = bool(frappe.db.exists("Farm Task Template", key))
+		if exists:
+			data = _data(tasktemplates.update_farm_task_template({**fields, "template": key}))
+		else:
+			data = _data(tasktemplates.create_farm_task_template({**fields, "template_name": key}))
+	return ToolResult(
+		data={"kind": kind, "key": key, "draft": data, "authored_by": "AI-proposed",
+		      "next": "preview_config, then stage_config; publishing happens in the Desk or on the phone."},
+		summary=f"drafted {kind} {key}",
+		docstatus_delta="0 → 0 (draft)",
+	)
+
+
+def stage_config(args: dict) -> ToolResult:
+	"""Put a Draft in front of a chosen audience first (it takes real effect for them — decision 4)."""
+	kind = kind_of(args)
+	_require_kind_allowed("stage", kind)
+	key = as_str(args, "key", required=True)
+	version = args.get("version")
+	if kind in PHONE_KINDS:
+		data = _data(phone_configs.stage_phone_config(
+			{"kind": kind, "key": key, "version": version, "change_note": as_str(args, "change_note", required=True),
+			 "users": args.get("users") or [], "roles": args.get("roles") or [], "companies": args.get("companies") or []}))
+	elif kind == "extraction_config":
+		data = _data(moments.stage_extraction_config({"document_type": key, "version": version, "users": args.get("users") or []}))
+	else:
+		raise ToolError(
+			f"{kind} has no staged audience yet: it goes live when approved in the Desk. Staging rules to "
+			"chosen blocks and crews arrives with the Work Timing rules (queue item 5). Nothing was changed."
+		)
+	return ToolResult(data={"kind": kind, "key": key, "staged": data}, summary=f"staged {kind} {key}",
+	                  docstatus_delta="0 → 0 (staged)")
+
+
+def publish_config(args: dict) -> ToolResult:
+	"""Publish a version — only one a person wrote; an AI-proposed one is published in the Desk."""
+	kind = kind_of(args)
+	_require_kind_allowed("publish", kind)
+	key = as_str(args, "key", required=True)
+	version = args.get("version")
+	if kind in PHONE_KINDS:
+		data = _data(phone_configs.publish_phone_config(
+			{"kind": kind, "key": key, "version": version, "change_note": as_str(args, "change_note", required=True)}))
+	elif kind == "extraction_config":
+		data = _data(moments.publish_extraction_config({"document_type": key, "version": version}))
+	elif kind in RULE_KINDS:
+		data = _data(rules.approve_compliance_rule({"name": key}))
+	elif kind == "inspection_template":
+		data = _data(sessions.approve_inspection_template({"name": key}))
+	else:
+		raise ToolError("a task template goes live when it is enabled in the Desk. Nothing was changed.")
+	return ToolResult(data={"kind": kind, "key": key, "published": data}, summary=f"published {kind} {key}",
+	                  docstatus_delta="0 → 0 (published)")
+
+
+def rollback_config(args: dict) -> ToolResult:
+	"""Back to the previous published version, or `to: none` to retire / deactivate."""
+	kind = kind_of(args)
+	_require_kind_allowed("rollback", kind)
+	key = as_str(args, "key", required=True)
+	note = as_str(args, "change_note", required=True)
+	retire = as_str(args, "to") == "none"
+	if kind in PHONE_KINDS:
+		handler = phone_configs.retire_phone_config if retire else phone_configs.rollback_phone_config
+		data = _data(handler({"kind": kind, "key": key, "change_note": note}))
+	elif kind in RULE_KINDS and retire:
+		data = _data(rules.deactivate_compliance_rule({"name": key, "reason": note}))
+	elif kind == "inspection_template" and retire:
+		data = _data(sessions.deactivate_inspection_template({"name": key, "reason": note}))
+	else:
+		raise ToolError(
+			f"{kind} rolls back by approving its earlier version in the Desk (or to: none to switch it off). "
+			"Nothing was changed."
+		)
+	return ToolResult(data={"kind": kind, "key": key, "rolled_back": data, "retired": retire},
+	                  summary=f"{'retired' if retire else 'rolled back'} {kind} {key}", docstatus_delta="0 → 0")

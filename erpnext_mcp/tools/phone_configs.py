@@ -26,6 +26,7 @@ import frappe
 from .. import (
 	compat,
 	compliance_loop,
+	config_lifecycle,
 	form_schema,
 	label_compliance,
 	phone_config,
@@ -178,6 +179,10 @@ def publish_phone_config(args: dict) -> ToolResult:
 	_ready()
 	actor = _gate("publish a phone config")
 	kind = _kind(args)
+	# v0.234.1 (decision 5): an AI-proposed version goes live only in the Desk or on the phone.
+	candidate = phone_config.doc_of(kind, as_str(args, "key", required=True), as_str(args, "version", required=True))
+	if candidate is not None:
+		config_lifecycle.refuse_ai_publish(candidate.authored_by, candidate.name)
 	doc, previous, already = _run(
 		phone_config.publish,
 		kind,

@@ -124,7 +124,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "Audits\nCertifications\nFilings\nFinance\nHousing\nInventory\nPolicies\nRecords\nSpray and Pesticides\nWater and Sanitation\nWorkforce",
+   "options": "Audits\nCertifications\nFilings\nFinance\nHousing\nInventory\nPolicies\nRecords\nSpray and Pesticides\nWater and Sanitation\nWork Timing\nWorkforce",
    "reqd": 1
   },
   {

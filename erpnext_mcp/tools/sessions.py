@@ -47,7 +47,7 @@ import json
 
 import frappe
 
-from .. import compat, form_schema, proposals, rodent_bait, sessions
+from .. import compat, config_lifecycle, form_schema, proposals, rodent_bait, sessions
 from .. import training as regimes_vocabulary
 from ..args import as_bool, as_date, as_int, as_limit, as_str, as_visit_id, resolve_company
 from ..errors import ToolError
@@ -1371,6 +1371,8 @@ def approve_inspection_template(args: dict) -> ToolResult:
 	"""
 	name = _template_or_refuse(as_str(args, "name") or as_str(args, "template", required=True), "name")
 	row = sessions.template_row(name)
+	# v0.234.1 (decision 5): an AI-proposed template is approved only in the Desk or on the phone.
+	config_lifecycle.refuse_ai_publish(row.get("authored_by"), f"Inspection Template {name}")
 	if str(row.get("superseded_by") or "").strip():
 		raise ToolError(
 			f"Inspection Template {name} was superseded by {row['superseded_by']} and cannot be "

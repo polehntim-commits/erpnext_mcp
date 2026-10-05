@@ -1165,6 +1165,14 @@
   "allow_get_config",
   "allow_diff_config",
   "allow_preview_config",
+  "allow_draft_config",
+  "allow_stage_config",
+  "allow_publish_config",
+  "allow_rollback_config",
+  "config_draft_kinds",
+  "config_stage_kinds",
+  "config_publish_kinds",
+  "config_rollback_kinds",
   "allow_search_contacts",
   "allow_save_contact",
   "allow_download_card_pdf",
@@ -9029,6 +9037,58 @@
    "fieldname": "allow_preview_config",
    "fieldtype": "Check",
    "label": "Preview Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.234.1. Create or change a draft of any configuration kind (always AI-proposed over MCP).",
+   "fieldname": "allow_draft_config",
+   "fieldtype": "Check",
+   "label": "Draft Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.234.1. Put a draft in front of a chosen audience first.",
+   "fieldname": "allow_stage_config",
+   "fieldtype": "Check",
+   "label": "Stage Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.234.1. Publish a version a person wrote; AI-proposed versions publish only in the Desk or on the phone.",
+   "fieldname": "allow_publish_config",
+   "fieldtype": "Check",
+   "label": "Publish Config"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.234.1. Go back to the previous version, or retire / switch off.",
+   "fieldname": "allow_rollback_config",
+   "fieldtype": "Check",
+   "label": "Roll Back Config"
+  },
+  {
+   "description": "v0.234.1. Kinds draft_config may touch, one per line (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule). Blank: every kind.",
+   "fieldname": "config_draft_kinds",
+   "fieldtype": "Small Text",
+   "label": "Draft Config — Kinds"
+  },
+  {
+   "description": "v0.234.1. Kinds stage_config may touch, one per line (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule). Blank: every kind.",
+   "fieldname": "config_stage_kinds",
+   "fieldtype": "Small Text",
+   "label": "Stage Config — Kinds"
+  },
+  {
+   "description": "v0.234.1. Kinds publish_config may touch, one per line (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule). Blank: every kind.",
+   "fieldname": "config_publish_kinds",
+   "fieldtype": "Small Text",
+   "label": "Publish Config — Kinds"
+  },
+  {
+   "description": "v0.234.1. Kinds rollback_config may touch, one per line (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule). Blank: every kind.",
+   "fieldname": "config_rollback_kinds",
+   "fieldtype": "Small Text",
+   "label": "Rollback Config — Kinds"
   },
   {
    "default": "1",

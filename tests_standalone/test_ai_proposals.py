@@ -234,6 +234,16 @@ class TheReviewFlags(ProposalTestCase):
 
 # ── 3 ───────────────────────────────────────────────────────────────────────
 class ApprovingIsWhereTheTeethAre(ProposalTestCase):
+
+	def setUp(self):
+		super().setUp()
+		# v0.234.1 (Tim's decision 5): an AI-proposed version is published only in the Desk;
+		# these tests are about what publishing does, so they publish as the Desk does.
+		from erpnext_mcp import config_lifecycle
+
+		desk = config_lifecycle.desk_action()
+		desk.__enter__()
+		self.addCleanup(desk.__exit__, None, None, None)
 	def test_a_clean_draft_approves_in_one_call(self):
 		name = self.propose()["name"]
 		data = self.tool_data("approve_compliance_rule", {"name": name})
@@ -285,6 +295,16 @@ class ApprovingIsWhereTheTeethAre(ProposalTestCase):
 
 # ── 4 ───────────────────────────────────────────────────────────────────────
 class ProposingAChangeToARuleThatIsRunning(ProposalTestCase):
+
+	def setUp(self):
+		super().setUp()
+		# v0.234.1 (Tim's decision 5): an AI-proposed version is published only in the Desk;
+		# these tests are about what publishing does, so they publish as the Desk does.
+		from erpnext_mcp import config_lifecycle
+
+		desk = config_lifecycle.desk_action()
+		desk.__enter__()
+		self.addCleanup(desk.__exit__, None, None, None)
 	def a_live_rule(self) -> dict:
 		self.seed_rules()
 		return compliance_rules.rule_row(compliance_rules.resolve("policy_review_overdue"))
@@ -426,6 +446,16 @@ class ProposingATemplate(SessionTestCase):
 
 # ── 6 ───────────────────────────────────────────────────────────────────────
 class ApprovingATemplate(ProposingATemplate):
+
+	def setUp(self):
+		super().setUp()
+		# v0.234.1 (Tim's decision 5): an AI-proposed version is published only in the Desk;
+		# these tests are about what publishing does, so they publish as the Desk does.
+		from erpnext_mcp import config_lifecycle
+
+		desk = config_lifecycle.desk_action()
+		desk.__enter__()
+		self.addCleanup(desk.__exit__, None, None, None)
 	def test_approval_activates_it_and_names_the_approver(self):
 		name = self.propose()["name"]
 		data = self.tool_data("approve_inspection_template", {"name": name})

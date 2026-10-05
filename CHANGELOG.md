@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.234.1 — 2026-10-04 — one config lifecycle, write side; AI-proposed versions publish only in the Desk; cards for Foremen
+
+**Migrate needed** (eight ERPNext MCP Settings fields; the category "Work Timing" on Compliance Rule and Compliance
+Alert). Four new MCP tools, all writes, off. Deploy `docs/deploy/v0.234.1_config_writes.md`. App 0.38.7.
+
+- **`draft_config`, `stage_config`, `publish_config`, `rollback_config`** (writes, off; per-kind allow lists
+  `config_<action>_kinds`, blank = every kind). Routed to the specific tool, so every check still runs. Over MCP a
+  draft is always AI-proposed. `stage_config` gives phone kinds and extraction configs a real staged audience
+  (decision 4); `rollback_config` `to: none` retires a phone config or switches off a rule or inspection template.
+- **Tim's decision 5, for every kind: an AI-proposed version is published only in the Desk or on the phone.**
+  `publish_config`, `publish_phone_config`, `publish_extraction_config`, `approve_compliance_rule` and
+  `approve_inspection_template` now refuse an AI-proposed version over MCP and say where to go. **New Desk buttons**:
+  Publish on Farm Config Version (Draft or Staged) and Approve on Compliance Rule, for System Manager / Farm
+  Manager, run the same logic as the person clicking. (Phone approval arrives with SOP approval, queue item 6.)
+- **Compliance Rule category "Work Timing"** (also on Compliance Alert), for `trigger_rule`s.
+- **Business cards (decision 53): Foreman and above capture and browse; a Crew Leader does not.** App 0.38.7 also
+  suggests "where met" from GPS (decision 52), editable.
+- The specific tools stay as they are (decision 7); no deprecation date.
+
 ## 0.234.0 — 2026-10-04 — one config lifecycle, read side: list / get / diff / preview any configuration
 
 **Migrate needed** (four ERPNext MCP Settings switches, all reads, on). Four new MCP tools. Deploy

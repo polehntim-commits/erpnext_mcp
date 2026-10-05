@@ -74,7 +74,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "\nCertifications\nPolicies\nWorkforce\nRecords\nHousing\nWater and Sanitation\nSpray and Pesticides\nFilings\nAudits\nFinance\nInventory\nOther"
+   "options": "\nCertifications\nPolicies\nWorkforce\nRecords\nHousing\nWater and Sanitation\nSpray and Pesticides\nFilings\nAudits\nFinance\nInventory\nWork Timing\nOther"
   },
   {
    "description": "Which audits this item matters for. Written by the rule that raised it, not typed: a lapsed WPS card is WPS evidence whoever happens to be looking. MULTI-SELECT because one alert genuinely matters to several — an untested block in spray rotation is an FSMA Subpart E finding AND an OR-OSHA one, and filing it under whichever came to mind first would hide it from the other packet. An alert tagged Internal is one the operation answers to itself: real work with a real due date and no external auditor, which is a claim somebody can correct rather than a silence.",
