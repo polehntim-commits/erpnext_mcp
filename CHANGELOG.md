@@ -29,7 +29,7 @@ No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.1_offline.md`.
 
 ## 0.231.0 — 2026-10-04 — business card → Contact (AFB-2026-00031)
 
-**Migrate needed** (six Contact custom fields, two settings switches). Two new MCP tools, both off. Deploy
+**Migrate needed** (six Contact custom fields, two settings switches). Two new MCP tools: one read (on), one write (off). Deploy
 `docs/deploy/v0.231.0_business_cards.md`. App 0.38.0. Design: `docs/design/business_card_contacts.md`.
 
 - **Phone routes `preview_business_card` and `save_business_card`** (Farm Manager, Accounts Manager, Accounts User,
@@ -41,8 +41,8 @@ No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.1_offline.md`.
   `create_party` makes a new Supplier or Customer through the same path as `create_supplier` / `create_customer`.
 - **Contact fields** `card_source`, `card_met_on`, `card_met_at`, `card_website`, `card_captured_by`,
   `card_client_request_id` (added in `after_migrate`).
-- **MCP tools `search_contacts` and `save_contact`** (`dry_run` previews), both default off
-  (`allow_search_contacts`, `allow_save_contact`).
+- **MCP tools `search_contacts` (read, default on) and `save_contact` (write, `dry_run` previews, default off)**
+  (`allow_search_contacts`, `allow_save_contact`). Corrected 2026-10-04: this entry first said both were off.
 
 ## 0.230.6 — 2026-10-04 — polish: label approvals run what is still needed; a phone spray resend is the same spray
 

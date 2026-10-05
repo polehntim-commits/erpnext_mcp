@@ -6,7 +6,7 @@ For a box on v0.230.3. One image covers v0.230.4, v0.230.5, v0.230.6, v0.231.0 a
 1. v0.230.4 — the after-migrate rewrite of every stored asset `qr_url` to `<farmops_public_url>/farmops/api/scan/<name>`.
 2. v0.230.5 — four columns on Farm Asset Type, one fetched flag on Asset Register, and the patch
    `asset_type_slope_defaults` (Tractor 15°, Vehicle 20°, Sprayer 12°, Implement 15°).
-3. v0.231.0 — six Contact columns (business cards) and two ERPNext MCP Settings switches, both off.
+3. v0.231.0 — six Contact columns (business cards) and two ERPNext MCP Settings switches: Search Contacts (a read) on, Save Contact (a write) off.
 
 v0.230.6 and v0.231.1 are code only. Every step is idempotent: a second migrate changes nothing. **Test on
 umbrel.local first; OML is Tim's call.** Details per release are in the files named below.
@@ -39,7 +39,7 @@ Expect:
    that URL opens the plain scan page in Safari. A second migrate prints no tag URL line.
 2. Asset types (`v0.230.5_asset_type_defaults.md`): `get_asset_type` Tractor → `has_slope_limit: true`, 15°.
 3. Business cards (`v0.231.0_business_cards.md`): Desk → Contact shows Captured From, Met On, Met At, Website,
-   Captured By; Settings has "Search Contacts" and "Save Contact", both unticked.
+   Captured By; Settings has "Search Contacts" (ticked — a read, like every read tool) and "Save Contact" (unticked).
 4. Phone 0.38.2: the checks in `v0.230.6_polish.md` §4, `v0.231.0_business_cards.md` §4 and
    `v0.231.1_offline.md` §3.
 
