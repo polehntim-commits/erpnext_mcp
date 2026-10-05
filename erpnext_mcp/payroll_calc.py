@@ -168,6 +168,26 @@ OT_MULTIPLIER = 1.5
 #: premium is half the regular rate, because the other one is already in hand.
 OT_PREMIUM_MULTIPLIER = OT_MULTIPLIER - 1.0
 
+def _multiplier() -> float:
+	"""The overtime multiplier in force (v0.235.0: `payroll_settings`, built-in 1.5 until a
+	version is published — so nothing changes until a person publishes one)."""
+	try:
+		from . import payroll_settings
+
+		return payroll_settings.ot_multiplier()
+	except Exception:
+		return OT_MULTIPLIER
+
+
+def _premium_multiplier() -> float:
+	try:
+		from . import payroll_settings
+
+		return payroll_settings.ot_premium_multiplier()
+	except Exception:
+		return OT_PREMIUM_MULTIPLIER
+
+
 #: The pay types a segment or a structure can name. "Salary" is period pay and has
 #: no per-hour or per-unit reading, so it never takes part in a mixed day.
 PAY_TYPES = ("Piece Rate", "Hourly", "Salary")
@@ -201,11 +221,12 @@ def calculate_gross_pay(
 		# — the break was paid at this very rate — and the short form does not
 		# divide by zero on a day that was all break.
 		effective_rate = (piece_earnings / piece_hours) if piece_hours > 0 else 0.0
+		premium = _premium_multiplier()
 		ot = calculate_overtime(
 			0,
 			overtime_hours,
 			effective_rate,
-			multiplier=OT_PREMIUM_MULTIPLIER,
+			multiplier=premium,
 		)
 		gross = piece_earnings + bp + ot
 		return {
@@ -218,7 +239,7 @@ def calculate_gross_pay(
 			"overtime_hours": round(overtime_hours, 2),
 			"piece_units": piece_units,
 			"piece_rate": base_rate,
-			"overtime_premium_multiplier": OT_PREMIUM_MULTIPLIER,
+			"overtime_premium_multiplier": premium,
 			"pay_type": "Piece Rate",
 		}
 
@@ -266,7 +287,7 @@ def calculate_overtime(
 	regular_pay: float,
 	overtime_hours: float,
 	effective_rate: float,
-	multiplier: float = OT_MULTIPLIER,
+	multiplier: float | None = None,
 ) -> float:
 	"""Overtime pay at `multiplier` times the effective rate.
 
@@ -282,6 +303,8 @@ def calculate_overtime(
 	what 29 CFR 778.111 asks for. Both arrive at the same place; the difference is
 	only which half was already in the number.
 	"""
+	if multiplier is None:
+		multiplier = _multiplier()
 	if overtime_hours <= 0:
 		return 0.0
 	return round(overtime_hours * effective_rate * multiplier, 2)
@@ -365,7 +388,7 @@ def calculate_mixed_gross_pay(
 		0,
 		overtime_hours,
 		regular_rate,
-		multiplier=OT_PREMIUM_MULTIPLIER,
+		multiplier=_premium_multiplier(),
 	)
 
 	kinds = {row["pay_type"] for row in rows}
@@ -384,7 +407,7 @@ def calculate_mixed_gross_pay(
 		"regular_hours": round(max(total_hours - overtime_hours, 0.0), 2),
 		"overtime_hours": round(overtime_hours, 2),
 		"piece_units": round(piece_units, 2),
-		"overtime_premium_multiplier": OT_PREMIUM_MULTIPLIER,
+		"overtime_premium_multiplier": _premium_multiplier(),
 		# "Mixed" only where it actually was. A day of segments that all turned out
 		# to be piece work is a piece-rate day, and calling it mixed on a slip
 		# somebody reads would be describing the code path rather than the work.
@@ -411,7 +434,7 @@ def minimum_wage_floor(
 	overtime_hours = min(max(float(overtime_hours or 0.0), 0.0), hours)
 	regular_hours = hours - overtime_hours
 	return round(
-		regular_hours * minimum_wage + overtime_hours * minimum_wage * OT_MULTIPLIER,
+		regular_hours * minimum_wage + overtime_hours * minimum_wage * _multiplier(),
 		2,
 	)
 

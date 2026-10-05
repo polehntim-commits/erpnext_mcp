@@ -32,7 +32,9 @@ import frappe
 from . import compat, flags
 
 DOCTYPE = "Farm Config Version"
-KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile"}
+#: v0.235.0: "Payroll Setting" — payroll settings as versioned data (`payroll_settings`), never served
+#: to a phone and published only by a person.
+KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "Payroll Setting": "payroll_setting"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -164,6 +166,10 @@ def _validator(kind: str):
 		from . import tiles
 
 		return tiles.validate
+	if kind == "Payroll Setting":
+		from . import payroll_settings
+
+		return payroll_settings.validate
 	from . import label_compliance
 
 	return label_compliance.validate

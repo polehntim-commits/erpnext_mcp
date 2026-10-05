@@ -40,7 +40,11 @@ KINDS = {
 		"store": "Compliance Rule (category Work Timing)",
 		"key": "rule_id or docname",
 	},
+	# v0.235.0. Payroll settings (decision 9): stricter — publish, stage and roll back are a
+	# person's, in the Desk; a preview reruns a real pay period live and staged.
+	"overtime_rule": {"label": "Overtime rule", "store": "Farm Config Version (Payroll Setting)", "key": "overtime_rule"},
 }
+PAYROLL_KINDS = ("overtime_rule",)
 PHONE_KINDS = ("wizard", "tile", "label_profile")
 RULE_KINDS = ("compliance_rule", "trigger_rule")
 MAX_PREVIEW_DAYS = 31
@@ -63,6 +67,8 @@ def list_configs(args: dict) -> ToolResult:
 	key = as_str(args, "key")
 	if kind in PHONE_KINDS:
 		data = _data(phone_configs.list_phone_configs({"kind": kind, "key": key, "status": as_str(args, "status")}))
+	elif kind in PAYROLL_KINDS:
+		data = _data(phone_configs.list_phone_configs({"kind": "payroll_setting", "key": kind, "status": as_str(args, "status")}))
 	elif kind == "extraction_config":
 		data = _data(moments.list_extraction_configs({"document_type": key} if key else {}))
 	elif kind == "inspection_template":
@@ -79,6 +85,16 @@ def list_configs(args: dict) -> ToolResult:
 
 # ── get ─────────────────────────────────────────────────────────────────────
 def _get(kind: str, key: str, version) -> dict:
+	if kind in PAYROLL_KINDS:
+		from .. import payroll_settings
+
+		inner = {"kind": "payroll_setting", "key": kind}
+		if version not in (None, ""):
+			inner["version"] = version
+		try:
+			return _data(phone_configs.get_phone_config(inner))
+		except ToolError:
+			return {"built_in": True, "in_force": payroll_settings.overtime()}
 	if kind in PHONE_KINDS:
 		inner = {"kind": kind, "key": key}
 		if version not in (None, ""):
@@ -209,6 +225,21 @@ def _rule_preview(kind: str, key: str, args: dict) -> dict:
 def preview_config(args: dict) -> ToolResult:
 	kind = kind_of(args)
 	key = as_str(args, "key")
+	if kind in PAYROLL_KINDS:
+		from .. import payroll_settings
+
+		body = args.get("body")
+		if not isinstance(body, dict):
+			raise ToolError("body is the overtime rule to try: {weekly_threshold_hours, multiplier, effective_from}.")
+		try:
+			data = payroll_settings.preview(kind, {"schema_version": 1, "key": kind, **body}, args)
+		except ValueError as exc:
+			raise ToolError(f"{exc}. Nothing was calculated.") from None
+		return ToolResult(
+			data={"kind": kind, "key": kind, "preview": data, "written": False},
+			summary=("identical pay" if data["identical"] else f"{data['changed']} employee(s) paid differently, "
+			         f"{len(data['flagged'])} over {data['flag_threshold_pct']:g}%") + " (nothing written)",
+		)
 	if kind in RULE_KINDS:
 		if not key:
 			raise ToolError("key (the rule) is required.")
@@ -281,6 +312,23 @@ def draft_config(args: dict) -> ToolResult:
 	key = as_str(args, "key", required=True)
 	fields = dict(args.get("fields") or {})
 	notes = as_str(args, "notes")
+	if kind in PAYROLL_KINDS:
+		from .. import payroll_settings, phone_config
+
+		body = args.get("body")
+		if not isinstance(body, dict):
+			raise ToolError("body is required: {weekly_threshold_hours, multiplier, effective_from}.")
+		try:
+			doc, _report = phone_config.save_draft(payroll_settings.KIND, kind, {"schema_version": 1, "key": kind, **body},
+			                                       notes or "Drafted through draft_config.", "AI-proposed")
+		except phone_config.ConfigError as exc:
+			raise ToolError(str(exc)) from None
+		return ToolResult(
+			data={"kind": kind, "key": kind, "draft": phone_config.describe(doc), "authored_by": "AI-proposed",
+			      "next": "preview_config (it reruns a pay period live and staged); a person publishes it in the Desk."},
+			summary=f"drafted {doc.name}",
+			docstatus_delta="0 → 0 (draft)",
+		)
 	if kind in PHONE_KINDS:
 		from .. import phone_config
 
@@ -321,6 +369,10 @@ def draft_config(args: dict) -> ToolResult:
 def stage_config(args: dict) -> ToolResult:
 	"""Put a Draft in front of a chosen audience first (it takes real effect for them — decision 4)."""
 	kind = kind_of(args)
+	if kind in PAYROLL_KINDS:
+		from .. import config_lifecycle
+
+		config_lifecycle.refuse_payroll_publish(f"the {kind}")
 	_require_kind_allowed("stage", kind)
 	key = as_str(args, "key", required=True)
 	version = args.get("version")
@@ -342,6 +394,10 @@ def stage_config(args: dict) -> ToolResult:
 def publish_config(args: dict) -> ToolResult:
 	"""Publish a version — only one a person wrote; an AI-proposed one is published in the Desk."""
 	kind = kind_of(args)
+	if kind in PAYROLL_KINDS:
+		from .. import config_lifecycle
+
+		config_lifecycle.refuse_payroll_publish(f"the {kind}")
 	_require_kind_allowed("publish", kind)
 	key = as_str(args, "key", required=True)
 	version = args.get("version")
@@ -363,6 +419,10 @@ def publish_config(args: dict) -> ToolResult:
 def rollback_config(args: dict) -> ToolResult:
 	"""Back to the previous published version, or `to: none` to retire / deactivate."""
 	kind = kind_of(args)
+	if kind in PAYROLL_KINDS:
+		from .. import config_lifecycle
+
+		config_lifecycle.refuse_payroll_publish(f"the {kind}")
 	_require_kind_allowed("rollback", kind)
 	key = as_str(args, "key", required=True)
 	note = as_str(args, "change_note", required=True)

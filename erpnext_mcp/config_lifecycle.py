@@ -52,6 +52,17 @@ def refuse_ai_publish(authored_by, what: str) -> None:
 	)
 
 
+def refuse_payroll_publish(what: str) -> None:
+	"""Payroll settings are published by a person in the Desk, whoever drafted them (§4)."""
+	if in_desk():
+		return
+	raise ToolError(
+		f"{what} is published only in the Desk by a person (HR Manager or System Manager) — payroll kinds are "
+		"never published over MCP, whoever drafted them. preview_config shows the pay difference first. "
+		"Nothing was published."
+	)
+
+
 def _require_publisher() -> str:
 	user = frappe.session.user
 	if not set(frappe.get_roles(user)).intersection(DESK_PUBLISHERS):

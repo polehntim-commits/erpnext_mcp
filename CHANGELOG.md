@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.235.0 — 2026-10-04 — payroll settings as data: the overtime rule (no pay changes)
+
+**Migrate needed** (one settings field; the Farm Config Version kind "Payroll Setting"; seeds `overtime_rule` v1).
+No new tools — the generic config tools gain the `overtime_rule` kind. Deploy
+`docs/deploy/v0.235.0_overtime_rule.md`. Tim's decisions 9 and 10.
+
+- **`overtime_rule` is versioned data** (Farm Config Version, kind Payroll Setting): `weekly_threshold_hours`,
+  `multiplier`, `effective_from`. Seeded at migrate as v1 with EXACTLY the values that were in code (40 h a
+  workweek, 1.5×, OR HB 4002 / WA SB 5172) — and with no version at all the readers answer the same numbers. The
+  multiplier, the half-time premium on piece work and the workweek threshold are read from it when pay is
+  calculated; a rerun of a past period uses the version in force then.
+- **Proven identical**: all 536 payroll tests pass unchanged; a test runs a period before and after seeding v1 and
+  compares every slip.
+- **`preview_config` kind `overtime_rule`** reruns a real pay period (default: the latest) twice, read-only, live
+  and with the proposed rule, and lists per employee gross, net, overtime and withholding differences — flagging
+  anyone whose net moves by more than `payroll_preview_flag_pct` (default 2%, decision 10). Nothing is written.
+- **A payroll setting is published only in the Desk by a person**, whoever drafted it; `draft_config` may draft one
+  over MCP (always AI-proposed). A version cannot take effect inside a submitted pay period. Pay runs record the
+  version they used (`config_versions`).
+
 ## 0.234.1 — 2026-10-04 — one config lifecycle, write side; AI-proposed versions publish only in the Desk; cards for Foremen
 
 **Migrate needed** (eight ERPNext MCP Settings fields; the category "Work Timing" on Compliance Rule and Compliance

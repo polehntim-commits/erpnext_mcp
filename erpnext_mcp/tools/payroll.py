@@ -1212,7 +1212,12 @@ def get_employee_timesheet_summary(args: dict) -> ToolResult:
 	if company:
 		company = resolve_company(company)
 
-	threshold = _as_float(args, "overtime_threshold", payroll_integration.OVERTIME_THRESHOLD_HOURS)
+	# v0.235.0: the workweek threshold is the `overtime_rule` in force at the period's end
+	# (built-in 40 until a version is published); an explicit argument still wins.
+	from .. import payroll_settings
+
+	rule = payroll_settings.overtime(str(end))
+	threshold = _as_float(args, "overtime_threshold", rule["weekly_threshold_hours"])
 	anchor = as_date(args, "workweek_anchor")
 
 	shifts, provenance = _load_period_shifts(company, start, end, employees=[employee])
@@ -1300,7 +1305,12 @@ def _period_run(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	if pay_frequency not in PERIODS_PER_YEAR:
 		raise ToolError(f"pay_frequency must be one of: {', '.join(PERIODS_PER_YEAR)}.")
 
-	threshold = _as_float(args, "overtime_threshold", payroll_integration.OVERTIME_THRESHOLD_HOURS)
+	# v0.235.0: the workweek threshold is the `overtime_rule` in force at the period's end
+	# (built-in 40 until a version is published); an explicit argument still wins.
+	from .. import payroll_settings
+
+	rule = payroll_settings.overtime(str(end))
+	threshold = _as_float(args, "overtime_threshold", rule["weekly_threshold_hours"])
 	anchor = as_date(args, "workweek_anchor")
 	include_unworked = args.get("include_unworked")
 	include_unworked = True if include_unworked is None else bool(int(include_unworked))
@@ -1380,6 +1390,8 @@ def _period_run(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 
 	context = {
 		"company": company,
+		# v0.235.0. Which payroll settings this run used — a pay run is answerable to its rules.
+		"config_versions": {"overtime_rule": rule["version"]},
 		"pay_period_start": str(start),
 		"pay_period_end": str(end),
 		"pay_frequency": pay_frequency,

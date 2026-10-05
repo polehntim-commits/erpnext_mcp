@@ -225,6 +225,7 @@ def after_migrate() -> None:
 	_trade_documents()
 	_asset_tag_urls()
 	_business_card_fields()
+	_payroll_settings_seed()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -724,6 +725,25 @@ def _reporting_templates() -> None:
 		print(
 			f"erpnext_mcp: {len(report['failed'])} reporting template(s) could not be seeded: {report['failed']}"
 		)
+
+
+def _payroll_settings_seed() -> None:
+	"""v0.235.0. Version 1 of `overtime_rule`, published, EXACTLY today's built-in values
+	(40 h, 1.5×, effective 2020-01-01), so the lifecycle has a baseline and no pay changes.
+	Create-only; never raises."""
+	try:
+		from . import payroll_settings, phone_config
+
+		name = phone_config.seed(
+			payroll_settings.KIND,
+			payroll_settings.OVERTIME_KEY,
+			payroll_settings.seed_body(),
+			"Built-in overtime rule (OR HB 4002 / WA SB 5172), seeded at install (v0.235.0). Identical to the code it replaces.",
+		)
+		if name:
+			print(f"erpnext_mcp: payroll setting {name} seeded — 40 hours a workweek, 1.5×, as before.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: the overtime rule was not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

@@ -1173,6 +1173,7 @@
   "config_stage_kinds",
   "config_publish_kinds",
   "config_rollback_kinds",
+  "payroll_preview_flag_pct",
   "allow_search_contacts",
   "allow_save_contact",
   "allow_download_card_pdf",
@@ -9089,6 +9090,13 @@
    "fieldname": "config_rollback_kinds",
    "fieldtype": "Small Text",
    "label": "Rollback Config — Kinds"
+  },
+  {
+   "default": "2",
+   "description": "v0.235.0 (Tim's decision 10). A payroll-setting preview flags every employee whose net pay would move by more than this percentage.",
+   "fieldname": "payroll_preview_flag_pct",
+   "fieldtype": "Float",
+   "label": "Payroll Preview Flag (%)"
   },
   {
    "default": "1",

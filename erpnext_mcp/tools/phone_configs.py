@@ -183,6 +183,9 @@ def publish_phone_config(args: dict) -> ToolResult:
 	candidate = phone_config.doc_of(kind, as_str(args, "key", required=True), as_str(args, "version", required=True))
 	if candidate is not None:
 		config_lifecycle.refuse_ai_publish(candidate.authored_by, candidate.name)
+	# v0.235.0: a payroll setting changes what people are paid; a person publishes it, always.
+	if kind == "Payroll Setting":
+		config_lifecycle.refuse_payroll_publish("a payroll setting")
 	doc, previous, already = _run(
 		phone_config.publish,
 		kind,
