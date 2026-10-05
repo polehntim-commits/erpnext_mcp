@@ -1,6 +1,6 @@
 # Proximity push-to-talk ("walkie-talkie") in Farm Ops
 
-**Status: PROPOSED (2026-10-04). Design note only — Tim's decision 36: do not build yet.**
+**Status: DROPPED (2026-10-04). Tim dropped push-to-talk; this note is kept for the record only and is off the build queue. Crew messaging (no-work notices, etc.) is unaffected and stays as designed.**
 
 **At a glance**
 

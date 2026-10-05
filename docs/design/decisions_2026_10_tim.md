@@ -8,7 +8,7 @@ answers as relayed, with the relayer's reading of the ambiguous ones. Numbers fo
 1. CCF core + shared config lifecycle → 2. start/due dates → 3. daily checklists → 4. Reference Library →
 5. triggers phase 1 (live by late December for dormant pruning), with suggested tasks, probabilistic dry-day,
 auto-clearing Holds and no-work escalation → 6. SOP approval → 7. training quiz + video → 8. upload links (no video)
-→ 9. irrigation schedule → 10. degree days → 11. walkie-talkie design note (note only).
+→ 9. irrigation schedule → 10. degree days → ~~11. walkie-talkie design note~~ (dropped 2026-10-04 by Tim).
 
 ## Queue and engine
 
