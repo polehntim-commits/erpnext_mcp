@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.251.0 — 2026-10-05 — punch review as a compliance item (AFB-2026-00032)
+
+**Migrate needed** (six Farm Shift crew-row fields; four settings fields; eight Compliance Rules seeded ON). Two new MCP
+tools (one read on, one write off) and two phone routes. Deploy `docs/deploy/v0.251.0_punch_review.md`. Tim, from Tell
+the Farm: "Shouldn't the punch times to review be part of the compliance?" — yes.
+
+- **What needs a supervisor's look**, per punch (a person's in / out on a Farm Shift): missing clock-out on a closed
+  shift or still clocked in long after (runaway); sent late beyond the offline window (v0.227.0) and not yet
+  resolved; edited or overridden (server time used, corrected, administrative close); a GPS fix outside the shift's
+  block (`punch_geofence_meters`, default 800 m); fewer breaks than the shift's break policy owes. Per person and
+  week: Oregon ag overtime approaching (4 h or fewer left) or exceeded, against the payroll setting's 40 h.
+- **As compliance, through CCF — data, not code**: providers `punch` (on Farm Shift) and `labor` (on Employee); eight
+  seeded condition-tree rules (`punch_missing_clock_out`, `punch_runaway`, `punch_offline_window`, `punch_edited`,
+  `punch_outside_block`, `punch_breaks_short`, `overtime_week_approaching`, `overtime_week_exceeded`) raise ordinary
+  Compliance Alerts — in the Compliance inbox, its tile and the compliance status, for Foreman / Farm Manager / HR.
+  Retune or switch one off as data.
+- **The supervisor reviews**: `review_punches` — approve (a flagged punch needs a reason; a missing clock-out is fixed
+  instead), fix with the corrected time and a reason, or reopen (a manager, with a reason). By row, by shift or for a
+  whole period. An approval re-judges the rules at once, so its alert clears.
+- **Locked for payroll**: a reviewed punch's times cannot change — the shift form, `resolve_punch_review` and the tools
+  refuse — until a manager reopens it. **Payroll preview warns** on every punch in the period not yet reviewed (pay is
+  computed exactly as before).
+- **Records**: the DOL audit packet gains **Time records and punch review** — each punch, its flags and its review.
+- `list_time_reviews` (read). Phone routes `list_time_reviews`, `review_punches` — FarmOps 0.41.0 draws the review
+  screen (alerts already show in the app's Compliance view).
+- The fourteen v0.250.0 routes moved from "pending iOS" to the app's surface (apps 0.39.0 / 0.40.0 call them), each now
+  with a contract mirror of its Swift decoder (`test_ios_contract` tests 61–74).
+
 ## 0.250.0 — 2026-10-04 — the approved queue on the phone (server routes)
 
 **Migrate needed** (one hidden Crop Observation field). Fourteen new `/farmops/api/mobile/*` routes; no MCP tool

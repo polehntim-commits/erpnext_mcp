@@ -483,6 +483,9 @@ ROUTES = (
 	Route("/mobile", mobile_api.submit_my_quiz_attempt),
 	Route("/mobile", mobile_api.list_training_signoffs),
 	Route("/mobile", mobile_api.sign_off_training),
+	# v0.251.0. Punch review (AFB-2026-00032).
+	Route("/mobile", mobile_api.list_time_reviews),
+	Route("/mobile", mobile_api.review_punches),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

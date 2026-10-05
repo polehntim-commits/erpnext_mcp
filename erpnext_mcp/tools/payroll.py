@@ -1514,10 +1514,19 @@ def preview_payroll_for_period(args: dict) -> ToolResult:
 		"calculation and stores it as a Farm Payroll Entry."
 	)
 
+	# v0.251.0 (AFB-2026-00032). Punches in the period no supervisor has reviewed: a warning only —
+	# pay is computed exactly as before.
+	from .. import time_review
+
+	punch_warning = time_review.payroll_warning(context["company"], context["pay_period_start"], context["pay_period_end"])
+	if punch_warning:
+		data["punches_not_reviewed"] = punch_warning
 	return ToolResult(
 		data=data,
 		summary=(
-			f"Payroll preview for {context['company']}, {context['pay_period_start']} to "
+			(f"WARNING: {punch_warning['punches_not_reviewed']} punch(es) not reviewed "
+			 f"({punch_warning['flagged']} flagged). " if punch_warning else "")
+			+ f"Payroll preview for {context['company']}, {context['pay_period_start']} to "
 			f"{context['pay_period_end']}: {totals['employee_count']} employee(s), "
 			f"{totals['total_hours']}h ({totals['total_overtime_hours']}h OT), "
 			f"gross ${totals['total_gross']}, net ${totals['total_net']}"

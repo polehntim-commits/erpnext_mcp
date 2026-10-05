@@ -230,6 +230,7 @@ def after_migrate() -> None:
 	_daily_check_templates()
 	_go_hold_presets()
 	_course_videos()
+	_punch_review_rules()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -802,6 +803,19 @@ def _course_videos() -> None:
 			print(f"erpnext_mcp: course videos moved in from video_url: {', '.join(moved)}.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: course videos were not moved in — {type(exc).__name__}: {exc}")
+
+
+def _punch_review_rules() -> None:
+	"""v0.251.0 (AFB-2026-00032). The eight punch-review and overtime rules, seeded ON. Create-only;
+	never raises."""
+	try:
+		from . import time_review
+
+		made = time_review.seed()
+		if made:
+			print(f"erpnext_mcp: punch review rules seeded: {', '.join(made)}.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: punch review rules were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

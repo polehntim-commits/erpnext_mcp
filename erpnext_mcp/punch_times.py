@@ -212,6 +212,11 @@ def resolve(
 	if not doctype:
 		raise ToolError(f"no punch called {row!r}. Nothing was changed.", "error.punch.not_found")
 	parent_doctype = SHIFT if doctype == CREW else SESSION
+	if doctype == CREW:
+		# v0.251.0. A punch a supervisor reviewed is locked for payroll.
+		from . import time_review
+
+		time_review.refuse_if_locked(row, "resolved again")
 	values = (
 		frappe.db.get_value(doctype, row, ["parent", "punch_review", "punch_resolution"], as_dict=True) or {}
 	)

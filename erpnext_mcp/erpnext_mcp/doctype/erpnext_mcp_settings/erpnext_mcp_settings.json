@@ -1204,6 +1204,10 @@
   "degree_day_biofix",
   "degree_day_stage_table",
   "allow_get_degree_days",
+  "punch_geofence_meters",
+  "time_review_days",
+  "allow_list_time_reviews",
+  "allow_review_punches",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9352,6 +9356,34 @@
    "fieldname": "allow_get_degree_days",
    "fieldtype": "Check",
    "label": "Get Degree Days"
+  },
+  {
+   "default": "800",
+   "description": "v0.251.0. A GPS fix during a shift farther than this from the shift's place flags the punch for review.",
+   "fieldname": "punch_geofence_meters",
+   "fieldtype": "Int",
+   "label": "Punch Geofence (m)"
+  },
+  {
+   "default": "31",
+   "description": "v0.251.0. How many days back the punch-review rules look at shifts.",
+   "fieldname": "time_review_days",
+   "fieldtype": "Int",
+   "label": "Punch Review Window (days)"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.251.0. Punches with what needs review and their review state.",
+   "fieldname": "allow_list_time_reviews",
+   "fieldtype": "Check",
+   "label": "List Time Reviews"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.251.0. Approve, fix or reopen punches (locks them for payroll).",
+   "fieldname": "allow_review_punches",
+   "fieldtype": "Check",
+   "label": "Review Punches"
   },
   {
    "default": "1",

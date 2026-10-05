@@ -5088,3 +5088,284 @@ class TheScreensHaveSomethingToShow(ContractTestCase):
 		)
 		self.assertTrue(row["created_record_name"], "the worker is told nothing was produced")
 		self.assertTrue(row["created_record_doctype"])
+
+
+# ── v0.250.0 / app 0.39.0–0.40.0: the approved queue on the phone ───────────
+# Mirrors of `WorkTimingAPI.swift` and `CourseAPI.swift`. A struct with a SYNTHESIZED decoder makes a
+# non-optional property STRICT and an optional one NULLABLE; a hand-written `init(from:)` with `try?`
+# makes a field LENIENT. `callVoid` routes decode nothing (VoidResponseModel).
+class BilingualModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("en", str, 98),)
+	NULLABLE = (("es", str, 99),)
+
+
+class StageRecordedModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("observation", str, 122),)
+	LENIENT = (("bbch", str, 123), ("flags", list, 124), ("duplicate", bool, 125))
+
+
+class StageCurrentModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	NULLABLE = (("bbch", str, 139), ("stage", str, 140), ("date", str, 141), ("age_days", int, 142))
+
+
+class StageTimelineModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("block", str, 145), ("stale", bool, 147))
+	NESTED = (("current", StageCurrentModel, False, 146),)
+
+
+class SuggestedTaskModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("task", str, 151), ("kind", str, 156))
+	NULLABLE = (("task_name", str, 153), ("location", str, 154), ("due_date", str, 155), ("tomorrow", str, 158))
+	NESTED = (("why", BilingualModel, False, 157),)
+
+
+class SuggestedTasksModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("suggestions", list, 165),)
+	NESTED = (("suggestions", SuggestedTaskModel, True, 165),)
+
+
+class NoticeForMeModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("notice", str, 169), ("for_date", str, 171), ("status", str, 172), ("text", str, 173))
+
+
+class NoticeToDecideModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("name", str, 189),)
+	LENIENT = (("for_date", str, 190), ("status", str, 191), ("task_name", str, 192), ("location", str, 193),
+	           ("hold_reasons", list, 194), ("text_en", str, 195), ("text_es", str, 196))
+
+
+class WorkNoticesModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("for_me", list, 200), ("to_decide", list, 201))
+	NESTED = (("for_me", NoticeForMeModel, True, 200), ("to_decide", NoticeToDecideModel, True, 201))
+
+
+class NoticeAnswerModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	LENIENT = (("status", str, 210), ("not_reached", list, 211))
+
+
+class SOPReviewModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("name", str, 216),)
+	NULLABLE = (("policy_name", str, 218), ("version", str, 219), ("attached_document", str, 220), ("review_note", str, 221))
+
+
+class SOPReviewsModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("reviews", list, 225),)
+	NESTED = (("reviews", SOPReviewModel, True, 225),)
+
+
+class CoveringSOPModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("policy", str, 228), ("approved", bool, 232))
+	NULLABLE = (("policy_name", str, 230), ("version", str, 231), ("attached_document", str, 233))
+
+
+class CoveringSOPsModel(Codable):
+	SWIFT = "WorkTimingAPI.swift"
+	STRICT = (("sops", list, 237),)
+	NESTED = (("sops", CoveringSOPModel, True, 237),)
+
+
+class CourseVideoModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("video", str, 150), ("title", str, 152), ("url", str, 154), ("required", bool, 158))
+	NULLABLE = (("title_es", str, 153), ("url_es", str, 155), ("kind", str, 156), ("youtube_id", str, 157),
+	            ("length_seconds", int, 159))
+
+
+class VideoSectionModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("section", str, 144), ("videos", list, 146))
+	NESTED = (("videos", CourseVideoModel, True, 146),)
+
+
+class VideoProgressItemModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("video", str, 187), ("line", str, 189), ("minimum_met", bool, 191))
+	NULLABLE = (("watched_pct", (int, float), 188), ("minimum_pct", int, 190))
+
+
+class VideoProgressModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("videos", list, 194), ("minimum_met", bool, 195))
+	NESTED = (("videos", VideoProgressItemModel, True, 194), ("footer", BilingualModel, False, 196))
+
+
+class QuizAttemptModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("evidence", str, 296),)
+	LENIENT = (("employee_name", str, 298), ("training_type", str, 299), ("score_pct", (int, float), 300),
+	           ("result", str, 301), ("short_pending", int, 302), ("video_minimum", str, 303),
+	           ("signoff_status", str, 304))
+
+
+class QuizModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("version", int, 251),)
+	LENIENT = (("pass_pct", (int, float), 253), ("shuffle", bool, 254), ("retakes", bool, 255), ("questions", list, 256))
+
+
+class MyCourseModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("training_type", str, 126),)
+	LENIENT = (("videos", list, 127), ("attempts", list, 130))
+	NESTED = (("videos", VideoSectionModel, True, 127), ("progress", VideoProgressModel, False, 128),
+	          ("quiz", QuizModel, False, 129), ("attempts", QuizAttemptModel, True, 130))
+
+
+class TrainingSignoffsModel(Codable):
+	SWIFT = "CourseAPI.swift"
+	STRICT = (("ready", list, 330), ("marking", list, 331))
+	NESTED = (("ready", QuizAttemptModel, True, 330), ("marking", QuizAttemptModel, True, 331))
+
+
+class _ApprovedQueueMirrors:
+	"""Mixed into `EveryMobileMethodDecodes` below: one test per v0.250.0 route the app calls."""
+
+	def _queue_furniture(self):
+		import datetime
+
+		from .test_api_mobile import WORKER_EMPLOYEE
+
+		from erpnext_mcp import config_lifecycle, sop, training_quiz
+		from erpnext_mcp.tools import phone_configs
+
+		from .test_api_mobile import ON as MOBILE_ON
+		from .test_course_videos import COURSE, YT
+		from .test_quiz import ALL_RIGHT, KEY, QUIZ
+
+		self.configure(enabled=1, public_url="https://umbrel.tail4a2b.ts.net",
+		               **{**MOBILE_ON, "allow_draft_config": 1, "knowledge_checks_enabled": 1,
+		                  "sop_approver_rules": f"* = {WORKER}"})
+		STORE.seed("Field", [{"name": "B7", "field_name": "B7", "company": MAIN}])
+		STORE.seed("Training Type", [{"name": COURSE, "training_type_name": COURSE, "active": 1, "video_url": YT}])
+		frappe.local.session.user = "Administrator"
+		self.tool_data("draft_config", {"kind": "quiz", "key": KEY, "body": QUIZ})
+		with config_lifecycle.desk_action():
+			phone_configs.publish_phone_config({"kind": "quiz", "key": KEY, "version": 1, "change_note": "read"})
+		from erpnext_mcp import training_videos
+
+		training_videos.add(COURSE, {"title": "Walk-around", "url": YT, "length_seconds": 600})
+		policy = frappe.get_doc({"doctype": "Compliance Policy", "policy_name": "Inspection SOP", "category": "Worker Safety",
+		                         "status": "Draft", "covers_task_types": "Inspection", "company": MAIN}).insert(ignore_permissions=True)
+		sop.submit(policy.name, "Administrator")
+		tomorrow = (datetime.date.fromisoformat(str(frappe.utils.today())[:10]) + datetime.timedelta(days=1)).isoformat()
+		notices = {}
+		for name, status, supervisor in (("WN-T1", "Sent", None), ("WN-T2", "Awaiting Supervisor", WORKER)):
+			notices[name] = frappe.get_doc({"doctype": "Work Notice", "company": MAIN, "for_date": tomorrow, "status": status,
+			                "task": self.task, "task_name": "Walk", "supervisor_user": supervisor,
+			                "text_en": "No walk tomorrow.", "text_es": "Mañana no hay revisión.",
+			                "recipients": [{"employee": WORKER_EMPLOYEE, "employee_name": "Ana Ramos", "language": "es",
+			                                "sent": 1 if status == "Sent" else 0}]}).insert(ignore_permissions=True).name
+		frappe.db.commit()
+		self.be()
+		self.queue = {"course": COURSE, "answers": ALL_RIGHT, "policy": policy.name, "quiz": training_quiz,
+		              "to_decide": notices["WN-T2"]}
+
+	def test_61_override_task_hold(self):
+		self._queue_furniture()
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		VoidResponseModel.decode(self.wire("override_task_hold", task=self.task, reason="Clear skies by 9"), "override_task_hold")
+
+	def test_62_record_block_stage(self):
+		self._queue_furniture()
+		row = self.wire("record_block_stage", block="B7", bbch="55", client_request_id="c-1")
+		StageRecordedModel.decode(row, "record_block_stage")
+
+	def test_63_get_block_stages(self):
+		self._queue_furniture()
+		self.wire("record_block_stage", block="B7", bbch="55")
+		StageTimelineModel.decode(self.wire("get_block_stages", block="B7"), "get_block_stages")
+
+	def test_64_list_my_suggested_tasks(self):
+		self._queue_furniture()
+		SuggestedTasksModel.decode(self.wire("list_my_suggested_tasks"), "list_my_suggested_tasks")
+
+	def test_65_list_my_work_notices(self):
+		self._queue_furniture()
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		body = self.wire("list_my_work_notices")
+		WorkNoticesModel.decode(body, "list_my_work_notices")
+		self.assertEqual([n["text"] for n in body["for_me"]], ["Mañana no hay revisión."])
+		self.assertEqual([n["name"] for n in body["to_decide"]], [self.queue["to_decide"]])
+
+	def test_66_answer_work_notice(self):
+		self._queue_furniture()
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		NoticeAnswerModel.decode(self.wire("answer_work_notice", notice=self.queue["to_decide"], choice="no_notice"), "answer_work_notice")
+
+	def test_67_list_my_sop_reviews(self):
+		self._queue_furniture()
+		body = self.wire("list_my_sop_reviews")
+		SOPReviewsModel.decode(body, "list_my_sop_reviews")
+		self.assertEqual(len(body["reviews"]), 1)
+
+	def test_68_review_sop(self):
+		self._queue_furniture()
+		VoidResponseModel.decode(self.wire("review_sop", policy=self.queue["policy"], action="approve"), "review_sop")
+
+	def test_69_get_task_sops(self):
+		self._queue_furniture()
+		self.wire("review_sop", policy=self.queue["policy"], action="approve")
+		body = self.wire("get_task_sops", task=self.task)
+		CoveringSOPsModel.decode(body, "get_task_sops")
+		self.assertTrue(body["sops"][0]["approved"])
+
+	def test_70_get_my_course(self):
+		self._queue_furniture()
+		body = self.wire("get_my_course", training_type=self.queue["course"])
+		MyCourseModel.decode(body, "get_my_course")
+		self.assertEqual(body["quiz"]["version"], 1)
+
+	def test_71_record_my_video_view(self):
+		self._queue_furniture()
+		video = self.wire("get_my_course", training_type=self.queue["course"])["videos"][0]["videos"][0]["video"]
+		VoidResponseModel.decode(self.wire("record_my_video_view", training_type=self.queue["course"], video=video,
+		                                   stretches=[[0, 60]]), "record_my_video_view")
+
+	def test_72_submit_my_quiz_attempt(self):
+		self._queue_furniture()
+		VoidResponseModel.decode(self.wire("submit_my_quiz_attempt", training_type=self.queue["course"],
+		                                   answers=self.queue["answers"]), "submit_my_quiz_attempt")
+
+	def test_73_list_training_signoffs(self):
+		self._queue_furniture()
+		attempt = self.wire("submit_my_quiz_attempt", training_type=self.queue["course"], answers=self.queue["answers"])
+		self.queue["quiz"].mark(attempt["evidence"], {"q5": True}, "Administrator")
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		body = self.wire("list_training_signoffs")
+		TrainingSignoffsModel.decode(body, "list_training_signoffs")
+		self.assertEqual(len(body["ready"]), 1)
+
+	def test_74_sign_off_training(self):
+		self._queue_furniture()
+		attempt = self.wire("submit_my_quiz_attempt", training_type=self.queue["course"], answers=self.queue["answers"])
+		self.queue["quiz"].mark(attempt["evidence"], {"q5": True}, "Administrator")
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		row = self.wire("sign_off_training", attempt=attempt["evidence"])
+		QuizAttemptModel.decode(row, "sign_off_training")
+		self.assertEqual(row["signoff_status"], "Signed off")
+
+
+for _name, _fn in vars(_ApprovedQueueMirrors).items():
+	if _name.startswith(("test_", "_queue")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({
+	"override_task_hold": "test_61", "record_block_stage": "test_62", "get_block_stages": "test_63",
+	"list_my_suggested_tasks": "test_64", "list_my_work_notices": "test_65", "answer_work_notice": "test_66",
+	"list_my_sop_reviews": "test_67", "review_sop": "test_68", "get_task_sops": "test_69", "get_my_course": "test_70",
+	"record_my_video_view": "test_71", "submit_my_quiz_attempt": "test_72", "list_training_signoffs": "test_73",
+	"sign_off_training": "test_74",
+})

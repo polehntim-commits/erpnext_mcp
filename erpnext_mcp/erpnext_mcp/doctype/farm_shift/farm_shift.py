@@ -99,6 +99,10 @@ class FarmShift(Document):
 		self._fill_from_the_foreman()
 		self._check_the_period()
 		self._check_the_crew()
+		# v0.251.0. A reviewed punch is locked for payroll (`time_review`).
+		from erpnext_mcp import time_review
+
+		time_review.check_locked_rows(self)
 		self._check_the_cancellation()
 		self._denormalise_the_weather()
 		self.status = shifts.status_for(self.end_datetime, self.cancelled)

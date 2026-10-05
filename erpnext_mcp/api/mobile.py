@@ -24841,3 +24841,38 @@ def sign_off_training(user: str, attempt=None, reason=None, face_id=None) -> dic
 		raise frappe.PermissionError(str(exc)) from None
 	except ValueError as exc:
 		_clean_error(exc)
+
+
+# ── v0.251.0. Punch review on the phone (AFB-2026-00032) ────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_time_reviews", limit=guard.READ_LIMIT)
+def list_time_reviews(user: str, start=None, end=None, status=None, employee=None, shift=None) -> dict:
+	"""Punches in the caller's entities needing (or having had) a supervisor's review."""
+	from .. import time_review
+
+	_require_roles(user, time_review.APPROVE_ROLES, "Punch review")
+	allowed = guard.require_scope(user)
+	import datetime as _datetime
+
+	today = _datetime.date.fromisoformat(str(frappe.utils.today())[:10])
+	start = str(start or (today - _datetime.timedelta(days=today.weekday())))[:10]
+	end = str(end or today)[:10]
+	rows = time_review.listing(allowed, start, end, str(employee or ""), str(shift or ""), str(status or "pending"))
+	return {"from": start, "to": end, "punches": rows, "flagged": sum(1 for r in rows if r["flags"])}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("review_punches", mutating=True, limit=guard.WRITE_LIMIT)
+def review_punches(user: str, action=None, rows=None, reason=None, corrections=None) -> dict:
+	"""Approve, fix or reopen named punches (period approval sends every row it listed)."""
+	from .. import time_review
+
+	_require_roles(user, time_review.APPROVE_ROLES, "Punch review")
+	allowed = guard.require_scope(user)
+	names = _list_argument(rows, "rows") if rows not in (None, "") else []
+	for name in names:
+		parent = frappe.db.get_value(time_review.ROW, name, "parent")
+		if parent:
+			guard.require_scoped_doc(time_review.SHIFT, parent, "shift", allowed)
+	return time_review.review(user, str(action or ""), names, str(reason or ""),
+	                          _object_argument(corrections, "corrections") if corrections not in (None, "") else {})

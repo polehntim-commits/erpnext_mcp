@@ -191,6 +191,7 @@ from .tools import gohold as go_hold_tools
 from .tools import irrigation_schedules as irrigation_schedule_tools
 from .tools import stages as stage_tools
 from .tools import taskdates as task_date_tools
+from .tools import time_reviews as time_review_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -17868,6 +17869,46 @@ TOOLS = {
 		},
 		required=("block",),
 		title="Get degree days",
+	),
+	# ── v0.251.0: punch review as compliance (AFB-2026-00032) ────────────────
+	"list_time_reviews": _tool(
+		time_review_tools.list_time_reviews,
+		"v0.251.0. Punches (a person's in / out on a Farm Shift) in a window — default this week — with what needs a "
+		"supervisor's look: missing clock-out or still clocked in, sent late beyond the offline window, edited or "
+		"overridden, GPS outside the block, fewer breaks than the policy owes — and each one's review (Approved / Fixed, "
+		"by whom, why). status: pending (default), flagged, reviewed, all. Overtime approaching / exceeded is a "
+		"compliance alert per person (rules overtime_week_approaching / _exceeded).",
+		{
+			"company": _field(_STRING, "One company."),
+			"from": _field(_STRING, "YYYY-MM-DD (default this Monday)."),
+			"to": _field(_STRING, "YYYY-MM-DD (default today)."),
+			"employee": _field(_STRING, "One person."),
+			"shift": _field(_STRING, "One Farm Shift."),
+			"status": _field(_STRING, "pending, flagged, reviewed or all."),
+		},
+		title="List time reviews",
+	),
+	"review_punches": _tool(
+		time_review_tools.review_punches,
+		"MUTATING (default OFF). v0.251.0. A supervisor (Foreman, Farm Manager, HR) reviews punches: action 'approve' "
+		"(a flagged punch needs a reason; a missing clock-out must be fixed instead), 'fix' (corrections {row: {in, out}} "
+		"with a reason), or 'reopen' (a manager, with a reason). Name rows, or a shift, or a whole period (from / to, "
+		"optionally one employee). Reviewed punches are LOCKED for payroll; payroll preview warns on any not reviewed. "
+		"Each review is evidence in the DOL audit packet.",
+		{
+			"action": _field(_STRING, "approve, fix or reopen."),
+			"rows": _field(_STRING_ARRAY, "Punch row ids (from list_time_reviews)."),
+			"shift": _field(_STRING, "Or every pending punch on one shift."),
+			"from": _field(_STRING, "Or a period: YYYY-MM-DD."),
+			"to": _field(_STRING, "YYYY-MM-DD."),
+			"employee": _field(_STRING, "Narrow a period to one person."),
+			"company": _field(_STRING, "Narrow a period to one company."),
+			"reason": _field(_STRING, "Required for fix, reopen, and approving a flagged punch."),
+			"corrections": _field({"type": "object"}, "{row: {in: 'YYYY-MM-DD HH:MM:SS', out: '…'}} for fix."),
+		},
+		required=("action",),
+		mutating=True,
+		title="Review punches",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

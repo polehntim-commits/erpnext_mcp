@@ -28,7 +28,13 @@
   "punch_review_reason",
   "punch_resolution",
   "punch_reviewed_by",
-  "punch_review_note"
+  "punch_review_note",
+  "time_review_section",
+  "time_review_status",
+  "time_reviewed_by",
+  "time_reviewed_at",
+  "time_review_reason",
+  "time_review_flags"
  ],
  "fields": [
   {
@@ -178,6 +184,45 @@
    "fieldname": "punch_review_note",
    "fieldtype": "Small Text",
    "label": "Decision note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "time_review_section",
+   "fieldtype": "Section Break",
+   "label": "Supervisor Review"
+  },
+  {
+   "fieldname": "time_review_status",
+   "fieldtype": "Select",
+   "label": "Review",
+   "options": "\nApproved\nFixed",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "v0.251.0. A supervisor's review of this punch. Reviewed punches are locked for payroll until a manager reopens them."
+  },
+  {
+   "fieldname": "time_reviewed_by",
+   "fieldtype": "Link",
+   "label": "Reviewed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "time_reviewed_at",
+   "fieldtype": "Datetime",
+   "label": "Reviewed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "time_review_reason",
+   "fieldtype": "Small Text",
+   "label": "Review Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "time_review_flags",
+   "fieldtype": "Small Text",
+   "label": "Flags When Reviewed",
    "read_only": 1
   }
  ],

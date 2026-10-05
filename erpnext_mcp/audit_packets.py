@@ -70,6 +70,8 @@ SECTION_ORDER = (
 	"workforce",
 	"training",
 	"heat_exposure",
+	# v0.251.0. Punches and their supervisor review (AFB-2026-00032).
+	"time_records",
 	"spray_records",
 	"water",
 	"traceability",
@@ -337,6 +339,7 @@ register(
 			"certifications",
 			"workforce",
 			"training",
+			"time_records",
 			"housing",
 			"sessions",
 			"traceability",
@@ -868,6 +871,30 @@ def _training(spec: AuditPacketType, company: str, start: str, end: str, regime:
 			"this themselves asks a much harder question than one who was shown it."
 		)
 	return section
+
+
+def _time_records(spec: AuditPacketType, company: str, start: str, end: str) -> dict:
+	"""v0.251.0 (AFB-2026-00032). Every punch in the period: in, out, what needed review, and the
+	supervisor's review — approved or fixed, by whom, when and why. Unreviewed punches are listed
+	as such rather than left out: a wage-hour investigator asks which times nobody checked."""
+	from . import time_review
+
+	columns = ("date", "shift", "employee_name", "in", "out", "flags", "status", "reviewed_by", "reviewed_at", "reason")
+	if not time_review.installed():
+		return _section("Time records and punch review", "Punches and their supervisor review.", [], columns,
+		                absent="This site has not migrated to v0.251.0 (no punch review on Farm Shift crew rows).")
+	rows = [
+		{**{k: r.get(k) for k in columns if k != "flags"}, "flags": "; ".join(r["flag_text"])}
+		for r in time_review.audit_rows(company, start, end)
+	]
+	return _section(
+		"Time records and punch review",
+		"Each punch in the period, what needed a supervisor's look (late offline sync, edits, missing "
+		"clock-out, GPS outside the block, short breaks) and how it was reviewed. Reviewed punches are "
+		"locked for payroll.",
+		rows,
+		columns,
+	)
 
 
 def _heat_exposure(spec: AuditPacketType, company: str, start: str, end: str) -> dict:
@@ -2020,6 +2047,7 @@ _BUILDERS = {
 	"workforce": _workforce,
 	"training": _training,
 	"heat_exposure": _heat_exposure,
+	"time_records": _time_records,
 	"spray_records": _spray_records,
 	"water": _water,
 	"traceability": _traceability,

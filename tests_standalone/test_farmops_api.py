@@ -535,6 +535,8 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/submit_my_quiz_attempt",
 		"/mobile/list_training_signoffs",
 		"/mobile/sign_off_training",
+		"/mobile/list_time_reviews",
+		"/mobile/review_punches",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2977,6 +2979,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.251.0. Punch review: Foreman, Farm Manager or HR (`time_review.APPROVE_ROLES`).
+		"list_time_reviews",
+		"review_punches",
 		# v0.250.0. Each checks the role its MCP tool does: a supervisor overrides a Hold;
 		# the notice's supervisor or a manager answers it; only an SOP's approver reviews
 		# it; HR / Farm Manager / System Manager sign training off.
@@ -3350,7 +3355,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 204, "a method is named in two sets at once")
+		self.assertEqual(len(named), 206, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

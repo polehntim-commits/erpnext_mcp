@@ -780,3 +780,8 @@ _sop.register(_sys.modules[__name__])
 from . import degree_days as _degree_days  # noqa: E402
 
 _degree_days.register(_sys.modules[__name__])
+
+# v0.251.0. Punch review and weekly hours (AFB-2026-00032).
+from . import time_review as _time_review  # noqa: E402
+
+_time_review.register(_sys.modules[__name__])
