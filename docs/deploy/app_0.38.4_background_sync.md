@@ -1,5 +1,7 @@
 **Deploy: FarmOps 0.38.4 (build 29) — background sync (app only; server stays v0.231.2)**
 
+**Superseded app build (2026-10-04): ship FarmOps 0.38.5 (build 30) instead of the build named below — 0.38.1–0.38.4 did not compile. See `app_0.38.5_build_fix_spanish_a11y.md`.**
+
 No server change, no migrate. Any box on v0.231.2 (or one built from `catchup_v0.230.3-v0.231.1.md` up to
 v0.231.2) takes this app.
 

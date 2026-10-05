@@ -1,5 +1,7 @@
 **Deploy: catch-up v0.230.3 → v0.231.1 — one build, ONE migrate (app 0.38.2)**
 
+**Superseded app build (2026-10-04): ship FarmOps 0.38.5 (build 30) instead of the build named below — 0.38.1–0.38.4 did not compile. See `app_0.38.5_build_fix_spanish_a11y.md`.**
+
 For a box on v0.230.3. One image covers v0.230.4, v0.230.5, v0.230.6, v0.231.0 and v0.231.1, and a single
 `bench migrate` runs everything those releases need, in order:
 
