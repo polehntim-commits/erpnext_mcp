@@ -1198,6 +1198,9 @@
   "allow_submit_quiz_attempt",
   "allow_mark_short_answers",
   "allow_get_quiz_results",
+  "irrigation_schedule_enabled",
+  "allow_set_irrigation_schedule",
+  "allow_get_irrigation_schedule",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9305,6 +9308,27 @@
    "fieldname": "allow_get_quiz_results",
    "fieldtype": "Check",
    "label": "Get Quiz Results"
+  },
+  {
+   "default": "0",
+   "description": "v0.248.0. Raise each day's scheduled irrigation sets as Irrigation tasks (00:15). Off until ticked.",
+   "fieldname": "irrigation_schedule_enabled",
+   "fieldtype": "Check",
+   "label": "Irrigation Schedule"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.248.0. Replace an irrigation zone's schedule.",
+   "fieldname": "allow_set_irrigation_schedule",
+   "fieldtype": "Check",
+   "label": "Set Irrigation Schedule"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.248.0. A zone's plan and what the valves actually ran.",
+   "fieldname": "allow_get_irrigation_schedule",
+   "fieldtype": "Check",
+   "label": "Get Irrigation Schedule"
   },
   {
    "default": "1",

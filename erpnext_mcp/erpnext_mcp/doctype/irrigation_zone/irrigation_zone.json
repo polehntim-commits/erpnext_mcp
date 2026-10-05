@@ -35,7 +35,9 @@
   "h3_cells",
   "area_computed_acres",
   "notes_section",
-  "notes"
+  "notes",
+  "schedule_section",
+  "schedule"
  ],
  "fields": [
   {
@@ -243,6 +245,18 @@
    "fieldname": "notes",
    "fieldtype": "Text Editor",
    "label": "Notes"
+  },
+  {
+   "fieldname": "schedule_section",
+   "fieldtype": "Section Break",
+   "label": "Irrigation Schedule"
+  },
+  {
+   "fieldname": "schedule",
+   "fieldtype": "Table",
+   "label": "Schedule",
+   "options": "Irrigation Schedule Line",
+   "description": "v0.248.0. The zone's planned sets. Raised as Irrigation tasks each day when Irrigation Schedule is on in ERPNext MCP Settings."
   }
  ],
  "index_web_pages_for_search": 0,

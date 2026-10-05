@@ -384,6 +384,17 @@ def preset_specs() -> list:
 			[],
 			"Work follows an approved procedure.",
 		),
+		# v0.248.0. A scheduled irrigation set when rain is coming (decision 18; 19: rain over 0.05 in).
+		_preset(
+			"go_hold_irrigation_rain",
+			"Irrigation: rain forecast",
+			"Hold a scheduled set when the next two days' forecast adds up to a quarter inch or more — check the soil "
+			"before running it.",
+			{"id": "dry_enough", "path": "weather.forecast.daily[0..1].precip_in", "agg": "sum", "op": "lt", "value": 0.25,
+			 "reason": {"en": "Rain forecast (¼ in or more) — is this set needed?", "es": "Pronóstico de lluvia (¼ in o más) — ¿hace falta este riego?"}},
+			[{"field": "task_type", "op": "eq", "value": "Irrigation"}],
+			"Water the block when it needs it, not when the rain is about to.",
+		),
 		_preset(
 			"go_hold_harvest_heat",
 			"Harvest: heat",

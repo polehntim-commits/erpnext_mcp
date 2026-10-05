@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.248.0 — 2026-10-04 — the irrigation schedule (approved queue item 9)
+
+**Migrate needed** (a Schedule table on Irrigation Zone — new child Irrigation Schedule Line; task type Irrigation;
+three settings fields; a sixth Work Timing preset, OFF). Two new MCP tools (one read on, one write off). Deploy
+`docs/deploy/v0.248.0_irrigation_schedule.md`. Tim's decision 18: no overhead-water flag; a real schedule reusing
+zones, valves and runtime.
+
+- **The schedule** lives on the Irrigation Zone: per set the valve (an Asset Register valve), days ("Mon Wed Fri",
+  "daily", "every 3" from the season start), start time, minutes, season dates, active. `set_irrigation_schedule`
+  (write, off) replaces a zone's list.
+- **Raised as work**: with **Irrigation Schedule** on, each day's sets become **Irrigation** Farm Tasks at 00:15
+  (new cron) on the zone's block with the valve as the asset — once per set and day. Opening and closing the valve
+  logs runtime exactly as before.
+- **Planned vs ran**: `get_irrigation_schedule` (read) sets the plan against the valve log for a window: done (90%+),
+  short, missed, skipped (task cancelled), extra (ran unplanned), with planned and ran minutes.
+- **Rain preset** (OFF, Advisory): "Irrigation: rain forecast" holds a set when the next two days add up to ¼ in or
+  more.
+
 ## 0.247.0 — 2026-10-04 — knowledge checks and trainer sign-off (approved queue item 7, part 2)
 
 **Migrate needed** (Farm Config Version kind Quiz; quiz-attempt fields on Training Evidence; Signing Evidence role

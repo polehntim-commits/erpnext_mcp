@@ -580,6 +580,8 @@ class TheScheduledJobs(unittest.TestCase):
 						# v0.221.0. office@ triage, off unless office_mail_enabled.
 						"erpnext_mcp.office_mail.run_triage",
 					],
+					# v0.248.0. Today's irrigation sets as tasks; off unless enabled.
+					"15 0 * * *": ["erpnext_mcp.irrigation_schedule.daily"],
 					"0 2 * * *": ["erpnext_mcp.services.windowed_reports.recompute_kpi_history_incremental"],
 					"0 3 * * *": ["erpnext_mcp.services.kpi_engine.refresh_all_kpi_caches"],
 					"15 3 * * *": ["erpnext_mcp.tools.budget.refresh_all_active_budgets"],

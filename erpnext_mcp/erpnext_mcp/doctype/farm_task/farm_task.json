@@ -122,7 +122,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Task Type",
-   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nScouting\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nPest Control\nMaintenance\nOther",
+   "options": "Inspection\nTest\nSpray\nRepair\nHarvest\nScouting\nTraining\nCompliance-Audit\nHiring\nHousing-Cleanup\nWater-Sampling\nPest Control\nMaintenance\nIrrigation\nOther",
    "reqd": 1,
    "search_index": 1
   },

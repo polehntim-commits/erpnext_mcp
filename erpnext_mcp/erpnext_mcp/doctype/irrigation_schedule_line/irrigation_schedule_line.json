@@ -1,0 +1,84 @@
+{
+ "actions": [],
+ "creation": "2026-10-05 02:00:00.000000",
+ "description": "v0.248.0. One scheduled set on an irrigation zone: which valve, which days, when, how long (decision 18).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "valve",
+  "days",
+  "start_time",
+  "minutes",
+  "season_start",
+  "season_end",
+  "active",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "valve",
+   "fieldtype": "Link",
+   "label": "Valve",
+   "options": "Asset Register",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "days",
+   "fieldtype": "Data",
+   "label": "Days",
+   "default": "daily",
+   "in_list_view": 1,
+   "description": "Mon Wed Fri · daily · every 3 (from the season start)."
+  },
+  {
+   "fieldname": "start_time",
+   "fieldtype": "Time",
+   "label": "Start",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "minutes",
+   "fieldtype": "Int",
+   "label": "Minutes",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "season_start",
+   "fieldtype": "Date",
+   "label": "Season Start"
+  },
+  {
+   "fieldname": "season_end",
+   "fieldtype": "Date",
+   "label": "Season End"
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Active",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Data",
+   "label": "Note"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-05 02:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Irrigation Schedule Line",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

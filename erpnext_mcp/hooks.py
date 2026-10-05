@@ -292,6 +292,11 @@ scheduler_events = {
 		#: the morning, and this is the one job here that can take minutes on a
 		#: large ledger. ONE ENTRY THAT ITERATES: it walks every registered
 		#: report and every company, so adding a KPI adds no line to this file.
+		#: v0.248.0. Today's scheduled irrigation sets become Irrigation tasks (decision 18). Off
+		#: unless `irrigation_schedule_enabled`; idempotent per zone, set and day; never raises.
+		"15 0 * * *": [
+			"erpnext_mcp.irrigation_schedule.daily",
+		],
 		"0 2 * * *": [
 			"erpnext_mcp.services.windowed_reports.recompute_kpi_history_incremental",
 		],

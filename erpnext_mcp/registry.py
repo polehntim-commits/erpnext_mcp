@@ -187,6 +187,7 @@ from .tools import course_videos as course_video_tools
 from .tools import quizzes as quiz_tools
 from .tools import references as reference_tools
 from .tools import gohold as go_hold_tools
+from .tools import irrigation_schedules as irrigation_schedule_tools
 from .tools import stages as stage_tools
 from .tools import taskdates as task_date_tools
 from .tools import worknotices as work_notice_tools
@@ -17822,6 +17823,34 @@ TOOLS = {
 			"limit": _field(_INTEGER, "Default 100."),
 		},
 		title="Get quiz results",
+	),
+	# ── v0.248.0: the irrigation schedule ───────────────────────────────────
+	"set_irrigation_schedule": _tool(
+		irrigation_schedule_tools.set_irrigation_schedule,
+		"MUTATING (default OFF). v0.248.0. Replace an irrigation zone's schedule (decision 18): each set names the valve "
+		"(an Asset Register valve), days ('Mon Wed Fri', 'daily', 'every 3' from the season start), start time HH:MM, "
+		"minutes, optional season dates, active. With Irrigation Schedule on, each day's sets become Irrigation tasks "
+		"on the zone's block just after midnight.",
+		{
+			"zone": _field(_STRING, "The Irrigation Zone."),
+			"schedule": _field({"type": "array", "items": {"type": "object"}},
+			                   "[{valve, days, start_time, minutes, season_start, season_end, active, note}]. Empty clears it."),
+		},
+		required=("zone", "schedule"),
+		mutating=True,
+		title="Set irrigation schedule",
+	),
+	"get_irrigation_schedule": _tool(
+		irrigation_schedule_tools.get_irrigation_schedule,
+		"v0.248.0. An irrigation zone's plan for a window (default this week) and, against it, what each valve actually "
+		"ran from its own log: done (90%+ of planned), short, missed, skipped (task cancelled), extra (ran unplanned).",
+		{
+			"zone": _field(_STRING, "The Irrigation Zone."),
+			"from": _field(_STRING, "YYYY-MM-DD (default this Monday)."),
+			"to": _field(_STRING, "YYYY-MM-DD (default from + 6 days; at most 93 days)."),
+		},
+		required=("zone",),
+		title="Get irrigation schedule",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(
