@@ -986,6 +986,29 @@ _RULE_DRAFT_ARGUMENTS = {
 	"purpose": _field(_STRING, "What goes wrong in the world if nobody acts on this."),
 	"authored_by": _field(_STRING, "System, Operator (default) or AI-proposed."),
 	"ai_source_citation": _field(_STRING, "If AI-proposed: the URL and section it was read from."),
+	# ── v0.233.0: the CCF generic evaluator (docs/design/ccf_core_work_timing.md §2) ──
+	"condition_tree": _field(
+		_OBJECT,
+		"A rule as DATA: all / any / not nodes over leaves {path, op, value | value_source, agg?}. Paths come "
+		"from providers (get_compliance_field_map `context`): calendar.mmdd, task.state, asset.engine_hours, "
+		"record.<field>, settings.weather.* …; a series takes [a..b] and an agg (max min sum count_where any "
+		"all). Ops: gte gt lte lt eq ne between in nin isnull isnotnull istrue isfalse. Each node may carry "
+		"id, reason {en, es}, basis (published | local_judgment) and source. Missing data fails a leaf. Set, it "
+		'replaces the primitive scan. e.g. {"all": [{"id": "in_season", "path": "calendar.mmdd", "op": '
+		'"between", "value": ["01-01", "03-15"]}, {"id": "open", "path": "task.state", "op": "in", "value": '
+		'["Available", "Claimed"]}]}',
+	),
+	"evaluation": _field(
+		_OBJECT,
+		"{raise_when: fail (default — alert when the tree fails, a Hold) | pass, as_of: today | tomorrow, "
+		"when: [sweep, day_start, task_start, evening_cutoff, forecast_refresh]}.",
+	),
+	"actions": _field(
+		{"type": "array", "items": _OBJECT},
+		"[{type: …}] from alert, create_farm_task, add_to_audit_packet, set_go_hold, block_start, "
+		"require_override_reason, require_checklist_item, notify_workers, notify_supervisor, shift_dates. An "
+		"alert is always raised; the others run as each feature lands.",
+	),
 }
 
 
@@ -10194,6 +10217,9 @@ TOOLS = {
 			),
 			"purpose": _field(_STRING, "Replace the purpose."),
 			"ai_source_citation": _field(_STRING, "Replace the AI source citation."),
+			"condition_tree": _field(_OBJECT, "v0.233.0. Replace the CCF condition tree; {} returns the rule to its primitive scan."),
+			"evaluation": _field(_OBJECT, "v0.233.0. Replace the evaluation settings (raise_when, as_of, when)."),
+			"actions": _field({"type": "array", "items": _OBJECT}, "v0.233.0. Replace the action list."),
 		},
 		required=("name",),
 		mutating=True,

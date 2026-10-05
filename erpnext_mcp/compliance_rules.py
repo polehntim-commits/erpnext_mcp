@@ -375,6 +375,10 @@ RULE_FIELDS = (
 	"gate_scope",
 	"gate_related_table_json",
 	"latest_child_field_threshold_json",
+	# v0.233.0. The CCF generic evaluator's three blobs (`ccf.py`).
+	"condition_tree_json",
+	"evaluation_json",
+	"actions_json",
 	"superseded_by_later_clean_json",
 	"regime_heuristics_json",
 	"category_heuristics_json",
@@ -1563,7 +1567,17 @@ _PRIMITIVE_BLOBS = (
 		"category_heuristics_json",
 		lambda raw, label="category_heuristics": parse_heuristics(raw, label, "category"),
 	),
+	# v0.233.0. The CCF generic evaluator. Validated by `ccf` at every door, like the rest.
+	("condition_tree", "condition_tree_json", lambda raw, label="condition_tree": _ccf().parse_tree(raw, label)),
+	("evaluation", "evaluation_json", lambda raw, label="evaluation": _ccf().parse_evaluation(raw, label)),
+	("actions", "actions_json", lambda raw, label="actions": _ccf().parse_actions(raw, label)),
 )
+
+
+def _ccf():
+	from . import ccf
+
+	return ccf
 
 
 def build_rule(spec: dict):

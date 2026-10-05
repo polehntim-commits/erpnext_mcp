@@ -152,7 +152,13 @@ def rule_from_row(row: dict) -> Rule:
 	)
 	regimes = tuple(regimes_vocabulary.parse(row.get("regimes")) or ("Internal",))
 
-	if shape == compliance_rules.SHAPE_BUILTIN:
+	if str(row.get("condition_tree_json") or "").strip() not in ("", "{}"):
+		# v0.233.0. A rule with a condition tree runs on the CCF generic evaluator;
+		# one without (the 14 shipped rules) is untouched (decision 2).
+		from .. import ccf
+
+		scan = ccf.scan_for(row)
+	elif shape == compliance_rules.SHAPE_BUILTIN:
 		scan = _builtin_scan(row)
 	elif shape == compliance_rules.SHAPE_CUSTOM:
 		scan = _custom_scan(row)

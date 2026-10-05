@@ -40,6 +40,9 @@
   "gate_scope",
   "gate_related_table_json",
   "latest_child_field_threshold_json",
+  "condition_tree_json",
+  "evaluation_json",
+  "actions_json",
   "cadence_col",
   "threshold_critical_days",
   "threshold_warning_days",
@@ -320,6 +323,24 @@
    "fieldtype": "Long Text",
    "label": "Latest Child Row Threshold (JSON)",
    "description": "v0.22.5. The newest child row of each scanned record, and a number read off it. {\"child_doctype\", \"parent_field\", \"order_by\", \"context_key\", \"match\", \"conditions\": [{\"field\", \"op\", \"threshold\", \"threshold_source\"}], \"scope_filters\"}. A subject with no child row is gated OUT: a shift with an empty weather timeline is not a cool shift, it is a shift nobody has a reading for."
+  },
+  {
+   "fieldname": "condition_tree_json",
+   "fieldtype": "Long Text",
+   "label": "Condition Tree (JSON)",
+   "description": "v0.233.0. The CCF generic evaluator (docs/design/ccf_core_work_timing.md §2). all / any / not nodes over leaves {path, op, value | value_source, agg?, id, reason {en, es}, basis, source}. Set, it replaces the primitive scan for this rule; blank, the rule runs as before. get_compliance_field_map lists every path under `context`."
+  },
+  {
+   "fieldname": "evaluation_json",
+   "fieldtype": "Long Text",
+   "label": "Evaluation (JSON)",
+   "description": "v0.233.0. {raise_when: fail (default — a Hold) | pass, as_of: today | tomorrow, when: [sweep, day_start, task_start, evening_cutoff, forecast_refresh], for_each}."
+  },
+  {
+   "fieldname": "actions_json",
+   "fieldtype": "Long Text",
+   "label": "Actions (JSON)",
+   "description": "v0.233.0. [{type: alert | create_farm_task | add_to_audit_packet | set_go_hold | block_start | require_override_reason | require_checklist_item | notify_workers | notify_supervisor | shift_dates, …}]. An alert is always raised; the others run as each feature lands."
   },
   {
    "fieldname": "cadence_col",

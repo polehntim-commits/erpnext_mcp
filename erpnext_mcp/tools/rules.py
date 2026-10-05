@@ -55,7 +55,7 @@ import json
 
 import frappe
 
-from .. import compat, compliance_rules, proposals
+from .. import ccf, compat, compliance_rules, proposals
 from .. import training as regimes_vocabulary
 from ..alerts import engine, sandbox
 from ..args import as_bool, as_date, as_int, as_limit, as_str
@@ -133,6 +133,10 @@ _BLOB_FIELDS = (
 	("latest_child_field_threshold", "latest_child_field_threshold_json"),
 	("regime_heuristics", "regime_heuristics_json"),
 	("category_heuristics", "category_heuristics_json"),
+	# v0.233.0. The CCF generic evaluator.
+	("condition_tree", "condition_tree_json"),
+	("evaluation", "evaluation_json"),
+	("actions", "actions_json"),
 )
 
 
@@ -846,6 +850,9 @@ def _spec_from_args(args: dict, required: bool, current: dict | None = None) -> 
 		"latest_child_field_threshold": compliance_rules.parse_latest_child_threshold,
 		"regime_heuristics": lambda raw, label: compliance_rules.parse_heuristics(raw, label, "regimes"),
 		"category_heuristics": lambda raw, label: compliance_rules.parse_heuristics(raw, label, "category"),
+		"condition_tree": ccf.parse_tree,
+		"evaluation": ccf.parse_evaluation,
+		"actions": ccf.parse_actions,
 	}
 	for argument, parser in parsers.items():
 		if argument not in spec:

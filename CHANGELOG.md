@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.233.0 — 2026-10-04 — the CCF generic evaluator: rules as data
+
+**Migrate needed** (three Compliance Rule fields). No new tools, no settings. Deploy
+`docs/deploy/v0.233.0_ccf_evaluator.md`. Design: `docs/design/ccf_core_work_timing.md` §2; decisions
+`docs/design/decisions_2026_10_tim.md` (approved queue item 1). v0.232.0 (upload links) is held for its turn in the
+queue.
+
+- **`condition_tree_json`, `evaluation_json`, `actions_json` on Compliance Rule.** A rule with a condition tree runs
+  on the new evaluator (`erpnext_mcp/ccf.py`); one without — all 14 shipped rules — runs exactly as before (Tim's
+  decision 2; a test proves the sweep never calls the evaluator for them).
+- **The tree**: `all` / `any` / `not` over leaves `{path, op, value | value_source, agg}`; ops `gte gt lte lt eq ne
+  between in nin isnull isnotnull istrue isfalse`; series paths take an index window `[a..b]` and an aggregate
+  (`max min sum count_where any all`); every node may carry `id`, `reason {en, es}`, `basis` (published |
+  local_judgment) and `source`. Missing data fails a check and says so. No eval; size and depth capped.
+- **It explains itself**: the outermost failing nodes with an id are reported with the values their checks saw, and
+  the Hold sentence is built from their reasons, in English or Spanish.
+- **Validated at every door** (create, propose, update, the seeder, the controller): an unknown provider or path, a
+  series without an aggregate, a malformed MM-DD or number, a duplicate id → refused, nothing written.
+- **Providers in this release**: `calendar`, `record` (any field of the walked row), `task`, `asset`, `settings`
+  (the Weather Settings limits, per company). Weather, phenology, crew, person, SOP and checklist come with the
+  features that need them. `get_compliance_field_map` lists every path under `context`.
+- **Actions** are validated and stored (`set_go_hold`, `block_start`, `require_override_reason`,
+  `require_checklist_item`, `notify_workers`, `notify_supervisor`, `shift_dates`, …); an alert is raised today and
+  the rest run as each lands.
+- `evaluation`: `raise_when` fail (default — a Hold) or pass; `as_of` today or tomorrow; `when` moments stored.
+
 ## 0.231.3 — 2026-10-04 — polish: each company's compliance inbox judged by its own loop; list reads without per-row queries
 
 No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.3_polish.md`. Any app from 0.38.5.
