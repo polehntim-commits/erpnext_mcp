@@ -1179,6 +1179,8 @@
   "allow_set_task_dates",
   "allow_check_go_hold",
   "allow_override_hold",
+  "allow_record_growth_stage",
+  "allow_get_stage_timeline",
   "allow_search_references",
   "allow_get_reference",
   "allow_list_references",
@@ -9146,6 +9148,20 @@
    "fieldname": "allow_override_hold",
    "fieldtype": "Check",
    "label": "Override Hold"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.241.0. Record a block's crop stage (BBCH); the phone uses it too.",
+   "fieldname": "allow_record_growth_stage",
+   "fieldtype": "Check",
+   "label": "Record Growth Stage"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.241.0. A block's crop stages for the year, with flags.",
+   "fieldname": "allow_get_stage_timeline",
+   "fieldtype": "Check",
+   "label": "Get Stage Timeline"
   },
   {
    "default": "1",

@@ -71,6 +71,7 @@ from .. import (
 	datetimes,
 	flags,
 	go_hold,
+	growth_stage,
 	minors,
 	qualifications,
 	records,
@@ -2392,6 +2393,11 @@ def start_farm_task(args: dict) -> ToolResult:
 			}
 	if go_hold_note:
 		started["go_hold"] = go_hold_note
+	# v0.241.0. The stage question for the block, when none is on record this year or it is over a
+	# week old (decision 27). A question, never a refusal.
+	stage_prompt = growth_stage.prompt(task, "task_start")
+	if stage_prompt:
+		started["stage_prompt"] = stage_prompt
 	if released:
 		started["unblocked_note"] = (
 			"No longer waiting on "
@@ -5920,6 +5926,8 @@ def report_field_task(args: dict) -> ToolResult:
 			"reported_by_name": worker_name,
 			"reported_at": str(doc.reported_at),
 			"report_photo": photo or None,
+			# v0.241.0. Reporting an issue on a block asks its stage too, when stale (decision 27).
+			**({"stage_prompt": ask} if (ask := growth_stage.prompt(dict(doc.as_dict()), "issue_report")) else {}),
 		},
 		summary=(
 			f"field report {doc.name} ({doc.task_type}, {urgency}) "

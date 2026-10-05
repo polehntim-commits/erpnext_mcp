@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.241.0 — 2026-10-04 — crop stage: capture and timeline (approved queue item 5, part 3)
+
+**Migrate needed** (one Crop Observation field; two switches). Two new MCP tools (one read on, one write off).
+Deploy `docs/deploy/v0.241.0_crop_stage.md`. Design: `docs/design/ccf_core_work_timing.md` (decisions 25, 27, 28).
+
+- **`record_growth_stage`**: a block's stage as a BBCH code, filed as a Crop Observation of type Growth Stage —
+  what the Go / Hold rules read (`phenology.bbch`). No new doctype.
+- **Flagged, never refused** (decisions 25, 28): no code (words only), a code that does not parse, or a code
+  earlier than the block's last this year is kept with a `stage_flags` note naming what to check. The phone
+  requires the code.
+- **`get_stage_timeline`**: the block's stages for the year, oldest first, with flags, the current stage and its
+  age; `stale` when none this year or over 7 days old.
+- **Prompts** (decision 27): `start_farm_task` (and the phone start) and `report_field_task` carry a
+  `stage_prompt` (English and Spanish) for a task on a block whose stage is missing or stale. A question, never a
+  refusal. The phone's End of Day will ask the same of the blocks worked that day (app release to follow).
+
 ## 0.240.0 — 2026-10-04 — Go / Hold on Farm Tasks (approved queue item 5, part 2)
 
 **Migrate needed** (six Farm Task fields; two switches; seeds four Work Timing presets, OFF). Two new MCP tools

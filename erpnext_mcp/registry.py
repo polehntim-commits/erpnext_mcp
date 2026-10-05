@@ -185,6 +185,7 @@ from .tools import configs as config_tools
 from .tools import contacts as contact_tools
 from .tools import references as reference_tools
 from .tools import gohold as go_hold_tools
+from .tools import stages as stage_tools
 from .tools import taskdates as task_date_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
@@ -17598,6 +17599,43 @@ TOOLS = {
 		required=("task", "reason"),
 		mutating=True,
 		title="Override hold",
+	),
+	# ── v0.241.0: crop stage ─────────────────────────────────────────────────
+	"record_growth_stage": _tool(
+		stage_tools.record_growth_stage,
+		"MUTATING (default OFF). v0.241.0. Record a block's crop stage as a BBCH code (e.g. '55' = flower buds "
+		"visible). Filed as a Crop Observation of type Growth Stage, which is what Go / Hold rules read. A stage with "
+		"no code, a code that does not parse, or one earlier than the block's last this year is KEPT and FLAGGED "
+		"(decisions 25, 28) — never refused. The phone requires the code.",
+		{
+			"block": _field(_STRING, "The block (Field), e.g. 'B7'."),
+			"block_doctype": _field(_STRING, "Default Field."),
+			"bbch": _field(_STRING, "The BBCH code, 00–99."),
+			"stage": _field(_STRING, "The stage in words, if no code (flagged)."),
+			"observed_at": _field(_STRING, "When seen (default now)."),
+			"task": _field(_STRING, "The Farm Task it was seen during, if any."),
+			"crop": _field(_STRING, "The crop."),
+			"company": _field(_STRING, "The company."),
+			"gps": _field(_STRING, "lat,lon where it was seen."),
+			"photo": _field(_STRING, "A file URL."),
+			"notes": _field(_STRING, "Anything else."),
+		},
+		required=("block",),
+		mutating=True,
+		title="Record growth stage",
+	),
+	"get_stage_timeline": _tool(
+		stage_tools.get_stage_timeline,
+		"v0.241.0. A block's crop stages for a year, oldest first: BBCH code, words, who, when, from which task, and "
+		"any flag (no code, unreadable, backwards). Also the current stage, its age in days, and whether it is stale "
+		"(none this year, or over 7 days old — when the phone asks again).",
+		{
+			"block": _field(_STRING, "The block (Field)."),
+			"block_doctype": _field(_STRING, "Default Field."),
+			"year": _field(_INTEGER, "Default this year."),
+		},
+		required=("block",),
+		title="Get stage timeline",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

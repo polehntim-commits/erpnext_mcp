@@ -26,6 +26,7 @@
   "threat_col",
   "crop_stage",
   "growth_stage_code",
+  "stage_flags",
   "measure_section",
   "sample_unit",
   "count_observed",
@@ -197,6 +198,14 @@
    "fieldname": "growth_stage_code",
    "fieldtype": "Data",
    "label": "BBCH Code"
+  },
+  {
+   "depends_on": "stage_flags",
+   "description": "v0.241.0. Why this stage needs a second look: no BBCH code, a code that does not parse, or earlier than the block's last one this year. Flagged, never refused.",
+   "fieldname": "stage_flags",
+   "fieldtype": "Small Text",
+   "label": "Stage Flags",
+   "read_only": 1
   },
   {
    "fieldname": "measure_section",
