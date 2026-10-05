@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.237.0 — 2026-10-04 — daily equipment checks: the operator checks the machine (approved queue item 3)
+
+**Migrate needed** (one Farm Task Template field, one settings switch; seeds three templates). No new tools.
+Deploy `docs/deploy/v0.237.0_daily_checks.md`. Tim's decision 33: daily checks are Farm Tasks; equipment in use is
+checked by its operator per its SOP.
+
+- **A Farm Task Template marked `daily_check`** ("Start of Day" / "End of Day") is a daily check: with no asset
+  types it is the BASE check, with `applies_to_asset_types` an ADD-ON for those types. A machine's check is the
+  base items followed by its type's add-ons, repeats once — composition is data, authored like any template.
+- **When a worker starts a task on a machine** (`Farm Task.asset`) and has no check of it today, one is raised and
+  dispatched to them — "Daily check — <asset>" — and the start answer names it. ADVISORY (decision 39): the work is
+  not held up. Once per operator, per machine, per day. The check is an ordinary task: offline, idempotent,
+  signed.
+- **Seeded** (create-only): "Daily equipment check" (walk-round, fluids, tires or tracks, guards, belt / ROPS,
+  lights and alarms, extinguisher) and the add-ons for **Tractor** (PTO shield, hitch pins, SMV sign) and **Mini
+  Excavator** (tracks and rollers, bucket pins, hydraulic hoses, quick coupler, swing lock) — the track hoe.
+- **Off until "Daily Equipment Checks" is ticked** in ERPNext MCP Settings.
+- Next in this item: the per-person Start / End of Day check at shift start and close-out, with engine hours.
+
 ## 0.236.0 — 2026-10-04 — start and due dates on Farm Tasks; blocked-by (approved queue item 2)
 
 **Migrate needed** (three Farm Task fields, two Farm Task Template fields, two settings switches; seeds the rule

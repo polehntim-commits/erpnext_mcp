@@ -1174,6 +1174,7 @@
   "config_publish_kinds",
   "config_rollback_kinds",
   "payroll_preview_flag_pct",
+  "daily_checks_enabled",
   "allow_list_overdue_tasks",
   "allow_set_task_dates",
   "allow_search_contacts",
@@ -9099,6 +9100,13 @@
    "fieldname": "payroll_preview_flag_pct",
    "fieldtype": "Float",
    "label": "Payroll Preview Flag (%)"
+  },
+  {
+   "default": "0",
+   "description": "v0.237.0 (decision 33). On: starting a task on a machine raises that day's check of it for the operator (base check + the add-ons for its asset type). Advisory — the work is not held up.",
+   "fieldname": "daily_checks_enabled",
+   "fieldtype": "Check",
+   "label": "Daily Equipment Checks"
   },
   {
    "default": "1",

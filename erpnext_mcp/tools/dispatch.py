@@ -67,6 +67,7 @@ from .. import (
 	compat,
 	completions,
 	crew_tasks,
+	daily_checks,
 	datetimes,
 	flags,
 	minors,
@@ -2355,6 +2356,23 @@ def start_farm_task(args: dict) -> ToolResult:
 			"it and nothing was lost. Resume it with resume_farm_task."
 		)
 	started["duplicate_hint"] = _duplicate_hint(task_row(assignment["task"]))
+	# v0.237.0 (decision 33). Equipment in use is checked by its operator: today's check of this
+	# machine is raised for them if there is none. ADVISORY — the work is not held up (decision 39).
+	if task.get("asset") and not task.get("template") in daily_checks.check_templates():
+		try:
+			check = daily_checks.ensure_equipment_check(
+				str(assignment.get("assigned_to") or ""), str(task["asset"]), str(task.get("company") or "")
+			)
+		except Exception:
+			# Advisory: a check that could not be raised never stops the work — but it is logged.
+			frappe.log_error(title="daily check not raised", message=frappe.get_traceback())
+			check = None
+		if check:
+			started["daily_check"] = {
+				**check,
+				"note": f"Daily check of {task['asset']} before use: {check['task']}"
+				+ (" (raised now)." if check.get("created") else " (already raised today)."),
+			}
 	if released:
 		started["unblocked_note"] = (
 			"No longer waiting on "

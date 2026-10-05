@@ -199,12 +199,16 @@ def create_farm_task_template(args: dict) -> ToolResult:
 		# v0.236.0. Default start / due offsets (days after a task is raised).
 		"default_start_after_days": args.get("default_start_after_days"),
 		"default_due_after_days": args.get("default_due_after_days"),
+		# v0.237.0. Daily check: base (no asset types) or add-on (with them).
+		"daily_check": as_str(args, "daily_check"),
 		# v0.213.0. docs/design/crew_tasks.md.
 		"is_crew_task": bool(crew_tasks.mode_argument(args)),
 		"crew_piece_unit": as_str(args, "piece_unit") or as_str(args, "crew_piece_unit"),
 		"crew_sections": crew_tasks.normalise_sections(args.get("sections")),
 	}
 
+	if spec.get("daily_check") not in (None, "", "Start of Day", "End of Day"):
+		raise ToolError("daily_check is 'Start of Day', 'End of Day' or empty. Nothing was created.")
 	doc = task_templates.build_template(spec)
 	doc.insert(ignore_permissions=True)
 	described = task_templates.describe(doc.name, with_checklist=True)
@@ -293,6 +297,15 @@ def update_farm_task_template(args: dict) -> ToolResult:
 			sections = crew_tasks.normalise_sections(args.get("sections"))
 			changes["crew_sections"] = {"to": [s["label"] for s in sections]}
 			doc.crew_sections = json.dumps(sections)
+
+	# v0.237.0. Whether this is a daily check (blank: an ordinary template).
+	if "daily_check" in args and compat.has_field(TEMPLATE, "daily_check"):
+		value = as_str(args, "daily_check")
+		if value not in ("", "Start of Day", "End of Day"):
+			raise ToolError("daily_check is 'Start of Day', 'End of Day' or empty. Nothing was changed.")
+		if str(doc.get("daily_check") or "") != value:
+			changes["daily_check"] = {"from": doc.get("daily_check") or "", "to": value}
+		doc.daily_check = value or None
 
 	# v0.236.0. Default start / due offsets for tasks raised from this template.
 	for field in ("default_start_after_days", "default_due_after_days"):

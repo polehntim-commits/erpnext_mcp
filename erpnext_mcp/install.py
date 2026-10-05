@@ -227,6 +227,7 @@ def after_migrate() -> None:
 	_business_card_fields()
 	_payroll_settings_seed()
 	_task_due_rule()
+	_daily_check_templates()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -761,6 +762,19 @@ def _task_due_rule() -> None:
 		print("erpnext_mcp: rule farm_task_due seeded OFF — approve it in the Desk to raise due / overdue alerts.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: the farm_task_due rule was not seeded — {type(exc).__name__}: {exc}")
+
+
+def _daily_check_templates() -> None:
+	"""v0.237.0. The base daily equipment check and the Tractor / Mini Excavator add-ons.
+	Create-only; nothing is raised until `daily_checks_enabled`. Never raises."""
+	try:
+		from . import daily_checks
+
+		made = daily_checks.seed()
+		if made:
+			print(f"erpnext_mcp: daily check templates seeded: {', '.join(made)} (off until Daily Equipment Checks is ticked).")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: daily check templates were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

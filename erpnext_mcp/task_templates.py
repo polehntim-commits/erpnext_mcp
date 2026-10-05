@@ -395,6 +395,11 @@ def build_template(spec: dict):
 	for field in ("default_start_after_days", "default_due_after_days"):
 		if spec.get(field) not in (None, "") and compat.has_field(TEMPLATE_DOCTYPE, field):
 			doc.set(field, int(spec[field]))
+	# v0.237.0. A daily check template (base or add-on by asset type).
+	if spec.get("daily_check") and compat.has_field(TEMPLATE_DOCTYPE, "daily_check"):
+		if spec["daily_check"] not in ("Start of Day", "End of Day"):
+			raise ValueError("daily_check is 'Start of Day' or 'End of Day'.")
+		doc.daily_check = spec["daily_check"]
 	doc.evidence_required = json.dumps(
 		parse_evidence_required(spec.get("evidence_required") or spec.get("evidence"))
 	)

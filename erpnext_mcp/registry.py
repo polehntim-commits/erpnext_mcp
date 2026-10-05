@@ -11777,6 +11777,7 @@ TOOLS = {
 			"estimated_duration_minutes": _field(_INTEGER, "How long one of these takes."),
 			"dispatch_mode": _field(_STRING, "Either (default), Dispatched or Self-pick."),
 			"default_start_after_days": _field(_INTEGER, "v0.236.0. A task raised from this template starts this many days later."),
+			"daily_check": _field(_STRING, "v0.237.0. 'Start of Day' or 'End of Day' makes this a daily check: with no applies_to_asset_types the BASE check, with them an ADD-ON for those asset types."),
 			"default_due_after_days": _field(_INTEGER, "v0.236.0. …and is due this many days after it is raised."),
 			"default_urgency": _field(
 				_STRING,
@@ -11888,6 +11889,7 @@ TOOLS = {
 			"dispatch_mode": _field(_STRING, "Either, Dispatched or Self-pick."),
 			"default_urgency": _field(_STRING, "Low, Normal, High or Critical."),
 			"default_start_after_days": _field(_INTEGER, "v0.236.0. A task raised from this template starts this many days later."),
+			"daily_check": _field(_STRING, "v0.237.0. 'Start of Day' or 'End of Day' makes this a daily check: with no applies_to_asset_types the BASE check, with them an ADD-ON for those asset types."),
 			"default_due_after_days": _field(_INTEGER, "v0.236.0. …and is due this many days after it is raised."),
 			"evidence_required": _field(_OBJECT, "Replace the evidence contract. At least one key true."),
 			"creates_record": _field(_STRING, "New produced-record DocType, or empty for none."),
