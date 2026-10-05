@@ -600,6 +600,7 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.tools.spray_rei.close_expired_reis",
 					# v0.243.0. No-work notice drafts and escalation; off unless enabled.
 					"erpnext_mcp.work_notices.hourly",
+					"erpnext_mcp.upload_links.sweep",
 				],
 				"daily": [
 					"erpnext_mcp.tools.uploads.collect_expired_sessions",

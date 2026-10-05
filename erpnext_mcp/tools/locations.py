@@ -216,6 +216,9 @@ DYNAMIC_REFERRERS = (
 	("Spray Application Block", "block", "block_doctype"),
 	("Spray REI", "block", "block_doctype"),
 	("Trade Document", "source_name", "source_doctype"),
+	# v0.244.0. An upload link names the record its file went onto — the upload
+	# history, kept like the print history.
+	("Upload Link", "target_name", "target_doctype"),
 )
 
 #: The one referring table that is a CHILD TABLE rather than a document. Its own

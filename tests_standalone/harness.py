@@ -2069,6 +2069,7 @@ APP_DOCTYPES = {
 	"Lot Line Adjustment Piece": "lot_line_adjustment_piece",
 	"Lot Line Adjustment Open Item": "lot_line_adjustment_open_item",
 	"Lot Line Adjustment Easement": "lot_line_adjustment_easement",
+	"Upload Link": "upload_link",
 }
 
 #: The standard reports this app ships, by folder name under `REPORT_DIR`. Rows

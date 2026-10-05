@@ -448,6 +448,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Trade Document Template",
 				"Training Type",
 				"USDA Price Quote",
+				"Upload Link",
 				"Wizard Definition",
 			],
 		)

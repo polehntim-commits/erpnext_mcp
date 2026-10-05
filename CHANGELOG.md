@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.244.0 — 2026-10-04 — one-time upload links: large files onto one document (approved queue item 8)
+
+**Migrate needed** (new doctype Upload Link; six ERPNext MCP Settings fields). Four new MCP tools (two reads on, two
+writes off) and a master switch, off. Deploy `docs/deploy/v0.244.0_upload_links.md`. Design and threat model:
+`docs/design/upload_links.md` (approved). Built as v0.232.0 and held; rebased and renumbered here with Tim's
+decisions: **no video uploads** (47) and **public files only with an admin switch** (48).
+
+- **`request_upload_url`** (write, off; System Manager / Farm Manager / Accounts Manager with write on the target)
+  issues one link: `https://<farmops host>/farmops/api/upload/<token>`, one photo or document file, up to
+  `max_bytes` (25 MB default, 100 MB at most), optional SHA-256, 15 minutes by default and at most 24 hours. Only
+  the token's SHA-256 is stored. **Private always**, unless an admin ticks **Upload Links: Allow Public Files**.
+- **`PUT|POST /farmops/api/upload/<token>`** — the only sidecar route past the 4 MB body ceiling, and only after the
+  token is proved. Unknown, expired, used, revoked and switched-off all answer the same 404; a link in flight is
+  409; per-IP rate limit before any session opens. Streams to disk in 1 MB pieces under the link's cap (413 over,
+  partial file removed); extension, declared Content-Type and first bytes must agree; executables, scripts, SVG,
+  HTML, archives and video refused (415); SHA-256 checked (422); the target re-checked at finish (409 if gone).
+  The stored name is `<upload id>-<safe name>`; the client never chooses a path. Every outcome audited; ten unknown
+  tokens an hour from one address raise one audit row.
+- **`get_upload_status`, `list_upload_links`** (reads, on) — never the token. **`revoke_upload_link`** (write, off).
+- Hourly sweep: Open past its time → Expired; Receiving for six hours → Failed; stray partial files removed.
+- Not in this release: the phone's own upload route and background upload (design note §5).
+
 ## 0.243.0 — 2026-10-04 — no-work notices (approved queue item 5, part 5)
 
 **Migrate needed** (two doctypes: Work Notice and its Recipient rows; six settings fields). Two new MCP tools (one read
@@ -252,7 +274,6 @@ No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.3_polish.md`. 
   asked once per alert type, not once per alert.
 - **Task lists** (`list_my_tasks`, `list_available_tasks`, `shape.tasks`): each template's SOP pair, each location's
   map point and each source alert read once per request, not once per task.
-
 ## 0.231.2 — 2026-10-04 — offline: a task started, paused or resumed with no signal counts from the tap
 
 No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.2_offline_tasks.md`. App 0.38.3.

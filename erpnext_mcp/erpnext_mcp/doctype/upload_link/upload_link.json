@@ -1,0 +1,250 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-04 18:00:00.000000",
+ "description": "v0.244.0. One one-time upload link: where a large file may land, how big, which kinds, until when — and what arrived. Only the token's SHA-256 is stored. docs/design/upload_links.md.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "upload_id",
+  "status",
+  "target_doctype",
+  "target_name",
+  "allowed_kinds",
+  "max_bytes",
+  "is_private",
+  "expected_sha256",
+  "expires_at",
+  "note",
+  "col_issue",
+  "token_hash",
+  "issued_by",
+  "issued_at",
+  "revoked_by",
+  "revoked_at",
+  "result_section",
+  "file",
+  "file_name",
+  "file_size",
+  "file_sha256",
+  "received_at",
+  "col_result",
+  "attempts",
+  "last_attempt_at",
+  "last_ip",
+  "last_user_agent",
+  "failure_reason"
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-04 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Upload Link",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "upload_id",
+ "fields": [
+  {
+   "fieldname": "upload_id",
+   "fieldtype": "Data",
+   "label": "Upload ID",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nReceiving\nDone\nFailed\nExpired\nRevoked",
+   "default": "Open",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Target",
+   "options": "target_doctype",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "allowed_kinds",
+   "fieldtype": "Data",
+   "label": "Allowed Kinds",
+   "read_only": 1,
+   "description": "photo, document — comma separated."
+  },
+  {
+   "fieldname": "max_bytes",
+   "fieldtype": "Int",
+   "label": "Max Bytes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "is_private",
+   "fieldtype": "Check",
+   "label": "Private",
+   "default": "1",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_sha256",
+   "fieldtype": "Data",
+   "label": "Expected SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_issue",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "token_hash",
+   "fieldtype": "Data",
+   "label": "Token Hash",
+   "read_only": 1,
+   "hidden": 1,
+   "unique": 1,
+   "description": "SHA-256 of the token. The token itself is never stored."
+  },
+  {
+   "fieldname": "issued_by",
+   "fieldtype": "Link",
+   "label": "Issued By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "issued_at",
+   "fieldtype": "Datetime",
+   "label": "Issued At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_by",
+   "fieldtype": "Link",
+   "label": "Revoked By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_at",
+   "fieldtype": "Datetime",
+   "label": "Revoked At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Link",
+   "label": "File",
+   "options": "File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_name",
+   "fieldtype": "Data",
+   "label": "File Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_size",
+   "fieldtype": "Int",
+   "label": "File Size",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_sha256",
+   "fieldtype": "Data",
+   "label": "File SHA-256",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_attempt_at",
+   "fieldtype": "Datetime",
+   "label": "Last Attempt At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_ip",
+   "fieldtype": "Data",
+   "label": "Last IP",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_user_agent",
+   "fieldtype": "Data",
+   "label": "Last User Agent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "failure_reason",
+   "fieldtype": "Small Text",
+   "label": "Failure Reason",
+   "read_only": 1
+  }
+ ]
+}

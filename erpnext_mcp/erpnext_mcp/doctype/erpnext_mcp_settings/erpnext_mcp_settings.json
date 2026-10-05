@@ -21,6 +21,8 @@
   "public_url",
   "farmops_public_url",
   "legacy_erpnext_paths",
+  "upload_links_enabled",
+  "upload_link_allow_public",
   "farm_ops_mobile_enabled",
   "mobile_grant_idle_days",
   "drift_report_email",
@@ -1199,6 +1201,10 @@
   "reference_regions",
   "allow_search_contacts",
   "allow_save_contact",
+  "allow_request_upload_url",
+  "allow_get_upload_status",
+  "allow_list_upload_links",
+  "allow_revoke_upload_link",
   "allow_download_card_pdf",
   "allow_request_card_back",
   "allow_mark_card_print_job",
@@ -1418,6 +1424,20 @@
    "fieldname": "legacy_erpnext_paths",
    "fieldtype": "Check",
    "label": "Allow legacy /erpnext paths for phones"
+  },
+  {
+   "default": "0",
+   "description": "v0.244.0. Master switch for one-time upload links (request_upload_url and the /farmops/api/upload/<token> route). Off: the route answers 404 and no link can be issued. docs/design/upload_links.md.",
+   "fieldname": "upload_links_enabled",
+   "fieldtype": "Check",
+   "label": "Upload Links Enabled"
+  },
+  {
+   "default": "0",
+   "description": "v0.244.0. Off (default): every upload link files a PRIVATE file. On: request_upload_url may set is_private false, and the file can be read by anyone with its URL (decision 48). Admins only.",
+   "fieldname": "upload_link_allow_public",
+   "fieldtype": "Check",
+   "label": "Upload Links: Allow Public Files"
   },
   {
    "default": "1",
@@ -9297,6 +9317,34 @@
    "fieldname": "allow_save_contact",
    "fieldtype": "Check",
    "label": "Save Contact"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.244.0. Issue a one-time upload link for a large file onto one document. Also needs Upload Links Enabled.",
+   "fieldname": "allow_request_upload_url",
+   "fieldtype": "Check",
+   "label": "Request Upload URL"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.244.0. One upload link's state and the File it made. Never the token.",
+   "fieldname": "allow_get_upload_status",
+   "fieldtype": "Check",
+   "label": "Get Upload Status"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.244.0. Recent upload links, by status or target.",
+   "fieldname": "allow_list_upload_links",
+   "fieldtype": "Check",
+   "label": "List Upload Links"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.244.0. Close an Open upload link before it is used.",
+   "fieldname": "allow_revoke_upload_link",
+   "fieldtype": "Check",
+   "label": "Revoke Upload Link"
   },
   {
    "default": "0",

@@ -188,6 +188,7 @@ from .tools import gohold as go_hold_tools
 from .tools import stages as stage_tools
 from .tools import taskdates as task_date_tools
 from .tools import worknotices as work_notice_tools
+from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
 from .tools import direct_deposit as direct_deposit_tools
@@ -17832,6 +17833,54 @@ TOOLS = {
 		},
 		mutating=True,
 		title="Save contact",
+	),
+	"request_upload_url": _tool(
+		upload_link_tools.request_upload_url,
+		"MUTATING (default OFF). v0.244.0. Issue ONE one-time upload link for a file too big for "
+		"attach_file_to_document (over 8 MB, or any size you would rather not send base64): an "
+		"operating agreement, an SOP binder. The answer's url is the credential and "
+		"the only copy of it — whoever has it may PUT one file of the allowed kinds, up to max_bytes, "
+		"before expires_at, onto the named document. Private by default. Also needs Upload Links "
+		"Enabled in ERPNext MCP Settings. System Manager, Farm Manager or Accounts Manager, with write "
+		"permission on the document.",
+		{
+			"doctype": _field(_STRING, "The document the file is attached to, e.g. Governance Document."),
+			"name": _field(_STRING, "Its docname."),
+			"kinds": _field(_STRING_ARRAY, "photo and/or document (pdf + images; the default). No video."),
+			"max_bytes": _field(_INTEGER, "Largest file accepted (default 25 MB; at most 100 MB)."),
+			"is_private": _field(_BOOLEAN, "Default true. False (a file anyone with its URL can read) is refused unless an admin ticked Upload Links: Allow Public Files."),
+			"sha256": _field(_STRING, "Optional: the file's SHA-256; a different file is refused."),
+			"expires_minutes": _field(_INTEGER, "Default 15, at most 1440 (24 hours)."),
+			"note": _field(_STRING, "Why the link was issued; kept on the Upload Link."),
+		},
+		mutating=True,
+		title="Request upload URL",
+	),
+	"get_upload_status": _tool(
+		upload_link_tools.get_upload_status,
+		"v0.244.0. One upload link: Open, Receiving, Done, Failed, Expired or Revoked; once Done, the "
+		"File it made, its size and SHA-256; attempts and the last refusal. Never the token.",
+		{"upload_id": _field(_STRING, "The UPL-… id from request_upload_url, or the Upload Link docname.")},
+		title="Get upload status",
+	),
+	"list_upload_links": _tool(
+		upload_link_tools.list_upload_links,
+		"v0.244.0. Recent upload links, newest first; filter by status or by the document they target.",
+		{
+			"status": _field(_STRING, "Open, Receiving, Done, Failed, Expired or Revoked."),
+			"doctype": _field(_STRING, "Only links onto this doctype."),
+			"name": _field(_STRING, "Only links onto this document."),
+			"limit": _field(_INTEGER, "At most this many (default 50, max 200)."),
+		},
+		title="List upload links",
+	),
+	"revoke_upload_link": _tool(
+		upload_link_tools.revoke_upload_link,
+		"MUTATING (default OFF). v0.244.0. Close an Open upload link before it is used — the URL then "
+		"answers 404 like any other dead link. Irreversible; issue a new one if needed.",
+		{"upload_id": _field(_STRING, "The UPL-… id or the Upload Link docname.")},
+		mutating=True,
+		title="Revoke upload link",
 	),
 	"repair_placeholder_phones": _tool(
 		receipts.repair_placeholder_phones_tool,

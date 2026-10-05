@@ -422,6 +422,9 @@ scheduler_events = {
 		#: escalation to management at the cutoff (decision 34). Hourly because the cutoff is the
 		#: farm's setting. Off unless `work_notices_enabled`; never sends a notice; never raises.
 		"erpnext_mcp.work_notices.hourly",
+		#: v0.244.0. Upload links: Open past their time → Expired, a transfer left
+		#: Receiving for six hours → Failed, and stray partial files removed.
+		"erpnext_mcp.upload_links.sweep",
 	],
 	"daily": [
 		"erpnext_mcp.tools.uploads.collect_expired_sessions",

@@ -86,7 +86,7 @@ import frappe
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.wrappers import Request, Response
 
-from .. import audit, device_enrollment, security, security_alerts, slope_aspect, slope_grade
+from .. import audit, device_enrollment, security, security_alerts, slope_aspect, slope_grade, upload_links
 from ..api import fallback_auth, guard
 from ..errors import ToolError
 from ..tools import employee as personnel
@@ -191,6 +191,33 @@ SCAN_DESCRIBED_ROUTE = {
 	"group": "scan",
 	"mutating": False,
 	"arguments": ["code"],
+}
+
+#: `PUT|POST /upload/<token>` — one file onto one document, once. v0.244.0. See `_upload`
+#: and `erpnext_mcp.upload_links`. THE ONLY ROUTE LET PAST `_MAX_BODY`, and only after
+#: its token is proved.
+UPLOAD_PREFIX = f"{PREFIX}/upload/"
+
+#: Upload requests a minute from one address, good token or bad.
+UPLOAD_LIMIT = 30
+
+#: Unknown tokens an hour from one address that raise the alert (audited once).
+UPLOAD_BAD_TOKEN_ALERT = 10
+
+#: Room for the multipart envelope around a file at the link's own cap.
+MULTIPART_SLACK = 64 * 1024
+
+#: What a declared Content-Type may be for each extension. `application/octet-stream`
+#: (or none) is always accepted: plenty of clients send nothing better, and the
+#: first bytes are checked whatever is declared.
+_DECLARED_TYPES = {
+	"jpg": ("image/jpeg",), "jpeg": ("image/jpeg",), "png": ("image/png",),
+	"heic": ("image/heic", "image/heif"), "heif": ("image/heif", "image/heic"),
+	"pdf": ("application/pdf",),
+}
+_EXTENSION_FOR_TYPE = {
+	"image/jpeg": "jpg", "image/png": "png", "image/heic": "heic", "image/heif": "heif",
+	"application/pdf": "pdf",
 }
 
 #: `GET /brand/<company>` — the company's logo, for email. v0.216.1. See `_brand_image`.
@@ -1162,6 +1189,129 @@ def _scan_page(path: str) -> Response:
 	return response
 
 
+def _upload_filename(request: Request) -> str:
+	"""The file name a PUT carries: `X-File-Name`, else Content-Disposition, else one
+	made from the Content-Type. Never a path — `upload_links.safe_filename` keeps the
+	last component and the stored name is prefixed with the upload id."""
+	from urllib.parse import unquote
+
+	name = unquote(str(request.headers.get("X-File-Name") or ""))
+	if not name:
+		disposition = str(request.headers.get("Content-Disposition") or "")
+		match = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", disposition, re.IGNORECASE)
+		if match:
+			name = unquote(match.group(1))
+	if not name:
+		kind = str(request.mimetype or "").lower()
+		name = f"upload.{_EXTENSION_FOR_TYPE.get(kind, 'bin')}"
+	return name
+
+
+def _declared_type_agrees(declared: str, filename: str) -> bool:
+	declared = str(declared or "").split(";")[0].strip().lower()
+	if declared in ("", "application/octet-stream", "binary/octet-stream"):
+		return True
+	return declared in _DECLARED_TYPES.get(upload_links.extension(upload_links.safe_filename(filename)), ())
+
+
+def _upload(request: Request, path: str) -> Response:
+	"""`PUT|POST /upload/<token>` — one file onto one document, once. v0.244.0.
+
+	THE TOKEN IS PROVED BEFORE A BYTE OF BODY IS READ, and every token that will
+	not work — unknown, expired, used, revoked, or the feature switched off — gets
+	the same 404. Then the link is claimed (row-locked; a second request is 409),
+	and the body streams to disk in 1 MB pieces under the LINK's cap rather than
+	`_MAX_BODY`. Never 401: there is no session here to lose.
+	"""
+	token = path[len(UPLOAD_PREFIX) :]
+	ip = _peer(request)
+	# Metered before any session opens, as the other open routes are: a flood costs
+	# a counter, not a database connection.
+	if guard._count(f"upload:{ip or 'unknown'}", 60) > UPLOAD_LIMIT:
+		return _failure(429, TOO_MANY)
+	with session.request_session(request=request, body={}):
+		if not upload_links.enabled():
+			return _failure(404, NOT_FOUND)
+		if request.method not in ("PUT", "POST"):
+			# No GET, no HEAD, no listing: a link is not a page.
+			return _failure(404, NOT_FOUND)
+		link = upload_links.find(token)
+		if link is None:
+			session.commit()  # `find` may have marked a link Expired
+			if guard._count(f"upload-bad:{ip or 'unknown'}", 3600) == UPLOAD_BAD_TOKEN_ALERT:
+				audit.record(
+					"farmops:upload",
+					{"ip": ip},
+					audit.STATUS_ERROR,
+					f"Error — {UPLOAD_BAD_TOKEN_ALERT} unknown upload tokens from {ip} within an hour",
+					caller_ip=ip,
+					commit=True,
+				)
+			return _failure(404, NOT_FOUND)
+
+		try:
+			upload_links.claim(link["name"])
+		except upload_links.UploadRefused as exc:
+			session.rollback()
+			return _failure(exc.status, str(exc))
+		upload_links.note_attempt(link["name"], ip, str(request.headers.get("User-Agent") or ""))
+		session.commit()
+
+		cap = int(link.get("max_bytes") or 0)
+		request.max_content_length = cap + MULTIPART_SLACK
+		try:
+			if request.method == "PUT":
+				filename = _upload_filename(request)
+				if not _declared_type_agrees(request.mimetype, filename):
+					raise upload_links.UploadRefused(415, "The declared Content-Type does not match the file name.")
+				result = upload_links.receive(
+					link, request.stream, declared_length=request.content_length, filename=filename
+				)
+			else:
+				parts = [part for part in request.files.values() if part and part.filename]
+				if len(parts) != 1:
+					raise upload_links.UploadRefused(400, "Send exactly one file part.")
+				part = parts[0]
+				if not _declared_type_agrees(part.mimetype, part.filename):
+					raise upload_links.UploadRefused(415, "The declared Content-Type does not match the file name.")
+				result = upload_links.receive(link, part.stream, filename=part.filename)
+		except upload_links.UploadRefused as exc:
+			session.rollback()
+			upload_links.fail(link["name"], str(exc))
+			audit.record(
+				"farmops:upload",
+				{"upload_id": link["upload_id"]},
+				audit.STATUS_ERROR,
+				f"Error — upload {link['upload_id']} refused ({exc.status}): {exc}",
+				caller_ip=ip,
+				commit=True,
+			)
+			logger.info("farmops-api %s upload %s from %s: %s", exc.status, link["upload_id"], ip, exc)
+			return _failure(exc.status, str(exc))
+		except RequestEntityTooLarge:
+			session.rollback()
+			upload_links.fail(link["name"], "Larger than the link allows.")
+			return _failure(413, f"This file is larger than the link allows ({cap} bytes).")
+		except Exception:
+			session.rollback()
+			upload_links.fail(link["name"], "The server could not store the file.")
+			logger.error("farmops-api 500 upload %s\n%s", link["upload_id"], traceback.format_exc())
+			return _failure(500, INTERNAL)
+
+		session.commit()
+		audit.record(
+			"farmops:upload",
+			{"upload_id": link["upload_id"], "file": result["file"]},
+			audit.STATUS_SUCCESS,
+			f"Success — upload {link['upload_id']}: {result['file_name']} ({result['file_size']} bytes, "
+			f"sha256 {result['sha256'][:12]}) onto {link['target_doctype']} {link['target_name']}",
+			caller_ip=ip,
+			commit=True,
+		)
+		logger.info("farmops-api 200 upload %s %s bytes", link["upload_id"], result["file_size"])
+		return _success(result)
+
+
 def dispatch(request: Request) -> Response:
 	"""One request, start to finish. Returns a JSON response for every outcome.
 
@@ -1175,6 +1325,14 @@ def dispatch(request: Request) -> Response:
 	4. WHAT. 404 and 405 are answered only to a caller holding a credential.
 	"""
 	path = (request.path or "").rstrip("/") or "/"
+
+	# v0.244.0: the one route with its own ceiling, set by its link once the token is
+	# proved. Everything else meets `_MAX_BODY` below, unchanged.
+	if path.startswith(UPLOAD_PREFIX):
+		try:
+			return _upload(request, path)
+		except RequestEntityTooLarge:
+			return _failure(413, TOO_LARGE)
 
 	if request.content_length and int(request.content_length) > _MAX_BODY:
 		return _failure(413, TOO_LARGE)
