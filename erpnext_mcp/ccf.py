@@ -762,3 +762,11 @@ def scan_for(row: dict):
 		return out
 
 	return scan
+
+
+# v0.239.0. Weather and phenology, registered here so every caller of `ccf` sees them.
+import sys as _sys  # noqa: E402
+
+from . import ccf_providers as _providers  # noqa: E402
+
+_providers.register(_sys.modules[__name__])

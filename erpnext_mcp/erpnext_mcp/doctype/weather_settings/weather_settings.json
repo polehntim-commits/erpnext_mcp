@@ -9,6 +9,7 @@
  "field_order": [
   "enabled",
   "fetch_interval_minutes",
+  "forecast_enabled",
   "cadence_col",
   "cache_ttl_seconds",
   "http_timeout_seconds",
@@ -129,6 +130,13 @@
    "fieldname": "open_meteo_base_url_geocoding",
    "fieldtype": "Data",
    "label": "Geocoding URL"
+  },
+  {
+   "fieldname": "forecast_enabled",
+   "fieldtype": "Check",
+   "default": "0",
+   "label": "Block Forecasts for Work Timing",
+   "description": "v0.239.0. On: Work Timing rules may read Open-Meteo's 16-day and 48-hour forecast for a task's block (one request per H3 cell, cached two hours). Off: every weather check reads 'no data' and holds, saying why. Desk only."
   }
  ],
  "index_web_pages_for_search": 0,

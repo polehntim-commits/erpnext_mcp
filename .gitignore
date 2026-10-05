@@ -33,3 +33,9 @@ htmlcov/
 *.token
 mcp_token*
 site_config.json
+
+# Desktop/iCloud sync-conflict copies ("name 2.py")
+* [0-9].py
+* [0-9].json
+* [0-9].md
+* [0-9].js

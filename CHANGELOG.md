@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.239.0 — 2026-10-04 — weather and crop stage for Work Timing rules (approved queue item 5, part 1)
+
+**Migrate needed** (one Weather Settings field). No new tools. Deploy `docs/deploy/v0.239.0_weather_stage.md`.
+Design: `docs/design/ccf_core_work_timing.md` (approved; decisions 3, 12, 15, 19, 22, 25).
+
+- **`weather` provider** for rule trees: Open-Meteo per block, fetched once per H3 cell (resolution 7) and kept for
+  2 hours, through the existing Weather Settings. `weather.forecast.daily[0..15]` (rain in inches, chance of rain,
+  low / high °F, wind and gusts mph), 48 hours of `forecast.hourly`, and `recent.hours_since_rain`,
+  `last_rain_end`, `dry_streak_days`.
+- **Probabilistic dry-day** (decision 15): each day carries `rain_risk_cum_pct`, the chance of at least one wet day
+  from today through that day — so "under 40% chance of rain this week" is one check. A wet day is more than
+  0.05 in. (decision 19).
+- **`phenology` provider**: the block's latest Crop Observation with a growth stage — `bbch`, `bbch_observed_at`,
+  `bbch_age_days`, `stage_name`. BBCH codes compare in order (`lt "51"` = before bud burst).
+- **Off by default**: Weather Settings → **Block Forecasts for Work Timing** (`forecast_enabled`). While it is off, a weather
+  check is a Hold that says "no data" — never a silent Go.
+- Nothing acts on these yet: Go / Hold on tasks follows in v0.240.0. The 14 shipped rules are untouched (decision 2).
+- Housekeeping: removed 16 byte-identical " 2" sync-conflict copies that v0.236.0–v0.238.0 picked up from the
+  Desktop folder; `.gitignore` now keeps them out.
+
 ## 0.238.0 — 2026-10-04 — the Reference Library (approved queue item 4)
 
 **Migrate needed** (three doctypes; a References table on Compliance Policy, Farm Task Template, Training Type,
