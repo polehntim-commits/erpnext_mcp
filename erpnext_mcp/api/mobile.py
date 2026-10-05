@@ -24876,3 +24876,46 @@ def review_punches(user: str, action=None, rows=None, reason=None, corrections=N
 			guard.require_scoped_doc(time_review.SHIFT, parent, "shift", allowed)
 	return time_review.review(user, str(action or ""), names, str(reason or ""),
 	                          _object_argument(corrections, "corrections") if corrections not in (None, "") else {})
+
+
+# ── v0.252.0. "Start my day" / "End my day" (approved queue item 3, part 2) ──
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("my_day_check", mutating=True, limit=guard.WRITE_LIMIT)
+def my_day_check(user: str, kind=None) -> dict:
+	"""Today's own Start of Day or End of Day check (raised now if there is none), as a task to open."""
+	from .. import daily_checks
+
+	guard.require_scope(user)
+	which = daily_checks.PERSON_END if str(kind or "").lower() in ("end", "end_of_day") else daily_checks.PERSON_START
+	if not daily_checks.personal_enabled():
+		_clean_error(ValueError("Personal Start / End of Day checks are switched off on this farm."))
+	me = _employee(user)
+	result = daily_checks.ensure_personal_check(me, which)
+	if not result:
+		_clean_error(ValueError("There is no Start / End of Day template on this farm yet."))
+	from ..tools import dispatch
+
+	return shape.task(dispatch._describe_task(dispatch.task_row(result["task"])), {})
+
+
+# ── v0.252.0. The contact register from the phone: find a contact, correct "where met" ──
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("search_contacts", limit=guard.READ_LIMIT)
+def search_contacts(user: str, query=None, limit=None) -> dict:
+	"""Contacts by name, company, email, phone or where met — the office roles that file cards."""
+	from .. import business_cards
+
+	business_cards.require_role(user)
+	guard.require_scope(user)
+	return {"contacts": business_cards.search(str(query or ""), limit=int(limit or 50))}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_contact_where_met", mutating=True, limit=guard.WRITE_LIMIT)
+def update_contact_where_met(user: str, contact=None, met_at=None, met_on=None) -> dict:
+	"""Correct a contact's "where met" / "met on" (Tim, 2026-10-05)."""
+	from .. import business_cards
+
+	business_cards.require_role(user)
+	guard.require_scope(user)
+	return business_cards.update_where_met(user, str(contact or ""), str(met_at or ""), str(met_on or ""))

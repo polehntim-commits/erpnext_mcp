@@ -537,6 +537,9 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/sign_off_training",
 		"/mobile/list_time_reviews",
 		"/mobile/review_punches",
+		"/mobile/my_day_check",
+		"/mobile/search_contacts",
+		"/mobile/update_contact_where_met",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2979,6 +2982,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.252.0. The contact register: Foreman, Farm Manager, bookkeeper (`business_cards.require_role`).
+		"search_contacts",
+		"update_contact_where_met",
 		# v0.251.0. Punch review: Foreman, Farm Manager or HR (`time_review.APPROVE_ROLES`).
 		"list_time_reviews",
 		"review_punches",
@@ -3102,6 +3108,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.252.0. The caller's own Start / End of Day.
+		"my_day_check",
 		# v0.250.0. The caller's own: a stage seen, suggested work, notices sent to me, SOPs
 		# waiting on me, View SOP on a task in scope, my course, my views and attempts.
 		"record_block_stage",
@@ -3355,7 +3363,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 206, "a method is named in two sets at once")
+		self.assertEqual(len(named), 209, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

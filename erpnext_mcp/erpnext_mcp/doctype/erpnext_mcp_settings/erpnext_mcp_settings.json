@@ -1177,6 +1177,7 @@
   "config_rollback_kinds",
   "payroll_preview_flag_pct",
   "daily_checks_enabled",
+  "personal_day_checks_enabled",
   "allow_list_overdue_tasks",
   "allow_set_task_dates",
   "allow_check_go_hold",
@@ -9167,6 +9168,13 @@
    "fieldname": "daily_checks_enabled",
    "fieldtype": "Check",
    "label": "Daily Equipment Checks"
+  },
+  {
+   "default": "0",
+   "description": "v0.252.0. Each worker's own Start of Day (at their first task start) and End of Day (at clock-out, with hour meters for machines used and the crop stage of blocks worked). Off until ticked.",
+   "fieldname": "personal_day_checks_enabled",
+   "fieldtype": "Check",
+   "label": "Personal Start / End of Day"
   },
   {
    "default": "1",

@@ -42,6 +42,8 @@ class ContactSite:
 		harness.CHILD_TABLE_SOURCES.update({
 			"Contact Email": (("Contact", "email_ids"),),
 			"Contact Phone": (("Contact", "phone_nos"),),
+			# v0.252.0. A contact's Addresses are found through their links.
+			"Dynamic Link": (("Address", "links"), ("Contact", "links")),
 		})
 		register_doctype("Contact Phone", [{"fieldname": n} for n in ("name", "parent", "phone", "is_primary_phone", "is_primary_mobile_no")])
 		register_doctype("Address", [{"fieldname": n} for n in ("name", "address_title", "address_type", "address_line1",
@@ -147,3 +149,76 @@ class OnlyTheOfficeSeesContacts(ContactSite, MobileAPITestCase):
 		saved = mobile_api.save_business_card(card=CARD, client_request_id="phone-1")
 		self.assertTrue(saved["created"])
 		self.assertTrue(mobile_api.save_business_card(card=CARD, client_request_id="phone-1")["replayed"])
+
+
+SHEPPARD = {
+	"first_name": "Ben",
+	"last_name": "Sheppard",
+	"company": "Sheppard's",
+	"phones": [{"number": "(541) 555-0199", "kind": "mobile"}],
+	"address": {"line1": "440 Riverside Dr", "city": "Hood River", "state": "OR", "postal_code": "97031"},
+	"met_at": "2259 Dry Hollow Rd, The Dalles",
+	"met_on": "2026-10-01",
+}
+
+
+class MergingTheWhereMet(ContactSite, V12TestCase):
+	"""v0.252.0 — Tim, 2026-10-05: merging into Ben Sheppard kept the GPS "where met" and left the new
+	Supplier off the address."""
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, allow_save_contact=1, allow_search_contacts=1)
+
+	def address_links(self, address):
+		return {(r.get("link_doctype"), r.get("link_name")) for r in frappe.get_doc("Address", address).get("links") or []}
+
+	def test_a_merge_replaces_where_and_when_met_and_the_company_but_nothing_else(self):
+		first = business_cards.save("Administrator", {**SHEPPARD, "title": "Owner"}, {})
+		merged = business_cards.save(
+			"Administrator",
+			{**SHEPPARD, "title": "Manager", "company": "Sheppard's Orchards",
+			 "met_at": "Sheppard's, 440 Riverside Dr, Hood River, OR 97031", "met_on": "2026-10-05"},
+			{"merge_into": first["name"]},
+		)
+		row = STORE.get_raw("Contact", first["name"])
+		self.assertEqual(row["card_met_at"], "Sheppard's, 440 Riverside Dr, Hood River, OR 97031")
+		self.assertEqual(str(row["card_met_on"]), "2026-10-05")
+		self.assertEqual(row["company_name"], "Sheppard's Orchards")
+		self.assertEqual(row["designation"], "Owner", "every other field still only fills a blank")
+		self.assertEqual(merged["met_at"], "Sheppard's, 440 Riverside Dr, Hood River, OR 97031")
+		blank = business_cards.save("Administrator", {**SHEPPARD, "met_at": "", "met_on": ""}, {"merge_into": first["name"]})
+		self.assertEqual(blank["met_at"], "Sheppard's, 440 Riverside Dr, Hood River, OR 97031", "not given, not erased")
+
+	def test_a_supplier_made_on_merge_is_linked_to_the_contacts_address_and_the_address_is_not_filed_twice(self):
+		STORE.seed("Supplier Group", [{"name": "All Supplier Groups", "is_group": 1}, {"name": "Services"}])
+		first = business_cards.save("Administrator", SHEPPARD, {})
+		address = first["address"]
+		self.assertTrue(address)
+		merged = business_cards.save("Administrator", SHEPPARD, {"merge_into": first["name"], "create_party": "Supplier"})
+		self.assertEqual(merged["address"], address, "the same street and city is reused")
+		self.assertEqual(len(STORE.rows("Address")), 1)
+		self.assertIn(("Supplier", merged["linked_to"]["name"]), self.address_links(address))
+		self.assertIn(("Contact", first["name"]), self.address_links(address))
+
+	def test_where_met_can_be_corrected_on_its_own(self):
+		first = business_cards.save("Administrator", SHEPPARD, {})
+		data = business_cards.update_where_met("Administrator", first["name"], "Sheppard's, Hood River", "2026-10-05")
+		self.assertEqual((data["met_at"], data["met_on"]), ("Sheppard's, Hood River", "2026-10-05"))
+		with self.assertRaises(ToolError):
+			business_cards.update_where_met("Administrator", first["name"])
+
+
+class WhereMetFromThePhone(ContactSite, MobileAPITestCase):
+	def test_a_foreman_finds_a_contact_and_corrects_where_met(self):
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.be()
+		saved = mobile_api.save_business_card(card=SHEPPARD, client_request_id="sheppard-1")
+		found = mobile_api.search_contacts(query="sheppard")["contacts"]
+		self.assertEqual([c["name"] for c in found], [saved["name"]])
+		data = mobile_api.update_contact_where_met(contact=saved["name"], met_at="Sheppard's, Hood River")
+		self.assertEqual(data["met_at"], "Sheppard's, Hood River")
+		set_roles(WORKER, ["Field Worker"])
+		self.be()
+		with self.assertRaises(frappe.PermissionError):
+			mobile_api.update_contact_where_met(contact=saved["name"], met_at="x")

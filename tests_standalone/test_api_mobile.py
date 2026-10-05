@@ -209,6 +209,14 @@ class MobileAPITestCase(V12TestCase):
 class TheSurfaceIsClosed(MobileAPITestCase):
 	#: Exactly what `MobileAPI.swift` names, and nothing else.
 	MOBILE: ClassVar[set[str]] = {
+		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).
+		"search_contacts",
+		"update_contact_where_met",
+		# v0.252.0. Start my day / End my day (app 0.42.0, DayCheckAPI.swift).
+		"my_day_check",
+		# v0.251.0. Punch review, called by app 0.41.0 (TimeReviewAPI.swift).
+		"list_time_reviews",
+		"review_punches",
 		# v0.250.0. Named by MobileAPI.swift since app 0.39.0 / 0.40.0.
 		"override_task_hold",
 		"record_block_stage",
@@ -422,9 +430,6 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
-		# v0.251.0. Punch review; the app's screen follows.
-		"list_time_reviews",
-		"review_punches",
 		# v0.231.0. Business card → Contact: app 0.38.0 calls these and reads the answer
 		# as a dictionary (the contact form fills from what it sent).
 		"preview_business_card",

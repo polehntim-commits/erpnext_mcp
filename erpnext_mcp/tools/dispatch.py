@@ -2391,6 +2391,17 @@ def start_farm_task(args: dict) -> ToolResult:
 				"note": f"Daily check of {task['asset']} before use: {check['task']}"
 				+ (" (raised now)." if check.get("created") else " (already raised today)."),
 			}
+	# v0.252.0. The person's own Start of Day, raised at their first start of the day (off unless
+	# personal_day_checks_enabled). Advisory — the work is not held up.
+	if task.get("template") not in daily_checks.check_templates():
+		try:
+			start_of_day = daily_checks.ensure_personal_check(
+				str(assignment.get("assigned_to") or ""), daily_checks.PERSON_START, str(task.get("company") or ""))
+		except Exception:
+			frappe.log_error(title="Start of Day not raised", message=frappe.get_traceback())
+			start_of_day = None
+		if start_of_day and start_of_day.get("created"):
+			started["start_of_day"] = start_of_day
 	if go_hold_note:
 		started["go_hold"] = go_hold_note
 	# v0.241.0. The stage question for the block, when none is on record this year or it is over a
@@ -2737,6 +2748,8 @@ def complete_farm_task(args: dict) -> ToolResult:
 	compliance_eval = _evaluate_compliance_after(
 		task, str(task.get("creates_record") or "").strip(), str(task.get("company") or "")
 	)
+	# v0.252.0. An End of Day files its hour-meter readings and crop stages (never refuses the close).
+	end_of_day = daily_checks.after_complete(task, form_answers, frappe.session.user)
 
 	final_state = AWAITING_REVIEW if record_state == records.CORRECTIVE_ACTION_REQUIRED else COMPLETED
 	task_fields = {"produced_record": produced or ""}
@@ -2849,6 +2862,7 @@ def complete_farm_task(args: dict) -> ToolResult:
 		# rule's answer — a hand-raised task from no alert that produces no
 		# record is exactly that, and saying so is different from silence.
 		"compliance_evaluation": compliance_eval,
+		**({"end_of_day": end_of_day} if end_of_day else {}),
 		# v0.69.0. ALWAYS PRESENT, null where this completion consumed nothing —
 		# same convention as `shift_evidence` above and for the same reason. A
 		# client testing for the key's existence rather than its value has two

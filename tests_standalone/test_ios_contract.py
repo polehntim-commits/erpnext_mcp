@@ -5369,3 +5369,132 @@ TheContractIsComplete.COVERED.update({
 	"record_my_video_view": "test_71", "submit_my_quiz_attempt": "test_72", "list_training_signoffs": "test_73",
 	"sign_off_training": "test_74",
 })
+
+
+# ── v0.251.0 / app 0.41.0: punch review (`TimeReviewAPI.swift`) ────────────
+class TimePunchModel(Codable):
+	"""`TimeReviewAPI.Punch` — hand-written decoder, every field lenient but `row` defaults."""
+
+	SWIFT = "TimeReviewAPI.swift"
+	LENIENT = (("row", str, 29), ("shift", str, 30), ("date", str, 31), ("employee_name", str, 32), ("in", str, 33),
+	           ("out", str, 34), ("flags", list, 35), ("flag_text", list, 36), ("status", str, 37), ("reason", str, 38))
+
+
+class TimeReviewPageModel(Codable):
+	SWIFT = "TimeReviewAPI.swift"
+	STRICT = (("from", str, 45), ("to", str, 46), ("punches", list, 47))
+	NESTED = (("punches", TimePunchModel, True, 47),)
+
+
+class TimeReviewRowModel(Codable):
+	SWIFT = "TimeReviewAPI.swift"
+	STRICT = (("row", str, 52),)
+
+
+class TimeReviewRefusedModel(Codable):
+	SWIFT = "TimeReviewAPI.swift"
+	STRICT = (("row", str, 51), ("why", str, 51))
+
+
+class TimeReviewOutcomeModel(Codable):
+	SWIFT = "TimeReviewAPI.swift"
+	STRICT = (("done", list, 53), ("refused", list, 54))
+	NESTED = (("done", TimeReviewRowModel, True, 53), ("refused", TimeReviewRefusedModel, True, 54))
+
+
+class _PunchReviewMirrors:
+	def _punches(self):
+		from erpnext_mcp import time_review
+
+		from .test_punch_times import stamp
+
+		time_review.seed()
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.be()
+		shift = mobile_api.clock_in_crew(employees=[WORKER_EMP_FOR_PUNCH], location="Block 7", tapped_at=stamp(1))["shift"]
+		return [r["name"] for r in frappe.get_doc("Farm Shift", shift).as_dict()["crew"]]
+
+	def test_75_list_time_reviews(self):
+		self._punches()
+		body = self.wire("list_time_reviews")
+		TimeReviewPageModel.decode(body, "list_time_reviews")
+		self.assertTrue(body["punches"])
+
+	def test_76_review_punches(self):
+		rows = self._punches()
+		body = self.wire("review_punches", action="approve", rows=rows)
+		TimeReviewOutcomeModel.decode(body, "review_punches")
+		self.assertEqual(len(body["done"]), len(rows))
+
+
+WORKER_EMP_FOR_PUNCH = "EMP-ANA"
+
+for _name, _fn in vars(_PunchReviewMirrors).items():
+	if _name.startswith(("test_", "_punches")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"list_time_reviews": "test_75", "review_punches": "test_76"})
+
+
+# ── v0.252.0 / app 0.42.0: Start my day / End my day (`DayCheckAPI.swift` decodes a FarmTask) ──
+class _DayCheckMirrors:
+	def test_77_my_day_check(self):
+		from erpnext_mcp import daily_checks
+
+		self.configure(enabled=1, public_url="https://umbrel.tail4a2b.ts.net",
+		               **{"allow_create_mobile_user": 1, "personal_day_checks_enabled": 1})
+		frappe.local.session.user = "Administrator"
+		daily_checks.seed_personal()
+		frappe.db.commit()
+		self.be()
+		row = self.wire("my_day_check", kind="end")
+		FarmTaskModel.decode(row, "my_day_check")
+		self.assertIn("End of Day", row["task_name"])
+
+
+for _name, _fn in vars(_DayCheckMirrors).items():
+	if _name.startswith("test_"):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"my_day_check": "test_77"})
+
+
+# ── v0.252.0 / app 0.42.0: contacts and where met (`ContactsAPI.swift`) ─────
+class PhoneContactModel(Codable):
+	SWIFT = "ContactsAPI.swift"
+	STRICT = (("name", str, 21),)
+	LENIENT = (("first_name", str, 22), ("last_name", str, 23), ("company", str, 24), ("met_at", str, 25), ("met_on", str, 26))
+
+
+class PhoneContactPageModel(Codable):
+	SWIFT = "ContactsAPI.swift"
+	STRICT = (("contacts", list, 35),)
+	NESTED = (("contacts", PhoneContactModel, True, 35),)
+
+
+class _ContactMirrors:
+	def _a_card(self):
+		from .test_business_cards import SHEPPARD
+
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.be()
+		return mobile_api.save_business_card(card=SHEPPARD, client_request_id="mirror-1")["name"]
+
+	def test_78_search_contacts(self):
+		name = self._a_card()
+		body = self.wire("search_contacts", query="sheppard")
+		PhoneContactPageModel.decode(body, "search_contacts")
+		self.assertEqual([c["name"] for c in body["contacts"]], [name])
+
+	def test_79_update_contact_where_met(self):
+		name = self._a_card()
+		row = self.wire("update_contact_where_met", contact=name, met_at="Sheppard's, Hood River")
+		PhoneContactModel.decode(row, "update_contact_where_met")
+		self.assertEqual(row["met_at"], "Sheppard's, Hood River")
+
+
+for _name, _fn in vars(_ContactMirrors).items():
+	if _name.startswith(("test_", "_a_card")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"search_contacts": "test_78", "update_contact_where_met": "test_79"})

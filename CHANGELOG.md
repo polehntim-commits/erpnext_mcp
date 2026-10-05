@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.252.0 — 2026-10-05 — each person's own Start / End of Day (approved queue item 3, part 2)
+
+**Migrate needed** (two more Daily Check values on Farm Task Template; one settings switch; two templates seeded). Three
+phone routes. Deploy `docs/deploy/v0.252.0_day_checks.md`. Decision 33 (checks are Farm Tasks) and decision 27 (the End
+of Day asks the crop stage).
+
+- **Start of Day — me**: each worker's own check before the day's work (fit for work, PPE, water and shade, today's
+  hazards), raised at their first task start of the day, once a day.
+- **End of Day — me**: raised when they clock out (or when the phone asks). Built for that person and day: the
+  template's items, then an **hour-meter reading** for each metered machine they used today (with the last reading as the
+  floor), then the **crop stage (BBCH)** of each block they worked whose stage is missing or over a week old.
+- **Completing it files them**: the readings through the same path a task completion's reading takes (Asset State Log,
+  meter checks); the stages as Growth Stage observations. Nothing refuses the close; problems are reported.
+- Templates are data: "Daily Check" now offers Person — Start / End of Day; edit the items in the Desk.
+- Phone route `my_day_check` (kind start / end) opens today's check (app 0.42.0 adds the buttons). Off until
+  **Personal Start / End of Day** is ticked.
+- **Fix — merging a business card into a contact (Tim, 2026-10-05, Ben Sheppard on OML)**: a merge now REPLACES
+  "where met", "met on" and the company when the card gives them (every other field still only fills a blank) — before,
+  the GPS default stayed. The contact's address is reused when the street and city match (not filed twice), and a
+  Supplier / Customer made by `create_party` (or named by `link_to`) is linked onto the contact's addresses.
+- **Where met from the phone**: routes `search_contacts` and `update_contact_where_met` (Foreman and up, as scanning a
+  card); app 0.42.0 adds Receipts → Business cards → Contacts → Where met.
+- The punch-review routes (app 0.41.0) and `my_day_check` (app 0.42.0) join the app's surface with contract mirrors
+  (tests 75–79, with the contact routes) — the mirror caught `my_day_check` answering the raw task row (evidence as a string), fixed before
+  release.
+
 ## 0.251.0 — 2026-10-05 — punch review as a compliance item (AFB-2026-00032)
 
 **Migrate needed** (six Farm Shift crew-row fields; four settings fields; eight Compliance Rules seeded ON). Two new MCP

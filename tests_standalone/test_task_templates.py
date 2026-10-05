@@ -1046,7 +1046,8 @@ class TheSeededTemplates(V12TestCase):
 		# v0.237.0: the three daily-check templates are seeded beside the rule-shaped ones.
 		rows = STORE.rows("Farm Task Template")
 		self.assertEqual(len([r for r in rows if not r.get("daily_check")]), len(self.NAMES))
-		self.assertEqual(len([r for r in rows if r.get("daily_check")]), 3)
+		# v0.237.0: three equipment checks; v0.252.0: + Start / End of Day — me.
+		self.assertEqual(len([r for r in rows if r.get("daily_check")]), 5)
 		wired = [
 			row
 			for row in STORE.rows("Compliance Rule")

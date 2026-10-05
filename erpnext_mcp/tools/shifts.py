@@ -865,6 +865,14 @@ def remove_worker_from_shift(args: dict) -> ToolResult:
 	doc.save(ignore_permissions=True)
 	# v0.213.0. Off the shift is off the crew task they were working on it.
 	crew_tasks.close_for_shift(row["name"], person, left, "Left the shift")
+	# v0.252.0. Clocking out raises their End of Day (off unless personal_day_checks_enabled).
+	from .. import daily_checks
+
+	try:
+		end_of_day = daily_checks.ensure_personal_check(person, daily_checks.PERSON_END, str(row.get("company") or ""))
+	except Exception:
+		frappe.log_error(title="End of Day not raised", message=frappe.get_traceback())
+		end_of_day = None
 
 	described = shifts.describe(dict(doc.as_dict()), with_children=True)
 	hours = shifts.hours_between(str(target.get("joined_at") or ""), left)
@@ -872,6 +880,7 @@ def remove_worker_from_shift(args: dict) -> ToolResult:
 		data={
 			**described,
 			"actor": actor,
+			**({"end_of_day": end_of_day} if end_of_day else {}),
 			"removed": {
 				"employee": person,
 				"employee_name": target.get("employee_name") or person,

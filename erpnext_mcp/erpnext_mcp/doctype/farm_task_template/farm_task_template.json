@@ -368,8 +368,8 @@
    "fieldname": "daily_check",
    "fieldtype": "Select",
    "label": "Daily Check",
-   "options": "\nStart of Day\nEnd of Day",
-   "description": "v0.237.0. A daily check template. With no asset types it is the BASE check; with asset types it is an ADD-ON for those types (decision 33)."
+   "options": "\nStart of Day\nEnd of Day\nPerson — Start of Day\nPerson — End of Day",
+   "description": "v0.237.0. A daily check template. With no asset types it is the BASE check; with asset types it is an ADD-ON for those types (decision 33). v0.252.0: Person — Start / End of Day is each worker's own check, once a day."
   },
   {
    "fieldname": "references_section",

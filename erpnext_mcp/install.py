@@ -773,7 +773,7 @@ def _daily_check_templates() -> None:
 	try:
 		from . import daily_checks
 
-		made = daily_checks.seed()
+		made = daily_checks.seed() + daily_checks.seed_personal()
 		if made:
 			print(f"erpnext_mcp: daily check templates seeded: {', '.join(made)} (off until Daily Equipment Checks is ticked).")
 	except Exception as exc:  # pragma: no cover

@@ -89,8 +89,8 @@ def ensure_fields() -> bool:
 def require_role(user: str) -> None:
 	if not set(frappe.get_roles(user) or []) & set(ROLES):
 		raise frappe.PermissionError(
-			"The contact register is restricted to a Farm Manager, the bookkeeper (Accounts Manager / Accounts "
-			"User) or a System Manager. Nothing was read or saved."
+			"The contact register is restricted to a Foreman, a Farm Manager, the bookkeeper (Accounts Manager / "
+			"Accounts User) or a System Manager. Nothing was read or saved."
 		)
 
 
@@ -290,11 +290,19 @@ def _party(card: dict, link_to: dict, create: str):
 	return None
 
 
+#: v0.252.0 (Tim, 2026-10-05). On a merge these are REPLACED when the card gives them — where and when
+#: you met is the latest meeting, and the company is the card's — where every other field only fills a
+#: blank. Before, a merge left the GPS default for "where met" in place under a corrected one.
+MERGE_REPLACES = ("card_met_at", "card_met_on", "company_name")
+
+
 def _fill(doc, card: dict, user: str, key: str, *, merging: bool) -> None:
-	"""Write the card onto the Contact. Merging fills blanks and adds what is new; it never overwrites."""
+	"""Write the card onto the Contact. Merging fills blanks and adds what is new; it overwrites only
+	`MERGE_REPLACES` (where / when met, company), and only when the card gives them."""
 
 	def put(field, value):
-		if value and (not merging or not doc.get(field)) and (compat.has_field(CONTACT, field) or field in ("first_name", "last_name")):
+		replace = field in MERGE_REPLACES
+		if value and (not merging or replace or not doc.get(field)) and (compat.has_field(CONTACT, field) or field in ("first_name", "last_name")):
 			doc.set(field, value)
 
 	put("first_name", card["first_name"] or card["company"])
@@ -328,11 +336,44 @@ def _fill(doc, card: dict, user: str, key: str, *, merging: bool) -> None:
 		have_phones.add(phone["digits"])
 
 
+def _contact_addresses(contact: str) -> list:
+	"""The Addresses linked to a Contact (Address.links → Dynamic Link)."""
+	if not compat.doctype_exists(ADDRESS):
+		return []
+	rows = frappe.db.get_all("Dynamic Link", filters={"parenttype": ADDRESS, "link_doctype": CONTACT, "link_name": contact},
+	                         fields=["parent"], limit=50) or []
+	return sorted({r["parent"] for r in rows if r.get("parent")})
+
+
+def _link_party(address: str, party) -> bool:
+	"""Add the party (Supplier / Customer) to an Address's links when it is not there yet."""
+	if not party:
+		return False
+	doc = frappe.get_doc(ADDRESS, address)
+	if any(row.get("link_doctype") == party[0] and row.get("link_name") == party[1] for row in doc.get("links") or []):
+		return False
+	doc.append("links", {"link_doctype": party[0], "link_name": party[1]})
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+	return True
+
+
 def _address(contact: str, card: dict, party) -> str | None:
-	"""An Address linked to the Contact (and the party), when the card had one."""
+	"""An Address linked to the Contact (and the party), when the card had one.
+
+	v0.252.0: the same street and city already on this Contact is REUSED rather than filed twice, and a party
+	named now (e.g. a Supplier `create_party` just made) is linked onto every Address the Contact has."""
+	existing = _contact_addresses(contact)
+	for name in existing:
+		_link_party(name, party)
 	parts = card["address"]
 	if not (parts["line1"] and parts["city"]) or not compat.doctype_exists(ADDRESS):
-		return None
+		return existing[0] if existing else None
+	for name in existing:
+		row = frappe.db.get_value(ADDRESS, name, ["address_line1", "city"], as_dict=True) or {}
+		if (str(row.get("address_line1") or "").strip().lower() == parts["line1"].strip().lower()
+		        and str(row.get("city") or "").strip().lower() == parts["city"].strip().lower()):
+			return name
 	country = parts["country"] or "United States"
 	if compat.doctype_exists("Country") and not frappe.db.exists("Country", country):
 		country = "United States" if frappe.db.exists("Country", "United States") else country
@@ -351,6 +392,26 @@ def _address(contact: str, card: dict, party) -> str | None:
 	doc.flags.ignore_permissions = True
 	doc.insert(ignore_permissions=True)
 	return doc.name
+
+
+def update_where_met(user: str, contact: str, met_at: str = "", met_on: str = "") -> dict:
+	"""Correct a contact's "where met" / "met on" (v0.252.0; the phone's edit). Office roles, as saving a card."""
+	require_role(user)
+	if not frappe.db.exists(CONTACT, contact):
+		raise ToolError(f"no Contact called {contact!r}. Nothing was changed.")
+	values = {}
+	if _text(met_at):
+		values["card_met_at"] = _text(met_at, 240)
+	if _text(met_on):
+		try:
+			values["card_met_on"] = str(frappe.utils.getdate(_text(met_on)))
+		except Exception:
+			raise ToolError("met_on is a date (YYYY-MM-DD). Nothing was changed.") from None
+	values = {k: v for k, v in values.items() if compat.has_field(CONTACT, k)}
+	if not values:
+		raise ToolError("give met_at and/or met_on. Nothing was changed.")
+	frappe.db.set_value(CONTACT, contact, values)
+	return describe(contact)
 
 
 def _note(contact: str, text: str, user: str) -> None:
