@@ -228,6 +228,7 @@ def after_migrate() -> None:
 	_payroll_settings_seed()
 	_task_due_rule()
 	_daily_check_templates()
+	_go_hold_presets()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -775,6 +776,19 @@ def _daily_check_templates() -> None:
 			print(f"erpnext_mcp: daily check templates seeded: {', '.join(made)} (off until Daily Equipment Checks is ticked).")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: daily check templates were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _go_hold_presets() -> None:
+	"""v0.240.0. The four Work Timing presets (pruning / canker, spray wind, burning, harvest heat),
+	seeded OFF for a person to approve in the Desk (decision 5). Create-only; never raises."""
+	try:
+		from . import go_hold
+
+		made = go_hold.seed()
+		if made:
+			print(f"erpnext_mcp: Go / Hold presets seeded OFF: {', '.join(made)}.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: Go / Hold presets were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

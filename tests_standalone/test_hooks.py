@@ -586,6 +586,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"0 4 * * *": ["erpnext_mcp.services.regulation_feed.sweep_due_feeds"],
 					"30 4 * * *": ["erpnext_mcp.tools.maintenance.sweep_due_maintenance"],
 					"0 5 * * *": ["erpnext_mcp.services.usda_prices.sweep_configured_reports"],
+					# v0.240.0. The day-start Go / Hold check; never raises.
+					"0 6 * * *": ["erpnext_mcp.go_hold.scheduled_day_start"],
 				},
 				"hourly": [
 					"erpnext_mcp.training_courses.send_reminders",

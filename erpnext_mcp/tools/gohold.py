@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MIT
+"""Go / Hold: the MCP tools. v0.240.0. See `erpnext_mcp.go_hold`."""
+
+from __future__ import annotations
+
+import frappe
+
+from .. import go_hold
+from ..args import as_str
+from ..errors import ToolError
+from ..result import ToolResult
+
+
+def _task(args: dict) -> str:
+	name = as_str(args, "task", required=True)
+	if not frappe.db.exists("Farm Task", name):
+		raise ToolError(f"no Farm Task {name!r}.")
+	if not go_hold.installed():
+		raise ToolError("this site has not migrated to v0.240.0 (no go_hold on Farm Task).")
+	return name
+
+
+def check_go_hold(args: dict) -> ToolResult:
+	"""Judge one task now against every Work Timing rule that speaks to it. Writes nothing."""
+	name = _task(args)
+	language = as_str(args, "language") or "en"
+	task = dict(frappe.get_doc("Farm Task", name).as_dict())
+	verdict = go_hold.evaluate(task, language, as_str(args, "as_of"))
+	data = {
+		"task": name,
+		"status": verdict["status"] or "No rule",
+		"reasons": verdict["reasons"],
+		"enforced_hold": verdict["enforced_hold"],
+		"rules": verdict["rules"],
+		"recorded": go_hold.describe(task),
+		"written": False,
+	}
+	if not verdict["rules"]:
+		data["note"] = "No live Work Timing rule speaks to this task (enable a preset in the Desk to start)."
+	return ToolResult(data=data, summary=f"{name}: {data['status']}")
+
+
+def override_hold(args: dict) -> ToolResult:
+	"""A supervisor lets a held task start today, with a reason (decision 17)."""
+	name = _task(args)
+	user = frappe.session.user
+	try:
+		entry = go_hold.override(name, as_str(args, "reason"), user, as_str(args, "employee"))
+	except (ValueError, PermissionError) as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+	return ToolResult(
+		data={"task": name, "override": entry, "note": "Recorded on the task's Go / Hold log; it lapses at midnight."},
+		summary=f"{name}: Hold overridden for today by {user}",
+		docstatus_delta="0 → 0 (updated)",
+	)

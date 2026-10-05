@@ -61,7 +61,7 @@ ACTIONS = (
 	"notify_supervisor",
 	"shift_dates",
 )
-LIVE_ACTIONS = ("alert",)
+LIVE_ACTIONS = ("alert", "set_go_hold", "block_start")
 
 _SEGMENT = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\[(?P<a>\d+)(?:\.\.(?P<b>\d+))?\])?$")
 

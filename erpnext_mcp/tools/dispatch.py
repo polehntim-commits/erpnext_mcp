@@ -70,6 +70,7 @@ from .. import (
 	daily_checks,
 	datetimes,
 	flags,
+	go_hold,
 	minors,
 	qualifications,
 	records,
@@ -151,6 +152,11 @@ _TASK_FIELDS = (
 	"start_date",
 	"due_date",
 	"starts_after",
+	# v0.240.0. Go / Hold (`go_hold`).
+	"go_hold",
+	"go_hold_reasons",
+	"go_hold_checked_at",
+	"go_hold_override",
 	"task_type",
 	"state",
 	"urgency",
@@ -966,6 +972,9 @@ def _describe_task(row: dict) -> dict:
 		out["crew"] = crew
 	# v0.236.0. The dates, and what they mean today (computed, never stored).
 	out.update(task_dates.describe(row))
+	# v0.240.0. Go / Hold — present only where a Work Timing rule has spoken to the task.
+	if row.get("go_hold"):
+		out.update(go_hold.describe(row))
 	return out
 
 
@@ -2274,6 +2283,14 @@ def start_farm_task(args: dict) -> ToolResult:
 			+ ". It can start when that is finished. Nothing was changed."
 		)
 
+	# v0.240.0. GO / HOLD at the start: an Enforced Hold (a rule with `block_start`) refuses
+	# unless a supervisor overrode it today; an Advisory one is said and the work goes ahead
+	# (decisions 16, 17, 39). Nothing here touches time already worked.
+	try:
+		go_hold_note = go_hold.at_start(assignment["task"])
+	except ValueError as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+
 	# v0.194.0. A HARVEST TASK TAKEN BEFORE A SPRAY IS NOT CLEAR AFTER IT. The
 	# worker's door, so no override here — the refusal names assign_farm_task,
 	# where a foreman re-sends it with a reason if the stamped date is wrong.
@@ -2373,6 +2390,8 @@ def start_farm_task(args: dict) -> ToolResult:
 				"note": f"Daily check of {task['asset']} before use: {check['task']}"
 				+ (" (raised now)." if check.get("created") else " (already raised today)."),
 			}
+	if go_hold_note:
+		started["go_hold"] = go_hold_note
 	if released:
 		started["unblocked_note"] = (
 			"No longer waiting on "

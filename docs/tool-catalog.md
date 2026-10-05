@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1030 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1032 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 501 read tools are **on** by default and can be switched off individually. A
+All 502 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 

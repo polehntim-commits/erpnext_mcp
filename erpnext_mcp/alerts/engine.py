@@ -131,6 +131,11 @@ def rule_set() -> tuple:
 		# an operator every night, which is not.
 		if str(row.get("control_point") or "").strip():
 			continue
+		# v0.240.0. A WORK TIMING (Go/Hold) RULE SPEAKS ON THE TASK, not in the inbox: it is
+		# checked at 06:00 and at task start (`go_hold`), and swept only when its actions ask
+		# for an `alert`.
+		if _go_hold_only(row):
+			continue
 		try:
 			assembled[key] = rule_from_row(row)
 		except Exception as exc:
@@ -139,6 +144,12 @@ def rule_set() -> tuple:
 				f"{type(exc).__name__}: {exc}. It raised nothing AND DISMISSED NOTHING."
 			)
 	return assembled, notes
+
+
+def _go_hold_only(row: dict) -> bool:
+	from .. import go_hold
+
+	return go_hold.is_go_hold_rule(row) and "alert" not in go_hold._actions(row)
 
 
 def rule_from_row(row: dict) -> Rule:

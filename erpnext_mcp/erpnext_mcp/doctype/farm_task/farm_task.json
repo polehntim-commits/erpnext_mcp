@@ -98,7 +98,13 @@
   "crew_person_minutes",
   "crew_pieces",
   "narrative_section",
-  "task_notes"
+  "task_notes",
+  "go_hold_section",
+  "go_hold",
+  "go_hold_reasons",
+  "go_hold_checked_at",
+  "go_hold_override",
+  "go_hold_log"
  ],
  "fields": [
   {
@@ -742,6 +748,53 @@
    "label": "Starts After",
    "description": "v0.236.0. A condition in words, e.g. \"after the hail net is up\" — shown as Waiting: … on the phone.",
    "in_list_view": 0
+  },
+  {
+   "fieldname": "go_hold_section",
+   "fieldtype": "Section Break",
+   "label": "Go / Hold",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "go_hold",
+   "fieldtype": "Select",
+   "label": "Go / Hold",
+   "options": "\nGo\nHold\nGo — verify stage",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "v0.240.0. The verdict of the Work Timing rules that speak to this task, checked at 06:00 and at start. Blank: no rule speaks to it."
+  },
+  {
+   "fieldname": "go_hold_reasons",
+   "fieldtype": "Small Text",
+   "label": "Why",
+   "read_only": 1,
+   "depends_on": "go_hold"
+  },
+  {
+   "fieldname": "go_hold_checked_at",
+   "fieldtype": "Datetime",
+   "label": "Checked At",
+   "read_only": 1,
+   "depends_on": "go_hold"
+  },
+  {
+   "fieldname": "go_hold_override",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Supervisor Override",
+   "read_only": 1,
+   "depends_on": "go_hold_override",
+   "description": "v0.240.0. Today's override of a Hold: who, when, why. It lapses at midnight."
+  },
+  {
+   "fieldname": "go_hold_log",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Go / Hold Log",
+   "read_only": 1,
+   "depends_on": "go_hold",
+   "description": "v0.240.0. Each check, newest first: every rule's id, version, verdict and the values it read."
   }
  ],
  "index_web_pages_for_search": 0,

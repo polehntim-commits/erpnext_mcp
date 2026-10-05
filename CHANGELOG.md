@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.240.0 — 2026-10-04 — Go / Hold on Farm Tasks (approved queue item 5, part 2)
+
+**Migrate needed** (six Farm Task fields; two switches; seeds four Work Timing presets, OFF). Two new MCP tools
+(one read on, one write off). Deploy `docs/deploy/v0.240.0_go_hold.md`. Design: `docs/design/ccf_core_work_timing.md`
+(approved; decisions 12, 15, 16, 17, 23, 39).
+
+- **Go / Hold** on a Farm Task: every live Work Timing rule (category Work Timing, target Farm Task, a condition
+  tree, `set_go_hold` in its actions) whose scope takes the task in must pass (decision 39). Fields: `go_hold`
+  (Go / Hold / Go — verify stage), the reasons, when checked, and a log — each check with every rule's id,
+  version, verdict and the values it read (weather for the block, crop stage).
+- **When**: 06:00 every day for open tasks (decision 16, new cron), and at task start (MCP and phone).
+  **Holds clear themselves** (decision 15): the next check that passes sets Go and the log says it cleared.
+- **Advisory by default**: a Hold is shown and the work starts anyway — the start says so. A rule with
+  **`block_start`** among its actions is Enforced: the start is refused until a Foreman, Farm Manager or System
+  Manager overrides it for the day with a reason (`override_hold`, decision 17). A Hold never touches time already
+  worked.
+- **No stage on record** (decision 12): "Go — verify stage", naming the block — not a Hold. Missing weather is a
+  Hold saying "no data".
+- **The alert sweep leaves Go / Hold rules alone** unless their actions include `alert` — the verdict lives on the
+  task, not once per task per sweep in the inbox.
+- **Presets, seeded OFF** (decision 5): pruning / bacterial canker (rain risk this week under 40%, 24 h dry, no
+  frost), spraying at or under 10 mph, burning (gusts under 15 mph and under 85 °F, today and tomorrow — check the
+  county burn status), harvest heat (under 95 °F). English and Spanish reasons.
+- **Tools**: `check_go_hold` (read; judges one task now, writes nothing), `override_hold` (write, off).
+  `get_farm_task` and the start answer carry `go_hold` where a rule has spoken.
+- Fix: the asset map's build stamp (`asset_register_map.js`) was left at 0.238.0 in v0.239.0, which failed the
+  stamp test on that commit; it now reads 0.240.0.
+
 ## 0.239.0 — 2026-10-04 — weather and crop stage for Work Timing rules (approved queue item 5, part 1)
 
 **Migrate needed** (one Weather Settings field). No new tools. Deploy `docs/deploy/v0.239.0_weather_stage.md`.

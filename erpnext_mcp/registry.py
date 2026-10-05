@@ -184,6 +184,7 @@ from .tools import card_prints as card_print_tools
 from .tools import configs as config_tools
 from .tools import contacts as contact_tools
 from .tools import references as reference_tools
+from .tools import gohold as go_hold_tools
 from .tools import taskdates as task_date_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
@@ -17568,6 +17569,35 @@ TOOLS = {
 		required=("task",),
 		mutating=True,
 		title="Set task dates",
+	),
+	# ── v0.240.0: Go / Hold ──────────────────────────────────────────────────
+	"check_go_hold": _tool(
+		go_hold_tools.check_go_hold,
+		"v0.240.0. Go or Hold for one Farm Task, judged now against every live Work Timing rule whose scope takes "
+		"it in (all must pass — decision 39): each rule's verdict, its version, Advisory or Enforced, the Hold "
+		"reason, and the values it read (weather for the block, crop stage). 'Go — verify stage' means only the "
+		"crop stage was missing: check it in the field. Writes nothing; the 06:00 check and the start record it.",
+		{
+			"task": _field(_STRING, "The Farm Task."),
+			"language": _field(_STRING, "en or es, for the reasons."),
+			"as_of": _field(_STRING, "YYYY-MM-DD to judge as of (default today)."),
+		},
+		required=("task",),
+		title="Check Go / Hold",
+	),
+	"override_hold": _tool(
+		go_hold_tools.override_hold,
+		"MUTATING (default OFF). v0.240.0. A supervisor (Foreman, Farm Manager or System Manager) lets a task on "
+		"an Enforced Hold start TODAY, with a reason. Recorded on the task's Go / Hold log with who and when; it "
+		"lapses at midnight. An Advisory Hold needs no override — the work can start and the start says so.",
+		{
+			"task": _field(_STRING, "The Farm Task."),
+			"reason": _field(_STRING, "Why it is safe to start today, in a few words."),
+			"employee": _field(_STRING, "The supervisor's Employee id, if known."),
+		},
+		required=("task", "reason"),
+		mutating=True,
+		title="Override hold",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

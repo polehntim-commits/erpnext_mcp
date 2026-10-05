@@ -378,6 +378,14 @@ scheduler_events = {
 		"0 5 * * *": [
 			"erpnext_mcp.services.usda_prices.sweep_configured_reports",
 		],
+		#: v0.240.0. The day-start Go / Hold check (decision 16): every open task a live Work
+		#: Timing rule speaks to is re-judged at six, so the Hold is on the phone before the crew
+		#: leaves the shop — and a Hold that no longer applies clears (decision 15). Advisory,
+		#: writes only the task's own Go / Hold fields, never raises; with no rule switched on it
+		#: does nothing.
+		"0 6 * * *": [
+			"erpnext_mcp.go_hold.scheduled_day_start",
+		],
 	},
 	"hourly": [
 		# v0.212.0. The evening-before push to tomorrow's class attendees. Hourly
