@@ -1717,6 +1717,9 @@ APP_DOCTYPES = {
 	"Work Notice Recipient": "work_notice_recipient",
 	# v0.245.0. An SOP's approvers.
 	"SOP Approver": "sop_approver",
+	# v0.246.0. Course videos and training evidence.
+	"Course Video": "course_video",
+	"Training Evidence": "training_evidence",
 	# v0.79.0. The two registers this release exists for. Both are on the SCAN
 	# and TASK paths — a discipline chain is read from a mobile wrapper and an
 	# accident report spawns sub-tasks — so they are registered here rather than
@@ -2639,6 +2642,7 @@ CHILD_TABLES = {
 	("Reference Document", "pages"): "Reference Page",
 	("Work Notice", "recipients"): "Work Notice Recipient",
 	("Compliance Policy", "approvers"): "SOP Approver",
+	("Training Type", "videos"): "Course Video",
 	("Compliance Policy", "references"): "Reference Citation",
 	("Farm Task Template", "references"): "Reference Citation",
 	("Training Type", "references"): "Reference Citation",

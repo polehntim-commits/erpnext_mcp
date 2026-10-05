@@ -183,6 +183,7 @@ from .tools import (
 from .tools import card_prints as card_print_tools
 from .tools import configs as config_tools
 from .tools import contacts as contact_tools
+from .tools import course_videos as course_video_tools
 from .tools import references as reference_tools
 from .tools import gohold as go_hold_tools
 from .tools import stages as stage_tools
@@ -17690,6 +17691,90 @@ TOOLS = {
 		required=("notice", "choice"),
 		mutating=True,
 		title="Send work notice",
+	),
+	# ── v0.246.0: course videos and watched amount ─────────────────────────
+	"add_course_video": _tool(
+		course_video_tools.add_course_video,
+		"MUTATING (default OFF). v0.246.0. Add a video to a course (Training Type): title EN/ES, a YouTube link or an "
+		"uploaded file, optional Spanish URL, required or optional, section ('Core', 'Vintage films'), order, length, "
+		"optional minimum % for this video.",
+		{
+			"training_type": _field(_STRING, "The course."),
+			"title": _field(_STRING, "Title (English)."),
+			"title_es": _field(_STRING, "Title (Spanish)."),
+			"url": _field(_STRING, "YouTube link or /files/… .mp4 / .mov."),
+			"url_es": _field(_STRING, "Optional Spanish version."),
+			"required": _field(_BOOLEAN, "Default true."),
+			"section": _field(_STRING, "Default Core."),
+			"sort_order": _field(_INTEGER, "Position in the section."),
+			"length_seconds": _field(_INTEGER, "Length, for % watched before anyone has played it."),
+			"min_pct": _field(_INTEGER, "Override the course minimum for this video (0–100)."),
+		},
+		required=("training_type", "title", "url"),
+		mutating=True,
+		title="Add course video",
+	),
+	"update_course_video": _tool(
+		course_video_tools.update_course_video,
+		"MUTATING (default OFF). v0.246.0. Change one course video (by its row id from get_training_curriculum).",
+		{
+			"training_type": _field(_STRING, "The course."),
+			"video": _field(_STRING, "The video's row id."),
+			"title": _field(_STRING, "Title (English)."),
+			"title_es": _field(_STRING, "Title (Spanish)."),
+			"url": _field(_STRING, "YouTube link or /files/… video."),
+			"url_es": _field(_STRING, "Spanish version."),
+			"required": _field(_BOOLEAN, "Required or optional."),
+			"section": _field(_STRING, "Section."),
+			"sort_order": _field(_INTEGER, "Order."),
+			"length_seconds": _field(_INTEGER, "Length."),
+			"min_pct": _field(_INTEGER, "Minimum % override."),
+		},
+		required=("training_type", "video"),
+		mutating=True,
+		title="Update course video",
+	),
+	"remove_course_video": _tool(
+		course_video_tools.remove_course_video,
+		"MUTATING (default OFF). v0.246.0. Take a video off a course. Views already recorded are kept.",
+		{"training_type": _field(_STRING, "The course."), "video": _field(_STRING, "The video's row id.")},
+		required=("training_type", "video"),
+		mutating=True,
+		title="Remove course video",
+	),
+	"record_video_view": _tool(
+		course_video_tools.record_video_view,
+		"MUTATING (default OFF). v0.246.0. One view of a course video as the phone's player counted it: the stretches "
+		"played on screen ([start, end] seconds), length, play time, skips, furthest point, device; measured false = "
+		"opened outside Farm Ops (not measured). Stored as Training Evidence. APPROXIMATE — it cannot tell whether "
+		"anyone was looking. client_request_id makes a retry safe.",
+		{
+			"employee": _field(_STRING, "The trainee."),
+			"training_type": _field(_STRING, "The course."),
+			"video": _field(_STRING, "The video's row id."),
+			"stretches": _field({"type": "array", "items": {"type": "array", "items": {"type": "number"}}}, "[[start, end], …] seconds."),
+			"length_seconds": _field(_INTEGER, "The video's length."),
+			"play_seconds": _field(_INTEGER, "Time spent playing (at any speed)."),
+			"seeks": _field(_INTEGER, "Skips."),
+			"furthest_seconds": _field(_INTEGER, "Furthest point reached."),
+			"started_at": _field(_STRING, "Phone time it started."),
+			"finished_at": _field(_STRING, "Phone time it ended."),
+			"device": _field(_STRING, "Device id."),
+			"measured": _field(_BOOLEAN, "False when opened outside Farm Ops."),
+			"client_request_id": _field(_STRING, "Retry-safe id."),
+		},
+		required=("employee", "training_type", "video"),
+		mutating=True,
+		title="Record video view",
+	),
+	"get_video_progress": _tool(
+		course_video_tools.get_video_progress,
+		"v0.246.0. How much of each course video one person has watched, merged across views and phones: "
+		"'Watched 87% (11:20 of 13:02) · 2 views · 3 skips · reached 12:58', and whether the course minimum is met "
+		"(off unless set). Approximate, and says so.",
+		{"employee": _field(_STRING, "The trainee."), "training_type": _field(_STRING, "The course.")},
+		required=("employee", "training_type"),
+		title="Get video progress",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

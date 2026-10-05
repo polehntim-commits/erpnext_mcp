@@ -1,0 +1,98 @@
+{
+ "actions": [],
+ "creation": "2026-10-05 01:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-05 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "description": "v0.246.0. One video on a course.",
+ "field_order": [
+  "title",
+  "title_es",
+  "url",
+  "url_es",
+  "video_kind",
+  "required",
+  "section",
+  "sort_order",
+  "length_seconds",
+  "min_pct"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "title_es",
+   "fieldtype": "Data",
+   "label": "Title (Spanish)"
+  },
+  {
+   "fieldname": "url",
+   "fieldtype": "Data",
+   "label": "URL",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "A YouTube link or an uploaded video (/files/… .mp4 / .mov)."
+  },
+  {
+   "fieldname": "url_es",
+   "fieldtype": "Data",
+   "label": "Spanish URL",
+   "description": "Optional (decision 46)."
+  },
+  {
+   "fieldname": "video_kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "YouTube\nFile",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "required",
+   "fieldtype": "Check",
+   "label": "Required",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "section",
+   "fieldtype": "Data",
+   "label": "Section",
+   "default": "Core",
+   "in_list_view": 1,
+   "description": "e.g. Core, Vintage films."
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Order"
+  },
+  {
+   "fieldname": "length_seconds",
+   "fieldtype": "Int",
+   "label": "Length (seconds)"
+  },
+  {
+   "fieldname": "min_pct",
+   "fieldtype": "Int",
+   "label": "Minimum % (override)",
+   "description": "Overrides the course minimum for this video. Blank: the course's."
+  }
+ ],
+ "name": "Course Video",
+ "permissions": [],
+ "istable": 1,
+ "editable_grid": 1
+}

@@ -20,6 +20,8 @@
   "regimes",
   "curriculum_section",
   "video_url",
+  "videos",
+  "video_min_pct",
   "curriculum_col",
   "materials_description",
   "detail_section",
@@ -108,6 +110,19 @@
    "fieldtype": "Data",
    "label": "Video URL",
    "options": "URL"
+  },
+  {
+   "fieldname": "videos",
+   "fieldtype": "Table",
+   "label": "Videos",
+   "options": "Course Video",
+   "description": "v0.246.0. The course's videos by section. video_url above is kept for older phones; migrate moves it in here."
+  },
+  {
+   "fieldname": "video_min_pct",
+   "fieldtype": "Int",
+   "label": "Minimum % Watched (required videos)",
+   "description": "v0.246.0. Off when blank (decision 44). The quiz unlocks once met."
   },
   {
    "fieldname": "curriculum_col",

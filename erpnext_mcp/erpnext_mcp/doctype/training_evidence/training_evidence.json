@@ -1,0 +1,200 @@
+{
+ "actions": [],
+ "creation": "2026-10-05 01:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-05 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "description": "v0.246.0. Evidence of training other than the session record: a video view (now) and a quiz attempt (next). One doctype (decision 42). docs/design/training_quiz_and_video.md.",
+ "field_order": [
+  "evidence_kind",
+  "employee",
+  "employee_name",
+  "company",
+  "training_type",
+  "col_a",
+  "started_at",
+  "finished_at",
+  "received_at",
+  "device",
+  "client_request_id",
+  "video_section",
+  "video",
+  "video_title",
+  "watched_pct",
+  "measured",
+  "length_seconds",
+  "play_seconds",
+  "seeks",
+  "furthest_seconds",
+  "stretches"
+ ],
+ "fields": [
+  {
+   "fieldname": "evidence_kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Video view\nQuiz attempt",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "fetch_from": "employee.employee_name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "fetch_from": "employee.company"
+  },
+  {
+   "fieldname": "training_type",
+   "fieldtype": "Link",
+   "label": "Training Type",
+   "options": "Training Type",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started (phone)"
+  },
+  {
+   "fieldname": "finished_at",
+   "fieldtype": "Datetime",
+   "label": "Finished (phone)"
+  },
+  {
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received (server)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "device",
+   "fieldtype": "Data",
+   "label": "Device"
+  },
+  {
+   "fieldname": "client_request_id",
+   "fieldtype": "Data",
+   "label": "Client Request ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "video_section",
+   "fieldtype": "Section Break",
+   "label": "Video view",
+   "depends_on": "eval:doc.evidence_kind=='Video view'"
+  },
+  {
+   "fieldname": "video",
+   "fieldtype": "Data",
+   "label": "Video (row)"
+  },
+  {
+   "fieldname": "video_title",
+   "fieldtype": "Data",
+   "label": "Video Title"
+  },
+  {
+   "fieldname": "watched_pct",
+   "fieldtype": "Float",
+   "label": "% Watched",
+   "description": "Approximate: counted by the app's player while the video was playing on screen. It can't tell whether anyone was looking."
+  },
+  {
+   "fieldname": "measured",
+   "fieldtype": "Select",
+   "label": "Measured",
+   "options": "Approximate\nNot measured"
+  },
+  {
+   "fieldname": "length_seconds",
+   "fieldtype": "Int",
+   "label": "Length (s)"
+  },
+  {
+   "fieldname": "play_seconds",
+   "fieldtype": "Int",
+   "label": "Played (s)"
+  },
+  {
+   "fieldname": "seeks",
+   "fieldtype": "Int",
+   "label": "Skips"
+  },
+  {
+   "fieldname": "furthest_seconds",
+   "fieldtype": "Int",
+   "label": "Furthest (s)"
+  },
+  {
+   "fieldname": "stretches",
+   "fieldtype": "Code",
+   "label": "Stretches Watched",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "name": "Training Evidence",
+ "autoname": "format:TE-{YYYY}-{#####}",
+ "title_field": "employee_name",
+ "track_changes": 1,
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "role": "HR Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Foreman"
+  }
+ ]
+}

@@ -620,6 +620,13 @@ def get_training_curriculum(args: dict) -> ToolResult:
 			if regime in training.REGIME_NOTES
 		}
 		described["retention_note"] = training.retention_note(described["regimes"])
+		# v0.246.0. The course's videos by section; `video_url` stays for older phones.
+		from .. import training_videos
+
+		if training_videos.installed():
+			rows = training_videos.videos(name)
+			described["videos"] = training_videos.by_section(rows)
+			described["video_min_pct"] = int(frappe.db.get_value("Training Type", name, "video_min_pct") or 0) or None
 		described["content_gaps"] = _content_gaps(described)
 		if described["content_gaps"]:
 			described["content_note"] = (

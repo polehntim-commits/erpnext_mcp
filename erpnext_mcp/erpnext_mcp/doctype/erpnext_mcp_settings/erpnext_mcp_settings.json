@@ -1189,6 +1189,11 @@
   "work_notice_supervisor_lead_minutes",
   "work_notice_managers",
   "sop_approver_rules",
+  "allow_add_course_video",
+  "allow_update_course_video",
+  "allow_remove_course_video",
+  "allow_record_video_view",
+  "allow_get_video_progress",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9233,6 +9238,41 @@
    "fieldname": "sop_approver_rules",
    "fieldtype": "Small Text",
    "label": "SOP Approver Rules"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.246.0. Add a video to a course.",
+   "fieldname": "allow_add_course_video",
+   "fieldtype": "Check",
+   "label": "Add Course Video"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.246.0. Change a course video.",
+   "fieldname": "allow_update_course_video",
+   "fieldtype": "Check",
+   "label": "Update Course Video"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.246.0. Take a video off a course (views kept).",
+   "fieldname": "allow_remove_course_video",
+   "fieldtype": "Check",
+   "label": "Remove Course Video"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.246.0. Record one view of a course video as the phone counted it.",
+   "fieldname": "allow_record_video_view",
+   "fieldtype": "Check",
+   "label": "Record Video View"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.246.0. How much of each course video one person watched (approximate).",
+   "fieldname": "allow_get_video_progress",
+   "fieldtype": "Check",
+   "label": "Get Video Progress"
   },
   {
    "default": "1",

@@ -229,6 +229,7 @@ def after_migrate() -> None:
 	_task_due_rule()
 	_daily_check_templates()
 	_go_hold_presets()
+	_course_videos()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -789,6 +790,18 @@ def _go_hold_presets() -> None:
 			print(f"erpnext_mcp: Go / Hold presets seeded OFF: {', '.join(made)}.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: Go / Hold presets were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _course_videos() -> None:
+	"""v0.246.0. Each course's old `video_url` becomes a required Core video. Create-only; never raises."""
+	try:
+		from . import training_videos
+
+		moved = training_videos.migrate_video_urls()
+		if moved:
+			print(f"erpnext_mcp: course videos moved in from video_url: {', '.join(moved)}.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: course videos were not moved in — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.246.0 — 2026-10-04 — course videos and watched amount (approved queue item 7, part 1)
+
+**Migrate needed** (new doctypes Course Video — a table on Training Type — and Training Evidence; a course minimum
+field; five switches). Five new MCP tools (one read on, four writes off). Deploy `docs/deploy/v0.246.0_course_videos.md`.
+Design: `docs/design/training_quiz_and_video.md` §3–4 (approved; decisions 42, 44, 46).
+
+- **Course videos**: a Videos table on each Training Type — title EN/ES, YouTube link or uploaded file, optional
+  Spanish URL (decision 46), required/optional, section ("Core", "Vintage films"), order, length, optional
+  per-video minimum. Migrate moves each course's `video_url` in as a required Core video (create-only);
+  `get_training_curriculum` returns `videos` by section and keeps `video_url` for older phones.
+  `add_course_video`, `update_course_video`, `remove_course_video` (writes, off; views are kept).
+- **Watched amount**: `record_video_view` (write, off — the phone's call) stores the stretches the player counted
+  while playing on screen as **Training Evidence** (one doctype for views and, next release, quiz attempts —
+  decision 42); a retry with the same request id is not a second view; opened outside Farm Ops = not measured.
+  `get_video_progress` (read) merges a person's views across phones: "Watched 87% (8:42 of 10:00) · 2 views · 3
+  skips · reached 8:42", with the footer that it is approximate.
+- **Minimum % is off** unless the course sets one (decision 44); `minimum_met` is reported, nothing is refused — the
+  quiz release reads it.
+
 ## 0.245.0 — 2026-10-04 — SOP review and approval (approved queue item 6)
 
 **Migrate needed** (Compliance Policy: statuses In Review / Approved, covers fields, an Approvers table — new child
