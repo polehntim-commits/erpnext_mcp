@@ -1,0 +1,57 @@
+{
+ "actions": [],
+ "creation": "2026-10-05 00:00:00.000000",
+ "description": "v0.245.0. One person who approves an SOP version, and when they did (decision 40: by the work or position it covers).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "approver",
+  "required",
+  "approved_at",
+  "signing_evidence"
+ ],
+ "fields": [
+  {
+   "fieldname": "approver",
+   "fieldtype": "Link",
+   "label": "Approver",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "required",
+   "fieldtype": "Check",
+   "label": "Required",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "Approved At",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "signing_evidence",
+   "fieldtype": "Link",
+   "label": "Signing Evidence",
+   "options": "Signing Evidence",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "SOP Approver",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

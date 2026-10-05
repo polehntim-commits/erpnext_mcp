@@ -23,6 +23,11 @@
   "supersedes",
   "chain_col",
   "superseded_by",
+  "approval_section",
+  "covers_task_types",
+  "covers_positions",
+  "review_note",
+  "approvers",
   "file_section",
   "attached_document",
   "notes_section",
@@ -86,7 +91,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Draft\nActive\nSuperseded\nRetired"
+   "options": "Draft\nIn Review\nApproved\nActive\nSuperseded\nRetired"
   },
   {
    "fieldname": "dates_section",
@@ -135,6 +140,38 @@
    "fieldtype": "Link",
    "label": "Superseded By",
    "options": "Compliance Policy"
+  },
+  {
+   "fieldname": "approval_section",
+   "fieldtype": "Section Break",
+   "label": "Review and Approval",
+   "collapsible": 0
+  },
+  {
+   "fieldname": "covers_task_types",
+   "fieldtype": "Small Text",
+   "label": "Covers Task Types",
+   "description": "v0.245.0. Farm Task types this SOP governs, one per line (e.g. Spray). Decides who approves it and which work it gates."
+  },
+  {
+   "fieldname": "covers_positions",
+   "fieldtype": "Small Text",
+   "label": "Covers Positions",
+   "description": "v0.245.0. Positions (Designations) this SOP governs, one per line."
+  },
+  {
+   "fieldname": "review_note",
+   "fieldtype": "Small Text",
+   "label": "Changes Requested",
+   "read_only": 1,
+   "depends_on": "review_note"
+  },
+  {
+   "fieldname": "approvers",
+   "fieldtype": "Table",
+   "label": "Approvers",
+   "options": "SOP Approver",
+   "description": "Filled from ERPNext MCP Settings → SOP Approver Rules when submitted for review; editable until someone approves."
   },
   {
    "fieldname": "file_section",

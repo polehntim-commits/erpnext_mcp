@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.245.0 — 2026-10-04 — SOP review and approval (approved queue item 6)
+
+**Migrate needed** (Compliance Policy: statuses In Review / Approved, covers fields, an Approvers table — new child
+SOP Approver; Signing Evidence role Approver; one settings field). No new MCP tools — the generic config tools take
+`kind: "sop"`. Deploy `docs/deploy/v0.245.0_sop_approval.md`. Design: `docs/design/sop_review_and_approval.md`
+(approved; decisions 38, 40).
+
+- **An SOP is a Compliance Policy**: Draft → **In Review** → **Approved** → Superseded (Retired kept). "Active" from
+  before reads as Approved (`in_force`).
+- **Who approves — by what it covers** (decision 40): `covers_task_types` / `covers_positions` on the SOP; ERPNext
+  MCP Settings → **SOP Approver Rules** (`task_type: Spray = …`, `position: … = …`, `* = …`). Submitting fills the
+  Approvers table (editable until someone approves). Every required approver must approve; with none required, any one.
+- **Approval is a person's act**: the Compliance Policy's **Approve** / **Request Changes** buttons in the Desk (the
+  phone follows in an app release). Each approval is a Signing Evidence row (role Approver). There is no MCP
+  approve: `publish_config` kind sop refuses, and `create/update_compliance_policy` refuse status In Review / Approved.
+- **MCP**: `draft_config` / `stage_config` (= submit for review) / `get_config` / `list_configs` / `preview_config`
+  (who would approve, and the open work it covers) with `kind: "sop"`.
+- **New versions**: a Draft names the version it replaces (`supersedes`); the old one stays in force until the new
+  one is approved, then approval writes both ends of the chain.
+- **Gating as a rule**: CCF provider `sop` (`sop.unapproved_count` for a task's type) and a fifth Work Timing preset,
+  **SOP approved before the work it covers** — seeded OFF and Advisory.
+
 ## 0.244.0 — 2026-10-04 — one-time upload links: large files onto one document (approved queue item 8)
 
 **Migrate needed** (new doctype Upload Link; six ERPNext MCP Settings fields). Four new MCP tools (two reads on, two

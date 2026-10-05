@@ -372,6 +372,18 @@ def preset_specs() -> list:
 			[{"field": "task_name", "op": "contains", "value": "burn"}],
 			"Burn piles only when a fire stays where it is put.",
 		),
+		# v0.245.0. Work an SOP covers waits for that SOP's approval. Advisory first (the design note's
+		# risk: a version left In Review must not stop real work by surprise).
+		_preset(
+			"go_hold_sop_approved",
+			"SOP approved before the work it covers",
+			"Go when every SOP covering this task's type is approved; a new version in review does not un-approve "
+			"the one in force.",
+			{"id": "sop_approved", "path": "sop.unapproved_count", "op": "eq", "value": 0,
+			 "reason": {"en": "An SOP for this work is not approved yet", "es": "Un SOP para este trabajo aún no está aprobado"}},
+			[],
+			"Work follows an approved procedure.",
+		),
 		_preset(
 			"go_hold_harvest_heat",
 			"Harvest: heat",

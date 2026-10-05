@@ -1,7 +1,8 @@
 # SOP review and approval
 
-**Status: PROPOSED (2026-10-03). Not approved; nothing built.** Queued after the Reference Library (SOPs cite
-references from day one). Built on the CCF core and the shared config lifecycle.
+**Status: APPROVED (decisions 38, 40) — server side shipped in v0.245.0** (approvers by the work or position the SOP
+covers, Desk approval, `kind: "sop"` in the config tools, the `sop` rule provider). The phone's approvals list,
+"View SOP" and Acknowledge follow in an app release.
 
 **At a glance**
 

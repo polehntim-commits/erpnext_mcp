@@ -770,3 +770,8 @@ import sys as _sys  # noqa: E402
 from . import ccf_providers as _providers  # noqa: E402
 
 _providers.register(_sys.modules[__name__])
+
+# v0.245.0. Whether the SOPs covering a task's type are approved.
+from . import sop as _sop  # noqa: E402
+
+_sop.register(_sys.modules[__name__])

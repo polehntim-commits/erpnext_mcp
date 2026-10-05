@@ -9281,7 +9281,10 @@ TOOLS = {
 				"The User an auditor's question gets forwarded to. Login email or full name; "
 				"one that does not exist is refused rather than silently dropped.",
 			),
-			"status": _field(_STRING, "Draft, Active, Superseded or Retired. Default Active."),
+			"status": _field(_STRING, "Draft, Active, Superseded or Retired. Default Active. An SOP goes In Review through stage_config (kind sop) and is Approved only by a person."),
+			"covers_task_types": _field(_STRING_ARRAY, "v0.245.0. Farm Task types this SOP governs (e.g. Spray) — decides its approvers and gates that work."),
+			"covers_positions": _field(_STRING_ARRAY, "v0.245.0. Positions (Designations) this SOP governs — decides its approvers."),
+			"supersedes": _field(_STRING, "v0.245.0. On a Draft NEW VERSION of an SOP: the version it will replace once approved (the old one stays in force until then)."),
 			"effective_date": _field(_STRING, "When this version took effect, YYYY-MM-DD."),
 			"review_due_date": _field(_STRING, "When it is next due to be read and re-adopted."),
 			"attached_document": _field(
@@ -9318,7 +9321,9 @@ TOOLS = {
 			"company": _COMPANY,
 			"category": _field(_STRING, "New category."),
 			"version": _field(_STRING, "New version."),
-			"status": _field(_STRING, "Draft, Active, Superseded or Retired."),
+			"status": _field(_STRING, "Draft, Active, Superseded or Retired (In Review / Approved are not set here)."),
+			"covers_task_types": _field(_STRING_ARRAY, "v0.245.0. Farm Task types this SOP governs (e.g. Spray) — decides its approvers and gates that work."),
+			"covers_positions": _field(_STRING_ARRAY, "v0.245.0. Positions (Designations) this SOP governs — decides its approvers."),
 			"effective_date": _field(_STRING, "New effective date, YYYY-MM-DD."),
 			"review_due_date": _field(_STRING, "New review date, YYYY-MM-DD."),
 			"policy_owner": _field(_STRING, "New owner. Empty string clears it."),
@@ -17417,10 +17422,10 @@ TOOLS = {
 	"list_configs": _tool(
 		config_tools.list_configs,
 		"v0.234.0. Versions and status of one kind of configuration — every 'flow data, not code' feature "
-		"through one tool. kind: wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule. Routed to the store that kind already uses, so the answer is the "
+		"through one tool. kind: wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop. Routed to the store that kind already uses, so the answer is the "
 		"same one the specific tool gives.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Only this config (wizard / tile / label key, document type, template, rule)."),
 			"status": _field(_STRING, "Phone kinds: Draft, Staged, Published, Superseded, Retired."),
 			"limit": _field(_INTEGER, "At most this many (default 100)."),
@@ -17430,10 +17435,10 @@ TOOLS = {
 	),
 	"get_config": _tool(
 		config_tools.get_config,
-		"v0.234.0. One configuration version — body, provenance, validation — of any kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule). "
+		"v0.234.0. One configuration version — body, provenance, validation — of any kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop). "
 		"Without version, the one in force.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "A version number (phone kinds, extraction configs). Default: in force."),
 		},
@@ -17445,7 +17450,7 @@ TOOLS = {
 		"v0.234.0. What changed between two versions of a configuration, field by field (bookkeeping such "
 		"as timestamps and hashes left out). Leave a version out for the one in force.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Which config."),
 			"from_version": _field(_INTEGER, "The older version (default: in force)."),
 			"to_version": _field(_INTEGER, "The newer version (default: in force)."),
@@ -17460,7 +17465,7 @@ TOOLS = {
 		"form, or a compliance / Work Timing rule over one or more past days — with an UNSAVED patch "
 		"(e.g. a new condition_tree) and compare_to: live side by side.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Which config (rules: rule_id or docname)."),
 			"patch": _field(_OBJECT, "Rules: unsaved field changes to try, e.g. {\"condition_tree\": {…}}."),
 			"as_of": _field(_STRING, "Rules: the (latest) day judged, YYYY-MM-DD. Default today."),
@@ -17484,13 +17489,13 @@ TOOLS = {
 	# ── v0.234.1: one config lifecycle — the generic writes ────────────────
 	"draft_config": _tool(
 		config_tools.draft_config,
-		"MUTATING (default OFF). v0.234.1. Create or change a DRAFT of any configuration kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule), "
+		"MUTATING (default OFF). v0.234.1. Create or change a DRAFT of any configuration kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop), "
 		"routed to the specific tool so every check still runs. Over MCP a draft is always AI-proposed: it "
 		"can be previewed (preview_config) and staged, and it is PUBLISHED ONLY IN THE DESK OR ON THE PHONE "
 		"(Tim's decision 5). Phone kinds and extraction configs take `body`; rules and templates take "
 		"`fields` (the same arguments their create/propose/update tools take).",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Which config (key, document type, template name or rule_id)."),
 			"body": _field(_OBJECT, "Phone kinds / extraction config: the whole body."),
 			"fields": _field(_OBJECT, "Rules and templates: the fields to set, e.g. {\"condition_tree\": {…}}."),
@@ -17506,7 +17511,7 @@ TOOLS = {
 		"effect for them (decision 4). Phone kinds: users / roles / companies; extraction configs: users. "
 		"Rules and templates have no staged audience yet.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "The draft's version."),
 			"change_note": _field(_STRING, "Why (phone kinds)."),
@@ -17525,7 +17530,7 @@ TOOLS = {
 		"5, for every kind. Rules: approve; inspection templates: approve; phone kinds and extraction: "
 		"publish the version named.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "Phone kinds / extraction: the version."),
 			"change_note": _field(_STRING, "Why (phone kinds)."),
@@ -17539,7 +17544,7 @@ TOOLS = {
 		"MUTATING (default OFF). v0.234.1. Back to the previous published version (phone kinds), or `to: "
 		"none` to retire a phone config or switch off a rule / inspection template. History is kept.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
 			"key": _field(_STRING, "Which config."),
 			"to": _field(_STRING, "'none' to retire / deactivate instead of rolling back."),
 			"change_note": _field(_STRING, "Why."),

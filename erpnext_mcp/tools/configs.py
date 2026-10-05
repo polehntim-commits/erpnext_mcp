@@ -43,6 +43,9 @@ KINDS = {
 	# v0.235.0. Payroll settings (decision 9): stricter — publish, stage and roll back are a
 	# person's, in the Desk; a preview reruns a real pay period live and staged.
 	"overtime_rule": {"label": "Overtime rule", "store": "Farm Config Version (Payroll Setting)", "key": "overtime_rule"},
+	# v0.245.0. An SOP version (Compliance Policy). Stage = submit for review; approval (publish) is a
+	# person's, in the Desk or on the phone — never over MCP.
+	"sop": {"label": "SOP", "store": "Compliance Policy", "key": "policy docname"},
 }
 PAYROLL_KINDS = ("overtime_rule",)
 PHONE_KINDS = ("wizard", "tile", "label_profile")
@@ -75,6 +78,13 @@ def list_configs(args: dict) -> ToolResult:
 		data = _data(sessions.list_inspection_templates({"limit": as_int(args, "limit", 100)}))
 	elif kind == "task_template":
 		data = _data(tasktemplates.list_farm_task_templates({"limit": as_int(args, "limit", 100)}))
+	elif kind == "sop":
+		from . import evidence
+
+		inner = {"limit": as_int(args, "limit", 100)}
+		if as_str(args, "status"):
+			inner["status"] = as_str(args, "status")
+		data = _data(evidence.list_compliance_policies(inner))
 	else:
 		inner = {"limit": as_int(args, "limit", 100)}
 		if kind == "trigger_rule":
@@ -109,6 +119,14 @@ def _get(kind: str, key: str, version) -> dict:
 		return _data(sessions.get_inspection_template({"template": key}))
 	if kind == "task_template":
 		return _data(tasktemplates.get_farm_task_template({"template": key}))
+	if kind == "sop":
+		from .. import sop
+		from . import evidence
+
+		data = _data(evidence.get_compliance_policy({"policy": key}))
+		if sop.installed():
+			data["review"] = sop.describe(key)
+		return data
 	if version not in (None, ""):
 		# A rule's versions are rows sharing a rule_id; `superseded_by` links them.
 		live = compliance_rules.resolve(key)
@@ -259,6 +277,8 @@ def preview_config(args: dict) -> ToolResult:
 		data = _data(moments.preview_extraction_config(inner))
 	elif kind == "inspection_template":
 		data = _data(sessions.preview_inspection_template({"template": key, **({"language": args["language"]} if "language" in args else {})}))
+	elif kind == "sop":
+		data = _sop_preview(key)
 	else:
 		inner = {k: args[k] for k in ("template_body", "language", "context", "answers") if k in args}
 		if key:
@@ -266,6 +286,29 @@ def preview_config(args: dict) -> ToolResult:
 		data = _data(tasktemplates.preview_farm_task_template(inner))
 	return ToolResult(data={"kind": kind, "key": key or None, "preview": data, "written": False},
 	                  summary=f"preview of {kind} {key or ''} (nothing written)".strip())
+
+
+def _sop_preview(key: str) -> dict:
+	"""Who would approve it, and which open work it would gate while unapproved."""
+	from .. import go_hold, settings, sop
+
+	if not key or not frappe.db.exists("Compliance Policy", key):
+		raise ToolError("key (the SOP's Compliance Policy) is required.")
+	policy = dict(frappe.get_doc("Compliance Policy", key).as_dict())
+	_rules, problems = sop.parse_rules(settings.get_settings().get("sop_approver_rules") or "")
+	types = sop._lines(policy.get("covers_task_types"))
+	open_tasks = frappe.db.get_all(
+		"Farm Task", filters={"task_type": ("in", types or ["—"]), "state": ("in", list(go_hold.OPEN_STATES))},
+		fields=["name", "task_name", "task_type", "state"], limit=200,
+	) if types else []
+	return {
+		"review": sop.describe(key),
+		"would_be_approved_by": [r.approver for r in policy.get("approvers") or []] if policy.get("approvers")
+		else sop.approvers_for(policy),
+		"approver_rule_problems": problems,
+		"open_work_it_covers": [dict(r) for r in open_tasks or []],
+		"note": "Approval is a person's act in the Desk or on the phone. Nothing was written.",
+	}
 
 
 def describe_kinds() -> list:
@@ -352,6 +395,13 @@ def draft_config(args: dict) -> ToolResult:
 		data = _data(rules.propose_compliance_rule(inner))
 	elif kind == "inspection_template":
 		data = _data(sessions.update_inspection_template({**fields, "name": key}))
+	elif kind == "sop":
+		from . import evidence
+
+		if frappe.db.exists("Compliance Policy", key):
+			data = _data(evidence.update_compliance_policy({**fields, "policy": key}))
+		else:
+			data = _data(evidence.create_compliance_policy({"status": "Draft", **fields, "policy_name": key}))
 	else:
 		exists = bool(frappe.db.exists("Farm Task Template", key))
 		if exists:
@@ -382,6 +432,15 @@ def stage_config(args: dict) -> ToolResult:
 			 "users": args.get("users") or [], "roles": args.get("roles") or [], "companies": args.get("companies") or []}))
 	elif kind == "extraction_config":
 		data = _data(moments.stage_extraction_config({"document_type": key, "version": version, "users": args.get("users") or []}))
+	elif kind == "sop":
+		from .. import sop
+
+		if not frappe.db.exists("Compliance Policy", key):
+			raise ToolError(f"no Compliance Policy {key!r}. Nothing was changed.")
+		try:
+			data = sop.submit(key, frappe.session.user)
+		except (ValueError, PermissionError) as exc:
+			raise ToolError(f"{exc} Nothing was changed.") from None
 	else:
 		raise ToolError(
 			f"{kind} has no staged audience yet: it goes live when approved in the Desk. Staging rules to "
@@ -410,6 +469,11 @@ def publish_config(args: dict) -> ToolResult:
 		data = _data(rules.approve_compliance_rule({"name": key}))
 	elif kind == "inspection_template":
 		data = _data(sessions.approve_inspection_template({"name": key}))
+	elif kind == "sop":
+		raise ToolError(
+			"an SOP is approved only by its approvers, in the Desk (Approve on the Compliance Policy) or on the "
+			"phone — never over MCP, whoever drafted it. Nothing was approved."
+		)
 	else:
 		raise ToolError("a task template goes live when it is enabled in the Desk. Nothing was changed.")
 	return ToolResult(data={"kind": kind, "key": key, "published": data}, summary=f"published {kind} {key}",

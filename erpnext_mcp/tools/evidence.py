@@ -78,6 +78,9 @@ _POLICY_FIELDS = (
 	"review_due_date",
 	"supersedes",
 	"superseded_by",
+	# v0.245.0. What an SOP covers (decides approvers; gates that work).
+	"covers_task_types",
+	"covers_positions",
 	"attached_document",
 	"notes",
 	"creation",
@@ -328,11 +331,14 @@ def _describe_policy(row: dict, today: str = "", attachments=None) -> dict:
 		"company": row.get("company") or None,
 		"policy_owner": row.get("policy_owner") or None,
 		"status": row.get("status") or "Active",
-		"in_force": (row.get("status") or "Active") == "Active",
+		# v0.245.0. "Approved" (through review) is in force, as "Active" (before review existed) is.
+		"in_force": (row.get("status") or "Active") in ("Active", "Approved"),
 		"effective_date": _date(row.get("effective_date")),
 		"review_due_date": review,
 		"days_until_review": days,
-		"review_overdue": bool(overdue and (row.get("status") or "Active") == "Active"),
+		"review_overdue": bool(overdue and (row.get("status") or "Active") in ("Active", "Approved")),
+		"covers_task_types": [t for t in str(row.get("covers_task_types") or "").splitlines() if t.strip()],
+		"covers_positions": [t for t in str(row.get("covers_positions") or "").splitlines() if t.strip()],
 		"supersedes": row.get("supersedes") or None,
 		"superseded_by": row.get("superseded_by") or None,
 		"attached_document": row.get("attached_document") or None,
@@ -707,6 +713,24 @@ def _audits_citing(policy: str) -> list:
 	]
 
 
+def _refuse_review_statuses(status: str) -> str:
+	"""v0.245.0. In Review is reached through stage_config (kind sop); Approved only by a person."""
+	if str(status).strip() in ("In Review", "Approved"):
+		raise ToolError(
+			f"status {status!r} is not set directly: submit an SOP for review with stage_config kind 'sop'; "
+			"approval is a person's act in the Desk or on the phone (there is no MCP approve). Nothing was changed."
+		)
+	return status
+
+
+def _newline_list(value) -> str:
+	if isinstance(value, (list, tuple)):
+		items = value
+	else:
+		items = str(value or "").replace(",", "\n").splitlines()
+	return "\n".join(str(i).strip() for i in items if str(i).strip())
+
+
 def create_compliance_policy(args: dict) -> ToolResult:
 	"""Register one written procedure at one version."""
 	_require(POLICY)
@@ -736,7 +760,21 @@ def create_compliance_policy(args: dict) -> ToolResult:
 	doc.category = as_choice(POLICY, "category", category, "category")
 	status = as_str(args, "status")
 	if status:
-		doc.status = as_choice(POLICY, "status", status, "status")
+		doc.status = as_choice(POLICY, "status", _refuse_review_statuses(status), "status")
+	# v0.245.0. What the SOP covers decides who approves it (decision 40).
+	for key in ("covers_task_types", "covers_positions"):
+		if key in args and compat.has_field(POLICY, key):
+			doc.set(key, _newline_list(args.get(key)))
+	# v0.245.0. A DRAFT NEW VERSION names the version it will replace; the old one stays in force until
+	# the new one is approved, and approval writes the other end of the chain (`sop.approve`). For an
+	# immediate replacement without review, supersede_compliance_policy is unchanged.
+	previous = as_str(args, "supersedes")
+	if previous:
+		if not frappe.db.exists(POLICY, previous):
+			raise ToolError(f"supersedes: no Compliance Policy {previous!r}. Nothing was created.")
+		if (doc.status or "Draft") != "Draft":
+			raise ToolError("supersedes is set on a Draft new version only. Nothing was created.")
+		doc.supersedes = previous
 
 	doc.insert(ignore_permissions=True)
 	attached = _attach_the_procedure(args, doc, tail="The policy WAS created.")
@@ -862,7 +900,12 @@ def update_compliance_policy(args: dict) -> ToolResult:
 	for key in ("category", "status"):
 		if key in args:
 			value = as_str(args, key)
+			if key == "status" and value:
+				_refuse_review_statuses(value)
 			_stage(changes, doc, key, as_choice(POLICY, key, value, key) if value else "")
+	for key in ("covers_task_types", "covers_positions"):
+		if key in args and compat.has_field(POLICY, key):
+			_stage(changes, doc, key, _newline_list(args.get(key)))
 	if "policy_owner" in args:
 		_stage(changes, doc, "policy_owner", _resolve_user(as_str(args, "policy_owner")) or "")
 	if "company" in args:

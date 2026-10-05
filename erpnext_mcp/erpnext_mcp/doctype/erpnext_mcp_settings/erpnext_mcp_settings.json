@@ -1188,6 +1188,7 @@
   "work_notice_cutoff",
   "work_notice_supervisor_lead_minutes",
   "work_notice_managers",
+  "sop_approver_rules",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9226,6 +9227,12 @@
    "fieldname": "work_notice_managers",
    "fieldtype": "Small Text",
    "label": "Escalate To"
+  },
+  {
+   "description": "v0.245.0. Who approves an SOP, by what it covers (decision 40). One rule per line: 'task_type: Spray = tim@example.com', 'position: Tractor Operator = a@x, b@y', '* = tim@example.com' (everything else). Applied when an SOP is submitted for review.",
+   "fieldname": "sop_approver_rules",
+   "fieldtype": "Small Text",
+   "label": "SOP Approver Rules"
   },
   {
    "default": "1",

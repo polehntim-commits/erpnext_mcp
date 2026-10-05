@@ -779,7 +779,7 @@ def _daily_check_templates() -> None:
 
 
 def _go_hold_presets() -> None:
-	"""v0.240.0. The four Work Timing presets (pruning / canker, spray wind, burning, harvest heat),
+	"""v0.240.0. The Work Timing presets (pruning / canker, spray wind, burning, harvest heat; v0.245.0: SOP approved),
 	seeded OFF for a person to approve in the Desk (decision 5). Create-only; never raises."""
 	try:
 		from . import go_hold
