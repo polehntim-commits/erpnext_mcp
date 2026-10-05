@@ -34,7 +34,9 @@ from . import compat, flags
 DOCTYPE = "Farm Config Version"
 #: v0.235.0: "Payroll Setting" — payroll settings as versioned data (`payroll_settings`), never served
 #: to a phone and published only by a person.
-KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "Payroll Setting": "payroll_setting"}
+#: v0.247.0: "Quiz" — a course's knowledge check (`training_quiz`), served with the course, not as a phone config.
+KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "Payroll Setting": "payroll_setting",
+         "Quiz": "quiz"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -170,6 +172,10 @@ def _validator(kind: str):
 		from . import payroll_settings
 
 		return payroll_settings.validate
+	if kind == "Quiz":
+		from . import training_quiz
+
+		return training_quiz.validate
 	from . import label_compliance
 
 	return label_compliance.validate

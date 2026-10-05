@@ -1194,6 +1194,10 @@
   "allow_remove_course_video",
   "allow_record_video_view",
   "allow_get_video_progress",
+  "knowledge_checks_enabled",
+  "allow_submit_quiz_attempt",
+  "allow_mark_short_answers",
+  "allow_get_quiz_results",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9273,6 +9277,34 @@
    "fieldname": "allow_get_video_progress",
    "fieldtype": "Check",
    "label": "Get Video Progress"
+  },
+  {
+   "default": "0",
+   "description": "v0.247.0. Knowledge checks (course quizzes): off until ticked; nothing shows until a quiz is published for a course.",
+   "fieldname": "knowledge_checks_enabled",
+   "fieldtype": "Check",
+   "label": "Knowledge Checks"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.247.0. Record a knowledge-check attempt (the phone's call).",
+   "fieldname": "allow_submit_quiz_attempt",
+   "fieldtype": "Check",
+   "label": "Submit Quiz Attempt"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.247.0. Mark an attempt's short answers.",
+   "fieldname": "allow_mark_short_answers",
+   "fieldtype": "Check",
+   "label": "Mark Short Answers"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.247.0. Knowledge-check attempts, results and sign-off status.",
+   "fieldname": "allow_get_quiz_results",
+   "fieldtype": "Check",
+   "label": "Get Quiz Results"
   },
   {
    "default": "1",

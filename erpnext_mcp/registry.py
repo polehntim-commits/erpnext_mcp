@@ -184,6 +184,7 @@ from .tools import card_prints as card_print_tools
 from .tools import configs as config_tools
 from .tools import contacts as contact_tools
 from .tools import course_videos as course_video_tools
+from .tools import quizzes as quiz_tools
 from .tools import references as reference_tools
 from .tools import gohold as go_hold_tools
 from .tools import stages as stage_tools
@@ -17423,10 +17424,10 @@ TOOLS = {
 	"list_configs": _tool(
 		config_tools.list_configs,
 		"v0.234.0. Versions and status of one kind of configuration — every 'flow data, not code' feature "
-		"through one tool. kind: wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop. Routed to the store that kind already uses, so the answer is the "
+		"through one tool. kind: wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz. Routed to the store that kind already uses, so the answer is the "
 		"same one the specific tool gives.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Only this config (wizard / tile / label key, document type, template, rule)."),
 			"status": _field(_STRING, "Phone kinds: Draft, Staged, Published, Superseded, Retired."),
 			"limit": _field(_INTEGER, "At most this many (default 100)."),
@@ -17436,10 +17437,10 @@ TOOLS = {
 	),
 	"get_config": _tool(
 		config_tools.get_config,
-		"v0.234.0. One configuration version — body, provenance, validation — of any kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop). "
+		"v0.234.0. One configuration version — body, provenance, validation — of any kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz). "
 		"Without version, the one in force.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "A version number (phone kinds, extraction configs). Default: in force."),
 		},
@@ -17451,7 +17452,7 @@ TOOLS = {
 		"v0.234.0. What changed between two versions of a configuration, field by field (bookkeeping such "
 		"as timestamps and hashes left out). Leave a version out for the one in force.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"from_version": _field(_INTEGER, "The older version (default: in force)."),
 			"to_version": _field(_INTEGER, "The newer version (default: in force)."),
@@ -17466,7 +17467,7 @@ TOOLS = {
 		"form, or a compliance / Work Timing rule over one or more past days — with an UNSAVED patch "
 		"(e.g. a new condition_tree) and compare_to: live side by side.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Which config (rules: rule_id or docname)."),
 			"patch": _field(_OBJECT, "Rules: unsaved field changes to try, e.g. {\"condition_tree\": {…}}."),
 			"as_of": _field(_STRING, "Rules: the (latest) day judged, YYYY-MM-DD. Default today."),
@@ -17490,13 +17491,13 @@ TOOLS = {
 	# ── v0.234.1: one config lifecycle — the generic writes ────────────────
 	"draft_config": _tool(
 		config_tools.draft_config,
-		"MUTATING (default OFF). v0.234.1. Create or change a DRAFT of any configuration kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop), "
+		"MUTATING (default OFF). v0.234.1. Create or change a DRAFT of any configuration kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz), "
 		"routed to the specific tool so every check still runs. Over MCP a draft is always AI-proposed: it "
 		"can be previewed (preview_config) and staged, and it is PUBLISHED ONLY IN THE DESK OR ON THE PHONE "
 		"(Tim's decision 5). Phone kinds and extraction configs take `body`; rules and templates take "
 		"`fields` (the same arguments their create/propose/update tools take).",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Which config (key, document type, template name or rule_id)."),
 			"body": _field(_OBJECT, "Phone kinds / extraction config: the whole body."),
 			"fields": _field(_OBJECT, "Rules and templates: the fields to set, e.g. {\"condition_tree\": {…}}."),
@@ -17512,7 +17513,7 @@ TOOLS = {
 		"effect for them (decision 4). Phone kinds: users / roles / companies; extraction configs: users. "
 		"Rules and templates have no staged audience yet.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "The draft's version."),
 			"change_note": _field(_STRING, "Why (phone kinds)."),
@@ -17531,7 +17532,7 @@ TOOLS = {
 		"5, for every kind. Rules: approve; inspection templates: approve; phone kinds and extraction: "
 		"publish the version named.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "Phone kinds / extraction: the version."),
 			"change_note": _field(_STRING, "Why (phone kinds)."),
@@ -17545,7 +17546,7 @@ TOOLS = {
 		"MUTATING (default OFF). v0.234.1. Back to the previous published version (phone kinds), or `to: "
 		"none` to retire a phone config or switch off a rule / inspection template. History is kept.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"to": _field(_STRING, "'none' to retire / deactivate instead of rolling back."),
 			"change_note": _field(_STRING, "Why."),
@@ -17775,6 +17776,52 @@ TOOLS = {
 		{"employee": _field(_STRING, "The trainee."), "training_type": _field(_STRING, "The course.")},
 		required=("employee", "training_type"),
 		title="Get video progress",
+	),
+	# ── v0.247.0: knowledge checks ──────────────────────────────────────────
+	"submit_quiz_attempt": _tool(
+		quiz_tools.submit_quiz_attempt,
+		"MUTATING (default OFF). v0.247.0. One knowledge-check attempt (the phone's call): graded here against the quiz "
+		"version it was taken on; short answers wait for a trainer; the video minimum (if the course sets one) is "
+		"recorded. Passing is not completing: a pass becomes 'Ready for sign-off' for a person to sign. Retry-safe with "
+		"client_request_id.",
+		{
+			"employee": _field(_STRING, "The trainee."),
+			"training_type": _field(_STRING, "The course."),
+			"answers": _field({"type": "object"}, "{question id: choice id | true/false | text}."),
+			"version": _field(_INTEGER, "The quiz version it was taken on (default the published one)."),
+			"started_at": _field(_STRING, "Phone time started (official)."),
+			"finished_at": _field(_STRING, "Phone time finished (official)."),
+			"device": _field(_STRING, "Device id."),
+			"client_request_id": _field(_STRING, "Retry-safe id."),
+		},
+		required=("employee", "training_type", "answers"),
+		mutating=True,
+		title="Submit quiz attempt",
+	),
+	"mark_short_answers": _tool(
+		quiz_tools.mark_short_answers,
+		"MUTATING (default OFF). v0.247.0. A trainer marks an attempt's short answers right or wrong; the score and "
+		"result follow, and a pass becomes Ready for sign-off.",
+		{
+			"attempt": _field(_STRING, "The Training Evidence (TE-…)."),
+			"marks": _field({"type": "object"}, "{question id: true | false}."),
+		},
+		required=("attempt", "marks"),
+		mutating=True,
+		title="Mark short answers",
+	),
+	"get_quiz_results": _tool(
+		quiz_tools.get_quiz_results,
+		"v0.247.0. Knowledge-check attempts with score, result, what was missed (with the explanation), short answers "
+		"awaiting marking, the video-minimum result and sign-off. status: 'ready' (for sign-off), 'marking', Passed, "
+		"Failed. Sign-off itself is a person's act in the Desk or on the phone.",
+		{
+			"employee": _field(_STRING, "One person."),
+			"training_type": _field(_STRING, "One course."),
+			"status": _field(_STRING, "ready, marking, Passed or Failed."),
+			"limit": _field(_INTEGER, "Default 100."),
+		},
+		title="Get quiz results",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

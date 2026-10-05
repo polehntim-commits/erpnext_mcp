@@ -1,6 +1,6 @@
 # Training knowledge checks and in-app course video (D-6C Dozer Operator first)
 
-**Status: PROPOSED (2026-10-03). Not approved; nothing built.** Version numbers are assigned at build (the
+**Status: APPROVED (decisions 42–46) — server side shipped: course videos and watched amount in v0.246.0, knowledge checks and sign-off in v0.247.0.** The phone's player, quiz screens and sign-off follow in an app release.
 earlier note's v0.230.0 / 0.37.0 went to durable task photos). Quiz content comes from Tim's separate document.
 Updated for the shared config lifecycle and the CCF core.
 

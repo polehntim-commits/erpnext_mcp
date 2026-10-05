@@ -12,7 +12,7 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "description": "v0.246.0. Evidence of training other than the session record: a video view (now) and a quiz attempt (next). One doctype (decision 42). docs/design/training_quiz_and_video.md.",
+ "description": "v0.246.0. Evidence of training other than the session record: a video view (now) and a quiz attempt (v0.247.0). One doctype (decision 42). docs/design/training_quiz_and_video.md.",
  "field_order": [
   "evidence_kind",
   "employee",
@@ -34,7 +34,24 @@
   "play_seconds",
   "seeks",
   "furthest_seconds",
-  "stretches"
+  "stretches",
+  "quiz_section",
+  "quiz_version",
+  "score_pct",
+  "result",
+  "short_pending",
+  "video_minimum",
+  "quiz_col",
+  "signoff_status",
+  "signed_off_by",
+  "signed_off_at",
+  "signing_evidence",
+  "override_reason",
+  "training_record",
+  "marked_by",
+  "answers",
+  "grading",
+  "marks"
  ],
  "fields": [
   {
@@ -162,6 +179,121 @@
    "fieldname": "stretches",
    "fieldtype": "Code",
    "label": "Stretches Watched",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quiz_section",
+   "fieldtype": "Section Break",
+   "label": "Quiz attempt",
+   "depends_on": "eval:doc.evidence_kind=='Quiz attempt'"
+  },
+  {
+   "fieldname": "quiz_version",
+   "fieldtype": "Int",
+   "label": "Quiz Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "score_pct",
+   "fieldtype": "Float",
+   "label": "Score %",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Select",
+   "label": "Result",
+   "options": "\nPassed\nFailed\nAwaiting marking",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "short_pending",
+   "fieldtype": "Int",
+   "label": "Short Answers to Mark",
+   "read_only": 1
+  },
+  {
+   "fieldname": "video_minimum",
+   "fieldtype": "Select",
+   "label": "Video Minimum",
+   "options": "\nOff\nMet\nNot met",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quiz_col",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "signoff_status",
+   "fieldtype": "Select",
+   "label": "Sign-off",
+   "options": "\nReady for sign-off\nSigned off",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "signed_off_by",
+   "fieldtype": "Link",
+   "label": "Signed Off By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "signed_off_at",
+   "fieldtype": "Datetime",
+   "label": "Signed Off At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "signing_evidence",
+   "fieldtype": "Link",
+   "label": "Signing Evidence",
+   "options": "Signing Evidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "override_reason",
+   "fieldtype": "Small Text",
+   "label": "Video Minimum Override Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "training_record",
+   "fieldtype": "Link",
+   "label": "Training Record",
+   "options": "Employee Training Record",
+   "read_only": 1
+  },
+  {
+   "fieldname": "marked_by",
+   "fieldtype": "Link",
+   "label": "Marked By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "answers",
+   "fieldtype": "Code",
+   "label": "Answers",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "grading",
+   "fieldtype": "Code",
+   "label": "Grading",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "marks",
+   "fieldtype": "Code",
+   "label": "Trainer's Marks",
    "options": "JSON",
    "read_only": 1
   }

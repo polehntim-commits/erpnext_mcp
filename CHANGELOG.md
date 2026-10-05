@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.247.0 — 2026-10-04 — knowledge checks and trainer sign-off (approved queue item 7, part 2)
+
+**Migrate needed** (Farm Config Version kind Quiz; quiz-attempt fields on Training Evidence; Signing Evidence role
+Trainer; four settings fields). Three new MCP tools (one read on, two writes off). Deploy
+`docs/deploy/v0.247.0_knowledge_checks.md`. Design: `docs/design/training_quiz_and_video.md` §2 (approved; decisions
+42–45).
+
+- **A quiz is a config kind** (`kind: "quiz"` in `draft_config` / `preview_config` / `get_config` / `list_configs`;
+  key = the course in lower_snake_case): multiple choice, true/false, short answer; EN/ES; explanations; pass mark
+  (default 80%), shuffle (default on, decision 43), retakes; `topics_covered` for the training record. Drafted over
+  MCP, **published by a person** in the Desk (decision 5). `preview_config` shows the answer key and what blocks
+  publishing (no Spanish, an answer that is not a choice, …).
+- **`submit_quiz_attempt`** (write, off — the phone's call): graded here against the version it was taken on;
+  retry-safe. Short answers wait — **`mark_short_answers`** (write, off). The video minimum (v0.246.0, off unless
+  the course sets one) is recorded on the attempt, not enforced (decision 44).
+- **Passing is not completing**: a pass with every short answer marked is **Ready for sign-off**. A person signs off
+  in the Desk (Training Evidence → **Sign Off**; the phone follows) — decision 45 — writing Signing Evidence (role
+  Trainer) and filing the **Employee Training Record** with them as reviewer. Below the video minimum it needs a
+  reason. No MCP sign-off.
+- **`get_quiz_results`** (read): attempts by person, course or status (`ready`, `marking`, Passed, Failed), with
+  what was missed and its explanation.
+- Off by default: **Knowledge Checks** in ERPNext MCP Settings.
+
 ## 0.246.0 — 2026-10-04 — course videos and watched amount (approved queue item 7, part 1)
 
 **Migrate needed** (new doctypes Course Video — a table on Training Type — and Training Evidence; a course minimum

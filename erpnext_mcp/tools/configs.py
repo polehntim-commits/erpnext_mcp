@@ -46,9 +46,11 @@ KINDS = {
 	# v0.245.0. An SOP version (Compliance Policy). Stage = submit for review; approval (publish) is a
 	# person's, in the Desk or on the phone — never over MCP.
 	"sop": {"label": "SOP", "store": "Compliance Policy", "key": "policy docname"},
+	# v0.247.0. A course's knowledge check; key = the course name in lower_snake_case.
+	"quiz": {"label": "Quiz", "store": "Farm Config Version (Quiz)", "key": "course key, e.g. d_6c_dozer_operator"},
 }
 PAYROLL_KINDS = ("overtime_rule",)
-PHONE_KINDS = ("wizard", "tile", "label_profile")
+PHONE_KINDS = ("wizard", "tile", "label_profile", "quiz")
 RULE_KINDS = ("compliance_rule", "trigger_rule")
 MAX_PREVIEW_DAYS = 31
 
@@ -279,6 +281,8 @@ def preview_config(args: dict) -> ToolResult:
 		data = _data(sessions.preview_inspection_template({"template": key, **({"language": args["language"]} if "language" in args else {})}))
 	elif kind == "sop":
 		data = _sop_preview(key)
+	elif kind == "quiz":
+		data = _quiz_preview(key, args.get("body"), args.get("version"))
 	else:
 		inner = {k: args[k] for k in ("template_body", "language", "context", "answers") if k in args}
 		if key:
@@ -308,6 +312,32 @@ def _sop_preview(key: str) -> dict:
 		"approver_rule_problems": problems,
 		"open_work_it_covers": [dict(r) for r in open_tasks or []],
 		"note": "Approval is a person's act in the Desk or on the phone. Nothing was written.",
+	}
+
+
+def _quiz_preview(key: str, body, version) -> dict:
+	"""The quiz as a trainee would get it, its answer key, and what blocks publishing."""
+	from .. import phone_config, training_quiz
+
+	if not isinstance(body, dict):
+		doc = phone_config.doc_of(training_quiz.KIND, key, version)
+		if not doc:
+			raise ToolError(f"no quiz {key!r}; pass body to preview an unsaved one.")
+		body = phone_config.body_of(doc)
+	report = training_quiz.validate(body, key, for_publish=True)
+	questions = body.get("questions") or []
+	return {
+		"title": body.get("title"),
+		"training_type": body.get("training_type"),
+		"pass_pct": body.get("pass_pct", 80),
+		"shuffle": body.get("shuffle", True),
+		"retakes": body.get("retakes", True),
+		"questions": len(questions),
+		"auto_graded": sum(1 for q in questions if q.get("type") != "short"),
+		"short_answers": sum(1 for q in questions if q.get("type") == "short"),
+		"answer_key": {str(q.get("id")): q.get("answer") for q in questions},
+		"publish_blockers": report["errors"],
+		"warnings": report["warnings"],
 	}
 
 
@@ -369,6 +399,25 @@ def draft_config(args: dict) -> ToolResult:
 		return ToolResult(
 			data={"kind": kind, "key": kind, "draft": phone_config.describe(doc), "authored_by": "AI-proposed",
 			      "next": "preview_config (it reruns a pay period live and staged); a person publishes it in the Desk."},
+			summary=f"drafted {doc.name}",
+			docstatus_delta="0 → 0 (draft)",
+		)
+	if kind == "quiz":
+		from .. import phone_config, training_quiz
+
+		body = args.get("body")
+		if not isinstance(body, dict):
+			raise ToolError("body is the quiz: {training_type, title, pass_pct, topics_covered, questions: [...]}.")
+		if body.get("training_type"):
+			key = training_quiz.key_for(body["training_type"])
+		try:
+			doc, _report = phone_config.save_draft(training_quiz.KIND, key, {"schema_version": 1, "key": key, **body},
+			                                       notes or "Drafted through draft_config.", "AI-proposed")
+		except phone_config.ConfigError as exc:
+			raise ToolError(str(exc)) from None
+		return ToolResult(
+			data={"kind": kind, "key": key, "draft": phone_config.describe(doc), "authored_by": "AI-proposed",
+			      "next": "preview_config to check it; a person publishes it in the Desk (decision 5)."},
 			summary=f"drafted {doc.name}",
 			docstatus_delta="0 → 0 (draft)",
 		)
