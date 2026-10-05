@@ -1436,7 +1436,12 @@ def start_task(user: str, task=None, task_assignment=None, tapped_at=None, clien
 	if when:
 		inner["started_at"] = when
 	result = fieldwork.start_task_via_mobile(inner)
-	return _with_time_note(shape.task(result.data.get("task") or {}, result.data.get("assignment") or {}), note)
+	payload = shape.task(result.data.get("task") or {}, result.data.get("assignment") or {})
+	# v0.250.0. What the start said about Go / Hold, and the stage question for the block (decision 27).
+	for key, as_key in (("go_hold", "go_hold_at_start"), ("stage_prompt", "stage_prompt")):
+		if result.data.get(key):
+			payload[as_key] = result.data[key]
+	return _with_time_note(payload, note)
 
 
 # ── 7. complete_task_via_mobile ─────────────────────────────────────────────
@@ -6293,6 +6298,10 @@ ATTACHMENT_PARENTS = {
 	# the accounts that hold those roles and does not manufacture a permission
 	# for anybody else.
 	discipline_tools.DISCIPLINE: True,
+	# v0.250.0. An SOP's own document (Compliance Policy), for "View SOP" and for an approver
+	# reviewing it on the phone. `False` — no HR gate: a procedure is a definition, like a
+	# template, and `files.list_attachments` still honours the policy's own read permission.
+	COMPLIANCE_POLICY: False,
 	# v0.98.0. The SOP a standing job carries, readable by whoever is doing the
 	# job. `False` — no HR gate — because a Farm Task Template is not a fact
 	# about a person: it is what this farm does when it cleans a cabin, and the
@@ -24574,3 +24583,261 @@ def save_business_card(
 		str(client_request_id or ""),
 		_list_argument(photos, "photos"),
 	)
+
+
+# ── v0.250.0. The phone's doors to the approved queue (items 5–7) ───────────
+# Go / Hold, crop stage, suggested work, no-work notices, SOP review and the course
+# player. Each answers for the caller's own Employee where it is "mine"; the ones
+# that decide something for others check the same roles their MCP tools do.
+def _task_in_scope(user: str, task) -> str:
+	allowed = guard.require_scope(user)
+	return guard.require_scoped_doc("Farm Task", task, "task", allowed)
+
+
+def _require_roles(user: str, roles, what: str) -> None:
+	if user == "Administrator" or set(frappe.get_roles(user) or []) & set(roles):
+		return
+	raise frappe.PermissionError(f"{what} is restricted to {', '.join(roles)}.")
+
+
+def _clean_error(exc) -> None:
+	from ..errors import ToolError
+
+	raise ToolError(str(exc))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("override_task_hold", mutating=True, limit=guard.WRITE_LIMIT)
+def override_task_hold(user: str, task=None, reason=None) -> dict:
+	"""A supervisor lets an Enforced Hold start today, with a reason (decision 17)."""
+	from .. import go_hold
+
+	_require_roles(user, go_hold.OVERRIDE_ROLES, "Overriding a Hold")
+	name = _task_in_scope(user, task)
+	try:
+		return {"task": name, "override": go_hold.override(name, str(reason or ""), user, fieldwork._employee_for(user))}
+	except (ValueError, PermissionError) as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("record_block_stage", mutating=True, limit=guard.WRITE_LIMIT)
+def record_block_stage(user: str, block=None, bbch=None, task=None, gps=None, photo=None, notes=None,
+                       observed_at=None, client_request_id=None) -> dict:
+	"""The block's crop stage from the phone. BBCH IS REQUIRED HERE (decision 25); a backwards one is
+	kept and flagged (28). The same client_request_id files once."""
+	from .. import bbch as bbch_scale
+	from .. import growth_stage
+
+	guard.require_scope(user)
+	if bbch_scale.parse(bbch) is None:
+		_clean_error(ValueError("pick the stage (a BBCH code) — the phone records stages by code."))
+	try:
+		return growth_stage.record(block=str(block or ""), code=str(bbch), observed_at=str(observed_at or ""),
+		                           observer=user, source_task=str(task or ""), gps=str(gps or ""),
+		                           photo=str(photo or ""), notes=str(notes or ""),
+		                           client_request_id=str(client_request_id or ""))
+	except ValueError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_block_stages", limit=guard.READ_LIMIT)
+def get_block_stages(user: str, block=None, year=None) -> dict:
+	from .. import growth_stage
+
+	guard.require_scope(user)
+	return growth_stage.timeline(str(block or ""), int(year) if str(year or "").isdigit() else None)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_my_suggested_tasks", limit=guard.READ_LIMIT)
+def list_my_suggested_tasks(user: str, location=None) -> dict:
+	"""Go-today work open to the caller (theirs or unassigned), window-closing first (decision 14)."""
+	from .. import suggested_tasks
+
+	allowed = guard.require_scope(user)
+	rows = [r for r in suggested_tasks.suggestions("", fieldwork._employee_for(user), str(location or ""))]
+	scoped = {t["name"] for t in frappe.db.get_all("Farm Task", filters={"name": ("in", [r["task"] for r in rows] or ["—"]),
+	                                                                    "company": ("in", allowed)}, fields=["name"])}
+	return {"suggestions": [r for r in rows if r["task"] in scoped]}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_my_work_notices", limit=guard.READ_LIMIT)
+def list_my_work_notices(user: str) -> dict:
+	"""Notices sent to me (Today card), and the ones I must decide as supervisor or manager."""
+	from .. import work_notices
+
+	guard.require_scope(user)
+	if not work_notices.installed():
+		return {"for_me": [], "to_decide": []}
+	me = fieldwork._employee_for(user)
+	today = str(frappe.utils.today())[:10]
+	for_me = []
+	if me:
+		parents = {r["parent"] for r in frappe.db.get_all("Work Notice Recipient", filters={"employee": me, "sent": 1},
+		                                                  fields=["parent"], limit=200) or []}
+		for name in parents:
+			notice = work_notices.describe(name)
+			if str(notice.get("for_date") or "") >= today:
+				mine = next((r for r in notice["recipients"] if r["employee"] == me), {})
+				for_me.append({"notice": name, "for_date": notice["for_date"], "status": notice["status"],
+				               "text": notice["text_es"] if mine.get("language") == "es" else notice["text_en"]})
+	to_decide = [n for n in work_notices.listing("open", limit=100)
+	             if work_notices.may_answer(frappe.get_doc(work_notices.DOCTYPE, n["name"]), user)]
+	return {"for_me": sorted(for_me, key=lambda n: n["for_date"]), "to_decide": to_decide}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("answer_work_notice", mutating=True, limit=guard.WRITE_LIMIT)
+def answer_work_notice(user: str, notice=None, choice=None, alternative=None, alternative_task=None) -> dict:
+	from .. import work_notices
+
+	_require_roles(user, ("System Manager", "Farm Manager", "Foreman", "Crew Leader"), "Answering a no-work notice")
+	guard.require_scope(user)
+	try:
+		return work_notices.answer(str(notice or ""), str(choice or ""), user, str(alternative or ""), str(alternative_task or ""))
+	except (ValueError, PermissionError) as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_my_sop_reviews", limit=guard.READ_LIMIT)
+def list_my_sop_reviews(user: str) -> dict:
+	"""SOPs In Review waiting on the caller's approval."""
+	from .. import sop
+
+	guard.require_scope(user)
+	if not sop.installed():
+		return {"reviews": []}
+	rows = frappe.db.get_all("SOP Approver", filters={"approver": user}, fields=["parent", "approved_at"], limit=500) or []
+	waiting = {r["parent"] for r in rows if not r.get("approved_at")}
+	out = []
+	for name in sorted(waiting):
+		if frappe.db.get_value(sop.DOCTYPE, name, "status") == sop.IN_REVIEW:
+			row = sop.describe(name)
+			row["attached_document"] = frappe.db.get_value(sop.DOCTYPE, name, "attached_document")
+			out.append(row)
+	return {"reviews": out}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("review_sop", mutating=True, limit=guard.WRITE_LIMIT)
+def review_sop(user: str, policy=None, action=None, note=None, face_id=None) -> dict:
+	"""Approve or request changes — the approver's own act on their phone (decision 45's twin for SOPs)."""
+	from .. import sop
+
+	if not frappe.db.exists("SOP Approver", {"approver": user}):
+		_require_roles(user, ("System Manager", "Farm Manager"), "Reviewing an SOP (its approvers only)")
+	guard.require_scope(user)
+	method = "Face ID (device key)" if str(face_id).lower() in ("1", "true", "yes") else "App sign-in"
+	try:
+		if action == "approve":
+			return sop.approve(str(policy or ""), user, method)
+		if action == "request_changes":
+			return sop.request_changes(str(policy or ""), user, str(note or ""))
+		raise ValueError("action is approve or request_changes.")
+	except (ValueError, PermissionError) as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_task_sops", limit=guard.READ_LIMIT)
+def get_task_sops(user: str, task=None) -> dict:
+	"""'View SOP' on a task: the approved SOPs covering its type, with their documents."""
+	from .. import sop
+
+	name = _task_in_scope(user, task)
+	task_type = str(frappe.db.get_value("Farm Task", name, "task_type") or "")
+	out = []
+	for row in sop.covering(task_type):
+		doc = frappe.db.get_value(sop.DOCTYPE, row["name"], ["policy_name", "version", "status", "attached_document"], as_dict=True) or {}
+		out.append({"policy": row["name"], **doc, "approved": doc.get("status") in sop.LIVE})
+	return {"task": name, "task_type": task_type, "sops": out}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_my_course", limit=guard.READ_LIMIT)
+def get_my_course(user: str, training_type=None) -> dict:
+	"""The course player: videos by section, my watched amount, the published quiz (with its key, so
+	the phone can show pass/fail offline — the server re-grades), and my attempts."""
+	from .. import training_quiz, training_videos
+
+	guard.require_scope(user)
+	name = str(training_type or "")
+	if not frappe.db.exists("Training Type", name):
+		_clean_error(ValueError(f"no course {name!r}."))
+	me = fieldwork._employee_for(user)
+	doc, body = training_quiz.body_for(name)
+	return {
+		"training_type": name,
+		"videos": training_videos.by_section(training_videos.videos(name)) if training_videos.installed() else [],
+		"progress": training_videos.progress(me, name) if (me and training_videos.installed()) else None,
+		"quiz": ({**body, "version": int(doc.version)} if (body and training_quiz.enabled()) else None),
+		"attempts": training_quiz.results(me, name, limit=20) if me else [],
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("record_my_video_view", mutating=True, limit=guard.WRITE_LIMIT)
+def record_my_video_view(user: str, training_type=None, video=None, stretches=None, length_seconds=None,
+                         play_seconds=None, seeks=None, furthest_seconds=None, started_at=None, finished_at=None,
+                         device=None, measured=None, client_request_id=None) -> dict:
+	from .. import training_videos
+
+	guard.require_scope(user)
+	try:
+		return training_videos.record_view(
+			employee=_employee(user), training_type=str(training_type or ""), video=str(video or ""),
+			stretches=_list_argument(stretches, "stretches") if stretches not in (None, "") else [],
+			length_seconds=length_seconds, play_seconds=play_seconds, seeks=seeks, furthest=furthest_seconds,
+			started_at=str(started_at or ""), ended_at=str(finished_at or ""), device=str(device or ""),
+			measured=str(measured).lower() not in ("0", "false", "no"), client_request_id=str(client_request_id or ""),
+		)
+	except ValueError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("submit_my_quiz_attempt", mutating=True, limit=guard.WRITE_LIMIT)
+def submit_my_quiz_attempt(user: str, training_type=None, answers=None, version=None, started_at=None,
+                           finished_at=None, device=None, client_request_id=None) -> dict:
+	from .. import training_quiz
+
+	guard.require_scope(user)
+	try:
+		return training_quiz.submit(
+			employee=_employee(user), training_type=str(training_type or ""), answers=_object_argument(answers, "answers"),
+			version=version, started_at=str(started_at or ""), finished_at=str(finished_at or ""), device=str(device or ""),
+			client_request_id=str(client_request_id or ""),
+		)
+	except ValueError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_training_signoffs", limit=guard.READ_LIMIT)
+def list_training_signoffs(user: str) -> dict:
+	from .. import training_quiz
+
+	_require_roles(user, training_quiz.SIGNOFF_ROLES, "Signing off training")
+	guard.require_scope(user)
+	return {"ready": training_quiz.results(status="ready"), "marking": training_quiz.results(status="marking")}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("sign_off_training", mutating=True, limit=guard.WRITE_LIMIT)
+def sign_off_training(user: str, attempt=None, reason=None, face_id=None) -> dict:
+	"""Decision 45: sign-off on the phone as in the Desk."""
+	from .. import training_quiz
+
+	_require_roles(user, training_quiz.SIGNOFF_ROLES, "Signing off training")
+	guard.require_scope(user)
+	method = "Face ID (device key)" if str(face_id).lower() in ("1", "true", "yes") else "App sign-in"
+	try:
+		return training_quiz.sign_off(str(attempt or ""), user, str(reason or ""), method)
+	except PermissionError as exc:
+		raise frappe.PermissionError(str(exc)) from None
+	except ValueError as exc:
+		_clean_error(exc)

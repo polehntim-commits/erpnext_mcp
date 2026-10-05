@@ -104,8 +104,16 @@ def record(
 	gps: str = "",
 	photo: str = "",
 	notes: str = "",
+	client_request_id: str = "",
 ) -> dict:
 	"""File one stage. Never refused for its code; flagged instead (decisions 25, 28)."""
+	if client_request_id and compat.has_field(DOCTYPE, "client_request_id"):
+		done = frappe.db.get_value(DOCTYPE, {"client_request_id": client_request_id}, "name")
+		if done:
+			row = frappe.db.get_value(DOCTYPE, done, ["growth_stage_code", "crop_stage", "observed_at", "stage_flags"], as_dict=True) or {}
+			return {"observation": done, "block": block, "bbch": row.get("growth_stage_code"), "stage": row.get("crop_stage"),
+			        "flags": [f for f in str(row.get("stage_flags") or "").splitlines() if f],
+			        "observed_at": str(row.get("observed_at") or ""), "duplicate": True}
 	if not str(code or "").strip() and not str(words or "").strip():
 		raise ValueError("give the BBCH code (e.g. 55) or, failing that, the stage in words.")
 	when = str(observed_at or frappe.utils.now())
@@ -131,6 +139,7 @@ def record(
 			"observed_gps": gps or None,
 			"photo": photo or None,
 			"notes": notes or None,
+			**({"client_request_id": client_request_id} if client_request_id and compat.has_field(DOCTYPE, "client_request_id") else {}),
 		}
 	)
 	doc.insert(ignore_permissions=True)

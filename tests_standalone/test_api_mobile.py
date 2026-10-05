@@ -407,6 +407,21 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 	#: has one. Listed here rather than in `MOBILE` so this file keeps claiming
 	#: only what the compiled Swift actually names.
 	PENDING_IOS_INTEGRATION: ClassVar[set[str]] = {
+		# v0.250.0. The approved queue's phone doors; app 0.39.0 names them.
+		"override_task_hold",
+		"record_block_stage",
+		"get_block_stages",
+		"list_my_suggested_tasks",
+		"list_my_work_notices",
+		"answer_work_notice",
+		"list_my_sop_reviews",
+		"review_sop",
+		"get_task_sops",
+		"get_my_course",
+		"record_my_video_view",
+		"submit_my_quiz_attempt",
+		"list_training_signoffs",
+		"sign_off_training",
 		# v0.231.0. Business card → Contact: app 0.38.0 calls these and reads the answer
 		# as a dictionary (the contact form fills from what it sent).
 		"preview_business_card",

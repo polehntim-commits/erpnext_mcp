@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.250.0 — 2026-10-04 — the approved queue on the phone (server routes)
+
+**Migrate needed** (one hidden Crop Observation field). Fourteen new `/farmops/api/mobile/*` routes; no MCP tool
+changes. Deploy `docs/deploy/v0.250.0_phone_routes.md`. App 0.39.0 draws the screens.
+
+- **Go / Hold**: every phone task row now carries `go_hold` and `go_hold_reasons` where a rule has spoken (absent
+  otherwise), and `start_task` answers with `go_hold_at_start` and the block's `stage_prompt` (decision 27).
+  `override_task_hold` — Foreman / Farm Manager / System Manager, with a reason (decision 17).
+- **Stage**: `record_block_stage` — the phone **must** send a BBCH code (decision 25); backwards is kept and flagged
+  (28); a retry with the same request id files once. `get_block_stages` — the block's timeline.
+- **Suggested work**: `list_my_suggested_tasks` — Go-today tasks open to me, window-closing first (decision 14).
+- **No-work notices**: `list_my_work_notices` — notices sent to me (in my language) and the ones I must decide;
+  `answer_work_notice` — supervisor or manager (decision 34: nothing is sent without an answer).
+- **SOP**: `list_my_sop_reviews`, `review_sop` (approve with Face ID, or request changes — approvers only),
+  `get_task_sops` ("View SOP" on a task).
+- **Course player**: `get_my_course` (videos by section, my watched amount, the published quiz with its key so pass /
+  fail shows offline — the server re-grades — and my attempts), `record_my_video_view`, `submit_my_quiz_attempt`,
+  `list_training_signoffs` and `sign_off_training` (HR / Farm Manager / System Manager; decision 45).
+- Role-gated routes refuse a picker before reading anything; the others answer only for the caller's own Employee.
+
 ## 0.249.0 — 2026-10-04 — growing degree days (approved queue item 10)
 
 **Migrate needed** (three settings fields). One new MCP tool (read, on). Deploy `docs/deploy/v0.249.0_degree_days.md`.

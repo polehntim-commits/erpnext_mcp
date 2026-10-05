@@ -520,6 +520,21 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/get_offline_scan_pack",
 		"/mobile/preview_business_card",
 		"/mobile/save_business_card",
+		# v0.250.0. The approved queue on the phone.
+		"/mobile/override_task_hold",
+		"/mobile/record_block_stage",
+		"/mobile/get_block_stages",
+		"/mobile/list_my_suggested_tasks",
+		"/mobile/list_my_work_notices",
+		"/mobile/answer_work_notice",
+		"/mobile/list_my_sop_reviews",
+		"/mobile/review_sop",
+		"/mobile/get_task_sops",
+		"/mobile/get_my_course",
+		"/mobile/record_my_video_view",
+		"/mobile/submit_my_quiz_attempt",
+		"/mobile/list_training_signoffs",
+		"/mobile/sign_off_training",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2962,6 +2977,14 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.250.0. Each checks the role its MCP tool does: a supervisor overrides a Hold;
+		# the notice's supervisor or a manager answers it; only an SOP's approver reviews
+		# it; HR / Farm Manager / System Manager sign training off.
+		"override_task_hold",
+		"answer_work_notice",
+		"review_sop",
+		"list_training_signoffs",
+		"sign_off_training",
 		# v0.231.0. A business card becomes a Contact: Farm Manager, bookkeeper or
 		# System Manager (`business_cards.require_role`) — a picker is refused.
 		"preview_business_card",
@@ -3074,6 +3097,17 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.250.0. The caller's own: a stage seen, suggested work, notices sent to me, SOPs
+		# waiting on me, View SOP on a task in scope, my course, my views and attempts.
+		"record_block_stage",
+		"get_block_stages",
+		"list_my_suggested_tasks",
+		"list_my_work_notices",
+		"list_my_sop_reviews",
+		"get_task_sops",
+		"get_my_course",
+		"record_my_video_view",
+		"submit_my_quiz_attempt",
 		# v0.197.0. The site's unit list and which unit a rate names — a
 		# vocabulary, like `list_asset_types`, with nothing to scope.
 		"list_uoms",
@@ -3316,7 +3350,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 190, "a method is named in two sets at once")
+		self.assertEqual(len(named), 204, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

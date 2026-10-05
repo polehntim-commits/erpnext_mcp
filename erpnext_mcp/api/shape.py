@@ -193,6 +193,13 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 	# `paused_minutes_ago` is the one that changes behaviour. "You have a paused
 	# task" is a notification; "you paused Irrigate Block 3 twenty-two minutes
 	# ago" is a worker turning round.
+	# v0.250.0. GO / HOLD, present only where a Work Timing rule has spoken to the task (so every
+	# other task's payload is exactly what it was). `go_hold_reasons` is a list of sentences.
+	if row.get("go_hold"):
+		reasons = row.get("go_hold_reasons")
+		out["go_hold"] = row.get("go_hold")
+		out["go_hold_reasons"] = reasons if isinstance(reasons, list) else [r for r in str(reasons or "").splitlines() if r]
+		out["go_hold_override_today"] = bool(row.get("override_today"))
 	out["paused"] = str(out["state"]) == "Paused"
 	out["paused_at"] = _first(live, row, "paused_at")
 	out["pause_reason"] = _first(live, row, "pause_reason")

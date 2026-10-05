@@ -4881,6 +4881,9 @@ class FakeDB:
 CHILD_TABLE_SOURCES = {
 	# v0.238.0. Library search reads pages directly; "cited by" reads citations directly.
 	"Reference Page": (("Reference Document", "pages"),),
+	# v0.250.0. "Notices sent to me" and "SOPs waiting on me" read the rows directly.
+	"Work Notice Recipient": (("Work Notice", "recipients"),),
+	"SOP Approver": (("Compliance Policy", "approvers"),),
 	"Reference Citation": (
 		("Compliance Policy", "references"),
 		("Farm Task Template", "references"),

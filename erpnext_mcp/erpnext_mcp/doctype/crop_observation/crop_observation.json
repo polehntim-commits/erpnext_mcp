@@ -27,6 +27,7 @@
   "crop_stage",
   "growth_stage_code",
   "stage_flags",
+  "client_request_id",
   "measure_section",
   "sample_unit",
   "count_observed",
@@ -205,6 +206,14 @@
    "fieldname": "stage_flags",
    "fieldtype": "Small Text",
    "label": "Stage Flags",
+   "read_only": 1
+  },
+  {
+   "description": "v0.250.0. The phone's request id: the same stage sent twice is filed once.",
+   "fieldname": "client_request_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Client Request ID",
    "read_only": 1
   },
   {
