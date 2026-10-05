@@ -181,6 +181,24 @@ def normalise(payload: dict, cell: str = "", today: str = "") -> dict:
 	}
 
 
+def as_of(values: dict, day) -> dict:
+	"""The forecast as seen from a later day (v0.242.0): days before it drop off and the rain risk
+	restarts there. Judging "tomorrow" against a forecast whose day 0 is today would repeat today."""
+	day = str(day or "")[:10]
+	daily = ((values or {}).get("forecast") or {}).get("daily") or []
+	if not daily or not day or day <= str(daily[0].get("date") or ""):
+		return values
+	ahead = [dict(row) for row in daily if str(row.get("date") or "") >= day]
+	dry_so_far = 1.0
+	for row in ahead:
+		p = (row.get("precip_prob_pct") or 0) / 100.0
+		if row.get("precip_in") is not None and row["precip_in"] > WET_DAY_IN and p == 0:
+			p = 1.0
+		dry_so_far *= 1 - min(max(p, 0.0), 1.0)
+		row["rain_risk_cum_pct"] = round((1 - dry_so_far) * 100, 1)
+	return {**values, "forecast": {**values["forecast"], "daily": ahead}}
+
+
 def _weather(subject: dict, ctx: dict) -> dict:
 	if not forecast_enabled():
 		return {}
@@ -242,7 +260,7 @@ def register(ccf) -> None:
 				"meta.fetched_at": p("string", "When it was fetched.", example="2026-01-15 05:40:00"),
 				"meta.h3": p("string", "The H3 cell (resolution 7) it was fetched for.", example="872830828ffffff"),
 			},
-			lambda subject, ctx: _weather(subject, ctx),
+			lambda subject, ctx: as_of(_weather(subject, ctx), ctx.get("as_of_date")),
 			past=False,
 			description="Open-Meteo per block (H3 resolution 7), through Weather Settings. Off until forecast_enabled.",
 		)

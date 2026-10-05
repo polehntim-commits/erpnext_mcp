@@ -1181,6 +1181,7 @@
   "allow_override_hold",
   "allow_record_growth_stage",
   "allow_get_stage_timeline",
+  "allow_list_suggested_tasks",
   "allow_search_references",
   "allow_get_reference",
   "allow_list_references",
@@ -9162,6 +9163,13 @@
    "fieldname": "allow_get_stage_timeline",
    "fieldtype": "Check",
    "label": "Get Stage Timeline"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.242.0. Open tasks the weather and crop stage favour today, window-closing first.",
+   "fieldname": "allow_list_suggested_tasks",
+   "fieldtype": "Check",
+   "label": "List Suggested Tasks"
   },
   {
    "default": "1",

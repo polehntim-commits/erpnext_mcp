@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.242.0 — 2026-10-04 — suggested tasks (approved queue item 5, part 4)
+
+**No migrate** beyond one switch field. One new MCP tool (read, on). Deploy `docs/deploy/v0.242.0_suggested_tasks.md`.
+Decision 14: managers create the work; the system suggests what to do now.
+
+- **`list_suggested_tasks`**: open Farm Tasks a Work Timing rule speaks to that are Go today, ranked
+  **window closing** (Go today, Hold tomorrow — do it today), **just cleared** (a Hold lifted this morning),
+  **verify stage**, then **go** by due date. Each carries why (English / Spanish) and tomorrow's verdict. Filters:
+  company, worker (theirs or unassigned), block. Nothing is written.
+- The weather provider now reads the forecast **from the day being judged**: a rule judged for tomorrow sees
+  tomorrow as day 0, with the rain risk restarting there. Before, "tomorrow" repeated today.
+
 ## 0.241.0 — 2026-10-04 — crop stage: capture and timeline (approved queue item 5, part 3)
 
 **Migrate needed** (one Crop Observation field; two switches). Two new MCP tools (one read on, one write off).

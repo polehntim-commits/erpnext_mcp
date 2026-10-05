@@ -17600,6 +17600,22 @@ TOOLS = {
 		mutating=True,
 		title="Override hold",
 	),
+	# ── v0.242.0: suggested tasks ────────────────────────────────────────────
+	"list_suggested_tasks": _tool(
+		go_hold_tools.list_suggested_tasks,
+		"v0.242.0. Work the conditions favour TODAY (decision 14): open Farm Tasks a Work Timing rule speaks to that "
+		"are Go, ranked — window_closing (Go today, Hold tomorrow: do it today), just_cleared (a Hold lifted this "
+		"morning), verify_stage (Go once the stage is checked), then go by due date. Each says why in English and "
+		"Spanish and gives tomorrow's verdict. Existing tasks only; nothing is written. Use it to offer a crew other "
+		"work when their job is on Hold.",
+		{
+			"company": _field(_STRING, "Only one company."),
+			"worker": _field(_STRING, "Only tasks open to this Employee (theirs or unassigned)."),
+			"location": _field(_STRING, "Only one block."),
+			"limit": _field(_INTEGER, "At most this many (default 50, max 200)."),
+		},
+		title="List suggested tasks",
+	),
 	# ── v0.241.0: crop stage ─────────────────────────────────────────────────
 	"record_growth_stage": _tool(
 		stage_tools.record_growth_stage,

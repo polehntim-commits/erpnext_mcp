@@ -53,3 +53,19 @@ def override_hold(args: dict) -> ToolResult:
 		summary=f"{name}: Hold overridden for today by {user}",
 		docstatus_delta="0 → 0 (updated)",
 	)
+
+
+def list_suggested_tasks(args: dict) -> ToolResult:
+	"""v0.242.0. Open tasks the conditions favour today, window-closing first (decision 14)."""
+	from .. import suggested_tasks
+	from ..args import as_int, resolve_company
+
+	company = resolve_company(as_str(args, "company")) if as_str(args, "company") else ""
+	rows = suggested_tasks.suggestions(company, as_str(args, "worker"), as_str(args, "location"),
+	                                   as_int(args, "limit", 50))
+	closing = sum(1 for r in rows if r["kind"] == suggested_tasks.CLOSING)
+	return ToolResult(
+		data={"suggestions": rows, "count": len(rows), "window_closing": closing,
+		      "note": "Existing open tasks only — managers create the work (decision 14). Nothing is written."},
+		summary=f"{len(rows)} suggested task(s)" + (f", {closing} with the window closing tomorrow" if closing else ""),
+	)
