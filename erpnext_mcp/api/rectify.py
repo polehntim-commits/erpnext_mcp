@@ -70,6 +70,9 @@ rectification fails that file rather than reaching a handset as a dead end.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 import frappe
 
 from ..tools import dispatch
@@ -514,7 +517,31 @@ def describe_rectification(row: dict) -> dict | None:
 		if built:
 			return built
 
-	if dispatch.has_task_recipe(alert_type):
+	if _has_task_recipe(alert_type):
 		return _task_action("create_task", "Raise a task to fix this")
 
 	return _no_fix()
+
+
+# v0.231.3. "Can a task be raised for this alert type" does not depend on the row, and
+# answering it reads the Compliance Rule register — two to six queries. A list of a
+# hundred alerts asks it once per type inside `remembering_recipes`.
+_RECIPES: contextvars.ContextVar = contextvars.ContextVar("erpnext_mcp_rectify_recipes", default=None)
+
+
+@contextlib.contextmanager
+def remembering_recipes():
+	token = _RECIPES.set({})
+	try:
+		yield
+	finally:
+		_RECIPES.reset(token)
+
+
+def _has_task_recipe(alert_type: str) -> bool:
+	memo = _RECIPES.get()
+	if memo is None:
+		return dispatch.has_task_recipe(alert_type)
+	if alert_type not in memo:
+		memo[alert_type] = dispatch.has_task_recipe(alert_type)
+	return memo[alert_type]

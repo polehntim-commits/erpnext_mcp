@@ -45,6 +45,9 @@ THE FIVE GAPS THIS FILE CLOSES, all of them found by reading the Swift:
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 import frappe
 
 from .. import compat, locations, task_templates, timezones
@@ -248,7 +251,7 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 		# ABSENT WHERE THERE IS NO DOCUMENT, like `template` itself. A key that
 		# was always there and usually null would put two permanent nulls on
 		# every templated row to serve the ones with a procedure filed.
-		for field, url in task_templates.sop_documents(row["template"]).items():
+		for field, url in _remembered("sop", row["template"], lambda: task_templates.sop_documents(row["template"])).items():
 			if url:
 				out[f"sop_document_{field}"] = url
 	if row.get("checklist"):
@@ -269,7 +272,7 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 	# one renderer through the whole list so the site's zone is read once too.
 	(clock or timezones.Renderer()).add(out, "claimed_at", "started_at", "completed_at", "paused_at")
 
-	source = alert_row(row.get("source_alert"))
+	source = _remembered("alert", row.get("source_alert"), lambda: alert_row(row.get("source_alert")))
 	explanation = str(source.get("alert_message") or "").strip()
 	if explanation:
 		out["source_alert_explanation"] = explanation
@@ -303,13 +306,44 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 		out["subject_doctype"] = row.get("subject_doctype")
 		out["subject_docname"] = row.get("subject_docname")
 
-	latitude, longitude = coordinates(row.get("location_doctype"), row.get("location"))
+	latitude, longitude = _remembered(
+		"place",
+		(row.get("location_doctype"), row.get("location")),
+		lambda: coordinates(row.get("location_doctype"), row.get("location")),
+	)
 	if latitude is not None and longitude is not None:
 		out["latitude"] = latitude
 		out["longitude"] = longitude
 	return out
 
 
+# v0.231.3. A LIST OF TASKS ASKS THE SAME THINGS OVER AND OVER: forty tasks in three
+# blocks from two templates read the same SOP pair, the same block centroid and often
+# the same alert again and again — a query each, on a Pi. Inside `remembering_reads`
+# each is read once per request. Outside it (one task) nothing is remembered.
+_READS: contextvars.ContextVar = contextvars.ContextVar("erpnext_mcp_shape_reads", default=None)
+
+
+@contextlib.contextmanager
+def remembering_reads():
+	token = _READS.set({})
+	try:
+		yield
+	finally:
+		_READS.reset(token)
+
+
+def _remembered(kind: str, key, read):
+	memo = _READS.get()
+	if memo is None:
+		return read()
+	slot = (kind, key)
+	if slot not in memo:
+		memo[slot] = read()
+	return memo[slot]
+
+
+@remembering_reads()
 def tasks(rows: list, assignments: dict | None = None, clock=None) -> list:
 	"""A list of tasks, each carrying its live assignment where there is one."""
 	by_task = assignments or {}
@@ -397,7 +431,7 @@ def signature_request(row: dict) -> dict | None:
 
 
 # ── the compliance calendar ─────────────────────────────────────────────────
-def alert(row: dict) -> dict:
+def alert(row: dict, linked: dict | None = None) -> dict:
 	"""One calendar row in the shape `ComplianceAlertSummary` decodes.
 
 	v0.57.0 ADDS THREE KEYS AND CHANGES NONE, per `API_CONTRACT.md` §8.1. An
@@ -462,7 +496,7 @@ def alert(row: dict) -> dict:
 		"severity": row.get("severity"),
 		"company": row.get("company"),
 		"regulation": row.get("framework"),
-		"linked_task": linked_task(row.get("name")),
+		"linked_task": linked.get(str(row.get("name") or "")) if linked is not None else linked_task(row.get("name")),
 		"overdue": row.get("overdue"),
 		"days_until_due": row.get("days_until_due"),
 		"subject_doctype": row.get("source_doctype"),
@@ -482,7 +516,33 @@ def alert(row: dict) -> dict:
 
 
 def alerts(rows: list) -> list:
-	return [alert(row) for row in rows or [] if isinstance(row, dict)]
+	"""v0.231.3: the linked tasks for the whole list in one read, and each alert type's
+	"can a task be raised" answer once — not two to six queries an alert."""
+	rows = [row for row in rows or [] if isinstance(row, dict)]
+	linked = linked_tasks([row.get("name") for row in rows])
+	with rectify.remembering_recipes():
+		return [alert(row, linked) for row in rows]
+
+
+def linked_tasks(alert_names) -> dict:
+	"""`{alert: newest Farm Task raised from it}` for many alerts, in one query."""
+	names = sorted({str(name).strip() for name in alert_names or [] if str(name or "").strip()})
+	if not names or not compat.doctype_exists(FARM_TASK):
+		return {}
+	try:
+		rows = frappe.db.get_all(
+			FARM_TASK,
+			filters={"source_alert": ("in", names)},
+			fields=["name", "source_alert", "creation"],
+			order_by="creation desc",
+			limit=len(names) * 20,
+		)
+	except Exception:  # pragma: no cover
+		return {}
+	out: dict = {}
+	for row in rows or []:
+		out.setdefault(str(row.get("source_alert") or ""), row.get("name"))
+	return out
 
 
 def linked_task(alert_name) -> str | None:

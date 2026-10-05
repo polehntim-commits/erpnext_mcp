@@ -1487,6 +1487,84 @@ def get_spray_application(args: dict) -> ToolResult:
 	)
 
 
+def describe_applications(names: list, args: dict | None = None) -> dict:
+	"""`get_spray_application`'s answer for many applications at once. v0.231.3.
+
+	THE PHONE'S SPRAY HISTORY ASKED FOR EACH ROW SEPARATELY — the application and
+	its blocks, the REI sweep and query, the tank mix and its products — about eleven
+	queries a row, a thousand for a full page on a Pi. Here: the applications in one
+	read, their blocks in a second, the live restrictions once per company (the sweep
+	once with them), and each distinct tank mix once. The answer for each name is
+	the single read's, field for field — `test_polish_v0_231_3` holds them equal.
+	"""
+	args = args or {}
+	names = [str(name) for name in names or [] if name]
+	if not names:
+		return {}
+	_require(APPLICATION)
+	rows = frappe.db.get_all(APPLICATION, filters={"name": ("in", names)}, fields=["*"], limit=len(names))
+	lines: dict = {}
+	if compat.doctype_exists("Spray Application Block"):
+		for line in (
+			frappe.db.get_all(
+				"Spray Application Block",
+				filters={"parent": ("in", names), "parenttype": APPLICATION},
+				fields=["*"],
+				order_by="idx asc",
+				limit=len(names) * BLOCK_CAP,
+			)
+			or []
+		):
+			entry = dict(line)
+			lines.setdefault(str(entry.get("parent") or ""), []).append(entry)
+	described: dict = {}
+	for row in rows or []:
+		row = dict(row)
+		row["blocks"] = lines.get(str(row["name"]), [])
+		described[str(row["name"])] = _describe_application(row, include_blocks=True)
+
+	blocks_by_company: dict = {}
+	for app in described.values():
+		blocks_by_company.setdefault(app.get("company") or "", set()).update(
+			b["block"] for b in app.get("blocks") or []
+		)
+	live = {
+		company: spray_rei.active_for_blocks(sorted(blocks), company)
+		for company, blocks in blocks_by_company.items()
+	}
+
+	mixes: dict = {}
+	out: dict = {}
+	for name in names:
+		app = described.get(name)
+		if app is None:
+			continue
+		mine = {b["block"] for b in app.get("blocks") or []}
+		by_block: dict = {}
+		for window in live.get(app.get("company") or "", []):
+			if str(window.get("block")) in mine:
+				by_block.setdefault(str(window.get("block")), []).append(window)
+		for row in app.get("blocks") or []:
+			windows = by_block.get(str(row["block"]), [])
+			row["restricted_now"] = bool(windows)
+			row["active_restrictions"] = windows
+		mix_name = app.get("tank_mix")
+		if mix_name and mix_name not in mixes:
+			mixes[mix_name] = (
+				_describe_mix(frappe.get_doc(TANK_MIX, mix_name)) if frappe.db.exists(TANK_MIX, mix_name) else None
+			)
+		clock = timezones.Renderer(args)
+		clock.add(app, "started_at", "completed_at", "flip_at", "rei_expires_at", "weather_recorded_at")
+		restricted = [row["block"] for row in app.get("blocks") or [] if row.get("restricted_now")]
+		out[name] = {
+			**app,
+			"tank_mix_detail": mixes.get(mix_name) if mix_name else None,
+			"blocks_restricted_now": restricted,
+			"timezone": clock.block(),
+		}
+	return out
+
+
 # ── get_spray_application_report ────────────────────────────────────────────
 #
 # WHAT WENT OUT, PER PRODUCT, PER BLOCK, OVER A SEASON. Every state that

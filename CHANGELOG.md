@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.231.3 — 2026-10-04 — polish: each company's compliance inbox judged by its own loop; list reads without per-row queries
+
+No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.3_polish.md`. Any app from 0.38.5.
+
+- **Fix: the compliance inbox judged every company's alerts of one type by the first company's loop.** The loop
+  report (who can do the work, which devices can) is read per company; the memo was keyed by alert type alone, so
+  on a multi-entity login an alert could be shown blocked — or not — for another company's reasons.
+- **Spray history in a handful of queries** (`list_spray_applications`, phone): the page's applications, blocks,
+  live REIs (one sweep and read per company) and tank mixes are read together instead of about eleven queries a
+  row — up to ~1,100 for a full page on a Pi. Each row is unchanged, field for field (a test holds the list equal
+  to the single read).
+- **Compliance alert lists** (`shape.alerts`): linked tasks in one query for the whole list; "can a task be raised"
+  asked once per alert type, not once per alert.
+- **Task lists** (`list_my_tasks`, `list_available_tasks`, `shape.tasks`): each template's SOP pair, each location's
+  map point and each source alert read once per request, not once per task.
+
 ## 0.231.2 — 2026-10-04 — offline: a task started, paused or resumed with no signal counts from the tap
 
 No migrate, no new tools, no settings. Deploy `docs/deploy/v0.231.2_offline_tasks.md`. App 0.38.3.

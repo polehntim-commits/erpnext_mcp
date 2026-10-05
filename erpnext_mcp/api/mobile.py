@@ -1211,6 +1211,7 @@ def get_current_user_context(user: str) -> dict:
 # ── 2. list_my_tasks ────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("list_my_tasks", limit=guard.READ_LIMIT)
+@shape.remembering_reads()
 def list_my_tasks(user: str, company=None, timezone=None) -> dict:
 	"""What this worker is holding right now: claimed and in progress.
 
@@ -1260,6 +1261,7 @@ def list_my_tasks(user: str, company=None, timezone=None) -> dict:
 # ── 3. list_available_tasks ─────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("list_available_tasks", limit=guard.READ_LIMIT)
+@shape.remembering_reads()
 def list_available_tasks(user: str, company=None) -> dict:
 	"""The pool this worker could take from.
 
@@ -24252,15 +24254,20 @@ def record_spray_application(
 
 
 # ── 272. list_spray_applications ─────────────────────────────────────────────
-def _spray_row(name: str) -> dict:
-	"""One application in the phone's history shape. Blocks and products included."""
-	data = spray_tools.get_spray_application({"application": name}).data
+def _spray_row(name: str, data: dict | None = None, full_names: dict | None = None) -> dict:
+	"""One application in the phone's history shape. Blocks and products included.
+
+	v0.231.3: the list passes `data` and `full_names` read for the whole page at once
+	(`spray_tools.describe_applications`); the single read still reads its own.
+	"""
+	if data is None:
+		data = spray_tools.get_spray_application({"application": name}).data
 	applicator = data.get("applicator") or ""
-	applicator_name = (
-		(str(frappe.db.get_value("User", applicator, "full_name") or "") if applicator else "")
-		or applicator
-		or None
-	)
+	if full_names is not None:
+		known = full_names.get(applicator) or ""
+	else:
+		known = str(frappe.db.get_value("User", applicator, "full_name") or "") if applicator else ""
+	applicator_name = known or applicator or None
 	return {
 		**data,
 		"blocks": [line.get("block") for line in data.get("blocks") or []],
@@ -24309,7 +24316,22 @@ def list_spray_applications(
 	names.sort(reverse=True)
 	if len(names) > cap:
 		truncated = True
-	return {"applications": [_spray_row(name) for _when, name in names[:cap]], "truncated": truncated}
+	page = [name for _when, name in names[:cap]]
+	# v0.231.3: the page in a handful of queries, not about eleven a row.
+	described = spray_tools.describe_applications(page)
+	applicators = sorted({d.get("applicator") for d in described.values() if d.get("applicator")})
+	full_names = {
+		str(row["name"]): str(row.get("full_name") or "")
+		for row in (
+			frappe.db.get_all("User", filters={"name": ("in", applicators)}, fields=["name", "full_name"])
+			if applicators
+			else []
+		)
+	}
+	return {
+		"applications": [_spray_row(name, described[name], full_names) for name in page if name in described],
+		"truncated": truncated,
+	}
 
 
 # ── 273. get_spray_application ───────────────────────────────────────────────

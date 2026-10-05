@@ -506,18 +506,25 @@ def inbox(user: str, company: str = "") -> dict:
 	):
 		tasks[task["source_alert"]] = dict(task)
 	rules: dict = {}
+	# v0.231.3. THE LOOP REPORT IS PER COMPANY, the rule is not. Who can do the work
+	# and which devices can (`audience_of`, `device_capabilities.problems`) are read
+	# for one company, and the memo used to be keyed by alert type alone — so every
+	# company's alerts of a type were judged blocked or not by the first company's.
+	loops: dict = {}
 	for alert in alerts:
 		snoozed = str(alert.get("snoozed_until") or "")[:10]
 		if snoozed and snoozed > today:
 			continue
 		alert_type = alert.get("alert_type") or ""
 		if alert_type not in rules:
-			rule = rule_of(alert_type)
-			rules[alert_type] = (
-				rule,
-				report(rule, alert["company"]) if rule else {"gaps": [], "path": {"kind": "none", "ref": ""}},
+			rules[alert_type] = rule_of(alert_type)
+		rule = rules[alert_type]
+		key = (alert_type, alert.get("company") or "")
+		if key not in loops:
+			loops[key] = (
+				report(rule, alert["company"]) if rule else {"gaps": [], "path": {"kind": "none", "ref": ""}}
 			)
-		rule, loop = rules[alert_type]
+		loop = loops[key]
 		task = tasks.get(alert["name"])
 		notify = set(_extra(rule).get("notify_roles") or []) if rule else set()
 		mine = (

@@ -251,3 +251,39 @@ class TheSprayHistory(SprayTestCase):
 		status, _body = self.refusal(ONE, {"name": name})
 		self.assertGreaterEqual(status, 400)
 		self.assertEqual(self.message(HISTORY)["applications"], [])
+
+
+class TheSprayHistoryIsReadInOneGo(SprayTestCase):
+	"""v0.231.3. The history page reads every application, block, REI and mix in a
+	handful of queries; each row must equal the one-at-a-time read exactly."""
+
+	def test_every_row_equals_the_single_read(self):
+		names = [
+			self.spray(blocks=(BLOCK,), wind_speed_mph=2)["spray_application"]["name"],
+			self.spray(blocks=(BLOCK, BLOCK_TWO), qty=7)["spray_application"]["name"],
+			self.spray(blocks=(BLOCK_TWO,), notes="second pass")["spray_application"]["name"],
+		]
+		def steady(value):
+			# The countdowns are read against the clock and move between two reads.
+			if isinstance(value, dict):
+				return {k: steady(v) for k, v in value.items() if k not in ("hours_remaining", "minutes_remaining")}
+			if isinstance(value, list):
+				return [steady(v) for v in value]
+			return value
+
+		rows = {row["name"]: row for row in self.message(HISTORY)["applications"]}
+		self.assertEqual(set(rows), set(names))
+		for name in names:
+			with self.subTest(name=name):
+				self.assertEqual(steady(rows[name]), steady(self.message(ONE, {"name": name})))
+
+	def test_the_page_does_not_query_per_row(self):
+		from unittest import mock
+
+		from erpnext_mcp.tools import spray_rei
+
+		for _ in range(4):
+			self.spray()
+		with mock.patch.object(spray_rei, "active_for_blocks", wraps=spray_rei.active_for_blocks) as reis:
+			self.message(HISTORY)
+		self.assertEqual(reis.call_count, 1, "one REI read per company, not one per application")
