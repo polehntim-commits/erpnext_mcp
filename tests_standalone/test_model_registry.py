@@ -907,9 +907,9 @@ class ToolRegistration(unittest.TestCase):
 		# v0.202.0 adds one write, `set_uom_aliases`: "pacs" for Place Pac without a deploy.
 		# v0.206.0 adds five reads and six writes: extraction config, feature flags, triage.
 		# v0.207.0 adds eight reads and eleven writes: phone config, tiles, wizards, the loop, labels.
-		self.assertEqual(len(self.registry.TOOLS), 1024)
-		self.assertEqual(len(self.registry.READ_TOOLS), 498)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 526)
+		self.assertEqual(len(self.registry.TOOLS), 1030)
+		self.assertEqual(len(self.registry.READ_TOOLS), 501)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 529)
 
 
 if __name__ == "__main__":

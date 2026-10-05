@@ -183,6 +183,7 @@ from .tools import (
 from .tools import card_prints as card_print_tools
 from .tools import configs as config_tools
 from .tools import contacts as contact_tools
+from .tools import references as reference_tools
 from .tools import taskdates as task_date_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
@@ -17567,6 +17568,113 @@ TOOLS = {
 		required=("task",),
 		mutating=True,
 		title="Set task dates",
+	),
+	# ── v0.238.0: the Reference Library ──────────────────────────────────────
+	"search_references": _tool(
+		reference_tools.search_references,
+		"v0.238.0. Search the farm's Reference Library — extension guides, research papers, labels, manuals, "
+		"regulations, internal documents — to the PAGE: ranked hits with the document, the page and a short "
+		"snippet. Every word must appear on the page. Search here first when drafting an SOP or a rule, and cite "
+		"by document and page. Filters: ref_type, crop, topic.",
+		{
+			"query": _field(_STRING, "Words to find, e.g. 'bacterial canker pruning dry weather'."),
+			"ref_type": _field(_STRING, "Extension Guide, Research Paper, Manual, Label, Regulation or Internal."),
+			"crop": _field(_STRING, "Only documents tagged with this crop."),
+			"topic": _field(_STRING, "Only documents tagged with this topic."),
+			"include_superseded": _field(_BOOLEAN, "Include documents a newer edition replaced."),
+			"limit": _field(_INTEGER, "At most this many hits (default 20, max 100)."),
+		},
+		required=("query",),
+		title="Search references",
+	),
+	"get_reference": _tool(
+		reference_tools.get_reference,
+		"v0.238.0. One Reference Document: metadata, tags, summary, key takeaways, which pages still await OCR, "
+		"what cites it — and the text of the pages asked for.",
+		{
+			"reference": _field(_STRING, "The Reference Document docname (from search_references)."),
+			"pages": _field(_STRING, "Page numbers to include, e.g. '12 13'."),
+		},
+		required=("reference",),
+		title="Get reference",
+	),
+	"list_references": _tool(
+		reference_tools.list_references,
+		"v0.238.0. The Reference Library's documents, by title; filter by type, publisher or text status "
+		"(Text layer / OCR pending / OCR'd).",
+		{
+			"ref_type": _field(_STRING, "One type."),
+			"publisher": _field(_STRING, "One publisher, e.g. OSU."),
+			"text_status": _field(_STRING, "Text layer, OCR pending or OCR'd."),
+			"limit": _field(_INTEGER, "At most this many (default 100)."),
+		},
+		title="List references",
+	),
+	"add_reference": _tool(
+		reference_tools.add_reference,
+		"MUTATING (default OFF). v0.238.0. File one PDF in the Reference Library, private: the text layer is "
+		"read now, a scanned page is left 'OCR pending' for the Mac's OCR job. The same PDF twice is refused. "
+		"source_url is required except for Internal documents. Tags are checked against the vocabularies in "
+		"ERPNext MCP Settings.",
+		{
+			"file": _field(_STRING, "A File docname already on the site (attached, staged or uploaded)."),
+			"file_content": _field(_STRING, "Or the PDF itself, base64 (up to 8 MB)."),
+			"file_name": _field(_STRING, "The file name to keep."),
+			"title": _field(_STRING, "The document's title."),
+			"ref_type": _field(_STRING, "Extension Guide, Research Paper, Manual, Label, Regulation or Internal."),
+			"publisher": _field(_STRING, "OSU, WSU, Cat, EPA …"),
+			"authors": _field(_STRING, "Authors."),
+			"year": _field(_INTEGER, "Year published."),
+			"publication_number": _field(_STRING, "e.g. PNW 543."),
+			"source_url": _field(_STRING, "Where it came from."),
+			"crops": _field(_STRING_ARRAY, "Crop tags."),
+			"varieties": _field(_STRING_ARRAY, "Variety tags."),
+			"topics": _field(_STRING_ARRAY, "Topic tags."),
+			"regions": _field(_STRING_ARRAY, "Region tags."),
+			"summary": _field(_STRING, "What it is about."),
+			"key_takeaways": _field(_STRING, "What matters for this farm."),
+		},
+		required=("title", "ref_type"),
+		mutating=True,
+		title="Add reference",
+	),
+	"update_reference": _tool(
+		reference_tools.update_reference,
+		"MUTATING (default OFF). v0.238.0. Change a Reference Document's metadata, tags, summary or takeaways — "
+		"or post OCR text for its pages ({page_number: text}), which is how the Mac's Apple Vision OCR job fills "
+		"in a scanned document. The status follows what is still missing.",
+		{
+			"reference": _field(_STRING, "The Reference Document."),
+			"title": _field(_STRING, "New title."),
+			"publisher": _field(_STRING, "Publisher."),
+			"authors": _field(_STRING, "Authors."),
+			"year": _field(_INTEGER, "Year."),
+			"publication_number": _field(_STRING, "Publication number."),
+			"source_url": _field(_STRING, "Source URL."),
+			"summary": _field(_STRING, "Summary."),
+			"key_takeaways": _field(_STRING, "Key takeaways."),
+			"crops": _field(_STRING_ARRAY, "Replace the crop tags."),
+			"varieties": _field(_STRING_ARRAY, "Replace the variety tags."),
+			"topics": _field(_STRING_ARRAY, "Replace the topic tags."),
+			"regions": _field(_STRING_ARRAY, "Replace the region tags."),
+			"page_texts": _field(_OBJECT, "OCR text by page number, e.g. {\"3\": \"…\"}."),
+			"text_source": _field(_STRING, "OCR (default) or Text layer."),
+		},
+		required=("reference",),
+		mutating=True,
+		title="Update reference",
+	),
+	"supersede_reference": _tool(
+		reference_tools.supersede_reference,
+		"MUTATING (default OFF). v0.238.0. Mark a Reference Document replaced by a newer edition; it drops out of "
+		"search unless include_superseded is passed, and its citations still resolve.",
+		{
+			"reference": _field(_STRING, "The older document."),
+			"superseded_by": _field(_STRING, "The newer document."),
+		},
+		required=("reference", "superseded_by"),
+		mutating=True,
+		title="Supersede reference",
 	),
 	"search_contacts": _tool(
 		contact_tools.search_contacts,

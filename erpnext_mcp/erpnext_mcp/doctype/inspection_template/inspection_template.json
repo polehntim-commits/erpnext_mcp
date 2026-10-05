@@ -34,7 +34,9 @@
   "ai_review_flags",
   "provenance_col",
   "human_approved_by",
-  "human_approved_on"
+  "human_approved_on",
+  "references_section",
+  "references"
  ],
  "fields": [
   {
@@ -223,6 +225,19 @@
    "fieldname": "human_approved_on",
    "fieldtype": "Datetime",
    "label": "Approved On"
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "References",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "references",
+   "fieldtype": "Table",
+   "label": "References",
+   "options": "Reference Citation",
+   "description": "v0.238.0. What this cites from the Reference Library, by page."
   }
  ],
  "index_web_pages_for_search": 0,

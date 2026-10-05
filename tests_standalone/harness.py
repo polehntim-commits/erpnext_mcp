@@ -1707,6 +1707,11 @@ APP_DOCTYPES = {
 	"Task Note": "task_note",
 	"Task Time Segment": "task_time_segment",
 	"Farm Task Link": "farm_task_link",
+	# v0.238.0. The Reference Library: the document, its pages, and the citation table five
+	# doctypes carry.
+	"Reference Document": "reference_document",
+	"Reference Page": "reference_page",
+	"Reference Citation": "reference_citation",
 	# v0.79.0. The two registers this release exists for. Both are on the SCAN
 	# and TASK paths — a discipline chain is read from a mobile wrapper and an
 	# accident report spawns sub-tasks — so they are registered here rather than
@@ -2625,6 +2630,12 @@ CHILD_TABLES = {
 	("App Feedback", "replies"): "Task Note",
 	("Farm Task Assignment", "time_segments"): "Task Time Segment",
 	("Farm Task", "linked_tasks"): "Farm Task Link",
+	("Reference Document", "pages"): "Reference Page",
+	("Compliance Policy", "references"): "Reference Citation",
+	("Farm Task Template", "references"): "Reference Citation",
+	("Training Type", "references"): "Reference Citation",
+	("Compliance Rule", "references"): "Reference Citation",
+	("Inspection Template", "references"): "Reference Citation",
 	("Accident Report", "witnesses"): "Accident Witness",
 	("Wizard Definition", "steps"): "Wizard Step",
 	("Wizard Step", "fields"): "Wizard Field",
@@ -4853,6 +4864,15 @@ class FakeDB:
 #: every other record's evidence as absent, which is the kind of empty result
 #: that reads as "no photographs were filed".
 CHILD_TABLE_SOURCES = {
+	# v0.238.0. Library search reads pages directly; "cited by" reads citations directly.
+	"Reference Page": (("Reference Document", "pages"),),
+	"Reference Citation": (
+		("Compliance Policy", "references"),
+		("Farm Task Template", "references"),
+		("Training Type", "references"),
+		("Compliance Rule", "references"),
+		("Inspection Template", "references"),
+	),
 	# v0.175.0. `device_enrollment.verify` finds a phone by its api_key and
 	# `exchange` by its token hash — both direct queries on the child doctype,
 	# which is the one lookup path every mobile request takes.

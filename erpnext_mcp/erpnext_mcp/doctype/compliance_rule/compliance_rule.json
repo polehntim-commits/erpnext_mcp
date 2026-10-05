@@ -86,7 +86,9 @@
   "human_approved_by",
   "human_approved_on",
   "approver_employee",
-  "approver_signature"
+  "approver_signature",
+  "references_section",
+  "references"
  ],
  "fields": [
   {
@@ -619,6 +621,19 @@
    "label": "Loop Gap Accepted",
    "read_only": 1,
    "description": "v0.207.0. Why this rule was enabled although audit_compliance_loop found a gap (accept_loop_gap on approve_compliance_rule)."
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "References",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "references",
+   "fieldtype": "Table",
+   "label": "References",
+   "options": "Reference Citation",
+   "description": "v0.238.0. What this cites from the Reference Library, by page."
   }
  ],
  "index_web_pages_for_search": 0,

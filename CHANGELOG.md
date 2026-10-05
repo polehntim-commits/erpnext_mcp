@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.238.0 — 2026-10-04 — the Reference Library (approved queue item 4)
+
+**Migrate needed** (three doctypes; a References table on Compliance Policy, Farm Task Template, Training Type,
+Compliance Rule and Inspection Template; nine settings fields). Six new MCP tools (three reads on, three writes off).
+Deploy `docs/deploy/v0.238.0_reference_library.md`. Design: `docs/design/reference_library.md` (approved; Tim's
+decisions: Mac-side OCR, tag values editable in settings, built before SOP approval).
+
+- **Reference Document** — title, type (Extension Guide, Research Paper, Manual, Label, Regulation, Internal),
+  publisher, authors, year, publication number, source URL (required except Internal), crop / variety / topic /
+  region tags (checked against the vocabularies in ERPNext MCP Settings, editable there), summary, key takeaways,
+  the PDF (private), SHA-256 (the same PDF twice is refused), text status, and its **Reference Pages**.
+- **Text**: each page's text layer is read on add; a page with none (a scan) leaves the document **OCR pending**.
+  `tools/mac/library_ocr.swift` OCRs on Tim's Mac with Apple Vision (English and Spanish) and prints the
+  `page_texts` that `update_reference` takes; the status follows what is still missing.
+- **Reference Citation** (document, pages, note) on SOPs (Compliance Policy), Farm Task Templates, Training Types,
+  Compliance Rules and Inspection Templates; `get_reference` lists what cites a document.
+- **Tools**: `search_references` (every word on the page; ranked; page + short snippet; filters by type, crop,
+  topic), `get_reference` (metadata + pages asked for + cited by), `list_references`; `add_reference`,
+  `update_reference`, `supersede_reference` (writes, off).
+- **Copyright**: private files only, source URL kept, "Internal reference copy — see the source", short snippets.
+- The phone's read-only Library (search, PDF viewer at the page, offline favourites) follows in an app release.
+
 ## 0.237.0 — 2026-10-04 — daily equipment checks: the operator checks the machine (approved queue item 3)
 
 **Migrate needed** (one Farm Task Template field, one settings switch; seeds three templates). No new tools.

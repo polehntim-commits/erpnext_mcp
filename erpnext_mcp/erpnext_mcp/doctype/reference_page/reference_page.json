@@ -1,0 +1,47 @@
+{
+ "actions": [],
+ "creation": "2026-10-04 20:00:00.000000",
+ "description": "v0.238.0. One page of a Reference Document: its text, from the PDF's text layer or from OCR.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "page_number",
+  "text",
+  "source"
+ ],
+ "fields": [
+  {
+   "fieldname": "page_number",
+   "fieldtype": "Int",
+   "label": "Page",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "text",
+   "fieldtype": "Long Text",
+   "label": "Text",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Text From",
+   "options": "Text layer\nOCR",
+   "in_list_view": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-04 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Reference Page",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

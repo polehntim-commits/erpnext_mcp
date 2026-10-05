@@ -1177,6 +1177,15 @@
   "daily_checks_enabled",
   "allow_list_overdue_tasks",
   "allow_set_task_dates",
+  "allow_search_references",
+  "allow_get_reference",
+  "allow_list_references",
+  "allow_add_reference",
+  "allow_update_reference",
+  "allow_supersede_reference",
+  "reference_crops",
+  "reference_topics",
+  "reference_regions",
   "allow_search_contacts",
   "allow_save_contact",
   "allow_download_card_pdf",
@@ -9121,6 +9130,69 @@
    "fieldname": "allow_set_task_dates",
    "fieldtype": "Check",
    "label": "Set Task Dates"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.238.0. Search the Reference Library to the page.",
+   "fieldname": "allow_search_references",
+   "fieldtype": "Check",
+   "label": "Search References"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.238.0. One reference document and the pages asked for.",
+   "fieldname": "allow_get_reference",
+   "fieldtype": "Check",
+   "label": "Get Reference"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.238.0. The library's documents.",
+   "fieldname": "allow_list_references",
+   "fieldtype": "Check",
+   "label": "List References"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.238.0. File a PDF in the library (private).",
+   "fieldname": "allow_add_reference",
+   "fieldtype": "Check",
+   "label": "Add Reference"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.238.0. Metadata, tags, summary, or OCR text for pages.",
+   "fieldname": "allow_update_reference",
+   "fieldtype": "Check",
+   "label": "Update Reference"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.238.0. Mark a document replaced by a newer edition.",
+   "fieldname": "allow_supersede_reference",
+   "fieldtype": "Check",
+   "label": "Supersede Reference"
+  },
+  {
+   "default": "Sweet Cherry\nApple\nPear",
+   "description": "v0.238.0. The tag values a Reference Document may carry, one per line. Edit freely.",
+   "fieldname": "reference_crops",
+   "fieldtype": "Small Text",
+   "label": "Reference Library — Crops"
+  },
+  {
+   "default": "Pruning\nBacterial canker\nSpraying\nIrrigation\nHarvest\nFood safety\nWorker safety\nNutrition\nPests\nFrost",
+   "description": "v0.238.0. The tag values a Reference Document may carry, one per line. Edit freely.",
+   "fieldname": "reference_topics",
+   "fieldtype": "Small Text",
+   "label": "Reference Library — Topics"
+  },
+  {
+   "default": "Oregon\nWashington\nPacific Northwest",
+   "description": "v0.238.0. The tag values a Reference Document may carry, one per line. Edit freely.",
+   "fieldname": "reference_regions",
+   "fieldtype": "Small Text",
+   "label": "Reference Library — Regions"
   },
   {
    "default": "1",

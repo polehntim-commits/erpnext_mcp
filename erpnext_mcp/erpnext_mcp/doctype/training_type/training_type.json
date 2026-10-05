@@ -23,7 +23,9 @@
   "curriculum_col",
   "materials_description",
   "detail_section",
-  "description"
+  "description",
+  "references_section",
+  "references"
  ],
  "fields": [
   {
@@ -128,6 +130,19 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "References",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "references",
+   "fieldtype": "Table",
+   "label": "References",
+   "options": "Reference Citation",
+   "description": "v0.238.0. What this cites from the Reference Library, by page."
   }
  ],
  "index_web_pages_for_search": 0,

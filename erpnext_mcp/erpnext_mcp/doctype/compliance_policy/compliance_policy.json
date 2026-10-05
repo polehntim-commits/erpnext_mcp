@@ -26,7 +26,9 @@
   "file_section",
   "attached_document",
   "notes_section",
-  "notes"
+  "notes",
+  "references_section",
+  "references"
  ],
  "fields": [
   {
@@ -154,6 +156,19 @@
    "fieldname": "notes",
    "fieldtype": "Text Editor",
    "label": "Notes"
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "References",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "references",
+   "fieldtype": "Table",
+   "label": "References",
+   "options": "Reference Citation",
+   "description": "v0.238.0. What this cites from the Reference Library, by page."
   }
  ],
  "index_web_pages_for_search": 0,

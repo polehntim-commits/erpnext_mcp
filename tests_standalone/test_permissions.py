@@ -440,6 +440,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Market",
 				"Merchant Alias",
 				"Mobile Push Token",
+				"Reference Document",
 				"Soil Compaction Profile",
 				"Staged File Chunk",
 				"Staged File Upload Session",
