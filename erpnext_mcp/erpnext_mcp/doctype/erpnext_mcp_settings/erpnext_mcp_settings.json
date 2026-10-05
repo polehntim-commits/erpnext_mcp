@@ -1161,6 +1161,10 @@
   "allow_list_punch_reviews",
   "allow_resolve_punch_review",
   "allow_repair_placeholder_phones",
+  "allow_list_configs",
+  "allow_get_config",
+  "allow_diff_config",
+  "allow_preview_config",
   "allow_search_contacts",
   "allow_save_contact",
   "allow_download_card_pdf",
@@ -8997,6 +9001,34 @@
    "fieldname": "allow_repair_placeholder_phones",
    "fieldtype": "Check",
    "label": "Repair Placeholder Phones"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.234.0. Versions and status of any configuration kind.",
+   "fieldname": "allow_list_configs",
+   "fieldtype": "Check",
+   "label": "List Configs"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.234.0. One configuration version of any kind.",
+   "fieldname": "allow_get_config",
+   "fieldtype": "Check",
+   "label": "Get Config"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.234.0. What changed between two versions of a configuration.",
+   "fieldname": "allow_diff_config",
+   "fieldtype": "Check",
+   "label": "Diff Config"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.234.0. Run a configuration on real data; writes nothing.",
+   "fieldname": "allow_preview_config",
+   "fieldtype": "Check",
+   "label": "Preview Config"
   },
   {
    "default": "1",

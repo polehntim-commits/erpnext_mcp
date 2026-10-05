@@ -181,6 +181,7 @@ from .tools import (
 	workflow,
 )
 from .tools import card_prints as card_print_tools
+from .tools import configs as config_tools
 from .tools import contacts as contact_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
@@ -17397,6 +17398,74 @@ TOOLS = {
 		title="Classify receipt",
 	),
 	# ── v0.68.0: merchant ↔ Supplier matching, and the bill a receipt becomes ─
+	# ── v0.234.0: one config lifecycle — the generic reads ─────────────────
+	"list_configs": _tool(
+		config_tools.list_configs,
+		"v0.234.0. Versions and status of one kind of configuration — every 'flow data, not code' feature "
+		"through one tool. kind: wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule. Routed to the store that kind already uses, so the answer is the "
+		"same one the specific tool gives.",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Only this config (wizard / tile / label key, document type, template, rule)."),
+			"status": _field(_STRING, "Phone kinds: Draft, Staged, Published, Superseded, Retired."),
+			"limit": _field(_INTEGER, "At most this many (default 100)."),
+		},
+		required=("kind",),
+		title="List configs",
+	),
+	"get_config": _tool(
+		config_tools.get_config,
+		"v0.234.0. One configuration version — body, provenance, validation — of any kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule). "
+		"Without version, the one in force.",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Which config."),
+			"version": _field(_INTEGER, "A version number (phone kinds, extraction configs). Default: in force."),
+		},
+		required=("kind", "key"),
+		title="Get config",
+	),
+	"diff_config": _tool(
+		config_tools.diff_config,
+		"v0.234.0. What changed between two versions of a configuration, field by field (bookkeeping such "
+		"as timestamps and hashes left out). Leave a version out for the one in force.",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Which config."),
+			"from_version": _field(_INTEGER, "The older version (default: in force)."),
+			"to_version": _field(_INTEGER, "The newer version (default: in force)."),
+		},
+		required=("kind", "key"),
+		title="Diff config",
+	),
+	"preview_config": _tool(
+		config_tools.preview_config,
+		"v0.234.0. Run a configuration on real data and write nothing: a wizard or tile rendered as a user, "
+		"a label profile against a product, an extraction config against a stored document, a template's "
+		"form, or a compliance / Work Timing rule over one or more past days — with an UNSAVED patch "
+		"(e.g. a new condition_tree) and compare_to: live side by side.",
+		{
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule."),
+			"key": _field(_STRING, "Which config (rules: rule_id or docname)."),
+			"patch": _field(_OBJECT, "Rules: unsaved field changes to try, e.g. {\"condition_tree\": {…}}."),
+			"as_of": _field(_STRING, "Rules: the (latest) day judged, YYYY-MM-DD. Default today."),
+			"days": _field(_INTEGER, "Rules: how many days back from as_of to judge (1–31)."),
+			"compare_to": _field(_STRING, "Rules: 'live' to show the live rule's count beside each day."),
+			"company": _field(_STRING, "Rules: one company."),
+			"version": _field(_INTEGER, "Phone kinds / extraction: a version to preview."),
+			"body": _field(_OBJECT, "Phone kinds: an unsaved body to preview."),
+			"answers": _field(_OBJECT, "Wizard / task template: answers to check."),
+			"language": _field(_STRING, "en or es."),
+			"surface": _field(_STRING, "Tiles: today, work or asset_scan."),
+			"as_user": _field(_STRING, "Tiles: render as this user."),
+			"item": _field(_STRING, "Label profile: the product."),
+			"validation": _field(_STRING, "Extraction: the stored document validation to run against."),
+			"template_body": _field(_OBJECT, "Task template: an unsaved template body."),
+			"context": _field(_OBJECT, "Task template: context values."),
+		},
+		required=("kind",),
+		title="Preview config",
+	),
 	"search_contacts": _tool(
 		contact_tools.search_contacts,
 		"v0.231.0. The farm's contacts — people met and filed from a business card, or entered "

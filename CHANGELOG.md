@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.234.0 — 2026-10-04 — one config lifecycle, read side: list / get / diff / preview any configuration
+
+**Migrate needed** (four ERPNext MCP Settings switches, all reads, on). Four new MCP tools. Deploy
+`docs/deploy/v0.234.0_config_reads.md`. Design: `docs/design/config_lifecycle_and_tool_consolidation.md` §3
+(decision 6: the eight generic tools approved; decision 7: the specific tools stay until Tim approves removal).
+
+- **`list_configs`, `get_config`, `diff_config`, `preview_config`, keyed by `kind`**: wizard, tile, label_profile,
+  extraction_config, inspection_template, task_template, compliance_rule, trigger_rule (a rule in category Work
+  Timing). Each kind is routed to the tool that already answers for it, so the generic and specific answers agree.
+- **A rule previews three new ways**: an UNSAVED `patch` (e.g. a new `condition_tree`, validated like a write),
+  a `days` window back from `as_of` ("would last Tuesday have raised?"), and `compare_to: live` beside each day.
+- `diff_config` compares any two versions field by field (rules by version number), bookkeeping left out.
+- The write side (`draft_config`, `stage_config`, `publish_config`, `rollback_config`) follows in v0.234.1.
+
 ## 0.233.0 — 2026-10-04 — the CCF generic evaluator: rules as data
 
 **Migrate needed** (three Compliance Rule fields). No new tools, no settings. Deploy
