@@ -12,6 +12,9 @@
   "task_type",
   "state",
   "urgency",
+  "start_date",
+  "due_date",
+  "starts_after",
   "origin",
   "identity_col",
   "company",
@@ -718,6 +721,27 @@
    "label": "Template Version",
    "read_only": 1,
    "description": "v0.207.0. The Farm Task Template version this task was raised from — the snapshot it keeps."
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date",
+   "description": "v0.236.0. When the work may begin.",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "Due Date",
+   "description": "v0.236.0. When it is due. Overdue is computed, never stored.",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "starts_after",
+   "fieldtype": "Data",
+   "label": "Starts After",
+   "description": "v0.236.0. A condition in words, e.g. \"after the hail net is up\" — shown as Waiting: … on the phone.",
+   "in_list_view": 0
   }
  ],
  "index_web_pages_for_search": 0,

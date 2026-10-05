@@ -74,6 +74,7 @@ from .. import (
 	records,
 	rodent_bait,
 	sessions,
+	task_dates,
 	task_forms,
 	timezones,
 	training_sessions,
@@ -145,6 +146,10 @@ GENERATE_CAP = 500
 _TASK_FIELDS = (
 	"name",
 	"task_name",
+	# v0.236.0. Start / due dates (`task_dates`).
+	"start_date",
+	"due_date",
+	"starts_after",
 	"task_type",
 	"state",
 	"urgency",
@@ -958,6 +963,8 @@ def _describe_task(row: dict) -> dict:
 		out["is_crew_task"] = True
 		out["work_mode"] = crew_tasks.CREW
 		out["crew"] = crew
+	# v0.236.0. The dates, and what they mean today (computed, never stored).
+	out.update(task_dates.describe(row))
 	return out
 
 
@@ -1405,6 +1412,11 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 		doc.assigned_to = worker
 		doc.assigned_to_name = _worker_name(worker, as_str(args, "assigned_to_name"))
 		doc.state = DRAFT if draft else CLAIMED
+	# v0.236.0. Start / due dates — given, else the template's defaults.
+	try:
+		task_dates.apply(doc, args, str(doc.get("template") or as_str(args, "template") or ""))
+	except ValueError as exc:
+		raise ToolError(f"{exc} Nothing was created.") from None
 	doc.insert(ignore_permissions=True)
 
 	assignment = None
@@ -2251,6 +2263,16 @@ def start_farm_task(args: dict) -> ToolResult:
 
 	task = task_row(assignment["task"])
 
+	# v0.236.0. BLOCKED BY: an unfinished blocker stops the start; a cancelled or rejected one
+	# no longer does, and the start says so (decision 30).
+	waiting_on, released = task_dates.blockers(assignment["task"])
+	if waiting_on:
+		raise ToolError(
+			f"{assignment['task']} is waiting on "
+			+ ", ".join(f"{b['task_name']} ({b['task']}, {b['state']})" for b in waiting_on)
+			+ ". It can start when that is finished. Nothing was changed."
+		)
+
 	# v0.194.0. A HARVEST TASK TAKEN BEFORE A SPRAY IS NOT CLEAR AFTER IT. The
 	# worker's door, so no override here — the refusal names assign_farm_task,
 	# where a foreman re-sends it with a reason if the stamped date is wrong.
@@ -2333,6 +2355,12 @@ def start_farm_task(args: dict) -> ToolResult:
 			"it and nothing was lost. Resume it with resume_farm_task."
 		)
 	started["duplicate_hint"] = _duplicate_hint(task_row(assignment["task"]))
+	if released:
+		started["unblocked_note"] = (
+			"No longer waiting on "
+			+ ", ".join(f"{b['task_name']} ({b['task']})" for b in released)
+			+ " — it was " + "/".join(sorted({b["state"].lower() for b in released})) + ", so this one went ahead."
+		)
 
 	return ToolResult(
 		data=started,

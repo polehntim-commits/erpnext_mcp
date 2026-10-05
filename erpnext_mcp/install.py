@@ -226,6 +226,7 @@ def after_migrate() -> None:
 	_asset_tag_urls()
 	_business_card_fields()
 	_payroll_settings_seed()
+	_task_due_rule()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -744,6 +745,22 @@ def _payroll_settings_seed() -> None:
 			print(f"erpnext_mcp: payroll setting {name} seeded — 40 hours a workweek, 1.5×, as before.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: the overtime rule was not seeded — {type(exc).__name__}: {exc}")
+def _task_due_rule() -> None:
+	"""v0.236.0. The overdue / due-soon rule on Farm Task, seeded OFF for a person to approve
+	in the Desk (decision 5). Create-only; never raises."""
+	try:
+		from . import compat, compliance_rules, task_dates
+
+		if not compat.doctype_exists(compliance_rules.DOCTYPE) or not compat.has_field("Farm Task", "due_date"):
+			return
+		if any(r.get("rule_id") == "farm_task_due" for r in compliance_rules.rule_rows(include_inactive=True)):
+			return
+		doc = compliance_rules.build_rule(task_dates.rule_spec())
+		doc.flags.ignore_permissions = True
+		doc.insert(ignore_permissions=True)
+		print("erpnext_mcp: rule farm_task_due seeded OFF — approve it in the Desk to raise due / overdue alerts.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: the farm_task_due rule was not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

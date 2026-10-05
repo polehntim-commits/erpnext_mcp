@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.236.0 — 2026-10-04 — start and due dates on Farm Tasks; blocked-by (approved queue item 2)
+
+**Migrate needed** (three Farm Task fields, two Farm Task Template fields, two settings switches; seeds the rule
+`farm_task_due` OFF). Two new MCP tools. Deploy `docs/deploy/v0.236.0_task_dates.md`. App 0.38.8.
+
+- **`start_date`, `due_date`, `starts_after`** on Farm Task ("starts after" is a condition in words, shown as
+  "Waiting: …"); `default_start_after_days` / `default_due_after_days` on Farm Task Template fill them when a task
+  is raised from it and none were given. A due date before the start is refused. `create_farm_task` takes all
+  three; `set_task_dates` (write, off) changes them.
+- **Overdue and due-soon are computed, never stored** — on the server (every task description, `days_until_due`,
+  `overdue`, `due_soon`) and on the phone from the cached date, so a phone with no signal is still right.
+  `list_overdue_tasks` (read) lists them.
+- **The alert is a CCF rule, `farm_task_due`**: Warning two days before (decision 32), Critical once past, on open
+  tasks only. Seeded OFF — a person approves it in the Desk (decision 5).
+- **Blocked by**: a `blocked_by` link (`link_farm_tasks`) stops the START until the blocker is finished; a blocker
+  that was cancelled, rejected or merged no longer blocks, and the start says so (decision 30).
+- App 0.38.8: Overdue / Due / Waiting on task rows; Today's "Overdue / due soon" section.
+
 ## 0.235.0 — 2026-10-04 — payroll settings as data: the overtime rule (no pay changes)
 
 **Migrate needed** (one settings field; the Farm Config Version kind "Payroll Setting"; seeds `overtime_rule` v1).

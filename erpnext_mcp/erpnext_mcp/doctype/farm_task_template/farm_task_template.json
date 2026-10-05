@@ -11,6 +11,8 @@
   "template_name",
   "task_type",
   "default_urgency",
+  "default_start_after_days",
+  "default_due_after_days",
   "identity_col",
   "company",
   "enabled",
@@ -344,6 +346,20 @@
    "label": "Form Hash",
    "read_only": 1,
    "hidden": 1
+  },
+  {
+   "fieldname": "default_start_after_days",
+   "fieldtype": "Int",
+   "label": "Default Start After (days)",
+   "description": "v0.236.0. A task raised from this template starts this many days after it is raised, unless a date is given.",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "default_due_after_days",
+   "fieldtype": "Int",
+   "label": "Default Due After (days)",
+   "description": "v0.236.0. …and is due this many days after it is raised.",
+   "in_list_view": 0
   }
  ],
  "index_web_pages_for_search": 0,

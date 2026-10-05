@@ -183,6 +183,7 @@ from .tools import (
 from .tools import card_prints as card_print_tools
 from .tools import configs as config_tools
 from .tools import contacts as contact_tools
+from .tools import taskdates as task_date_tools
 from .tools import crew_tasks as crew_task_tools
 from .tools import device_keys as device_key_tools
 from .tools import direct_deposit as direct_deposit_tools
@@ -11113,6 +11114,9 @@ TOOLS = {
 			"company": _COMPANY,
 			"skill_required": _field(_STRING, "e.g. 'camp_maintenance', 'applicator_license'."),
 			"urgency": _field(_STRING, "Low, Normal, High or Critical. Default Normal."),
+			"start_date": _field(_STRING, "v0.236.0. When the work may begin (YYYY-MM-DD). Default: the template's offset."),
+			"due_date": _field(_STRING, "v0.236.0. When it is due (YYYY-MM-DD). Default: the template's offset."),
+			"starts_after": _field(_STRING, "v0.236.0. A condition in words — 'after the hail net is up'."),
 			"dispatch_mode": _field(
 				_STRING,
 				"Either (default), Dispatched (a foreman sends somebody by name) or Self-pick "
@@ -11772,6 +11776,8 @@ TOOLS = {
 			"skill_required": _field(_STRING, "e.g. 'camp_maintenance', 'applicator_license'."),
 			"estimated_duration_minutes": _field(_INTEGER, "How long one of these takes."),
 			"dispatch_mode": _field(_STRING, "Either (default), Dispatched or Self-pick."),
+			"default_start_after_days": _field(_INTEGER, "v0.236.0. A task raised from this template starts this many days later."),
+			"default_due_after_days": _field(_INTEGER, "v0.236.0. …and is due this many days after it is raised."),
 			"default_urgency": _field(
 				_STRING,
 				"Low, Normal (default), High or Critical. A DEFAULT, not a ceiling: a task "
@@ -11881,6 +11887,8 @@ TOOLS = {
 			"estimated_duration_minutes": _field(_INTEGER, "New estimate, in minutes."),
 			"dispatch_mode": _field(_STRING, "Either, Dispatched or Self-pick."),
 			"default_urgency": _field(_STRING, "Low, Normal, High or Critical."),
+			"default_start_after_days": _field(_INTEGER, "v0.236.0. A task raised from this template starts this many days later."),
+			"default_due_after_days": _field(_INTEGER, "v0.236.0. …and is due this many days after it is raised."),
 			"evidence_required": _field(_OBJECT, "Replace the evidence contract. At least one key true."),
 			"creates_record": _field(_STRING, "New produced-record DocType, or empty for none."),
 			"creates_record_data": _field(_OBJECT, "Replace the produced-record defaults."),
@@ -17532,6 +17540,31 @@ TOOLS = {
 		required=("kind", "key", "change_note"),
 		mutating=True,
 		title="Roll back config",
+	),
+	# ── v0.236.0: start / due dates ─────────────────────────────────────────
+	"list_overdue_tasks": _tool(
+		task_date_tools.list_overdue_tasks,
+		"v0.236.0. Open Farm Tasks past their due date, oldest first, with who holds each and how many days "
+		"late. The overdue alert itself is the CCF rule farm_task_due (approve it in the Desk to turn it on).",
+		{
+			"company": _field(_STRING, "Only one company."),
+			"limit": _field(_INTEGER, "At most this many (default 200, max 500)."),
+		},
+		title="List overdue tasks",
+	),
+	"set_task_dates": _tool(
+		task_date_tools.set_task_dates,
+		"MUTATING (default OFF). v0.236.0. Change a Farm Task's start_date, due_date or starts_after (a "
+		"condition in words, shown as 'Waiting: …'). A due date before the start date is refused.",
+		{
+			"task": _field(_STRING, "The Farm Task."),
+			"start_date": _field(_STRING, "YYYY-MM-DD, or empty to clear."),
+			"due_date": _field(_STRING, "YYYY-MM-DD, or empty to clear."),
+			"starts_after": _field(_STRING, "e.g. 'after the hail net is up'."),
+		},
+		required=("task",),
+		mutating=True,
+		title="Set task dates",
 	),
 	"search_contacts": _tool(
 		contact_tools.search_contacts,

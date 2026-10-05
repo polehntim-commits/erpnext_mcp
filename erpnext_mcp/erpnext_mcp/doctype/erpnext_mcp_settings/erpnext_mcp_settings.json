@@ -1174,6 +1174,8 @@
   "config_publish_kinds",
   "config_rollback_kinds",
   "payroll_preview_flag_pct",
+  "allow_list_overdue_tasks",
+  "allow_set_task_dates",
   "allow_search_contacts",
   "allow_save_contact",
   "allow_download_card_pdf",
@@ -9097,6 +9099,20 @@
    "fieldname": "payroll_preview_flag_pct",
    "fieldtype": "Float",
    "label": "Payroll Preview Flag (%)"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.236.0. Open Farm Tasks past their due date.",
+   "fieldname": "allow_list_overdue_tasks",
+   "fieldtype": "Check",
+   "label": "List Overdue Tasks"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.236.0. Change a Farm Task's start date, due date or 'starts after'.",
+   "fieldname": "allow_set_task_dates",
+   "fieldtype": "Check",
+   "label": "Set Task Dates"
   },
   {
    "default": "1",

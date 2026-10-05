@@ -45,6 +45,7 @@ import json
 
 import frappe
 
+from .. import task_dates
 from .. import compat, crew_tasks, form_schema, task_templates
 from .. import training as regimes_vocabulary
 from ..args import as_bool, as_choice, as_int, as_limit, as_str, resolve_company
@@ -195,6 +196,9 @@ def create_farm_task_template(args: dict) -> ToolResult:
 		"title_es": as_str(args, "title_es"),
 		"instructions_es": as_str(args, "instructions_es"),
 		"required_certification": as_str(args, "required_certification"),
+		# v0.236.0. Default start / due offsets (days after a task is raised).
+		"default_start_after_days": args.get("default_start_after_days"),
+		"default_due_after_days": args.get("default_due_after_days"),
 		# v0.213.0. docs/design/crew_tasks.md.
 		"is_crew_task": bool(crew_tasks.mode_argument(args)),
 		"crew_piece_unit": as_str(args, "piece_unit") or as_str(args, "crew_piece_unit"),
@@ -289,6 +293,15 @@ def update_farm_task_template(args: dict) -> ToolResult:
 			sections = crew_tasks.normalise_sections(args.get("sections"))
 			changes["crew_sections"] = {"to": [s["label"] for s in sections]}
 			doc.crew_sections = json.dumps(sections)
+
+	# v0.236.0. Default start / due offsets for tasks raised from this template.
+	for field in ("default_start_after_days", "default_due_after_days"):
+		if field in args and compat.has_field(TEMPLATE, field):
+			raw = args.get(field)
+			value = None if raw in (None, "") else as_int(args, field)
+			if doc.get(field) != value:
+				changes[field] = {"from": doc.get(field), "to": value}
+			doc.set(field, value)
 
 	if "estimated_duration_minutes" in args:
 		value = as_int(args, "estimated_duration_minutes") or 0
@@ -775,6 +788,11 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 		doc.assigned_to = worker
 		doc.assigned_to_name = dispatch._worker_name(worker, as_str(args, "assigned_to_name"))
 		doc.state = DRAFT if draft else CLAIMED
+	# v0.236.0. Start / due dates — given, else this template's default offsets.
+	try:
+		task_dates.apply(doc, args, shape["template"])
+	except ValueError as exc:
+		raise ToolError(f"{exc} Nothing was created.") from None
 	doc.insert(ignore_permissions=True)
 
 	assignment = None

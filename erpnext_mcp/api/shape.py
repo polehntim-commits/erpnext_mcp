@@ -155,6 +155,13 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 		"creates_record": row.get("creates_record"),
 		"produced_record": row.get("produced_record"),
 		"source_alert": row.get("source_alert"),
+		# v0.236.0. Start / due dates; overdue / due soon are computed by the server AND by the
+		# phone from the cached date (offline).
+		"start_date": row.get("start_date"),
+		"due_date": row.get("due_date"),
+		"starts_after": row.get("starts_after"),
+		"overdue": bool(row.get("overdue")),
+		"due_soon": bool(row.get("due_soon")),
 		"assignment": live.get("name") or row.get("assignment"),
 		"assigned_to": live.get("assigned_to") or row.get("assigned_to"),
 		"assigned_to_name": live.get("assigned_to_name") or row.get("assigned_to_name"),

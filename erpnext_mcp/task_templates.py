@@ -391,6 +391,10 @@ def build_template(spec: dict):
 	doc.estimated_duration_minutes = int(spec.get("estimated_duration_minutes") or 0)
 	doc.dispatch_mode = str(spec.get("dispatch_mode") or "Either").strip()
 	doc.default_urgency = str(spec.get("default_urgency") or "Normal").strip()
+	# v0.236.0. Default start / due offsets (days after a task is raised).
+	for field in ("default_start_after_days", "default_due_after_days"):
+		if spec.get(field) not in (None, "") and compat.has_field(TEMPLATE_DOCTYPE, field):
+			doc.set(field, int(spec[field]))
 	doc.evidence_required = json.dumps(
 		parse_evidence_required(spec.get("evidence_required") or spec.get("evidence"))
 	)
