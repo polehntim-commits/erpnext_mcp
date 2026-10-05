@@ -186,6 +186,7 @@ from .tools import contacts as contact_tools
 from .tools import course_videos as course_video_tools
 from .tools import quizzes as quiz_tools
 from .tools import references as reference_tools
+from .tools import degree_day_tools
 from .tools import gohold as go_hold_tools
 from .tools import irrigation_schedules as irrigation_schedule_tools
 from .tools import stages as stage_tools
@@ -17851,6 +17852,22 @@ TOOLS = {
 		},
 		required=("zone",),
 		title="Get irrigation schedule",
+	),
+	# ── v0.249.0: degree days ───────────────────────────────────────────────
+	"get_degree_days": _tool(
+		degree_day_tools.get_degree_days,
+		"v0.249.0. Growing degree days for a block (°F·days since the biofix, base 50 °F and cutoff 86 °F unless the "
+		"crop's settings say otherwise), from Open-Meteo history and forecast for the block's H3 cell; the next 7 days' "
+		"forecast; and — when the settings carry a stage table for the crop — the stage they suggest and when the next "
+		"one is expected. An ESTIMATE: it never passes a stage check; only an observed stage does (decision 12).",
+		{
+			"block": _field(_STRING, "The block (Field)."),
+			"crop": _field(_STRING, "The crop, if the Field does not say."),
+			"as_of": _field(_STRING, "YYYY-MM-DD (default today)."),
+			"with_series": _field(_BOOLEAN, "Include each day's degree days."),
+		},
+		required=("block",),
+		title="Get degree days",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

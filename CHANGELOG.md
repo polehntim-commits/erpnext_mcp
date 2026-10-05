@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.249.0 — 2026-10-04 — growing degree days (approved queue item 10)
+
+**Migrate needed** (three settings fields). One new MCP tool (read, on). Deploy `docs/deploy/v0.249.0_degree_days.md`.
+Decision 12 (estimate the stage from calendar + degree days) and `docs/design/ccf_core_work_timing.md` §5 (an estimate
+predicts; only an observed stage passes).
+
+- **`get_degree_days`**: °F·days since the biofix (default 1 January, a setting) for a block's H3 cell — Open-Meteo's
+  archive to a week ago, its forecast API for the last week and the next 16 days; simple average with a 50 °F base and
+  86 °F upper cutoff (per crop in settings); the next 7 days' forecast; days with no data counted.
+- **Stage estimate** only from a table someone wrote: ERPNext MCP Settings → **Degree-Day Stage Table** ("Sweet Cherry:
+  51 = 120"), to be drafted from the Reference Library's OSU/WSU guides. No built-in numbers; no line for the crop, no
+  estimate — and it says so. With one: the suggested stage, the next stage and the date the forecast reaches it.
+- **CCF provider `degree_days`** (`gdd_season`, `gdd_next_7`, `estimated_bbch`, `next_bbch`, `next_expected`).
+- **"Go — verify stage"** now adds what degree days suggest to look for. An estimate never passes a stage check.
+
 ## 0.248.0 — 2026-10-04 — the irrigation schedule (approved queue item 9)
 
 **Migrate needed** (a Schedule table on Irrigation Zone — new child Irrigation Schedule Line; task type Irrigation;

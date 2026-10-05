@@ -122,6 +122,21 @@ def _only_stage_missing(failures: list) -> bool:
 	return bool(leaves) and all(leaf.get("missing") and str(leaf.get("path") or "").startswith("phenology.") for leaf in leaves)
 
 
+def _estimated_stage(task: dict) -> str:
+	"""v0.249.0 (decision 12): what degree days suggest to look for. An estimate never passes the check."""
+	try:
+		from . import degree_days
+
+		if str(task.get("location_doctype") or "") != "Field" or not task.get("location"):
+			return ""
+		data = degree_days.for_block(str(task["location"]))
+		if data.get("estimated_bbch"):
+			return f" Degree days ({data['gdd_season']:g} since {data['biofix']}) suggest about BBCH {data['estimated_bbch']}."
+	except Exception:
+		frappe.log_error(title="degree-day estimate failed", message=frappe.get_traceback())
+	return ""
+
+
 def evaluate(task: dict, language: str = "en", as_of: str = "") -> dict:
 	"""The verdict for one task, without writing anything."""
 	rules = rules_for(task)
@@ -143,7 +158,8 @@ def evaluate(task: dict, language: str = "en", as_of: str = "") -> dict:
 		elif _only_stage_missing(result["failures"]):
 			verdict = VERIFY
 			verify.append(f"{row.get('title') or row.get('rule_id')}: no crop stage recorded for "
-			              f"{task.get('location') or 'this block'} — check the stage in the field.")
+			              f"{task.get('location') or 'this block'} — check the stage in the field."
+			              + _estimated_stage(task))
 		else:
 			verdict = HOLD
 			reasons.append(result["hold"])

@@ -775,3 +775,8 @@ _providers.register(_sys.modules[__name__])
 from . import sop as _sop  # noqa: E402
 
 _sop.register(_sys.modules[__name__])
+
+# v0.249.0. Growing degree days per block, and the stage they suggest (never a passing stage).
+from . import degree_days as _degree_days  # noqa: E402
+
+_degree_days.register(_sys.modules[__name__])

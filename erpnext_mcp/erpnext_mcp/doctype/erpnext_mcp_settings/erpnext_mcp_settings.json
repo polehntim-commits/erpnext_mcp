@@ -1201,6 +1201,9 @@
   "irrigation_schedule_enabled",
   "allow_set_irrigation_schedule",
   "allow_get_irrigation_schedule",
+  "degree_day_biofix",
+  "degree_day_stage_table",
+  "allow_get_degree_days",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9329,6 +9332,26 @@
    "fieldname": "allow_get_irrigation_schedule",
    "fieldtype": "Check",
    "label": "Get Irrigation Schedule"
+  },
+  {
+   "default": "01-01",
+   "description": "v0.249.0. MM-DD each year that degree days count from (the biofix). Default 1 January.",
+   "fieldname": "degree_day_biofix",
+   "fieldtype": "Data",
+   "label": "Degree-Day Biofix (MM-DD)"
+  },
+  {
+   "description": "v0.249.0. Degree days to each stage, per crop, one per line: 'Sweet Cherry: 51 = 120' (BBCH = °F·days since the biofix); optional 'Sweet Cherry: base = 50' and 'cutoff = 86'. Draft from the Reference Library's OSU/WSU guides. No line for a crop: no stage estimate. An estimate never passes a stage check.",
+   "fieldname": "degree_day_stage_table",
+   "fieldtype": "Small Text",
+   "label": "Degree-Day Stage Table"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.249.0. Growing degree days for a block and the stage they suggest.",
+   "fieldname": "allow_get_degree_days",
+   "fieldtype": "Check",
+   "label": "Get Degree Days"
   },
   {
    "default": "1",
