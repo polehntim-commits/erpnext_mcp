@@ -16876,6 +16876,26 @@ TOOLS = {
 		available=_needs_doctype("Expense Receipt"),
 		requires="the Expense Receipt doctype (run bench migrate after installing v0.31.0)",
 	),
+	"relink_expense_receipt": _tool(
+		expenses.relink_expense_receipt,
+		"MUTATING (default OFF). v0.256.0. Point a filed, Approved receipt at a Purchase Invoice or Journal Entry "
+		"that already exists — a bill entered at the Desk, a JE posted for a batch — or move it off the wrong one, "
+		"or clear its link (unlink=true). Same company; never a cancelled document; a vehicle title links nothing; "
+		"an Owner Draw links only to a Journal Entry. Replacing or clearing a link needs a reason, written on the "
+		"receipt with the old and new link. A total that differs, a different supplier, a draft target or another "
+		"receipt already on the same document come back as `warnings`, not refusals — one invoice can carry several "
+		"receipts.",
+		{
+			"receipt": _field(_STRING, "The Expense Receipt docname."),
+			"linked_doctype": _field(_STRING, "Purchase Invoice or Journal Entry."),
+			"linked_document": _field(_STRING, "Its docname."),
+			"unlink": _field(_BOOLEAN, "true clears the link instead (needs a reason)."),
+			"reason": _field(_STRING, "Why — required when replacing or clearing a link."),
+		},
+		required=("receipt",),
+		mutating=True,
+		title="Relink expense receipt",
+	),
 	"correct_receipt_amount": _tool(
 		expenses.correct_receipt_amount,
 		"MUTATING (default OFF). Correct the AMOUNT on a receipt already "

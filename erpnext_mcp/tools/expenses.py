@@ -1793,3 +1793,104 @@ def _csv_export(receipts: list[dict]) -> str:
 	for row in receipts:
 		writer.writerow(row)
 	return buffer.getvalue()
+
+
+# ── relink_expense_receipt ── v0.256.0 ────────────────────────────────────
+LINKABLE_DOCTYPES = ("Purchase Invoice", "Journal Entry")
+#: How far a linked document's total may sit from the receipt before the answer warns: a cent of rounding,
+#: or 1% (a receipt is often one of several lines on an invoice — a warning, never a refusal).
+RELINK_TOLERANCE = (0.01, 0.01)
+
+
+def _linked_total(doctype: str, name: str) -> float:
+	field = "grand_total" if doctype == "Purchase Invoice" else "total_debit"
+	return float(frappe.db.get_value(doctype, name, field) or 0)
+
+
+def relink_expense_receipt(args: dict) -> ToolResult:
+	"""Point a filed receipt at an invoice or journal entry that already exists — or clear its link.
+
+	v0.256.0. Until now a receipt got its link one way: `create_purchase_invoice_from_receipt` (or the co-op /
+	reimbursement posters) made the document. A bill entered at the Desk, a JE the bookkeeper posted for a batch,
+	or a draft made from the wrong receipt left the receipt unlinked — in `list_unmatched_receipts` for good — or
+	linked to the wrong thing with no way to say so.
+	"""
+	name = as_str(args, "receipt") or as_str(args, "name")
+	if not name:
+		raise ToolError("receipt (the Expense Receipt docname) is required.")
+	if not frappe.db.exists(EXPENSE_RECEIPT, name):
+		raise ToolError(f"no Expense Receipt called {name!r} on this site.")
+	unlink = as_bool(args, "unlink", False)
+	reason = as_str(args, "reason")
+	row = frappe.db.get_value(EXPENSE_RECEIPT, name, ["status", "category", "company", "supplier", "amount",
+	                                                  "linked_doctype", "linked_document"], as_dict=True) or {}
+	old = (str(row.get("linked_doctype") or ""), str(row.get("linked_document") or ""))
+	if row.get("category") in DOCUMENT_CATEGORIES:
+		raise ToolError(f"expense receipt {name} is a {row.get('category')} — a vehicle document, not a bill. It is "
+		                "filed on the asset (link_title_to_asset) and posts nothing. Nothing was changed.")
+	if row.get("status") != APPROVED:
+		raise ToolError(f"expense receipt {name} is {row.get('status')!r}, not Approved. Linking it says it is "
+		                "accounted for; approve it first (approve_expense_receipt). Nothing was changed.")
+	if (old[1] or unlink) and len(reason) < 5:
+		raise ToolError(
+			"a reason is required to replace or clear a link (a few words: why the receipt belongs elsewhere). "
+			"Nothing was changed.")
+	warnings: list = []
+	if unlink:
+		if not old[1]:
+			raise ToolError(f"expense receipt {name} is not linked to anything. Nothing was changed.")
+		target = ("", "")
+	else:
+		doctype = as_str(args, "linked_doctype", required=True)
+		document = as_str(args, "linked_document", required=True)
+		if doctype not in LINKABLE_DOCTYPES:
+			raise ToolError(f"linked_doctype is {' or '.join(LINKABLE_DOCTYPES)}. Nothing was changed.")
+		if not frappe.db.exists(doctype, document):
+			raise ToolError(f"no {doctype} called {document!r} on this site. Nothing was changed.")
+		if (doctype, document) == old:
+			raise ToolError(f"expense receipt {name} is already linked to {doctype} {document}. Nothing was changed.")
+		meta = frappe.db.get_value(doctype, document, ["company", "docstatus"], as_dict=True) or {}
+		if int(meta.get("docstatus") or 0) == 2:
+			raise ToolError(f"{doctype} {document} is cancelled — a receipt linked to it reads as accounted for "
+			                "when it is not. Link the amended document instead. Nothing was changed.")
+		if row.get("company") and meta.get("company") and meta["company"] != row["company"]:
+			raise ToolError(f"{doctype} {document} belongs to {meta['company']}; the receipt to {row['company']}. "
+			                "One company's receipt cannot stand behind another's books. Nothing was changed.")
+		if row.get("category") == OWNER_DRAW_CATEGORY and doctype != "Journal Entry":
+			raise ToolError(f"an {OWNER_DRAW_CATEGORY} is equity, not a bill — it links to a Journal Entry. "
+			                "Nothing was changed.")
+		target = (doctype, document)
+		amount, total = float(row.get("amount") or 0), _linked_total(doctype, document)
+		absolute, share = RELINK_TOLERANCE
+		if total and abs(total - amount) > max(absolute, share * max(amount, total)):
+			warnings.append(f"the receipt is {amount:.2f} and {doctype} {document} totals {total:.2f}. Fine when the "
+			                "receipt is one of several lines on it; otherwise check the right document is linked.")
+		if doctype == "Purchase Invoice":
+			supplier = frappe.db.get_value(doctype, document, "supplier")
+			if row.get("supplier") and supplier and supplier != row["supplier"]:
+				warnings.append(f"the receipt's supplier is {row['supplier']}; the invoice's is {supplier}.")
+		if int(meta.get("docstatus") or 0) == 0:
+			warnings.append(f"{doctype} {document} is still a draft — the receipt reads as accounted for once it is "
+			                "submitted.")
+		others = [r["name"] for r in frappe.db.get_all(
+			EXPENSE_RECEIPT, filters={"linked_doctype": doctype, "linked_document": document, "name": ("!=", name)},
+			fields=["name"], limit=20) or []]
+		if others:
+			warnings.append(f"{doctype} {document} is already the link of {', '.join(others)} — right for a batch, "
+			                "wrong for a receipt filed twice.")
+	if old[1] and old[0] == "Purchase Invoice" and int(frappe.db.get_value(old[0], old[1], "docstatus") or 0) == 0:
+		warnings.append(f"the old link, {old[0]} {old[1]}, is a draft nobody else may need — delete_draft_purchase_invoice "
+		                "removes it if it was made from this receipt by mistake.")
+	frappe.db.set_value(EXPENSE_RECEIPT, name, {"linked_doctype": target[0] or "", "linked_document": target[1] or ""})
+	said = (f"Linked via MCP (erpnext_mcp): {old[0] + ' ' + old[1] if old[1] else 'nothing'} → "
+	        f"{target[0] + ' ' + target[1] if target[1] else 'nothing'}" + (f". Reason: {reason}" if reason else "") + ".")
+	try:
+		frappe.get_doc(EXPENSE_RECEIPT, name).add_comment("Comment", said)
+	except Exception:
+		frappe.log_error(title="erpnext_mcp: could not attach relink comment to Expense Receipt",
+		                 message=compat.traceback_text())
+	data = {"name": name, "previous_link": {"doctype": old[0] or None, "document": old[1] or None},
+	        "linked_doctype": target[0] or None, "linked_document": target[1] or None, "reason": reason or None,
+	        "warnings": warnings}
+	return ToolResult(data=data, summary=f"{name}: {said[len('Linked via MCP (erpnext_mcp): '):]}",
+	                  docstatus_delta="0 → 0 (updated)")

@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.256.0 — 2026-10-05 — a filed receipt pointed at an invoice or journal entry that already exists
+
+**Migrate needed** (one settings switch, off). Deploy `docs/deploy/v0.256.0_receipt_relink.md`.
+
+- New write `relink_expense_receipt` (default OFF): point an Approved Expense Receipt at an existing Purchase Invoice
+  or Journal Entry — a bill entered at the Desk, a JE posted for a batch — move it off the wrong one, or clear the link.
+  Until now the only way to link a receipt was to have this app create the document, so a receipt whose bill was
+  entered elsewhere sat in `list_unmatched_receipts` for good.
+- Refused: not Approved; a cancelled document; another company's; a vehicle title (links nothing); an Owner Draw to
+  anything but a Journal Entry. Replacing or clearing a link needs a reason, written on the receipt with the old and
+  new link.
+- Warned, not refused: the document's total far from the receipt's (one invoice often carries several receipts), a
+  different supplier, a draft target, another receipt already on the same document, and an old draft invoice left
+  behind (named, with `delete_draft_purchase_invoice`).
+- 1057 / 513 / 544.
+
 ## 0.255.0 — 2026-10-05 — Library documents on an asset (AFB-2026-00021); the pruning preset refreshed
 
 **Migrate needed** (Asset Register gains a References table; "Record" document type; one settings switch). One phone

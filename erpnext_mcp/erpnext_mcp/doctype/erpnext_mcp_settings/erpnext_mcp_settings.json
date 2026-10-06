@@ -561,6 +561,7 @@
   "allow_reject_expense_receipt",
   "allow_update_expense_receipt",
   "allow_correct_receipt_amount",
+  "allow_relink_expense_receipt",
   "allow_correct_receipt_date",
   "allow_ensure_coop_accounts",
   "allow_post_coop_receipt",
@@ -5132,6 +5133,13 @@
    "fieldname": "allow_correct_receipt_amount",
    "fieldtype": "Check",
    "label": "Correct Receipt Amount"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.256.0. Point a filed receipt at an existing invoice or journal entry, or clear its link (with a reason).",
+   "fieldname": "allow_relink_expense_receipt",
+   "fieldtype": "Check",
+   "label": "Relink Expense Receipt"
   },
   {
    "default": "0",
