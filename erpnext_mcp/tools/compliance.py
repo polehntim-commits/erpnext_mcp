@@ -91,6 +91,12 @@ def _ccf_context() -> list:
 	return ccf.context_map()
 
 
+def _ccf_aggregations() -> list:
+	from .. import ccf
+
+	return ccf.aggregation_map()
+
+
 def get_compliance_field_map(args: dict) -> ToolResult:
 	"""What this app believes compliance requires of an operational record, and why.
 
@@ -129,6 +135,8 @@ def get_compliance_field_map(args: dict) -> ToolResult:
 			"missing_here": missing,
 			# v0.233.0. Every value a CCF condition tree can read, by provider.
 			"context": _ccf_context(),
+			# v0.253.0. Reductions a provider brings (the weather's chance_over), with their parameters.
+			"aggregations": _ccf_aggregations(),
 			"doctypes_not_on_this_site": absent,
 			"switch": f"allow_{compliance_fields.SWITCH}",
 			"the_test": (

@@ -587,6 +587,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"15 3 * * *": ["erpnext_mcp.tools.budget.refresh_all_active_budgets"],
 					"0 4 * * *": ["erpnext_mcp.services.regulation_feed.sweep_due_feeds"],
 					"30 4 * * *": ["erpnext_mcp.tools.maintenance.sweep_due_maintenance"],
+					# v0.253.0. The rain archive check (decision 21); never raises.
+					"45 4 * * *": ["erpnext_mcp.weather_verify.daily"],
 					"0 5 * * *": ["erpnext_mcp.services.usda_prices.sweep_configured_reports"],
 					# v0.240.0. The day-start Go / Hold check; never raises.
 					"0 6 * * *": ["erpnext_mcp.go_hold.scheduled_day_start"],
@@ -603,6 +605,8 @@ class TheScheduledJobs(unittest.TestCase):
 					# v0.243.0. No-work notice drafts and escalation; off unless enabled.
 					"erpnext_mcp.work_notices.hourly",
 					"erpnext_mcp.upload_links.sweep",
+					# v0.253.0. Go / Hold re-judged as the forecast changes.
+					"erpnext_mcp.go_hold.scheduled_forecast_refresh",
 				],
 				"daily": [
 					"erpnext_mcp.tools.uploads.collect_expired_sessions",

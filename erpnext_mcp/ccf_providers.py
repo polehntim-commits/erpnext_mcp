@@ -13,6 +13,16 @@ day, from the daily probabilities — so a rule says "Hold if the chance of rain
 or more", and when the forecast changes the next evaluation clears the Hold by itself. Rain is "wet"
 above `WET_DAY_IN` (0.05 in, decision 19; a rule can use its own number on the daily amount).
 
+v0.253.0 — PROBABILITY AND AMOUNT TOGETHER, AND THE RULE'S OWN THRESHOLD. Open-Meteo's daily
+probability is the chance of any measurable rain (0.1 mm), which says nothing about whether a day
+passes 0.05 in. Each day now also carries `rain` = {p, in} and the chance of rain OVER a threshold:
+P(over T) = p × exp(−(T − trace) / μ), μ = the forecast amount ÷ p (the mean amount on a wet day,
+never under 0.02 in) — the exponential wet-day amount of the standard stochastic weather generators
+(Richardson 1981). `p_over_pct` / `wet_risk_cum_pct` use 0.05 in; a rule reads its own with the
+`chance_over` aggregation and an `over` in inches:
+  {"path": "weather.forecast.daily[0..6].rain", "agg": "chance_over", "over": 0.05, "op": "lt", "value": 40}
+— "the chance of at least one day over 0.05 in this week is under 40%". `rain_risk_cum_pct` is unchanged.
+
 Off until `weather_forecast_enabled` (Weather Settings is Desk-only, design §4): with it off the
 provider answers nothing and every weather check is "no data" — a Hold that says why.
 
@@ -23,12 +33,20 @@ how old. Decision 12's "estimate from calendar + degree days" arrives with degre
 from __future__ import annotations
 
 import datetime
+import math
 
 import frappe
 
 from . import compat
 
 WET_DAY_IN = 0.05
+#: v0.253.0. Open-Meteo's precipitation probability is for more than 0.1 mm.
+TRACE_IN = 0.004
+#: v0.253.0. The smallest mean wet-day amount the model assumes when a day has a chance of rain but
+#: the forecast amount is (near) nothing — drizzle, not zero. Local judgment.
+WET_MEAN_FLOOR_IN = 0.02
+#: v0.253.0. The largest `over` a rule may give (inches in a day).
+OVER_MAX_IN = 5.0
 FORECAST_DAYS = 16
 HOURLY_HOURS = 48
 PAST_DAYS = 3
@@ -116,6 +134,42 @@ def _num(value):
 		return None
 
 
+def p_over(prob_pct, amount_in, over_in: float = WET_DAY_IN) -> float:
+	"""v0.253.0. The chance (0–1) that one day's rain passes `over_in`, from the chance of any rain and
+	the forecast amount. Pure."""
+	p = min(max((_num(prob_pct) or 0.0) / 100.0, 0.0), 1.0)
+	amount = _num(amount_in)
+	if p == 0:
+		if amount is None or amount < 0.01:
+			return 0.0
+		p = 1.0  # the model rains while the ensemble says nothing — believe the amount
+	mean_wet = max((amount or 0.0) / p, WET_MEAN_FLOOR_IN)
+	return p * math.exp(-max(float(over_in) - TRACE_IN, 0.0) / mean_wet)
+
+
+def chance_any(chances) -> float:
+	"""v0.253.0. The chance (0–1) that at least one of independent events happens."""
+	dry = 1.0
+	for chance in chances:
+		dry *= 1 - min(max(float(chance), 0.0), 1.0)
+	return 1 - dry
+
+
+def _cumulate(ahead: list) -> None:
+	"""The two running risks over the days ahead, in place: any rain (decision 15, as since v0.239.0)
+	and rain over 0.05 in (v0.253.0)."""
+	dry_so_far = 1.0
+	running = []
+	for row in ahead:
+		p = (row.get("precip_prob_pct") or 0) / 100.0
+		if row.get("precip_in") is not None and row["precip_in"] > WET_DAY_IN and p == 0:
+			p = 1.0
+		dry_so_far *= 1 - min(max(p, 0.0), 1.0)
+		row["rain_risk_cum_pct"] = round((1 - dry_so_far) * 100, 1)
+		running.append(p_over(row.get("precip_prob_pct"), row.get("precip_in")))
+		row["wet_risk_cum_pct"] = round(chance_any(running) * 100, 1)
+
+
 def normalise(payload: dict, cell: str = "", today: str = "") -> dict:
 	"""Open-Meteo's answer as the provider's paths. Pure: tested without a network."""
 	daily = payload.get("daily") or {}
@@ -135,16 +189,13 @@ def normalise(payload: dict, cell: str = "", today: str = "") -> dict:
 				"gust_mph": _num((daily.get("wind_gusts_10m_max") or [None] * len(days))[index]),
 			}
 		)
+		row = rows[-1]
+		row["rain"] = {"p": row["precip_prob_pct"], "in": row["precip_in"]}
+		row["p_over_pct"] = round(p_over(row["precip_prob_pct"], row["precip_in"]) * 100, 1)
 	past = [r for r in rows if r["date"] < today]
 	ahead = [r for r in rows if r["date"] >= today]
 	# Decision 15: the chance of at least one wet day from today through day i.
-	dry_so_far = 1.0
-	for row in ahead:
-		p = (row["precip_prob_pct"] or 0) / 100.0
-		if row["precip_in"] is not None and row["precip_in"] > WET_DAY_IN and p == 0:
-			p = 1.0
-		dry_so_far *= 1 - min(max(p, 0.0), 1.0)
-		row["rain_risk_cum_pct"] = round((1 - dry_so_far) * 100, 1)
+	_cumulate(ahead)
 	times = list(hourly.get("time") or [])
 	hours = []
 	for index, when in enumerate(times):
@@ -189,13 +240,7 @@ def as_of(values: dict, day) -> dict:
 	if not daily or not day or day <= str(daily[0].get("date") or ""):
 		return values
 	ahead = [dict(row) for row in daily if str(row.get("date") or "") >= day]
-	dry_so_far = 1.0
-	for row in ahead:
-		p = (row.get("precip_prob_pct") or 0) / 100.0
-		if row.get("precip_in") is not None and row["precip_in"] > WET_DAY_IN and p == 0:
-			p = 1.0
-		dry_so_far *= 1 - min(max(p, 0.0), 1.0)
-		row["rain_risk_cum_pct"] = round((1 - dry_so_far) * 100, 1)
+	_cumulate(ahead)
 	return {**values, "forecast": {**values["forecast"], "daily": ahead}}
 
 
@@ -236,8 +281,38 @@ def _phenology(subject: dict, ctx: dict) -> dict:
 	        "stage_name": row.get("crop_stage")}
 
 
+def _chance_over(series: list, leaf: dict):
+	"""`chance_over`: % chance that at least one day of the window passes the leaf's `over` inches."""
+	over = float(leaf.get("over", WET_DAY_IN))
+	days = [d for d in series if isinstance(d, dict)]
+	if not days:
+		return None
+	return round(chance_any(p_over(d.get("p"), d.get("in"), over) for d in days) * 100, 1)
+
+
+def _check_over(leaf: dict, where: str) -> None:
+	if "over" not in leaf:
+		return
+	over = leaf["over"]
+	if not isinstance(over, (int, float)) or isinstance(over, bool) or not TRACE_IN < over <= OVER_MAX_IN:
+		from . import ccf
+
+		raise ccf.TreeError(f"{where}: over is a daily rain amount in inches, more than {TRACE_IN} and at most {OVER_MAX_IN:g}.")
+
+
 def register(ccf) -> None:
 	p = ccf._p
+	ccf.register_aggregation(
+		ccf.Aggregation(
+			"chance_over",
+			_chance_over,
+			_check_over,
+			("rain",),
+			"% chance that at least one day in the window rains more than `over` inches (default 0.05, decision 19): "
+			"each day's chance of any rain and forecast amount, an exponential wet-day amount, days independent.",
+			{"over": "inches in a day, default 0.05"},
+		)
+	)
 	ccf.register(
 		ccf.Provider(
 			"weather",
@@ -245,6 +320,9 @@ def register(ccf) -> None:
 				"forecast.daily[].precip_in": p("number", "Daily rain.", "in", 0.12),
 				"forecast.daily[].precip_prob_pct": p("number", "Daily chance of rain.", "%", 40),
 				"forecast.daily[].rain_risk_cum_pct": p("number", "Chance of at least one wet day from today through this day (decision 15).", "%", 55),
+				"forecast.daily[].rain": p("rain", "The day's chance of rain and forecast amount, for agg chance_over (v0.253.0).", example={"p": 40, "in": 0.12}),
+				"forecast.daily[].p_over_pct": p("number", "Chance this day rains more than 0.05 in (v0.253.0).", "%", 25),
+				"forecast.daily[].wet_risk_cum_pct": p("number", "Chance of a day over 0.05 in from today through this day (v0.253.0).", "%", 35),
 				"forecast.daily[].tmin_f": p("number", "Daily low.", "°F", 27),
 				"forecast.daily[].tmax_f": p("number", "Daily high.", "°F", 48),
 				"forecast.daily[].wind_mph": p("number", "Daily max wind.", "mph", 8),

@@ -19,6 +19,10 @@ tasks it speaks to (by type, template, name…). Every such rule on a task must 
 * NO STAGE (decision 12): when the only thing a rule could not judge is the crop stage, the verdict
   is "Go — verify stage" with the stage to check, not a Hold.
 * Missing WEATHER is a Hold saying "no data" — never a silent Go.
+* v0.253.0 — CLEARED WHEN THE FORECAST CHANGES (decision 15), not only at six: every forecast refresh
+  re-judges the open tasks a weather-reading rule speaks to, and logs only what changed. Each rule's
+  verdict also records the rain it was betting against (`rain_forecast`: window, threshold, % risk),
+  which the archive check (`weather_verify`, decision 21) later scores against what actually fell.
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ import json
 
 import frappe
 
-from . import ccf, compat, compliance_rules
+from . import ccf, ccf_providers, compat, compliance_rules
 
 DOCTYPE = "Farm Task"
 CATEGORY = "Work Timing"
@@ -107,6 +111,49 @@ def _snapshot(tree: dict, values: dict) -> dict:
 	return out
 
 
+_RAIN_FIELDS = ("rain", "precip_prob_pct", "precip_in", "rain_risk_cum_pct", "wet_risk_cum_pct", "p_over_pct")
+
+
+def _rain_leaves(node) -> list:
+	"""Leaves reading a window of daily rain: weather.forecast.daily[a..b].<rain field>."""
+	if not isinstance(node, dict):
+		return []
+	found = []
+	if node.get("path"):
+		try:
+			provider, segments, _ = ccf.split_path(node["path"])
+		except ccf.TreeError:
+			segments, provider = [], ""
+		names = [name for name, _, _ in segments]
+		if provider == "weather" and names[:2] == ["forecast", "daily"] and names[-1] in _RAIN_FIELDS:
+			a, b = segments[1][1], segments[1][2]
+			if a is not None:
+				found.append((node, a, b if b is not None else a))
+	for key in ("all", "any"):
+		for child in node.get(key) or []:
+			found += _rain_leaves(child)
+	if "not" in node:
+		found += _rain_leaves(node["not"])
+	return found
+
+
+def rain_forecast(tree: dict, values: dict) -> dict | None:
+	"""v0.253.0. What a rule bet on: the widest daily-rain window it reads, the threshold (`over`, else
+	0.05 in) and the forecast % chance of a day over it — the number the archive check scores."""
+	leaves = _rain_leaves(tree)
+	if not leaves:
+		return None
+	leaf, a, b = max(leaves, key=lambda item: item[2] - item[1])
+	daily = ((values.get("weather") or {}).get("forecast") or {}).get("daily") or []
+	window = daily[a : b + 1]
+	if not window:
+		return None
+	over = float(leaf.get("over", ccf_providers.WET_DAY_IN))
+	risk = ccf_providers.chance_any(ccf_providers.p_over(d.get("precip_prob_pct"), d.get("precip_in"), over) for d in window)
+	return {"from": window[0].get("date"), "to": window[-1].get("date"), "days": len(window), "over_in": over,
+	        "risk_pct": round(risk * 100, 1), "check": leaf.get("id") or leaf.get("path")}
+
+
 def _only_stage_missing(failures: list) -> bool:
 	"""True when every failing check failed for want of a crop stage (decision 12)."""
 	leaves = []
@@ -173,6 +220,7 @@ def evaluate(task: dict, language: str = "en", as_of: str = "") -> dict:
 				"verdict": verdict,
 				"hold": result["hold"],
 				"read": _snapshot(tree, values),
+				"rain_forecast": rain_forecast(tree, values),
 			}
 		)
 	status = HOLD if reasons else (VERIFY if verify else GO)
@@ -187,8 +235,10 @@ def _load_json(raw, default):
 	return value if isinstance(value, type(default)) else default
 
 
-def check(task_name: str, moment: str = "on_demand", language: str = "en", write: bool = True) -> dict:
-	"""Evaluate and (by default) record the verdict on the task. Returns the verdict plus `changed`."""
+def check(task_name: str, moment: str = "on_demand", language: str = "en", write: bool = True,
+          only_if_changed: bool = False) -> dict:
+	"""Evaluate and (by default) record the verdict on the task. Returns the verdict plus `changed`.
+	`only_if_changed` (the forecast refresh) writes nothing when the verdict is the one already shown."""
 	if not installed() or not frappe.db.exists(DOCTYPE, task_name):
 		return {"status": "", "rules": [], "reasons": [], "enforced_hold": False, "changed": False}
 	task = dict(frappe.get_doc(DOCTYPE, task_name).as_dict())
@@ -197,6 +247,8 @@ def check(task_name: str, moment: str = "on_demand", language: str = "en", write
 	verdict["changed"] = verdict["status"] != before
 	verdict["cleared"] = before == HOLD and verdict["status"] in (GO, VERIFY)
 	if not write or (not verdict["rules"] and not before):
+		return verdict
+	if only_if_changed and not verdict["changed"]:
 		return verdict
 	now = frappe.utils.now()
 	log = _load_json(task.get("go_hold_log"), [])
@@ -314,6 +366,46 @@ def scheduled_day_start() -> None:
 	day_start()
 
 
+def _reads_weather(row: dict) -> bool:
+	try:
+		return "weather" in ccf.providers_in(ccf.parse_tree(row.get("condition_tree_json")))
+	except ccf.TreeError:
+		return False
+
+
+def forecast_refresh(company: str = "") -> dict:
+	"""v0.253.0 (decision 15). Re-judge the open tasks a WEATHER-reading Go/Hold rule speaks to, as the
+	forecast changes: a Hold whose rain has moved off clears now, not at tomorrow's six o'clock; a Go
+	whose window has closed turns Hold. Logs only a change. Advisory; never raises; does nothing with
+	forecasts off or no such rule on."""
+	report = {"checked": 0, "hold": 0, "cleared": 0, "changed": 0, "failed": 0}
+	if not installed() or not ccf_providers.forecast_enabled():
+		return report
+	if not any(is_go_hold_rule(row) and _reads_weather(row) for row in compliance_rules.rule_rows()):
+		return report
+	filters = {"state": ("in", list(OPEN_STATES))}
+	if company:
+		filters["company"] = company
+	for row in frappe.db.get_all(DOCTYPE, filters=filters, fields=["name"], limit=2000) or []:
+		try:
+			verdict = check(row["name"], "forecast_refresh", only_if_changed=True)
+		except Exception:
+			report["failed"] += 1
+			frappe.log_error(title="Go/Hold forecast refresh failed", message=frappe.get_traceback())
+			continue
+		if verdict["rules"]:
+			report["checked"] += 1
+			report["hold"] += verdict["status"] == HOLD
+			report["cleared"] += bool(verdict.get("cleared"))
+			report["changed"] += bool(verdict.get("changed"))
+	return report
+
+
+def scheduled_forecast_refresh() -> None:
+	"""The hourly entry. The forecast itself is fetched at most every two hours per cell (TTL)."""
+	forecast_refresh()
+
+
 def describe(task: dict) -> dict:
 	if not installed():
 		return {}
@@ -350,14 +442,17 @@ def preset_specs() -> list:
 		_preset(
 			"go_hold_pruning_canker",
 			"Pruning: dry spell for wound healing (bacterial canker)",
-			"Pruning cuts stay open to Pseudomonas while wet. Go when the chance of rain over the next 7 days "
-			"stays under 40%, it has been dry 24 hours, and no frost in the next 2 days.",
+			"Pruning cuts stay open to Pseudomonas while wet. Go when the chance of a day with more than 0.05 in "
+			"of rain in the next 7 days is under 40%, it has been dry 48 hours, and no frost in the next 2 days. "
+			"Every number is editable rule data (v0.253.0: the 7-day window, 0.05 in, 40% and 48 h).",
 			{"all": [
-				{"id": "dry_ahead", "path": "weather.forecast.daily[0..6].rain_risk_cum_pct", "agg": "max", "op": "lt",
-				 "value": 40, "basis": "local_judgment",
+				{"id": "dry_ahead", "path": "weather.forecast.daily[0..6].rain", "agg": "chance_over", "over": 0.05,
+				 "op": "lt", "value": 40, "basis": "published",
+				 "source": "PNW Plant Disease Management Handbook: no rain for at least a week after pruning; "
+				           "0.05 in (decision 19) and 40% are local judgment",
 				 "reason": {"en": "Rain likely this week — cuts would stay wet", "es": "Lluvia probable esta semana — los cortes quedarían mojados"}},
-				{"id": "dry_now", "path": "weather.recent.hours_since_rain", "op": "gte", "value": 24, "basis": "local_judgment",
-				 "reason": {"en": "Rained in the last 24 hours", "es": "Llovió en las últimas 24 horas"}},
+				{"id": "dry_since", "path": "weather.recent.hours_since_rain", "op": "gte", "value": 48, "basis": "local_judgment",
+				 "reason": {"en": "Rained in the last 48 hours — wood still wet", "es": "Llovió en las últimas 48 horas — la madera sigue mojada"}},
 				{"id": "no_frost", "path": "weather.forecast.daily[0..1].tmin_f", "agg": "min", "op": "gt", "value": 28,
 				 "reason": {"en": "Frost forecast", "es": "Pronóstico de helada"}},
 			]},

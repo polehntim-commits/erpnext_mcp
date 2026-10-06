@@ -6,7 +6,7 @@ from __future__ import annotations
 import frappe
 
 from .. import go_hold
-from ..args import as_str
+from ..args import as_int, as_str
 from ..errors import ToolError
 from ..result import ToolResult
 
@@ -52,6 +52,24 @@ def override_hold(args: dict) -> ToolResult:
 		data={"task": name, "override": entry, "note": "Recorded on the task's Go / Hold log; it lapses at midnight."},
 		summary=f"{name}: Hold overridden for today by {user}",
 		docstatus_delta="0 → 0 (updated)",
+	)
+
+
+def get_forecast_verification(args: dict) -> ToolResult:
+	"""v0.253.0 (decision 21). Weather-gated work scored against the rain that actually fell."""
+	from .. import weather_verify
+
+	days = as_int(args, "days", 90)
+	if not 1 <= days <= 730:
+		raise ToolError("days is 1 to 730.")
+	data = weather_verify.summary(days, as_str(args, "rule_id"), as_str(args, "block"), as_str(args, "company"))
+	if not data["tasks_checked"]:
+		data["note"] = ("Nothing checked yet. The archive check (04:45 daily) scores completed tasks that started "
+		                "under a Go / Hold rule reading the rain forecast, once the rule's window has passed.")
+	return ToolResult(
+		data=data,
+		summary=(f"{data['tasks_checked']} task(s) checked, rained after {data['rained']}; Brier {data['brier']}"
+		         if data["tasks_checked"] else "no archive checks yet"),
 	)
 
 

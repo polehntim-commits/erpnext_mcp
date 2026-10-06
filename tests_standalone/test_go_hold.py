@@ -83,7 +83,7 @@ class AdvisoryHold(GoHoldTestCase):
 		self.assertEqual(entry["moment"], "task_start")
 		rule = entry["rules"][0]
 		self.assertEqual((rule["rule_id"], rule["version"], rule["enforcement"]), ("go_hold_pruning_canker", 1, "Advisory"))
-		self.assertIn("weather.forecast.daily[0..6].rain_risk_cum_pct", rule["read"])
+		self.assertIn("weather.forecast.daily[0..6].rain", rule["read"])
 
 	def test_a_task_outside_the_rules_scope_is_not_judged(self):
 		self.a_rule()

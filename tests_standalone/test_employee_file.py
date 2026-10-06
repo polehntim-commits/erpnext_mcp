@@ -270,7 +270,8 @@ class NothingSecret(FileCase):
 			"123000848",
 		):
 			self.assertNotIn(forbidden, text, forbidden)
-		self.assertFalse(re.search(r"(?<!\d)\d{9}(?!\d)", text), "an SSN-shaped number")
+		# Standing alone, not the tail of a random hex docname ("1a4d699901001" made this flaky).
+		self.assertFalse(re.search(r"(?<![0-9A-Za-z])\d{9}(?![0-9A-Za-z])", text), "an SSN-shaped number")
 		self.assertNotIn("extra_withholding", text)
 
 

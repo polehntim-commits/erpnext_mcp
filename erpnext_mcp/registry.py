@@ -17598,6 +17598,21 @@ TOOLS = {
 		required=("task",),
 		title="Check Go / Hold",
 	),
+	"get_forecast_verification": _tool(
+		go_hold_tools.get_forecast_verification,
+		"v0.253.0 (decision 21). Did it actually rain? Completed work that started under a Go / Hold rule reading the "
+		"rain forecast, set against the rain that fell in the rule's window (Open-Meteo archive; provisional from the "
+		"forecast API's past days until the archive catches up). Per task: the window, threshold, forecast % chance, "
+		"whether a day passed it and how much fell. Overall: how often it rained against the mean forecast chance, the "
+		"Brier score and a reliability table. The 04:45 job records each check on the task's Go / Hold log; this reads.",
+		{
+			"days": _field(_NUMBER, "Completed in the last N days (default 90, max 730)."),
+			"rule_id": _field(_STRING, "Only work released by this rule (e.g. go_hold_pruning_canker)."),
+			"block": _field(_STRING, "Only this block (Field)."),
+			"company": _field(_STRING, "Only this company."),
+		},
+		title="Forecast verification",
+	),
 	"override_hold": _tool(
 		go_hold_tools.override_hold,
 		"MUTATING (default OFF). v0.240.0. A supervisor (Foreman, Farm Manager or System Manager) lets a task on "

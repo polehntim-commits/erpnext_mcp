@@ -391,6 +391,14 @@ scheduler_events = {
 		"0 6 * * *": [
 			"erpnext_mcp.go_hold.scheduled_day_start",
 		],
+		#: v0.253.0. The rain archive check (decision 21: continuous, at least weekly): completed
+		#: weather-gated work is scored against what actually fell — provisional from the forecast
+		#: API's past days, final from the archive once it catches up. Before the 06:00 check so the
+		#: morning sees yesterday's verdicts. Off with block forecasts off; never raises. 04:45 because
+		#: "30 4" is the maintenance sweep's key: a second entry under it would replace it.
+		"45 4 * * *": [
+			"erpnext_mcp.weather_verify.daily",
+		],
 	},
 	"hourly": [
 		# v0.212.0. The evening-before push to tomorrow's class attendees. Hourly
@@ -430,6 +438,10 @@ scheduler_events = {
 		#: v0.244.0. Upload links: Open past their time → Expired, a transfer left
 		#: Receiving for six hours → Failed, and stray partial files removed.
 		"erpnext_mcp.upload_links.sweep",
+		#: v0.253.0. Go / Hold re-judged as the forecast changes (decision 15): a Hold whose rain has
+		#: moved off clears within the hour. The forecast is fetched at most every two hours per cell;
+		#: only a changed verdict is written. Nothing without forecasts on and a weather rule live.
+		"erpnext_mcp.go_hold.scheduled_forecast_refresh",
 	],
 	"daily": [
 		"erpnext_mcp.tools.uploads.collect_expired_sessions",

@@ -43,6 +43,12 @@ ORDERED = ("gte", "gt", "lte", "lt", "between")
 AGGS = ("max", "min", "sum", "count_where", "any", "all")
 BASES = ("published", "local_judgment")
 
+#: v0.253.0. Aggregations a PROVIDER brings (name → Aggregation): a series it publishes can need a
+#: reduction the engine has no business knowing — the weather's `chance_over` turns a week of daily
+#: rain probabilities and amounts into "the chance of a day over N inches". Each takes its own leaf
+#: parameters, checked at create / propose / update like everything else in a tree.
+AGG_FUNCS: dict = {}
+
 #: When a rule is evaluated (§2.3). `sweep` is the existing nightly/hourly sweep;
 #: the others are wired as the features that need them land.
 MOMENTS = ("sweep", "day_start", "task_start", "evening_cutoff", "forecast_refresh")
@@ -177,6 +183,24 @@ PROVIDERS: dict = {}
 def register(provider: Provider) -> Provider:
 	PROVIDERS[provider.name] = provider
 	return provider
+
+
+class Aggregation:
+	"""v0.253.0. `reduce(series, leaf) -> number | None`; `check(leaf, where)` raises TreeError for bad
+	parameters; `types` are the path types it reduces."""
+
+	def __init__(self, name: str, reduce, check, types: tuple, description: str = "", params: dict | None = None):
+		self.name = name
+		self.reduce = reduce
+		self.check = check
+		self.types = types
+		self.description = description
+		self.params = params or {}
+
+
+def register_aggregation(aggregation: Aggregation) -> Aggregation:
+	AGG_FUNCS[aggregation.name] = aggregation
+	return aggregation
 
 
 register(
@@ -372,10 +396,23 @@ def _validate_leaf(leaf: dict, where: str) -> None:
 	type_ = described["spec"]["type"]
 	agg = leaf.get("agg")
 	if described["series"]:
-		if agg not in AGGS:
-			raise TreeError(f"{where}: {leaf['path']} is a series and needs agg ({', '.join(AGGS)}).")
+		if agg not in AGGS and agg not in AGG_FUNCS:
+			raise TreeError(f"{where}: {leaf['path']} is a series and needs agg ({', '.join(AGGS + tuple(AGG_FUNCS))}).")
 	elif agg is not None:
 		raise TreeError(f"{where}: agg applies only to a path with an index window [a..b].")
+	if agg in AGG_FUNCS:
+		custom = AGG_FUNCS[agg]
+		if type_ not in custom.types:
+			raise TreeError(f"{where}: agg {agg} reduces {', '.join(custom.types)}; {leaf['path']} is {type_}.")
+		custom.check(leaf, where)
+		if op in NULLARY or "value_source" in leaf:
+			return
+		for item in leaf.get("value") if op == "between" else [leaf.get("value")]:
+			if not isinstance(item, (int, float)) or isinstance(item, bool):
+				raise TreeError(f"{where}: agg {agg} gives a number; the value must be one.")
+		return
+	elif type_ in {t for a in AGG_FUNCS.values() for t in a.types} and described["series"] is False:
+		raise TreeError(f"{where}: {leaf['path']} is a {type_} and is read through an agg ({', '.join(AGG_FUNCS)}).")
 	if op in NULLARY:
 		if "value" in leaf or "value_source" in leaf:
 			raise TreeError(f"{where}: {op} takes no value.")
@@ -548,7 +585,12 @@ def _leaf(leaf: dict, values: dict, language: str) -> tuple:
 		present = [v for v in series if v is not None]
 		if not present:
 			return False, [_failure(leaf, None, threshold, language, missing=True)]
-		if agg == "count_where":
+		if agg in AGG_FUNCS:
+			actual = AGG_FUNCS[agg].reduce(present, leaf)
+			if actual is None:
+				return False, [_failure(leaf, None, threshold, language, missing=True)]
+			ok = _compare(actual, op, threshold)
+		elif agg == "count_where":
 			actual = sum(1 for v in present if _compare(v, leaf.get("where_op", "eq"), leaf.get("where", True)))
 			ok = _compare(actual, op, threshold)
 		elif agg in ("any", "all"):
@@ -569,6 +611,8 @@ def _leaf(leaf: dict, values: dict, language: str) -> tuple:
 
 
 def _aggregate(values: list, agg: str, leaf: dict):
+	if agg in AGG_FUNCS:
+		return AGG_FUNCS[agg].reduce([v for v in values if v is not None], leaf)
 	numbers = [_number_or_none(v) for v in values if v is not None]
 	numbers = [n for n in numbers if n is not None]
 	if not numbers:
@@ -680,6 +724,12 @@ def _as_date(value) -> datetime.date | None:
 
 
 # ── the field map's context section ─────────────────────────────────────────
+def aggregation_map() -> list:
+	"""v0.253.0. The provider-brought aggregations, for the field map."""
+	return [{"agg": a.name, "reduces": list(a.types), "params": a.params, "description": a.description}
+	        for a in sorted(AGG_FUNCS.values(), key=lambda a: a.name)]
+
+
 def context_map() -> list:
 	out = []
 	for name in sorted(PROVIDERS):
@@ -785,3 +835,8 @@ _degree_days.register(_sys.modules[__name__])
 from . import time_review as _time_review  # noqa: E402
 
 _time_review.register(_sys.modules[__name__])
+
+# v0.253.0. Did it actually rain after weather-gated work (decision 21).
+from . import weather_verify as _weather_verify  # noqa: E402
+
+_weather_verify.register(_sys.modules[__name__])

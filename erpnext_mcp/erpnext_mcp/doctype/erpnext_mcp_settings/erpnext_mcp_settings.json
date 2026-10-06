@@ -1181,6 +1181,7 @@
   "allow_list_overdue_tasks",
   "allow_set_task_dates",
   "allow_check_go_hold",
+  "allow_get_forecast_verification",
   "allow_override_hold",
   "allow_record_growth_stage",
   "allow_get_stage_timeline",
@@ -9196,6 +9197,13 @@
    "fieldname": "allow_check_go_hold",
    "fieldtype": "Check",
    "label": "Check Go / Hold"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.253.0. Weather-gated work scored against the rain that actually fell (decision 21).",
+   "fieldname": "allow_get_forecast_verification",
+   "fieldtype": "Check",
+   "label": "Get Forecast Verification"
   },
   {
    "default": "0",

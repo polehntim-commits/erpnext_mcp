@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.253.0 — 2026-10-05 — probabilistic dry day, per-rule rain threshold, Holds cleared by the forecast, the rain archive check
+
+**Migrate needed** (one settings switch; one rule seeded OFF). No phone change. Deploy
+`docs/deploy/v0.253.0_dry_day.md`. Tim's decisions 15 (probabilistic dry day; a Hold clears when the forecast that
+caused it changes), 19 (rain over 0.05 in, adjustable per rule) and 21 (archive check, continuous, at least weekly).
+
+- **Rain risk from probability AND amount**: each forecast day now carries `rain` = {chance of any rain, forecast
+  amount} and the chance it passes a threshold — P(over T) = p × exp(−(T − trace) / μ), μ = amount ÷ p (the mean
+  wet-day amount, never under 0.02 in): the exponential wet-day amount of the standard weather generators. New paths
+  `p_over_pct` and `wet_risk_cum_pct` (at 0.05 in); `rain_risk_cum_pct` (any rain) is unchanged.
+- **The threshold is the rule's**: the CCF engine takes aggregations a provider brings (`ccf.Aggregation`); the
+  weather's `chance_over` reads a window of days with the leaf's own `over` in inches — "the chance of a day over
+  0.05 in this week is under 40%". Bad parameters are refused at save. `get_compliance_field_map` lists aggregations.
+- **Holds clear when the forecast does**: an hourly re-judge of open tasks under weather-reading Go / Hold rules
+  (forecast fetched at most every two hours per cell); only a changed verdict is written, logged as `forecast_refresh`.
+  A Go whose window closes turns Hold the same way.
+- **Pruning preset defaults** (`go_hold_pruning_canker`, seeded OFF): the next 7 days' chance of a day over 0.05 in
+  under 40% (`chance_over`), dry 48 hours (was 24), no frost in 2 days. All rule data.
+- **Did it actually rain?** (`weather_verify`, 04:45 daily): completed work that started under a rain-reading rule is
+  set against what fell in the rule's window — provisional from the forecast API's past days, final from the
+  Open-Meteo archive once it catches up — and recorded on the task's Go / Hold log. Each verdict now records the bet
+  it made (`rain_forecast`: window, threshold, % chance).
+- Through CCF: provider `weather_check` (verified, rained, max_in, wet_day_count, forecast_risk_pct, days_since_work…)
+  and rule `weather_check_pruning_rain` (seeded OFF) alerting "rain fell in the week after the work … check the cuts".
+- Read tool `get_forecast_verification`: per task and overall — how often it rained against the forecast chance, the
+  Brier score, a reliability table. 1055 / 513 / 542.
+
 ## 0.252.0 — 2026-10-05 — each person's own Start / End of Day (approved queue item 3, part 2)
 
 **Migrate needed** (two more Daily Check values on Farm Task Template; one settings switch; two templates seeded). Three

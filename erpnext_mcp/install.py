@@ -789,6 +789,12 @@ def _go_hold_presets() -> None:
 		made = go_hold.seed()
 		if made:
 			print(f"erpnext_mcp: Go / Hold presets seeded OFF: {', '.join(made)}.")
+		# v0.253.0. The rain archive check's alert rule (decision 21), OFF like the presets.
+		from . import weather_verify
+
+		checked = weather_verify.seed()
+		if checked:
+			print(f"erpnext_mcp: rain archive check rule seeded OFF: {', '.join(checked)}.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: Go / Hold presets were not seeded — {type(exc).__name__}: {exc}")
 
