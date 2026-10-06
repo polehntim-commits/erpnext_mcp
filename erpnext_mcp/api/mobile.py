@@ -1892,6 +1892,127 @@ def get_asset_reference(user: str, asset_name=None, reference=None, max_bytes=No
 	}
 
 
+# ── office@ replies to review ── v0.258.0 (docs/design/office_reply_drafts.md §3, Phase 3) ──
+def _reply_reviewer(user: str) -> list:
+	"""The reviewer gate, before anything else: some approver role for some class, or refused by name."""
+	from .. import mail_drafts
+
+	allowed = guard.require_scope(user)
+	roles = mail_drafts.reviewer_roles()
+	if not set(guard.roles_held(user)) & set(roles):
+		raise frappe.PermissionError(f"Reviewing office@ replies is restricted to {', '.join(roles)}.")
+	return allowed
+
+
+def _reply_in_scope(name, allowed) -> str:
+	from .. import mail_drafts
+
+	name = str(name or "").strip()
+	if not name:
+		frappe.throw("name is required — the Office Mail the reply answers.", frappe.ValidationError)
+	company = frappe.db.get_value(mail_drafts.DOCTYPE, name, "company") if frappe.db.exists(mail_drafts.DOCTYPE, name) else None
+	if not frappe.db.exists(mail_drafts.DOCTYPE, name) or (company and company not in set(allowed)):
+		frappe.throw(f"Office Mail {name} was not found.", frappe.DoesNotExistError)
+	return name
+
+
+def _reply_call(fn):
+	from .. import mail_drafts
+
+	try:
+		return fn()
+	except mail_drafts.Refused as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_replies_to_review", limit=guard.READ_LIMIT)
+def list_replies_to_review(user: str, limit=None) -> dict:
+	"""Drafted office@ replies this person may approve, newest first. Never a flagged email."""
+	from .. import mail_drafts
+
+	allowed = _reply_reviewer(user)
+	rows = mail_drafts.for_reviewer(user, list(allowed), min(int(limit or 50), 200))
+	return {"replies": rows, "count": len(rows)}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_reply_to_review", limit=guard.READ_LIMIT)
+def get_reply_to_review(user: str, name=None) -> dict:
+	"""One reply to review: the sender's message (untrusted), the flags, the linked record, the draft, and the
+	files of the linked record that may go with it."""
+	from .. import mail_drafts
+
+	from .. import device_keys
+
+	allowed = _reply_reviewer(user)
+	name = _reply_in_scope(name, allowed)
+	answer = _reply_call(lambda: mail_drafts.for_review(name, user))
+	# Whether approving takes Face ID on this farm — the phone asks for it before it sends.
+	answer["device_keys"] = bool(device_keys.enabled())
+	return answer
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_reply_draft", mutating=True, limit=guard.WRITE_LIMIT)
+def update_reply_draft(user: str, name=None, text=None) -> dict:
+	"""Correct the draft's text from the phone (the reply stays unsent)."""
+	from .. import mail_drafts
+
+	allowed = _reply_reviewer(user)
+	name = _reply_in_scope(name, allowed)
+	if not str(text or "").strip():
+		frappe.throw("text is required — the corrected reply.", frappe.ValidationError)
+	_reply_call(lambda: mail_drafts.for_review(name, user))
+	_reply_call(lambda: mail_drafts.update_draft(name, user, text=str(text)))
+	return _reply_call(lambda: mail_drafts.for_review(name, user))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("approve_reply", mutating=True, limit=guard.WRITE_LIMIT)
+def approve_reply(user: str, name=None, text=None, attachments=None, confirm_financial_details=None,
+                  signature=None) -> dict:
+	"""Approve and send. Every check of `mail_drafts.approve` (a person, an approver of this class, Frappe's email
+	permission on the linked record, financial details confirmed); with device keys on, Face ID over the exact
+	text and files sent (`mail_drafts.signed_message`)."""
+	from .. import device_keys, mail_drafts
+
+	allowed = _reply_reviewer(user)
+	name = _reply_in_scope(name, allowed)
+	if isinstance(attachments, str):
+		attachments = _json_argument(attachments, "attachments") if attachments.strip() else []
+	chosen = [str(a) for a in (attachments or [])]
+	review = _reply_call(lambda: mail_drafts.for_review(name, user))
+	final = str(text if text not in (None, "") else review.get("draft_text") or "").strip()
+	caller = _dd_caller()
+	via = f"phone {caller['device'] or ''}".strip()
+	if device_keys.enabled():
+		if not caller["key_bound"] or not caller["device"]:
+			frappe.throw("approving a reply takes a phone signed in with Face ID. Nothing was sent.",
+			             frappe.PermissionError)
+		try:
+			device_keys._verify_approver(user, caller["device"], mail_drafts.signed_message(name, final, chosen),
+			                             str(signature or ""))
+		except Exception as exc:
+			frappe.throw(f"{exc}", frappe.PermissionError)
+		via = f"phone {caller['device']} (Face ID)"
+	return _reply_call(lambda: mail_drafts.approve(
+		name, user, via, text=final, attachments=chosen,
+		confirm_financial_details=str(confirm_financial_details or "").lower() in ("1", "true", "yes")))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("discard_reply", mutating=True, limit=guard.WRITE_LIMIT)
+def discard_reply(user: str, name=None, reason=None) -> dict:
+	"""Discard the draft — nothing is sent; the email stays on file."""
+	from .. import mail_drafts
+
+	allowed = _reply_reviewer(user)
+	name = _reply_in_scope(name, allowed)
+	_reply_call(lambda: mail_drafts.for_review(name, user))
+	return _reply_call(lambda: mail_drafts.discard(name, user, str(reason or "")))
+
+
 # ── device keys ── v0.218.0 ───────────────────────────────────────────────
 # docs/design/device_client_enrollment.md §3, §4.5, §7. All four refuse while
 # `device_keys_enabled` is off, except the inventory, which is a read.

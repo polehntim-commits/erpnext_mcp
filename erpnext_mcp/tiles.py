@@ -431,6 +431,21 @@ PAYROLL_TILES = {
 		"show_if": {},
 		"min_app_version": "0.21.0",
 	},
+	# v0.258.0 (docs/design/office_reply_drafts.md §3, Phase 3). Hidden until office@ is switched on; a reply
+	# opens in the app's review screen (app 0.46.0), where it is edited, approved with Face ID, or discarded.
+	"replies_to_review": {
+		"surface": "today",
+		"title": {"en": "Replies to review", "es": "Respuestas por revisar"},
+		"subtitle": {"en": "office@ drafts waiting for you", "es": "Borradores de office@ que esperan por ti"},
+		"icon": "envelope.badge",
+		"order": 74,
+		"target": {"kind": "list_query", "query": "replies_to_review", "params": {}},
+		"audience": {"roles": ["System Manager", "Accounts Manager", "Accounts User", "HR Manager",
+		                       "Compliance Officer", "Farm Manager"]},
+		"badge": {"query": "replies_to_review", "params": {}},
+		"show_if": {},
+		"min_app_version": "0.46.0",
+	},
 }
 
 

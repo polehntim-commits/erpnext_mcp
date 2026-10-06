@@ -266,6 +266,23 @@ def punch_reviews(user, company, params):
 	return answer
 
 
+def replies_to_review(user, company, params):
+	"""v0.258.0. office@ replies drafted and waiting for this person's approval (office_reply_drafts.md §3)."""
+	from . import mail_drafts
+
+	rows = [
+		{
+			"doctype": "Office Mail",
+			"name": r["name"],
+			"title": r.get("subject") or r.get("sender") or r["name"],
+			"subtitle": " · ".join(x for x in (r.get("sender_name") or r.get("sender"), r.get("mail_class")) if x),
+			"state": "Edited" if r.get("state") == "Edited" else "due",
+		}
+		for r in mail_drafts.for_reviewer(user, [company] if company else None)
+	]
+	return _answer(rows)
+
+
 #: id → (function, params schema {name: type}, roles gate or ()).
 QUERIES = {
 	"my_tasks_open": (my_tasks_open, {}, ()),
@@ -286,6 +303,12 @@ QUERIES = {
 	),
 	# v0.227.0. Punches to review (`punch_times`).
 	"punch_reviews": (punch_reviews, {}, ("Farm Manager", "HR Manager", "HR User", "System Manager")),
+	# v0.258.0. Off until office@ drafting is on; see AVAILABLE.
+	"replies_to_review": (
+		replies_to_review,
+		{},
+		("System Manager", "Accounts Manager", "Accounts User", "HR Manager", "Compliance Officer", "Farm Manager"),
+	),
 }
 
 
@@ -296,7 +319,13 @@ def _payroll_calendar_on() -> bool:
 	return payroll_calendar.enabled()
 
 
-AVAILABLE = {"payroll_calendar": _payroll_calendar_on}
+def _office_mail_on() -> bool:
+	from . import office_mail
+
+	return office_mail.enabled()
+
+
+AVAILABLE = {"payroll_calendar": _payroll_calendar_on, "replies_to_review": _office_mail_on}
 
 
 def available(query: str) -> bool:

@@ -526,3 +526,72 @@ def _send(row: dict, text: str, attachments: list, approver: str) -> str:
 	finally:
 		frappe.set_user(previous)
 	return str((answer or {}).get("name") or "")
+
+
+# ── v0.258.0: the phone's "Replies to review" (docs/design/office_reply_drafts.md §3, Phase 3) ──
+REVIEW_STATES = ("Drafted", "Edited")
+
+
+def reviewer_roles() -> list:
+	"""Everyone who may approve some class — the tile's audience."""
+	return sorted({role for roles in approver_roles().values() for role in roles} | {ALWAYS})
+
+
+def for_reviewer(user: str, companies=None, limit: int = 50) -> list:
+	"""Drafted / Edited replies this person may approve, newest first; never a flagged one."""
+	if not compat.doctype_exists(DOCTYPE):
+		return []
+	filters = {"state": ("in", list(REVIEW_STATES))}
+	rows = frappe.db.get_all(
+		DOCTYPE, filters=filters,
+		fields=["name", "subject", "sender", "sender_name", "mail_class", "state", "company", "received_at",
+		        "linked_doctype", "linked_name", "contains_financial_details", "suspicious", "mail_flags", "draftable"],
+		order_by="received_at desc", limit=500) or []
+	out = []
+	for row in rows:
+		row = dict(row)
+		if companies is not None and row.get("company") and row["company"] not in companies:
+			continue
+		if _blocked(row) or not may_approve(user, row):
+			continue
+		out.append({k: row.get(k) for k in ("name", "subject", "sender", "sender_name", "mail_class", "state",
+		                                    "company", "received_at", "linked_doctype", "linked_name")}
+		           | {"contains_financial_details": bool(row.get("contains_financial_details"))})
+		if len(out) >= limit:
+			break
+	return out
+
+
+def for_review(name: str, user: str) -> dict:
+	"""One reply as the reviewer sees it — refused unless this person may approve it."""
+	row = _row(name)
+	if not may_approve(user, row):
+		raise Refused(f"{name} is {row.get('mail_class')} mail, which {user} does not approve.")
+	full = office_mail.one(name) or {}
+	return {
+		"name": name,
+		"state": row.get("state"),
+		"mail_class": row.get("mail_class"),
+		"company": row.get("company"),
+		"subject": row.get("subject"),
+		"sender": row.get("sender"),
+		"sender_name": row.get("sender_name"),
+		"received_at": str(row.get("received_at") or "")[:19] or None,
+		"message": full.get("message"),
+		"flags": _flags(row),
+		"blocked": _blocked(row) or None,
+		"linked_doctype": row.get("linked_doctype"),
+		"linked_name": row.get("linked_name"),
+		"draft_text": row.get("draft_text"),
+		"contains_financial_details": bool(row.get("contains_financial_details")),
+		"available_attachments": _available_files(row),
+		"proposed_attachments": full.get("proposed_attachments") or [],
+	}
+
+
+def signed_message(name: str, text: str, attachments) -> str:
+	"""What Face ID signs on approval: the mail, a hash of the exact text sent, the files chosen."""
+	import hashlib
+
+	digest = hashlib.sha256(str(text or "").strip().encode()).hexdigest()
+	return f"farmops-office-reply|{name}|{digest}|{','.join(sorted(str(a) for a in attachments or []))}"

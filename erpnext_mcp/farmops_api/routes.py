@@ -493,6 +493,12 @@ ROUTES = (
 	Route("/mobile", mobile_api.update_contact_where_met),
 	# v0.255.0 (AFB-2026-00021). A Library document cited on an asset, opened from its scan.
 	Route("/mobile", mobile_api.get_asset_reference),
+	# v0.258.0. office@ replies to review, from the "Replies to review" tile (app 0.46.0).
+	Route("/mobile", mobile_api.list_replies_to_review),
+	Route("/mobile", mobile_api.get_reply_to_review),
+	Route("/mobile", mobile_api.update_reply_draft),
+	Route("/mobile", mobile_api.approve_reply),
+	Route("/mobile", mobile_api.discard_reply),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

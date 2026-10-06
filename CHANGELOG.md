@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.258.0 — 2026-10-05 — office@ replies reviewed on the phone (Phase 3)
+
+**Migrate needed** (one tile seeded, hidden until office@ is on). Five phone routes. Pairs with FarmOps 0.46.0. Deploy
+`docs/deploy/v0.258.0_replies_to_review.md`. docs/design/office_reply_drafts.md §3 (frozen, approved).
+
+- Tile **Replies to review** (Today; Accounts, HR, Compliance, Farm Manager, System Manager; badge = how many wait for
+  you; hidden until `office_mail_enabled`): the drafted replies this person may approve — never a flagged email.
+- A reply opens the app's review screen: who wrote and what (shown as data), the flags, the linked record, the draft
+  to correct, the linked record's files as checkboxes, **Approve and send** or **Discard**.
+- Routes `list_replies_to_review`, `get_reply_to_review`, `update_reply_draft`, `approve_reply`, `discard_reply` —
+  role-gated (refused by name), company-scoped, and through `mail_drafts`, so every check is the Desk's and the MCP's:
+  a person, an approver of the class, Frappe's email permission on the linked record, financial details confirmed.
+- **Face ID** when device keys are on: the phone signs the mail, a hash of the exact text and the files sent
+  (`mail_drafts.signed_message`); `approved_via` records the phone and Face ID.
+- Phone named routes 215; contract mirror tests 81–85.
+
 ## 0.257.0 — 2026-10-05 — the dedicated MCP System User, planned and dry-run (read-only)
 
 **Migrate needed** (one settings switch, a read, on). Deploy `docs/deploy/v0.257.0_mcp_system_user.md`.

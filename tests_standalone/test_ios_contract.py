@@ -5544,3 +5544,100 @@ for _name, _fn in vars(_AssetLibraryMirrors).items():
 		setattr(EveryMobileMethodDecodes, _name, _fn)
 
 TheContractIsComplete.COVERED.update({"get_asset_reference": "test_80"})
+
+
+# ── v0.258.0 / app 0.46.0: office@ replies to review (`OfficeRepliesAPI.swift`) ─────
+class ReplyRowModel(Codable):
+	SWIFT = "OfficeRepliesAPI.swift"
+	LENIENT = (("name", str, 90), ("subject", str, 91), ("sender", str, 92), ("sender_name", str, 93),
+	           ("mail_class", str, 94), ("state", str, 95), ("contains_financial_details", bool, 96))
+
+
+class ReplyPageModel(Codable):
+	SWIFT = "OfficeRepliesAPI.swift"
+	NESTED = (("replies", ReplyRowModel, True, 64),)
+
+
+class ReplyFileModel(Codable):
+	SWIFT = "OfficeRepliesAPI.swift"
+	LENIENT = (("name", str, 113), ("file_name", str, 114))
+
+
+class ReplyDetailModel(Codable):
+	SWIFT = "OfficeRepliesAPI.swift"
+	LENIENT = (("name", str, 166), ("state", str, 167), ("mail_class", str, 168), ("subject", str, 169),
+	           ("sender", str, 170), ("draft_text", str, 179), ("contains_financial_details", bool, 180),
+	           ("device_keys", bool, 183))
+	NESTED = (("available_attachments", ReplyFileModel, True, 181),)
+
+
+class ReplyOutcomeModel(Codable):
+	SWIFT = "OfficeRepliesAPI.swift"
+	LENIENT = (("name", str, 195), ("state", str, 196))
+
+
+class _ReplyMirrors:
+	def _a_reply(self):
+		from unittest import mock
+
+		from erpnext_mcp import mail_drafts, office_mail
+
+		from .test_security_217 import Defaults
+
+		original = getattr(frappe, "defaults", None)
+		frappe.defaults = Defaults()
+		self.addCleanup(lambda: setattr(frappe, "defaults", original) if original else delattr(frappe, "defaults"))
+		self.configure(office_mail_enabled=1)
+		STORE.seed("Email Account", [{"name": "Office", "email_id": "office@orchardmeadow.net", "enable_incoming": 1}])
+		STORE.seed("Customer", [{"name": "Valley Fruit Co", "customer_name": "Valley Fruit Co",
+		                         "email_id": "buyer@valleyfruit.com"}])
+		STORE.seed("Communication", [{"name": "COMM-0001", "subject": "Order 42", "sender": "buyer@valleyfruit.com",
+		                              "content": "<p>Delivery?</p>", "communication_type": "Communication",
+		                              "communication_medium": "Email", "sent_or_received": "Received",
+		                              "email_account": "Office", "communication_date": frappe.utils.now(),
+		                              "creation": frappe.utils.now()}])
+		row = office_mail.triage_one("COMM-0001")
+		frappe.db.set_value("Office Mail", row["name"], "company", MAIN)
+		mail_drafts.save_draft(row["name"], "Thursday morning.", model="claude")
+		patcher = mock.patch.object(mail_drafts, "_send", return_value="COMM-SENT-1")
+		patcher.start()
+		self.addCleanup(patcher.stop)
+		set_roles(WORKER, ["Field Worker", "Accounts User"])
+		self.be()
+		return row["name"]
+
+	def test_81_list_replies_to_review(self):
+		name = self._a_reply()
+		body = self.wire("list_replies_to_review")
+		ReplyPageModel.decode(body, "list_replies_to_review")
+		self.assertEqual([r["name"] for r in body["replies"]], [name])
+
+	def test_82_get_reply_to_review(self):
+		name = self._a_reply()
+		ReplyDetailModel.decode(self.wire("get_reply_to_review", name=name), "get_reply_to_review")
+
+	def test_83_update_reply_draft(self):
+		name = self._a_reply()
+		body = self.wire("update_reply_draft", name=name, text="Thursday at 8.")
+		ReplyDetailModel.decode(body, "update_reply_draft")
+		self.assertEqual(body["state"], "Edited")
+
+	def test_84_approve_reply(self):
+		name = self._a_reply()
+		body = self.wire("approve_reply", name=name, attachments=[])
+		ReplyOutcomeModel.decode(body, "approve_reply")
+		self.assertEqual(body["state"], "Sent")
+
+	def test_85_discard_reply(self):
+		name = self._a_reply()
+		body = self.wire("discard_reply", name=name, reason="Answered by phone")
+		ReplyOutcomeModel.decode(body, "discard_reply")
+
+
+for _name, _fn in vars(_ReplyMirrors).items():
+	if _name.startswith(("test_", "_a_reply")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"list_replies_to_review": "test_81", "get_reply_to_review": "test_82",
+                                      "update_reply_draft": "test_83", "approve_reply": "test_84",
+                                      "discard_reply": "test_85"})
