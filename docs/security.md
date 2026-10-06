@@ -683,8 +683,10 @@ answers several of these differently — where it does, it says so.)*
 - [ ] Confirm every **Mobile Access Grant** is one you meant to issue, and that
       each has entity access naming at least one Company — `list_mobile_users`
       flags an account with none, and in Frappe none means *every*.
-- [ ] Create a dedicated **MCP System User** with **Accounts User** and nothing
-      more. Do not leave mutations running as `Administrator`.
+- [ ] Create a dedicated **MCP System User** with only the roles the tools you
+      switched on need — `plan_mcp_system_user` (v0.257.0, read-only) lists them,
+      dry-runs a candidate account and writes out the Desk steps. Do not leave
+      mutations running as `Administrator`.
 - [ ] Leave every mutating switch off until you have a specific need, then enable
       the narrowest one. If `create_journal_entry` is enough, do not enable
       `submit_journal_entry`.

@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.257.0 — 2026-10-05 — the dedicated MCP System User, planned and dry-run (read-only)
+
+**Migrate needed** (one settings switch, a read, on). Deploy `docs/deploy/v0.257.0_mcp_system_user.md`.
+
+- New read `plan_mcp_system_user`: who MCP calls run as now (Administrator until `mcp_system_user` is set — every
+  permission check passes), which areas the switches that are on reach (ledger, purchasing, sales, stock, fixed
+  assets, HR and payroll, generic reads) and the standard ERPNext roles they need — never System Manager.
+- With `candidate`: a dry run with Frappe's own permission check for that account on each area's documents — what
+  would be refused and which tools would break — missing and extra roles, and a disabled, non-System or System
+  Manager account flagged. Then the Desk steps (User, Role Profile, the setting) and how to undo.
+- IT CHANGES NOTHING. Creating the user and setting `mcp_system_user` stay a person's acts in the Desk.
+- docs/security.md's checklist item points at it. 1058 / 514 / 544.
+
 ## 0.256.0 — 2026-10-05 — a filed receipt pointed at an invoice or journal entry that already exists
 
 **Migrate needed** (one settings switch, off). Deploy `docs/deploy/v0.256.0_receipt_relink.md`.

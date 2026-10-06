@@ -1009,6 +1009,7 @@
   "allow_get_backup_status",
   "allow_test_pdf_rendering",
   "allow_get_security_status",
+  "allow_plan_mcp_system_user",
   "allow_list_mcp_switches",
   "allow_issue_enrollment_link",
   "allow_list_access_inventory",
@@ -8142,6 +8143,13 @@
    "fieldname": "allow_get_security_status",
    "fieldtype": "Check",
    "label": "Get Security Status"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.257.0. Plan and dry-run a dedicated MCP System User. Changes nothing.",
+   "fieldname": "allow_plan_mcp_system_user",
+   "fieldtype": "Check",
+   "label": "Plan MCP System User"
   },
   {
    "default": "1",

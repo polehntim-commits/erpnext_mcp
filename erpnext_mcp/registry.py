@@ -206,6 +206,7 @@ from .tools import pest_control as pest_control_tools
 from .tools import phone_configs as phone_config_tools
 from .tools import programs as program_tools
 from .tools import punch_reviews as punch_review_tools
+from .tools import mcp_user as mcp_user_tools
 from .tools import security_status as security_status_tools
 
 _STRING = {"type": "string"}
@@ -30108,6 +30109,21 @@ TOOLS = {
 		required=("name",),
 		mutating=True,
 		title="Redraft mail",
+	),
+	"plan_mcp_system_user": _tool(
+		mcp_user_tools.plan_mcp_system_user,
+		"v0.257.0. Plan the dedicated MCP System User — READ-ONLY: it creates no user, sets no role and never "
+		"touches ERPNext MCP Settings; a person applies the plan in the Desk. Answers who MCP calls run as now "
+		"(Administrator until mcp_system_user is set — every permission check passes), which areas the switches "
+		"that are on reach (ledger, purchasing, sales, stock, fixed assets, HR and payroll, generic reads) and the "
+		"standard ERPNext roles they need (never System Manager). With `candidate`, a DRY RUN: Frappe's own "
+		"permission check for that account on each area's documents — what would be refused and which tools would "
+		"break — plus missing / extra roles, a disabled or non-System user, System Manager held. Ends with the Desk "
+		"steps. Run it again after turning a switch on: a new area can need a new role.",
+		{
+			"candidate": _field(_STRING, "A User to dry-run as the MCP System User, e.g. mcp@yourfarm.com."),
+		},
+		title="Plan MCP System User",
 	),
 	"get_security_status": _tool(
 		security_status_tools.get_security_status,
