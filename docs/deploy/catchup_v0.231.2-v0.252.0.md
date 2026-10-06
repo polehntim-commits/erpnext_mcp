@@ -1,4 +1,4 @@
-**Deploy: catch-up v0.231.2 → v0.252.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.42.0 (build 37)**
+**Deploy: catch-up v0.231.2 → v0.252.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.43.0 (build 38)**
 
 For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.252.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
@@ -6,7 +6,7 @@ ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime
 output, proven on the payroll suite).
 
 - **Server**: erpnext_mcp main **`f25973d`** (`__version__ = "0.252.0"`).
-- **App**: fafo_ios main **`d16964f`** — FarmOps **0.42.0 (build 37)**, scheme **FarmOps**. It needs v0.252.0's
+- **App**: fafo_ios main **`2f1ac6c`** — FarmOps **0.43.0 (build 38)**, scheme **FarmOps**. It needs v0.252.0's
   routes, so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 
@@ -41,11 +41,12 @@ output, proven on the payroll suite).
 | app 0.40.0 | The course player: course videos with how much was watched, the knowledge check, trainer sign-off. |
 | app 0.41.0 | Punch review for supervisors: this week's punches, why each is flagged, approve or fix with a reason; "Punches to review" on Today. |
 | app 0.42.0 | My day: Start / End of Day on Today. Contacts: find a contact and correct where you met (Foreman+). |
+| app 0.43.0 | Spanish sweep: 133 longer explanations that always showed in English now read in Spanish (tú). |
 
 **1. Build (Tim)**
 
 Push erpnext_mcp main (`f25973d`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.252.0`. Push fafo_ios main
-(`d16964f`) and archive FarmOps 0.42.0 (build 37), scheme **FarmOps**.
+(`2f1ac6c`) and archive FarmOps 0.43.0 (build 38), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
 chooses. The full command list is in `~/Desktop/deploy-catchup-latest.txt`.
@@ -69,7 +70,7 @@ Expect from the migrate (first run only):
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
-4. Phone 0.42.0: Today and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
+4. Phone 0.43.0: Today and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
    works for a Foreman.
 5. Punch review (`v0.251.0_punch_review.md`): this week's flagged punches appear as compliance alerts and under
    "Punches to review" on Today for a Foreman / Farm Manager; `preview_payroll_for_period` warns on unreviewed punches
@@ -79,7 +80,7 @@ Expect from the migrate (first run only):
    now reads that, and Sheppards-Office-1 links to Supplier Sheppard's.
 7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`,
    `app_0.39.0_work_timing.md`, `app_0.40.0_course_player.md`, `app_0.41.0_punch_review.md`,
-   `app_0.42.0_my_day_contacts.md`).
+   `app_0.42.0_my_day_contacts.md`, `app_0.43.0_spanish_sweep.md`).
 
 **4. Rollback**
 
