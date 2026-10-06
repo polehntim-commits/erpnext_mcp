@@ -1044,6 +1044,13 @@ class ContractTestCase(MobileAPITestCase):
 		)
 		self.be()
 
+	def with_roles(self, *extra):
+		"""v0.260.0. Add roles to the worker for a test whose route is now gated (compliance, private HR)."""
+		from .harness import ROLES
+
+		set_roles(WORKER, sorted(set(ROLES.get(WORKER) or []) | set(extra)))
+		self.be()
+
 	def wire(self, method, **kwargs):
 		"""Call one mobile method as the worker and return what the phone gets."""
 		return on_the_wire(getattr(mobile_api, method)(**kwargs))
@@ -1112,7 +1119,8 @@ class ContractTestCase(MobileAPITestCase):
 				},
 			],
 		)
-		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		# v0.260.0. The HR account holds HR Manager too: the private personnel reads are HR's.
+		set_roles(WORKER, ["Field Worker", "Farm Manager", "HR Manager"])
 		self.be()
 
 	def a_shift(self, **overrides):
@@ -1485,6 +1493,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 	def test_09_list_compliance_alerts(self):
 		# The sweep is an operator's call, not a worker's — the phone only ever
 		# reads the calendar it produces.
+		self.with_roles("Foreman")  # v0.260.0
 		frappe.local.session.user = "Administrator"
 		self.tool_data("refresh_compliance_alerts", {"company": MAIN})
 		self.be()
@@ -2469,6 +2478,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		anything still owed. All of it was on the server and none of it was
 		reachable.
 		"""
+		self.with_roles("HR Manager")  # v0.260.0
 		self.the_hr_furniture()
 		self.the_i9_document_table()
 		self.wire("create_i9_form", employee=self.NEW_HIRE, company=MAIN, hire_date=frappe.utils.today())
@@ -2511,6 +2521,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 
 	def test_33_the_ssn_comes_back_as_the_last_four_and_nothing_more(self):
 		"""`_i9_fields` does not list `ssn_full` and argues why it never will."""
+		self.with_roles("HR Manager")  # v0.260.0
 		self.the_hr_furniture()
 		self.the_i9_document_table()
 		self.wire("create_i9_form", employee=self.NEW_HIRE, company=MAIN, hire_date=frappe.utils.today())
@@ -3205,6 +3216,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		uninspected and the calendar quiet about it, which is why v1 shipped with
 		no dismiss at all.
 		"""
+		self.with_roles("Foreman")  # v0.260.0
 		alert = self.a_dismissible_alert()
 
 		listed = self.wire("list_compliance_alerts")
@@ -3242,6 +3254,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		"""The gate is here and not only on the handset. The app hides the button
 		on `can_dismiss: false` and its own contract calls that UI courtesy; a
 		refusal that exists only in a client is not one."""
+		self.with_roles("Foreman")  # v0.260.0
 		frappe.local.session.user = "Administrator"
 		self.tool_data("refresh_compliance_alerts", {"company": MAIN})
 		self.be()
@@ -3254,6 +3267,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		self.assertEqual(int(frappe.db.get_value("Compliance Alert", alert["name"], "dismissed") or 0), 0)
 
 	def test_46_an_empty_reason_is_refused_before_anything_is_written(self):
+		self.with_roles("Foreman")  # v0.260.0
 		alert = self.a_dismissible_alert()
 		with self.assertRaises(Exception) as caught:
 			self.wire("dismiss_compliance_alert", alert=alert, reason="   ")
@@ -4063,6 +4077,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		from a handset again and "is there work authorization on file" was a Desk
 		question.
 		"""
+		self.with_roles("HR Manager")  # v0.260.0
 		self.the_hr_furniture()
 		_staged, finalized = self.upload(kind="licence", name="licence.jpg")
 		self.wire(
@@ -4098,6 +4113,7 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		`/private/files/…` link answers that with a login page. Without this the
 		list above is a list of things that cannot be opened.
 		"""
+		self.with_roles("HR Manager")  # v0.260.0
 		self.the_hr_furniture()
 		_staged, finalized = self.upload(kind="licence", name="licence.jpg")
 		self.wire(
@@ -4317,14 +4333,14 @@ class EveryMobileMethodDecodes(ContractTestCase):
 		it from an alert would be the dispatch gate with a second door in it."""
 		frappe.local.session.user = "Administrator"
 		self.tool_data("refresh_compliance_alerts", {"company": MAIN})
-		set_roles(WORKER, ["Field Worker"])
-		self.be()
-
+		self.with_roles("Foreman")  # v0.260.0: the calendar is read by a Foreman and up
 		alert = next(
 			row
 			for row in self.wire("list_compliance_alerts")["alerts"]
 			if row["name"].startswith("housing_inspection_overdue")
 		)
+		set_roles(WORKER, ["Field Worker"])
+		self.be()
 		with self.assertRaises(frappe.PermissionError):
 			self.wire("materialize_task_for_alert", alert=alert["name"])
 

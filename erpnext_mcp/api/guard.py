@@ -108,7 +108,19 @@ GRANT = "Mobile Access Grant"
 #: it goes red naming Crew Leader. Compliance Officer is its negative control —
 #: a role with desk access is deliberately NOT required to be in this set, so the
 #: invariant cannot be satisfied by simply listing all seven.
-FARM_OPS_ROLES = frozenset({"Field Worker", "Farm Worker", "Foreman", "Crew Leader", "Farm Manager"})
+FARM_OPS_ROLES = frozenset({"Field Worker", "Farm Worker", "Foreman", "Crew Leader", "Farm Manager",
+                            # v0.260.0. Office HR may use the phone for the HR reads that are now theirs alone.
+                            "HR Manager", "HR User"})
+
+#: v0.260.0 (docs/design/role_data_access_audit.md; Tim, 2026-10-06). The PRIVATE personnel reads — somebody else's
+#: I-9 and personal details, discipline, everybody's pay, deductions and garnishments, tax remittance, personnel
+#: attachments. Running the farm (Farm Manager) no longer opens them by itself; a person who needs both holds both
+#: roles (the Farm Owner profile carries HR Manager).
+PRIVATE_HR_ROLES = frozenset({"HR Manager", "HR User", "System Manager"})
+#: v0.260.0. Who reads the compliance calendar and dismisses its alerts — what the app's Compliance tab already used.
+COMPLIANCE_ROLES = frozenset({"Compliance Officer", "Foreman", "Farm Manager", "System Manager"})
+#: v0.260.0. Who reads everybody's expense receipts; everyone else reads their own.
+RECEIPT_REVIEW_ROLES = frozenset({"Farm Manager", "Accounts Manager", "Accounts User", "System Manager"})
 
 #: The roles that may DISPATCH: raise work, send somebody to it, or read a board
 #: that is not their own. A SUBSET of the list above rather than a second list
@@ -296,6 +308,31 @@ def roles_held(user: str) -> set:
 	"""
 	held = set(frappe.get_roles(user) or [])
 	return held or set(role_lib.all_roles_of(user) or [])
+
+
+def _held(user: str) -> set:
+	return set(roles_held(user or str(getattr(frappe.session, "user", "") or "")))
+
+
+def require_private_hr(user: str, action: str) -> None:
+	"""v0.260.0. HR Manager, HR User or System Manager — the private personnel reads. Refused by name."""
+	if _held(user) & PRIVATE_HR_ROLES:
+		return
+	raise frappe.PermissionError(
+		f"{action} is restricted to {', '.join(sorted(PRIVATE_HR_ROLES))}. Nothing was read.")
+
+
+def require_compliance_role(user: str, action: str) -> None:
+	"""v0.260.0. Compliance Officer, Foreman, Farm Manager or System Manager."""
+	if _held(user) & COMPLIANCE_ROLES:
+		return
+	raise frappe.PermissionError(
+		f"{action} is restricted to {', '.join(sorted(COMPLIANCE_ROLES))}. Nothing was read or changed.")
+
+
+def reviews_receipts(user: str) -> bool:
+	"""v0.260.0. True for those who read everybody's receipts; everyone else reads their own."""
+	return bool(_held(user) & RECEIPT_REVIEW_ROLES)
 
 
 def require_dispatch_role(user: str, action: str) -> None:

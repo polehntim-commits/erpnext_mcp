@@ -148,6 +148,8 @@ class EmployeeDocumentsTestCase(V12TestCase):
 		STORE.file_contents[OUTSIDER_FILE] = b"nope"
 		self.enrol(OWNER, "Tim Polehn", "Farm Manager")
 		self.enrol(PICKER, "Ana Ramos", "Field Worker")
+		# v0.260.0. Personnel folders are HR's; the owner holds HR Manager (the Farm Owner profile carries it).
+		ROLES[OWNER] = sorted(set(ROLES.get(OWNER) or []) | {"HR Manager"})
 
 	def _restore_roles(self):
 		ROLES.clear()
@@ -317,8 +319,8 @@ class TheBrokerIsNotAWidening(EmployeeDocumentsTestCase):
 		# `require_hr_role` raises a `ToolError`, which `guard.endpoint` turns into
 		# a validation error so the sentence reaches the phone in `_server_messages`.
 		# The four role names are in it, which is what makes it actionable.
-		self.assertIn("personnel register", str(caught.exception))
-		self.assertIn("Farm Manager", str(caught.exception))
+		self.assertIn("is restricted to", str(caught.exception))
+		self.assertIn("HR Manager", str(caught.exception))
 
 	def test_a_parent_off_the_list_is_still_refused_by_name(self):
 		"""Gate 1, `ATTACHMENT_PARENTS`. The brokering changed nothing about which

@@ -123,7 +123,8 @@ ADMIN_ROLE = "System Manager"
 #: The five profiles, and the roles each one bundles. Every role already exists:
 #: five come from `roles.py` and two from ERPNext's own accounting set.
 PROFILES = {
-	"Owner": ("Farm Manager", "Accounts Manager", "Family Member"),
+	# v0.260.0. HR Manager: the private personnel reads are HR's alone now; the owner holds both.
+	"Owner": ("Farm Manager", "Accounts Manager", "Family Member", "HR Manager"),
 	"Manager": ("Farm Manager",),
 	"Bookkeeper": ("Accounts Manager", "Accounts User"),
 	"Field Supervisor": ("Foreman",),

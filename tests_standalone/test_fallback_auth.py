@@ -214,6 +214,7 @@ class TheThreeDoors(FallbackTestCase):
 		self.by_header()
 		self.assertEqual(mobile_api.list_available_tasks()["count"], 0)
 		self.by_header()
+		ROLES[WORKER] = sorted(set(ROLES.get(WORKER) or []) | {"Foreman"})  # v0.260.0: the calendar is Foreman+
 		self.assertEqual(mobile_api.list_compliance_alerts()["count"], 0)
 
 	def test_the_arguments_survive_becoming_somebody(self):

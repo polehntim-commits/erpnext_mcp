@@ -261,7 +261,8 @@ class AForemanWalksTheWholeHire(MobileAPITestCase):
 		):
 			with self.assertRaises(Exception) as caught:
 				call()
-			self.assertIn("personnel register", str(caught.exception))
+			# v0.260.0: deductions are now refused by the private-HR gate, in its own words.
+			self.assertTrue(any(w in str(caught.exception) for w in ("personnel register", "is restricted to HR Manager")))
 
 	# ── fixture helpers ─────────────────────────────────────────────────────
 	def _through_section_1(self) -> str:

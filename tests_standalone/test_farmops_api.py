@@ -1672,6 +1672,7 @@ class ByteIdentical(FarmOpsAPITestCase):
 		self.both_ways("/mobile/get_task", mobile_api.get_task, {"task": task})
 
 	def test_list_compliance_alerts(self):
+		set_roles(WORKER, sorted(set(ROLES.get(WORKER) or []) | {"Foreman"}))  # v0.260.0: Foreman and up
 		self.both_ways("/mobile/list_compliance_alerts", mobile_api.list_compliance_alerts)
 
 	def test_a_write_produces_the_same_shape_over_either_transport(self):
@@ -2537,6 +2538,8 @@ class TheAuditRow(FarmOpsAPITestCase):
 
 class NoSecretReachesThePhone(FarmOpsAPITestCase):
 	def test_no_response_from_any_route_carries_a_credential_shaped_key(self):
+		# v0.260.0. The compliance calendar is a Foreman's and up.
+		set_roles(WORKER, sorted(set(ROLES.get(WORKER) or []) | {"Foreman"}))
 		self.a_camp()
 		task = self.a_task()
 		for path, body in (

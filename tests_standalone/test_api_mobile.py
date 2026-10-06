@@ -5329,7 +5329,7 @@ class ThePayrollRoutesAreHROnly(MobileAPITestCase):
 		)
 
 	def as_hr(self):
-		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		set_roles(WORKER, ["Field Worker", "Farm Manager", "HR Manager"])
 		return self.be()
 
 	# ── the register ────────────────────────────────────────────────────────
@@ -5338,7 +5338,7 @@ class ThePayrollRoutesAreHROnly(MobileAPITestCase):
 		self.be()
 		with self.assertRaises(Exception) as caught:
 			mobile_api.get_payroll_register(date_from="2026-06-01", date_to="2026-06-30")
-		self.assertIn("personnel", str(caught.exception).lower())
+		self.assertIn("is restricted to hr manager", str(caught.exception).lower())
 
 	def test_a_foreman_cannot_read_the_register_either(self):
 		"""Foreman is on `DISPATCH_ROLES` and not on `HR_ROLES`, and this is the
@@ -5348,7 +5348,7 @@ class ThePayrollRoutesAreHROnly(MobileAPITestCase):
 		self.be()
 		with self.assertRaises(Exception) as caught:
 			mobile_api.get_payroll_register(date_from="2026-06-01", date_to="2026-06-30")
-		self.assertIn("personnel", str(caught.exception).lower())
+		self.assertIn("is restricted to hr manager", str(caught.exception).lower())
 
 	def test_an_hr_account_reads_its_own_entity(self):
 		self.as_hr()
@@ -5390,7 +5390,7 @@ class ThePayrollRoutesAreHROnly(MobileAPITestCase):
 				payroll_entry="PAY-2026-0001",
 				employee=WORKER_EMPLOYEE,
 			)
-		self.assertIn("personnel", str(caught.exception).lower())
+		self.assertIn("is restricted to hr manager", str(caught.exception).lower())
 
 	def test_an_employee_outside_the_callers_crew_reads_as_not_found(self):
 		"""Without this an HR account could have walked the holding company's
@@ -5533,7 +5533,7 @@ class ReportingAnIncidentIsNotAdministration(MobileAPITestCase):
 		self.be()
 		with self.assertRaises(Exception) as caught:
 			mobile_api.get_discipline_record(record=record)
-		self.assertIn("personnel register", str(caught.exception))
+		self.assertIn("is restricted to HR Manager", str(caught.exception))
 
 	def test_the_self_exception_cannot_be_claimed_by_naming_somebody(self):
 		"""The subject is read OFF THE RECORD and the caller off their login, so
@@ -5550,7 +5550,7 @@ class ReportingAnIncidentIsNotAdministration(MobileAPITestCase):
 			mobile_api.acknowledge_discipline_record(
 				record=record, employee_signature="data:image/png;base64,iVBORw0KGgo="
 			)
-		self.assertIn("personnel register", str(caught.exception))
+		self.assertIn("is restricted to HR Manager", str(caught.exception))
 
 	def test_the_register_across_everybody_is_still_HRs(self):
 		"""`get_discipline_report` gained no self-service branch, deliberately: it
@@ -5561,7 +5561,7 @@ class ReportingAnIncidentIsNotAdministration(MobileAPITestCase):
 		self.be()
 		with self.assertRaises(Exception) as caught:
 			mobile_api.get_discipline_report(employee=WORKER_EMPLOYEE)
-		self.assertIn("personnel register", str(caught.exception))
+		self.assertIn("is restricted to HR Manager", str(caught.exception))
 
 
 class ThePickerCanSeeWhoIsQualified(MobileAPITestCase):

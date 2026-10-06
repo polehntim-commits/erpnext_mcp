@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.260.0 — 2026-10-06 — least privilege on the phone: the hotfix
+
+**Migrate needed** (the Farm Owner profile gains HR Manager). No new routes. Pairs with FarmOps 0.47.0. Deploy
+`docs/deploy/v0.260.0_data_access_hotfix.md`. The role / data audit of 2026-10-05; Tim's decisions 2026-10-06.
+
+- **HR reads are HR's.** Somebody else's I-9, discipline record / history / register, the payroll register, another
+  person's pay stub, payroll deductions and garnishments, tax remittance (941 / FUTA / state) and personnel attachment
+  folders (Employee, I-9, Payroll Entry, Discipline) need **HR Manager, HR User or System Manager**. Farm Manager alone
+  no longer opens them. `get_employee` on somebody else still answers a Farm Manager running a hire, without gender,
+  date of birth, personal email, cell number or login (`withheld` lists what was withheld). The **Farm Owner** profile
+  carries HR Manager; HR Manager / HR User may now enrol a phone.
+- **Accident report**: one report is read by Foreman / Farm Manager (the register's readers) or by the injured person.
+- **Compliance calendar**: listing and dismissing alerts need Compliance Officer, Foreman, Farm Manager or System
+  Manager (what the app's Compliance tab already showed). The per-person compliance inbox is unchanged.
+- **Expense receipts**: a worker lists, opens, views the photo of and recodes **their own**; Farm Manager, Accounts and
+  System Manager see everyone's. Anybody else's receipt reads as not found.
+- **Housing tag scan**: shows the unit (capacity, beds open, condition), not who lives there — occupants, deposits and
+  deductions stay with the personnel roles.
+- **search_link**: filters only on links, selects, checks and the fields the picker shows — a date, phone or free-text
+  column can no longer be probed one yes/no answer at a time.
+- Refusals name the roles that may ("… is restricted to HR Manager, HR User, System Manager").
+
 ## 0.259.0 — 2026-10-05 — Form 940 and W-3: the payroll filing set completed
 
 **Migrate needed** (two Tax Form types). Deploy `docs/deploy/v0.259.0_940_w3.md`.

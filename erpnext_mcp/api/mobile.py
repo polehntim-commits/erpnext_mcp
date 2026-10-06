@@ -1732,6 +1732,7 @@ def list_compliance_alerts(user: str, company=None) -> dict:
 	that matters is `guard.endpoint` plus the entity scoping below, both of which
 	run whatever the app decided to draw.
 	"""
+	guard.require_compliance_role(user, "The compliance calendar")
 	allowed = guard.require_scope(user)
 	wanted = guard.require_company(user, company, allowed)
 
@@ -1778,6 +1779,7 @@ def dismiss_compliance_alert(user: str, alert=None, reason=None) -> dict:
 	expired, the cabin still uninspected. What is recorded is that somebody with
 	a phone in an orchard decided it did not need doing, and who they were.
 	"""
+	guard.require_compliance_role(user, "Dismissing a compliance alert")
 	allowed = guard.require_scope(user)
 	name = guard.require_scoped_doc(ALERT, alert, "alert", allowed)
 	if not str(reason or "").strip():
@@ -2011,6 +2013,10 @@ def discard_reply(user: str, name=None, reason=None) -> dict:
 	name = _reply_in_scope(name, allowed)
 	_reply_call(lambda: mail_drafts.for_review(name, user))
 	return _reply_call(lambda: mail_drafts.discard(name, user, str(reason or "")))
+
+
+#: v0.260.0. The personal columns of an Employee answer that only HR sees on somebody else's record.
+PERSONAL_EMPLOYEE_FIELDS = ("gender", "date_of_birth", "personal_email", "cell_number", "user_id")
 
 
 # ── device keys ── v0.218.0 ───────────────────────────────────────────────
@@ -2816,6 +2822,14 @@ def get_employee(user: str, employee=None, docname=None) -> dict:
 	detail = personnel.employee_detail(person)
 	if not guard.scoped([detail], allowed):  # pragma: no cover - require_scoped_doc got there first
 		frappe.throw(f"employee {person} was not found.", frappe.DoesNotExistError)
+	# v0.260.0. Somebody else's record: the onboarding answer (status, role, compliance state) for whoever hires,
+	# the PERSONAL fields only for HR (HR Manager, HR User, System Manager) — a Farm Manager running a hire does not
+	# need a coworker's date of birth or phone.
+	if person != fieldwork._employee_for(user) and not (set(guard.roles_held(user)) & guard.PRIVATE_HR_ROLES):
+		withheld = [key for key in PERSONAL_EMPLOYEE_FIELDS if detail.get(key) not in (None, "")]
+		for key in PERSONAL_EMPLOYEE_FIELDS:
+			detail[key] = None
+		detail["withheld"] = withheld
 	return detail
 
 
@@ -3808,6 +3822,7 @@ def get_i9_form(user: str, employee=None, docname=None) -> dict:
 	person = _employee_argument(employee or docname, allowed)
 
 	if person != fieldwork._employee_for(user):
+		guard.require_private_hr(user, "Reading another person's I-9")
 		personnel.require_hr_role()
 
 	result = i9.get_i9_form({"employee": person})
@@ -6693,6 +6708,7 @@ def _attachment_parent(doctype, docname, allowed: list) -> tuple:
 	# quietly refusing the Foreman this entry was added for, in the one code path
 	# nobody would think to read.
 	if gate is True:
+		guard.require_private_hr("", "A personnel folder")
 		personnel.require_hr_role()
 	elif gate is SHIFT_GATE:
 		try:
@@ -7272,6 +7288,16 @@ def universal_scan(
 	data["pending_task_count"] = len(data["pending_tasks"])
 	data["overdue_task_count"] = len(data["overdue_tasks"])
 	data["due_compliance_count"] = len(data["due_compliance"])
+	# v0.260.0. A housing tag tells a worker the unit — capacity, beds open, condition — and not who lives
+	# there, their deposits or wage deductions. Those stay with the people who run housing (the personnel roles),
+	# as `list_available_housing` already does.
+	if data.get("entity_type") == universal_scan_tool.HOUSING and not (
+		set(guard.roles_held(user)) & set(personnel.HR_ROLES)
+	):
+		entity = dict(data.get("entity") or {})
+		for key in ("current_assignments", "assignment_history"):
+			entity.pop(key, None)
+		data["entity"] = entity
 	return data
 
 
@@ -9604,6 +9630,12 @@ def list_expense_receipts(
 		if value not in (None, ""):
 			inner[key] = value
 
+	# v0.260.0. Everybody's receipts are for those who review them; anyone else lists their own.
+	if not guard.reviews_receipts(user):
+		mine = fieldwork._employee_for(user)
+		if not mine:
+			return {"receipts": [], "count": 0, "company": wanted or None, "total_amount": 0.0}
+		inner["submitted_by"] = mine
 	data = expense_tools.list_expense_receipts(inner).data
 	rows = guard.scoped(data.get("receipts") or [], allowed)
 	return {
@@ -9621,6 +9653,15 @@ def list_expense_receipts(
 			2,
 		),
 	}
+
+
+def _own_receipt_or_reviewer(user: str, docname: str) -> None:
+	"""v0.260.0. A receipt is read (or recoded) by the person who filed it, or by those who review receipts.
+	Anybody else's reads as not found — the same answer as another farm's, so a docname confirms nothing."""
+	if guard.reviews_receipts(user):
+		return
+	if str(frappe.db.get_value(EXPENSE_RECEIPT, docname, "submitted_by") or "") != str(fieldwork._employee_for(user) or "-"):
+		frappe.throw(f"receipt {docname} was not found.", frappe.DoesNotExistError)
 
 
 # ── 74a. get_expense_receipt ────────────────────────────────────────────────
@@ -9654,6 +9695,7 @@ def get_expense_receipt(user: str, receipt=None, name=None) -> dict:
 			"Expense Receipt. list_expense_receipts has the register."
 		)
 	docname = guard.require_scoped_doc(EXPENSE_RECEIPT, wanted, "receipt", allowed)
+	_own_receipt_or_reviewer(user, docname)
 	return expense_tools.get_expense_receipt({"receipt": docname}).data
 
 
@@ -9711,6 +9753,7 @@ def get_receipt_image(user: str, receipt=None, name=None, max_bytes=None) -> dic
 			"Expense Receipt. list_expense_receipts has the register. Nothing was read."
 		)
 	docname = guard.require_scoped_doc(EXPENSE_RECEIPT, wanted, "receipt", allowed)
+	_own_receipt_or_reviewer(user, docname)
 	field_value = str(frappe.db.get_value(EXPENSE_RECEIPT, docname, "receipt_image") or "")
 
 	answer = {
@@ -9853,6 +9896,7 @@ def update_expense_receipt(
 	"""
 	allowed = guard.require_scope(user)
 	name = guard.require_scoped_doc(EXPENSE_RECEIPT, receipt_name, "receipt_name", allowed)
+	_own_receipt_or_reviewer(user, name)
 
 	inner = {"name": name}
 	for key, value in (
@@ -10769,6 +10813,7 @@ def _require_self_or_hr(user: str, record: str) -> None:
 	except Exception:  # pragma: no cover - a site shaping the column differently
 		subject = None
 	if not subject or str(subject) != str(fieldwork._employee_for(user) or ""):
+		guard.require_private_hr(user, "Reading another person's discipline record")
 		personnel.require_hr_role()
 
 
@@ -11069,6 +11114,7 @@ def list_discipline_history(user: str, employee=None, include_inactive=None, dir
 	allowed = guard.require_scope(user)
 	person = _employee_argument(employee, allowed, "employee")
 	if person != fieldwork._employee_for(user):
+		guard.require_private_hr(user, "Reading another person's discipline history")
 		personnel.require_hr_role()
 	inner: dict = {"employee": person}
 	if include_inactive is not None:
@@ -11091,6 +11137,7 @@ def get_discipline_report(user: str, employee=None) -> dict:
 	SUPERVISOR DIRECTION ONLY: `chain_for` filters it, so a worker's own
 	grievances can never appear in it as their disciplinary history.
 	"""
+	guard.require_private_hr(user, "The discipline register")
 	personnel.require_hr_role()
 	allowed = guard.require_scope(user)
 	return discipline_tools.get_incident_report(
@@ -11281,8 +11328,12 @@ def close_accident_investigation(
 def get_accident_report(user: str, report=None) -> dict:
 	"""One investigation in full: witnesses, narrative, steps, what is outstanding."""
 	allowed = guard.require_scope(user)
+	docname = guard.require_scoped_doc(ACCIDENT_REPORT, report, "report", allowed)
+	# v0.260.0. The register's readers (Foreman, Farm Manager), or the injured person reading their own report.
+	if frappe.db.get_value(ACCIDENT_REPORT, docname, "injured_person") != fieldwork._employee_for(user):
+		guard.require_dispatch_role(user, "Reading an accident report")
 	return accident_tools.get_accident_report(
-		{"report": guard.require_scoped_doc(ACCIDENT_REPORT, report, "report", allowed)}
+		{"report": docname}
 	).data
 
 
@@ -13191,6 +13242,26 @@ def search_link(user: str, doctype=None, txt=None, filters=None, limit=None) -> 
 		)
 	wanted_limit = _limit_argument(limit, 20, 50, "limit")
 	meta = frappe.get_meta(wanted)
+	# v0.260.0. A filter is how a picker narrows a list (a status, a department, a parent) — not a way to test
+	# what hidden columns hold. Only links, selects and checks, and the fields the picker shows, may be filtered on;
+	# a date, a phone number or a free-text column cannot be probed one yes/no answer at a time.
+	shown = {"name", str(getattr(meta, "title_field", "") or "")} | {
+		f.strip() for f in str(getattr(meta, "search_fields", "") or "").split(",") if f.strip()}
+	probing = []
+	for key in given:
+		if key in shown:
+			continue
+		field = meta.get_field(key) if hasattr(meta, "get_field") else None
+		if isinstance(field, dict):
+			fieldtype = str(field.get("fieldtype") or "")
+		else:
+			fieldtype = str(getattr(field, "fieldtype", "") or "")
+		if fieldtype not in ("Link", "Select", "Check"):
+			probing.append(key)
+	if probing:
+		frappe.throw(
+			f"filters on {', '.join(sorted(map(str, probing)))} are not allowed here — a picker filters on links, "
+			"choices and checks only.", frappe.PermissionError)
 	title_field = str(getattr(meta, "title_field", "") or "")
 	if wanted == "Employee":
 		title_field = "employee_name"
@@ -13620,6 +13691,7 @@ def get_payroll_register(
 	"""
 	allowed = guard.require_scope(user)
 	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	guard.require_private_hr(user, "The payroll register")
 	personnel.require_hr_role()
 
 	inner: dict = {"company": entity}
@@ -13690,6 +13762,7 @@ def render_pay_stub(
 	passed. None of it is restated here.
 	"""
 	allowed = guard.require_scope(user)
+	guard.require_private_hr(user, "Another person's pay stub")
 	personnel.require_hr_role()
 	person = _employee_argument(employee, allowed)
 	run = guard.require_scoped_doc("Farm Payroll Entry", payroll_entry, "payroll_entry", allowed)
@@ -14134,6 +14207,7 @@ def list_payroll_deductions(
 	newly excludes is a picker reading a coworker's child-support order.
 	"""
 	allowed = guard.require_scope(user)
+	guard.require_private_hr(user, "Payroll deductions and garnishments")
 	personnel.require_hr_role()
 	inner: dict = {"company": _company(user, company, allowed)}
 	if employee:
@@ -14182,6 +14256,7 @@ def get_payroll_deduction(user: str, deduction=None) -> dict:
 	this register" and an oracle that confirms row names one guess at a time.
 	"""
 	allowed = guard.require_scope(user)
+	guard.require_private_hr(user, "Payroll deductions and garnishments")
 	personnel.require_hr_role()
 	docname = guard.require_scoped_doc(
 		PAYROLL_DEDUCTION,
@@ -14235,6 +14310,7 @@ def list_employee_deductions(
 	refusal should not depend on, or reveal, whether the named worker resolves.
 	"""
 	allowed = guard.require_scope(user)
+	guard.require_private_hr(user, "Payroll deductions and garnishments")
 	personnel.require_hr_role()
 	inner: dict = {"employee": _employee_argument(employee, allowed)}
 	for key, value in (
@@ -15420,6 +15496,7 @@ def get_tax_remittance_summary(user: str, company=None, fiscal_year=None, quarte
 	"""
 	allowed = guard.require_scope(user)
 	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	guard.require_private_hr(user, "Payroll-tax figures")
 	personnel.require_hr_role()
 
 	data = remittance_tools.get_tax_remittance_summary(_remittance_args(entity, fiscal_year, quarter)).data
@@ -15463,6 +15540,7 @@ def get_941_prefill(user: str, company=None, fiscal_year=None, quarter=None, dep
 	"""
 	allowed = guard.require_scope(user)
 	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	guard.require_private_hr(user, "Payroll-tax figures")
 	personnel.require_hr_role()
 
 	inner = _remittance_args(entity, fiscal_year, quarter)
@@ -15501,6 +15579,7 @@ def get_state_tax_remittance(user: str, company=None, fiscal_year=None, quarter=
 	"""
 	allowed = guard.require_scope(user)
 	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	guard.require_private_hr(user, "Payroll-tax figures")
 	personnel.require_hr_role()
 
 	inner = _remittance_args(entity, fiscal_year, quarter)
@@ -15601,6 +15680,7 @@ def get_futa_summary(user: str, company=None, fiscal_year=None, deposits=None) -
 	"""
 	allowed = guard.require_scope(user)
 	entity = guard.require_company(user, company, allowed) or (allowed[0] if allowed else "")
+	guard.require_private_hr(user, "Payroll-tax figures")
 	personnel.require_hr_role()
 
 	inner = _remittance_args(entity, fiscal_year, None)
