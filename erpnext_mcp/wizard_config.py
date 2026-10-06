@@ -524,10 +524,10 @@ ACCIDENT_WIZARD = "accident_investigation"
 ACCIDENT_LOCATION_FIELD = {
 	"key": "location_point",
 	"type": "geolocation",
-	"label": {"en": "Pin where it happened", "es": "Marque dónde ocurrió"},
+	"label": {"en": "Pin where it happened", "es": "Marca dónde ocurrió"},
 	"help": {
 		"en": "Optional. Use your location, or tap the map.",
-		"es": "Opcional. Use su ubicación o toque el mapa.",
+		"es": "Opcional. Usa tu ubicación o toca el mapa.",
 	},
 	"required": False,
 }

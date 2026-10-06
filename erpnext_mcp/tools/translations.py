@@ -203,12 +203,12 @@ _WIZARD_LABELS = {
 	"wizard.field.photo": ("Photograph", "Fotografía"),
 	"wizard.field.photo_help": (
 		"Take a photograph. It is the evidence, so frame what you are reporting.",
-		"Tome una fotografía. Es la evidencia, así que encuadre lo que está reportando.",
+		"Toma una foto. Es la evidencia, así que encuadra lo que estás reportando.",
 	),
 	"wizard.field.signature": ("Signature", "Firma"),
 	"wizard.field.signature_help": (
 		"Sign with your finger. This is your attestation that what you entered is true.",
-		"Firme con el dedo. Esta es su declaración de que lo que ingresó es cierto.",
+		"Firma con el dedo. Es tu declaración de que lo que escribiste es cierto.",
 	),
 	"wizard.field.qr_scan": ("Scan Code", "Escanear código"),
 	"wizard.field.audio_note": ("Voice Note", "Nota de voz"),
@@ -227,7 +227,7 @@ _WIZARD_LABELS = {
 	),
 	"wizard.validation.too_short": (
 		"Please write at least {min} characters.",
-		"Por favor escriba al menos {min} caracteres.",
+		"Escribe al menos {min} caracteres.",
 	),
 	"wizard.validation.bad_format": (
 		"That is not the expected format.",
@@ -273,7 +273,7 @@ _COMPLIANCE_FORMS = {
 	),
 	"compliance.label.shade_water_rest": (
 		"Shade, water and rest are available. Ask your supervisor.",
-		"Hay sombra, agua y descanso disponibles. Pregunte a su supervisor.",
+		"Hay sombra, agua y descanso disponibles. Pregúntale a tu supervisor.",
 	),
 	"compliance.label.evidence_required": (
 		"This work needs evidence before it can be filed.",
@@ -289,21 +289,21 @@ _SHIFT_STATUS = {
 	"shift.status.on_break": ("On Break", "En descanso"),
 	"shift.message.clocked_in": (
 		"You are clocked in on {shift} since {since}.",
-		"Está registrado en {shift} desde {since}.",
+		"Estás registrado en {shift} desde {since}.",
 	),
 	"shift.message.clocked_out": (
 		"You are clocked out. Your shift ran {hours} hours.",
-		"Ha salido. Su turno duró {hours} horas.",
+		"Ya marcaste la salida. Tu turno duró {hours} horas.",
 	),
-	"shift.message.break_started": ("Your break started at {at}.", "Su descanso comenzó a las {at}."),
-	"shift.message.break_ended": ("Your break ended at {at}.", "Su descanso terminó a las {at}."),
+	"shift.message.break_started": ("Your break started at {at}.", "Tu descanso empezó a las {at}."),
+	"shift.message.break_ended": ("Your break ended at {at}.", "Tu descanso terminó a las {at}."),
 	"shift.message.break_due": (
 		"A rest break is due. Tell your supervisor if you have not had one.",
-		"Le corresponde un descanso. Avise a su supervisor si no lo ha tomado.",
+		"Te toca un descanso. Avísale a tu supervisor si no lo has tomado.",
 	),
 	"shift.message.no_open_shift": (
 		"You are not clocked in on any shift.",
-		"No está registrado en ningún turno.",
+		"No estás registrado en ningún turno.",
 	),
 	"shift.message.awaiting_review": (
 		"This shift is waiting for a supervisor to review and sign it.",
@@ -322,11 +322,11 @@ _SHIFT_STATUS = {
 _ERRORS = {
 	"error.unspecified": (
 		"Something went wrong and this app could not say what. Tell your supervisor.",
-		"Algo salió mal y esta aplicación no pudo indicar qué. Avise a su supervisor.",
+		"Algo salió mal y la aplicación no pudo decir qué. Avísale a tu supervisor.",
 	),
 	"error.mobile.disabled": (
 		"The field app is switched off on this site. Your operator turned it off.",
-		"La aplicación de campo está desactivada en este sitio. Su operador la desactivó.",
+		"La aplicación de campo está desactivada en este sitio. La desactivó tu operador.",
 	),
 	# THE ONE KEY EVERY ENROLMENT FAILURE GETS. There is deliberately no separate
 	# key for "wrong role" or "no grant": `api/guard._not_enrolled` answers all
@@ -335,23 +335,23 @@ _ERRORS = {
 	# back the oracle the English message is written to withhold.
 	"error.mobile.no_grant": (
 		"This login is not enrolled for the field app. Ask your operator to enrol you.",
-		"Este inicio de sesión no está inscrito en la aplicación de campo. Pida a su operador que lo inscriba.",
+		"Esta cuenta no está inscrita en la aplicación de campo. Pídele a tu operador que te inscriba.",
 	),
 	"error.mobile.rate_limited": (
 		"Too many requests. Wait a moment and try again.",
-		"Demasiadas solicitudes. Espere un momento e intente de nuevo.",
+		"Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.",
 	),
 	"error.mobile.no_employee": (
 		"This login is not linked to an employee record.",
-		"Este inicio de sesión no está vinculado a un registro de empleado.",
+		"Esta cuenta no está vinculada a un registro de empleado.",
 	),
 	"error.permission.denied": (
 		"You are not permitted to do that.",
-		"No tiene permiso para hacer eso.",
+		"No tienes permiso para hacer eso.",
 	),
 	"error.shift.already_open": (
 		"You already have an open shift. Close it before starting another.",
-		"Ya tiene un turno abierto. Ciérrelo antes de comenzar otro.",
+		"Ya tienes un turno abierto. Ciérralo antes de empezar otro.",
 	),
 	"error.shift.not_found": ("That shift was not found.", "No se encontró ese turno."),
 	"error.shift.already_closed": (
@@ -364,7 +364,7 @@ _ERRORS = {
 	),
 	"error.task.not_assigned": (
 		"That job is not assigned to you.",
-		"Ese trabajo no está asignado a usted.",
+		"Ese trabajo no está asignado a ti.",
 	),
 	"error.task.already_done": ("That job is already filed.", "Ese trabajo ya fue registrado."),
 	"error.task.evidence_missing": (
@@ -373,7 +373,7 @@ _ERRORS = {
 	),
 	"error.task.too_many_claims": (
 		"You are holding as many jobs as you can at once. Finish one first.",
-		"Tiene tantos trabajos a la vez como puede. Termine uno primero.",
+		"Ya tienes el máximo de trabajos a la vez. Termina uno primero.",
 	),
 	"error.badge.unknown": (
 		"That badge is not registered to anybody.",
@@ -393,8 +393,32 @@ _ERRORS = {
 	),
 	"error.upload.failed": (
 		"The file did not finish sending. Try again where there is better signal.",
-		"El archivo no terminó de enviarse. Intente de nuevo donde haya mejor señal.",
+		"El archivo no terminó de enviarse. Inténtalo de nuevo donde haya mejor señal.",
 	),
+	# v0.254.0. Keys raise sites already send (offline create, asset tags, business cards, punch review)
+	# that had no row, so they reached a Spanish phone in English.
+	"error.asset.bad_tag": (
+		"This record's tag is not valid. Update the app and try again.",
+		"La etiqueta de este registro no es válida. Actualiza la app e inténtalo de nuevo.",
+	),
+	"error.asset.name_taken": (
+		"That name is already used by another tag. Rename it on the phone and send it again.",
+		"Ese nombre ya lo usa otra etiqueta. Cámbiale el nombre en el teléfono y envíalo de nuevo.",
+	),
+	"error.asset.tag_in_use": ("That tag is already on another record.", "Esa etiqueta ya está en otro registro."),
+	"error.asset.unknown_type": (
+		"That asset type is not on the farm's list.",
+		"Ese tipo de activo no está en la lista de la granja.",
+	),
+	"error.contact.duplicate": (
+		"This card matches a contact already saved. Update that contact or save it as new.",
+		"Esta tarjeta coincide con un contacto ya guardado. Actualiza ese contacto o guárdalo como nuevo.",
+	),
+	"error.punch.forbidden": (
+		"Reviewing punch times is for a Farm Manager or HR.",
+		"Revisar las marcas de tiempo es para un gerente o Recursos Humanos.",
+	),
+	"error.punch.not_found": ("That punch was not found.", "No se encontró esa marca de tiempo."),
 	"error.validation.failed": (
 		"Some answers need fixing before this can be sent.",
 		"Algunas respuestas necesitan corregirse antes de enviar esto.",
@@ -434,6 +458,13 @@ for _category, _group in (
 ):
 	for _key, (_en, _es) in _group.items():
 		SHIPPED[_key] = (_category, _en, _es)
+
+# v0.254.0. The refusals a worker hits on the phone, matched from their English (`error_phrases`), so
+# the hundreds of raise sites that carry no key still reach a Spanish speaker in their language.
+from .. import error_phrases as _error_phrases  # noqa: E402
+
+for _key, _en, _es in _error_phrases.catalogue():
+	SHIPPED[_key] = ("Error Messages", _en, _es)
 
 
 # ── resolution ──────────────────────────────────────────────────────────────

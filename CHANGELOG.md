@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.254.0 — 2026-10-05 — refusals in Spanish (tú); receipt checks with nothing extracted
+
+**Migrate needed** (translation rows only; no schema change). Pairs with FarmOps 0.44.0. Deploy
+`docs/deploy/v0.254.0_spanish_errors.md`.
+
+- **Why it never worked**: refusals have carried an optional translation key since v0.85.0, and no raise site a
+  worker hits passed one — so a Spanish phone got "something went wrong" or English. `error_phrases` now recognises
+  the ~50 refusals a worker actually meets (claim, start, pause, complete, hand back, Holds, shifts, punch review,
+  contacts, roles, tags, units) from the English the code already writes, with the names in it, and the guard sends
+  the Spanish beside the unchanged English. A key at a raise site still wins.
+- Seven keys raise sites already sent (asset tags, offline create, business cards, punch review) had no rows; they do.
+- **tú everywhere the phone reads**: the shipped error and shift messages, the photo / signature prompts, wizard hints
+  (incident location, bait station, machine tag) and the login / tag QR captions were in the formal register. A test
+  now refuses formal imperatives anywhere in the shipped catalogue.
+- **Fix — receipt, signature and task-evidence checks (OML action log)**: the phone sends `extracted_fields: {}` when
+  on-device extraction finds nothing, and the phone route refused it as missing — every such check on OML failed
+  (35 times, 2026-09-30 → 10-03). `{}` is now validated (and says what is missing); absent is still refused.
+
 ## 0.253.0 — 2026-10-05 — probabilistic dry day, per-rule rain threshold, Holds cleared by the forecast, the rain archive check
 
 **Migrate needed** (one settings switch; one rule seeded OFF). No phone change. Deploy

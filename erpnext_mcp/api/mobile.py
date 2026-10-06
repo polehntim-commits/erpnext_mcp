@@ -7778,7 +7778,11 @@ def validate_document(
 			"document_type is required — it decides which checks run, so there is no default.",
 			frappe.ValidationError,
 		)
-	if extracted_fields in (None, "", {}):
+	# v0.254.0. `{}` IS AN ANSWER, NOT A MISSING ARGUMENT: on-device extraction that found nothing (a
+	# signature, task evidence, a receipt the reader could not parse) sends an empty object, and the
+	# validation then says what is missing. Refusing it failed every such capture on OML (action log,
+	# 2026-09-30 → 10-03). Absent is still refused.
+	if extracted_fields in (None, ""):
 		frappe.throw(
 			"extracted_fields is required — what on-device extraction pulled out of the OCR text.",
 			frappe.ValidationError,

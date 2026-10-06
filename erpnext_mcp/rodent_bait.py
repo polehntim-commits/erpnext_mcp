@@ -1474,7 +1474,7 @@ def _product(required: bool = True) -> dict:
 		"label": _t("Product", "Producto"),
 		"help": _t(
 			"Scan or pick the bait. Its label opens from here.",
-			"Escanee o elija el cebo. Su etiqueta se abre aquí.",
+			"Escanea o elige el cebo. Su etiqueta se abre aquí.",
 		),
 		"required": required,
 		"link": {"doctype": "Item", "filters": {"item_group": PEST_CONTROL_GROUP}},

@@ -21,7 +21,7 @@ RULE = "Compliance Rule"
 ALERT = "Compliance Alert"
 OPEN_TASK_STATES = ("Available", "Claimed", "In-Progress", "Paused", "Awaiting Review")
 BLOCK_REASONS = {
-	"certification": ("needs {what}, which you don't hold", "requiere {what}, que usted no tiene"),
+	"certification": ("needs {what}, which you don't hold", "requiere {what}, que tú no tienes"),
 	"paused": ("the task is paused", "la tarea está en pausa"),
 	"approval": ("waiting for an approval step", "esperando una aprobación"),
 	"gap": (
@@ -30,7 +30,7 @@ BLOCK_REASONS = {
 	),
 	"device": (
 		"this phone can't show a required step — update the app",
-		"este teléfono no puede mostrar un paso requerido — actualice la app",
+		"este teléfono no puede mostrar un paso requerido — actualiza la app",
 	),
 }
 

@@ -822,9 +822,16 @@ def _stamp_error(exc, fallback_key: str) -> None:
 	try:
 		from ..tools import translations
 
-		key = str(getattr(exc, "translation_key", "") or "").strip() or fallback_key
-		language = caller_language() or translations.DEFAULT_LANGUAGE
+		key = str(getattr(exc, "translation_key", "") or "").strip()
 		fill = dict(getattr(exc, "translation_fill", None) or {})
+		if not key:
+			# v0.254.0. No key at the raise site: recognise the refusals a worker hits from their
+			# English (`error_phrases`), so a Spanish speaker reads why rather than "something went wrong".
+			from .. import error_phrases
+
+			key, fill = error_phrases.match(str(exc))
+		key = key or fallback_key
+		language = caller_language() or translations.DEFAULT_LANGUAGE
 		localised = translations.translate(key, language, default=str(exc), **fill)
 		response = getattr(frappe.local, "response", None)
 		if response is None:

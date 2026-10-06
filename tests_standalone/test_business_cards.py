@@ -222,3 +222,26 @@ class WhereMetFromThePhone(ContactSite, MobileAPITestCase):
 		self.be()
 		with self.assertRaises(frappe.PermissionError):
 			mobile_api.update_contact_where_met(contact=saved["name"], met_at="x")
+
+
+class NothingExtractedIsStillAValidation(MobileAPITestCase):
+	"""v0.254.0. OML's action log: every receipt, signature and task-evidence check whose on-device
+	extraction found nothing was refused, because the phone sends `extracted_fields: {}`."""
+
+	def test_an_empty_extraction_reaches_the_validation(self):
+		from unittest import mock
+
+		from erpnext_mcp.result import ToolResult
+		from erpnext_mcp.tools import docvalidation
+
+		self.be()
+		with mock.patch.object(docvalidation, "validate_document_extraction",
+		                       return_value=ToolResult(data={"status": "Needs Review"})) as inner:
+			data = mobile_api.validate_document(document_type="Receipt", extracted_fields={}, ocr_text="TOTAL 12.00")
+		self.assertEqual(data, {"status": "Needs Review"})
+		self.assertEqual(inner.call_args[0][0]["extracted_fields"], {})
+
+	def test_absent_is_still_refused(self):
+		self.be()
+		with self.assertRaisesRegex(frappe.ValidationError, "extracted_fields is required"):
+			mobile_api.validate_document(document_type="Receipt")

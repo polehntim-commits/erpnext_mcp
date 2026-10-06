@@ -253,7 +253,7 @@ ACCESS_STATUS_PATH = f"{PREFIX}/access/status"
 _PICKUP_PAGE = (
 	"Farm Ops sign-in code\n\n"
 	"Open the Farm Ops app and scan this code from its sign-in screen.\n\n"
-	"Abra la aplicación Farm Ops y escanee este código desde la pantalla de inicio de sesión.\n"
+	"Abre la aplicación Farm Ops y escanea este código desde la pantalla de inicio de sesión.\n"
 )
 
 PICKUP_DESCRIBED_ROUTE = {
@@ -1032,7 +1032,7 @@ def _terrain_tile(
 _SCAN_PAGE = (
 	"Farm Ops tag: {code}\n\n"
 	"Open the Farm Ops app and scan this tag with the app's scanner.\n\n"
-	"Abra la aplicación Farm Ops y escanee esta etiqueta con el escáner de la aplicación.\n"
+	"Abre la aplicación Farm Ops y escanea esta etiqueta con el escáner de la aplicación.\n"
 )
 
 
