@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.259.0 — 2026-10-05 — Form 940 and W-3: the payroll filing set completed
+
+**Migrate needed** (two Tax Form types). Deploy `docs/deploy/v0.259.0_940_w3.md`.
+
+- `generate_tax_form` (and `regenerate_tax_form`, `render_tax_form_pdf`, `mark_tax_form_filed`) take **940** and
+  **W-3**, per company per year, recorded as Tax Forms like the other six.
+- **940**: the same wage-base walk as `get_futa_summary` (the $7,000 base consumed in date order, the FUTA
+  configuration for the year, deposits and exemptions as arguments), so the recorded return and the summary cannot
+  disagree. The worksheet carries Parts 2–3, the quarterly liabilities and the agricultural-coverage note.
+- **W-3**: every employee's W-2 for the year computed with the W-2's own generator and totalled box by box (the Social
+  Security base capped per person first), with the count of W-2s, the state totals and box b. `kind_of_payer`
+  defaults to 941 with a warning: an agricultural employer that files **Form 943** ticks 943.
+- Both PDFs are working copies with the disclaimer and the real filing channel (EFTPS; SSA Business Services Online).
+- Noted, not built: **Form 943** itself (the farm employer's annual return in place of the 941s) is not generated —
+  if OML files a 943, that is the next form to add.
+
 ## 0.258.0 — 2026-10-05 — office@ replies reviewed on the phone (Phase 3)
 
 **Migrate needed** (one tile seeded, hidden until office@ is on). Five phone routes. Pairs with FarmOps 0.46.0. Deploy

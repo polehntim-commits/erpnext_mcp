@@ -131,6 +131,14 @@ FILING_CHANNEL = {
 	"WA-ESD": (
 		"The quarterly report is filed with the Washington Employment Security Department through EAMS."
 	),
+	"940": (
+		"Form 940 is filed on the official IRS form or electronically through an authorised e-file provider; "
+		"FUTA deposits are made through EFTPS."
+	),
+	"W-3": (
+		"The W-3 goes to the SSA with Copy A of the W-2s — on the official scannable red-ink form, or filed "
+		"electronically through Business Services Online, which builds the W-3 itself."
+	),
 }
 
 #: Which copy of a recipient form this module draws, and who it is for. Only
@@ -1863,6 +1871,96 @@ def _wa_employee_table(sheet: _Sheet, form_data: dict) -> None:
 	sheet.top = row_top + 16
 
 
+# ── Form 940 and W-3 ── v0.259.0 ────────────────────────────────────────────
+
+_940_LINES = (
+	("Line 3 - Total payments to all employees", "line3_total_payments"),
+	("Line 4 - Payments exempt from FUTA tax", "line4_payments_exempt_from_futa"),
+	("Line 5 - Payments over the $7,000 wage base", "line5_payments_over_wage_base"),
+	("Line 6 - Subtotal (line 4 + line 5)", "line6_subtotal"),
+	("Line 7 - Total taxable FUTA wages", "line7_total_taxable_futa_wages"),
+	("Line 8 - FUTA tax before adjustments", "line8_futa_tax_before_adjustments"),
+	("Line 11 - Credit reduction", "line11_credit_reduction"),
+	("Line 12 - Total FUTA tax after adjustments", "line12_total_futa_tax"),
+	("Line 13 - FUTA tax deposited for the year", "line13_futa_tax_deposited"),
+	("Line 14 - Balance due", "line14_balance_due"),
+	("Line 15 - Overpayment", "line15_overpayment"),
+	("Line 17 - Total tax liability for the year", "line17_total_liability"),
+)
+
+_W3_BOXES = (
+	("1 - Wages, tips, other compensation", "box1_wages"),
+	("2 - Federal income tax withheld", "box2_federal_income_tax_withheld"),
+	("3 - Social security wages", "box3_social_security_wages"),
+	("4 - Social security tax withheld", "box4_social_security_tax_withheld"),
+	("5 - Medicare wages and tips", "box5_medicare_wages"),
+	("6 - Medicare tax withheld", "box6_medicare_tax_withheld"),
+	("7 - Social security tips", "box7_social_security_tips"),
+	("8 - Allocated tips", "box8_allocated_tips"),
+	("14 - Income tax withheld by third-party payer", "box14_income_tax_withheld_by_third_party_payer"),
+)
+
+
+def render_940_pdf(form_data: dict, company_info: dict) -> bytes:
+	"""Form 940 working copy: Part 2 and 3 lines, the quarterly liabilities, and the notes."""
+	form_data = dict(form_data or {})
+	year = form_data.get("tax_year") or ""
+	sheet = _sheet_for("940", form_data, f"Employer's Annual Federal Unemployment (FUTA) Tax Return {year}")
+	employer = _employer(form_data, company_info)
+	sheet.masthead("Form 940", "Employer's Annual Federal Unemployment (FUTA) Tax Return", str(year))
+	top = sheet.top
+	sheet.box(MARGIN, top, 170.0, 26, "Employer identification number (EIN)", employer["ein"])
+	sheet.box(MARGIN + 170.0, top, CONTENT_WIDTH - 170.0, 26, "Name (not your trade name)", employer["name"])
+	sheet.box(MARGIN, top + 26, CONTENT_WIDTH, 42, "Address",
+	          employer["address"] or ["(no address recorded on this site)"], value_font=FONT_PLAIN, value_size=8.0)
+	sheet.top = top + 68 + 4
+	sheet.heading("Parts 2 and 3: FUTA tax")
+	_amount_table(sheet, _940_LINES, form_data)
+	quarters = form_data.get("line16_quarterly_liabilities") or {}
+	if quarters:
+		sheet.heading("Part 5, line 16: FUTA liability by quarter")
+		_amount_table(sheet, [(f"16 - {q}", q) for q in sorted(quarters)], quarters)
+	extra = [
+		"Line 13 is whatever deposit total was supplied. FUTA deposits go through EFTPS and this system does not "
+		"see them, so a zero on line 13 means nobody told it, not that nothing was deposited.",
+		"Agricultural employers: FUTA covers farm labour only if cash wages reached $20,000 in some quarter or 10 "
+		"or more farmworkers were employed in 20 or more weeks. Read `agricultural_coverage` in the record first.",
+	]
+	_notes(sheet, form_data, extra)
+	return sheet.render()
+
+
+def render_w3_pdf(form_data: dict, company_info: dict) -> bytes:
+	"""W-3 working copy: boxes b, c, e, f and 1-8, 14, and the state totals."""
+	form_data = dict(form_data or {})
+	year = form_data.get("tax_year") or ""
+	sheet = _sheet_for("W-3", form_data, f"Transmittal of Wage and Tax Statements {year}")
+	employer = _employer(form_data, company_info)
+	sheet.masthead("Form W-3", "Transmittal of Wage and Tax Statements", str(year))
+	top = sheet.top
+	sheet.box(MARGIN, top, CONTENT_WIDTH / 2, 26, "b - Kind of payer", str(form_data.get("box_b_kind_of_payer") or ""))
+	sheet.box(MARGIN + CONTENT_WIDTH / 2, top, CONTENT_WIDTH / 2, 26, "b - Kind of employer",
+	          str(form_data.get("box_b_kind_of_employer") or ""))
+	sheet.box(MARGIN, top + 26, 170.0, 26, "c - Total number of Forms W-2",
+	          str(form_data.get("box_c_total_w2_forms") or 0))
+	sheet.box(MARGIN + 170.0, top + 26, CONTENT_WIDTH - 170.0, 26, "e - Employer identification number (EIN)",
+	          employer["ein"])
+	sheet.box(MARGIN, top + 52, CONTENT_WIDTH, 42, "f - Employer's name and address",
+	          [employer["name"], *(employer["address"] or [])], value_font=FONT_PLAIN, value_size=8.0)
+	sheet.top = top + 94 + 4
+	sheet.heading("Totals of the Forms W-2")
+	_amount_table(sheet, _W3_BOXES, form_data)
+	states = form_data.get("state_boxes") or []
+	if states:
+		sheet.heading("Boxes 15-17: by state")
+		for state in states:
+			label = f"{state.get('box15_state')} ({state.get('box15_employer_state_id') or 'no state ID'})"
+			_amount_table(sheet, [(f"16 - {label} state wages", "box16_state_wages"),
+			                      (f"17 - {label} state income tax", "box17_state_income_tax")], state)
+	_notes(sheet, form_data, [])
+	return sheet.render()
+
+
 # ── Dispatch ────────────────────────────────────────────────────────────────
 
 #: Which renderer draws which form, and whether it needs a recipient block.
@@ -1876,6 +1974,8 @@ RENDERERS = {
 	"OR-WR": render_or_wr_pdf,
 	"OQ": render_or_oq_pdf,
 	"WA-ESD": render_wa_esd_pdf,
+	"940": render_940_pdf,
+	"W-3": render_w3_pdf,
 }
 
 #: The two forms whose renderer takes a third argument: the person it is about.

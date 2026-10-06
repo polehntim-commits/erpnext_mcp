@@ -671,8 +671,19 @@ def _compute(form_type, company, year, quarter, employee, related_party, args) -
 		if employee:
 			subject_info = _employee_info(employee)
 			company_info["ss_wage_base"] = company_info.get("ss_wage_base") or _ss_wage_base()
-		if form_type in ("941",):
+		if form_type in ("941", "W-3"):
 			company_info["ss_wage_base"] = company_info.get("ss_wage_base") or _ss_wage_base()
+		if form_type == "940":
+			# v0.259.0. The FUTA walk needs the employer-side slip columns and the year's FUTA configuration —
+			# the same as get_futa_summary, so the recorded form and the summary cannot disagree.
+			from . import tax_remittance
+
+			slips = _load_slips(company, period_start, period_end, extra_fields=tax_remittance.EMPLOYER_FIELDS)
+			company_info.update(tax_remittance._futa_config(year))
+			for key in ("exempt_payments", "credit_reduction", "futa_rate", "futa_wage_base",
+			            "futa_state_credit_max", "deposits"):
+				if args.get(key) not in (None, ""):
+					company_info[key] = tax_remittance._float(args[key], key=key)
 		if form_type == "WA-ESD":
 			company_info["ssn_last4_by_employee"] = _ssn_last4_map(
 				{s.get("employee") for s in slips if s.get("employee")}
@@ -873,6 +884,11 @@ def _company_info(company: str, args: dict) -> dict:
 				info[key] = float(args[key])
 			except (TypeError, ValueError):
 				raise ToolError(f"{key} must be a number, got {args[key]!r}.") from None
+
+	# v0.259.0. W-3 boxes b: what kind of payer and employer this company is (943 for an agricultural filer).
+	for key in ("kind_of_payer", "kind_of_employer"):
+		if as_str(args, key):
+			info[key] = as_str(args, key)
 
 	for key in ("ytd_wages_by_employee", "oq_reported"):
 		value = args.get(key)

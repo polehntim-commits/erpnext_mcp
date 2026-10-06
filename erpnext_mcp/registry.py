@@ -26265,7 +26265,7 @@ TOOLS = {
 		"'what is still outstanding for this quarter'. Read-only.",
 		{
 			"company": _COMPANY,
-			"form_type": _field(_STRING, "W-2, 1099-NEC, 941, OR-WR, OQ, or WA-ESD."),
+			"form_type": _field(_STRING, "W-2, 1099-NEC, 941, OR-WR, OQ, WA-ESD, 940 or W-3 (v0.259.0)."),
 			"fiscal_year": _field(_STRING, "The calendar year as YYYY. `year` is an alias."),
 			"quarter": _field(_STRING, "Q1, Q2, Q3 or Q4. Quarterly forms only."),
 			"employee": _field(_STRING, "Only the forms for one employee."),
@@ -26500,7 +26500,9 @@ TOOLS = {
 		"MUTATING (default OFF). Compute a tax form from the payroll already "
 		"in the system and record it as a Tax Form in Generated status.\n\n"
 		"W-2 and 1099-NEC are per recipient per calendar year; 941, OQ and "
-		"WA-ESD are per company per quarter; OR-WR is per company per year. "
+		"WA-ESD are per company per quarter; OR-WR, 940 and W-3 are per company per year (v0.259.0: 940 is the "
+		"FUTA return, the same wage-base walk as get_futa_summary; W-3 totals every employee's W-2 box by box — "
+		"pass kind_of_payer 943 for an agricultural filer). "
 		"Only Calculated and Submitted payroll entries are counted — a Draft "
 		"payroll has not been paid.\n\n"
 		"REFUSES: a second form for the same period and recipient while the "
@@ -26509,7 +26511,7 @@ TOOLS = {
 		"FILES NOTHING. It computes box and line values. A person reads them "
 		"onto the real form or into the agency's portal.",
 		{
-			"form_type": _field(_STRING, "W-2, 1099-NEC, 941, OR-WR, OQ, or WA-ESD."),
+			"form_type": _field(_STRING, "W-2, 1099-NEC, 941, OR-WR, OQ, WA-ESD, 940 or W-3 (v0.259.0)."),
 			"company": _COMPANY,
 			"fiscal_year": _field(_STRING, "The calendar year as YYYY. `year` is an alias."),
 			"quarter": _field(_STRING, "Q1, Q2, Q3 or Q4. Required for 941, OQ and WA-ESD."),
@@ -26522,7 +26524,9 @@ TOOLS = {
 				"Overrides what is on the State Tax Configuration.",
 			),
 			"ui_rate": _field(_NUMBER, "The state's assigned unemployment-insurance rate, as a percent."),
-			"deposits": _field(_NUMBER, "Form 941 line 13 — total federal deposits made for the quarter."),
+			"deposits": _field(_NUMBER, "Form 941 line 13 — total federal deposits made for the quarter; on a 940, the year's FUTA deposits (line 13)."),
+			"kind_of_payer": _field(_STRING, "W-3 box b: 941 (default), 943 (agricultural employer), 944, …"),
+			"kind_of_employer": _field(_STRING, "W-3 box b, kind of employer: None apply (default), 501c non-govt., …"),
 			"ytd_wages_by_employee": _field(
 				_OBJECT,
 				'Prior-period wages per employee, e.g. {"HR-EMP-00001": 42000}. Lets '
@@ -26646,7 +26650,7 @@ TOOLS = {
 		{
 			"names": _field(_STRING_ARRAY, "Explicit Tax Form docnames, instead of filters."),
 			"company": _COMPANY,
-			"form_type": _field(_STRING, "W-2, 1099-NEC, 941, OR-WR, OQ, or WA-ESD."),
+			"form_type": _field(_STRING, "W-2, 1099-NEC, 941, OR-WR, OQ, WA-ESD, 940 or W-3 (v0.259.0)."),
 			"fiscal_year": _field(_STRING, "The calendar year as YYYY. `year` is an alias."),
 			"quarter": _field(_STRING, "Q1, Q2, Q3 or Q4. Quarterly forms only."),
 			"status": _field(_STRING, "Draft, Generated, Filed, or Amended."),

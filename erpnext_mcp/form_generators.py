@@ -82,7 +82,13 @@ FORM_TYPES = {
 	"OR-WR": {"period": "year", "scope": "company", "label": "Oregon Annual Withholding Tax Reconciliation"},
 	"OQ": {"period": "quarter", "scope": "company", "label": "Oregon Quarterly Tax Report"},
 	"WA-ESD": {"period": "quarter", "scope": "company", "label": "Washington ESD Quarterly Report"},
+	# v0.259.0. The two that completed the payroll filing set.
+	"940": {"period": "year", "scope": "company", "label": "Employer's Annual Federal Unemployment (FUTA) Tax Return"},
+	"W-3": {"period": "year", "scope": "company", "label": "Transmittal of Wage and Tax Statements"},
 }
+
+#: W-3 box b. 943 is the agricultural employer's annual return (farmworkers' FICA and withholding).
+KINDS_OF_PAYER = ("941", "943", "944", "Military", "CT-1", "Hshld. emp.", "Medicare govt. emp.")
 
 QUARTERS = ("Q1", "Q2", "Q3", "Q4")
 
@@ -943,7 +949,83 @@ def generate_form_data(
 		return generate_or_oq_data(slips, company_info, quarter or "Q1", year)
 	if form_type == "WA-ESD":
 		return generate_wa_esd_data(slips, company_info, quarter or "Q1", year)
+	if form_type == "940":
+		from .tax_remittance_calc import generate_940_data
+
+		return generate_940_data(slips, company_info, year)
+	if form_type == "W-3":
+		return generate_w3_data(slips, company_info, year)
 	raise ValueError(f"unknown form_type {form_type!r}. Known forms: {', '.join(sorted(FORM_TYPES))}.")
+
+
+# ── W-3 ── v0.259.0 ───────────────────────────────────────────────────────
+
+
+def generate_w3_data(slips: list[dict], company_info: dict, year: int) -> dict:
+	"""The W-3 transmittal: every employee's W-2 for the year, totalled box by box.
+
+	Each employee's W-2 is computed with `generate_w2_data` from the same slips, so the transmittal cannot
+	disagree with the forms it transmits — the Social Security wage-base cap is applied per person, as on the
+	W-2s, before the totals are taken. Box b (kind of payer) comes from `company_info["kind_of_payer"]`: 941 by
+	default, and an agricultural employer that files Form 943 ticks 943.
+	"""
+	warnings: list[str] = []
+	by_employee: dict[str, list[dict]] = {}
+	for slip in slips or []:
+		by_employee.setdefault(str(slip.get("employee") or ""), []).append(slip)
+	w2s = [generate_w2_data({"employee": emp}, rows, company_info, year) for emp, rows in sorted(by_employee.items())]
+
+	def total(key: str) -> float:
+		return _money(sum(_float(w2.get(key)) for w2 in w2s))
+
+	states: dict[str, dict] = {}
+	for w2 in w2s:
+		for box in w2.get("state_boxes") or []:
+			state = states.setdefault(box["box15_state"], {"box15_state": box["box15_state"],
+			                                                "box15_employer_state_id": box["box15_employer_state_id"],
+			                                                "box16_state_wages": 0.0, "box17_state_income_tax": 0.0})
+			state["box16_state_wages"] = _money(state["box16_state_wages"] + _float(box["box16_state_wages"]))
+			state["box17_state_income_tax"] = _money(state["box17_state_income_tax"] + _float(box["box17_state_income_tax"]))
+	kind = str(company_info.get("kind_of_payer") or "941")
+	if kind not in KINDS_OF_PAYER:
+		warnings.append(f"kind_of_payer {kind!r} is not a box b option; it is one of {', '.join(KINDS_OF_PAYER)}.")
+	if kind == "941":
+		warnings.append(
+			"box b is 941. An employer of farmworkers who files Form 943 (the annual agricultural return) ticks 943 "
+			"instead — pass kind_of_payer: 943 if that is how this company files.")
+	flagged = [w2["employee"]["employee"] for w2 in w2s if w2.get("warnings")]
+	if flagged:
+		warnings.append(f"{len(flagged)} W-2(s) carry their own warnings ({', '.join(flagged[:6])}"
+		                f"{'…' if len(flagged) > 6 else ''}); read those before the transmittal is filed.")
+	if not w2s:
+		warnings.append(f"no payroll slips found for {year}; every box is zero and there are no W-2s to transmit.")
+	warnings.append(
+		"boxes 1–6 must equal the year's Forms 941 (or the 943) added together; compare them before filing — a "
+		"difference is the SSA/IRS mismatch letter a year later.")
+	period_start, period_end = year_period(year)
+	return {
+		"form_type": "W-3",
+		"tax_year": int(year),
+		"period_start": period_start,
+		"period_end": period_end,
+		"employer": _employer_block(company_info),
+		"box_b_kind_of_payer": kind,
+		"box_b_kind_of_employer": str(company_info.get("kind_of_employer") or "None apply"),
+		"box_c_total_w2_forms": len(w2s),
+		"box1_wages": total("box1_wages"),
+		"box2_federal_income_tax_withheld": total("box2_federal_income_tax_withheld"),
+		"box3_social_security_wages": total("box3_social_security_wages"),
+		"box4_social_security_tax_withheld": total("box4_social_security_tax_withheld"),
+		"box5_medicare_wages": total("box5_medicare_wages"),
+		"box6_medicare_tax_withheld": total("box6_medicare_tax_withheld"),
+		"box7_social_security_tips": 0.0,
+		"box8_allocated_tips": 0.0,
+		"box14_income_tax_withheld_by_third_party_payer": 0.0,
+		"state_boxes": [states[s] for s in sorted(states)],
+		"employees": [w2["employee"]["employee"] for w2 in w2s],
+		"slip_count": len(slips or []),
+		"warnings": warnings,
+	}
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────
