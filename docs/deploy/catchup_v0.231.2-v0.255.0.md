@@ -1,12 +1,12 @@
-**Deploy: catch-up v0.231.2 → v0.254.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.44.0 (build 39)**
+**Deploy: catch-up v0.231.2 → v0.255.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.45.0 (build 40)**
 
-For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.254.0, and
+For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.255.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
 ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime rule into data with identical
 output, proven on the payroll suite).
 
-- **Server**: erpnext_mcp main **`dfedb8a`** (`__version__ = "0.254.0"`).
-- **App**: fafo_ios main **`79f952d`** — FarmOps **0.44.0 (build 39)**, scheme **FarmOps**. It needs v0.252.0's
+- **Server**: erpnext_mcp main **`c2f08c4`** (`__version__ = "0.255.0"`).
+- **App**: fafo_ios main **`35623e6`** — FarmOps **0.45.0 (build 40)**, scheme **FarmOps**. It needs v0.252.0's
   routes, so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 
@@ -38,6 +38,7 @@ output, proven on the payroll suite).
 | v0.252.0 | Each person's own Start of Day and End of Day check (End of Day files hour-meter readings and crop stages; switch OFF). Fix: merging a business card into an existing contact now updates where and when you met and the company; the contact's address is reused and linked to the new Supplier. Phone routes to find a contact and correct where you met. |
 | v0.253.0 | Rain risk from forecast chance AND amount, with each rule's own rain threshold (0.05 in by default); Holds clear within the hour when the forecast dries; pruning defaults 7 days ahead / dry 48 h; a daily check of whether it actually rained after weather-gated work, with an alert rule (OFF) and a forecast score. |
 | v0.254.0 | Refusals reach a Spanish phone saying why, in tú (about 50 worker-facing messages); all phone Spanish brought to tú. Fix: receipt, signature and task-evidence checks where the phone extracted nothing were refused — they are now filed. |
+| v0.255.0 | A well's logs on the well (AFB-2026-00021): Library documents cited on an asset show where its tag is scanned and open on the phone; type "Record" for the farm's own records. The pruning preset seeded by an earlier release takes the new defaults if nobody touched it. |
 | app 0.38.8 | Due dates and overdue on task rows and a Due section on Today, computed on the phone (works offline). |
 | app 0.39.0 | Go / Hold chips and card, supervisor override, crop-stage picker (offline), Today: work notices, notices to decide, "Good to do today", SOPs to review; approved SOPs in "How this job is done". Spanish (tú). |
 | app 0.40.0 | The course player: course videos with how much was watched, the knowledge check, trainer sign-off. |
@@ -45,11 +46,12 @@ output, proven on the payroll suite).
 | app 0.42.0 | My day: Start / End of Day on Today. Contacts: find a contact and correct where you met (Foreman+). |
 | app 0.43.0 | Spanish sweep: 133 longer explanations that always showed in English now read in Spanish (tú). |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish when the phone is in Spanish. |
+| app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main (`dfedb8a`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.254.0`. Push fafo_ios main
-(`79f952d`) and archive FarmOps 0.44.0 (build 39), scheme **FarmOps**.
+Push erpnext_mcp main (`c2f08c4`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.255.0`. Push fafo_ios main
+(`35623e6`) and archive FarmOps 0.45.0 (build 40), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
 chooses. The full command list is in `~/Desktop/deploy-catchup-latest.txt`.
@@ -66,15 +68,15 @@ Expect from the migrate (first run only):
 6. "punch review rules seeded: punch_missing_clock_out, punch_runaway, punch_offline_window, punch_edited,
    punch_outside_block, punch_breaks_short, overtime_week_approaching, overtime_week_exceeded."
 7. "rain archive check rule seeded OFF: weather_check_pruning_rain."
-8. `__version__ = "0.254.0"`.
+8. `__version__ = "0.255.0"`.
 
 **3. Checks after the migrate**
 
-1. `get_server_status`: 0.254.0. Desk → any Asset Register form: the map's build stamp reads 0.254.0.
+1. `get_server_status`: 0.255.0. Desk → any Asset Register form: the map's build stamp reads 0.255.0.
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets and weather_check_pruning_rain, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
-4. Phone 0.44.0: Today and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
+4. Phone 0.45.0: Today and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
    works for a Foreman.
 5. Punch review (`v0.251.0_punch_review.md`): this week's flagged punches appear as compliance alerts and under
    "Punches to review" on Today for a Foreman / Farm Manager; `preview_payroll_for_period` warns on unreviewed punches
@@ -82,9 +84,9 @@ Expect from the migrate (first run only):
 6. Business-card merge (`v0.252.0_day_checks.md` §5): on OML, re-run the Ben Sheppard merge with Met At
    "Sheppard's, 440 Riverside Dr, Hood River, OR 97031" (or correct it from the phone: Contacts → Where met); Met At
    now reads that, and Sheppards-Office-1 links to Supplier Sheppard's.
-7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`,
+7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`, `v0.255.0_asset_library.md`,
    `app_0.39.0_work_timing.md`, `app_0.40.0_course_player.md`, `app_0.41.0_punch_review.md`,
-   `app_0.42.0_my_day_contacts.md`, `app_0.43.0_spanish_sweep.md`, `app_0.44.0_server_spanish.md`).
+   `app_0.42.0_my_day_contacts.md`, `app_0.43.0_spanish_sweep.md`, `app_0.44.0_server_spanish.md`, `app_0.45.0_asset_library.md`).
 
 **4. Rollback**
 
