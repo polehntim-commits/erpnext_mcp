@@ -67,6 +67,19 @@ def add_reference(args: dict) -> ToolResult:
 	                  docstatus_delta="none → 0 (created)")
 
 
+def cite_reference(args: dict) -> ToolResult:
+	"""v0.255.0. Cite a Library document on a record — an asset (AFB-2026-00021), an SOP, a template …"""
+	from ..args import as_bool
+
+	data = library.cite(as_str(args, "doctype", required=True), as_str(args, "name", required=True),
+	                    as_str(args, "reference", required=True), as_str(args, "pages"), as_str(args, "note"),
+	                    as_bool(args, "remove", False))
+	verb = "removed from" if as_bool(args, "remove", False) else "cited on"
+	return ToolResult(data=data, summary=f"{as_str(args, 'reference')} {verb} {data['doctype']} {data['name']}: "
+	                                      f"{len(data['references'])} citation(s)",
+	                  docstatus_delta="0 → 0 (updated)")
+
+
 def update_reference(args: dict) -> ToolResult:
 	name = as_str(args, "reference", required=True)
 	if not frappe.db.exists(library.DOCTYPE, name):

@@ -17934,7 +17934,8 @@ TOOLS = {
 		"by document and page. Filters: ref_type, crop, topic.",
 		{
 			"query": _field(_STRING, "Words to find, e.g. 'bacterial canker pruning dry weather'."),
-			"ref_type": _field(_STRING, "Extension Guide, Research Paper, Manual, Label, Regulation or Internal."),
+			"ref_type": _field(_STRING, "Extension Guide, Research Paper, Manual, Label, Regulation, Internal or Record "
+			                            "(v0.255.0: the farm's own records about a thing — well logs, a pump test)."),
 			"crop": _field(_STRING, "Only documents tagged with this crop."),
 			"topic": _field(_STRING, "Only documents tagged with this topic."),
 			"include_superseded": _field(_BOOLEAN, "Include documents a newer edition replaced."),
@@ -17970,14 +17971,15 @@ TOOLS = {
 		reference_tools.add_reference,
 		"MUTATING (default OFF). v0.238.0. File one PDF in the Reference Library, private: the text layer is "
 		"read now, a scanned page is left 'OCR pending' for the Mac's OCR job. The same PDF twice is refused. "
-		"source_url is required except for Internal documents. Tags are checked against the vocabularies in "
+		"source_url is required except for Internal documents and Records. Tags are checked against the vocabularies in "
 		"ERPNext MCP Settings.",
 		{
 			"file": _field(_STRING, "A File docname already on the site (attached, staged or uploaded)."),
 			"file_content": _field(_STRING, "Or the PDF itself, base64 (up to 8 MB)."),
 			"file_name": _field(_STRING, "The file name to keep."),
 			"title": _field(_STRING, "The document's title."),
-			"ref_type": _field(_STRING, "Extension Guide, Research Paper, Manual, Label, Regulation or Internal."),
+			"ref_type": _field(_STRING, "Extension Guide, Research Paper, Manual, Label, Regulation, Internal or Record "
+			                            "(v0.255.0: the farm's own records about a thing — well logs, a pump test)."),
 			"publisher": _field(_STRING, "OSU, WSU, Cat, EPA …"),
 			"authors": _field(_STRING, "Authors."),
 			"year": _field(_INTEGER, "Year published."),
@@ -17993,6 +17995,26 @@ TOOLS = {
 		required=("title", "ref_type"),
 		mutating=True,
 		title="Add reference",
+	),
+	"cite_reference": _tool(
+		reference_tools.cite_reference,
+		"MUTATING (default OFF). v0.255.0 (AFB-2026-00021). Cite a Reference Library document on a record — "
+		"an Asset Register asset (a well's logs, a pump test, a water-right certificate: shown when the asset is "
+		"scanned), an SOP (Compliance Policy), a Farm Task Template, Training Type, Compliance Rule or Inspection "
+		"Template — with the pages and a note. Citing it again updates the pages / note; remove=true takes it off. "
+		"One PDF in the library can serve the well, its pump and the water right without a copy on each.",
+		{
+			"doctype": _field(_STRING, "Asset Register, Compliance Policy, Farm Task Template, Training Type, "
+			                           "Compliance Rule or Inspection Template."),
+			"name": _field(_STRING, "The record, e.g. the asset's tag ID."),
+			"reference": _field(_STRING, "The Reference Document (search_references / list_references)."),
+			"pages": _field(_STRING, "Pages, like 3, 5-7."),
+			"note": _field(_STRING, "Why it is cited here."),
+			"remove": _field(_BOOLEAN, "true takes the citation off."),
+		},
+		required=("doctype", "name", "reference"),
+		mutating=True,
+		title="Cite reference",
 	),
 	"update_reference": _tool(
 		reference_tools.update_reference,

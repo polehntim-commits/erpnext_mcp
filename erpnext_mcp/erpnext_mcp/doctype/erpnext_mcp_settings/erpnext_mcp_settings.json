@@ -1216,6 +1216,7 @@
   "allow_get_reference",
   "allow_list_references",
   "allow_add_reference",
+  "allow_cite_reference",
   "allow_update_reference",
   "allow_supersede_reference",
   "reference_crops",
@@ -9442,6 +9443,13 @@
    "fieldname": "allow_add_reference",
    "fieldtype": "Check",
    "label": "Add Reference"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.255.0. Cite a Library document on an asset, SOP, template, course, rule or inspection template.",
+   "fieldname": "allow_cite_reference",
+   "fieldtype": "Check",
+   "label": "Cite Reference"
   },
   {
    "default": "0",

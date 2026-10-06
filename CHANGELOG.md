@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.255.0 — 2026-10-05 — Library documents on an asset (AFB-2026-00021); the pruning preset refreshed
+
+**Migrate needed** (Asset Register gains a References table; "Record" document type; one settings switch). One phone
+route. Pairs with FarmOps 0.45.0. Deploy `docs/deploy/v0.255.0_asset_library.md`.
+
+- **A well's logs on the well** (Tell the Farm AFB-2026-00021, "show the library information for the well like well
+  logs"): an asset cites Reference Library documents in the same Reference Citation table SOPs and templates use — one
+  PDF can serve the well, its pump and the water right with no copy on each. `get_asset_detail` lists them
+  (`references`: title, type, year, pages, note); the phone's asset screen shows them under Documentation, and
+  scanning the tag opens that screen.
+- New write `cite_reference` (default OFF): cite / update / remove a Library document on an asset, SOP, template,
+  course, rule or inspection template, with pages and a note.
+- Phone route `get_asset_reference`: the PDF, fetched THROUGH the asset — the asset is company-scoped and must cite the
+  document; the Library's private file link is never handed out.
+- Reference type **Record** — the farm's own records about a thing (well logs, a pump test); like Internal, no source
+  URL needed.
+- **Pruning preset refreshed** (decision 15 / 19, v0.253.0's defaults): seeding is create-only, so a site that ran
+  v0.240.0–v0.252.0 (OML) kept the old tree. A preset still exactly as shipped — never enabled, never approved,
+  version 1, the old tree unchanged — takes the new one at migrate; anything a person touched is left alone.
+- 1056 / 513 / 543; phone named routes 210; contract mirror test 80.
+
 ## 0.254.0 — 2026-10-05 — refusals in Spanish (tú); receipt checks with nothing extracted
 
 **Migrate needed** (translation rows only; no schema change). Pairs with FarmOps 0.44.0. Deploy

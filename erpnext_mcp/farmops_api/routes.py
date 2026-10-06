@@ -491,6 +491,8 @@ ROUTES = (
 	# v0.252.0. Contacts from the phone: search and correct "where met".
 	Route("/mobile", mobile_api.search_contacts),
 	Route("/mobile", mobile_api.update_contact_where_met),
+	# v0.255.0 (AFB-2026-00021). A Library document cited on an asset, opened from its scan.
+	Route("/mobile", mobile_api.get_asset_reference),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

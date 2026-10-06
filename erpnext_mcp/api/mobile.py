@@ -1845,6 +1845,53 @@ def get_asset_detail(user: str, asset_name=None) -> dict:
 	return result.data
 
 
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_asset_reference", limit=guard.UPLOAD_LIMIT)
+def get_asset_reference(user: str, asset_name=None, reference=None, max_bytes=None) -> dict:
+	"""v0.255.0 (AFB-2026-00021). A Library document cited on an asset — the well's log — as bytes.
+
+	THROUGH THE ASSET, NEVER THE FILE LINK. The Library's PDFs are private (copyright, internal records), and a
+	Reference Document has no company to scope by. What a phone may open is what an asset in its own company
+	cites: the asset is scope-checked like `get_asset_detail`, and the document must be on that asset's
+	references. Rate-limited as an upload, like `get_attachment_content`, whose answer this mirrors.
+	"""
+	from .. import reference_library
+	from ..tools import files as file_tools
+
+	allowed = guard.require_scope(user)
+	asset_name = str(asset_name or "").strip()
+	reference = str(reference or "").strip()
+	if not asset_name or not reference:
+		frappe.throw("asset_name and reference are required — the asset and the Library document it cites.",
+		             frappe.ValidationError)
+	docname = guard.require_scoped_doc(asset_tags.ASSET_REGISTER, asset_name, "asset_name", allowed)
+	cited = {row["reference"] for row in reference_library.citations_of(asset_tags.ASSET_REGISTER, docname)}
+	if reference not in cited:
+		frappe.throw(f"{docname} does not cite {reference}.", frappe.DoesNotExistError)
+	file_name = reference_library.pdf_file(reference)
+	if not file_name:
+		frappe.throw(f"{reference} has no PDF on file.", frappe.DoesNotExistError)
+	inner = {"name": file_name}
+	if max_bytes not in (None, ""):
+		inner["max_bytes"] = max_bytes
+	data = file_tools.get_attachment_content(inner).data
+	title = frappe.db.get_value(reference_library.DOCTYPE, reference, "title") or reference
+	return {
+		"name": data.get("name"),
+		"file": data.get("name"),
+		"reference": reference,
+		"title": title,
+		"file_name": data.get("file_name"),
+		"file_size": data.get("file_size"),
+		"size_human": data.get("size_human"),
+		"content_type": data.get("mime_type"),
+		"mime_type": data.get("mime_type"),
+		"encoding": data.get("encoding"),
+		"content": data.get("content_base64"),
+		"content_base64": data.get("content_base64"),
+	}
+
+
 # ── device keys ── v0.218.0 ───────────────────────────────────────────────
 # docs/design/device_client_enrollment.md §3, §4.5, §7. All four refuse while
 # `device_keys_enabled` is off, except the inventory, which is a read.

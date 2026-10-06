@@ -789,6 +789,10 @@ def _go_hold_presets() -> None:
 		made = go_hold.seed()
 		if made:
 			print(f"erpnext_mcp: Go / Hold presets seeded OFF: {', '.join(made)}.")
+		# v0.255.0. A preset still exactly as an earlier release shipped it takes today's defaults.
+		refreshed = go_hold.refresh_presets()
+		if refreshed:
+			print(f"erpnext_mcp: Go / Hold presets brought to today's defaults (untouched, still OFF): {', '.join(refreshed)}.")
 		# v0.253.0. The rain archive check's alert rule (decision 21), OFF like the presets.
 		from . import weather_verify
 

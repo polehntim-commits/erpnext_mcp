@@ -227,3 +227,36 @@ class DidItActuallyRain(GoHoldTestCase):
 		self.assertEqual(data["tasks_checked"], 0)
 		self.assertIn("04:45", data["note"])
 		self.assertIn("730", self.tool_error("get_forecast_verification", {"days": 0}))
+
+
+class AnUntouchedPresetTakesTheNewDefaults(GoHoldTestCase):
+	"""v0.255.0. OML seeded the pruning preset at v0.240.0; seeding is create-only."""
+
+	def an_old_preset(self, **overrides):
+		spec = next(s for s in go_hold.preset_specs() if s["rule_id"] == CANKER)
+		spec = {**spec, "condition_tree": go_hold.SUPERSEDED_TREES[CANKER][0], **overrides}
+		return compliance_rules.build_rule(spec).insert(ignore_permissions=True).name
+
+	def tree(self, name):
+		return json.loads(frappe.db.get_value(compliance_rules.DOCTYPE, name, "condition_tree_json"))
+
+	def test_the_old_tree_is_replaced_and_the_rule_stays_off(self):
+		name = self.an_old_preset()
+		self.assertEqual(go_hold.refresh_presets(), [CANKER])
+		leaves = {leaf["id"]: leaf for leaf in self.tree(name)["all"]}
+		self.assertEqual((leaves["dry_ahead"]["agg"], leaves["dry_since"]["value"]), ("chance_over", 48))
+		self.assertFalse(int(frappe.db.get_value(compliance_rules.DOCTYPE, name, "enabled") or 0))
+		self.assertEqual(go_hold.refresh_presets(), [], "once")
+
+	def assert_left_alone(self, **overrides):
+		name = self.an_old_preset(**overrides)
+		before = self.tree(name)
+		self.assertEqual(go_hold.refresh_presets(), [])
+		self.assertEqual(self.tree(name), before)
+
+	def test_an_enabled_approved_preset_is_left_alone(self):
+		self.assert_left_alone(enabled=1, human_approved_by="Administrator", human_approved_on=frappe.utils.now())
+
+	def test_an_edited_tree_is_left_alone(self):
+		edited = go_hold.SUPERSEDED_TREES[CANKER][0]
+		self.assert_left_alone(condition_tree={"all": [dict(edited["all"][0], value=30)] + edited["all"][1:]})

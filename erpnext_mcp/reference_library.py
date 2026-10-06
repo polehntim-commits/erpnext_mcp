@@ -12,6 +12,10 @@ internal documents — to look up and cite, to the page, when SOPs and rules are
   document "OCR pending"; Tim's Mac OCRs it with Apple Vision and posts the text back through
   `update_reference` (decision 41: Mac-side OCR). Without pypdf on a box, every page is pending.
 * TAGS are checked against vocabularies held in ERPNext MCP Settings, editable there (decision).
+* v0.255.0 (AFB-2026-00021) — ON THE ASSET: an Asset Register row cites Library documents in the same
+  Reference Citation table (a well's logs, a pump test, a water-right certificate), and the asset's scan
+  lists them; the phone opens the PDF through the asset (`get_asset_reference`), never by its file link.
+  "Record" is the type for the farm's own records about a thing — like Internal, it needs no source URL.
 * COPYRIGHT: PDFs are private, never on a public link; the source URL is kept; answers quote short
   snippets with a citation. Nothing is re-published.
 """
@@ -30,10 +34,13 @@ from .errors import ToolError
 DOCTYPE = "Reference Document"
 PAGE = "Reference Page"
 CITATION = "Reference Citation"
-TYPES = ("Extension Guide", "Research Paper", "Manual", "Label", "Regulation", "Internal")
+TYPES = ("Extension Guide", "Research Paper", "Manual", "Label", "Regulation", "Internal", "Record")
+#: v0.255.0. The farm's own documents: no publisher's URL to cite.
+SOURCELESS = ("Internal", "Record")
 TEXT_LAYER, OCR_PENDING, OCRD = "Text layer", "OCR pending", "OCR'd"
 TAG_FIELDS = {"crops": "reference_crops", "topics": "reference_topics", "regions": "reference_regions"}
-CITING = ("Compliance Policy", "Farm Task Template", "Training Type", "Compliance Rule", "Inspection Template")
+CITING = ("Compliance Policy", "Farm Task Template", "Training Type", "Compliance Rule", "Inspection Template",
+          "Asset Register")
 
 SNIPPET = 160
 #: A page with fewer characters than this read from its text layer is treated as a scan.
@@ -105,10 +112,10 @@ def add(
 		raise ToolError("the library holds PDFs; this file is not one. Nothing was written.")
 	if ref_type not in TYPES:
 		raise ToolError(f"ref_type is one of: {', '.join(TYPES)}. Nothing was written.")
-	if ref_type != "Internal" and not str(source_url or "").strip():
+	if ref_type not in SOURCELESS and not str(source_url or "").strip():
 		raise ToolError(
-			"source_url is required (where the document came from) for everything except Internal documents. "
-			"Nothing was written."
+			"source_url is required (where the document came from) for everything except Internal documents and "
+			"Records. Nothing was written."
 		)
 	digest = hashlib.sha256(data).hexdigest()
 	already = frappe.db.get_value(DOCTYPE, {"sha256": digest}, "name")
@@ -147,6 +154,62 @@ def add(
 	).insert(ignore_permissions=True)
 	frappe.db.set_value(DOCTYPE, doc.name, "file", attached.get("file_url"))
 	return describe(doc.name)
+
+
+# ── citing (v0.255.0) ──────────────────────────────────────────────────────
+def citations_of(doctype: str, name: str) -> list:
+	"""What one record cites, with each document's title, type and year — for a detail screen."""
+	if not compat.has_field(doctype, "references"):
+		return []
+	rows = frappe.db.get_all(CITATION, filters={"parenttype": doctype, "parent": name},
+	                         fields=["reference", "pages", "note", "idx"], order_by="idx asc", limit=200) or []
+	out = []
+	for row in rows:
+		meta = frappe.db.get_value(DOCTYPE, row.get("reference"), ["title", "ref_type", "year", "publisher", "page_count",
+		                                                          "file", "superseded_by"], as_dict=True) or {}
+		out.append({"reference": row.get("reference"), "title": meta.get("title") or row.get("reference"),
+		            "ref_type": meta.get("ref_type"), "year": meta.get("year"), "publisher": meta.get("publisher"),
+		            "page_count": meta.get("page_count"), "pages": row.get("pages") or None, "note": row.get("note") or None,
+		            "has_pdf": bool(meta.get("file")), "superseded_by": meta.get("superseded_by") or None})
+	return out
+
+
+def cite(doctype: str, name: str, reference: str, pages: str = "", note: str = "", remove: bool = False) -> dict:
+	"""Add (or update, or remove) one citation on a record that can cite. Returns the record's citations."""
+	if doctype not in CITING:
+		raise ToolError(f"doctype is one of: {', '.join(CITING)}. Nothing was changed.")
+	if not compat.has_field(doctype, "references"):
+		raise ToolError(f"this site's {doctype} has no references table yet — run bench migrate. Nothing was changed.")
+	if not frappe.db.exists(doctype, name):
+		raise ToolError(f"no {doctype} called {name!r}. Nothing was changed.")
+	if not frappe.db.exists(DOCTYPE, reference):
+		raise ToolError(f"no Reference Document {reference!r} (search_references finds one). Nothing was changed.")
+	pages = str(pages or "").strip()
+	if pages and not re.fullmatch(r"\d+(?:\s*[-–]\s*\d+)?(?:\s*,\s*\d+(?:\s*[-–]\s*\d+)?)*", pages):
+		raise ToolError("pages is like 3, 5-7, 12. Nothing was changed.")
+	doc = frappe.get_doc(doctype, name)
+	rows = [r for r in doc.get("references") or [] if r.get("reference") == reference]
+	if remove:
+		if not rows:
+			raise ToolError(f"{name} does not cite {reference}. Nothing was changed.")
+		doc.set("references", [r for r in doc.get("references") or [] if r.get("reference") != reference])
+	elif rows:
+		rows[0].pages = pages or rows[0].get("pages")
+		rows[0].note = str(note or "").strip() or rows[0].get("note")
+	else:
+		doc.append("references", {"reference": reference, "pages": pages or None, "note": str(note or "").strip() or None})
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+	return {"doctype": doctype, "name": name, "references": citations_of(doctype, name)}
+
+
+def pdf_file(reference: str) -> str:
+	"""The File docname of a Library document's PDF, or ""."""
+	url = frappe.db.get_value(DOCTYPE, reference, "file")
+	if not url:
+		return ""
+	return frappe.db.get_value("File", {"file_url": url, "attached_to_doctype": DOCTYPE, "attached_to_name": reference},
+	                           "name") or frappe.db.get_value("File", {"file_url": url}, "name") or ""
 
 
 def set_page_text(name: str, page_texts: dict, source: str = "OCR") -> dict:

@@ -29,6 +29,7 @@ from .. import (
 	compat,
 	geo,
 	offline_create,
+	reference_library,
 	rodent_bait,
 	slope_grade,
 	timezones,
@@ -954,6 +955,8 @@ def get_asset_detail(args: dict) -> ToolResult:
 			"history_count": len(history),
 			# v0.214.0. The latest position change, and whether it can be undone.
 			"last_move": asset_moves.last_move(row["name"]),
+			# v0.255.0 (AFB-2026-00021). Library documents cited on this asset — a well's logs, a pump test.
+			"references": reference_library.citations_of(ASSET_REGISTER, row["name"]),
 		},
 		summary=f"{row['name']}: {described['asset_type'] or 'untyped'}"
 		+ (f", {len(open_tasks)} open task(s)" if open_tasks else ""),

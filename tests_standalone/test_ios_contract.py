@@ -5498,3 +5498,49 @@ for _name, _fn in vars(_ContactMirrors).items():
 		setattr(EveryMobileMethodDecodes, _name, _fn)
 
 TheContractIsComplete.COVERED.update({"search_contacts": "test_78", "update_contact_where_met": "test_79"})
+
+
+# ── v0.255.0 / app 0.45.0: Library documents on an asset (`DocumentFolderAPI.swift`) ─────
+class AssetLibraryReferenceModel(Codable):
+	SWIFT = "DocumentFolderAPI.swift"
+	LENIENT = (("reference", str, 180), ("title", str, 181), ("ref_type", str, 182), ("year", int, 183),
+	           ("pages", str, 185), ("note", str, 186), ("has_pdf", bool, 187))
+
+
+class AssetDetailReferencesModel(Codable):
+	SWIFT = "AssetContext.swift"
+	NESTED = (("references", AssetLibraryReferenceModel, True, 315),)
+
+
+class AssetReferenceContentModel(Codable):
+	SWIFT = "DocumentFolderAPI.swift"
+	LENIENT = (("file_name", str, 117), ("content_type", str, 118), ("content", str, 119))
+
+
+class _AssetLibraryMirrors:
+	def test_80_get_asset_reference(self):
+		import base64
+		from unittest import mock
+
+		from erpnext_mcp import reference_library
+
+		self.configure(allow_register_asset=1, allow_add_reference=1, allow_cite_reference=1)
+		well = self.tool_data("register_asset", {"name": "MC-Well-01", "asset_type": "Water Source", "company": MAIN})["name"]
+		with mock.patch.object(reference_library, "extract_pages", return_value=["Static water level 42 ft."]):
+			log = self.tool_data("add_reference", {"file_content": base64.b64encode(b"%PDF-1.7\n% log\n").decode(),
+			                                       "file_name": "well1.pdf", "title": "Well log", "ref_type": "Record"})["name"]
+		self.tool_data("cite_reference", {"doctype": "Asset Register", "name": well, "reference": log, "pages": "1"})
+		self.be()
+		detail = self.wire("get_asset_detail", asset_name=well)
+		AssetDetailReferencesModel.decode(detail, "get_asset_detail")
+		self.assertEqual(detail["references"][0]["reference"], log)
+		body = self.wire("get_asset_reference", asset_name=well, reference=log)
+		AssetReferenceContentModel.decode(body, "get_asset_reference")
+		self.assertTrue(body["content"])
+
+
+for _name, _fn in vars(_AssetLibraryMirrors).items():
+	if _name.startswith("test_"):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"get_asset_reference": "test_80"})

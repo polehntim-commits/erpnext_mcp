@@ -87,7 +87,9 @@
   "device_created_at",
   "created_device",
   "needs_review",
-  "review_note"
+  "review_note",
+  "library_section",
+  "references"
  ],
  "fields": [
   {
@@ -637,6 +639,19 @@
    "fieldname": "review_note",
    "fieldtype": "Small Text",
    "label": "Review note"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "library_section",
+   "fieldtype": "Section Break",
+   "label": "Library"
+  },
+  {
+   "description": "v0.255.0. Reference Library documents about this asset — a well's logs, a pump test, a water-right certificate. Shown on the asset's scan.",
+   "fieldname": "references",
+   "fieldtype": "Table",
+   "label": "References",
+   "options": "Reference Citation"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1055 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1056 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 

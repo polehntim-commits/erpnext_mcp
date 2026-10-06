@@ -209,6 +209,8 @@ class MobileAPITestCase(V12TestCase):
 class TheSurfaceIsClosed(MobileAPITestCase):
 	#: Exactly what `MobileAPI.swift` names, and nothing else.
 	MOBILE: ClassVar[set[str]] = {
+		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
+		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).
 		"search_contacts",
 		"update_contact_where_met",

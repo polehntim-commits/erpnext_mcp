@@ -42,7 +42,7 @@
    "fieldname": "ref_type",
    "fieldtype": "Select",
    "label": "Type",
-   "options": "Extension Guide\nResearch Paper\nManual\nLabel\nRegulation\nInternal",
+   "options": "Extension Guide\nResearch Paper\nManual\nLabel\nRegulation\nInternal\nRecord",
    "in_list_view": 1,
    "in_standard_filter": 1
   },

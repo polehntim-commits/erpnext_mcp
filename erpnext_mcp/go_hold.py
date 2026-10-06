@@ -519,6 +519,54 @@ def preset_specs() -> list:
 	]
 
 
+#: v0.255.0. Trees a preset SHIPPED WITH EARLIER, by rule id. Seeding is create-only, so a site that ran
+#: v0.240.0–v0.252.0 kept the old tree when v0.253.0 changed the defaults (decision 15 / 19: the rain
+#: chance over 0.05 in, dry 48 h). `refresh_presets` replaces one of these — and only one of these.
+SUPERSEDED_TREES = {
+	"go_hold_pruning_canker": (
+		{"all": [
+			{"id": "dry_ahead", "path": "weather.forecast.daily[0..6].rain_risk_cum_pct", "agg": "max", "op": "lt",
+			 "value": 40, "basis": "local_judgment",
+			 "reason": {"en": "Rain likely this week — cuts would stay wet", "es": "Lluvia probable esta semana — los cortes quedarían mojados"}},
+			{"id": "dry_now", "path": "weather.recent.hours_since_rain", "op": "gte", "value": 24, "basis": "local_judgment",
+			 "reason": {"en": "Rained in the last 24 hours", "es": "Llovió en las últimas 24 horas"}},
+			{"id": "no_frost", "path": "weather.forecast.daily[0..1].tmin_f", "agg": "min", "op": "gt", "value": 28,
+			 "reason": {"en": "Frost forecast", "es": "Pronóstico de helada"}},
+		]},
+	),
+}
+
+
+def refresh_presets() -> list:
+	"""v0.255.0. Bring a preset still EXACTLY AS SHIPPED up to today's defaults: never enabled, never approved,
+	version 1, and its tree one this app shipped before. Anything a person touched is left alone. Never raises."""
+	refreshed = []
+	if not compat.doctype_exists(compliance_rules.DOCTYPE):
+		return refreshed
+	for spec in preset_specs():
+		olds = SUPERSEDED_TREES.get(spec["rule_id"])
+		if not olds:
+			continue
+		try:
+			row = frappe.db.get_value(
+				compliance_rules.DOCTYPE, {"rule_id": spec["rule_id"]},
+				["name", "enabled", "version", "human_approved_by", "condition_tree_json"], as_dict=True)
+			if not row or compat.checked(row.get("enabled")) or int(row.get("version") or 1) > 1 or row.get("human_approved_by"):
+				continue
+			current = _load_json(row.get("condition_tree_json"), {})
+			shipped = [json.loads(json.dumps(ccf.parse_tree(old))) for old in olds]
+			if current not in shipped:
+				continue
+			frappe.db.set_value(compliance_rules.DOCTYPE, row["name"], {
+				"condition_tree_json": json.dumps(ccf.parse_tree(spec["condition_tree"])),
+				"kairotic_gate_description": spec["kairotic_gate_description"],
+			})
+			refreshed.append(spec["rule_id"])
+		except Exception:
+			frappe.log_error(title=f"Go/Hold preset {spec['rule_id']} not refreshed", message=frappe.get_traceback())
+	return refreshed
+
+
 def seed() -> list:
 	"""Create-only; never raises."""
 	made = []

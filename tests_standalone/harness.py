@@ -2651,6 +2651,7 @@ CHILD_TABLES = {
 	("Training Type", "references"): "Reference Citation",
 	("Compliance Rule", "references"): "Reference Citation",
 	("Inspection Template", "references"): "Reference Citation",
+	("Asset Register", "references"): "Reference Citation",
 	("Accident Report", "witnesses"): "Accident Witness",
 	("Wizard Definition", "steps"): "Wizard Step",
 	("Wizard Step", "fields"): "Wizard Field",
@@ -4890,6 +4891,7 @@ CHILD_TABLE_SOURCES = {
 		("Training Type", "references"),
 		("Compliance Rule", "references"),
 		("Inspection Template", "references"),
+		("Asset Register", "references"),
 	),
 	# v0.175.0. `device_enrollment.verify` finds a phone by its api_key and
 	# `exchange` by its token hash — both direct queries on the child doctype,
