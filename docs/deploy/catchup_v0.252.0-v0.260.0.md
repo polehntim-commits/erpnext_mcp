@@ -1,10 +1,10 @@
-**Deploy: v0.252.0 → v0.259.0 (OML today) — one build, one migrate; FarmOps 0.46.0 (build 41)**
+**Deploy: v0.252.0 → v0.260.0 (OML today) — one build, one migrate; FarmOps 0.47.0 (build 42)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.259.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.260.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`c98b26d`** (`__version__ = "0.259.0"`).
-- **App**: fafo_ios main **`4772b20`** — FarmOps **0.46.0 (build 41)**, scheme **FarmOps**.
+- **Server**: erpnext_mcp main **`a53ed95`** (`__version__ = "0.260.0"`).
+- **App**: fafo_ios main **`2003940`** — FarmOps **0.47.0 (build 42)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
 
@@ -17,24 +17,26 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.257.0 | `plan_mcp_system_user` (read): the roles a dedicated MCP System User needs, a dry run for a candidate account and the Desk steps — changes nothing. |
 | v0.258.0 | office@ replies reviewed on the phone: tile **Replies to review** (hidden until office@ is on) — read, correct, attach, approve and send with Face ID, or discard. Pairs with app 0.46.0. |
 | v0.259.0 | Form 940 and W-3 via `generate_tax_form` (940 = the FUTA summary's walk; W-3 = the W-2s totalled; `kind_of_payer: 943` for an agricultural filer). |
+| v0.260.0 | **Least-privilege hotfix.** HR reads (others' I-9, discipline, everyone's pay, deductions, personnel files) need HR Manager / HR User — the Farm Owner profile carries HR Manager; accident reports, the compliance calendar, receipts (own only), housing occupants and search filters narrowed. **Check Tim holds HR Manager after the migrate.** |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
 | app 0.46.0 | Replies to review: office@ drafts read, corrected and approved (Face ID) or discarded on the phone. |
+| app 0.47.0 | Sign-out leaves nothing of the last person's on a shared phone; unsent queued work is counted in the sign-out warning. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.259.0`. Push fafo_ios main and archive
-FarmOps 0.46.0 (build 41).
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.260.0`. Push fafo_ios main and archive
+FarmOps 0.47.0 (build 42).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." and `0.259.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." and `0.260.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.259.0; the asset map's build stamp 0.259.0.
+1. `get_server_status`: 0.260.0; the asset map's build stamp 0.260.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
