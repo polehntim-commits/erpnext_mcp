@@ -1228,6 +1228,7 @@
   "allow_approve_pest_action_threshold",
   "allow_get_pest_dd_status",
   "allow_calibrate_pest_dd",
+  "allow_propose_harvest_calibration",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9545,6 +9546,13 @@
    "fieldname": "allow_calibrate_pest_dd",
    "fieldtype": "Check",
    "label": "Calibrate Pest DD"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.264.1. Harvest windows to proposed crop DD models and relative parcel offsets (Drafts only).",
+   "fieldname": "allow_propose_harvest_calibration",
+   "fieldtype": "Check",
+   "label": "Propose Harvest Calibration"
   },
   {
    "default": "1",

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1074 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1075 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -21030,6 +21030,7 @@ returns `organism`, `status`, `provenance`. Five phone routes and a Today tile (
 | --- | --- |
 | `get_pest_dd_status` | Each pest model on a block (or every block, paged): °F·day on the farm's Open-Meteo weather with the block offset, events reached / projected, provenance. Read |
 | `calibrate_pest_dd` | Suggest a block's offset from its observations; `draft` writes a Draft a person publishes. Write |
+| `propose_harvest_calibration` | v0.264.1. Tim's harvest windows → per-variety harvest DD models and relative parcel offsets, as proposals / Drafts. Write |
 
 `get_ipm_graph` takes `with_dd`. The generic config tools take kinds `pest_dd_models` and `pest_dd_offsets`
 (publish only in the Desk). `get_map_overlays` serves layer `pest_dd` when asked for by name. Contract:

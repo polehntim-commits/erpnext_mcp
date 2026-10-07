@@ -268,3 +268,23 @@ def calibrate_pest_dd(args: dict) -> ToolResult:
 		        + ("; DRAFT written for a person to publish" if data.get("draft") else ""),
 		docstatus_delta="none → 0 (draft)" if data.get("draft") else "none",
 	)
+
+
+def propose_harvest_calibration(args: dict) -> ToolResult:
+	"""v0.264.1. Harvest windows (Tim's Harvest_Dates file, seeded) → per-variety 'harvest start' degree days and
+	relative parcel offsets, as proposals; draft=true writes Drafts for a person to publish."""
+	from .. import pest_dd
+
+	block_map = args.get("block_map") or {}
+	if not isinstance(block_map, dict) or not block_map:
+		raise ToolError('block_map is required: {"Mill Creek": "<Field>", "40 Acre": "<Field>"} — which block each parcel is.')
+	missing = [b for b in block_map.values() if not frappe.db.exists("Field", b)]
+	if missing:
+		raise ToolError(f"no Field {', '.join(missing)}. Nothing was proposed.")
+	data = pest_dd.propose_harvest_calibration(block_map, author=frappe.session.user, draft=as_bool(args, "draft", False))
+	return ToolResult(
+		data=data,
+		summary=f"{len(data['proposed_models'])} crop model(s) and {len(data['proposed_block_offsets'])} parcel offset(s) "
+		        f"proposed from {len(data['windows_used'])} window(s)" + ("; Drafts written" if data.get("models_draft") else ""),
+		docstatus_delta="none → 0 (draft)" if data.get("models_draft") else "none",
+	)

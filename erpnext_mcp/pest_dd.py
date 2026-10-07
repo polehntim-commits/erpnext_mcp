@@ -571,3 +571,106 @@ def register(ccf) -> None:
 		"pest_dd", params, lambda subject, ctx: provider_values(subject, ctx), past=False,
 		description="Pest degree-day windows per block (v0.264.0): Open-Meteo weather, slope / aspect / elevation offset.",
 	))
+
+
+# ── v0.264.1: harvest windows → a proposed crop model and parcel offsets (Drafts only) ──
+HARVEST_SEED = "seed_data/harvest_windows_highland.json"
+WEAK_YEARS = {2023: 0.3}  # 2023: market failure at Mill Creek — picked when it was worth picking, not when ripe
+
+
+def harvest_windows() -> dict:
+	import json
+	import os
+
+	with open(os.path.join(os.path.dirname(__file__), HARVEST_SEED), encoding="utf-8") as handle:
+		return json.load(handle)
+
+
+def _dd_between(block: str, start: datetime.date, end: datetime.date, base: float, upper) -> float | None:
+	from . import degree_days
+
+	point = _point(block)
+	if not point:
+		return None
+	temps = degree_days.daily_temps(point[0], point[1], start, end)
+	total, seen = 0.0, 0
+	for day, (high, low) in sorted(temps.items()):
+		if start <= datetime.date.fromisoformat(day) <= end:
+			dd = _dd(high, low, base, upper, 0.0)
+			if dd is not None:
+				total += dd
+				seen += 1
+	return round(total, 1) if seen else None
+
+
+def propose_harvest_calibration(block_map: dict, base_f: float = 40.0, upper_f=86.0, biofix: str = "mar1",
+                                author: str = "", draft: bool = False, windows: list | None = None) -> dict:
+	"""Fit a 'harvest start' degree-day total per variety from the farm's own picking windows (raw weather, no
+	offset), then each parcel's RELATIVE offset from how far its windows sit from those totals.
+
+	THE FARM'S DATA, NOT LITERATURE: the totals are what this farm's own weather summed to on the days it started
+	picking. RELATIVE, NOT ABSOLUTE: the totals come from the same windows, so only the difference between parcels
+	is identified — the offsets are centred on zero. WEAK: picking also follows the market and the crew (2023 is
+	down-weighted). Everything comes back as a proposal; draft=True writes DRAFT versions of pest_dd_models and
+	pest_dd_offsets for a person to publish. Nothing is applied."""
+	data = windows if windows is not None else harvest_windows()["windows"]
+	rows, skipped = [], []
+	for w in data:
+		block = (block_map or {}).get(w["parcel"])
+		if not block:
+			skipped.append({**w, "why": f"no block mapped for parcel {w['parcel']!r}"})
+			continue
+		start, _ = _biofix(biofix, int(w["year"]), block, "")
+		harvest = datetime.date.fromisoformat(w["harvest_start"])
+		dd = _dd_between(block, start, harvest, base_f, upper_f) if start else None
+		if dd is None:
+			skipped.append({**w, "why": "no weather for this block / window"})
+			continue
+		rows.append({**w, "block": block, "dd_at_harvest_start": dd, "days": (harvest - start).days + 1,
+		             "weight": WEAK_YEARS.get(int(w["year"]), 1.0)})
+	by_variety: dict = {}
+	for r in rows:
+		by_variety.setdefault(r["variety"], []).append(r)
+	models = {}
+	for variety, group in sorted(by_variety.items()):
+		weight = sum(r["weight"] for r in group)
+		mean = sum(r["dd_at_harvest_start"] * r["weight"] for r in group) / weight
+		spread = max(r["dd_at_harvest_start"] for r in group) - min(r["dd_at_harvest_start"] for r in group)
+		models[f"sweet-cherry-{variety.lower().replace(' ', '-')}"] = {
+			"base_f": base_f, "upper_f": upper_f, "biofix": biofix, "kind": "crop",
+			"events": [{"name": "harvest start", "dd": round(mean)}],
+			"citation": f"Fitted from this farm's harvest windows ({len(group)} season-parcel(s), spread {round(spread)} °F·day) "
+			            "on Open-Meteo weather — Harvest_Dates.numbers, Highland LLC.",
+			"verify": True,
+			"note": "Picking dates follow the market and crews as well as ripeness; 2023 down-weighted (market failure).",
+		}
+	residuals: dict = {}
+	for r in rows:
+		model = models[f"sweet-cherry-{r['variety'].lower().replace(' ', '-')}"]
+		residual = r["dd_at_harvest_start"] - model["events"][0]["dd"]
+		residuals.setdefault(r["parcel"], []).append((residual / r["days"], r["weight"]))
+	raw = {p: -sum(v * w for v, w in vals) / sum(w for _, w in vals) for p, vals in residuals.items()}
+	centre = sum(raw.values()) / len(raw) if raw else 0.0
+	proposed_offsets = {block_map[p]: {"offset_f": round(v - centre, 2),
+	                          "reason": f"relative harvest-window calibration ({p}: {len(residuals[p])} window(s)); "
+	                                    "parcels compared with each other, centred on zero"}
+	           for p, v in raw.items()}
+	out = {"windows_used": rows, "skipped": skipped, "proposed_models": models, "proposed_block_offsets": proposed_offsets,
+	       "note": ("Proposals only. The block offsets are relative between parcels; the crop models are this farm's "
+	                "own picking dates in degree days. A person reviews them with preview_config and publishes.")}
+	if draft and models:
+		from . import phone_config
+
+		current, _ = _published(MODELS_KEY)
+		body = {**DEFAULT_MODELS, **(current or {})}
+		body["models"] = {**(body.get("models") or {}), **models}
+		doc, _r = phone_config.save_draft(KIND, MODELS_KEY, {**body, "key": MODELS_KEY, "schema_version": 1},
+		                                  f"Harvest-window crop models proposed by {author or 'calibration'}.", "AI-proposed")
+		out["models_draft"] = phone_config.describe(doc)
+		table, _v = offsets()
+		obody = {k: v for k, v in table.items() if k != "schema_version"}
+		obody["blocks"] = {**(obody.get("blocks") or {}), **proposed_offsets}
+		doc, _r = phone_config.save_draft(KIND, OFFSETS_KEY, {**obody, "key": OFFSETS_KEY, "schema_version": 1},
+		                                  f"Harvest-window parcel offsets proposed by {author or 'calibration'}.", "AI-proposed")
+		out["offsets_draft"] = phone_config.describe(doc)
+	return out

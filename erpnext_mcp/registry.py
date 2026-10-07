@@ -18204,6 +18204,21 @@ TOOLS = {
 		},
 		title="Get pest DD status",
 	),
+	"propose_harvest_calibration": _tool(
+		ipm_graph_tools.propose_harvest_calibration,
+		"MUTATING (default OFF). v0.264.1. Tim's harvest windows by variety and parcel (Harvest_Dates.numbers, "
+		"seeded in seed_data/harvest_windows_highland.json: Mill Creek and 40 Acre, 2023 / 2025 / 2026) → a "
+		"'harvest start' degree-day total per variety fitted on the farm's own Open-Meteo weather, and each "
+		"parcel's offset RELATIVE to the other. Proposals only; draft=true writes Draft versions of pest_dd_models "
+		"and pest_dd_offsets for a person to publish. 2023 is down-weighted (market failure).",
+		{
+			"block_map": _field({"type": "object"}, '{"Mill Creek": "<Field>", "40 Acre": "<Field>"}.'),
+			"draft": _field(_BOOLEAN, "Write the proposals as Drafts (default false)."),
+		},
+		required=("block_map",),
+		mutating=True,
+		title="Propose harvest calibration",
+	),
 	"calibrate_pest_dd": _tool(
 		ipm_graph_tools.calibrate_pest_dd,
 		"MUTATING (default OFF). v0.264.0. Compare a block's observations with the pest DD models and suggest the "

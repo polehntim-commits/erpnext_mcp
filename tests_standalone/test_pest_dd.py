@@ -225,3 +225,44 @@ class TheToolsAndTheConfig(DDCase):
 		row = next(r for r in prev["preview"]["blocks"] if r["pest"] == "western-cherry-fruit-fly")
 		self.assertEqual((row["offset_now"], row["offset_draft"]), (0.0, 1.0))
 		self.assertLessEqual(row["next_draft"], row["next_now"])
+
+
+class HarvestCalibration(DDCase):
+	"""v0.264.1. Tim's harvest windows → proposals. Weather: 70 / 50 °F, base 40 → 20 °F·day a day."""
+
+	def setUp(self):
+		super().setUp()
+		STORE.seed("Field", [{"name": "Gib Fred 40", "field_name": "Gib Fred 40", "crop": "Cherries", "owning_entity": MAIN,
+		                      "boundary_centroid_lat": 45.61, "boundary_centroid_lon": -121.21}])
+		self.map = {"Mill Creek": BLOCK, "40 Acre": "Gib Fred 40"}
+
+	def test_the_seed_is_tims_file(self):
+		data = pest_dd.harvest_windows()
+		self.assertEqual(len(data["windows"]), 30)
+		chelan = [w for w in data["windows"] if w["variety"] == "Chelan" and w["year"] == 2026][0]
+		self.assertEqual((chelan["harvest_start"], chelan["harvest_end"]), ("2026-06-05", "2026-06-07"))
+
+	def test_variety_models_are_fitted_and_offsets_are_relative(self):
+		out = pest_dd.propose_harvest_calibration(self.map)
+		models = out["proposed_models"]
+		self.assertEqual(len(models), 9)
+		chelan = models["sweet-cherry-chelan"]
+		# 1 Mar → 5 Jun 2026 = 97 days × 20 = 1940; 2025: 103 d = 2060; 2023: 114 d = 2280 (weight 0.3).
+		expected = round((1940 + 2060 + 2280 * 0.3) / 2.3)
+		self.assertEqual(chelan["events"][0]["dd"], expected)
+		self.assertTrue(chelan["verify"])
+		offs = [v["offset_f"] for v in out["proposed_block_offsets"].values()]
+		self.assertAlmostEqual(sum(offs), 0.0, places=1)
+		self.assertEqual(out["skipped"], [])
+
+	def test_drafts_only(self):
+		out = pest_dd.propose_harvest_calibration(self.map, draft=True)
+		self.assertIn("models_draft", out)
+		self.assertIn("offsets_draft", out)
+		self.assertNotIn("sweet-cherry-chelan", pest_dd.models()[0], "nothing published")
+		self.assertEqual(pest_dd.block_offset(BLOCK)["offset_f"], 0.0)
+
+	def test_an_unmapped_parcel_is_skipped_and_said(self):
+		out = pest_dd.propose_harvest_calibration({"Mill Creek": BLOCK})
+		self.assertEqual(len(out["skipped"]), 6)
+		self.assertIn("40 Acre", out["skipped"][0]["why"])

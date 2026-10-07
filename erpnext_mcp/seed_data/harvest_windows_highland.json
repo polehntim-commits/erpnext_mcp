@@ -1,0 +1,246 @@
+{
+ "source": "Tim Polehn, Harvest_Dates.numbers (2026-10-06): 'Harvest Date Windows by Variety & Parcel', cross-correlated from Bucket Average daily picking logs (Highland LLC blocks).",
+ "caveats": [
+  "Dates are when picking happened, which also follows market and crew decisions, not only fruit maturity.",
+  "2023 was a near-total crop failure / market failure at Mill Creek (Polehn_Cherry_Production_2): low weight.",
+  "No 2024 windows in the file."
+ ],
+ "parcels": {
+  "Mill Creek": "Highland LLC, MC Bing block",
+  "40 Acre": "Highland LLC, Gib/Fred pearls"
+ },
+ "windows": [
+  {
+   "parcel": "Mill Creek",
+   "variety": "Chelan",
+   "year": 2023,
+   "harvest_start": "2023-06-22",
+   "harvest_end": "2023-06-24"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Chelan",
+   "year": 2025,
+   "harvest_start": "2025-06-11",
+   "harvest_end": "2025-06-12"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Chelan",
+   "year": 2026,
+   "harvest_start": "2026-06-05",
+   "harvest_end": "2026-06-07"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Coral Champagne",
+   "year": 2023,
+   "harvest_start": "2023-06-26",
+   "harvest_end": "2023-07-01"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Coral Champagne",
+   "year": 2025,
+   "harvest_start": "2025-06-13",
+   "harvest_end": "2025-06-14"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Coral Champagne",
+   "year": 2026,
+   "harvest_start": "2026-06-07",
+   "harvest_end": "2026-06-10"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Black Pearl",
+   "year": 2023,
+   "harvest_start": "2023-06-24",
+   "harvest_end": "2023-06-26"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Black Pearl",
+   "year": 2025,
+   "harvest_start": "2025-06-15",
+   "harvest_end": "2025-06-16"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Black Pearl",
+   "year": 2026,
+   "harvest_start": "2026-06-11",
+   "harvest_end": "2026-06-11"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Burgundy Pearl",
+   "year": 2023,
+   "harvest_start": "2023-06-27",
+   "harvest_end": "2023-06-28"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Burgundy Pearl",
+   "year": 2025,
+   "harvest_start": "2025-06-21",
+   "harvest_end": "2025-06-21"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Burgundy Pearl",
+   "year": 2026,
+   "harvest_start": "2026-06-18",
+   "harvest_end": "2026-06-18"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Ebony Pearl",
+   "year": 2023,
+   "harvest_start": "2023-06-29",
+   "harvest_end": "2023-07-01"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Ebony Pearl",
+   "year": 2025,
+   "harvest_start": "2025-06-21",
+   "harvest_end": "2025-06-21"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Ebony Pearl",
+   "year": 2026,
+   "harvest_start": "2026-06-22",
+   "harvest_end": "2026-06-22"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Early Robin",
+   "year": 2023,
+   "harvest_start": "2023-06-22",
+   "harvest_end": "2023-06-22"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Early Robin",
+   "year": 2026,
+   "harvest_start": "2026-06-18",
+   "harvest_end": "2026-06-22"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Skeena",
+   "year": 2023,
+   "harvest_start": "2023-07-15",
+   "harvest_end": "2023-07-16"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Skeena",
+   "year": 2025,
+   "harvest_start": "2025-07-11",
+   "harvest_end": "2025-07-12"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Skeena",
+   "year": 2026,
+   "harvest_start": "2026-07-03",
+   "harvest_end": "2026-07-03"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Sweetheart",
+   "year": 2025,
+   "harvest_start": "2025-07-14",
+   "harvest_end": "2025-07-16"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Sweetheart",
+   "year": 2026,
+   "harvest_start": "2026-07-06",
+   "harvest_end": "2026-07-10"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Suite Note",
+   "year": 2025,
+   "harvest_start": "2025-06-21",
+   "harvest_end": "2025-06-21"
+  },
+  {
+   "parcel": "Mill Creek",
+   "variety": "Suite Note",
+   "year": 2026,
+   "harvest_start": "2026-06-22",
+   "harvest_end": "2026-06-22"
+  },
+  {
+   "parcel": "40 Acre",
+   "variety": "Black Pearl",
+   "year": 2025,
+   "harvest_start": "2025-06-16",
+   "harvest_end": "2025-06-18"
+  },
+  {
+   "parcel": "40 Acre",
+   "variety": "Black Pearl",
+   "year": 2026,
+   "harvest_start": "2026-06-11",
+   "harvest_end": "2026-06-15"
+  },
+  {
+   "parcel": "40 Acre",
+   "variety": "Burgundy Pearl",
+   "year": 2025,
+   "harvest_start": "2025-06-20",
+   "harvest_end": "2025-06-20"
+  },
+  {
+   "parcel": "40 Acre",
+   "variety": "Burgundy Pearl",
+   "year": 2026,
+   "harvest_start": "2026-06-18",
+   "harvest_end": "2026-06-19"
+  },
+  {
+   "parcel": "40 Acre",
+   "variety": "Ebony Pearl",
+   "year": 2025,
+   "harvest_start": "2025-06-21",
+   "harvest_end": "2025-06-26"
+  },
+  {
+   "parcel": "40 Acre",
+   "variety": "Ebony Pearl",
+   "year": 2026,
+   "harvest_start": "2026-06-20",
+   "harvest_end": "2026-06-22"
+  }
+ ],
+ "season_overview_all_growers": {
+  "First Pick": {
+   "2023": "2023-06-22",
+   "2025": "2025-06-10",
+   "2026": "2026-06-05"
+  },
+  "Last Pick": {
+   "2023": "2023-07-16",
+   "2025": "2025-07-16",
+   "2026": "2026-07-10"
+  },
+  "Season Length (days)": {
+   "2023": 25.0,
+   "2025": 37.0,
+   "2026": 36.0
+  },
+  "Picking Days": {
+   "2023": 15.0,
+   "2025": 34.0,
+   "2026": 32.0
+  }
+ }
+}

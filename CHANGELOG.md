@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.264.1 — 2026-10-06 — Tim's harvest windows as calibration proposals
+
+No migrate. Deploy `docs/deploy/v0.264.1_harvest_calibration.md`.
+
+- `seed_data/harvest_windows_highland.json`: Tim's Harvest_Dates file (Mill Creek 24 and 40 Acre 6 variety-season
+  windows, 2023 / 2025 / 2026, plus the season overview), with its caveats.
+- `propose_harvest_calibration` (OFF): fits a "harvest start" degree-day total per variety on the farm's own
+  Open-Meteo weather (base 40 °F, upper 86 °F, from 1 March; 2023 down-weighted as the market-failure year), and
+  each parcel's offset RELATIVE to the other (centred on zero — the totals come from the same windows, so only the
+  difference is identified). Proposals; `draft` writes Drafts of pest_dd_models and pest_dd_offsets for a person
+  to publish. Nothing is applied.
+
 ## 0.264.0 — 2026-10-06 — pest degree days per block, on the farm's own weather
 
 **Migrate needed** (Farm Config Version kind "IPM Setting": `pest_dd_models` and `pest_dd_offsets` seeded and
