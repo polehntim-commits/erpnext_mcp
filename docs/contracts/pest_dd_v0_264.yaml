@@ -1,0 +1,45 @@
+# Pest degree days per block — the frozen contract. erpnext_mcp v0.264.0 + FarmOps 0.50.0.
+# ADDITIVE to ipm_graph_v0_262.yaml: every v0.262 answer is unchanged unless the phone asks for the new
+# parts. Fixtures: tests_standalone/contract/v0_264_0/ (byte-identical copies in FarmOps
+# FarmOpsKit/Tests/FarmOpsKitTests/Fixtures/contract_v0_264_0/).
+
+version: "0.264.0"
+weather: "The farm's own: Open-Meteo per Weather Settings (archive to 6 days ago, then the 16-day forecast), at the block's grid cell. No literature dates."
+
+dd_status:          # on a pest node (get_ipm_graph with_dd=1 and a block) and on threshold_status (with a block)
+  dd_to_date: "number — °F·day since the biofix, on this block"
+  biofix: "string — '1 March', 'first trap catch logged on this block', 'waiting for the first trap catch…'"
+  window_open: "bool — the model's first event has been reached on this block"
+  next_event: "event|null — the first not yet reached"
+  last_event: "event|null — the last reached"
+  offset_f: "number — °F added to each day's high and low for this block"
+  offset_reasons: "[string] — aspect × slope, elevation vs the weather cell, or a calibrated value"
+  verify: "bool — the model's numbers still need checking; show a caveat"
+  citation: string
+  weather: {source: string, grid_cell: string, latitude: number, longitude: number, grid_elevation_m: "number|null", missing_days: int}
+  summary: "string — one sentence"
+
+event:
+  name: string
+  dd: number
+  status: "reached | projected (within the forecast) | beyond_forecast (extrapolated, rough) | not_yet"
+  date: "YYYY-MM-DD | null"
+  plus_minus_days: "int | null"
+  text: "string — e.g. 'Western Cherry Fruit Fly first emergence expected ~Apr 19 ±1 d (forecast).'"
+
+routes:
+  get_ipm_graph:
+    new_param: {with_dd: "1 — with a block, pest nodes that have a model carry dd_status, and active_now follows window_open"}
+    fixture: get_ipm_graph_with_dd.json
+  get_ipm_threshold_status:
+    change: "with a block and a pest that has a model: dd_status is present and the message reads the block window"
+  get_pest_dd_status:
+    who: "any FarmOps role"
+    params: {block: "Field (required)", pest: "node id, optional", as_of: "YYYY-MM-DD, optional"}
+    answer: {block: string, pests: "[status] — available, pest, pest_name, model, biofix_date, dd_to_date, events, window_open, offset {offset_f, source, reasons, config}, weather, config, summary; or available=false with reason"}
+    fixture: get_pest_dd_status.json
+
+phone:
+  graph: "request with_dd=1 when a block is chosen; show dd_to_date, the next event text, the window state and the offset reasons on pest nodes; mark verify models"
+  threshold: "show dd_status.summary under the status when present"
+  cache: "the with_dd graph is cached like the v0.262 graph (by graph_version + block); DD answers are dated by as_of"

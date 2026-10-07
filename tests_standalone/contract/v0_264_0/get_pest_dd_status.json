@@ -1,0 +1,230 @@
+{
+ "message": {
+  "block": "Block 7 Bing",
+  "pests": [
+   {
+    "as_of": "2026-04-15",
+    "available": true,
+    "biofix": "waiting for the first trap catch on this block",
+    "biofix_date": null,
+    "block": "Block 7 Bing",
+    "config": {
+     "pest_dd_models": "built-in",
+     "pest_dd_offsets": "built-in"
+    },
+    "dd_to_date": null,
+    "events": [],
+    "model": {
+     "base_f": 50.0,
+     "biofix": "first_catch",
+     "citation": "ipm_reference PEST_MODELS (UC IPM)",
+     "events": [
+      {
+       "dd": 220,
+       "name": "egg hatch"
+      }
+     ],
+     "note": "From the shipped IPM reference: its base is stated in °C (converted here) and its degree-day totals match the published °F·day models, so they are read as °F·day. No upper threshold in the reference. VERIFY against the WSU Decision Aid System / UC IPM model before relying on a date.",
+     "upper_f": null,
+     "verify": true
+    },
+    "offset": {
+     "config": "built-in",
+     "offset_f": 0.0,
+     "reasons": [
+      "no slope/aspect layer for this block (build_slope_aspect_layer) — no offset"
+     ],
+     "source": "aspect table"
+    },
+    "pest": "codling-moth",
+    "pest_name": "Codling Moth",
+    "summary": "Codling Moth: waiting for the first trap catch on this block.",
+    "weather": {
+     "grid_cell": "8728f66e4ffffff",
+     "grid_elevation_m": null,
+     "latitude": 45.6,
+     "longitude": -121.2,
+     "source": "Open-Meteo (archive to 6 days ago, then forecast) — Weather Settings"
+    },
+    "window_open": false
+   },
+   {
+    "as_of": "2026-04-15",
+    "available": true,
+    "biofix": "waiting for the first trap catch on this block",
+    "biofix_date": null,
+    "block": "Block 7 Bing",
+    "config": {
+     "pest_dd_models": "built-in",
+     "pest_dd_offsets": "built-in"
+    },
+    "dd_to_date": null,
+    "events": [],
+    "model": {
+     "base_f": 43.0,
+     "biofix": "first_catch",
+     "citation": "ipm_reference PEST_MODELS (PNW handbooks)",
+     "events": [],
+     "note": "From the shipped IPM reference: its base is stated in °C (converted here) and its degree-day totals match the published °F·day models, so they are read as °F·day. No upper threshold in the reference. VERIFY against the WSU Decision Aid System / UC IPM model before relying on a date. The reference gives no event totals: add them (e.g. larval emergence) to date anything.",
+     "upper_f": null,
+     "verify": true
+    },
+    "offset": {
+     "config": "built-in",
+     "offset_f": 0.0,
+     "reasons": [
+      "no slope/aspect layer for this block (build_slope_aspect_layer) — no offset"
+     ],
+     "source": "aspect table"
+    },
+    "pest": "obliquebanded-leafroller",
+    "pest_name": "Obliquebanded Leafroller",
+    "summary": "Obliquebanded Leafroller: waiting for the first trap catch on this block.",
+    "weather": {
+     "grid_cell": "8728f66e4ffffff",
+     "grid_elevation_m": null,
+     "latitude": 45.6,
+     "longitude": -121.2,
+     "source": "Open-Meteo (archive to 6 days ago, then forecast) — Weather Settings"
+    },
+    "window_open": false
+   },
+   {
+    "as_of": "2026-04-15",
+    "available": true,
+    "biofix": "1 January",
+    "biofix_date": "2026-01-01",
+    "block": "Block 7 Bing",
+    "config": {
+     "pest_dd_models": "built-in",
+     "pest_dd_offsets": "built-in"
+    },
+    "dd_to_date": 1575.0,
+    "events": [
+     {
+      "date": "2026-01-10",
+      "dd": 150.0,
+      "name": "first flight",
+      "plus_minus_days": 0,
+      "status": "reached",
+      "text": "Spotted Wing Drosophila first flight: reached Jan 10."
+     },
+     {
+      "date": "2026-02-09",
+      "dd": 600.0,
+      "name": "peak flight",
+      "plus_minus_days": 0,
+      "status": "reached",
+      "text": "Spotted Wing Drosophila peak flight: reached Feb 9."
+     }
+    ],
+    "model": {
+     "base_f": 45.0,
+     "biofix": "jan1",
+     "citation": "ipm_reference PEST_MODELS (MSU / PNW SWD research)",
+     "events": [
+      {
+       "dd": 150,
+       "name": "first flight"
+      },
+      {
+       "dd": 600,
+       "name": "peak flight"
+      }
+     ],
+     "note": "From the shipped IPM reference: its base is stated in °C (converted here) and its degree-day totals match the published °F·day models, so they are read as °F·day. No upper threshold in the reference. VERIFY against the WSU Decision Aid System / UC IPM model before relying on a date.",
+     "upper_f": null,
+     "verify": true
+    },
+    "offset": {
+     "config": "built-in",
+     "offset_f": 0.0,
+     "reasons": [
+      "no slope/aspect layer for this block (build_slope_aspect_layer) — no offset"
+     ],
+     "source": "aspect table"
+    },
+    "pest": "spotted-wing-drosophila",
+    "pest_name": "Spotted Wing Drosophila",
+    "summary": "Spotted Wing Drosophila: 1575 °F·day since 1 January (base 45 °F, offset +0 °F). Spotted Wing Drosophila peak flight: reached Feb 9. Model marked verify.",
+    "weather": {
+     "grid_cell": "8728f66e4ffffff",
+     "grid_elevation_m": null,
+     "latitude": 45.6,
+     "longitude": -121.2,
+     "missing_days": 0,
+     "source": "Open-Meteo (archive to 6 days ago, then forecast) — Weather Settings"
+    },
+    "window_open": true
+   },
+   {
+    "as_of": "2026-04-15",
+    "available": true,
+    "biofix": "1 March",
+    "biofix_date": "2026-03-01",
+    "block": "Block 7 Bing",
+    "config": {
+     "pest_dd_models": "built-in",
+     "pest_dd_offsets": "built-in"
+    },
+    "dd_to_date": 874.0,
+    "events": [
+     {
+      "date": "2026-04-19",
+      "dd": 950.0,
+      "name": "first emergence",
+      "plus_minus_days": 1,
+      "status": "projected",
+      "text": "Western Cherry Fruit Fly first emergence expected ~Apr 19 ±1 d (forecast)."
+     },
+     {
+      "date": "2026-04-27",
+      "dd": 1100.0,
+      "name": "peak emergence",
+      "plus_minus_days": 1,
+      "status": "projected",
+      "text": "Western Cherry Fruit Fly peak emergence expected ~Apr 27 ±1 d (forecast)."
+     }
+    ],
+    "model": {
+     "base_f": 41.0,
+     "biofix": "mar1",
+     "citation": "ipm_reference PEST_MODELS (UC IPM; PNW handbooks)",
+     "events": [
+      {
+       "dd": 950,
+       "name": "first emergence"
+      },
+      {
+       "dd": 1100,
+       "name": "peak emergence"
+      }
+     ],
+     "note": "From the shipped IPM reference: its base is stated in °C (converted here) and its degree-day totals match the published °F·day models, so they are read as °F·day. No upper threshold in the reference. VERIFY against the WSU Decision Aid System / UC IPM model before relying on a date.",
+     "upper_f": null,
+     "verify": true
+    },
+    "offset": {
+     "config": "built-in",
+     "offset_f": 0.0,
+     "reasons": [
+      "no slope/aspect layer for this block (build_slope_aspect_layer) — no offset"
+     ],
+     "source": "aspect table"
+    },
+    "pest": "western-cherry-fruit-fly",
+    "pest_name": "Western Cherry Fruit Fly",
+    "summary": "Western Cherry Fruit Fly: 874 °F·day since 1 March (base 41 °F, offset +0 °F). Western Cherry Fruit Fly first emergence expected ~Apr 19 ±1 d (forecast). Model marked verify.",
+    "weather": {
+     "grid_cell": "8728f66e4ffffff",
+     "grid_elevation_m": null,
+     "latitude": 45.6,
+     "longitude": -121.2,
+     "missing_days": 0,
+     "source": "Open-Meteo (archive to 6 days ago, then forecast) — Weather Settings"
+    },
+    "window_open": false
+   }
+  ]
+ }
+}
