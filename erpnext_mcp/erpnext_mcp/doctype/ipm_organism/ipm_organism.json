@@ -1,0 +1,336 @@
+{
+ "actions": [],
+ "creation": "2026-10-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "IPM Organism",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "role": "Compliance Officer"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Foreman"
+  },
+  {
+   "read": 1,
+   "role": "Field Worker"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "description": "v0.262.0. A node of the IPM relationship graph: a crop or variety, a pest, disease, weed or vertebrate, a beneficial, a pollinator or a product. Seeded from the shipped IPM reference as Literature; everything else is the farm's and is never overwritten.",
+ "field_order": [
+  "organism_name",
+  "kind",
+  "scientific_name",
+  "parent_organism",
+  "identity_col",
+  "organism_key",
+  "aliases",
+  "description",
+  "legal_section",
+  "protected_status",
+  "protected_note",
+  "legal_col",
+  "ccf_gate",
+  "window_section",
+  "bbch_from",
+  "bbch_to",
+  "window_col",
+  "dd_from",
+  "dd_to",
+  "dd_base_f",
+  "product_section",
+  "item",
+  "epa_reg_number",
+  "product_col",
+  "moa_group",
+  "provenance_section",
+  "provenance",
+  "source",
+  "confidence",
+  "provenance_col",
+  "status",
+  "enabled",
+  "company",
+  "seed_key",
+  "review_section",
+  "proposed_by",
+  "approved_by",
+  "approved_on",
+  "review_col",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "organism_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Crop\nVariety\nInsect Pest\nMite Pest\nDisease\nWeed\nVertebrate Pest\nBeneficial Insect\nBeneficial Mite\nBeneficial Microbe\nBeneficial Vertebrate\nPollinator\nProduct",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "scientific_name",
+   "fieldtype": "Data",
+   "label": "Scientific Name"
+  },
+  {
+   "fieldname": "parent_organism",
+   "fieldtype": "Link",
+   "label": "Parent",
+   "options": "IPM Organism",
+   "description": "A variety's crop."
+  },
+  {
+   "fieldname": "identity_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "organism_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "read_only": 1,
+   "unique": 1,
+   "description": "The stable id every edge and the phone use (a slug of the name)."
+  },
+  {
+   "fieldname": "aliases",
+   "fieldtype": "Small Text",
+   "label": "Aliases",
+   "description": "Other names, one per line (common names, Spanish)."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "legal_section",
+   "fieldtype": "Section Break",
+   "label": "Legal status"
+  },
+  {
+   "fieldname": "protected_status",
+   "fieldtype": "Select",
+   "label": "Protected Status",
+   "options": "\nMBTA\nMBTA Depredation Order\nState Protected\nESA",
+   "description": "MBTA species: recommendations lead with exclusion, netting, scare devices and habitat; lethal options are not offered."
+  },
+  {
+   "fieldname": "protected_note",
+   "fieldtype": "Small Text",
+   "label": "Protected Note"
+  },
+  {
+   "fieldname": "legal_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ccf_gate",
+   "fieldtype": "Data",
+   "label": "Compliance Gate",
+   "description": "e.g. rodent_bait: an option using this product goes through those compliance rules."
+  },
+  {
+   "fieldname": "window_section",
+   "fieldtype": "Section Break",
+   "label": "When it is active"
+  },
+  {
+   "fieldname": "bbch_from",
+   "fieldtype": "Int",
+   "label": "BBCH From"
+  },
+  {
+   "fieldname": "bbch_to",
+   "fieldtype": "Int",
+   "label": "BBCH To"
+  },
+  {
+   "fieldname": "window_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "dd_from",
+   "fieldtype": "Float",
+   "label": "Degree-days From"
+  },
+  {
+   "fieldname": "dd_to",
+   "fieldtype": "Float",
+   "label": "Degree-days To"
+  },
+  {
+   "fieldname": "dd_base_f",
+   "fieldtype": "Float",
+   "label": "Degree-day Base (°F)"
+  },
+  {
+   "fieldname": "product_section",
+   "fieldtype": "Section Break",
+   "label": "Product",
+   "depends_on": "eval:doc.kind=='Product'"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "epa_reg_number",
+   "fieldtype": "Data",
+   "label": "EPA Reg. No."
+  },
+  {
+   "fieldname": "product_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "moa_group",
+   "fieldtype": "Data",
+   "label": "Mode-of-action Group",
+   "description": "IRAC / FRAC group."
+  },
+  {
+   "fieldname": "provenance_section",
+   "fieldtype": "Section Break",
+   "label": "Provenance"
+  },
+  {
+   "fieldname": "provenance",
+   "fieldtype": "Select",
+   "label": "Provenance",
+   "options": "Literature\nFarm Observed\nUser Entered\nAI Proposed\nImported",
+   "default": "User Entered",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Literature rows are seeded from the shipped IPM reference and refreshed by re-seed; every other provenance is never touched by a re-seed."
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Small Text",
+   "label": "Source"
+  },
+  {
+   "fieldname": "confidence",
+   "fieldtype": "Float",
+   "label": "Confidence",
+   "default": "0.7",
+   "description": "0–1. How sure the source is."
+  },
+  {
+   "fieldname": "provenance_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Proposed\nActive\nRejected",
+   "default": "Active",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Proposed rows (AI proposals, imports, seeded thresholds) wait for a person; Rejected rows are kept, not deleted."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "description": "Blank = applies to every company on this site."
+  },
+  {
+   "fieldname": "seed_key",
+   "fieldtype": "Data",
+   "label": "Seed Key",
+   "read_only": 1,
+   "search_index": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "review_section",
+   "fieldtype": "Section Break",
+   "label": "Review",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "proposed_by",
+   "fieldtype": "Data",
+   "label": "Proposed By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Data",
+   "label": "Approved By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_on",
+   "fieldtype": "Datetime",
+   "label": "Approved On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "title_field": "organism_name",
+ "search_fields": "kind,scientific_name,aliases",
+ "show_title_field_in_link": 1
+}

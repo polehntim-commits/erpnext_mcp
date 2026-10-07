@@ -1,0 +1,59 @@
+{
+ "message": {
+  "aliases": [],
+  "can_edit": true,
+  "description": "Pecks and removes ripening fruit; a major cherry bird pest.",
+  "edges": [
+   {
+    "active_now": null,
+    "bbch_from": 81,
+    "bbch_to": 89,
+    "confidence": 0.6,
+    "crop": null,
+    "enabled": true,
+    "id": "<volatile>",
+    "notes": null,
+    "object": "sweet-cherry",
+    "provenance": "Literature",
+    "relation": "attacks",
+    "source": "PNW handbooks; WSU Tree Fruit",
+    "status": "Active",
+    "subject": "american-robin",
+    "weight": 0.6
+   }
+  ],
+  "node": {
+   "active_now": null,
+   "bbch_from": 81,
+   "bbch_to": 89,
+   "ccf_gate": null,
+   "dd_from": null,
+   "dd_to": null,
+   "enabled": true,
+   "epa_reg_number": null,
+   "id": "american-robin",
+   "item": null,
+   "kind": "Vertebrate Pest",
+   "name": "American Robin",
+   "parent": null,
+   "protected_note": "Protected by the Migratory Bird Treaty Act: lethal control needs a USFWS depredation permit. Lead with netting, scare devices and habitat.",
+   "protected_status": "MBTA",
+   "provenance": "Literature",
+   "scientific_name": "Turdus migratorius"
+  },
+  "thresholds": [
+   {
+    "action_threshold": 0.0,
+    "comparison": "Greater Than",
+    "crop": "Cherries",
+    "crop_stage": "BBCH 81–89",
+    "enabled": false,
+    "name": "PAT-00010",
+    "recommended_methods": "MBTA-protected: netting, rotated scare devices, raptor perches and kestrel boxes, prompt harvest. Lethal control only under a USFWS depredation permit.",
+    "sample_unit": "Percent Infested",
+    "status": "Proposed",
+    "warning_threshold": null
+   }
+  ]
+ }
+}

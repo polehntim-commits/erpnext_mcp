@@ -28,7 +28,15 @@
   "recommended_methods",
   "source",
   "notes_section",
-  "notes"
+  "notes",
+  "ipm_section",
+  "organism",
+  "status",
+  "ipm_col",
+  "provenance",
+  "approved_by",
+  "approved_on",
+  "seed_key"
  ],
  "fields": [
   {
@@ -178,11 +186,63 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "ipm_section",
+   "fieldtype": "Section Break",
+   "label": "IPM graph (v0.262.0)"
+  },
+  {
+   "fieldname": "organism",
+   "fieldtype": "Link",
+   "label": "Organism",
+   "options": "IPM Organism",
+   "description": "The IPM graph node this threshold is for. The phone's threshold status and the graph read it."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Approved\nProposed\nRejected",
+   "default": "Approved",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Seeded starter thresholds and AI proposals are Proposed and disabled until a person approves them (approve_pest_action_threshold)."
+  },
+  {
+   "fieldname": "ipm_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "provenance",
+   "fieldtype": "Select",
+   "label": "Provenance",
+   "options": "User Entered\nLiterature\nFarm Observed\nAI Proposed\nImported",
+   "default": "User Entered"
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Data",
+   "label": "Approved By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_on",
+   "fieldtype": "Datetime",
+   "label": "Approved On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "seed_key",
+   "fieldtype": "Data",
+   "label": "Seed Key",
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-16 09:00:00.000000",
+ "modified": "2026-10-06 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Pest Action Threshold",

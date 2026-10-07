@@ -1,0 +1,85 @@
+{
+ "message": {
+  "label_caveat": "These are research reference figures, not the label. Pre-harvest and re-entry intervals vary by state, formulation and crop, and labels change between seasons. The label in the applicator's hand governs, and it is the legal document.",
+  "message": "American Robin has a proposed threshold that nobody has approved yet, so nothing was compared.",
+  "observed": {
+   "count": null,
+   "sample_unit": null
+  },
+  "options": [
+   {
+    "ccf_gate": null,
+    "efficacy": null,
+    "harms_active": [],
+    "impact": 0.0,
+    "kind": "exclusion",
+    "note": null,
+    "product": null,
+    "title": "Netting over high-value blocks from straw colour"
+   },
+   {
+    "ccf_gate": null,
+    "efficacy": null,
+    "harms_active": [],
+    "impact": 0.0,
+    "kind": "cultural",
+    "note": null,
+    "product": null,
+    "title": "Scare devices — propane cannons, distress calls, reflective tape — rotated so birds do not habituate"
+   },
+   {
+    "ccf_gate": null,
+    "efficacy": null,
+    "harms_active": [],
+    "impact": 0.0,
+    "kind": "cultural",
+    "note": null,
+    "product": null,
+    "title": "Prompt, clean harvest; remove dropped and cull fruit"
+   },
+   {
+    "ccf_gate": null,
+    "efficacy": null,
+    "harms_active": [],
+    "impact": 0.0,
+    "kind": "biological",
+    "note": null,
+    "product": null,
+    "title": "Kestrel and owl nest boxes, raptor perches"
+   }
+  ],
+  "organism": {
+   "active_now": true,
+   "bbch_from": 81,
+   "bbch_to": 89,
+   "ccf_gate": null,
+   "dd_from": null,
+   "dd_to": null,
+   "enabled": true,
+   "epa_reg_number": null,
+   "id": "american-robin",
+   "item": null,
+   "kind": "Vertebrate Pest",
+   "name": "American Robin",
+   "parent": null,
+   "protected_note": "Protected by the Migratory Bird Treaty Act: lethal control needs a USFWS depredation permit. Lead with netting, scare devices and habitat.",
+   "protected_status": "MBTA",
+   "provenance": "Literature",
+   "scientific_name": "Turdus migratorius"
+  },
+  "protected_species_note": "American Robin is protected (MBTA). Protected by the Migratory Bird Treaty Act: lethal control needs a USFWS depredation permit. Lead with netting, scare devices and habitat. Non-lethal options only.",
+  "status": "not_approved",
+  "threshold": {
+   "action_threshold": 0.0,
+   "comparison": "Greater Than",
+   "crop": "Cherries",
+   "crop_stage": "BBCH 81–89",
+   "enabled": false,
+   "name": "PAT-00010",
+   "recommended_methods": "MBTA-protected: netting, rotated scare devices, raptor perches and kestrel boxes, prompt harvest. Lethal control only under a USFWS depredation permit.",
+   "sample_unit": "Percent Infested",
+   "status": "Proposed",
+   "warning_threshold": null
+  }
+ }
+}

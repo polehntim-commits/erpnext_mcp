@@ -1,0 +1,22 @@
+{
+ "message": {
+  "created": true,
+  "edge": {
+   "active_now": null,
+   "bbch_from": null,
+   "bbch_to": null,
+   "confidence": 0.5,
+   "crop": "sweet-cherry",
+   "enabled": true,
+   "id": "<volatile>",
+   "notes": "Seen on the north rows",
+   "object": "cherry-slug",
+   "provenance": "User Entered",
+   "relation": "preys_on",
+   "source": null,
+   "status": "Active",
+   "subject": "green-lacewing",
+   "weight": 0.3
+  }
+ }
+}

@@ -1,0 +1,78 @@
+{
+ "message": {
+  "observation": "<volatile>",
+  "threshold_status": {
+   "label_caveat": "These are research reference figures, not the label. Pre-harvest and re-entry intervals vary by state, formulation and crop, and labels change between seasons. The label in the applicator's hand governs, and it is the legal document.",
+   "message": "Spider Mites is over the action threshold. Act — the lowest-impact option is first.",
+   "observed": {
+    "count": 8.0,
+    "sample_unit": "Per Leaf"
+   },
+   "options": [
+    {
+     "ccf_gate": null,
+     "efficacy": 0.4,
+     "harms_active": [],
+     "impact": 0.0,
+     "kind": "biological",
+     "note": "Conserve it: the products below that harm it are ranked lower.",
+     "product": "ladybug",
+     "title": "Ladybug (preys on)"
+    },
+    {
+     "ccf_gate": null,
+     "efficacy": 0.4,
+     "harms_active": [],
+     "impact": 0.0,
+     "kind": "biological",
+     "note": "Conserve it: the products below that harm it are ranked lower.",
+     "product": "green-lacewing",
+     "title": "Green Lacewing (preys on)"
+    },
+    {
+     "ccf_gate": null,
+     "efficacy": 0.9,
+     "harms_active": [],
+     "impact": 0.0,
+     "kind": "biological",
+     "note": "Conserve it: the products below that harm it are ranked lower.",
+     "product": "predatory-mite",
+     "title": "Predatory Mite (preys on)"
+    }
+   ],
+   "organism": {
+    "active_now": true,
+    "bbch_from": null,
+    "bbch_to": null,
+    "ccf_gate": null,
+    "dd_from": null,
+    "dd_to": null,
+    "enabled": true,
+    "epa_reg_number": null,
+    "id": "spider-mites",
+    "item": null,
+    "kind": "Mite Pest",
+    "name": "Spider Mites",
+    "parent": null,
+    "protected_note": null,
+    "protected_status": "",
+    "provenance": "Literature",
+    "scientific_name": "Tetranychus urticae / Panonychus ulmi"
+   },
+   "protected_species_note": null,
+   "status": "action",
+   "threshold": {
+    "action_threshold": 5.0,
+    "comparison": "Greater Than Or Equal",
+    "crop": "Cherries",
+    "crop_stage": "BBCH 71–89",
+    "enabled": true,
+    "name": "PAT-00005",
+    "recommended_methods": "Brush or count 25 leaves per block; hold off where predatory mites are at least one per ten spider mites; avoid pyrethroids that flare mites; a selective miticide only above threshold.",
+    "sample_unit": "Per Leaf",
+    "status": "Approved",
+    "warning_threshold": 2.0
+   }
+  }
+ }
+}
