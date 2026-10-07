@@ -1,10 +1,10 @@
-**Deploy: v0.252.0 → v0.268.1 (OML today) — one build, one migrate; FarmOps 0.53.0 (build 48)**
+**Deploy: v0.252.0 → v0.268.1 (OML today) — one build, one migrate; FarmOps 0.53.1 (build 49)**
 
 For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.268.1.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
 - **Server**: erpnext_mcp main **`627deda`** (`__version__ = "0.268.1"`).
-- **App**: fafo_ios main **`a06adc8`** — FarmOps **0.53.0 (build 48)**, scheme **FarmOps**.
+- **App**: fafo_ios main **`760cf5f`** — FarmOps **0.53.1 (build 49)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
 
@@ -40,11 +40,12 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | app 0.51.0 | Market card ("Should I be picking today?") and a stock-style price chart; works offline from the saved copy; no quote never shows an old price. |
 | app 0.52.0 | On-device protection: people/money caches locked when the phone is locked (background-sync stores stay readable after first unlock), all caches out of backups, no HTTP cache, sign-out now wipes four stores it missed. |
 | app 0.53.0 | Company switcher chip on every company-scoped list (hidden for single-company users); the choice is remembered, sent with every request, and caches are kept per company. |
+| app 0.53.1 | The Today map shows every asset on the farm as you pan (it showed only the five nearest you), the same as the All Assets map. |
 
 **1. Build (Tim)**
 
 Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.268.1`. Push fafo_ios main and archive
-FarmOps 0.53.0 (build 48).
+FarmOps 0.53.1 (build 49).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 

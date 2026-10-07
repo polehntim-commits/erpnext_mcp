@@ -1,4 +1,4 @@
-**Deploy: catch-up v0.231.2 → v0.268.1 — one build, ONE migrate; FarmOps 0.38.7 → 0.53.0 (build 48)**
+**Deploy: catch-up v0.231.2 → v0.268.1 — one build, ONE migrate; FarmOps 0.38.7 → 0.53.1 (build 49)**
 
 For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.268.1, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
@@ -6,7 +6,7 @@ ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime
 output, proven on the payroll suite).
 
 - **Server**: erpnext_mcp main **`627deda`** (`__version__ = "0.268.1"`).
-- **App**: fafo_ios main **`a06adc8`** — FarmOps **0.53.0 (build 48)**, scheme **FarmOps**. It needs v0.252.0's
+- **App**: fafo_ios main **`760cf5f`** — FarmOps **0.53.1 (build 49)**, scheme **FarmOps**. It needs v0.252.0's
   routes, so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 
@@ -71,11 +71,12 @@ output, proven on the payroll suite).
 | app 0.51.0 | Market card ("Should I be picking today?") and a stock-style price chart; works offline from the saved copy; no quote never shows an old price. |
 | app 0.52.0 | On-device protection: people/money caches locked when the phone is locked (background-sync stores stay readable after first unlock), all caches out of backups, no HTTP cache, sign-out now wipes four stores it missed. |
 | app 0.53.0 | Company switcher chip on every company-scoped list (hidden for single-company users); the choice is remembered, sent with every request, and caches are kept per company. |
+| app 0.53.1 | The Today map shows every asset on the farm as you pan (it showed only the five nearest you), the same as the All Assets map. |
 
 **1. Build (Tim)**
 
 Push erpnext_mcp main (`627deda`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.268.1`. Push fafo_ios main
-(`a06adc8`) and archive FarmOps 0.53.0 (build 48), scheme **FarmOps**.
+(`760cf5f`) and archive FarmOps 0.53.1 (build 49), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
 chooses. The full command list is in `~/Desktop/deploy-catchup-latest.txt`.
@@ -102,7 +103,7 @@ Expect from the migrate (first run only):
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets and weather_check_pruning_rain, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
-4. Phone 0.53.0: Today (a Market prices tile) and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
+4. Phone 0.53.1: Today (a Market prices tile) and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
    works for a Foreman.
 5. Punch review (`v0.251.0_punch_review.md`): this week's flagged punches appear as compliance alerts and under
    "Punches to review" on Today for a Foreman / Farm Manager; `preview_payroll_for_period` warns on unreviewed punches
