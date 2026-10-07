@@ -1,12 +1,12 @@
-**Deploy: catch-up v0.231.2 → v0.267.1 — one build, ONE migrate; FarmOps 0.38.7 → 0.52.0 (build 47)**
+**Deploy: catch-up v0.231.2 → v0.268.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.53.0 (build 48)**
 
-For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.267.1, and
+For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.268.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
 ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime rule into data with identical
 output, proven on the payroll suite).
 
-- **Server**: erpnext_mcp main **`a2a9595`** (`__version__ = "0.267.1"`).
-- **App**: fafo_ios main **`72d4de0`** — FarmOps **0.52.0 (build 47)**, scheme **FarmOps**. It needs v0.252.0's
+- **Server**: erpnext_mcp main **`5ab9b1b`** (`__version__ = "0.268.0"`).
+- **App**: fafo_ios main **`a06adc8`** — FarmOps **0.53.0 (build 48)**, scheme **FarmOps**. It needs v0.252.0's
   routes, so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 
@@ -53,6 +53,7 @@ output, proven on the payroll suite).
 | v0.266.0 | Desk **Market Prices** page (candles + volume, season over season, bars, overlays; vendored chart library, no CDN), the market in the pro forma's breakeven sensitivity, phone tile **Market prices** (app 0.51.0+). |
 | v0.267.0 | Who sees what on the phone, as data: one Data Access policy (tiers, gates, restricted fields, all 428 routes) filtering every answer at one exit; seeded to today's behaviour (nothing changes until a System Manager publishes); gates may only narrow (private HR never back to Farm Manager); ten over-shares listed for Tim in `v0.267.0_data_access.md` §4. |
 | v0.267.1 | Four access-audit fixes (before Constancy): routing number masked except payroll / HR; employee-file login ID and IPs to System Manager only; accident and leave lists and totals one company's; contacts by farm entity (older contacts stamped where unambiguous). |
+| v0.268.0 | The phone's company switcher: a person in several companies picks one in the header and every company-scoped list follows it (accidents included); the server applies the choice to every route that takes a company and refuses a company the person is not in. No migrate. Pairs with app 0.53.0. |
 | app 0.38.8 | Due dates and overdue on task rows and a Due section on Today, computed on the phone (works offline). |
 | app 0.39.0 | Go / Hold chips and card, supervisor override, crop-stage picker (offline), Today: work notices, notices to decide, "Good to do today", SOPs to review; approved SOPs in "How this job is done". Spanish (tú). |
 | app 0.40.0 | The course player: course videos with how much was watched, the knowledge check, trainer sign-off. |
@@ -68,11 +69,12 @@ output, proven on the payroll suite).
 | app 0.50.0 | Degree days per block on the IPM map: next-event dates on pests, a Degree days screen, the offset and its reasons. |
 | app 0.51.0 | Market card ("Should I be picking today?") and a stock-style price chart; works offline from the saved copy; no quote never shows an old price. |
 | app 0.52.0 | On-device protection: people/money caches locked when the phone is locked (background-sync stores stay readable after first unlock), all caches out of backups, no HTTP cache, sign-out now wipes four stores it missed. |
+| app 0.53.0 | Company switcher chip on every company-scoped list (hidden for single-company users); the choice is remembered, sent with every request, and caches are kept per company. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main (`a2a9595`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.267.1`. Push fafo_ios main
-(`72d4de0`) and archive FarmOps 0.52.0 (build 47), scheme **FarmOps**.
+Push erpnext_mcp main (`5ab9b1b`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.268.0`. Push fafo_ios main
+(`a06adc8`) and archive FarmOps 0.53.0 (build 48), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
 chooses. The full command list is in `~/Desktop/deploy-catchup-latest.txt`.
@@ -91,15 +93,15 @@ Expect from the migrate (first run only):
 7. "rain archive check rule seeded OFF: weather_check_pruning_rain."
 8. "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded
    (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M."
-9. `__version__ = "0.267.1"`.
+9. `__version__ = "0.268.0"`.
 
 **3. Checks after the migrate**
 
-1. `get_server_status`: 0.267.1. Desk → any Asset Register form: the map's build stamp reads 0.267.1.
+1. `get_server_status`: 0.268.0. Desk → any Asset Register form: the map's build stamp reads 0.268.0.
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets and weather_check_pruning_rain, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
-4. Phone 0.52.0: Today (a Market prices tile) and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
+4. Phone 0.53.0: Today (a Market prices tile) and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
    works for a Foreman.
 5. Punch review (`v0.251.0_punch_review.md`): this week's flagged punches appear as compliance alerts and under
    "Punches to review" on Today for a Foreman / Farm Manager; `preview_payroll_for_period` warns on unreviewed punches
@@ -107,7 +109,7 @@ Expect from the migrate (first run only):
 6. Business-card merge (`v0.252.0_day_checks.md` §5): on OML, re-run the Ben Sheppard merge with Met At
    "Sheppard's, 440 Riverside Dr, Hood River, OR 97031" (or correct it from the phone: Contacts → Where met); Met At
    now reads that, and Sheppards-Office-1 links to Supplier Sheppard's.
-7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`, `v0.255.0_asset_library.md`, `v0.256.0_receipt_relink.md`, `v0.257.0_mcp_system_user.md`, `v0.258.0_replies_to_review.md`, `v0.267.1_access_audit_fixes.md`, `v0.267.0_data_access.md`, `v0.266.0_market_dashboard.md`, `v0.265.0_market_prices.md`, `v0.264.1_harvest_calibration.md`, `v0.264.0_pest_dd.md`, `v0.263.0_ipm_desk_map.md`, `v0.262.0_ipm_graph.md`, `v0.261.0_offline_claim.md`, `v0.260.0_data_access_hotfix.md`, `v0.259.0_940_w3.md`,
+7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`, `v0.255.0_asset_library.md`, `v0.256.0_receipt_relink.md`, `v0.257.0_mcp_system_user.md`, `v0.258.0_replies_to_review.md`, `v0.268.0_company_switcher.md`, `v0.267.1_access_audit_fixes.md`, `v0.267.0_data_access.md`, `v0.266.0_market_dashboard.md`, `v0.265.0_market_prices.md`, `v0.264.1_harvest_calibration.md`, `v0.264.0_pest_dd.md`, `v0.263.0_ipm_desk_map.md`, `v0.262.0_ipm_graph.md`, `v0.261.0_offline_claim.md`, `v0.260.0_data_access_hotfix.md`, `v0.259.0_940_w3.md`,
    `app_0.39.0_work_timing.md`, `app_0.40.0_course_player.md`, `app_0.41.0_punch_review.md`,
    `app_0.42.0_my_day_contacts.md`, `app_0.43.0_spanish_sweep.md`, `app_0.44.0_server_spanish.md`, `app_0.45.0_asset_library.md`, `app_0.46.0_replies_to_review.md`, `app_0.47.0_signout.md`, `app_0.48.0_offline_claim.md`, `v0.262.0_ipm_graph.md` (app 0.49.0), `v0.264.0_pest_dd.md` (app 0.50.0), `v0.265.0_market_prices.md` (app 0.51.0)).
 
