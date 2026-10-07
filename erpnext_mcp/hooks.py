@@ -625,7 +625,7 @@ has_permission = {
 #: them, and losing the reading must not look like losing the record.
 doctype_js = {
 	"Parcel": ["public/js/geo_map_widget.js", "public/js/parcel_map.js"],
-	"Field": ["public/js/geo_map_widget.js", "public/js/field_map.js"],
+	"Field": ["public/js/geo_map_widget.js", "public/js/field_map.js", "public/js/field_history.js"],
 	"Irrigation Zone": ["public/js/geo_map_widget.js", "public/js/irrigation_zone_map.js"],
 	"Housing Unit": ["public/js/geo_map_widget.js", "public/js/housing_unit_map.js"],
 	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js"],

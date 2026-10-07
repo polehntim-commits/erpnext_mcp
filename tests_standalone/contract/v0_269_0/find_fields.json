@@ -1,0 +1,30 @@
+{
+ "message": {
+  "candidates": [
+   {
+    "acreage": 12.0,
+    "field": "Bing Block - MC",
+    "field_name": "MC Centerpiece",
+    "matched_on": "alias",
+    "matched_text": "Bing Block",
+    "owning_entity": "Example Trading Co",
+    "parcel": "Mill Creek - MC"
+   },
+   {
+    "acreage": 14.0,
+    "field": "Wind Mecine - MC",
+    "field_name": "Wind Mecine",
+    "matched_on": "alias",
+    "matched_text": "Bing Block",
+    "owning_entity": "Example Trading Co",
+    "parcel": "Mill Creek - MC"
+   }
+  ],
+  "group": "Bing Block",
+  "query": "bing block",
+  "resolved": [
+   "Bing Block - MC",
+   "Wind Mecine - MC"
+  ]
+ }
+}

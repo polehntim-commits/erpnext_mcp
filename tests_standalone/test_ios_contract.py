@@ -5877,3 +5877,81 @@ for _name, _fn in vars(_MarketMirrors).items():
 		setattr(EveryMobileMethodDecodes, _name, _fn)
 
 TheContractIsComplete.COVERED.update({"get_market_card": "test_93", "get_market_chart": "test_94"})
+
+
+# ── v0.269.0. Fields by name / alias, the card, the history (FieldCard.swift, app 0.54.0) ────────────────────────
+class FieldCandidateModel(Codable):
+	SWIFT = "FieldCard.swift"
+	STRICT = (("field", str, 0), ("matched_on", str, 0))
+	LENIENT = (("field_name", str, 0), ("parcel", str, 0), ("owning_entity", str, 0), ("acreage", float, 0),
+	           ("matched_text", str, 0))
+
+
+class FieldLookupModel(Codable):
+	SWIFT = "FieldCard.swift"
+	STRICT = (("query", str, 0),)
+	LENIENT = (("group", str, 0),)
+	NESTED = (("candidates", FieldCandidateModel, True, 0),)
+
+
+class FieldEventModel(Codable):
+	SWIFT = "FieldCard.swift"
+	STRICT = (("kind", str, 0), ("when", str, 0))
+	LENIENT = (("title", str, 0), ("detail", str, 0), ("doctype", str, 0), ("docname", str, 0))
+
+
+class FieldHistoryModel(Codable):
+	SWIFT = "FieldCard.swift"
+	STRICT = (("field", str, 0),)
+	LENIENT = (("count", int, 0), ("before", str, 0))
+	NESTED = (("events", FieldEventModel, True, 0),)
+
+
+class FieldHazardModel(Codable):
+	SWIFT = "FieldCard.swift"
+	STRICT = (("name", str, 0),)
+	LENIENT = (("asset_type", str, 0), ("latitude", float, 0), ("longitude", float, 0), ("valve_type", str, 0),
+	           ("description", str, 0))
+
+
+class FieldOpenTaskModel(Codable):
+	SWIFT = "FieldCard.swift"
+	STRICT = (("name", str, 0),)
+	LENIENT = (("task_name", str, 0), ("task_type", str, 0), ("state", str, 0), ("urgency", str, 0))
+
+
+class FieldCardModel(Codable):
+	SWIFT = "FieldCard.swift"
+	STRICT = (("field", str, 0),)
+	LENIENT = (("field_name", str, 0), ("parcel", str, 0), ("owning_entity", str, 0), ("acreage", float, 0),
+	           ("acreage_source", str, 0), ("area_computed_acres", float, 0), ("crop", str, 0), ("variety", str, 0))
+	NESTED = (("open_tasks", FieldOpenTaskModel, True, 0), ("hazards", FieldHazardModel, True, 0))
+
+
+class _FieldMirrors:
+	def _field_site(self):
+		from .test_field_self_service import mill_creek
+
+		mill_creek(self)
+		self.be()
+
+	def test_95_find_fields(self):
+		self._field_site()
+		FieldLookupModel.decode(self.wire("find_fields", query="bing block"), "find_fields")
+
+	def test_96_get_field_card(self):
+		self._field_site()
+		answer = self.wire("get_field_card", field="center piece")
+		FieldCardModel.decode(answer, "get_field_card")
+		FieldHistoryModel.decode(answer["history"], "get_field_card.history")
+
+	def test_97_get_field_history(self):
+		self._field_site()
+		FieldHistoryModel.decode(self.wire("get_field_history", field="center piece"), "get_field_history")
+
+
+for _name, _fn in vars(_FieldMirrors).items():
+	if _name.startswith(("test_", "_field_site")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"find_fields": "test_95", "get_field_card": "test_96", "get_field_history": "test_97"})

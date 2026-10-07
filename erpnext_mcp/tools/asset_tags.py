@@ -143,6 +143,8 @@ ASSET_TYPE_SKILL_MAP: dict[str, str] = {
 	# and the one who services a tractor are not the same job.
 	"Fuel Tank": "facility_maintenance",
 	"Gas Tank": "facility_maintenance",
+	# v0.269.0. A hazard pin is field ground — the field crew marks and clears it.
+	"Hazard Marker": "field_operations",
 	"General": "general_maintenance",
 }
 
@@ -324,24 +326,17 @@ def asset_row(asset_name: str, company: str = "") -> dict:
 
 def _asset_history(asset_name: str, limit: int = 50) -> list:
 	"""Chronological history from all doctypes that reference this asset."""
+	from .. import history
+
 	events = []
 	for doctype, link_field, field_str in _HISTORY_DOCTYPES:
-		if not compat.doctype_exists(doctype):
-			continue
-		if not compat.has_field(doctype, link_field):
-			continue
 		fields_wanted = [f.strip() for f in field_str.split(",")]
-		fields_available = compat.existing_fields(doctype, fields_wanted)
+		fields_available = compat.existing_fields(doctype, fields_wanted) if compat.doctype_exists(doctype) else []
 		if not fields_available:
 			continue
+		# v0.269.0: the shared history engine's reader (erpnext_mcp/history.py), which a block's history uses too.
 		try:
-			rows = frappe.db.get_all(
-				doctype,
-				filters={link_field: asset_name},
-				fields=fields_available,
-				order_by="creation desc",
-				limit=limit,
-			)
+			rows = history._link(doctype, link_field, asset_name, fields_available, limit=limit)
 		except Exception:
 			continue
 		for row in rows or []:

@@ -52,6 +52,8 @@ SCAN_MOVE_METRES = 25.0
 #: — is mobile until a farm ticks the box.
 FIXED_TYPES = (
 	"Irrigation Valve",
+	# v0.269.0. A hazard pin stays where the crew dropped it; a scan never moves it.
+	"Hazard Marker",
 	"Irrigation Zone",
 	"Water Source",
 	"Wind Machine",

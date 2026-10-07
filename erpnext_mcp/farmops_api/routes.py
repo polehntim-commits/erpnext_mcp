@@ -510,6 +510,10 @@ ROUTES = (
 	# v0.265.0. USDA AMS market prices (app 0.51.0).
 	Route("/mobile", mobile_api.get_market_card),
 	Route("/mobile", mobile_api.get_market_chart),
+	# v0.269.0. Fields by the names people use; the field card and its history (app 0.54.0).
+	Route("/mobile", mobile_api.find_fields),
+	Route("/mobile", mobile_api.get_field_card),
+	Route("/mobile", mobile_api.get_field_history),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

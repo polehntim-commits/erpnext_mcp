@@ -1242,6 +1242,12 @@
   "allow_observe_market_reports",
   "allow_draft_market_commodity",
   "allow_get_data_access_policy",
+  "allow_find_fields",
+  "allow_get_field_history",
+  "allow_set_field_aliases",
+  "allow_rename_field",
+  "allow_set_field_acreage",
+  "allow_create_task_on_field",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -1391,7 +1397,7 @@
  "fields": [
   {
    "default": "1",
-   "description": "The leave types this site offers and, with an employee, which of them that person may actually draw. `requestable` is the column a picker should draw on \u2014 an unpaid type is requestable with no allocation and no balance, which on a farm with no Leave Allocations is the only kind anybody can file.",
+   "description": "The leave types this site offers and, with an employee, which of them that person may actually draw. `requestable` is the column a picker should draw on — an unpaid type is requestable with no allocation and no balance, which on a farm with no Leave Allocations is the only kind anybody can file.",
    "fieldname": "allow_list_leave_types",
    "fieldtype": "Check",
    "label": "List Leave Types"
@@ -1681,7 +1687,7 @@
   },
   {
    "default": "0",
-   "description": "Off (default). On (and only with device keys OFF): generate_mobile_login_qr may file the card PNG \u2014 a live credential \u2014 on a Governance Document, privately. A filed card deletes itself on its first sign-in or when it expires. With device keys on nothing is ever filed. docs/design/employee_file.md section 1.",
+   "description": "Off (default). On (and only with device keys OFF): generate_mobile_login_qr may file the card PNG — a live credential — on a Governance Document, privately. A filed card deletes itself on its first sign-in or when it expires. With device keys on nothing is ever filed. docs/design/employee_file.md section 1.",
    "fieldname": "login_card_archive_enabled",
    "fieldtype": "Check",
    "label": "File login cards"
@@ -1752,7 +1758,7 @@
    "label": "Verify with Plaid"
   },
   {
-   "description": "Plaid client id (a separate Plaid use case from Bank Bridge's \u2014 see the design section 4).",
+   "description": "Plaid client id (a separate Plaid use case from Bank Bridge's — see the design section 4).",
    "fieldname": "plaid_client_id",
    "fieldtype": "Data",
    "label": "Plaid client id"
@@ -1772,7 +1778,7 @@
   },
   {
    "default": "1",
-   "description": "READ. Direct-deposit changes in progress or turned down \u2014 masked to the last 4.",
+   "description": "READ. Direct-deposit changes in progress or turned down — masked to the last 4.",
    "fieldname": "allow_list_direct_deposit_changes",
    "fieldtype": "Check",
    "label": "List Direct Deposit Changes"
@@ -1786,7 +1792,7 @@
   },
   {
    "default": "1",
-   "description": "READ. Everything about one person: identity, badge, access, training, signed documents, housing, tasks \u2014 as the caller may see it; expiries flagged; never a secret or full SSN.",
+   "description": "READ. Everything about one person: identity, badge, access, training, signed documents, housing, tasks — as the caller may see it; expiries flagged; never a secret or full SSN.",
    "fieldname": "allow_get_employee_file",
    "fieldtype": "Check",
    "label": "Get Employee File"
@@ -2361,7 +2367,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. File every attachment on a received email onto one record by file_url (one stored copy, no re-upload), link the email to that record the way the Desk\u2019s Relink does, and leave an audit comment on the email. Needs write permission on both. Refuses an email already linked.",
+   "description": "WRITE. File every attachment on a received email onto one record by file_url (one stored copy, no re-upload), link the email to that record the way the Desk’s Relink does, and leave an audit comment on the email. Needs write permission on both. Refuses an email already linked.",
    "fieldname": "allow_route_incoming_document",
    "fieldtype": "Check",
    "label": "Route Incoming Document"
@@ -2480,7 +2486,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. File a leave request as a DRAFT Leave Application \u2014 approval is a separate switch. Refuses an overlapping request, an insufficient balance (naming both numbers) and a leave type nobody allocated, which is a different fact from a spent one. Unpaid leave types skip the balance check.",
+   "description": "WRITE. File a leave request as a DRAFT Leave Application — approval is a separate switch. Refuses an overlapping request, an insufficient balance (naming both numbers) and a leave type nobody allocated, which is a different fact from a spent one. Unpaid leave types skip the balance check.",
    "fieldname": "allow_create_leave_request",
    "fieldtype": "Check",
    "label": "Create Leave Request"
@@ -2494,7 +2500,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. Approve a draft leave request and submit it. THIS MOVES A BALANCE \u2014 hrms writes the Leave Ledger Entry on submit. Separate from create_leave_request so filing can be on every handset while approving stays in one pair of hands.",
+   "description": "WRITE. Approve a draft leave request and submit it. THIS MOVES A BALANCE — hrms writes the Leave Ledger Entry on submit. Separate from create_leave_request so filing can be on every handset while approving stays in one pair of hands.",
    "fieldname": "allow_approve_leave_request",
    "fieldtype": "Check",
    "label": "Approve Leave Request"
@@ -2644,7 +2650,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. Delete a DRAFT purchase invoice outright, recording what it was and why in the audit log, and release any Expense Receipt linked to it so it can be billed again. Refuses submitted invoices (cancel those instead) and cancelled ones \u2014 a cancelled invoice and its reversing rows are the audit trail.",
+   "description": "WRITE. Delete a DRAFT purchase invoice outright, recording what it was and why in the audit log, and release any Expense Receipt linked to it so it can be billed again. Refuses submitted invoices (cancel those instead) and cancelled ones — a cancelled invoice and its reversing rows are the audit trail.",
    "fieldname": "allow_delete_draft_purchase_invoice",
    "fieldtype": "Check",
    "label": "Delete Draft Purchase Invoice"
@@ -3195,14 +3201,14 @@
   },
   {
    "default": "0",
-   "description": "WRITE, DESTRUCTIVE. Delete a DRAFT ERPNext Asset and the Asset Activity and Asset Cost Profile rows that stop the Desk deleting it \u2014 which is what a failed mirror leaves behind. Refuses a submitted asset (it is on the fixed-asset register; dispose of it with a scrap or sale journal) and a cancelled one. The Asset Register tag is never touched.",
+   "description": "WRITE, DESTRUCTIVE. Delete a DRAFT ERPNext Asset and the Asset Activity and Asset Cost Profile rows that stop the Desk deleting it — which is what a failed mirror leaves behind. Refuses a submitted asset (it is on the fixed-asset register; dispose of it with a scrap or sale journal) and a cancelled one. The Asset Register tag is never touched.",
    "fieldname": "allow_delete_draft_asset",
    "fieldtype": "Check",
    "label": "Delete Draft Asset"
   },
   {
    "default": "0",
-   "description": "WRITE. Point an Asset Register tag at an ERPNext Asset that already exists, for a machine that was on the books before it was tagged. Writes only the asset_register link column \u2014 no value, category or photograph is copied \u2014 and clears the tag from any other Asset that carried it. Works on a submitted asset.",
+   "description": "WRITE. Point an Asset Register tag at an ERPNext Asset that already exists, for a machine that was on the books before it was tagged. Writes only the asset_register link column — no value, category or photograph is copied — and clears the tag from any other Asset that carried it. Works on a submitted asset.",
    "fieldname": "allow_link_tag_to_erpnext_asset",
    "fieldtype": "Check",
    "label": "Link Tag to ERPNext Asset"
@@ -3441,7 +3447,7 @@
   },
   {
    "default": "1",
-   "description": "Read-only. The drawn map and the draft description on one sheet \u2014 what you hand a surveyor or attach to a county filing.",
+   "description": "Read-only. The drawn map and the draft description on one sheet — what you hand a surveyor or attach to a county filing.",
    "fieldname": "allow_export_lla_survey_packet_pdf",
    "fieldtype": "Check",
    "label": "Export LLA Survey Packet PDF"
@@ -5160,7 +5166,7 @@
   },
   {
    "default": "0",
-   "description": "MUTATING. Correct the AMOUNT on a receipt already captured, keeping what the scanner read in original_amount and recording who changed it, when and why. A reason is required. This is a bookkeeper fixing an OCR misread \u2014 a slip whose total came back $18.18 instead of $13.99 can never match its bank line \u2014 and it is a separate switch from Update Expense Receipt because changing what was spent is a different act from changing what it was spent on.",
+   "description": "MUTATING. Correct the AMOUNT on a receipt already captured, keeping what the scanner read in original_amount and recording who changed it, when and why. A reason is required. This is a bookkeeper fixing an OCR misread — a slip whose total came back $18.18 instead of $13.99 can never match its bank line — and it is a separate switch from Update Expense Receipt because changing what was spent is a different act from changing what it was spent on.",
    "fieldname": "allow_correct_receipt_amount",
    "fieldtype": "Check",
    "label": "Correct Receipt Amount"
@@ -6827,7 +6833,7 @@
   },
   {
    "default": "0",
-   "description": "MUTATING. Add one kind of asset to the register \u2014 a fuel tank, a generator. The whole point of the v0.162.0 register, reachable without the Desk: a farm that buys a generator adds the type and registers one the same minute. A duplicate under another spelling is refused and named, because the docname IS the type name and two spellings would be two Link targets.",
+   "description": "MUTATING. Add one kind of asset to the register — a fuel tank, a generator. The whole point of the v0.162.0 register, reachable without the Desk: a farm that buys a generator adds the type and registers one the same minute. A duplicate under another spelling is refused and named, because the docname IS the type name and two spellings would be two Link targets.",
    "fieldname": "allow_create_asset_type",
    "fieldtype": "Check",
    "label": "Create Asset Type"
@@ -6841,21 +6847,21 @@
   },
   {
    "default": "1",
-   "description": "READ. What kinds of asset this farm keeps \u2014 the register a picker is built from. From v0.162.0 the asset types are Farm Asset Type records rather than a hard-coded Select, so a new kind of asset is something you create in the Desk. iOS reads this to build its type wheel.",
+   "description": "READ. What kinds of asset this farm keeps — the register a picker is built from. From v0.162.0 the asset types are Farm Asset Type records rather than a hard-coded Select, so a new kind of asset is something you create in the Desk. iOS reads this to build its type wheel.",
    "fieldname": "allow_list_asset_types",
    "fieldtype": "Check",
    "label": "List Asset Types"
   },
   {
    "default": "0",
-   "description": "MUTATING. Correct one asset type's icon, order, description or enablement \u2014 or its NAME, which is a RENAME: the docname is the type name and every asset stores it, so the rename goes through frappe.rename_doc and repoints every asset carrying it. Unticking `enabled` retires a type: off every picker, assets untouched. That is almost always what \"we do not use that any more\" means.",
+   "description": "MUTATING. Correct one asset type's icon, order, description or enablement — or its NAME, which is a RENAME: the docname is the type name and every asset stores it, so the rename goes through frappe.rename_doc and repoints every asset carrying it. Unticking `enabled` retires a type: off every picker, assets untouched. That is almost always what \"we do not use that any more\" means.",
    "fieldname": "allow_update_asset_type",
    "fieldtype": "Check",
    "label": "Update Asset Type"
   },
   {
    "default": "0",
-   "description": "MUTATING. Delete an asset type outright \u2014 REFUSED while any asset carries it, because asset_type is a required Link and the assets would be left unopenable. Separate from Update Asset Type on purpose: an operator who wants a client able to retire a type does not necessarily want it able to remove one, and a deleted type this app ships comes back on the next migrate.",
+   "description": "MUTATING. Delete an asset type outright — REFUSED while any asset carries it, because asset_type is a required Link and the assets would be left unopenable. Separate from Update Asset Type on purpose: an operator who wants a client able to retire a type does not necessarily want it able to remove one, and a deleted type this app ships comes back on the next migrate.",
    "fieldname": "allow_delete_asset_type",
    "fieldtype": "Check",
    "label": "Delete Asset Type"
@@ -8483,7 +8489,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. Answer a feedback note \u2014 what was done, or why it will not be. \"Won't Fix\" is a real answer and needs a resolution_note: a worker told no is told something, and one whose complaint quietly disappears learns not to file the next one. The note itself is never edited and the answering account is written from the session.",
+   "description": "WRITE. Answer a feedback note — what was done, or why it will not be. \"Won't Fix\" is a real answer and needs a resolution_note: a worker told no is told something, and one whose complaint quietly disappears learns not to file the next one. The note itself is never edited and the answering account is written from the session.",
    "fieldname": "allow_resolve_app_feedback",
    "fieldtype": "Check",
    "label": "Resolve App Feedback"
@@ -8852,14 +8858,14 @@
   },
   {
    "default": "1",
-   "description": "READ. One extraction config body \u2014 what the phone's reader is told and checked against.",
+   "description": "READ. One extraction config body — what the phone's reader is told and checked against.",
    "fieldname": "allow_get_extraction_config",
    "fieldtype": "Check",
    "label": "Get Extraction Config"
   },
   {
    "default": "1",
-   "description": "READ. Dry run of a config against a stored Document Validation's OCR \u2014 what would change.",
+   "description": "READ. Dry run of a config against a stored Document Validation's OCR — what would change.",
    "fieldname": "allow_preview_extraction_config",
    "fieldtype": "Check",
    "label": "Preview Extraction Config"
@@ -8880,7 +8886,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. Publish a Draft extraction config \u2014 every phone fetches it; the previous version is superseded.",
+   "description": "WRITE. Publish a Draft extraction config — every phone fetches it; the previous version is superseded.",
    "fieldname": "allow_publish_extraction_config",
    "fieldtype": "Check",
    "label": "Publish Extraction Config"
@@ -9027,7 +9033,7 @@
   },
   {
    "default": "0",
-   "description": "WRITE. A Draft label profile (label facts \u2192 programs, templates, requirements).",
+   "description": "WRITE. A Draft label profile (label facts → programs, templates, requirements).",
    "fieldname": "allow_update_label_profile",
    "fieldtype": "Check",
    "label": "Update Label Profile"
@@ -10638,6 +10644,48 @@
    "fieldname": "offline_punch_window_hours",
    "fieldtype": "Float",
    "label": "Offline window (hours)"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.269.0. A block by name or alias.",
+   "fieldname": "allow_find_fields",
+   "fieldtype": "Check",
+   "label": "Find Fields"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.269.0. A block's history.",
+   "fieldname": "allow_get_field_history",
+   "fieldtype": "Check",
+   "label": "Get Field History"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.269.0. A block's aliases.",
+   "fieldname": "allow_set_field_aliases",
+   "fieldtype": "Check",
+   "label": "Set Field Aliases"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.269.0. Rename a block, keeping the old name as an alias.",
+   "fieldname": "allow_rename_field",
+   "fieldtype": "Check",
+   "label": "Rename Field"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.269.0. Acreage from the outline or a manual figure with a reason.",
+   "fieldname": "allow_set_field_acreage",
+   "fieldtype": "Check",
+   "label": "Set Field Acreage"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.269.0. A Farm Task on a block named the way people say it.",
+   "fieldname": "allow_create_task_on_field",
+   "fieldtype": "Check",
+   "label": "Create Task On Field"
   }
  ],
  "index_web_pages_for_search": 0,

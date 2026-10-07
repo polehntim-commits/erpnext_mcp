@@ -226,6 +226,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		# v0.265.0. Market prices (app 0.51.0).
 		"get_market_card",
 		"get_market_chart",
+		# v0.269.0. Fields by name / alias, the field card and its history (app 0.54.0).
+		"find_fields",
+		"get_field_card",
+		"get_field_history",
 		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
 		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1087 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1093 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 526 read tools are **on** by default and can be switched off individually. A
+All 528 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21068,3 +21068,16 @@ The policy is a Farm Config Version (kind Data Access, key `farm`); a System Man
 No new tools. `get_price_trend` carries `season_curve` (harvest timing); `get_breakeven_sensitivity` carries
 `market_reference` (what the market has paid, p10 / p50 / p90 per season). The Desk page `/app/market-prices`
 draws candles with a volume pane, season-over-season and weekly bars on the same data.
+
+## v0.269.0 — fields by the names people use
+
+| Tool | What it does |
+| --- | --- |
+| `find_fields` | A block by name or alias; a shared alias is a named group; ambiguous → candidates, never a guess. Read |
+| `get_field_history` | Everything tied to a block, newest first, filterable by kind / dates / season. Read |
+| `set_field_aliases` | The names a block also answers to. Write |
+| `rename_field` | Rename a block, keeping the old name as an alias. Write |
+| `set_field_acreage` | Acreage from the drawn outline (the default) or a manual figure with a reason; old value logged. Write |
+| `create_task_on_field` | A Farm Task on a block named the way people say it. Write |
+
+Contract: `docs/contracts/field_self_service_v0_269.yaml`.

@@ -11,6 +11,9 @@
   "parcel",
   "owning_entity",
   "acreage",
+  "acreage_source",
+  "acreage_override_reason",
+  "aliases",
   "identity_col",
   "block_number",
   "block_ticker",
@@ -496,6 +499,25 @@
    "fieldname": "notes",
    "fieldtype": "Text Editor",
    "label": "Notes"
+  },
+  {
+   "fieldname": "acreage_source",
+   "fieldtype": "Select",
+   "label": "Acreage Source",
+   "options": "\nOutline\nManual",
+   "description": "v0.269.0. Outline: acreage follows the drawn boundary. Manual: kept as entered, with a reason. Blank (older blocks): as before, until set."
+  },
+  {
+   "fieldname": "acreage_override_reason",
+   "fieldtype": "Small Text",
+   "label": "Acreage Override Reason",
+   "depends_on": "eval:doc.acreage_source=='Manual'"
+  },
+  {
+   "fieldname": "aliases",
+   "fieldtype": "Small Text",
+   "label": "Also Known As",
+   "description": "v0.269.0. One name per line — the names people use ('Wind Machine', 'Center Piece'). The same name on several blocks makes a group ('Bing Block')."
   }
  ],
  "index_web_pages_for_search": 0,

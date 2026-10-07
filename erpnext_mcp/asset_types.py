@@ -82,6 +82,8 @@ SEEDED: tuple[tuple[str, str, int, str], ...] = (
 	# `occupied` on the asset is what puts rodent bait there in the strict tier.
 	("Cabin", "K", 142, "A cabin somebody lives in. Mark it Occupied when somebody does."),
 	("House", "O", 144, "A house somebody lives in. Mark it Occupied when somebody does."),
+	# v0.269.0. A pin a crew drops on anything a machine must avoid — a buried line, a stump, a well head.
+	("Hazard Marker", "X", 150, "Something to protect or avoid in a block: a buried line, a well head, a stump."),
 	("General", "A", 200, "Anything the other types do not describe."),
 )
 

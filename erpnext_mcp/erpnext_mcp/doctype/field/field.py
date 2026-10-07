@@ -115,12 +115,59 @@ class Field(Document):
 		if int(self.planting_density_per_acre or 0) < 0:
 			frappe.throw(_("Planting Density cannot be negative."))
 
+		self._tidy_aliases()
+		if not self.get("acreage_source") and not (self.name and frappe.db.exists("Field", self.name)):
+			self.acreage_source = "Outline"  # a NEW block follows its outline (see before_insert)
+		# v0.269.0: the boundary first — on an Outline block it sets the acreage the parcel check reads.
+		self._check_boundary()
 		self._check_parcel_acreage(parcel)
 		self._check_block_ticker()
 		self._check_varieties()
 		self._derive_organic_certified()
-		self._check_boundary()
 		self._check_ndvi()
+		self._log_acreage_change()
+
+	def _tidy_aliases(self) -> None:
+		"""v0.269.0. One alias per line, trimmed, de-duplicated (case-insensitively), never the block's own name."""
+		seen, kept = set(), []
+		for line in str(self.get("aliases") or "").replace(",", "\n").splitlines():
+			text = " ".join(line.split())
+			key = text.casefold()
+			if text and key not in seen and key != str(self.field_name or "").casefold():
+				seen.add(key)
+				kept.append(text)
+		self.aliases = "\n".join(kept)
+		if self.get("acreage_source") == "Manual" and not str(self.get("acreage_override_reason") or "").strip():
+			frappe.throw(_("A manual acreage needs a reason (Acreage Override Reason)."))
+
+	def _log_acreage_change(self) -> None:
+		"""v0.269.0. Every acreage change is said on the block: old → new, the source, the reason."""
+		if not self.name or not frappe.db.exists("Field", self.name):
+			return
+		before = frappe.db.get_value("Field", self.name, "acreage")
+		old, new = round(float(before or 0), 2), round(float(self.acreage or 0), 2)
+		if old == new:
+			return
+		source = self.get("acreage_source") or "entered"
+		reason = str(self.get("acreage_override_reason") or "").strip() if source == "Manual" else ""
+		self.flags.acreage_change_note = (
+			f"Acreage changed from {old} to {new} ({source}" + (f": {reason}" if reason else "") + ")."
+		)
+
+	def before_insert(self):
+		# v0.269.0. A NEW block's acreage follows its outline by default. Set here, not as a column default, so the
+		# migrate does not stamp every existing block "Outline" and quietly change its recorded acreage.
+		if not self.get("acreage_source"):
+			self.acreage_source = "Outline"
+
+	def on_update(self):
+		note = self.flags.get("acreage_change_note")
+		if note:
+			self.flags.acreage_change_note = None
+			try:
+				self.add_comment("Info", note)
+			except Exception:  # pragma: no cover - a site whose Comment will not take it keeps the change
+				pass
 
 	def _check_varieties(self) -> None:
 		"""Every `varieties` row must name this block's crop's own catalogue variety
@@ -309,6 +356,10 @@ class Field(Document):
 		derived.pop("shape", None)
 		for fieldname, value in derived.items():
 			self.set(fieldname, value)
+		# v0.269.0 (Tim): the drawn outline is the acreage on an Outline block — nothing to disagree with.
+		if self.get("acreage_source") == "Outline" and self.area_computed_acres:
+			self.acreage = round(float(self.area_computed_acres), 2)
+			return
 
 		_ratio, verdict = geo.area_disagreement(self.acreage, self.area_computed_acres)
 		if verdict == "refuse":

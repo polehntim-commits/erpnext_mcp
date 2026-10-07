@@ -1844,6 +1844,12 @@ def set_field_boundary(args: dict) -> ToolResult:
 
 	ratio, verdict = geo.area_disagreement(row.get("acreage"), derived["area_computed_acres"])
 	entered = round(float(row.get("acreage") or 0), 2)
+	# v0.269.0 (Tim): on an Outline block the drawn outline IS the acreage — there is nothing to disagree with.
+	follows_outline = compat.has_field(FIELD, "acreage_source") and (
+		frappe.db.get_value(FIELD, row["name"], "acreage_source") == "Outline"
+	)
+	if follows_outline:
+		verdict = "ok"
 	if verdict == "refuse":
 		raise ToolError(
 			f"the boundary encloses {derived['area_computed_acres']} acres and {row['name']} is "
@@ -1861,7 +1867,9 @@ def set_field_boundary(args: dict) -> ToolResult:
 			"routinely disagree by a few percent; both figures are kept and neither is "
 			"overwritten."
 		)
-	if not entered:
+	if follows_outline:
+		warnings.append(f"Acreage follows the outline on this block: {entered} → {derived['area_computed_acres']} ac.")
+	elif not entered:
 		warnings.append(
 			f"No acreage was recorded on this block, so nothing was compared. The polygon says "
 			f"{derived['area_computed_acres']} acres — set it with update_field if that is right."

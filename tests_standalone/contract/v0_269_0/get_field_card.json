@@ -1,0 +1,84 @@
+{
+ "message": {
+  "acreage": 12.0,
+  "acreage_source": null,
+  "aliases": [
+   "Center Piece",
+   "Bing Block"
+  ],
+  "area_computed_acres": 11.3366,
+  "crop": "Cherries",
+  "field": "Bing Block - MC",
+  "field_name": "MC Centerpiece",
+  "has_boundary": true,
+  "hazards": [
+   {
+    "asset_type": "Irrigation Valve",
+    "description": null,
+    "latitude": 45.5852,
+    "longitude": -121.231,
+    "name": "MC-V1",
+    "valve_type": "Lateral"
+   }
+  ],
+  "history": {
+   "before": null,
+   "count": 4,
+   "events": [
+    {
+     "detail": "Completed",
+     "docname": "FT-DONE",
+     "doctype": "Farm Task",
+     "kind": "task",
+     "title": "Irrigation: Pull sprinkler risers",
+     "when": "2026-10-05 15:00:00"
+    },
+    {
+     "detail": "Bing : 18000 lb",
+     "docname": "ST-1",
+     "doctype": "Scale Ticket",
+     "kind": "harvest",
+     "title": "Scale ticket ST-1",
+     "when": "2026-07-10"
+    },
+    {
+     "detail": "count 12, 30% affected — THRESHOLD EXCEEDED",
+     "docname": "OBS-1",
+     "doctype": "Crop Observation",
+     "kind": "ipm",
+     "title": "Pest: Spider Mites",
+     "when": "2026-07-01"
+    },
+    {
+     "detail": "",
+     "docname": "OBS-2",
+     "doctype": "Crop Observation",
+     "kind": "phenology",
+     "title": "Stage: 85",
+     "when": "2026-06-20"
+    }
+   ],
+   "field": "Bing Block - MC",
+   "kinds": [
+    "harvest",
+    "ipm",
+    "phenology",
+    "task"
+   ],
+   "more": false,
+   "sensitive_included": false
+  },
+  "open_tasks": [
+   {
+    "name": "FT-OPEN",
+    "state": "Available",
+    "task_name": "Mark valves",
+    "task_type": "Irrigation",
+    "urgency": null
+   }
+  ],
+  "owning_entity": "Example Trading Co",
+  "parcel": "Mill Creek - MC",
+  "variety": "Bing (Fallow post 2026 Harvest)"
+ }
+}

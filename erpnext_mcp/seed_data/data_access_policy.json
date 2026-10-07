@@ -872,6 +872,7 @@
    ]
   },
   "finalize_staged_file": {},
+  "find_fields": {},
   "find_item_by_barcode": {},
   "finish_bank_verification": {},
   "generate_asset_qr": {},
@@ -961,6 +962,8 @@
   },
   "get_extraction_config": {},
   "get_feature_flags": {},
+  "get_field_card": {},
+  "get_field_history": {},
   "get_food_safety_dashboard": {},
   "get_food_safety_plan": {},
   "get_futa_summary": {

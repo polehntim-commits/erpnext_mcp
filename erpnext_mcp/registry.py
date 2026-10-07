@@ -195,6 +195,7 @@ from .tools import time_reviews as time_review_tools
 from .tools import ipm_graph_tools
 from .tools import market_prices_tools
 from .tools import data_access_tools
+from .tools import field_self_service
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18272,6 +18273,73 @@ TOOLS = {
 		 "include_stale": _field(_BOOLEAN, "Include reports nothing has been published in for a year."),
 		 "start": _field(_INTEGER, "Page start."), "limit": _field(_INTEGER, "Page size (default 200).")},
 		title="List market catalog",
+	),
+	"find_fields": _tool(
+		field_self_service.find_fields,
+		"v0.269.0. A block by the name people use — field name, record id, ticker or an alias ('Wind Machine', "
+		"'Center Piece', 'Bing Block'), case-, space- and punctuation-insensitive. An alias several blocks share is a "
+		"named group and resolves to all of them; anything else ambiguous returns the candidates and picks none.",
+		{"name": _field(_STRING, "The name or alias.")},
+		required=("name",),
+		title="Find fields",
+	),
+	"get_field_history": _tool(
+		field_self_service.get_field_history,
+		"v0.269.0. Everything tied to one block, newest first: tasks, sprays (tank mix, gal/ac, REI, PHI), IPM "
+		"observations and threshold hits, phenology stages, valve runs, inspections, harvest (scale tickets, lots), "
+		"plantings and removals, food-safety checks, changes to the block (acreage old → new), notes and photos, and "
+		"costs. Filter by kinds, dates or season; page back with `before`.",
+		{"field": _field(_STRING, "Block name or alias (one block)."),
+		 "types": _field(_STRING, "Comma list: task, spray, ipm, phenology, irrigation, inspection, harvest, planting, food_safety, record, note, cost."),
+		 "from_date": _field(_STRING, "YYYY-MM-DD."), "to_date": _field(_STRING, "YYYY-MM-DD."),
+		 "season": _field(_INTEGER, "A calendar year."), "limit": _field(_INTEGER, "Default 50, max 500."),
+		 "before": _field(_STRING, "The `before` from the previous page."),
+		 "include_costs": _field(_BOOLEAN, "Default true.")},
+		required=("field",),
+		title="Get field history",
+	),
+	"set_field_aliases": _tool(
+		field_self_service.set_field_aliases,
+		"MUTATING (default OFF). v0.269.0. The names a block also answers to. `aliases` replaces the list; `add` and "
+		"`remove` edit it. The same alias on several blocks makes a named group ('Bing Block').",
+		{"field": _field(_STRING, "Block name or alias."), "aliases": _field(_STRING, "Replace with these (comma or newline)."),
+		 "add": _field(_STRING, "Add these."), "remove": _field(_STRING, "Remove these.")},
+		required=("field",),
+		mutating=True,
+		title="Set field aliases",
+	),
+	"rename_field": _tool(
+		field_self_service.rename_field,
+		"MUTATING (default OFF). v0.269.0. A block's name changed (a spelling fixed: 'Wind Mecine' → 'Wind Machine'). "
+		"The old name is kept as an alias, so old references still resolve. rename_docname also renames the record id.",
+		{"field": _field(_STRING, "Block name or alias."), "new_name": _field(_STRING, "The new name."),
+		 "rename_docname": _field(_BOOLEAN, "Also rename the record id. Default false.")},
+		required=("field", "new_name"),
+		mutating=True,
+		title="Rename field",
+	),
+	"set_field_acreage": _tool(
+		field_self_service.set_field_acreage,
+		"MUTATING (default OFF). v0.269.0. A block's acreage from its drawn outline (source Outline — then it follows "
+		"the outline from here on) or a manual figure with a reason (source Manual). The old value is logged on the block.",
+		{"field": _field(_STRING, "Block name or alias."), "source": _field(_STRING, "Outline (default) or Manual."),
+		 "acres": _field(_NUMBER, "Manual only."), "reason": _field(_STRING, "Manual only: why.")},
+		required=("field",),
+		mutating=True,
+		title="Set field acreage",
+	),
+	"create_task_on_field": _tool(
+		field_self_service.create_task_on_field,
+		"MUTATING (default OFF). v0.269.0. A Farm Task on a block named the way people say it ('a spray check on "
+		"Center Piece'). Takes every create_farm_task argument; the block's company is used unless one is given. A "
+		"name that is more than one block is refused with the candidates.",
+		{"field": _field(_STRING, "Block name or alias."), "task_name": _field(_STRING, "What to do."),
+		 "task_type": _field(_STRING, "As create_farm_task."), "notes": _field(_STRING, "Instructions."),
+		 "urgency": _field(_STRING, "Low, Normal, High or Critical."), "due_date": _field(_STRING, "YYYY-MM-DD."),
+		 "company": _field(_STRING, "Default: the block's company.")},
+		required=("field", "task_name"),
+		mutating=True,
+		title="Create task on field",
 	),
 	"get_data_access_policy": _tool(
 		data_access_tools.get_data_access_policy,

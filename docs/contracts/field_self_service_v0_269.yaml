@@ -1,0 +1,61 @@
+# Fields Tim can find and define himself — the frozen contract. erpnext_mcp v0.269.0; FarmOps 0.54.0 builds against it.
+# Fixtures: tests_standalone/contract/v0_269_0/ (byte-identical in FarmOps FarmOpsKit/Tests/FarmOpsKitTests/Fixtures/
+# contract_v0_269_0/). Tim, 2026-10-07: "find and define these himself (or via Claude through MCP), no code tasks."
+
+version: "0.269.0"
+
+field_record:   # Field gains (migrate)
+  aliases: "one per line. The names people use ('Wind Machine', 'Wind Mecine', 'Center Piece', 'Centerpiece'). The SAME alias on several fields is a NAMED GROUP: 'Bing Block' on Wind Machine and Center Piece resolves to both."
+  acreage_source: "Outline (default) | Manual. Outline: acreage follows the drawn boundary (area_computed_acres) whenever the boundary changes. Manual: kept as entered, with acreage_override_reason."
+  acreage_changes: "every acreage change is logged on the Field (Comment): old value, new value, source, reason, who"
+
+lookup:   # field_names.find — one rule everywhere (phone, Desk, MCP)
+  normalise: "casefold; drop spaces, hyphens, dots, apostrophes; '&' → 'and' — 'Center Piece' == 'centerpiece' == 'CENTER-PIECE'"
+  matches_on: [docname, field_name, block_ticker, aliases]
+  answer: "{query, resolved: [field docnames] | [], candidates: [{field, field_name, parcel, owning_entity, acreage, matched_on, matched_text}], group: alias | null}"
+  rules:
+    - "one field matches → resolved = [it]"
+    - "an alias shared by several fields (a group) → resolved = all of them, group = the alias"
+    - "anything else ambiguous (two different fields, or a group AND a different field's own name) → resolved = [], candidates listed — NEVER a silent pick"
+    - "scoped to the caller's companies on the phone"
+
+field_card:   # get_field_card (phone) — what a tap on a field shows
+  answer: "{field, field_name, aliases, parcel, owning_entity, acreage, acreage_source, area_computed_acres, crop, variety, has_boundary, open_tasks: [{name, task_name, task_type, state, urgency}], history: <get_field_history, current + prior season, first 50>}"
+
+field_history:   # get_field_history (phone + MCP + Desk). The asset-history engine, generalised (erpnext_mcp/history.py)
+  params: {field: "name or alias (one field)", types: "comma list (default all)", from_date: optional, to_date: optional, season: "YYYY optional", limit: "default 50, max 500", before: "cursor for older pages"}
+  event: "{kind, when (ISO), title, detail, doctype, docname}"
+  kinds:
+    task: "Farm Task on the field (completed and closed; open tasks are on the card)"
+    spray: "Spray Application with a block row on the field — tank mix, gallons/acre, REI h, PHI d"
+    ipm: "Crop Observation (pest / beneficial / threshold hits) and Pest Pressure"
+    phenology: "Crop Observation with a crop stage (BBCH) — the degree-day / phenology milestones"
+    irrigation: "valve open / close (Asset State Log) for valves in the field's irrigation zones"
+    inspection: "Inspection Session on the field"
+    harvest: "Scale Ticket and Traceability Lot Code on the field (net weight, quantity)"
+    planting: "Planting Season on the field — planted, productive, removed (removal reason)"
+    food_safety: "Water Test and Monitoring Record on the block"
+    record: "changes to the Field itself — acreage (old → new), variety, condition, aliases, boundary"
+    note: "Comments and attached photos on the Field"
+    cost: "Block Cost / Revenue Entry — MANAGER, ACCOUNTS AND HR ONLY"
+  gating: "the caller must reach the field's company (entity scope); workers and crew leads get operational kinds only (never cost); history recorded by any company about this field is included"
+  offline: "the phone caches the current + prior season; older pages load on demand with `before`"
+
+hazards:   # pins on any field, any time, from the phone
+  how: "register_asset with asset_type 'Hazard Marker' (new seeded type, fixed location) or 'Irrigation Valve', with GPS — the field is the one whose outline contains the pin"
+  on_the_card: "hazards: [{name, asset_type, latitude, longitude, description}] inside the field's outline"
+
+add_task_here:
+  phone: "a field card's 'Add task' → create_farm_task / create_task_from_template with location_doctype=Field, location=<field>, gps of the press point; workers → report_field_task (unchanged gates); offline through the existing queue"
+  mcp: "create_task_on_field(field: name or alias, ...) — refuses an ambiguous name with the candidates"
+
+boundaries:
+  phone: "draw / edit / walk-the-perimeter → set_field_boundary (existing route); acreage then follows the outline unless Manual"
+  desk_and_mcp: "set_field_boundary, import_field_boundary_geojson, KML / FSA CLU imports (existing)"
+
+mcp_tools:
+  read: [find_fields, get_field_history]
+  write: [set_field_aliases, rename_field, set_field_acreage, create_task_on_field]   # all OFF by default
+  rename_field: "changes field_name (and the docname when asked); the old name is kept as an alias so old references resolve"
+
+phone_routes: [find_fields, get_field_card, get_field_history]

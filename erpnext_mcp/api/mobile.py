@@ -25418,3 +25418,53 @@ def get_market_chart(user: str, commodity=None, variety=None, size=None, distric
 		                           str(from_date or ""), str(to_date or ""), overlays)
 	except ValueError as exc:
 		_clean_error(exc)
+
+
+# ── v0.269.0. Fields Tim can find and define himself (docs/contracts/field_self_service_v0_269.yaml) ─────────────
+def _field_in_scope(user: str, query, allowed: list) -> str:
+	"""One block the caller's companies reach, by name or alias; a group or an ambiguity is refused with candidates."""
+	from .. import field_names
+
+	try:
+		return field_names.resolve_one(str(query or ""), allowed)
+	except ValueError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("find_fields", limit=guard.READ_LIMIT)
+def find_fields(user: str, query=None) -> dict:
+	"""A block (or a named group) by the name people use, in the caller's companies; candidates when ambiguous."""
+	from .. import field_names
+
+	allowed = guard.require_scope(user)
+	return field_names.find(str(query or ""), allowed)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_field_card", limit=guard.READ_LIMIT)
+def get_field_card(user: str, field=None) -> dict:
+	"""What a tap on a block shows: name, aliases, acreage, crop, open tasks, hazards inside it, recent history."""
+	from .. import field_card, history
+
+	allowed = guard.require_scope(user)
+	name = _field_in_scope(user, field, allowed)
+	return field_card.card(name, include_sensitive=history.may_see_sensitive(guard.roles_held(user)))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_field_history", limit=guard.READ_LIMIT)
+def get_field_history(user: str, field=None, types=None, from_date=None, to_date=None, season=None, limit=None,
+                      before=None) -> dict:
+	"""A block's history, newest first; workers and crew leads see operational kinds only (never cost)."""
+	from .. import history
+
+	allowed = guard.require_scope(user)
+	name = _field_in_scope(user, field, allowed)
+	wanted = types if isinstance(types, list) else [t for t in str(types or "").split(",") if t.strip()]
+	return history.field_history(
+		name, types=wanted, from_date=str(from_date or ""), to_date=str(to_date or ""),
+		season=int(season) if str(season or "").isdigit() else None,
+		limit=int(limit) if str(limit or "").isdigit() else 50, before=str(before or ""),
+		include_sensitive=history.may_see_sensitive(guard.roles_held(user)),
+	)

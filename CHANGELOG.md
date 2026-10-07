@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.269.0 — 2026-10-07 — fields Tim can find and define himself
+
+**Migrate needed** (Field gains Also Known As, Acreage Source, Acreage Override Reason; asset type Hazard Marker; six
+settings switches). Pairs with FarmOps 0.54.0. Deploy `docs/deploy/v0.269.0_field_self_service.md`. Contract
+`docs/contracts/field_self_service_v0_269.yaml`. Tim, 2026-10-07: no code tasks to find or define a block.
+
+- **By the names people use**: one lookup everywhere — record id, field name, ticker or an alias, ignoring case, spaces
+  and punctuation. An alias several blocks of one company share is a named group ("Bing Block" → Wind Machine + Center
+  Piece); anything else ambiguous comes back as candidates and is never picked silently.
+- **Rename without losing the old name**: `rename_field` keeps the old name as an alias ("Wind Mecine" still resolves).
+- **Acreage follows the drawn outline** on new blocks (Acreage Source = Outline); a manual figure needs a reason; every
+  change is logged on the block with the old value. Existing blocks keep their recorded acreage until switched with
+  `set_field_acreage`.
+- **The field card** (phone): name and aliases, acreage, crop and variety, open tasks, the valves and hazard pins inside
+  its outline, and recent history. **Hazard Marker**: a new fixed asset type for pins a crew drops on anything to avoid.
+- **Field history** on the phone, in the Desk (Field form → History, filters by kind and season, older pages) and over
+  MCP: tasks, sprays (REI / PHI), IPM and threshold hits, phenology stages, valve runs, inspections, harvest, plantings
+  and removals, food-safety checks, changes to the block, notes and photos; costs only for managers, accounts and HR.
+  The asset history now runs on the same engine.
+- **Add task here**: Desk Field form button; `create_task_on_field` over MCP by name or alias. Phone in app 0.54.0.
+- **MCP**: find_fields, get_field_history (read); set_field_aliases, rename_field, set_field_acreage,
+  create_task_on_field (write, OFF). Phone routes find_fields, get_field_card, get_field_history (routes 226).
+
 ## 0.268.1 — 2026-10-07 — get_backup_status speaks the kit's two words
 
 **No migrate needed.** For erp-backup kit 2026-10-07.8 (older kits still read correctly). Deploy

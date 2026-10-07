@@ -415,7 +415,7 @@ class ReadToolsDoNotWrite(SeededTestCase):
 
 		# v0.204.0 adds preview_farm_task_template, preview_inspection_template and
 		# list_pest_control_applications.
-		self.assertEqual(len(registry.READ_TOOLS), 526)
+		self.assertEqual(len(registry.READ_TOOLS), 528)
 		self.assertTrue(set(ACCOUNTING_READ_TOOLS) <= set(registry.READ_TOOLS))
 
 
