@@ -63,6 +63,7 @@ import zlib
 from typing import ClassVar
 
 import frappe
+from unittest import mock
 
 from erpnext_mcp import compliance_rules, i9_pdf, w4_pdf
 from erpnext_mcp.api import files as files_api
@@ -5778,3 +5779,43 @@ for _name, _fn in vars(_IPMMirrors).items():
 TheContractIsComplete.COVERED.update({"get_ipm_graph": "test_87", "get_ipm_organism": "test_88",
                                       "save_ipm_relationship": "test_89", "record_pest_observation": "test_90",
                                       "get_ipm_threshold_status": "test_91"})
+
+
+# ── v0.264.0 / app 0.50.0: pest degree days per block (docs/contracts/pest_dd_v0_264.yaml) ──
+class PestDDEventModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("name", str, 0), ("status", str, 0))
+	LENIENT = (("dd", float, 0), ("date", str, 0), ("plus_minus_days", int, 0), ("text", str, 0))
+
+
+class PestDDStatusModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("pest", str, 0),)
+	LENIENT = (("available", bool, 0), ("reason", str, 0), ("pest_name", str, 0), ("block", str, 0),
+	           ("biofix_date", str, 0), ("dd_to_date", float, 0), ("window_open", bool, 0), ("summary", str, 0))
+	NESTED = (("events", PestDDEventModel, True, 0),)
+
+
+class PestDDAnswerModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("block", str, 0),)
+	NESTED = (("pests", PestDDStatusModel, True, 0),)
+
+
+class _PestDDMirror:
+	def test_92_get_pest_dd_status(self):
+		from erpnext_mcp import ccf_providers
+
+		from .test_pest_dd import dd_site
+
+		dd_site(self)
+		self.be()
+		with mock.patch.object(ccf_providers, "forecast_enabled", return_value=True):
+			PestDDAnswerModel.decode(self.wire("get_pest_dd_status", block="Block 7 Bing"), "get_pest_dd_status")
+
+
+for _name, _fn in vars(_PestDDMirror).items():
+	if _name.startswith("test_"):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"get_pest_dd_status": "test_92"})

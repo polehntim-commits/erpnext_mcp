@@ -505,6 +505,8 @@ ROUTES = (
 	Route("/mobile", mobile_api.save_ipm_relationship),
 	Route("/mobile", mobile_api.record_pest_observation),
 	Route("/mobile", mobile_api.get_ipm_threshold_status),
+	# v0.264.0. Pest degree days per block (app 0.50.0).
+	Route("/mobile", mobile_api.get_pest_dd_status),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

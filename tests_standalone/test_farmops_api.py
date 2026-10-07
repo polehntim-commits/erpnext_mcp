@@ -551,6 +551,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/save_ipm_relationship",
 		"/mobile/record_pest_observation",
 		"/mobile/get_ipm_threshold_status",
+		"/mobile/get_pest_dd_status",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -3135,6 +3136,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"get_ipm_organism",
 		"record_pest_observation",
 		"get_ipm_threshold_status",
+		# v0.264.0. A block's pest degree days.
+		"get_pest_dd_status",
 		# v0.255.0. A Library document cited on an asset in the caller's company (as the asset's own folder).
 		"get_asset_reference",
 		# v0.252.0. The caller's own Start / End of Day.
@@ -3392,7 +3395,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 220, "a method is named in two sets at once")
+		self.assertEqual(len(named), 221, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

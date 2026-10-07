@@ -201,7 +201,7 @@ function erpnext_mcp_ipm_map(page) {
 	function elements() {
 		const out = answer.nodes.map((n) => ({
 			group: "nodes",
-			data: { id: n.id, label: n.name + (n.protected ? " ⛨" : ""), kind: n.kind, node: n },
+			data: { id: n.id, label: n.name + (n.protected ? " ⛨" : "") + dd_label(n), kind: n.kind, node: n },
 			classes: [n.active_now === false ? "inactive" : "", n.protected ? "protected" : "",
 				(n.harms_active || []).length ? "harms" : "", n.id === answer.crop.id ? "focus" : ""].join(" "),
 		}));
@@ -211,6 +211,17 @@ function erpnext_mcp_ipm_map(page) {
 			classes: [e.active_now === false ? "inactive" : "", e.enabled ? "" : "disabled", "rel-" + e.relation].join(" "),
 		}));
 		return out;
+	}
+
+	// v0.264.0. A pest's degree days on the selected block: the next event's date, or "out" once open.
+	function dd_label(n) {
+		const dd = n.dd_status;
+		if (!dd) return "";
+		if (dd.window_open && !(dd.next_event && dd.next_event.date)) return " · " + __("out");
+		const e = dd.next_event;
+		if (!e || !e.date) return dd.window_open ? " · " + __("out") : "";
+		const d = frappe.datetime.str_to_obj(e.date);
+		return ` · ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}${e.plus_minus_days ? " ±" + e.plus_minus_days : ""}`;
 	}
 
 	function style() {
@@ -286,6 +297,17 @@ function erpnext_mcp_ipm_map(page) {
 			const shown = answer && answer.nodes.find((x) => x.id === n.id);
 			if (shown && (shown.harms_active || []).length) {
 				$("<p class='text-danger'>").text(__("Harms beneficials active now: {0}", [shown.harms_active.map(name_of).join(", ")])).appendTo($p);
+			}
+			if (shown && shown.dd_status) {
+				const dd = shown.dd_status;
+				const $dd = $("<div class='mb-2 p-2' style='border:1px solid var(--border-color);border-radius:6px'>").appendTo($p);
+				$("<strong>").text(__("Degree days on {0}", [answer.block])).appendTo($dd);
+				$("<p class='mb-1'>").text(dd.summary || "").appendTo($dd);
+				if (dd.verify) $("<p class='text-warning mb-1'>").text(__("Model numbers not yet verified — check them before relying on a date.")).appendTo($dd);
+				$("<div class='ipm-muted'>").text(__("Offset {0} °F: {1}", [dd.offset_f, (dd.offset_reasons || []).join("; ")])).appendTo($dd);
+				const w = dd.weather || {};
+				$("<div class='ipm-muted'>").text(`${w.source || ""} · ${__("cell")} ${w.grid_cell || ""}${w.grid_elevation_m != null ? " · " + w.grid_elevation_m + " m" : ""}`).appendTo($dd);
+				$("<div class='ipm-muted'>").text(dd.citation || "").appendTo($dd);
 			}
 			if (d.description) $("<p>").text(d.description).appendTo($p);
 			$("<strong>").text(__("Relationships")).appendTo($p);

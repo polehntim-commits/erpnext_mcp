@@ -341,8 +341,34 @@ def version() -> str:
 	return hashlib.sha1("/".join(parts).encode()).hexdigest()[:16]
 
 
+def dd_brief(status: dict) -> dict | None:
+	"""The part of a pest_dd status a node or a threshold answer carries (v0.264.0)."""
+	if not status or not status.get("available"):
+		return None
+	head = next((e for e in status.get("events") or [] if e["status"] != "reached"), None)
+	last = next((e for e in reversed(status.get("events") or []) if e["status"] == "reached"), None)
+	return {
+		"dd_to_date": status.get("dd_to_date"), "biofix": status.get("biofix"), "window_open": status.get("window_open"),
+		"next_event": head, "last_event": last, "offset_f": (status.get("offset") or {}).get("offset_f"),
+		"offset_reasons": (status.get("offset") or {}).get("reasons") or [], "verify": bool((status.get("model") or {}).get("verify")),
+		"citation": (status.get("model") or {}).get("citation"), "weather": status.get("weather"), "summary": status.get("summary"),
+	}
+
+
+def _dd_for(pest: str, block: str) -> dict | None:
+	try:
+		from . import pest_dd
+
+		if pest not in pest_dd.models()[0]:
+			return None
+		return dd_brief(pest_dd.status(block, pest))
+	except Exception:  # pragma: no cover - weather down: the graph still draws
+		frappe.log_error(title="pest DD status", message=frappe.get_traceback())
+		return None
+
+
 def graph(crop: str = "", stage=None, block: str = "", depth: int = 2, kinds=None, start: int = 0,
-          limit: int = DEFAULT_LIMIT, company: str = "", include_disabled: bool = False) -> dict:
+          limit: int = DEFAULT_LIMIT, company: str = "", include_disabled: bool = False, with_dd: bool = False) -> dict:
 	"""The neighbourhood of one crop, `depth` hops out, edges paginated. See the contract."""
 	stage_source = None
 	if block:
@@ -391,12 +417,22 @@ def graph(crop: str = "", stage=None, block: str = "", depth: int = 2, kinds=Non
 	ranked = sorted(chosen.values(), key=lambda e: (order.get(e["relation"], 99), e["subject"], e["object"], e["name"]))
 	page = ranked[start:start + limit]
 	shown = {focus} | {e["subject"] for e in page} | {e["object"] for e in page}
+	described = [describe_node(nodes[n], stage) for n in sorted(shown)]
+	if with_dd and block:
+		# v0.264.0. Each pest with a DD model: its degree days on THIS block (farm weather, block offset), and
+		# whether its window is open — which then decides `active_now` for it.
+		for node in described:
+			if node["kind"] in PEST_KINDS:
+				dd = _dd_for(node["id"], block)
+				if dd:
+					node["dd_status"] = dd
+					node["active_now"] = bool(dd["window_open"])
 	return {
 		"graph_version": version(),
 		"crop": describe_node(nodes[focus], stage),
 		"block": block or None,
 		"stage": {"bbch": stage, "source": stage_source, "label": f"BBCH {stage}" if stage is not None else None},
-		"nodes": [describe_node(nodes[n], stage) for n in sorted(shown)],
+		"nodes": described,
 		"edges": [describe_edge(e, stage) for e in page],
 		"total_edges": len(ranked),
 		"next_start": start + limit if start + limit < len(ranked) else None,
@@ -593,6 +629,7 @@ def threshold_status(organism_name: str, block: str = "", crop: str = "", count=
 			applied, status = proposed, "not_approved"
 	options, note = options_for(row["name"], crop_node, stage, company)
 	name = row.get("organism_name")
+	dd = _dd_for(row["name"], block) if block else None
 	message = {
 		"action": f"{name} is over the action threshold. Act — the lowest-impact option is first.",
 		"warning": f"{name} is over the warning level. Watch it; re-scout soon.",
@@ -603,7 +640,17 @@ def threshold_status(organism_name: str, block: str = "", crop: str = "", count=
 	}[status]
 	if evaluation and evaluation.get("beneficials_holding"):
 		message += " Beneficials look to be holding it — hold and re-scout."
+	if dd:
+		# v0.264.0. The block-adjusted window: the count is read against where this block's degree days are.
+		head = dd.get("next_event") or {}
+		if not dd["window_open"] and status in ("action", "warning"):
+			message += (f" The degree-day model says {name} is not out yet on this block ({dd['dd_to_date']:g} °F·day; "
+			            f"{head.get('text') or 'first event not reached'}) — confirm the identification and the trap.")
+		elif head.get("text"):
+			message += f" {head['text']}"
+	answer_dd = {"dd_status": dd} if dd else {}
 	return {
+		**answer_dd,
 		"organism": describe_node(row, stage),
 		"status": status,
 		"threshold": describe_threshold(applied) if applied else None,

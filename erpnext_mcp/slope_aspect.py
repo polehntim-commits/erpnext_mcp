@@ -604,6 +604,8 @@ def load_grid(meta: dict) -> dict:
 		return cached[1]
 	with np.load(os.path.join(cache_dir(), "grid.npz")) as data:
 		loaded = {"aspect": data["aspect"], "slope": data["slope"], "rgba": data["rgba"]}
+		if "elevation" in data.files:  # v0.264.0; a layer built before it has none until rebuilt
+			loaded["elevation"] = data["elevation"]
 	_GRID_CACHE["grid"] = (key, loaded)
 	return loaded
 
@@ -727,7 +729,8 @@ def build(company: str = "", buffer_metres=None, dry_run: bool = False) -> dict:
 	staging = f"{root}.building.{os.getpid()}"
 	shutil.rmtree(staging, ignore_errors=True)
 	os.makedirs(staging, exist_ok=True)
-	np.savez_compressed(os.path.join(staging, "grid.npz"), aspect=aspect, slope=slope, rgba=rgba)
+	np.savez_compressed(os.path.join(staging, "grid.npz"), aspect=aspect, slope=slope, rgba=rgba,
+	                    elevation=dem.astype("float32"))  # v0.264.0: the pest DD lapse-rate offset reads it
 
 	bounds = grid_bounds(grid)
 	rendered = 0
@@ -950,6 +953,25 @@ def block_summaries(company: str = "", meta: dict | None = None) -> tuple[list, 
 	for rank, entry in enumerate(out, start=1):
 		entry["earliness_rank"] = rank
 	return out, warnings
+
+
+def elevation_at(latitude, longitude, meta: dict | None = None) -> float | None:
+	"""v0.264.0. Metres above sea level at a point, from the built layer's DEM, or None (no layer, a layer
+	built before v0.264.0, outside it, or no data)."""
+	meta = meta if meta is not None else read_meta()
+	if meta is None:
+		return None
+	grid = meta["grid"]
+	x, y = to_mercator(float(longitude), float(latitude))
+	col = int((x - grid["xmin"]) // grid["cell"])
+	row = int((grid["ymax"] - y) // grid["cell"])
+	if not (0 <= col < grid["width"] and 0 <= row < grid["height"]):
+		return None
+	elevation = load_grid(meta).get("elevation")
+	if elevation is None:
+		return None
+	value = float(elevation[row, col])
+	return round(value, 1) if math.isfinite(value) else None
 
 
 def aspect_at(latitude, longitude, meta: dict | None = None) -> dict | None:

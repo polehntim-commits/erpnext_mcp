@@ -164,8 +164,8 @@ class TheSweepLeavesThemAlone(GoHoldTestCase):
 
 	def test_the_presets_are_seeded_off(self):
 		made = go_hold.seed()
-		self.assertEqual(len(made), 6)
+		self.assertEqual(len(made), 8)  # v0.264.0: + the two pest DD window presets
 		rows = [r for r in compliance_rules.rule_rows(include_inactive=True) if r["rule_id"].startswith("go_hold_")]
-		self.assertEqual(len(rows), 6)
+		self.assertEqual(len(rows), 8)
 		self.assertFalse(any(int(r.get("enabled") or 0) for r in rows))
 		self.assertEqual(go_hold.seed(), [], "create-only")

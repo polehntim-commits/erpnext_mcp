@@ -223,3 +223,48 @@ def approve_pest_action_threshold(args: dict) -> ToolResult:
 	decision = as_str(args, "decision") or "approve"
 	out = _wrap(lambda: ipm_graph.decide(names, decision, frappe.session.user, as_str(args, "note")))
 	return ToolResult(data=out, summary=f"{decision}: {len(out['done'])} threshold(s)", docstatus_delta="0 → 0 (updated)")
+
+
+# ── v0.264.0: pest degree days per block ────────────────────────────────────
+def get_pest_dd_status(args: dict) -> ToolResult:
+	"""The pest DD models on one block (or every block): farm weather, block offset, events, provenance."""
+	from .. import pest_dd
+
+	block = as_str(args, "block")
+	pest = as_str(args, "pest")
+	as_of = as_str(args, "as_of")
+	if block and not frappe.db.exists("Field", block):
+		raise ToolError(f"no Field {block!r}.")
+	blocks = [block] if block else [r["name"] for r in frappe.db.get_all("Field", fields=["name"], order_by="name asc")]
+	start, limit = _page(args)
+	page = blocks[start:start + limit]
+	out = []
+	for name in page:
+		out.extend([pest_dd.status(name, pest, as_of)] if pest else pest_dd.statuses(name, as_of))
+	return ToolResult(
+		data={"statuses": out, "total_blocks": len(blocks), "next_start": start + limit if start + limit < len(blocks) else None,
+		      "models_config": pest_dd.models()[1], "offsets_config": pest_dd.offsets()[1]},
+		summary="; ".join(s.get("summary") or s.get("reason") or "" for s in out[:3]) or "no pest DD statuses",
+	)
+
+
+def calibrate_pest_dd(args: dict) -> ToolResult:
+	"""Compare a block's observations with the models and suggest its offset. draft=true writes a DRAFT of
+	pest_dd_offsets for a person to publish in the Desk; nothing is ever applied here."""
+	from .. import pest_dd
+
+	block = as_str(args, "block", required=True)
+	if not frappe.db.exists("Field", block):
+		raise ToolError(f"no Field {block!r}.")
+	observations = list(args.get("observations") or [])
+	if not observations:
+		observations = pest_dd.logged_observations(block)
+	data = pest_dd.calibrate(block, observations, frappe.session.user, draft=as_bool(args, "draft", False))
+	return ToolResult(
+		data=data,
+		summary=(f"{block}: suggested offset {data['suggested_offset_f']:+g} °F from {data.get('observations_used', 0)} "
+		         f"observation(s), confidence {data.get('confidence')}" if data["suggested_offset_f"] is not None
+		         else f"{block}: nothing to calibrate against")
+		        + ("; DRAFT written for a person to publish" if data.get("draft") else ""),
+		docstatus_delta="none → 0 (draft)" if data.get("draft") else "none",
+	)

@@ -18185,6 +18185,41 @@ TOOLS = {
 		mutating=True,
 		title="Approve pest action threshold",
 	),
+	# ── v0.264.0: pest degree days per block ────────────────────────────────
+	"get_pest_dd_status": _tool(
+		ipm_graph_tools.get_pest_dd_status,
+		"v0.264.0. The pest degree-day models on a block (or every block, paged), on THE FARM'S OWN WEATHER: Open-"
+		"Meteo (Weather Settings — archive to 6 days ago, then the 16-day forecast) at the block's grid cell, with "
+		"the block's temperature offset (slope aspect and grade from the aspect layer, elevation against the cell, "
+		"or a calibrated value). Per pest: °F·day since its biofix (1 Jan, 1 Mar or the block's first trap catch), "
+		"each event reached or projected ('~Jun 3 ±3 d'), and provenance: source, cell, offset and why, config "
+		"versions, citation. No literature dates. Models and offsets are config (list_configs kind "
+		"pest_dd_models / pest_dd_offsets).",
+		{
+			"block": _field(_STRING, "A Field; omit for every block (paged)."),
+			"pest": _field(_STRING, "One pest node id, e.g. western-cherry-fruit-fly."),
+			"as_of": _field(_STRING, "YYYY-MM-DD (default today)."),
+			"start": _field(_INTEGER, "Block page start."),
+			"limit": _field(_INTEGER, "Blocks per page."),
+		},
+		title="Get pest DD status",
+	),
+	"calibrate_pest_dd": _tool(
+		ipm_graph_tools.calibrate_pest_dd,
+		"MUTATING (default OFF). v0.264.0. Compare a block's observations with the pest DD models and suggest the "
+		"block's temperature offset (the median across observations, with spread and confidence). observations: "
+		"[{pest, event, observed_on}] — trap first catches, emergence, or harvest dates once a crop model is in "
+		"pest_dd_models; omitted, the block's own logged first catches are used. draft=true writes a DRAFT version "
+		"of pest_dd_offsets; it is NEVER applied — a person publishes it in the Desk.",
+		{
+			"block": _field(_STRING, "A Field."),
+			"observations": _field({"type": "array", "items": {"type": "object"}}, "[{pest, event, observed_on}]."),
+			"draft": _field(_BOOLEAN, "Write the suggestion as a Draft (default false: just report)."),
+		},
+		required=("block",),
+		mutating=True,
+		title="Calibrate pest DD",
+	),
 	# ── v0.261.0: offline claims ─────────────────────────────────────────────
 	"review_claim_conflict": _tool(
 		time_review_tools.review_claim_conflict,

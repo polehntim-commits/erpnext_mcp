@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.264.0 — 2026-10-06 — pest degree days per block, on the farm's own weather
+
+**Migrate needed** (Farm Config Version kind "IPM Setting": `pest_dd_models` and `pest_dd_offsets` seeded and
+published; two Go / Hold presets seeded OFF). Pairs with FarmOps 0.50.0. Contract `docs/contracts/pest_dd_v0_264.yaml`
+(additive to v0.262). Deploy `docs/deploy/v0.264.0_pest_dd.md`. Tim, 2026-10-06.
+
+- **The farm's weather, no literature dates.** Each pest model accumulates degree days from its biofix (1 Jan,
+  1 Mar, or the block's first logged trap catch) on Open-Meteo — the source Weather Settings configures ("the metro
+  weather"): archive to 6 days ago, then the 16-day forecast, at the block's grid cell. Events are reached (dated
+  from the record) or projected ("~Apr 19 ±1 d"), or extrapolated past the forecast and said to be rough.
+- **Models as data** (`pest_dd_models`): base and upper (°F), biofix rule, events, citation, verify. Seeded only
+  with what the IPM reference holds — 4 of its 28 pests (western cherry fruit fly, SWD, codling moth, OBLR) — units
+  made explicit, every one marked VERIFY. The other 24 have no DD model until one is added.
+- **Per-block offset as data** (`pest_dd_offsets`): aspect × slope (south / SW +1.5 °F … north −1 °F, full effect
+  at 15°), elevation lapse −3.5 °F / 1,000 ft against the weather cell's elevation (the aspect layer now keeps its
+  DEM: `slope_aspect.elevation_at`), capped ±4 °F; a pinned block value (calibration or a person) wins. Every
+  answer states the offset and why.
+- **Calibration suggests, never applies.** `calibrate_pest_dd` (OFF) compares a block's observations — its logged
+  first catches, or a list such as historical harvest dates once a crop model exists — and suggests the median
+  offset with spread and confidence; `draft` writes a DRAFT version a person publishes in the Desk.
+  `publish_config` refuses these kinds over MCP.
+- **Everywhere**: `get_ipm_graph with_dd=1` (pest nodes carry `dd_status`, `active_now` follows the window),
+  threshold status reads the block window, phone route `get_pest_dd_status`, MCP `get_pest_dd_status`, CCF provider
+  `pest_dd.*` on Field, opt-in map overlay layer `pest_dd` (never in a default answer), Go / Hold presets
+  `go_hold_spray_fruit_fly_window` / `go_hold_spray_swd_window` (OFF), Desk IPM Map labels and side panel.
+- Generic config tools take kinds `pest_dd_models` / `pest_dd_offsets` (list / get / draft / preview).
+
 ## 0.263.0 — 2026-10-06 — the IPM Map in the Desk
 
 **Migrate needed** (the page `ipm-map`; the Crop Protection workspace gains the IPM Map shortcut and links). No phone

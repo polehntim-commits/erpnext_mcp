@@ -1226,6 +1226,8 @@
   "allow_propose_ipm_relationships",
   "allow_approve_ipm_proposal",
   "allow_approve_pest_action_threshold",
+  "allow_get_pest_dd_status",
+  "allow_calibrate_pest_dd",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9529,6 +9531,20 @@
    "fieldname": "allow_approve_pest_action_threshold",
    "fieldtype": "Check",
    "label": "Approve Pest Action Threshold"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.264.0. Pest degree days per block on the farm weather, with offsets and provenance.",
+   "fieldname": "allow_get_pest_dd_status",
+   "fieldtype": "Check",
+   "label": "Get Pest DD Status"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.264.0. Suggest a block's DD offset from its observations; optionally a DRAFT for a person to publish.",
+   "fieldname": "allow_calibrate_pest_dd",
+   "fieldtype": "Check",
+   "label": "Calibrate Pest DD"
   },
   {
    "default": "1",

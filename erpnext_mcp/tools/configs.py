@@ -48,8 +48,13 @@ KINDS = {
 	"sop": {"label": "SOP", "store": "Compliance Policy", "key": "policy docname"},
 	# v0.247.0. A course's knowledge check; key = the course name in lower_snake_case.
 	"quiz": {"label": "Quiz", "store": "Farm Config Version (Quiz)", "key": "course key, e.g. d_6c_dozer_operator"},
+	"pest_dd_models": {"label": "Pest DD models", "store": "Farm Config Version (IPM Setting)", "key": "pest_dd_models"},
+	"pest_dd_offsets": {"label": "Pest DD block offsets", "store": "Farm Config Version (IPM Setting)", "key": "pest_dd_offsets"},
 }
 PAYROLL_KINDS = ("overtime_rule",)
+#: v0.264.0. The pest degree-day models and block offsets (Farm Config Version, IPM Setting). AI may draft;
+#: a person publishes in the Desk — calibration suggests, it never applies.
+IPM_KINDS = ("pest_dd_models", "pest_dd_offsets")
 PHONE_KINDS = ("wizard", "tile", "label_profile", "quiz")
 RULE_KINDS = ("compliance_rule", "trigger_rule")
 MAX_PREVIEW_DAYS = 31
@@ -72,6 +77,8 @@ def list_configs(args: dict) -> ToolResult:
 	key = as_str(args, "key")
 	if kind in PHONE_KINDS:
 		data = _data(phone_configs.list_phone_configs({"kind": kind, "key": key, "status": as_str(args, "status")}))
+	elif kind in IPM_KINDS:
+		data = _data(phone_configs.list_phone_configs({"kind": "ipm_setting", "key": kind, "status": as_str(args, "status")}))
 	elif kind in PAYROLL_KINDS:
 		data = _data(phone_configs.list_phone_configs({"kind": "payroll_setting", "key": kind, "status": as_str(args, "status")}))
 	elif kind == "extraction_config":
@@ -97,6 +104,16 @@ def list_configs(args: dict) -> ToolResult:
 
 # ── get ─────────────────────────────────────────────────────────────────────
 def _get(kind: str, key: str, version) -> dict:
+	if kind in IPM_KINDS:
+		from .. import pest_dd
+
+		inner = {"kind": "ipm_setting", "key": kind}
+		if version not in (None, ""):
+			inner["version"] = version
+		try:
+			return _data(phone_configs.get_phone_config(inner))
+		except ToolError:
+			return {"built_in": True, "in_force": pest_dd.seed_body(kind)}
 	if kind in PAYROLL_KINDS:
 		from .. import payroll_settings
 
@@ -260,7 +277,11 @@ def preview_config(args: dict) -> ToolResult:
 			summary=("identical pay" if data["identical"] else f"{data['changed']} employee(s) paid differently, "
 			         f"{len(data['flagged'])} over {data['flag_threshold_pct']:g}%") + " (nothing written)",
 		)
-	if kind in RULE_KINDS:
+	if kind in IPM_KINDS:
+		from .. import pest_dd
+
+		data = pest_dd.preview(kind, args.get("body"), list(args.get("blocks") or []))
+	elif kind in RULE_KINDS:
 		if not key:
 			raise ToolError("key (the rule) is required.")
 		data = _rule_preview(kind, key, args)
@@ -402,6 +423,24 @@ def draft_config(args: dict) -> ToolResult:
 			summary=f"drafted {doc.name}",
 			docstatus_delta="0 → 0 (draft)",
 		)
+	if kind in IPM_KINDS:
+		from .. import pest_dd, phone_config
+
+		body = args.get("body")
+		if not isinstance(body, dict):
+			raise ToolError(f"body is the whole {kind} (get_config shows the version in force).")
+		try:
+			doc, _report = phone_config.save_draft(pest_dd.KIND, kind, {"schema_version": 1, "key": kind, **body},
+			                                       notes or "Drafted through draft_config.", "AI-proposed")
+		except phone_config.ConfigError as exc:
+			raise ToolError(str(exc)) from None
+		return ToolResult(
+			data={"kind": kind, "key": kind, "draft": phone_config.describe(doc), "authored_by": "AI-proposed",
+			      "next": "preview_config (it shows each block's offset and the next pest event, current vs draft); "
+			              "a person publishes it in the Desk."},
+			summary=f"drafted {doc.name}",
+			docstatus_delta="0 → 0 (draft)",
+		)
 	if kind == "quiz":
 		from .. import phone_config, training_quiz
 
@@ -468,6 +507,9 @@ def draft_config(args: dict) -> ToolResult:
 def stage_config(args: dict) -> ToolResult:
 	"""Put a Draft in front of a chosen audience first (it takes real effect for them — decision 4)."""
 	kind = kind_of(args)
+	if kind in IPM_KINDS:
+		raise ToolError(f"the {kind} is published (and rolled back) only by a person in the Desk — calibration "
+		                "and AI drafts suggest, they never apply. preview_config shows the effect. Nothing was changed.")
 	if kind in PAYROLL_KINDS:
 		from .. import config_lifecycle
 
@@ -502,6 +544,9 @@ def stage_config(args: dict) -> ToolResult:
 def publish_config(args: dict) -> ToolResult:
 	"""Publish a version — only one a person wrote; an AI-proposed one is published in the Desk."""
 	kind = kind_of(args)
+	if kind in IPM_KINDS:
+		raise ToolError(f"the {kind} is published (and rolled back) only by a person in the Desk — calibration "
+		                "and AI drafts suggest, they never apply. preview_config shows the effect. Nothing was changed.")
 	if kind in PAYROLL_KINDS:
 		from .. import config_lifecycle
 
@@ -532,6 +577,9 @@ def publish_config(args: dict) -> ToolResult:
 def rollback_config(args: dict) -> ToolResult:
 	"""Back to the previous published version, or `to: none` to retire / deactivate."""
 	kind = kind_of(args)
+	if kind in IPM_KINDS:
+		raise ToolError(f"the {kind} is published (and rolled back) only by a person in the Desk — calibration "
+		                "and AI drafts suggest, they never apply. preview_config shows the effect. Nothing was changed.")
 	if kind in PAYROLL_KINDS:
 		from .. import config_lifecycle
 

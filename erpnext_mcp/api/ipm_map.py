@@ -77,7 +77,8 @@ def _view(crop=None, block=None, stage=None, date=None, depth=None, kinds=None, 
 	while start is not None:
 		try:
 			page = ipm_graph.graph(crop=crop or "", stage=stage, block=block or "", depth=int(depth or 2), start=start,
-			                       limit=ipm_graph.MAX_LIMIT, include_disabled=bool(compat.checked(include_disabled)))
+			                       limit=ipm_graph.MAX_LIMIT, include_disabled=bool(compat.checked(include_disabled)),
+			                       with_dd=bool(block))
 		except ValueError as exc:
 			raise ToolError(str(exc)) from None
 		pages.append(page)
@@ -155,7 +156,7 @@ def _save(relationship=None, subject=None, relation=None, object=None, weight=No
 
 def _choices() -> dict:
 	_require_reader()
-	crops = frappe.get_all(ipm_graph.ORGANISM, filters={"kind": ("in", ["Crop", "Variety"]), "enabled": 1},
+	crops = frappe.db.get_all(ipm_graph.ORGANISM, filters={"kind": ("in", ["Crop", "Variety"]), "enabled": 1},
 	                       fields=["name", "organism_name", "kind"], order_by="organism_name asc")
 	blocks = frappe.get_list("Field", fields=["name"], order_by="name asc", limit_page_length=0)
 	return {

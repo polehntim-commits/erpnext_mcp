@@ -459,6 +459,33 @@ def preset_specs() -> list:
 			[{"field": "task_name", "op": "contains", "value": "prun"}],
 			"Prune in dry weather so wounds close before bacterial canker gets in.",
 		),
+		# v0.264.0. Pest degree-day windows on the block (pest_dd): a spray aimed at a pest goes when that pest
+		# is out on THIS block by its model, on the farm's weather and the block's offset. Seeded OFF.
+		_preset(
+			"go_hold_spray_fruit_fly_window",
+			"Spraying for cherry fruit fly: wait for emergence on this block",
+			"Cover sprays for western cherry fruit fly protect nothing before the flies emerge. Go once the block's "
+			"degree-day model (pest_dd_models, farm weather + block offset) has reached first emergence; until then "
+			"a Hold says when it is expected. Advisory: a trap catch overrides the model — log it and spray.",
+			{"id": "wcff_out", "path": "pest_dd.western_cherry_fruit_fly_window_open", "op": "eq", "value": True,
+			 "basis": "published", "source": "pest_dd_models: western-cherry-fruit-fly first emergence (verify the model)",
+			 "reason": {"en": "Cherry fruit fly not emerged yet on this block by its degree days",
+			            "es": "La mosca de la cereza aún no ha emergido en este bloque según sus grados-día"}},
+			[{"field": "task_type", "op": "eq", "value": "Spray"}, {"field": "task_name", "op": "contains", "value": "fruit fly"}],
+			"Time fruit fly cover sprays to emergence on each block.",
+		),
+		_preset(
+			"go_hold_spray_swd_window",
+			"Spraying for spotted wing drosophila: wait for first flight on this block",
+			"SWD sprays before first flight on the block protect nothing. Go once the block's degree-day model has "
+			"reached first flight. Advisory: a trap catch overrides the model.",
+			{"id": "swd_out", "path": "pest_dd.spotted_wing_drosophila_window_open", "op": "eq", "value": True,
+			 "basis": "published", "source": "pest_dd_models: spotted-wing-drosophila first flight (verify the model)",
+			 "reason": {"en": "SWD not flying yet on this block by its degree days",
+			            "es": "La SWD aún no vuela en este bloque según sus grados-día"}},
+			[{"field": "task_type", "op": "eq", "value": "Spray"}, {"field": "task_name", "op": "contains", "value": "SWD"}],
+			"Time SWD sprays to first flight on each block.",
+		),
 		_preset(
 			"go_hold_spray_wind",
 			"Spraying: wind at or under 10 mph",

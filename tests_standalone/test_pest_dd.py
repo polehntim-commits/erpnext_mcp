@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: MIT
+"""Pest degree days on the farm's weather, per block. v0.264.0 (Tim, 2026-10-06).
+
+The weather is mocked at `degree_days.daily_temps` — the one door to Open-Meteo — with a constant
+70 / 50 °F day, so every date below is arithmetic a reader can check: 60 °F mean, base 41 °F → 19 °F·day.
+
+1. `FromTheFarmsWeather` — accumulated DD from the biofix, events reached and projected ±, never a
+   literature date; provenance names the source, the cell, the offset and the citation.
+2. `TheBlockOffset` — aspect × slope, capped; a pinned (calibrated) block value wins; reasons stated.
+3. `Calibration` — suggests the offset that would have dated an observed event; writes only a DRAFT.
+4. `EverywhereElse` — the graph's pest nodes, the threshold status, the CCF provider, the opt-in map
+   layer, the phone route and the config kinds.
+"""
+
+import datetime
+from unittest import mock
+
+from erpnext_mcp import ccf_providers, degree_days, ipm_graph, overlays, pest_dd, phone_config
+
+from .fixtures import MAIN, V12TestCase
+from .harness import ROLES, STORE
+
+BLOCK = "Block 7 Bing"
+AS_OF = "2026-04-15"
+
+
+def weather(lat, lon, start, end):
+	out, day = {}, start
+	while day <= end:
+		out[day.isoformat()] = (70.0, 50.0)
+		day += datetime.timedelta(days=1)
+	return out
+
+
+def dd_site(case) -> None:
+	"""The seeded graph, one block with a centroid, and the weather / today / aspect layer mocked."""
+	ipm_graph.seed()
+	STORE.commit()
+	STORE.seed("Field", [{"name": BLOCK, "field_name": BLOCK, "crop": "Cherries", "owning_entity": MAIN,
+	                      "boundary_centroid_lat": 45.6, "boundary_centroid_lon": -121.2}])
+	for patcher in (mock.patch.object(degree_days, "daily_temps", side_effect=weather),
+	                mock.patch.object(ccf_providers, "forecast_enabled", return_value=True),
+	                mock.patch.object(pest_dd, "_aspect_summary", return_value=None),
+	                mock.patch.object(pest_dd.frappe.utils, "today", return_value=AS_OF)):
+		patcher.start()
+		case.addCleanup(patcher.stop)
+
+
+class DDCase(V12TestCase):
+	def setUp(self):
+		super().setUp()
+		dd_site(self)
+
+
+class FromTheFarmsWeather(DDCase):
+	def test_fruit_fly_accumulates_from_its_biofix_and_projects_emergence(self):
+		st = pest_dd.status(BLOCK, "western-cherry-fruit-fly", AS_OF)
+		self.assertTrue(st["available"])
+		self.assertEqual(st["biofix_date"], "2026-03-01")
+		self.assertEqual(st["dd_to_date"], 46 * 19.0)  # 1 Mar – 15 Apr inclusive
+		first = st["events"][0]
+		self.assertEqual((first["name"], first["status"], first["date"]), ("first emergence", "projected", "2026-04-19"))
+		self.assertIn("expected ~Apr 19", first["text"])
+		self.assertGreaterEqual(first["plus_minus_days"], 1)
+		self.assertFalse(st["window_open"])
+		self.assertIn("Open-Meteo", st["weather"]["source"])
+		self.assertTrue(st["model"]["verify"])
+		self.assertIn("citation", st["model"])
+
+	def test_a_reached_event_is_dated_from_the_record_and_opens_the_window(self):
+		st = pest_dd.status(BLOCK, "spotted-wing-drosophila", AS_OF)  # base 45: 15 °F·day/day from 1 Jan
+		self.assertEqual(st["events"][0]["status"], "reached")
+		self.assertEqual(st["events"][0]["date"], "2026-01-10")  # 150 / 15 = day 10
+		self.assertTrue(st["window_open"])
+
+	def test_first_catch_biofix_waits_for_a_logged_catch(self):
+		st = pest_dd.status(BLOCK, "codling-moth", AS_OF)
+		self.assertIsNone(st["biofix_date"])
+		self.assertIn("waiting for the first trap catch", st["summary"])
+		STORE.seed("Crop Observation", [{"name": "CM1", "block": BLOCK, "block_doctype": "Field", "threat": "Codling Moth",
+		                                 "count_observed": 2, "observed_on": "2026-04-01", "company": MAIN}])
+		st = pest_dd.status(BLOCK, "codling-moth", AS_OF)
+		self.assertEqual(st["biofix_date"], "2026-04-01")
+		self.assertEqual(st["dd_to_date"], 15 * 10.0)  # base 50
+
+	def test_a_pest_with_no_model_says_so(self):
+		st = pest_dd.status(BLOCK, "powdery-mildew", AS_OF)
+		self.assertFalse(st["available"])
+		self.assertIn("No degree-day model", st["reason"])
+
+
+class TheBlockOffset(DDCase):
+	def test_a_south_slope_runs_warmer_and_says_why(self):
+		with mock.patch.object(pest_dd, "_aspect_summary", return_value={"mean_aspect": "S", "mean_slope_degrees": 15}):
+			off = pest_dd.block_offset(BLOCK)
+			self.assertEqual(off["offset_f"], 1.5)
+			self.assertIn("faces S", off["reasons"][0])
+			st = pest_dd.status(BLOCK, "western-cherry-fruit-fly", AS_OF)
+		self.assertEqual(st["dd_to_date"], round(46 * 20.5, 1))
+		self.assertEqual(st["offset"]["offset_f"], 1.5)
+
+	def test_a_gentle_north_slope_is_scaled_and_capped(self):
+		with mock.patch.object(pest_dd, "_aspect_summary", return_value={"mean_aspect": "N", "mean_slope_degrees": 7.5}):
+			self.assertEqual(pest_dd.block_offset(BLOCK)["offset_f"], -0.5)
+
+	def test_a_calibrated_block_value_wins(self):
+		body = {**pest_dd.DEFAULT_OFFSETS, "blocks": {BLOCK: {"offset_f": 2.2, "reason": "calibration 2027"}}}
+		with pest_dd.overlay(pest_dd.OFFSETS_KEY, body):
+			off = pest_dd.block_offset(BLOCK)
+		self.assertEqual((off["offset_f"], off["source"], off["reasons"]), (2.2, "block", ["calibration 2027"]))
+
+	def test_no_layer_no_offset_and_it_says_so(self):
+		off = pest_dd.block_offset(BLOCK)
+		self.assertEqual(off["offset_f"], 0.0)
+		self.assertIn("build_slope_aspect_layer", off["reasons"][0])
+
+
+class Calibration(DDCase):
+	def test_an_observed_emergence_suggests_the_offset_that_dates_it(self):
+		# Emergence seen on 9 Apr: 40 days from 1 Mar → 950/40 = 23.75 °F·day/day → +4.75 °F.
+		s = pest_dd.suggest_calibration(BLOCK, "western-cherry-fruit-fly", "2026-04-09", "first emergence")
+		self.assertAlmostEqual(s["suggested_offset_f"], 4.75, delta=0.05)
+		self.assertEqual(s["current_offset_f"], 0.0)
+
+	def test_calibration_writes_only_a_draft(self):
+		out = pest_dd.calibrate(BLOCK, [{"pest": "western-cherry-fruit-fly", "observed_on": "2026-04-17"},
+		                                {"pest": "western-cherry-fruit-fly", "observed_on": "2026-04-19"}], "tim", draft=True)
+		self.assertIn("draft", out)
+		self.assertEqual(out["observations_used"], 2)
+		self.assertEqual(out["confidence"], "low")
+		rows = phone_config.rows(pest_dd.KIND, pest_dd.OFFSETS_KEY)
+		self.assertTrue(rows)
+		self.assertFalse([r for r in rows if r["status"] == phone_config.PUBLISHED and int(r.get("version") or 0) > 1])
+		self.assertEqual(pest_dd.block_offset(BLOCK)["offset_f"], 0.0, "nothing applied")
+
+	def test_logged_first_catches_are_the_default_observations(self):
+		STORE.seed("Crop Observation", [{"name": "F1", "block": BLOCK, "block_doctype": "Field",
+		                                 "threat": "Western Cherry Fruit Fly", "count_observed": 1,
+		                                 "observed_on": "2026-04-12", "company": MAIN}])
+		self.assertEqual(pest_dd.logged_observations(BLOCK),
+		                 [{"pest": "western-cherry-fruit-fly", "event": "first emergence", "observed_on": "2026-04-12"}])
+
+	def test_the_models_validate(self):
+		self.assertEqual(pest_dd.validate(pest_dd.DEFAULT_MODELS, pest_dd.MODELS_KEY)["errors"], [])
+		bad = {"models": {"x": {"base_f": 50, "upper_f": 40, "biofix": "jan1", "events": [{"name": "a", "dd": 5}, {"name": "b", "dd": 4}]}}}
+		errors = pest_dd.validate(bad, pest_dd.MODELS_KEY)["errors"]
+		self.assertTrue(any("upper_f" in e for e in errors) and any("rise" in e for e in errors))
+
+
+class EverywhereElse(DDCase):
+	def test_the_graph_carries_dd_status_on_pest_nodes_for_a_block(self):
+		g = ipm_graph.graph(block=BLOCK, stage=75, with_dd=True, limit=2000)
+		wcff = next(n for n in g["nodes"] if n["id"] == "western-cherry-fruit-fly")
+		self.assertEqual(wcff["dd_status"]["next_event"]["date"], "2026-04-19")
+		self.assertFalse(wcff["active_now"], "the block's DD window decides active_now")
+		plain = ipm_graph.graph(block=BLOCK, stage=75, limit=2000)
+		self.assertNotIn("dd_status", next(n for n in plain["nodes"] if n["id"] == "western-cherry-fruit-fly"))
+
+	def test_the_threshold_status_reads_the_block_window(self):
+		row = next(r for r in STORE.rows("Pest Action Threshold") if r.get("threat") == "Western Cherry Fruit Fly")
+		ipm_graph.decide([row["name"]], "approve", "tim")
+		st = ipm_graph.threshold_status("western-cherry-fruit-fly", block=BLOCK, count=2)
+		self.assertEqual(st["status"], "action")
+		self.assertIn("not out yet on this block", st["message"])
+		self.assertEqual(st["dd_status"]["next_event"]["date"], "2026-04-19")
+
+	def test_the_ccf_provider(self):
+		values = pest_dd.provider_values({"name": BLOCK}, {"doctype": "Field", "as_of_date": AS_OF})
+		self.assertEqual(values["western_cherry_fruit_fly_days_to_next"], 4)
+		self.assertFalse(values["western_cherry_fruit_fly_window_open"])
+		self.assertTrue(values["spotted_wing_drosophila_window_open"])
+
+	def test_the_map_layer_is_opt_in(self):
+		ROLES["Administrator"] = ["System Manager"]
+		keep, refused = overlays.requested_layers(["pest_dd"], list(overlays.LAYER_KEYS))
+		self.assertEqual((keep, refused), (["pest_dd"], []))
+		self.assertNotIn("pest_dd", overlays.LAYER_KEYS, "never in a default answer")
+		layer = overlays.pest_dd_overlay(BLOCK)
+		self.assertEqual(layer["status"], "open")
+		self.assertIn("Apr 19", layer["headline"])
+
+	def test_the_go_hold_presets_ship_off(self):
+		from erpnext_mcp import go_hold
+
+		ids = {s["rule_id"]: s for s in go_hold.preset_specs()}
+		for rid in ("go_hold_spray_fruit_fly_window", "go_hold_spray_swd_window"):
+			self.assertEqual(ids[rid]["enabled"], 0)
+
+
+class TheToolsAndTheConfig(DDCase):
+	ON = {"allow_get_pest_dd_status": 1, "allow_calibrate_pest_dd": 1, "allow_list_configs": 1, "allow_get_config": 1,
+	      "allow_draft_config": 1, "allow_publish_config": 1, "allow_preview_config": 1}
+
+	def setUp(self):
+		super().setUp()
+		self.configure(enabled=1, **self.ON)
+		from erpnext_mcp import install
+
+		install._pest_dd_seed()
+		STORE.commit()
+
+	def test_status_over_mcp(self):
+		data = self.tool_data("get_pest_dd_status", {"block": BLOCK, "pest": "western-cherry-fruit-fly", "as_of": AS_OF})
+		self.assertEqual(data["statuses"][0]["events"][0]["date"], "2026-04-19")
+		self.assertTrue(data["models_config"].startswith("FCV") or data["models_config"] != "built-in")
+
+	def test_calibration_over_mcp_reports_and_drafts_but_never_publishes(self):
+		out = self.tool_data("calibrate_pest_dd", {"block": BLOCK, "draft": True, "observations": [
+			{"pest": "western-cherry-fruit-fly", "observed_on": "2026-04-18"}]})
+		self.assertIn("draft", out)
+		self.assertIn("never", self.tool_error("publish_config", {"kind": "pest_dd_offsets", "key": "pest_dd_offsets",
+		                                                       "change_note": "x"}).lower())
+
+	def test_the_config_kinds(self):
+		listed = self.tool_data("list_configs", {"kind": "pest_dd_models"})
+		self.assertEqual(listed["kind"], "pest_dd_models")
+		got = self.tool_data("get_config", {"kind": "pest_dd_offsets", "key": "pest_dd_offsets"})
+		self.assertIn("config", got)
+		body = {**pest_dd.DEFAULT_OFFSETS, "blocks": {BLOCK: {"offset_f": 1.0, "reason": "trial"}}}
+		prev = self.tool_data("preview_config", {"kind": "pest_dd_offsets", "key": "pest_dd_offsets", "body": body,
+		                                         "blocks": [BLOCK]})
+		row = next(r for r in prev["preview"]["blocks"] if r["pest"] == "western-cherry-fruit-fly")
+		self.assertEqual((row["offset_now"], row["offset_draft"]), (0.0, 1.0))
+		self.assertLessEqual(row["next_draft"], row["next_now"])

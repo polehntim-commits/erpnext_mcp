@@ -83,6 +83,10 @@ def gdd(high, low, base: float, cutoff: float) -> float:
 	return max(0.0, (high + low) / 2 - base)
 
 
+#: v0.264.0. {H3 cell: metres} — the weather grid cell's elevation, as Open-Meteo last stated it.
+LAST_ELEVATION: dict = {}
+
+
 def daily_temps(lat: float, lon: float, start: datetime.date, end: datetime.date) -> dict:
 	"""{date: (high, low)} — archive to a week ago, forecast API for the rest. Cached per cell."""
 	from .services import weather
@@ -109,6 +113,10 @@ def daily_temps(lat: float, lon: float, start: datetime.date, end: datetime.date
 		f"degree-days:{cell}",
 	) or {}
 	_merge(out, payload)
+	# v0.264.0. The grid cell's own elevation, which Open-Meteo states with every answer: the pest DD
+	# lapse-rate offset compares the block's ground with it.
+	if isinstance(payload, dict) and payload.get("elevation") is not None:
+		LAST_ELEVATION[cell] = payload["elevation"]
 	_CACHE[key] = (time.time() + TTL_SECONDS, out)
 	return out
 

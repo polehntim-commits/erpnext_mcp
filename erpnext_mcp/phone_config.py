@@ -36,7 +36,9 @@ DOCTYPE = "Farm Config Version"
 #: to a phone and published only by a person.
 #: v0.247.0: "Quiz" — a course's knowledge check (`training_quiz`), served with the course, not as a phone config.
 KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "Payroll Setting": "payroll_setting",
-         "Quiz": "quiz"}
+         "Quiz": "quiz",
+         # v0.264.0. The pest degree-day models and the per-block offsets (`pest_dd`); a person publishes.
+         "IPM Setting": "ipm_setting"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -176,6 +178,10 @@ def _validator(kind: str):
 		from . import training_quiz
 
 		return training_quiz.validate
+	if kind == "IPM Setting":
+		from . import pest_dd
+
+		return pest_dd.validate
 	from . import label_compliance
 
 	return label_compliance.validate

@@ -845,3 +845,8 @@ _weather_verify.register(_sys.modules[__name__])
 from . import offline_claims as _offline_claims  # noqa: E402
 
 _offline_claims.register(_sys.modules[__name__])
+
+# v0.264.0. Pest degree-day windows per block, on the farm's weather.
+from . import pest_dd as _pest_dd  # noqa: E402
+
+_pest_dd.register(_sys.modules[__name__])

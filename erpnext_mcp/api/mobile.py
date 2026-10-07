@@ -25220,7 +25220,7 @@ def _ipm_value(fn):
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("get_ipm_graph", limit=guard.READ_LIMIT)
 def get_ipm_graph(user: str, crop=None, block=None, stage=None, depth=None, kinds=None, start=None,
-                  limit=None) -> dict:
+                  limit=None, with_dd=None) -> dict:
 	"""The crop's neighbourhood — active pests, the beneficials working now, the products that harm them.
 	Cached on the phone by `graph_version`."""
 	from .. import ipm_graph
@@ -25230,7 +25230,8 @@ def get_ipm_graph(user: str, crop=None, block=None, stage=None, depth=None, kind
 	block = guard.require_docname("Field", block, "block") if block else ""
 	answer = _ipm_value(lambda: ipm_graph.graph(
 		crop=str(crop or ""), stage=stage, block=block, depth=int(depth or 2), kinds=kinds,
-		start=int(start or 0), limit=int(limit or ipm_graph.DEFAULT_LIMIT), company=_ipm_company(user, allowed, block)))
+		start=int(start or 0), limit=int(limit or ipm_graph.DEFAULT_LIMIT), company=_ipm_company(user, allowed, block),
+		with_dd=str(with_dd or "").lower() in ("1", "true", "yes")))
 	answer["can_edit"] = guard.may_edit_ipm(user)
 	return answer
 
@@ -25336,3 +25337,18 @@ def get_ipm_threshold_status(user: str, organism=None, block=None, crop=None, co
 	block = guard.require_docname("Field", block, "block") if block else ""
 	return ipm_graph.threshold_status(name, block=block, crop=str(crop or ""), count=count,
 	                                  sample_unit=str(sample_unit or ""), company=_ipm_company(user, allowed, block))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_pest_dd_status", limit=guard.READ_LIMIT)
+def get_pest_dd_status(user: str, block=None, pest=None, as_of=None) -> dict:
+	"""v0.264.0. The pest degree-day models on one block: degree days on the farm's weather (Open-Meteo, the
+	block's grid cell) with the block's slope / aspect / elevation offset, each event reached or projected
+	("~Jun 3 ±3 d"), and the provenance. One pest, or every pest with a model."""
+	from .. import pest_dd
+
+	guard.require_scope(user)
+	block = guard.require_docname("Field", block, "block")
+	if pest:
+		return {"block": block, "pests": [pest_dd.status(block, str(pest), str(as_of or ""))]}
+	return {"block": block, "pests": pest_dd.statuses(block, str(as_of or ""))}

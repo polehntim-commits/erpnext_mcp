@@ -233,6 +233,7 @@ def after_migrate() -> None:
 	_punch_review_rules()
 	_offline_claim_rule()
 	_ipm_graph_seed()
+	_pest_dd_seed()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -855,6 +856,22 @@ def _ipm_graph_seed() -> None:
 			print(f"erpnext_mcp: IPM seed row skipped — {error}")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: IPM graph was not seeded — {type(exc).__name__}: {exc}")
+
+
+def _pest_dd_seed() -> None:
+	"""v0.264.0. Version 1 of the pest DD models and the block offsets, published: the reference's own
+	numbers with units made explicit, and the conservative aspect / slope / elevation table. Create-only;
+	never raises."""
+	try:
+		from . import pest_dd, phone_config
+
+		for key in pest_dd.KEYS:
+			name = phone_config.seed(pest_dd.KIND, key, pest_dd.seed_body(key),
+			                         f"Seeded at install (v0.264.0): {key}. Change it with a new version a person publishes.")
+			if name:
+				print(f"erpnext_mcp: IPM setting {name} seeded.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: pest DD settings were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

@@ -181,6 +181,31 @@ LAYERS = (
 LAYER_KEYS = tuple(spec["key"] for spec in LAYERS)
 LAYER_BY_KEY = {spec["key"]: spec for spec in LAYERS}
 
+#: v0.264.0. Layers computed ONLY WHEN NAMED in `layers` — never in a default answer, so every map that
+#: asks for "everything" draws exactly what it drew before. Pest degree days read the weather per block,
+#: which is not a cost a picker's map should pay unasked.
+LAYER_PEST_DD = "pest_dd"
+OPT_IN_LAYERS = (
+	{
+		"key": LAYER_PEST_DD,
+		"label": "Pest degree days",
+		"subject": "block",
+		"detail": (
+			"Each pest model's degree days on this block — the farm's weather with the block's slope, aspect and "
+			"elevation offset — and the next event with its date (forecast) or that it has been reached."
+		),
+	},
+)
+OPT_IN_BY_KEY = {spec["key"]: spec for spec in OPT_IN_LAYERS}
+OPT_IN_ROLES = frozenset({"Crew Leader", "Foreman", "Farm Manager", "System Manager"})
+
+
+def opt_in_allowed(user: str = "") -> bool:
+	try:
+		return bool(set(frappe.get_roles(user or frappe.session.user)) & OPT_IN_ROLES)
+	except Exception:
+		return False
+
 #: The layer nobody is ever without. Stated as its own constant rather than
 #: repeated into seven rows of the table below, because it is the one entry that
 #: is a SAFETY rule and not a screen-clutter judgement — a role that could be
@@ -476,6 +501,12 @@ def requested_layers(wanted, allowed: list) -> tuple[list, list]:
 	keep, refused = [], []
 	for name in names:
 		key = name.lower()
+		if key in OPT_IN_BY_KEY:
+			if not opt_in_allowed():
+				refused.append({"key": key, "reason": "not shown for the roles this login holds."})
+			elif key not in keep:
+				keep.append(key)
+			continue
 		if key not in LAYER_BY_KEY:
 			refused.append({"key": name, "reason": f"not a layer. The five are: {', '.join(LAYER_KEYS)}."})
 		elif key not in allowed:
@@ -1482,6 +1513,8 @@ def build(company: str = "", visible=None, blocks=None, limit: int = SUBJECT_CAP
 			entry[LAYER_ACCESS] = access_overlay(
 				rolled, rei_overlay(windows["rei"]), operations.get(name) or {}, now
 			)
+		if LAYER_PEST_DD in visible:
+			entry[LAYER_PEST_DD] = pest_dd_overlay(name)
 		block_out.append(entry)
 	block_out.sort(key=lambda entry: entry["label"].lower())
 
@@ -1514,7 +1547,8 @@ def build(company: str = "", visible=None, blocks=None, limit: int = SUBJECT_CAP
 	return {
 		"company": company or None,
 		"as_of": now,
-		"layers": [{**LAYER_BY_KEY[key], "visible": True} for key in LAYER_KEYS if key in visible],
+		"layers": [{**LAYER_BY_KEY[key], "visible": True} for key in LAYER_KEYS if key in visible]
+		+ [{**OPT_IN_BY_KEY[key], "visible": True} for key in OPT_IN_BY_KEY if key in visible],
 		"blocks": block_out,
 		"zones": zone_out,
 		"counts": _counts(block_out, zone_out, visible),
@@ -1528,6 +1562,25 @@ def build(company: str = "", visible=None, blocks=None, limit: int = SUBJECT_CAP
 			"brix_near_margin": BRIX_NEAR_MARGIN,
 			"observation_stale_days": OBSERVATION_STALE_DAYS,
 		},
+	}
+
+
+def pest_dd_overlay(block: str) -> dict:
+	"""v0.264.0. The block's pest models, the soonest coming event first. Never raises."""
+	try:
+		from . import ipm_graph, pest_dd
+
+		pests = [ipm_graph.dd_brief(st) for st in pest_dd.statuses(block)]
+		pests = [p for p in pests if p]
+	except Exception:
+		frappe.log_error(title="pest DD overlay", message=frappe.get_traceback())
+		return {"status": UNKNOWN, "pests": [], "headline": None}
+	coming = sorted((p["next_event"]["date"], p["next_event"]["text"]) for p in pests
+	                if p.get("next_event") and p["next_event"].get("date"))
+	return {
+		"status": "open" if any(p["window_open"] for p in pests) else ("coming" if coming else UNKNOWN),
+		"pests": pests,
+		"headline": coming[0][1] if coming else None,
 	}
 
 
