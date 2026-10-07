@@ -1,12 +1,12 @@
-**Deploy: catch-up v0.231.2 → v0.260.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.47.0 (build 42)**
+**Deploy: catch-up v0.231.2 → v0.261.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.48.0 (build 43)**
 
-For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.260.0, and
+For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.261.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
 ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime rule into data with identical
 output, proven on the payroll suite).
 
-- **Server**: erpnext_mcp main **`a53ed95`** (`__version__ = "0.260.0"`).
-- **App**: fafo_ios main **`2003940`** — FarmOps **0.47.0 (build 42)**, scheme **FarmOps**. It needs v0.252.0's
+- **Server**: erpnext_mcp main **`2b93e73`** (`__version__ = "0.261.0"`).
+- **App**: fafo_ios main **`fb26f3e`** — FarmOps **0.47.0 (build 42)**, scheme **FarmOps**. It needs v0.252.0's
   routes, so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 
@@ -44,6 +44,7 @@ output, proven on the payroll suite).
 | v0.258.0 | office@ replies reviewed on the phone: tile **Replies to review** (hidden until office@ is on) — read, correct, attach, approve and send with Face ID, or discard. Pairs with app 0.46.0. |
 | v0.259.0 | Form 940 and W-3 via `generate_tax_form` (940 = the FUTA summary's walk; W-3 = the W-2s totalled; `kind_of_payer: 943` for an agricultural filer). |
 | v0.260.0 | **Least-privilege hotfix.** HR reads (others' I-9, discipline, everyone's pay, deductions, personnel files) need HR Manager / HR User — the Farm Owner profile carries HR Manager; accident reports, the compliance calendar, receipts (own only), housing occupants and search filters narrowed. **Check Tim holds HR Manager after the migrate.** |
+| v0.261.0 | Claim a task with no signal: the first claim to reach the server holds it; a later one is kept as a second claim with the worker's time and evidence, flagged "claimed offline by two people" (rule task_claimed_offline_twice ON) for a supervisor to review. Online claims unchanged. Pairs with app 0.48.0. |
 | app 0.38.8 | Due dates and overdue on task rows and a Due section on Today, computed on the phone (works offline). |
 | app 0.39.0 | Go / Hold chips and card, supervisor override, crop-stage picker (offline), Today: work notices, notices to decide, "Good to do today", SOPs to review; approved SOPs in "How this job is done". Spanish (tú). |
 | app 0.40.0 | The course player: course videos with how much was watched, the knowledge check, trainer sign-off. |
@@ -54,11 +55,12 @@ output, proven on the payroll suite).
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
 | app 0.46.0 | Replies to review: office@ drafts read, corrected and approved (Face ID) or discarded on the phone. |
 | app 0.47.0 | Sign-out leaves nothing of the last person's on a shared phone; unsent queued work is counted in the sign-out warning. |
+| app 0.48.0 | Claim a task with no signal ("Claimed on phone — will confirm when synced"); told, by name, when someone else's claim reached the farm first — your time and photos are kept. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main (`a53ed95`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.260.0`. Push fafo_ios main
-(`2003940`) and archive FarmOps 0.47.0 (build 42), scheme **FarmOps**.
+Push erpnext_mcp main (`2b93e73`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.261.0`. Push fafo_ios main
+(`fb26f3e`) and archive FarmOps 0.48.0 (build 43), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
 chooses. The full command list is in `~/Desktop/deploy-catchup-latest.txt`.
@@ -75,15 +77,15 @@ Expect from the migrate (first run only):
 6. "punch review rules seeded: punch_missing_clock_out, punch_runaway, punch_offline_window, punch_edited,
    punch_outside_block, punch_breaks_short, overtime_week_approaching, overtime_week_exceeded."
 7. "rain archive check rule seeded OFF: weather_check_pruning_rain."
-8. `__version__ = "0.260.0"`.
+8. `__version__ = "0.261.0"`.
 
 **3. Checks after the migrate**
 
-1. `get_server_status`: 0.260.0. Desk → any Asset Register form: the map's build stamp reads 0.260.0.
+1. `get_server_status`: 0.261.0. Desk → any Asset Register form: the map's build stamp reads 0.261.0.
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets and weather_check_pruning_rain, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
-4. Phone 0.47.0: Today and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
+4. Phone 0.48.0: Today and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
    works for a Foreman.
 5. Punch review (`v0.251.0_punch_review.md`): this week's flagged punches appear as compliance alerts and under
    "Punches to review" on Today for a Foreman / Farm Manager; `preview_payroll_for_period` warns on unreviewed punches
@@ -91,9 +93,9 @@ Expect from the migrate (first run only):
 6. Business-card merge (`v0.252.0_day_checks.md` §5): on OML, re-run the Ben Sheppard merge with Met At
    "Sheppard's, 440 Riverside Dr, Hood River, OR 97031" (or correct it from the phone: Contacts → Where met); Met At
    now reads that, and Sheppards-Office-1 links to Supplier Sheppard's.
-7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`, `v0.255.0_asset_library.md`, `v0.256.0_receipt_relink.md`, `v0.257.0_mcp_system_user.md`, `v0.258.0_replies_to_review.md`, `v0.260.0_data_access_hotfix.md`, `v0.259.0_940_w3.md`,
+7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`, `v0.255.0_asset_library.md`, `v0.256.0_receipt_relink.md`, `v0.257.0_mcp_system_user.md`, `v0.258.0_replies_to_review.md`, `v0.261.0_offline_claim.md`, `v0.260.0_data_access_hotfix.md`, `v0.259.0_940_w3.md`,
    `app_0.39.0_work_timing.md`, `app_0.40.0_course_player.md`, `app_0.41.0_punch_review.md`,
-   `app_0.42.0_my_day_contacts.md`, `app_0.43.0_spanish_sweep.md`, `app_0.44.0_server_spanish.md`, `app_0.45.0_asset_library.md`, `app_0.46.0_replies_to_review.md`, `app_0.47.0_signout.md`).
+   `app_0.42.0_my_day_contacts.md`, `app_0.43.0_spanish_sweep.md`, `app_0.44.0_server_spanish.md`, `app_0.45.0_asset_library.md`, `app_0.46.0_replies_to_review.md`, `app_0.47.0_signout.md`, `app_0.48.0_offline_claim.md`).
 
 **4. Rollback**
 
