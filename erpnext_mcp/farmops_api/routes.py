@@ -507,6 +507,9 @@ ROUTES = (
 	Route("/mobile", mobile_api.get_ipm_threshold_status),
 	# v0.264.0. Pest degree days per block (app 0.50.0).
 	Route("/mobile", mobile_api.get_pest_dd_status),
+	# v0.265.0. USDA AMS market prices (app 0.51.0).
+	Route("/mobile", mobile_api.get_market_card),
+	Route("/mobile", mobile_api.get_market_chart),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

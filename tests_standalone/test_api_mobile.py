@@ -223,6 +223,9 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_ipm_threshold_status",
 		# v0.264.0. Pest degree days per block (app 0.50.0).
 		"get_pest_dd_status",
+		# v0.265.0. Market prices (app 0.51.0).
+		"get_market_card",
+		"get_market_chart",
 		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
 		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).

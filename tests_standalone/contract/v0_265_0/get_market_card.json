@@ -1,0 +1,59 @@
+{
+ "message": {
+  "above_breakeven_per_lb": 0.7633,
+  "as_of": "2026-07-09",
+  "breakeven": {
+   "label": "Constancy 2027 draft pro forma",
+   "per_lb": 1.22,
+   "source": "config"
+  },
+  "caveat": "Shipping-point FOB from USDA AMS Market News; grower return is an estimate after the configured deductions. The terminal–shipping difference is the cost of market access, not margin. A size with no quote today shows no price — nothing is carried forward.",
+  "commodity": "sweet_cherries",
+  "data_issues_open": 0,
+  "grower_return_per_lb": 1.9833,
+  "headline_size": "10 row",
+  "signal": {
+   "label": "supply pressure",
+   "why": "price -7.0% while volume +25.0% — more fruit moving"
+  },
+  "sizes": [
+   {
+    "change_wow_pct": null,
+    "grower_return_per_lb": 1.4556,
+    "high": 40.0,
+    "low": 34.0,
+    "mid": 37.0,
+    "mostly_high": 38.0,
+    "mostly_low": 36.0,
+    "quote_status": "Priced",
+    "report_date": "2026-07-09",
+    "size": "9 1/2 row"
+   },
+   {
+    "change_wow_pct": -7.0,
+    "grower_return_per_lb": 1.9833,
+    "high": 55.0,
+    "low": 38.0,
+    "mid": 46.5,
+    "mostly_high": null,
+    "mostly_low": null,
+    "quote_status": "Priced",
+    "report_date": "2026-07-09",
+    "size": "10 row"
+   }
+  ],
+  "terminal": {
+   "cost_of_market_access": 16.5,
+   "market": "Chicago",
+   "mid": 63.0
+  },
+  "title": "Sweet cherries",
+  "unit": "$ per 18 lb cartons",
+  "volume": {
+   "change_wow_pct": 25.0,
+   "report_date": "2026-07-06",
+   "unit": "10,000 lb units",
+   "value": 150.0
+  }
+ }
+}

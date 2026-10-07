@@ -38,7 +38,9 @@ DOCTYPE = "Farm Config Version"
 KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "Payroll Setting": "payroll_setting",
          "Quiz": "quiz",
          # v0.264.0. The pest degree-day models and the per-block offsets (`pest_dd`); a person publishes.
-         "IPM Setting": "ipm_setting"}
+         "IPM Setting": "ipm_setting",
+         # v0.265.0. One per commodity: its USDA reports, field names, sizes, packs, deductions, breakeven.
+         "Market Commodity": "market_commodity"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -182,6 +184,10 @@ def _validator(kind: str):
 		from . import pest_dd
 
 		return pest_dd.validate
+	if kind == "Market Commodity":
+		from . import market_prices
+
+		return market_prices.validate
 	from . import label_compliance
 
 	return label_compliance.validate

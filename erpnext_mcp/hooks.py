@@ -383,6 +383,11 @@ scheduler_events = {
 		"0 5 * * *": [
 			"erpnext_mcp.services.usda_prices.sweep_configured_reports",
 		],
+		#: v0.265.0. Market prices for every Market Commodity in season (shipping point, terminal, movement), the
+		#: last 7 days each morning so AMS corrections land. OFF until `market_prices_enabled`; never raises.
+		"30 5 * * *": [
+			"erpnext_mcp.market_prices.daily_pull",
+		],
 		#: v0.240.0. The day-start Go / Hold check (decision 16): every open task a live Work
 		#: Timing rule speaks to is re-judged at six, so the Hold is on the phone before the crew
 		#: leaves the shop — and a Hold that no longer applies clears (decision 15). Advisory,

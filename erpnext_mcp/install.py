@@ -234,6 +234,7 @@ def after_migrate() -> None:
 	_offline_claim_rule()
 	_ipm_graph_seed()
 	_pest_dd_seed()
+	_market_commodity_seed()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -872,6 +873,21 @@ def _pest_dd_seed() -> None:
 				print(f"erpnext_mcp: IPM setting {name} seeded.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: pest DD settings were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _market_commodity_seed() -> None:
+	"""v0.265.0. Version 1 of each seeded Market Commodity (sweet cherries, cantaloupe), published: USDA report
+	IDs, field names, sizes, packs, deductions, breakeven. Create-only; never raises."""
+	try:
+		from . import market_prices, phone_config
+
+		for key in market_prices.SEED:
+			name = phone_config.seed(market_prices.KIND, key, market_prices.seed_body(key),
+			                         f"Seeded at install (v0.265.0): {key}. Change it with a new version a person publishes.")
+			if name:
+				print(f"erpnext_mcp: Market Commodity {name} seeded.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: market commodities were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

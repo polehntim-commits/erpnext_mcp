@@ -1,0 +1,147 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Market Data Issue",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "search_fields": "report_slug,kind,status",
+ "description": "v0.265.0. Something about a USDA market report that a person should look at — a report missing on an in-season day, a size or pack the commodity's vocabulary does not know, the report's fields changing, a row that would not parse, an HTTP error, or items listed without a price. Flagged, never silently dropped: the old Farm App lost shipping-point rows without a word.",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "field_order": [
+  "report_slug",
+  "commodity_key",
+  "report_date",
+  "kind",
+  "status",
+  "issue_col",
+  "detail",
+  "count",
+  "issue_key",
+  "first_seen",
+  "last_seen",
+  "raw_section",
+  "raw",
+  "resolution"
+ ],
+ "fields": [
+  {
+   "fieldname": "report_slug",
+   "fieldtype": "Data",
+   "label": "Report",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "commodity_key",
+   "fieldtype": "Data",
+   "label": "Commodity Key",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "report_date",
+   "fieldtype": "Date",
+   "label": "Report Date",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "report_missing\nunknown_size\nunknown_pack\nfield_set_changed\nparse_error\nhttp_error\nnot_quoted",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nResolved\nIgnored",
+   "default": "Open",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "issue_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "detail",
+   "fieldtype": "Small Text",
+   "label": "Detail"
+  },
+  {
+   "fieldname": "count",
+   "fieldtype": "Int",
+   "label": "Rows",
+   "default": "1"
+  },
+  {
+   "fieldname": "issue_key",
+   "fieldtype": "Data",
+   "label": "Issue Key",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "first_seen",
+   "fieldtype": "Datetime",
+   "label": "First Seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_seen",
+   "fieldtype": "Datetime",
+   "label": "Last Seen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raw_section",
+   "fieldtype": "Section Break",
+   "label": "Raw",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "raw",
+   "fieldtype": "Code",
+   "label": "Raw Row / Response",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "resolution",
+   "fieldtype": "Small Text",
+   "label": "Resolution"
+  }
+ ]
+}

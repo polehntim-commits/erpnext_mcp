@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1075 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1082 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 520 read tools are **on** by default and can be switched off individually. A
+All 524 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21035,3 +21035,17 @@ returns `organism`, `status`, `provenance`. Five phone routes and a Today tile (
 `get_ipm_graph` takes `with_dd`. The generic config tools take kinds `pest_dd_models` and `pest_dd_offsets`
 (publish only in the Desk). `get_map_overlays` serves layer `pest_dd` when asked for by name. Contract:
 `docs/contracts/pest_dd_v0_264.yaml`.
+
+## v0.265.0 — USDA AMS market prices
+
+| Tool | What it does |
+| --- | --- |
+| `get_market_prices` | Stored market points (shipping point by default; terminal; movement), paged; Not Quoted rows are gaps. Read |
+| `get_price_trend` | Candles per size, volume, season-over-season by week, the signal, p10 / p50 / p90; overlays. Read |
+| `get_grower_return_vs_breakeven` | Grower return $/lb against breakeven, terminal as the cost of market access. Read |
+| `list_market_data_issues` | Missing reports, unknown sizes / packs, field changes, parse and HTTP errors. Read |
+| `fetch_market_reports` | Pull a commodity's reports for a date range. Write |
+| `backfill_market_reports` | Pull whole past seasons. Write |
+| `probe_market_report` | Read one USDA report raw and save it as a private File (fixtures). Write |
+
+Commodities are Market Commodity configs (sweet_cherries, cantaloupe seeded). Contract: `docs/contracts/market_prices_v0_265.yaml`.

@@ -1715,6 +1715,8 @@ APP_DOCTYPES = {
 	# v0.262.0. The IPM relationship graph: nodes and edges.
 	"IPM Organism": "ipm_organism",
 	"IPM Relationship": "ipm_relationship",
+	# v0.265.0. USDA market data issues.
+	"Market Data Issue": "market_data_issue",
 	# v0.243.0. No-work notices and their recipients.
 	"Work Notice": "work_notice",
 	"Work Notice Recipient": "work_notice_recipient",

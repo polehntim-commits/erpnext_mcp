@@ -5819,3 +5819,61 @@ for _name, _fn in vars(_PestDDMirror).items():
 		setattr(EveryMobileMethodDecodes, _name, _fn)
 
 TheContractIsComplete.COVERED.update({"get_pest_dd_status": "test_92"})
+
+
+# ── v0.265.0 / app 0.51.0: market prices (docs/contracts/market_prices_v0_265.yaml) ──
+class MarketSizeModel(Codable):
+	SWIFT = "MarketPrices.swift"
+	LENIENT = (("size", str, 0), ("low", float, 0), ("high", float, 0), ("mid", float, 0), ("report_date", str, 0),
+	           ("quote_status", str, 0), ("change_wow_pct", float, 0), ("grower_return_per_lb", float, 0))
+
+
+class MarketCardModel(Codable):
+	SWIFT = "MarketPrices.swift"
+	STRICT = (("commodity", str, 0),)
+	LENIENT = (("as_of", str, 0), ("unit", str, 0), ("headline_size", str, 0), ("grower_return_per_lb", float, 0),
+	           ("above_breakeven_per_lb", float, 0), ("data_issues_open", int, 0), ("caveat", str, 0))
+	NESTED = (("sizes", MarketSizeModel, True, 0),)
+
+
+class MarketCandleModel(Codable):
+	SWIFT = "MarketPrices.swift"
+	STRICT = (("time", str, 0),)
+	LENIENT = (("open", float, 0), ("high", float, 0), ("low", float, 0), ("close", float, 0), ("quotes", int, 0),
+	           ("not_quoted", int, 0))
+
+
+class MarketSeriesModel(Codable):
+	SWIFT = "MarketPrices.swift"
+	LENIENT = (("size", str, 0),)
+	NESTED = (("candles", MarketCandleModel, True, 0),)
+
+
+class MarketChartModel(Codable):
+	SWIFT = "MarketPrices.swift"
+	STRICT = (("commodity", str, 0), ("interval", str, 0))
+	LENIENT = (("unit", str, 0),)
+	NESTED = (("series", MarketSeriesModel, True, 0),)
+
+
+class _MarketMirrors:
+	def _market_site(self):
+		from .test_contract_v0_265_0 import market_site
+
+		market_site()
+		self.be()
+
+	def test_93_get_market_card(self):
+		self._market_site()
+		MarketCardModel.decode(self.wire("get_market_card", commodity="sweet_cherries"), "get_market_card")
+
+	def test_94_get_market_chart(self):
+		self._market_site()
+		MarketChartModel.decode(self.wire("get_market_chart", commodity="sweet_cherries", interval="week"), "get_market_chart")
+
+
+for _name, _fn in vars(_MarketMirrors).items():
+	if _name.startswith(("test_", "_market_site")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"get_market_card": "test_93", "get_market_chart": "test_94"})

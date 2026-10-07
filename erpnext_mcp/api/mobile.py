@@ -25352,3 +25352,38 @@ def get_pest_dd_status(user: str, block=None, pest=None, as_of=None) -> dict:
 	if pest:
 		return {"block": block, "pests": [pest_dd.status(block, str(pest), str(as_of or ""))]}
 	return {"block": block, "pests": pest_dd.statuses(block, str(as_of or ""))}
+
+
+# ── USDA AMS market prices ── v0.265.0 (docs/contracts/market_prices_v0_265.yaml) ──────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_market_card", limit=guard.READ_LIMIT)
+def get_market_card(user: str, commodity=None, variety=None, size=None) -> dict:
+	""""Should I be picking today?": today's shipping-point quotes by size, the week's change and signal, grower
+	return $/lb against breakeven, terminal as context (cost of market access, never margin), volume."""
+	from .. import market_prices
+
+	guard.require_scope(user)
+	try:
+		return market_prices.card(str(commodity or "sweet_cherries"), str(variety or ""), str(size or ""))
+	except ValueError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_market_chart", limit=guard.READ_LIMIT)
+def get_market_chart(user: str, commodity=None, variety=None, size=None, district=None, interval=None, season=None,
+                     from_date=None, to_date=None, overlays=None) -> dict:
+	"""Candles per size (Priced rows only; a gap is a gap), volume, season-over-season by week, and the overlays
+	asked for: terminal, grower_return, breakeven."""
+	from .. import market_prices
+
+	guard.require_scope(user)
+	overlays = overlays or ""
+	overlays = [o.strip() for o in (overlays.split(",") if isinstance(overlays, str) else overlays) if str(o).strip()]
+	try:
+		return market_prices.chart(str(commodity or "sweet_cherries"), str(variety or ""), str(size or ""),
+		                           str(district or ""), str(interval or "day"),
+		                           int(season) if str(season or "").isdigit() else None,
+		                           str(from_date or ""), str(to_date or ""), overlays)
+	except ValueError as exc:
+		_clean_error(exc)

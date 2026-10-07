@@ -31,7 +31,22 @@
   "fetched_by",
   "notes",
   "payload_section",
-  "payload"
+  "payload",
+  "market_section",
+  "commodity_key",
+  "market_type",
+  "quote_status",
+  "district",
+  "size",
+  "size_rank",
+  "market_col",
+  "pack_net_lb",
+  "volume",
+  "volume_unit",
+  "season",
+  "week_of_season",
+  "comment",
+  "row_hash"
  ],
  "fields": [
   {
@@ -196,11 +211,103 @@
    "label": "Raw Payload",
    "options": "JSON",
    "read_only": 1
+  },
+  {
+   "fieldname": "market_section",
+   "fieldtype": "Section Break",
+   "label": "Market point (v0.265.0)"
+  },
+  {
+   "fieldname": "commodity_key",
+   "fieldtype": "Data",
+   "label": "Commodity Key",
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "description": "The Market Commodity config this row came through (sweet_cherries, cantaloupe …). Blank on hand-entered and pre-v0.265 quotes."
+  },
+  {
+   "fieldname": "market_type",
+   "fieldtype": "Select",
+   "label": "Market Type",
+   "options": "\nShipping Point\nTerminal\nMovement",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "quote_status",
+   "fieldtype": "Select",
+   "label": "Quote Status",
+   "options": "Priced\nNot Quoted",
+   "default": "Priced",
+   "in_list_view": 1,
+   "description": "Not Quoted: the report listed the item WITHOUT a price (the comment says why). Kept, so a reported-but-unpriced day is told apart from a day the item was not in the report. Nothing is ever carried forward."
+  },
+  {
+   "fieldname": "district",
+   "fieldtype": "Data",
+   "label": "District / Origin",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "size",
+   "fieldtype": "Data",
+   "label": "Size",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "size_rank",
+   "fieldtype": "Int",
+   "label": "Size Rank",
+   "description": "Order in the commodity's size vocabulary (1 = first listed)."
+  },
+  {
+   "fieldname": "market_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pack_net_lb",
+   "fieldtype": "Float",
+   "label": "Pack Net Weight (lb)"
+  },
+  {
+   "fieldname": "volume",
+   "fieldtype": "Float",
+   "label": "Volume"
+  },
+  {
+   "fieldname": "volume_unit",
+   "fieldtype": "Data",
+   "label": "Volume Unit"
+  },
+  {
+   "fieldname": "season",
+   "fieldtype": "Int",
+   "label": "Season",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "week_of_season",
+   "fieldtype": "Int",
+   "label": "Week of Season"
+  },
+  {
+   "fieldname": "comment",
+   "fieldtype": "Small Text",
+   "label": "Report Comment"
+  },
+  {
+   "fieldname": "row_hash",
+   "fieldtype": "Data",
+   "label": "Row Hash",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "The identity of this row: commodity key, market type, district, variety, size, pack, report and date."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-16 18:00:00.000000",
+ "modified": "2026-10-06 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "USDA Price Quote",
@@ -228,9 +335,19 @@
    "role": "Accounts Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Foreman"
   }
  ],
- "search_fields": "commodity,variety,market,report_date",
+ "search_fields": "commodity,variety,market,report_date,size,district",
  "sort_field": "report_date",
  "sort_order": "DESC",
  "states": [],

@@ -1090,6 +1090,7 @@
   "usda_market_col",
   "enable_usda_price_sweep",
   "usda_price_reports",
+  "market_prices_enabled",
   "agronomy_section",
   "allow_list_crops",
   "allow_get_crop",
@@ -1229,6 +1230,13 @@
   "allow_get_pest_dd_status",
   "allow_calibrate_pest_dd",
   "allow_propose_harvest_calibration",
+  "allow_get_market_prices",
+  "allow_get_price_trend",
+  "allow_get_grower_return_vs_breakeven",
+  "allow_list_market_data_issues",
+  "allow_fetch_market_reports",
+  "allow_backfill_market_reports",
+  "allow_probe_market_report",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -8584,6 +8592,13 @@
    "label": "Enable USDA Price Sweep"
   },
   {
+   "default": "0",
+   "description": "v0.265.0. Pull USDA AMS market prices every morning (05:30) for each Market Commodity in season: shipping point, terminal and movement reports, the last 7 days. Needs the MARS API key above. Off by default.",
+   "fieldname": "market_prices_enabled",
+   "fieldtype": "Check",
+   "label": "Market Prices: Daily Pull"
+  },
+  {
    "description": "Which AMS reports the sweep pulls, by slug, comma- or newline-separated. NO DEFAULTS ARE SHIPPED, deliberately: AMS identifies its reports by slugs an operator looks up for the districts and commodities they actually ship into, and a list invented here would be right for one region and a nightly 404 for everybody else. An unconfigured sweep does nothing and says so.",
    "fieldname": "usda_price_reports",
    "fieldtype": "Small Text",
@@ -9553,6 +9568,55 @@
    "fieldname": "allow_propose_harvest_calibration",
    "fieldtype": "Check",
    "label": "Propose Harvest Calibration"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.265.0. Stored USDA market points (shipping point, terminal, movement).",
+   "fieldname": "allow_get_market_prices",
+   "fieldtype": "Check",
+   "label": "Get Market Prices"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.265.0. Candles, volume, season-over-season, signal, percentiles.",
+   "fieldname": "allow_get_price_trend",
+   "fieldtype": "Check",
+   "label": "Get Price Trend"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.265.0. Grower return $/lb vs breakeven, with terminal as context.",
+   "fieldname": "allow_get_grower_return_vs_breakeven",
+   "fieldtype": "Check",
+   "label": "Get Grower Return Vs Breakeven"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.265.0. USDA market data issues to look at.",
+   "fieldname": "allow_list_market_data_issues",
+   "fieldtype": "Check",
+   "label": "List Market Data Issues"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.265.0. Pull a commodity's USDA reports for a date range.",
+   "fieldname": "allow_fetch_market_reports",
+   "fieldtype": "Check",
+   "label": "Fetch Market Reports"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.265.0. Pull whole past seasons.",
+   "fieldname": "allow_backfill_market_reports",
+   "fieldtype": "Check",
+   "label": "Backfill Market Reports"
+  },
+  {
+   "default": "0",
+   "description": "WRITE (a private File only). v0.265.0. Read one USDA report raw and save it as a fixture.",
+   "fieldname": "allow_probe_market_report",
+   "fieldtype": "Check",
+   "label": "Probe Market Report"
   },
   {
    "default": "1",

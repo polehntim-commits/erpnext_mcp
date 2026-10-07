@@ -1,0 +1,89 @@
+# Market prices (USDA AMS My Market News) — the frozen contract. erpnext_mcp v0.265.0; the Desk dashboard
+# (v0.266.0) and FarmOps 0.51.0 build against it. Fixtures: tests_standalone/contract/v0_265_0/ (byte-identical
+# copies in FarmOps FarmOpsKit/Tests/FarmOpsKitTests/Fixtures/contract_v0_265_0/).
+
+version: "0.265.0"
+
+source:
+  api: "USDA AMS MARS v1.2 — https://marsapi.ams.usda.gov/services/v1.2/reports/{slug}/Report%20Details?q=report_begin_date=MM/DD/YYYY:MM/DD/YYYY (fallback ?allSections=true)"
+  auth: "HTTP Basic, key as username, blank password; the key is ERPNext MCP Settings → usda_mars_api_key (Password). Never in code, logs or answers."
+  limits: "100,000 rows a request (registered); no paging — windows are chunked (31 days) and every chunk is fetched. No other cap."
+  reports_seeded:
+    sweet_cherries:
+      shipping_point: ["2412 YAKIMA Shipping Point Fruit Prices (YA_FV110) — Yakima Valley & Wenatchee district WA; daily in season"]
+      terminal: ["2290 Chicago", "2314 New York", "2306 Los Angeles", "2277 Atlanta", "2285 Boston", "2318 Philadelphia"]
+      movement: ["3284 National Truck/Air/Boat Daily Movement (WA_FV175) — daily by commodity & origin", "3258 Cherries weekly movement (WA_FV415)"]
+    cantaloupe:
+      shipping_point: ["2402 Phoenix Shipping Point Fruit Prices (IX_FV110) — Imperial Valley CA & central/western AZ; San Joaquin Valley CA"]
+      terminal: ["2290 Chicago", "2314 New York", "2306 Los Angeles"]
+      movement: ["3284 daily", "3254 Cantaloupes weekly movement (WA_FV411)"]
+  unconfirmed: ["an Oregon / Columbia Basin cherry shipping-point district (none seen in 2412 for 2024 — the district filter takes it if it appears)", "Texas cantaloupe", "exact JSON field names (probe_market_report settles them)"]
+
+commodity_config:   # Farm Config Version kind "Market Commodity" (slug market_commodity), one key per commodity; a person publishes
+  key: "lower_snake, e.g. sweet_cherries, cantaloupe"
+  title: string
+  match: {commodity: "[AMS commodity names, upper-case match]", variety_exclude: "[optional]"}
+  season: {start_mmdd: "05-15", end_mmdd: "09-15", week_anchor: "first_quote | start_mmdd — week 1 of a season"}
+  reports: "[{slug, role: shipping_point|terminal|movement|movement_weekly, label, districts: [names, empty = all], origins: [codes]}]"
+  field_map: "{role: {field: [aliases]}} — fields: variety, size, pack, grade, district, origin, low, high, mostly_low, mostly_high, comment, volume, volume_unit, commodity, report_date"
+  size: {kind: "row | count | grade", order: "ascending | descending — which way is bigger fruit", vocabulary: "[{label, aliases}]"}
+  packs: "[{label, match: [substrings], net_lb, unit: box|carton|bin|lb|cwt}]"
+  grower_deductions_per_lb: "[{name, per_lb}] — e.g. Constancy pool ≈ 0.60"
+  breakeven: {analysis: "Breakeven Analysis docname | null — wins when set", per_lb: "number | null", label: string}
+
+price_point:   # the USDA Price Quote doctype, extended — one row per (commodity_key, market_type, district, variety, size, pack, report_slug, report_date)
+  quote_status: "Priced | Not Quoted (the report lists the item without a price; comment carries why)"
+  market_type: "Shipping Point | Terminal | Movement"
+  rule: "NO CARRY-FORWARD. A day without a row is a gap; a Not Quoted row is a marked gap. Nothing is ever filled."
+
+candle:
+  derivation: |
+    Per size, per period (day | week), over Priced rows only, in report-date order:
+      mid(row) = (mostly_low + mostly_high) / 2 when both "mostly" prices exist, else (low + high) / 2
+      open  = mid(first row of the period)
+      close = mid(last row of the period)
+      high  = max(high) over the period
+      low   = min(low) over the period
+    A period with no Priced row is not a candle (a gap). Not Quoted rows are counted in `not_quoted`.
+    A one-quote day: open = close = mid, wicks at low / high.
+  fields: {time: "YYYY-MM-DD (period start)", open: number, high: number, low: number, close: number, quotes: int, not_quoted: int}
+
+routes:
+  get_market_card:
+    who: "any FarmOps role"
+    params: {commodity: "config key (default sweet_cherries)", variety: optional, size: optional}
+    answer:
+      commodity: string
+      as_of: "date of the latest shipping-point report used"
+      unit: "e.g. $ per 18 lb carton"
+      sizes: "[{size, low, high, mostly_low, mostly_high, mid, report_date, quote_status, change_wow_pct, grower_return_per_lb}]"
+      signal: "{label: 'demand building' | 'softening' | 'supply pressure' | 'steady' | 'not enough data', why: string}"
+      grower_return_per_lb: "number|null — shipping-point mid of the headline size ÷ pack lb − deductions"
+      breakeven: "{per_lb, label, source: analysis|config}|null"
+      above_breakeven_per_lb: "number|null — grower return minus breakeven (not a margin; a gap to the cost line)"
+      terminal: "{mid, market, cost_of_market_access} | null — context only"
+      volume: "{value, unit, report_date, change_wow_pct} | null"
+      data_issues_open: int
+      caveat: string
+    fixture: get_market_card.json
+  get_market_chart:
+    who: "any FarmOps role"
+    params: {commodity, variety: optional, size: "optional — omit for every size", district: optional, interval: "day | week", season: "YYYY optional", from_date: "YYYY-MM-DD optional", to_date: "YYYY-MM-DD optional", overlays: "terminal,grower_return,breakeven (optional)"}
+    answer:
+      commodity: string
+      interval: string
+      unit: string
+      series: "[{size, candles: [candle], not_quoted_dates: [date]}]"
+      volume: "[{time, value, unit}]"
+      terminal: "[{time, value}]  (only when asked)"
+      grower_return: "[{time, value}] $/lb (only when asked)"
+      breakeven: "{per_lb, label} | null (only when asked)"
+      seasons: "[{season, week_of_season: [{week, close}]}] — season-over-season, aligned by week of season"
+    fixture: get_market_chart.json
+
+mcp_tools:
+  read: [get_market_prices, get_price_trend, get_grower_return_vs_breakeven, list_market_data_issues]
+  write: [fetch_market_reports, backfill_market_reports, probe_market_report]   # all OFF; probe is read-only against USDA and saves raw answers as fixtures
+
+data_quality:   # Market Data Issue, one row per (report, date, kind, detail); open until resolved; compliance alert via CCF
+  kinds: [report_missing, unknown_size, unknown_pack, field_set_changed, parse_error, http_error, not_quoted]

@@ -40,6 +40,11 @@ SOURCES = ("USDA AMS Market News", "Manual", "Broker Quote")
 
 class USDAPriceQuote(Document):
 	def autoname(self):
+		# v0.265.0. A market point (fetched through a Market Commodity config) has eight identity parts; its name
+		# is readable and ends in the identity hash, which keeps it unique and under 140 characters.
+		if self.get("commodity_key") and self.get("row_hash"):
+			self.name = f"{self.commodity_key}·{(self.market_type or '')[:1]}·{self.report_date}·{self.size or '-'}·{self.row_hash[:10]}"
+			return
 		parts = [
 			str(self.commodity or "").strip().upper(),
 			str(self.variety or "").strip().upper(),
@@ -59,6 +64,12 @@ class USDAPriceQuote(Document):
 					"Report Date is required. It is what says how stale the number is, and a quote with no date wins every 'most recent' lookup forever."
 				)
 			)
+		if self.get("quote_status") not in (None, "", "Priced", "Not Quoted"):
+			frappe.throw(_("Quote Status is Priced or Not Quoted."))
+		if self.get("quote_status") == "Not Quoted":
+			# A listed item with no price: the prices stay EMPTY — never a carried-forward number.
+			for field in ("low_price", "high_price", "mostly_low", "mostly_high"):
+				self.set(field, None)
 		if str(self.source or "") not in SOURCES:
 			frappe.throw(_("Source must be one of: {0}.").format(", ".join(SOURCES)))
 

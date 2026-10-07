@@ -193,6 +193,7 @@ from .tools import stages as stage_tools
 from .tools import taskdates as task_date_tools
 from .tools import time_reviews as time_review_tools
 from .tools import ipm_graph_tools
+from .tools import market_prices_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18184,6 +18185,80 @@ TOOLS = {
 		},
 		mutating=True,
 		title="Approve pest action threshold",
+	),
+	# ── v0.265.0: USDA AMS market prices (docs/contracts/market_prices_v0_265.yaml) ──
+	"get_market_prices": _tool(
+		market_prices_tools.get_market_prices,
+		"v0.265.0. Stored USDA AMS market points for a commodity — SHIPPING POINT (FOB, the primary line) by default, "
+		"or Terminal (context) or Movement (volume) — by variety, size, pack, district and date, paged. Each priced row "
+		"carries its mid; 'Not Quoted' rows are items the report listed without a price: gaps, never filled.",
+		{"commodity": _field(_STRING, "Market Commodity key: sweet_cherries (default), cantaloupe, or any configured."), "market_type": _field(_STRING, "Shipping Point (default), Terminal or Movement."),
+		  "variety": _field(_STRING, "One variety."), "size": _field(_STRING, "One size (e.g. '10 row', '12s')."),
+		  "district": _field(_STRING, "One district / origin."), "from": _field(_STRING, "YYYY-MM-DD."),
+		  "to": _field(_STRING, "YYYY-MM-DD."), "season": _field(_INTEGER, "One season (year)."),
+		  "start": _field(_INTEGER, "Page start."), "limit": _field(_INTEGER, "Page size (default 500).")},
+		title="Get market prices",
+	),
+	"get_price_trend": _tool(
+		market_prices_tools.get_price_trend,
+		"v0.265.0. Shipping-point candles per size (open = first quote's mostly-mid, close = last's, high = max high, "
+		"low = min low; Priced rows only — a period with no quote is a gap, nothing carried forward), daily or weekly, "
+		"volume from the movement reports, season-over-season by week of season, the week-on-week SIGNAL (demand "
+		"building / softening / supply pressure — a signal, not advice), historical p10 / p50 / p90 for pro forma "
+		"sensitivity. Overlays on request: terminal (context), grower_return ($/lb), breakeven.",
+		{"commodity": _field(_STRING, "Market Commodity key: sweet_cherries (default), cantaloupe, or any configured."), "variety": _field(_STRING, "One variety."), "size": _field(_STRING, "One size; omit for every size."),
+		  "district": _field(_STRING, "One district."), "interval": _field(_STRING, "day (default) or week."),
+		  "season": _field(_INTEGER, "One season."), "from": _field(_STRING, "YYYY-MM-DD."), "to": _field(_STRING, "YYYY-MM-DD."),
+		  "overlays": _field(_STRING_ARRAY, "terminal, grower_return, breakeven.")},
+		title="Get price trend",
+	),
+	"get_grower_return_vs_breakeven": _tool(
+		market_prices_tools.get_grower_return_vs_breakeven,
+		"v0.265.0. 'Should I be picking today?': the latest shipping-point quote by size, grower return $/lb (FOB ÷ pack "
+		"lb − the configured packing / selling / harvest deductions), breakeven $/lb from the farm's Breakeven "
+		"Analysis or its configured value, the week's change and signal, terminal as context with the COST OF MARKET "
+		"ACCESS (terminal − shipping; never margin), and movement volume.",
+		{"commodity": _field(_STRING, "Market Commodity key: sweet_cherries (default), cantaloupe, or any configured."), "variety": _field(_STRING, "One variety."), "size": _field(_STRING, "One size.")},
+		title="Get grower return vs breakeven",
+	),
+	"list_market_data_issues": _tool(
+		market_prices_tools.list_market_data_issues,
+		"v0.265.0. What about the USDA market data needs a person: in-season days with no shipping-point report, sizes or "
+		"packs the commodity config does not know, a report's fields changing, rows that would not parse, HTTP errors. "
+		"Flagged, never silently dropped.",
+		{"commodity": _field(_STRING, "Market Commodity key: sweet_cherries (default), cantaloupe, or any configured."), "kind": _field(_STRING, "report_missing, unknown_size, unknown_pack, field_set_changed, parse_error, http_error."),
+		  "status": _field(_STRING, "Open (default), Resolved or Ignored."), "report_slug": _field(_STRING, "One report."),
+		  "start": _field(_INTEGER, "Page start.")},
+		title="List market data issues",
+	),
+	"fetch_market_reports": _tool(
+		market_prices_tools.fetch_market_reports,
+		"MUTATING (default OFF). v0.265.0. Pull a commodity's configured USDA reports over a date range (default the last "
+		"7 days) — Report Details, 31-day windows, every window, idempotent upsert — and flag anything unexpected.",
+		{"commodity": _field(_STRING, "Market Commodity key: sweet_cherries (default), cantaloupe, or any configured."), "from": _field(_STRING, "YYYY-MM-DD."), "to": _field(_STRING, "YYYY-MM-DD."),
+		  "roles": _field(_STRING_ARRAY, "Only these report roles: shipping_point, terminal, movement, movement_weekly.")},
+		mutating=True,
+		title="Fetch market reports",
+	),
+	"backfill_market_reports": _tool(
+		market_prices_tools.backfill_market_reports,
+		"MUTATING (default OFF). v0.265.0. Whole past seasons of a commodity's reports, window by window, no caps.",
+		{"commodity": _field(_STRING, "Market Commodity key: sweet_cherries (default), cantaloupe, or any configured."), "seasons": _field({"type": "array", "items": {"type": "integer"}}, "Years, e.g. [2023, 2024, 2025]."),
+		  "roles": _field(_STRING_ARRAY, "Only these report roles.")},
+		required=("seasons",),
+		mutating=True,
+		title="Backfill market reports",
+	),
+	"probe_market_report": _tool(
+		market_prices_tools.probe_market_report,
+		"MUTATING (default OFF; writes only a private File). v0.265.0. READ-ONLY against USDA: one report's raw answer "
+		"(Report Details and allSections) for a date range — its field names, sample rows and any rows listed without "
+		"a price — saved as private Files to become test fixtures. The key never appears.",
+		{"report": _field(_STRING, "The report slug, e.g. 2412."), "from": _field(_STRING, "YYYY-MM-DD."),
+		  "to": _field(_STRING, "YYYY-MM-DD (default = from)."), "save": _field(_BOOLEAN, "Save as Files (default true).")},
+		required=("report", "from"),
+		mutating=True,
+		title="Probe market report",
 	),
 	# ── v0.264.0: pest degree days per block ────────────────────────────────
 	"get_pest_dd_status": _tool(
