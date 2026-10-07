@@ -8,6 +8,8 @@ import datetime
 import json
 import pathlib
 
+import frappe
+
 from erpnext_mcp import market_prices as mp
 from erpnext_mcp.api import market_dashboard
 
@@ -78,3 +80,30 @@ class Shipped(MarketCase):
 		self.assertIn("market-prices", [s["link_to"] for s in spec["shortcuts"]])
 		html = (PAGE / "market_prices.html").read_text()
 		self.assertNotIn("'", html.split("-->", 1)[1])
+
+
+class Tile(MarketCase):
+	def test_the_market_card_tile_is_seeded_and_every_seed_publishes(self):
+		from erpnext_mcp import tiles
+
+		tile = tiles.SEEDS["market_card"]
+		self.assertEqual(tile["target"], {"kind": "report", "report": "market_card"})
+		self.assertEqual(tile["icon"], "chart.line.uptrend.xyaxis")
+		self.assertEqual(tile["min_app_version"], "0.51.0")
+		for key, body in tiles.SEEDS.items():  # ipm_map once pointed at a report key the validator refused
+			self.assertEqual(tiles.target_problems(body["target"], body["audience"]), [], key)
+			self.assertIn(body["target"]["report"], tiles.REPORTS, key)
+			self.assertIn(body["icon"], tiles.ICONS, key)
+
+
+class SizeOrder(MarketCase):
+	def test_the_size_filter_uses_the_one_size_order(self):
+		saved = list(ROLES.get("Administrator", []))
+		self.addCleanup(lambda: ROLES.__setitem__("Administrator", saved))
+		ROLES["Administrator"] = ["Farm Manager"]
+		self.ingest()
+		sizes = market_dashboard._choices("sweet_cherries")["sizes"]
+		rows = frappe.db.get_all(mp.QUOTE, filters={"commodity_key": "sweet_cherries"}, fields=["size", "size_rank"])
+		ranks = {r["size"]: r.get("size_rank") for r in rows if r.get("size")}
+		self.assertTrue(sizes)
+		self.assertEqual(sizes, sorted(ranks, key=lambda s: mp.size_order(s, ranks[s])))

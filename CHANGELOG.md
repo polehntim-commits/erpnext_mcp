@@ -17,6 +17,11 @@ Deploy `docs/deploy/v0.266.0_market_dashboard.md`. Tim, 2026-10-06.
 - Season over season aligned by week of season, and weekly closes by size as BAR charts (the Desk's frappe.Chart),
   the p10 / p50 / p90 table, open data issues, the card (shipping point, week-on-week and signal, grower return vs
   breakeven, terminal and the cost of market access, movement).
+- **Phone tile** `market_card` (Market prices, icon `chart.line.uptrend.xyaxis`, app 0.51.0+) seeded create-only
+  for everyone enrolled. The tile report allowlist also gains `ipm_map`, whose v0.262.0 tile pointed at a key the
+  validator would have refused on republish.
+- **Any commodity**: the commodity, size and district filters come from the data; sizes sort in the one generic
+  order (`size_order`).
 - **Pro forma**: `get_breakeven_sensitivity` carries `market_reference` — what the market has actually paid
   (p10 / p50 / p90 per season, in $ per pack and grower $/lb) for the commodity the analysis's crop maps to.
 - **Harvest timing**: `season_curve` — the median weekly close by week of season across past seasons, the usual

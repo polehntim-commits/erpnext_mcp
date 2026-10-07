@@ -30,6 +30,10 @@ REPORTS = (
 	"assign_tasks",
 	# v0.213.0. The crew task board (needs app 0.25.0).
 	"crew_tasks",
+	# v0.262.0. The IPM map (app 0.49.0) — its seeded tile pointed here before the key was allowed.
+	"ipm_map",
+	# v0.266.0. The market card and chart (app 0.51.0).
+	"market_card",
 )
 DOCUMENT_DOCTYPES = ("Farm Task", "Inspection Session", "Asset Register", "Item", "App Feedback")
 TARGET_KINDS = ("wizard", "task_template", "inspection_template", "report", "list_query", "document")
@@ -90,6 +94,8 @@ ICONS = (
 	"plus.circle",
 	# v0.208.0.
 	"printer",
+	# v0.266.0. The market card tile (FarmOps 0.51.0 carries the same symbol).
+	"chart.line.uptrend.xyaxis",
 )
 SEASONS = ("in", "off")
 OCCUPANCY = ("Occupied", "Unoccupied")
@@ -334,6 +340,20 @@ SEEDS = {
 		"badge": {},
 		"show_if": {},
 		"min_app_version": "0.49.0",
+	},
+	# v0.266.0 (docs/contracts/market_prices_v0_265.yaml). Today's shipping-point prices, the signal and grower
+	# return against breakeven; terminal is context. Read-only, for everyone enrolled.
+	"market_card": {
+		"surface": "today",
+		"title": {"en": "Market prices", "es": "Precios de mercado"},
+		"subtitle": {"en": "Shipping point today vs breakeven", "es": "Punto de embarque hoy vs. punto de equilibrio"},
+		"icon": "chart.line.uptrend.xyaxis",
+		"order": 87,
+		"target": {"kind": "report", "report": "market_card"},
+		"audience": {},
+		"badge": {},
+		"show_if": {},
+		"min_app_version": "0.51.0",
 	},
 	"my_feedback": {
 		"surface": "today",
