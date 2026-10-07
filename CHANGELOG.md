@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.265.0 — 2026-10-06 — USDA AMS market prices, done right
+
+**Migrate needed** (USDA Price Quote gains the market-point fields; doctype Market Data Issue; Farm Config Version
+kind "Market Commodity" with sweet_cherries and cantaloupe seeded and published; setting `market_prices_enabled`
+OFF; the daily pull at 05:30). Contract `docs/contracts/market_prices_v0_265.yaml`. Deploy
+`docs/deploy/v0.265.0_market_prices.md`. Tim, 2026-10-06.
+
+- **What was broken**: the Farm App's nightly job sent the API key still encrypted and a terminal package filter
+  dropped every shipping-point row; farm_precision_ag (Phase B, stopped at 0.4.2) copied that client;
+  erpnext_mcp's own v0.87.0 fetch read only the report header and let sizes overwrite each other.
+- **Source**: MARS v1.2 Report Details (allSections fallback), HTTP Basic with the key from ERPNext MCP Settings,
+  31-day windows, every window — no caps. Seeded reports: cherries 2412 (Yakima / Wenatchee shipping point),
+  terminal 2290 / 2314 / 2306 / 2277 / 2285 / 2318, movement 3284 daily and 3258 weekly; cantaloupe 2402,
+  terminal, 3284 and 3254.
+- **No carry-forward**: a day without a quote is a gap; a row listed without a price is stored **Not Quoted**
+  (its comment kept), told apart from a day the item was not in the report. Nothing fills a gap.
+- **Commodity-agnostic**: the Market Commodity config holds AMS names, reports, field-name maps, size vocabulary
+  (cherry row sizes, melon counts), packs with net lb, grower deductions $/lb and breakeven. A new crop is config.
+- **Flagged, never dropped** (Market Data Issue): in-season weekdays with no shipping-point report, unknown sizes
+  and packs, a report's field set changing, rows that would not parse, HTTP errors.
+- **Candles** per size (open / close = first / last quote's mostly-mid, high / low = max high / min low; Priced
+  rows only), daily or weekly; volume from movement; season-over-season by week of season; week-on-week signal
+  (demand building / softening / supply pressure — a signal, not advice); p10 / p50 / p90 for the pro forma.
+- **Grower framing**: shipping point primary; terminal is context, and terminal − shipping is the cost of market
+  access, never margin; grower return $/lb = FOB ÷ pack lb − deductions (cherries: Constancy pool ≈ $0.60/lb);
+  breakeven from a Pound Breakeven Analysis, else the configured value (Constancy 2027 draft $1.22/lb).
+- **Phone** `get_market_card`, `get_market_chart` (routes 223). **MCP** 4 reads, 3 writes (OFF):
+  get_market_prices, get_price_trend, get_grower_return_vs_breakeven, list_market_data_issues,
+  fetch_market_reports, backfill_market_reports, probe_market_report (read-only against USDA; saves fixtures).
+
 ## 0.264.1 — 2026-10-06 — Tim's harvest windows as calibration proposals
 
 No migrate. Deploy `docs/deploy/v0.264.1_harvest_calibration.md`.

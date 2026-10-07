@@ -601,6 +601,8 @@ class TheScheduledJobs(unittest.TestCase):
 					# v0.253.0. The rain archive check (decision 21); never raises.
 					"45 4 * * *": ["erpnext_mcp.weather_verify.daily"],
 					"0 5 * * *": ["erpnext_mcp.services.usda_prices.sweep_configured_reports"],
+					# v0.265.0. Market prices for each commodity in season; off until market_prices_enabled.
+					"30 5 * * *": ["erpnext_mcp.market_prices.daily_pull"],
 					# v0.240.0. The day-start Go / Hold check; never raises.
 					"0 6 * * *": ["erpnext_mcp.go_hold.scheduled_day_start"],
 				},

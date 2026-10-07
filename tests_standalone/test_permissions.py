@@ -438,6 +438,8 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Lot Line Adjustment",
 				"MCP Action Log",
 				"Market",
+				# v0.265.0. USDA market data issues: public market data, site-wide.
+				"Market Data Issue",
 				"Merchant Alias",
 				"Mobile Push Token",
 				"Reference Document",
