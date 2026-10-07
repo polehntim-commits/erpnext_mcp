@@ -23,8 +23,12 @@ def _installed() -> None:
 
 
 def _page(args: dict) -> tuple[int, int]:
-	start = max(0, as_int(args, "start") or 0)
-	limit = max(1, min(as_int(args, "limit") or ipm_graph.DEFAULT_LIMIT, ipm_graph.MAX_LIMIT))
+	start = as_int(args, "start")
+	start = 0 if start is None else max(0, start)
+	limit = as_int(args, "limit")
+	if limit is not None and limit < 1:
+		raise ToolError("limit is at least 1.")
+	limit = min(ipm_graph.DEFAULT_LIMIT if limit is None else limit, ipm_graph.MAX_LIMIT)
 	return start, limit
 
 
@@ -94,7 +98,7 @@ def get_ipm_graph(args: dict) -> ToolResult:
 	start, limit = _page(args)
 	data = _wrap(lambda: ipm_graph.graph(
 		crop=as_str(args, "crop"), stage=args.get("stage"), block=as_str(args, "block"),
-		depth=as_int(args, "depth") or 2, kinds=args.get("kinds"), start=start, limit=limit,
+		depth=2 if as_int(args, "depth") is None else as_int(args, "depth"), kinds=args.get("kinds"), start=start, limit=limit,
 		company=as_str(args, "company"), include_disabled=as_bool(args, "include_disabled", False)))
 	return ToolResult(
 		data=data,

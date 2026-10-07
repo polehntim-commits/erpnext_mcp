@@ -450,7 +450,7 @@ class TheFurniture(CardPrintCase):
 	def test_the_tile_allowlists(self):
 		self.assertIn("print_queue", tiles.REPORTS)
 		self.assertIn("printer", tiles.ICONS)
-		self.assertEqual(len(tiles.ICONS), 49)
+		self.assertEqual(len(tiles.ICONS), 50)
 		self.assertIn("my_print_jobs", tile_queries.QUERIES)
 		self.assertEqual(tiles.PRINT_QUEUE_TILE["audience"], {"roles": list(card_print.REQUEST_ROLES)})
 

@@ -39,6 +39,8 @@ FALLBACK_ICON = "square.grid.2x2"
 #: back to FALLBACK_ICON for anything else (§3.4).
 ICONS = (
 	"square.grid.2x2",
+	# v0.262.0. The IPM map tile (FarmOps 0.49.0 carries the same symbol in its allowlist).
+	"point.3.connected.trianglepath.dotted",
 	"tray.full",
 	"tray",
 	"exclamationmark.shield",
