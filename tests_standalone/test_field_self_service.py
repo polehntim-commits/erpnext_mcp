@@ -208,3 +208,27 @@ class OutlineByDefault(FieldCase):
 		doc.insert(ignore_permissions=True)
 		self.assertEqual(doc.acreage_source, "Outline")
 		self.assertAlmostEqual(float(doc.acreage), round(float(doc.area_computed_acres), 2))
+
+
+class AddTaskHereOffline(FieldCase):
+	def test_a_retried_template_task_is_not_raised_twice(self):
+		"""App 0.54.0 queues "Add task here" offline; the route takes client_request_id through request_receipts
+		(the decorator claim / start / complete already use and test), so a retry replays the first answer."""
+		import inspect
+
+		from erpnext_mcp import request_receipts
+
+		source = inspect.getsource(mobile_api)
+		self.assertIn('@request_receipts.idempotent("create_task_from_template")', source)
+		self.assertIn("client_request_id", inspect.signature(inspect.unwrap(mobile_api.create_task_from_template)).parameters)
+		calls = []
+
+		@request_receipts.idempotent("create_task_from_template")
+		def fake(user, client_request_id=None):
+			calls.append(1)
+			return {"name": "FT-NEW"}
+
+		first = fake(WORKER, client_request_id="op-1")
+		STORE.commit()
+		again = fake(WORKER, client_request_id="op-1")
+		self.assertEqual((len(calls), again.get("replayed"), again["name"]), (1, True, first["name"]))

@@ -46,6 +46,7 @@ hazards:   # pins on any field, any time, from the phone
   on_the_card: "hazards: [{name, asset_type, latitude, longitude, description}] inside the field's outline"
 
 add_task_here:
+  idempotent: "create_task_from_template takes client_request_id (v0.269.0): the same id twice returns the first answer with replayed: true — the offline queue sends its operation id"
   phone: "a field card's 'Add task' → create_farm_task / create_task_from_template with location_doctype=Field, location=<field>, gps of the press point; workers → report_field_task (unchanged gates); offline through the existing queue"
   mcp: "create_task_on_field(field: name or alias, ...) — refuses an ambiguous name with the candidates"
 

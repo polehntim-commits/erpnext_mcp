@@ -8604,6 +8604,8 @@ def list_farm_task_templates(
 # ── 71. create_task_from_template ────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("create_task_from_template", mutating=True, limit=guard.WRITE_LIMIT)
+# v0.269.0. App 0.54.0 queues "Add task here" offline: a retry after a timeout must not raise the task twice.
+@request_receipts.idempotent("create_task_from_template")
 def create_task_from_template(
 	user: str,
 	template=None,
@@ -8615,6 +8617,7 @@ def create_task_from_template(
 	company=None,
 	assigned_to=None,
 	employee=None,
+	client_request_id=None,
 ) -> dict:
 	"""Raise one task from a standing template, pre-filled. v0.72.0.
 
