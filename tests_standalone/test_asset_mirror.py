@@ -790,7 +790,15 @@ class TheColumnsAgree(unittest.TestCase):
 		without adding it here is therefore a decision about a real farm's books,
 		and `Block` is the only one so far."""
 		unmapped = set(asset_tags.ASSET_TYPES) - set(asset_mirror.CATEGORY_BY_TYPE)
-		self.assertEqual(unmapped, {"Block"}, "an asset type gained or lost a category mapping")
+		# v0.269.0: a Hazard Marker is a pin, not property — never mirrored at all (NEVER_MIRRORED).
+		self.assertEqual(unmapped - asset_mirror.NEVER_MIRRORED, {"Block"},
+		                 "an asset type gained or lost a category mapping")
+		self.assertEqual(asset_mirror.NEVER_MIRRORED, {"Hazard Marker"})
+
+	def test_a_hazard_marker_is_never_mirrored(self):
+		verdict = asset_mirror.sync({"name": "HZ-1", "asset_type": "Hazard Marker"})
+		self.assertFalse(verdict["mirrored"])
+		self.assertIn("not a fixed asset", verdict["reason"])
 
 
 # ── the photograph reaches the books ────────────────────────────────────────

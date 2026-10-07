@@ -170,6 +170,9 @@ CATEGORY_BY_TYPE = {
 	"General": "Machinery & Equipment",
 }
 
+#: v0.269.0. Types that are pins, not property: never filed as an ERPNext fixed Asset, whatever categories exist.
+NEVER_MIRRORED = frozenset({"Hazard Marker"})
+
 #: Prefix for the fixed-asset Item every Asset has to hang off. One per asset
 #: type rather than one per machine: ERPNext wants an Item to say what KIND of
 #: thing this is, and forty valves are forty assets of one kind.
@@ -338,6 +341,9 @@ def sync(row: dict, *, location: str = "", photo_file: str = "") -> dict:
 
 
 def _sync(row: dict, *, location: str, photo_file: str, verdict: dict) -> dict:
+	if str(row.get("asset_type") or "") in NEVER_MIRRORED:
+		verdict["reason"] = f"a {row.get('asset_type')} is a pin on the ground, not a fixed asset; nothing was mirrored."
+		return verdict
 	blocked = available()
 	if blocked:
 		verdict["reason"] = blocked
