@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.267.0 (OML today) — one build, one migrate; FarmOps 0.52.0 (build 47)**
+**Deploy: v0.252.0 → v0.267.1 (OML today) — one build, one migrate; FarmOps 0.52.0 (build 47)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.267.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.267.1.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`cf04db6`** (`__version__ = "0.267.0"`).
+- **Server**: erpnext_mcp main **`a2a9595`** (`__version__ = "0.267.1"`).
 - **App**: fafo_ios main **`72d4de0`** — FarmOps **0.52.0 (build 47)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -26,6 +26,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.265.0 | USDA AMS market prices: shipping point (primary), terminal (context, the cost of market access), movement. Idempotent Price Points, no carry-forward, gaps and format changes flagged not dropped. Any commodity as config: sweet cherries and cantaloupe published, ten tree fruit / melons seeded as drafts; the AMS catalog browsable, drafts built from observed data. Fetch once per report, fan out. Daily pull 05:30 only once the key is set. Phone market card and chart routes; MCP reads, writes OFF. |
 | v0.266.0 | Desk **Market Prices** page (candles + volume, season over season, bars, overlays; vendored chart library, no CDN), the market in the pro forma's breakeven sensitivity, phone tile **Market prices** (app 0.51.0+). |
 | v0.267.0 | Who sees what on the phone, as data: one Data Access policy (tiers, gates, restricted fields, all 428 routes) filtering every answer at one exit; seeded to today's behaviour (nothing changes until a System Manager publishes); gates may only narrow (private HR never back to Farm Manager); ten over-shares listed for Tim in `v0.267.0_data_access.md` §4. |
+| v0.267.1 | Four access-audit fixes (before Constancy): routing number masked except payroll / HR; employee-file login ID and IPs to System Manager only; accident and leave lists and totals one company's; contacts by farm entity (older contacts stamped where unambiguous). |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -39,17 +40,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.267.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.267.1`. Push fafo_ios main and archive
 FarmOps 0.52.0 (build 47).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew.", and `0.267.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M.", and `0.267.1`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.267.0; the asset map's build stamp 0.267.0.
+1. `get_server_status`: 0.267.1; the asset map's build stamp 0.267.1.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
