@@ -231,6 +231,7 @@ def after_migrate() -> None:
 	_go_hold_presets()
 	_course_videos()
 	_punch_review_rules()
+	_offline_claim_rule()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -826,6 +827,17 @@ def _punch_review_rules() -> None:
 			print(f"erpnext_mcp: punch review rules seeded: {', '.join(made)}.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: punch review rules were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _offline_claim_rule() -> None:
+	"""v0.261.0. The 'claimed offline by two people' rule, seeded ON. Create-only; never raises."""
+	try:
+		from . import offline_claims
+
+		if offline_claims.seed():
+			print("erpnext_mcp: offline claim rule seeded.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: offline claim rule was not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:

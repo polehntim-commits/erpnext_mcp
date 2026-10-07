@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.261.0 — 2026-10-06 — claiming a task with no signal
+
+**Migrate needed** (six Farm Task Assignment columns; rule `task_claimed_offline_twice` seeded ON; switch
+`allow_review_claim_conflict` OFF). Pairs with FarmOps 0.48.0. Deploy `docs/deploy/v0.261.0_offline_claim.md`.
+Tim, 2026-10-06.
+
+- **`claim_task` takes `offline`, `claimed_at` and `client_request_id`** (idempotent). The first claim to reach the
+  server holds the task. A later offline claim — or one a rule would refuse — is a **second claim**: its own
+  assignment, the worker's start / pause / resume / completion, minutes, notes and photos kept, `claim_conflict`
+  saying what happened. It never moves the task (state, evidence contract, compliance record, stock, spray windows
+  stay the holder's). The answer carries `claim_outcome` (`held` / `second`), `second_claim`, `claim_conflict` and
+  `claim_holder_name`. An online claim on a held task is still refused.
+- Start, pause, resume and complete find the caller's **own** assignment on a task first (worker-aware), so a second
+  claim is worked like any assignment; a phone that names the holder's assignment still lands on its own.
+- **Flag and review**: CCF provider `claim.offline_conflicts` on Farm Task; rule `task_claimed_offline_twice` raises a
+  compliance alert for Foreman / Farm Manager / HR until a supervisor reviews it (`review_claim_conflict`, or the
+  **Conflict Reviewed** tick on the assignment).
+
 ## 0.260.0 — 2026-10-06 — least privilege on the phone: the hotfix
 
 **Migrate needed** (the Farm Owner profile gains HR Manager). No new routes. Pairs with FarmOps 0.47.0. Deploy

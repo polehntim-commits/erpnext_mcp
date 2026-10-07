@@ -11475,6 +11475,11 @@ TOOLS = {
 			"task": _field(_STRING, "The Farm Task docname."),
 			"worker_id": _field(_STRING, "The claiming Employee id."),
 			"worker_name": _field(_STRING, "Their name, where no HR app can resolve it."),
+			"offline": _field(_BOOLEAN, "v0.261.0. The claim was made on a phone with no signal. The first claim to "
+			                            "reach the server holds the task; a later one (or one a rule would refuse) is "
+			                            "recorded as a SECOND CLAIM with its time and evidence kept, flagged 'claimed "
+			                            "offline by two people', and the task is not moved."),
+			"claimed_at": _field(_STRING, "v0.261.0. When the worker tapped Claim, by the phone's clock."),
 		},
 		required=("task", "worker_id"),
 		mutating=True,
@@ -17945,6 +17950,22 @@ TOOLS = {
 		required=("action",),
 		mutating=True,
 		title="Review punches",
+	),
+	# ── v0.261.0: offline claims ─────────────────────────────────────────────
+	"review_claim_conflict": _tool(
+		time_review_tools.review_claim_conflict,
+		"MUTATING (default OFF). v0.261.0. A supervisor (Foreman, Farm Manager, HR) marks a task CLAIMED OFFLINE BY TWO "
+		"PEOPLE as reviewed, which clears its compliance alert (rule task_claimed_offline_twice). The first claim to "
+		"reach the server holds the task; the later one is a second claim whose time and evidence are kept on its own "
+		"assignment (second_claim, claim_conflict on get_farm_task's assignments). Nothing is merged or moved; settle "
+		"whose evidence stands and any pay split, then review with a note.",
+		{
+			"task": _field(_STRING, "The Farm Task."),
+			"note": _field(_STRING, "What was decided, appended to each flagged assignment."),
+		},
+		required=("task",),
+		mutating=True,
+		title="Review claim conflict",
 	),
 	# ── v0.238.0: the Reference Library ──────────────────────────────────────
 	"search_references": _tool(

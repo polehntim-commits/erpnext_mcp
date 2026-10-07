@@ -584,7 +584,12 @@ def claim_task_via_mobile(args: dict) -> ToolResult:
 	worker = _require_employee(me)
 	task = as_str(args, "task_name") or as_str(args, "task", required=True)
 
-	result = dispatch.claim_farm_task({"task": task, "worker_id": worker})
+	inner = {"task": task, "worker_id": worker}
+	# v0.261.0. A claim made with no signal: see `erpnext_mcp/offline_claims.py`.
+	for key in ("offline", "claimed_at"):
+		if args.get(key):
+			inner[key] = args.get(key)
+	result = dispatch.claim_farm_task(inner)
 	data = dict(result.data)
 	data["me"] = _me_block(me)
 	data["next"] = {"tool": "start_task_via_mobile", "label": "Start", "why": "claimed"}

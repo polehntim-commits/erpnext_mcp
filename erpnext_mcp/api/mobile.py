@@ -1355,17 +1355,27 @@ def get_task(user: str, task=None, timezone=None) -> dict:
 # ── 5. claim_task ───────────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("claim_task", limit=guard.WRITE_LIMIT, mutating=True)
-def claim_task(user: str, task=None) -> dict:
+@request_receipts.idempotent("claim_task")
+def claim_task(user: str, task=None, offline=None, claimed_at=None, client_request_id=None) -> dict:
 	"""Take one task from the pool.
 
-	Never queued offline by the app, and it must not be: two workers offline
-	would both believe they own the same cabin, and the concurrent-claim limit
-	cannot be enforced from a phone.
+	v0.261.0 (Tim, 2026-10-06). App 0.48.0 queues a claim made with no signal and
+	sends it with `offline=1` and the tap as `claimed_at`, ahead of that task's
+	start and completion. THE FIRST CLAIM TO REACH THE SERVER WINS; a later one
+	is kept as a second claim, with its time and evidence, and the answer says
+	so (`claim_outcome`, `claim_conflict`). See `erpnext_mcp/offline_claims.py`.
 	"""
 	allowed = guard.require_scope(user)
 	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
 
-	result = fieldwork.claim_task_via_mobile({"task": name})
+	inner = {"task": name}
+	note = ""
+	if str(offline or "").strip().lower() in ("1", "true", "yes"):
+		inner["offline"] = 1
+		when, note = _tap_time(claimed_at)
+		if when:
+			inner["claimed_at"] = when
+	result = fieldwork.claim_task_via_mobile(inner)
 	# v0.18.2: dispatch.claim_farm_task spreads task fields at the TOP LEVEL of
 	# data (see dispatch.py `_describe_task(dict(task_doc.as_dict()))` inside
 	# `data={**_describe_task(...), "assignment": ..., ...}`), not nested under
@@ -1385,9 +1395,18 @@ def claim_task(user: str, task=None) -> dict:
 			"evidence_you_will_need",
 			"me",
 			"next",
+			"claim_outcome",
+			"claim_conflict",
 		)
 	}
-	return shape.task(task_row, result.data.get("assignment") or {})
+	payload = shape.task(task_row, result.data.get("assignment") or {})
+	payload["claim_outcome"] = result.data.get("claim_outcome") or "held"
+	if result.data.get("claim_conflict"):
+		payload["claim_conflict"] = result.data["claim_conflict"]
+	if payload["claim_outcome"] == "second":
+		# The holder, not this worker (shape.task names the caller's own second claim).
+		payload["claim_holder_name"] = result.data.get("assigned_to_name") or None
+	return _with_time_note(payload, note)
 
 
 def _tap_time(tapped_at) -> tuple[str, str]:

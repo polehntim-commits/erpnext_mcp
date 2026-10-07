@@ -1212,6 +1212,7 @@
   "time_review_days",
   "allow_list_time_reviews",
   "allow_review_punches",
+  "allow_review_claim_conflict",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9417,6 +9418,13 @@
    "fieldname": "allow_review_punches",
    "fieldtype": "Check",
    "label": "Review Punches"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.261.0. Mark a task claimed offline by two people as reviewed.",
+   "fieldname": "allow_review_claim_conflict",
+   "fieldtype": "Check",
+   "label": "Review Claim Conflict"
   },
   {
    "default": "1",

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1058 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1059 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -20991,3 +20991,15 @@ supervisor, who takes the lead), and `get_farm_task` returns `crew`. Contract:
 `create_training_session` takes `days`. `list_training_sessions` takes `view`
 (courses / days / all). `complete_training_session` closes a day without filing
 records and completes a course for whoever attended every required day.
+
+## v0.261.0 — offline claims
+
+| Tool | What it does |
+| --- | --- |
+| `review_claim_conflict` | Mark a task claimed offline by two people as reviewed (clears its compliance alert), with a note. Write |
+
+`claim_farm_task` takes `offline` and `claimed_at`. The first claim to reach the server holds the
+task; a later offline claim, or one a rule would refuse, is a **second claim**: its own assignment,
+its time and evidence kept, `claim_conflict` saying what happened, the task not moved. Start, pause,
+resume and complete work on it as on any assignment. Rule `task_claimed_offline_twice` raises the
+alert. Contract: `docs/deploy/v0.261.0_offline_claim.md`.

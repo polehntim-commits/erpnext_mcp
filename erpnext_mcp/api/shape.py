@@ -140,7 +140,10 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 		"name": row.get("name"),
 		"task_name": row.get("task_name") or row.get("name"),
 		"task_type": row.get("task_type") or "Other",
-		"state": row.get("state") or "Draft",
+		# v0.261.0. A second claim's own state: the task is somebody else's (`offline_claims`).
+		"state": (live.get("state") if bool(compat.checked(live.get("second_claim"))) else row.get("state")) or "Draft",
+		"second_claim": bool(compat.checked(live.get("second_claim"))),
+		"claim_conflict": live.get("claim_conflict") or None,
 		"urgency": row.get("urgency") or "Normal",
 		"dispatch_mode": row.get("dispatch_mode") or "Either",
 		"estimated_duration_minutes": row.get("estimated_duration_minutes"),

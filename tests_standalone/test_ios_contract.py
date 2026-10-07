@@ -329,6 +329,10 @@ class FarmTaskModel(Codable):
 		("source_alert_explanation", str, 123),
 		("assignment", str, 124),
 		("assigned_to", str, 125),
+		# app 0.48.0 / v0.261.0: a claim made offline, and whether it held.
+		("claim_outcome", str, 511),
+		("claim_conflict", str, 513),
+		("second_claim", bool, 512),
 	)
 	DATES = (("claimed_at", 126), ("started_at", 127))
 	ENUMS = (
@@ -5657,3 +5661,20 @@ for _name, _fn in vars(_ReplyMirrors).items():
 TheContractIsComplete.COVERED.update({"list_replies_to_review": "test_81", "get_reply_to_review": "test_82",
                                       "update_reply_draft": "test_83", "approve_reply": "test_84",
                                       "discard_reply": "test_85"})
+
+
+# ── v0.261.0 / app 0.48.0: a claim made offline ──────────────────────────────
+class _OfflineClaimMirror:
+	def test_86_claim_task_offline(self):
+		"""The queued claim's answer — held, with `claim_outcome` — decodes as a FarmTask."""
+		row = self.wire("claim_task", task=self.task, offline=1, claimed_at="2026-07-24 07:00:00",
+		                client_request_id="contract-86")
+		task = FarmTaskModel.decode(row, "claim_task")
+		self.assertEqual(row["claim_outcome"], "held")
+		self.assertIs(row["second_claim"], False)
+		return task
+
+
+for _name, _fn in vars(_OfflineClaimMirror).items():
+	if _name.startswith("test_"):
+		setattr(EveryMobileMethodDecodes, _name, _fn)

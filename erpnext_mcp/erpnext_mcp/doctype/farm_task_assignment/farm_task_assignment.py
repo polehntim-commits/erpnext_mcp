@@ -137,7 +137,9 @@ class FarmTaskAssignment(Document):
 		self.task_name = self.task_name or frappe.db.get_value("Farm Task", self.task, "task_name")
 		self.company = self.company or frappe.db.get_value("Farm Task", self.task, "company")
 
-		if self.state in LIVE_STATES:
+		# v0.261.0. A second claim (offline, lost the race) is never the holder and never
+		# blocks one: `erpnext_mcp/offline_claims.py`.
+		if self.state in LIVE_STATES and not int(self.get("second_claim") or 0):
 			self._refuse_a_second_live_assignment()
 		if self.state == ON_CREW:
 			self._refuse_the_same_person_twice()
@@ -168,6 +170,7 @@ class FarmTaskAssignment(Document):
 				"task": self.task,
 				"state": ("in", list(LIVE_STATES)),
 				"name": ("!=", self.name or ""),
+				**_not_second(),
 			},
 			["name", "assigned_to_name"],
 			as_dict=True,
@@ -184,11 +187,17 @@ class FarmTaskAssignment(Document):
 			)
 
 
+def _not_second() -> dict:
+	"""v0.261.0. The filter that leaves second claims out, where the column exists."""
+	meta = frappe.get_meta("Farm Task Assignment")
+	return {"second_claim": ("!=", 1)} if meta.has_field("second_claim") else {}
+
+
 def live_assignment(task: str):
-	"""The assignment currently holding this task, or None."""
+	"""The assignment currently holding this task, or None. A second claim never holds it."""
 	name = frappe.db.get_value(
 		"Farm Task Assignment",
-		{"task": task, "state": ("in", list(LIVE_STATES))},
+		{"task": task, "state": ("in", list(LIVE_STATES)), **_not_second()},
 		"name",
 	)
 	return name or None

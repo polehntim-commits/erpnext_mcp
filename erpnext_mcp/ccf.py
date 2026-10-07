@@ -840,3 +840,8 @@ _time_review.register(_sys.modules[__name__])
 from . import weather_verify as _weather_verify  # noqa: E402
 
 _weather_verify.register(_sys.modules[__name__])
+
+# v0.261.0. A task two people claimed with no signal (Tim, 2026-10-06).
+from . import offline_claims as _offline_claims  # noqa: E402
+
+_offline_claims.register(_sys.modules[__name__])

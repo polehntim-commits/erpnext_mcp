@@ -64,3 +64,17 @@ def review_punches(args: dict) -> ToolResult:
 		summary=f"{action}: {len(data['done'])} punch(es) done, {len(data['refused'])} refused",
 		docstatus_delta="0 → 0 (updated)",
 	)
+
+
+def review_claim_conflict(args: dict) -> ToolResult:
+	"""v0.261.0. A supervisor has looked at a task claimed offline by two people."""
+	from .. import offline_claims
+
+	if not offline_claims.ready():
+		raise ToolError("this site has not migrated to v0.261.0 (no offline claim columns).")
+	task = as_str(args, "task", required=True)
+	if not frappe.db.exists("Farm Task", task):
+		raise ToolError(f"no Farm Task {task!r}. Nothing was changed.")
+	data = offline_claims.review(frappe.session.user, task, as_str(args, "note"))
+	return ToolResult(data=data, summary=f"{task}: {len(data['reviewed'])} claim conflict(s) reviewed",
+	                  docstatus_delta="0 → 0 (updated)")

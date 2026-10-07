@@ -73,6 +73,7 @@ from .. import (
 	go_hold,
 	growth_stage,
 	minors,
+	offline_claims,
 	qualifications,
 	records,
 	rodent_bait,
@@ -256,6 +257,11 @@ _ASSIGNMENT_FIELDS = (
 	"farm_shift",
 	"creation",
 	"owner",
+	# v0.261.0. `offline_claims`.
+	"second_claim",
+	"claimed_offline",
+	"device_claimed_at",
+	"claim_conflict",
 )
 
 #: v0.64.0. The Farm Shift doctype, named here rather than imported from
@@ -1048,6 +1054,11 @@ def _describe_assignment(row: dict) -> dict:
 		# has two paths where it needs one, and this one decides whether a
 		# completion's evidence reached a compliance record at all.
 		"farm_shift": row.get("farm_shift") or None,
+		# v0.261.0. A claim made offline, and whether it lost the race (`offline_claims`).
+		"second_claim": bool(compat.checked(row.get("second_claim"))),
+		"claimed_offline": bool(compat.checked(row.get("claimed_offline"))),
+		"device_claimed_at": row.get("device_claimed_at") or None,
+		"claim_conflict": row.get("claim_conflict") or None,
 	}
 
 
@@ -1168,10 +1179,24 @@ def _assignment_for(args: dict, task_name: str = "", or_completed: bool = False)
 	if explicit:
 		if not frappe.db.exists(FARM_TASK_ASSIGNMENT, explicit):
 			raise ToolError(f"no Farm Task Assignment called {explicit!r} on this site. Nothing was changed.")
-		return _assignment_row(explicit)
+		row = _assignment_row(explicit)
+		# v0.261.0. A phone that saved the holder's assignment before its own offline claim
+		# synced names the wrong row; the caller's own second claim on the task is theirs.
+		worker = as_str(args, "worker_id")
+		if worker and row.get("assigned_to") != worker:
+			own = _own_assignment(str(row.get("task") or ""), worker, or_completed)
+			if own and offline_claims.is_second(_assignment_row(own)):
+				return _assignment_row(own)
+		return row
 
 	task = task_name or as_str(args, "task", required=True)
-	name = live_assignment(task) or (_last_completion(task) if or_completed else "")
+	# v0.261.0. A task can carry a second claim (`offline_claims`), so the caller's OWN
+	# assignment is found first; anybody else falls back to the holder's, as before.
+	name = (
+		_own_assignment(task, as_str(args, "worker_id"), or_completed)
+		or live_assignment(task)
+		or (_last_completion(task) if or_completed else "")
+	)
 	if not name:
 		raise ToolError(
 			f"{task} has nobody holding it, so there is nothing to start, complete or reject. It has "
@@ -1179,6 +1204,22 @@ def _assignment_for(args: dict, task_name: str = "", or_completed: bool = False)
 			"was changed."
 		)
 	return _assignment_row(name)
+
+
+def _own_assignment(task: str, worker: str, or_completed: bool) -> str:
+	"""This worker's live assignment on the task, else their finished one, else ""."""
+	if not worker:
+		return ""
+	states = [CLAIMED, IN_PROGRESS, PAUSED] + ([COMPLETED] if or_completed else [])
+	return str(
+		frappe.db.get_value(
+			FARM_TASK_ASSIGNMENT,
+			{"task": task, "assigned_to": worker, "state": ("in", states)},
+			"name",
+			order_by="creation desc",
+		)
+		or ""
+	)
 
 
 def _set_task_state(task: str, state: str, **fields) -> None:
@@ -2168,6 +2209,41 @@ def claim_farm_task(args: dict) -> ToolResult:
 	row = task_row(row["name"])
 	worker = _worker(args)
 	worker_name = _worker_name(worker, as_str(args, "worker_name"))
+	# v0.261.0. A CLAIM MADE WITH NO SIGNAL. The first to reach the server wins; a claim
+	# that cannot hold the task is kept as a second claim with its reason, never refused.
+	if as_bool(args, "offline") and offline_claims.ready():
+		try:
+			return _claim_checks_then_hold(row, args, worker, worker_name, offline=True)
+		except ToolError as exc:
+			return _second_claim_result(row, worker, worker_name, as_str(args, "claimed_at"), str(exc))
+	return _claim_checks_then_hold(row, args, worker, worker_name, offline=False)
+
+
+def _second_claim_result(row: dict, worker: str, worker_name: str, claimed_at: str, refusal: str) -> ToolResult:
+	"""The late or refused offline claim, recorded as its own assignment."""
+	task_doc = frappe.get_doc(FARM_TASK, row["name"])
+	held_by = str(task_doc.get("assigned_to") or "")
+	holder_name = str(task_doc.get("assigned_to_name") or "")
+	if held_by == worker:
+		raise ToolError(refusal)
+	# Held by somebody else (even finished): the plain conflict. Nobody holds it: the rule's own words.
+	reason = "" if held_by else refusal.replace(" Nothing was changed.", "")
+	assignment = offline_claims.record_second_claim(task_doc, worker, worker_name, claimed_at, holder_name, reason)
+	return ToolResult(
+		data={
+			**_describe_task(dict(task_doc.as_dict())),
+			"assignment": _describe_assignment(assignment),
+			"claim_outcome": "second",
+			"claim_conflict": assignment.get("claim_conflict"),
+		},
+		summary=f"{worker_name}'s offline claim on {row['name']} recorded as a second claim",
+		docstatus_delta="(task unchanged)",
+	)
+
+
+def _claim_checks_then_hold(row: dict, args: dict, worker: str, worker_name: str, offline: bool) -> ToolResult:
+	"""The online claim's rules, then the hold. `offline` lifts only the hoarding limit
+	(a phone cannot know what its owner's other phone took) and stamps the device time."""
 
 	if row["state"] != AVAILABLE:
 		if row["state"] == DRAFT:
@@ -2207,7 +2283,7 @@ def claim_farm_task(args: dict) -> ToolResult:
 		)
 
 	holding = concurrent_claims(worker)
-	if len(holding) >= MAX_CONCURRENT_CLAIMS:
+	if len(holding) >= MAX_CONCURRENT_CLAIMS and not offline:
 		raise ToolError(
 			f"{worker_name} is already holding {len(holding)} task(s): {', '.join(sorted(holding))}. "
 			f"The limit is {MAX_CONCURRENT_CLAIMS} at once. This is a hoarding limit and not a "
@@ -2222,12 +2298,20 @@ def claim_farm_task(args: dict) -> ToolResult:
 	task_doc.state = CLAIMED
 	task_doc.save(ignore_permissions=True)
 	assignment = _open_assignment(task_doc, worker, worker_name, dispatched=False)
+	if offline:
+		frappe.db.set_value(
+			FARM_TASK_ASSIGNMENT,
+			assignment["name"],
+			{"claimed_offline": 1, "device_claimed_at": as_str(args, "claimed_at") or None,
+			 **({"claimed_at": as_str(args, "claimed_at")} if as_str(args, "claimed_at") else {})},
+		)
 
 	claimed = {
 		**_describe_task(dict(task_doc.as_dict())),
 		"assignment": assignment,
 		"concurrent_claims": len(holding) + 1,
-		"claims_remaining": MAX_CONCURRENT_CLAIMS - len(holding) - 1,
+		"claims_remaining": max(MAX_CONCURRENT_CLAIMS - len(holding) - 1, 0),
+		"claim_outcome": "held",
 		"evidence_you_will_need": _contract_sentence(evidence_contract(task_doc.evidence_required)),
 	}
 	# v0.79.0. THE HINT, NOT THE MERGE. A claim is the moment somebody has
@@ -2273,10 +2357,13 @@ def start_farm_task(args: dict) -> ToolResult:
 		)
 
 	task = task_row(assignment["task"])
+	# v0.261.0. A second claim records work that already happened; it is gated by nothing
+	# on the task and moves nothing on it (`offline_claims`).
+	second = offline_claims.is_second(assignment)
 
 	# v0.236.0. BLOCKED BY: an unfinished blocker stops the start; a cancelled or rejected one
 	# no longer does, and the start says so (decision 30).
-	waiting_on, released = task_dates.blockers(assignment["task"])
+	waiting_on, released = ([], []) if second else task_dates.blockers(assignment["task"])
 	if waiting_on:
 		raise ToolError(
 			f"{assignment['task']} is waiting on "
@@ -2288,25 +2375,26 @@ def start_farm_task(args: dict) -> ToolResult:
 	# unless a supervisor overrode it today; an Advisory one is said and the work goes ahead
 	# (decisions 16, 17, 39). Nothing here touches time already worked.
 	try:
-		go_hold_note = go_hold.at_start(assignment["task"])
+		go_hold_note = None if second else go_hold.at_start(assignment["task"])
 	except ValueError as exc:
 		raise ToolError(f"{exc} Nothing was changed.") from None
 
 	# v0.194.0. A HARVEST TASK TAKEN BEFORE A SPRAY IS NOT CLEAR AFTER IT. The
 	# worker's door, so no override here — the refusal names assign_farm_task,
 	# where a foreman re-sends it with a reason if the stamped date is wrong.
-	_refuse_harvest_inside_phi(
-		task, args, "started", windows=_phi_sprayed_since(task, str(assignment.get("claimed_at") or ""))
-	)
-	# v0.203.0. Rodent bait: the applicator qualification, and at an occupied
-	# place the English/Spanish occupant notice done first. Both the MCP tool and
-	# the phone start here. docs/design/rodent_bait_program.md §5–§6.
-	qualifications.refuse_unqualified(task, str(assignment.get("assigned_to") or ""), "started")
-	rodent_bait.refuse_start_without_notice(task)
-	# v0.204.0. A `before_start` approval step (e.g. the Farm Manager's sign-off
-	# on interior bait) must be signed first.
-	task_forms.refuse_start_while_unapproved(task)
-	task_forms.stamp_label(task)
+	if not second:
+		_refuse_harvest_inside_phi(
+			task, args, "started", windows=_phi_sprayed_since(task, str(assignment.get("claimed_at") or ""))
+		)
+		# v0.203.0. Rodent bait: the applicator qualification, and at an occupied
+		# place the English/Spanish occupant notice done first. Both the MCP tool and
+		# the phone start here. docs/design/rodent_bait_program.md §5–§6.
+		qualifications.refuse_unqualified(task, str(assignment.get("assigned_to") or ""), "started")
+		rodent_bait.refuse_start_without_notice(task)
+		# v0.204.0. A `before_start` approval step (e.g. the Farm Manager's sign-off
+		# on interior bait) must be signed first.
+		task_forms.refuse_start_while_unapproved(task)
+		task_forms.stamp_label(task)
 
 	farm_shift = _shift_argument(args, str(task.get("company") or ""))
 
@@ -2346,7 +2434,8 @@ def start_farm_task(args: dict) -> ToolResult:
 		# leaving it unlinked and saying so.
 		doc.farm_shift = _open_shift_for(doc.assigned_to, str(task.get("company") or "")) or None
 	doc.save(ignore_permissions=True)
-	_set_task_state(assignment["task"], IN_PROGRESS)
+	if not second:
+		_set_task_state(assignment["task"], IN_PROGRESS)
 
 	started = {
 		"assignment": _describe_assignment(dict(doc.as_dict())),
@@ -2433,6 +2522,22 @@ def complete_farm_task(args: dict) -> ToolResult:
 	assignment = _assignment_for(args, or_completed=True)
 	task = task_row(assignment["task"])
 	worker = _worker(args)
+	# v0.261.0. A second claim finishes on its own row: minutes, words and files, and nothing
+	# of the task's (its evidence contract, record, stock and windows are the holder's).
+	if offline_claims.is_second(assignment):
+		if worker and assignment.get("assigned_to") != worker:
+			raise ToolError(f"{assignment['name']} is not {worker}'s. Nothing was changed.")
+		done = offline_claims.complete_second(assignment, args)
+		return ToolResult(
+			data={
+				"assignment": _describe_assignment(done),
+				"task": _describe_task(task_row(assignment["task"])),
+				"claim_outcome": "second",
+				"claim_conflict": done.get("claim_conflict"),
+			},
+			summary=f"{done.get('assigned_to_name')} finished their second claim on {assignment['task']}",
+			docstatus_delta="(task unchanged)",
+		)
 
 	# A PARENT DOES NOT CLOSE WHILE A STEP IS LIVE. This is what makes a
 	# multi-day investigation survive an evening: without it the first person to
@@ -6138,7 +6243,8 @@ def _pause_assignment(name: str, reason: str, when: str, automatic: bool) -> dic
 	doc.auto_paused = 1 if automatic else 0
 	doc.actual_duration_minutes = active_minutes(doc)
 	doc.save(ignore_permissions=True)
-	_set_task_state(doc.task, PAUSED)
+	if not offline_claims.is_second(doc):
+		_set_task_state(doc.task, PAUSED)
 	return {
 		"assignment": doc.name,
 		"task": doc.task,
@@ -6233,8 +6339,10 @@ def resume_farm_task(args: dict) -> ToolResult:
 	holder = str(assignment.get("assigned_to") or "")
 	# v0.203.0. Resuming is starting: the same rodent bait refusals.
 	resumed_task = task_row(assignment["task"])
-	qualifications.refuse_unqualified(resumed_task, holder, "resumed")
-	rodent_bait.refuse_start_without_notice(resumed_task)
+	second = offline_claims.is_second(assignment)
+	if not second:
+		qualifications.refuse_unqualified(resumed_task, holder, "resumed")
+		rodent_bait.refuse_start_without_notice(resumed_task)
 	# RESUMING IS STARTING, so the same exclusivity applies: whatever this worker
 	# had running is stood down first. Without this a resume would be the one door
 	# left that could put somebody In-Progress on two jobs at once.
@@ -6252,7 +6360,8 @@ def resume_farm_task(args: dict) -> ToolResult:
 	doc.auto_paused = 0
 	doc.actual_duration_minutes = active_minutes(doc)
 	doc.save(ignore_permissions=True)
-	_set_task_state(assignment["task"], IN_PROGRESS)
+	if not second:
+		_set_task_state(assignment["task"], IN_PROGRESS)
 
 	data = {
 		"assignment": doc.name,
