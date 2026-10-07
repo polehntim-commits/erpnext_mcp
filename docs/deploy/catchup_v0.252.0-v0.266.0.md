@@ -1,10 +1,10 @@
-**Deploy: v0.252.0 → v0.264.0 (OML today) — one build, one migrate; FarmOps 0.50.0 (build 45)**
+**Deploy: v0.252.0 → v0.266.0 (OML today) — one build, one migrate; FarmOps 0.51.0 (build 46)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.264.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.266.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`e400b96`** (`__version__ = "0.264.0"`).
-- **App**: fafo_ios main **`26d1d03`** — FarmOps **0.50.0 (build 45)**, scheme **FarmOps**.
+- **Server**: erpnext_mcp main **`c1de899`** (`__version__ = "0.266.0"`).
+- **App**: fafo_ios main **`6d7e800`** — FarmOps **0.51.0 (build 46)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
 
@@ -22,6 +22,9 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.262.0 | The IPM relationship graph ("mind map"): editable nodes and relationships seeded from the reference (106 / 157), vertebrates with exact MBTA status, twelve sweet-cherry starter thresholds seeded OFF and Proposed, lowest-impact-first options, phone tile IPM map, MCP read / write (writes OFF). Pairs with app 0.49.0. |
 | v0.263.0 | The IPM Map in the Desk (Crop Protection → IPM Map): same graph and same edit rule as the phone; filters, side panel with observations, PNG / SVG / CSV export; library vendored (no CDN). |
 | v0.264.0 | Pest degree days per block on the farm's own weather (Open-Meteo): models and block offsets (slope / aspect / elevation) as config a person publishes, calibration that only drafts; shown in the graph, threshold checks, Desk map, an opt-in map layer, Go / Hold presets (OFF). 4 of 28 pests have models, all marked verify. Pairs with app 0.50.0. |
+| v0.264.1 | Tim's harvest windows (Mill Creek 24, 40 Acre 6) as calibration seed data; `propose_harvest_calibration` (off) drafts DD calibrations from them — nothing applied. |
+| v0.265.0 | USDA AMS market prices: shipping point (primary), terminal (context, the cost of market access), movement. Idempotent Price Points, no carry-forward, gaps and format changes flagged not dropped. Any commodity as config: sweet cherries and cantaloupe published, ten tree fruit / melons seeded as drafts; the AMS catalog browsable, drafts built from observed data. Fetch once per report, fan out. Daily pull 05:30 only once the key is set. Phone market card and chart routes; MCP reads, writes OFF. |
+| v0.266.0 | Desk **Market Prices** page (candles + volume, season over season, bars, overlays; vendored chart library, no CDN), the market in the pro forma's breakeven sensitivity, phone tile **Market prices** (app 0.51.0+). |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -30,27 +33,30 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | app 0.48.0 | Claim a task with no signal ("Claimed on phone — will confirm when synced"); told, by name, when someone else's claim reached the farm first — your time and photos are kept. |
 | app 0.49.0 | IPM map on the phone: the graph, node detail, log a pest (threshold status, lowest-impact option first), add / edit relationships for managers; works offline. |
 | app 0.50.0 | Degree days per block on the IPM map: next-event dates on pests, a Degree days screen, the offset and its reasons. |
+| app 0.51.0 | Market card ("Should I be picking today?") and a stock-style price chart; works offline from the saved copy; no quote never shows an old price. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.264.0`. Push fafo_ios main and archive
-FarmOps 0.50.0 (build 45).
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.266.0`. Push fafo_ios main and archive
+FarmOps 0.51.0 (build 46).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." and `0.264.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew.", and `0.266.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.264.0; the asset map's build stamp 0.264.0.
+1. `get_server_status`: 0.266.0; the asset map's build stamp 0.266.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
 3. Phone 0.45.0 in Spanish: claiming a task somebody else is doing reads "<nombre> ya está haciendo FT-…".
 4. A receipt photo the phone cannot read is filed (Needs Review), not refused with "extracted_fields is required".
 5. Put a well log on a well (`v0.255.0_asset_library.md` §3) and scan its tag: the log is under Documentation.
-6. Afterwards: resolve AFB-2026-00014 (weather-based tasks and holding periods) — it is v0.239.0–v0.253.0.
+6. Desk → Market & Sales → **Market Prices** opens (empty until the USDA key is set and a backfill runs —
+   `v0.265.0_market_prices.md`). Market Commodity: sweet_cherries and cantaloupe Published, ten Drafts.
+7. Afterwards: resolve AFB-2026-00014 (weather-based tasks and holding periods) — it is v0.239.0–v0.253.0.
 
 **4. Rollback**
 
