@@ -163,6 +163,111 @@ def _block(body: dict, key: str) -> dict:
 	return value if isinstance(value, dict) else {}
 
 
+# ── the kit's two words (v0.268.1; kit 2026-10-07.8, spec §6) ───────────────
+#: `result` / `job` says whether the JOB ran (OK / FAIL); `check` says whether the RESTORE VERIFIED
+#: (Pass / Partial / Fail). Older kits wrote only `result` — on a receipt that was already the check.
+ARCHIVE_TEST_MAX_DAYS = 35
+
+
+def check_of(block: dict) -> str:
+	"""Pass / Partial / Fail from `check`, else an older kit's `result` when it is one of those words."""
+	check = str(block.get("check") or "").strip()
+	if check:
+		return check
+	result = str(block.get("result") or "").strip()
+	return result if result.lower() in ("pass", "partial", "fail") else ""
+
+
+def job_of(block: dict) -> str:
+	"""OK / FAIL: `job` (kit .8 receipts), else `result` when it is a job word."""
+	job = str(block.get("job") or "").strip()
+	if job:
+		return job
+	result = str(block.get("result") or "").strip()
+	return result if result.upper() in ("OK", "FAIL") else ""
+
+
+def _file_pairs(text) -> list:
+	"""`restored/archive` pairs from `231/230,1/1` (restored first, as the kit writes them)."""
+	out = []
+	for part in str(text or "").split(","):
+		if "/" not in part:
+			continue
+		left, right = part.split("/", 1)
+		restored, archive = _number(left.strip()), _number(right.strip())
+		if restored is not None and archive is not None:
+			out.append((restored, archive))
+	return out
+
+
+def files_missing(block: dict):
+	"""Files in the archive the restore did not produce. `files_missing` (kit ≥ .7), else from the counts."""
+	if block.get("files_missing") not in (None, ""):
+		return int(_number(block.get("files_missing")) or 0)
+	pairs = _file_pairs(block.get("files"))
+	return int(sum(max(0.0, archive - restored) for restored, archive in pairs)) if pairs else None
+
+
+def files_extra(block: dict):
+	"""Files the restore produced beyond the archive — reported, never a failure."""
+	if block.get("files_extra") not in (None, ""):
+		return int(_number(block.get("files_extra")) or 0)
+	pairs = _file_pairs(block.get("files"))
+	return int(sum(max(0.0, restored - archive) for restored, archive in pairs)) if pairs else None
+
+
+def _clean_partial(block: dict) -> bool:
+	"""A Partial nobody lost anything in: counts match, nothing failed to decrypt, no file missing."""
+	return (
+		check_of(block).lower() == "partial"
+		and _yes(block.get("counts_ok"))
+		and int(_number(block.get("decrypt_fail")) or 0) == 0
+		and files_missing(block) in (0, None)
+		and (files_missing(block) == 0 or not block.get("files"))
+	)
+
+
+def remote_restore_expected(body: dict) -> bool:
+	"""`roles.remote_restore_expected` (kit .8). False where no peer restores this box by design
+	(umbrel.local: OML holds no standby) — its archive tests are the restore evidence. Default true."""
+	roles = _block(body, "roles")
+	return _yes(roles.get("remote_restore_expected")) if "remote_restore_expected" in roles else True
+
+
+def remote_restore_limit(body: dict, stale_hours: float) -> float:
+	"""`roles.remote_restore_max_hours` (198 on OML: the peer's standby is weekly), else `stale_hours`."""
+	value = _number(_block(body, "roles").get("remote_restore_max_hours"))
+	return value if value and value > 0 else stale_hours
+
+
+def standby_limit(body: dict, stale_hours: float) -> float:
+	"""The standby's cadence (`roles.standby_cadence`, else `standby_of_peer.every`): weekly → 7 days + stale_hours."""
+	roles = _block(body, "roles")
+	explicit = _number(roles.get("standby_max_hours"))
+	if explicit and explicit > 0:
+		return explicit
+	cadence = str(roles.get("standby_cadence") or _block(body, "standby_of_peer").get("every") or "").lower()
+	return 7 * 24 + stale_hours if cadence == "weekly" else stale_hours
+
+
+def archive_test_max_days(body: dict) -> float:
+	value = _number(_block(body, "roles").get("archive_test_max_days"))
+	return value if value and value > 0 else ARCHIVE_TEST_MAX_DAYS
+
+
+def archive_evidence(body: dict, now=None) -> dict:
+	"""Whether this box's OWN archive test is the restore evidence, and whether it is a Pass in time."""
+	archive = _block(body, "last_archive_test")
+	limit = archive_test_max_days(body)
+	age = hours_since(archive.get("at"), now)
+	return {
+		"at": archive.get("at") or None,
+		"check": check_of(archive) or None,
+		"max_days": limit,
+		"passing": bool(archive) and check_of(archive) == "Pass" and age is not None and age <= limit * 24,
+	}
+
+
 # ── alerts ──────────────────────────────────────────────────────────────────
 #: The kit's own alert codes about holding a standby of the peer.
 STANDBY_CODES = frozenset({"STANDBY_FAILED", "STANDBY_STALE", "STANDBY_CHECK_NOT_PASS"})
@@ -184,9 +289,9 @@ def holds_standby(body: dict) -> bool:
 	return bool(standby.get("at") or standby.get("result"))
 
 
-def _alert(code: str, message: str, box: str = "") -> dict:
+def _alert(code: str, message: str, box: str = "", level: str = "") -> dict:
 	return {
-		"level": CRITICAL if code in CRITICAL_CODES else WARNING,
+		"level": level or (CRITICAL if code in CRITICAL_CODES else WARNING),
 		"code": code,
 		"box": box or None,
 		"message": message,
@@ -256,7 +361,24 @@ def box_alerts(body: dict, stale_hours: float, now=None) -> list:
 			)
 
 		restore = _block(body, "remote_restore_of_my_data")
-		if not restore:
+		if not remote_restore_expected(body):
+			# v0.268.1. No peer restores this box by design: its own archive test is the evidence.
+			evidence = archive_evidence(body, now)
+			if not evidence["passing"]:
+				out.append(
+					_alert(
+						"ARCHIVE_TEST_DUE",
+						f"No peer restores {box}'s data by design, so its archive test is the restore evidence — and "
+						+ (
+							f"the last one was {evidence['check'] or 'not reported'} on {evidence['at']}"
+							if evidence["at"]
+							else "there is none on record"
+						)
+						+ f" (needs a Pass within {evidence['max_days']:g} days).",
+						box,
+					)
+				)
+		elif not restore:
 			out.append(
 				_alert(
 					"NO_REMOTE_RESTORE",
@@ -265,23 +387,34 @@ def box_alerts(body: dict, stale_hours: float, now=None) -> list:
 				)
 			)
 		else:
+			limit = remote_restore_limit(body, stale_hours)
 			restore_age = hours_since(restore.get("at"), now)
-			if restore_age is None or restore_age > stale_hours:
+			if restore_age is None or restore_age > limit:
 				out.append(
 					_alert(
 						"REMOTE_RESTORE_STALE",
 						f"The last restore of {box}'s data on {restore.get('restored_by') or 'the peer'} is "
-						+ (f"{restore_age} h old." if restore_age is not None else "undated."),
+						+ (f"{restore_age} h old" if restore_age is not None else "undated")
+						+ f" (limit {limit:g} h).",
 						box,
 					)
 				)
-			if str(restore.get("result") or "") != "Pass":
+			check = check_of(restore)
+			if check != "Pass":
+				missing, extra = files_missing(restore), files_extra(restore)
+				clean = _clean_partial(restore)
 				out.append(
 					_alert(
 						"REMOTE_RESTORE_NOT_PASS",
 						f"The last restore of {box}'s data on {restore.get('restored_by') or 'the peer'} was "
-						f"{restore.get('result') or 'not reported'}, not Pass.",
+						f"{check or 'not reported'}, not Pass"
+						+ (
+							f" — nothing missing{f', {extra} extra file(s)' if extra else ''}, counts match, no decrypt failures."
+							if clean
+							else (f" — {missing} file(s) missing." if missing else ".")
+						),
 						box,
+						WARNING if clean else CRITICAL,
 					)
 				)
 
@@ -296,8 +429,9 @@ def box_alerts(body: dict, stale_hours: float, now=None) -> list:
 
 	standby = _block(body, "standby_of_peer")
 	if holds_standby(body):
-		result = str(standby.get("result") or "")
-		if result.upper() == "FAIL":
+		result = job_of(standby) or str(standby.get("result") or "")
+		check = check_of(standby)
+		if result.upper() == "FAIL" or check == "Fail":
 			out.append(
 				_alert(
 					"STANDBY_FAILED",
@@ -306,16 +440,27 @@ def box_alerts(body: dict, stale_hours: float, now=None) -> list:
 				)
 			)
 		elif standby:
+			limit = standby_limit(body, stale_hours)
 			standby_age = hours_since(standby.get("at"), now)
-			if standby_age is None or standby_age > stale_hours:
+			if standby_age is None or standby_age > limit:
 				out.append(
-					_alert("STANDBY_STALE", f"{box}'s standby copy of its peer is {standby_age} h old.", box)
+					_alert(
+						"STANDBY_STALE",
+						f"{box}'s standby copy of its peer is {standby_age} h old (limit {limit:g} h).",
+						box,
+					)
 				)
-			if result != "Pass":
+			if check != "Pass":
+				extra = files_extra(standby)
 				out.append(
 					_alert(
 						"STANDBY_CHECK_NOT_PASS",
-						f"{box}'s standby restore of its peer was {result or 'not reported'}.",
+						f"{box}'s standby restore of its peer checked {check or 'not reported'}, not Pass"
+						+ (
+							f" — nothing missing{f', {extra} extra file(s)' if extra else ''}, counts match, no decrypt failures."
+							if _clean_partial(standby)
+							else "."
+						),
 						box,
 					)
 				)
@@ -398,9 +543,12 @@ def describe_box(body: dict, stale_hours: float, now=None) -> dict:
 				"by": restore.get("restored_by") or None,
 				"at": restore.get("at") or None,
 				"set": restore.get("set") or None,
-				"result": restore.get("result") or None,
+				"result": check_of(restore) or restore.get("result") or None,
+				"job": job_of(restore) or None,
 				"counts_ok": _yes(restore.get("counts_ok")),
-				"files_ok": _files_ok(restore.get("files")),
+				"files_ok": _files_ok(restore),
+				"files_missing": files_missing(restore),
+				"files_extra": files_extra(restore),
 				"decrypt_failures": int(_number(restore.get("decrypt_fail")) or 0),
 				"duration_minutes": math.ceil(duration / 60.0) if duration else None,
 			}
@@ -411,7 +559,8 @@ def describe_box(body: dict, stale_hours: float, now=None) -> dict:
 			{
 				"at": archive.get("at") or None,
 				"no_key_test": archive.get("no_key_test") or None,
-				"result": archive.get("check") or archive.get("result") or None,
+				"source": archive.get("source") or None,
+				"result": check_of(archive) or archive.get("result") or None,
 			}
 			if archive
 			else None
@@ -420,12 +569,22 @@ def describe_box(body: dict, stale_hours: float, now=None) -> dict:
 			{
 				"of": body.get("peer") or None,
 				"at": standby.get("at") or None,
-				"result": standby.get("result") or None,
+				"result": check_of(standby) or standby.get("result") or None,
+				"job": job_of(standby) or None,
+				"every": _block(body, "roles").get("standby_cadence") or standby.get("every") or None,
+				"counts_ok": _yes(standby.get("counts_ok")) if standby.get("counts_ok") is not None else None,
+				"files_missing": files_missing(standby),
+				"files_extra": files_extra(standby),
+				"decrypt_failures": int(_number(standby.get("decrypt_fail")) or 0),
 			}
 			if standby and holds_standby(body)
 			else None
 		),
 		"holds_standby": holds_standby(body),
+		# v0.268.1. What this box's restore evidence is expected to be (kit .8 roles).
+		"remote_restore_expected": remote_restore_expected(body),
+		"remote_restore_max_hours": remote_restore_limit(body, stale_hours),
+		"archive_evidence": None if remote_restore_expected(body) else archive_evidence(body, now),
 		"promoted": body.get("promoted") or None,
 		"fenced": bool(body.get("fenced")),
 		"alerts": box_alerts(body, stale_hours, now),
@@ -433,12 +592,13 @@ def describe_box(body: dict, stale_hours: float, now=None) -> dict:
 	return out
 
 
-def _files_ok(text) -> bool | None:
-	"""`812/812,1204/1204` → every pair matches. None when there is nothing to judge."""
-	pairs = [part for part in str(text or "").split(",") if "/" in part]
-	if not pairs:
-		return None
-	return all(part.split("/")[0].strip() == part.split("/")[1].strip() for part in pairs)
+def _files_ok(block) -> bool | None:
+	"""v0.268.1: NOTHING MISSING, not equal counts — a restore with extra files and none missing is not a file
+	failure. `files_missing` (kit ≥ .7) when present, else from the `restored/archive` pairs. None: nothing to judge."""
+	if not isinstance(block, dict):
+		block = {"files": block}
+	missing = files_missing(block)
+	return None if missing is None else missing == 0
 
 
 def _records(company: str) -> dict:
@@ -512,7 +672,18 @@ def status(box: str = "", stale_hours: float = STALE_HOURS, include_raw: bool = 
 				alerts.append(alert)
 	company = _company()
 	records = _records(company)
+	# v0.268.1. A box whose evidence is its own archive test (no peer restores it by design) is judged on that
+	# test when the register has nothing in the window; the register's gap is named, not hidden.
+	file_evidence = [
+		{"box": b.get("box"), **b["archive_evidence"]}
+		for b in boxes
+		if b.get("archive_evidence") and b["archive_evidence"]["passing"]
+	]
 	if not records["within_window"]:
+		records["why_not"] = ingest_blocker()
+	if file_evidence:
+		records["file_evidence"] = file_evidence
+	if not records["within_window"] and not file_evidence:
 		alerts.append(
 			_alert(
 				"NO_PASSING_TEST_IN_WINDOW",
@@ -647,6 +818,20 @@ def _result(value) -> str:
 	return "Partial" if text == "partial" else "Fail"
 
 
+def ingest_blocker() -> str | None:
+	"""v0.268.1. Why the hourly ingest would write nothing on this site, or None. Reads only."""
+	if not compat.doctype_exists(BACKUP) or not compat.has_field(BACKUP, "ingest_key"):
+		return "the Backup Record ingest columns are missing — run `bench migrate`."
+	files, _skipped = read_files()
+	if not files:
+		return "no status file to ingest."
+	if not own_box(files):
+		return f"{len(files)} status files and no `{FLAG_BOX}` flag saying which box this site is."
+	if not _company():
+		return f"no company to file Backup Records under — set the `{FLAG_COMPANY}` flag (this site has several)."
+	return None
+
+
 def run_ingest() -> dict:
 	"""Status files → Backup Records. Idempotent. Raises nothing a caller must catch for a file."""
 	report = {"box": None, "company": None, "created": [], "tests": [], "skipped": [], "notes": []}
@@ -756,7 +941,7 @@ def run_ingest() -> dict:
 			wrote = _apply_test(
 				record,
 				f"{by}|{restore['at']}|restore",
-				_result(restore.get("result")),
+				_result(check_of(restore) or restore.get("result")),
 				restore.get("at"),
 				math.ceil(duration / 60.0) if duration else None,
 				f"By erp-backup@{by}\n"
@@ -772,6 +957,37 @@ def run_ingest() -> dict:
 			report["notes"].append(
 				f"a restore of set {restore['set']} was reported, and there is no replica record for that set yet."
 			)
+
+	# 3b. v0.268.1. Our OWN archive test (source = own): the restore evidence on a box nobody restores by design
+	# (umbrel.local). Filed on our own record for that set, else our latest own record.
+	mine = _block(body, "last_archive_test")
+	if str(mine.get("source") or "") == "own" and mine.get("at"):
+		target = str(mine.get("set") or "")
+		record = _by_key(f"{box}|{target}|own") if target else ""
+		if not record:
+			latest = frappe.db.get_all(
+				BACKUP,
+				filters={"company": company, "ingest_key": ("like", f"{box}|%|own")},
+				pluck="name",
+				order_by="started_at desc",
+				limit=1,
+			)
+			record = str(latest[0]) if latest else ""
+		if record:
+			duration = _number(mine.get("duration_s"))
+			verdict = _result(check_of(mine) or mine.get("result"))
+			if _apply_test(
+				record,
+				f"{box}|{mine['at']}|archive-own",
+				verdict,
+				mine.get("at"),
+				math.ceil(duration / 60.0) if duration else None,
+				f"By erp-backup@{box}\nfull restore of its own encrypted archive + no-key test={mine.get('no_key_test') or '?'}; "
+				f"files {mine.get('files') or '?'}; counts_ok {mine.get('counts_ok') or '?'}",
+			):
+				report["tests"].append({"record": record, "kind": "archive-own", "result": verdict})
+		else:
+			report["notes"].append(f"an own archive test of set {target or '?'} was reported, and there is no own backup record yet.")
 
 	# 4. A full restore of OUR archive, run on the peer (its file, source = peer).
 	for other, theirs in files.items():

@@ -29319,7 +29319,9 @@ TOOLS = {
 		"v0.222.1: a box whose role has no standby (`roles.standby` false — OML) is never judged on "
 		"one (`holds_standby`). `peers_not_reported` names a peer whose own file is not on this site: "
 		"each box's kit copies only its own status into its own container, so a peer's backups are "
-		"read with get_backup_status on the peer's site.",
+		"read with get_backup_status on the peer's site. v0.268.1 (kit 2026-10-07.8): a restore's verdict is its `check` (Pass / Partial / Fail), "
+		"not the job's OK; files are judged by nothing missing; a box no peer restores by design (umbrel.local) "
+		"is judged on its own archive test, and its Partial-with-nothing-lost is a warning.",
 		{
 			"box": _field(_STRING, "One box (e.g. 'oml'). Default: every status file present."),
 			"stale_hours": _field(_NUMBER, "How old is too old. Default 30."),

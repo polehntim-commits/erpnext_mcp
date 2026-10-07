@@ -169,11 +169,17 @@ class TheTool(BackupStatusCase):
 		self.write(body)
 		codes = self.codes(self.tool_data("get_backup_status", {}))
 		self.assertTrue({"NO_REMOTE_RESTORE", "BACKUP_UNENCRYPTED"} <= codes)
+		# v0.268.1: a Partial with nothing missing, counts matching and no decrypt failure is a WARNING ...
 		body = all_ok()
 		body["remote_restore_of_my_data"]["result"] = "Partial"
 		self.write(body)
 		answer = self.tool_data("get_backup_status", {})
 		self.assertIn("REMOTE_RESTORE_NOT_PASS", self.codes(answer))
+		self.assertEqual(answer["overall"], "warning")
+		# ... and a missing file keeps it CRITICAL.
+		body["remote_restore_of_my_data"]["files"] = "811/812,1204/1204"
+		self.write(body)
+		answer = self.tool_data("get_backup_status", {})
 		self.assertEqual(answer["overall"], "critical")
 
 	def test_promoted_and_fenced_and_the_kits_own_alerts(self):
@@ -202,10 +208,8 @@ class TheTool(BackupStatusCase):
 		codes = self.codes(answer)
 		self.assertTrue({"STANDBY_CHECK_NOT_PASS", "PEER_COPIES_BAD"} <= codes)
 		self.assertNotIn("BACKUP_STALE", codes, "a box that does not send is not judged on its own backup")
-		self.assertEqual(
-			answer["boxes"][0]["standby_held_here"],
-			{"of": "oml", "at": body["standby_of_peer"]["at"], "result": "Partial"},
-		)
+		held = answer["boxes"][0]["standby_held_here"]
+		self.assertEqual((held["of"], held["at"], held["result"]), ("oml", body["standby_of_peer"]["at"], "Partial"))
 
 	def test_a_box_without_the_standby_role_is_not_judged_on_one(self):
 		"""v0.222.1. OML: STANDBY_ENABLED=0, roles.standby false, an empty standby block."""
@@ -375,3 +379,123 @@ class Ingest(BackupStatusCase):
 		frappe.set_user("Administrator")
 		self.assertEqual(len(backup_status.ingest()["created"]), 2)
 		self.assertIn("erpnext_mcp.backup_status.ingest_scheduled", hooks.scheduler_events["hourly"])
+
+
+# ── v0.268.1: kit 2026-10-07.8 vocabulary (`job` / `check`), files by "nothing missing", expectations ───────────
+def umbrellocal(kit="2026-10-07.8") -> dict:
+	"""umbrel.local as its live file reads (2026-10-07): standby of OML weekly, Partial with one EXTRA file,
+	no peer restoring it, its own archive test as the evidence. `kit` .6 = the old format (no roles flags)."""
+	body = all_ok(box="umbrellocal", peer="oml", set_name="2026-10-07_0301")
+	body["kit_version"] = kit
+	body["remote_restore_of_my_data"] = None
+	body["roles"] = {"send": True, "receive": True, "standby": True}
+	body["standby_of_peer"] = {
+		"result": "OK", "at": ago(13), "site": "standby-oml", "set": "2026-10-06_0233", "every": "weekly",
+		"check": "Partial", "counts_ok": "yes", "files": "1/1,231/230", "decrypt_fail": "0",
+	}
+	body["last_archive_test"] = {
+		"result": "OK", "at": ago(107), "set": "2026-10-07_0301", "source": "own", "no_key_test": "Pass",
+		"duration_s": "172", "check": "Pass", "counts_ok": "yes", "files": "0/0,470/470", "decrypt_fail": "0",
+	}
+	if kit >= "2026-10-07.8":
+		body["roles"].update({"remote_restore_expected": False, "standby_cadence": "weekly", "archive_test_max_days": 35})
+		body["standby_of_peer"].update({"files_missing": 0, "files_extra": 1})
+	return body
+
+
+class KitVocabulary(BackupStatusCase):
+	def test_the_standby_says_its_check_not_its_job_in_both_formats(self):
+		for kit in ("2026-10-06.6", "2026-10-07.8"):
+			self.write(umbrellocal(kit))
+			answer = self.tool_data("get_backup_status", {})
+			held = answer["boxes"][0]["standby_held_here"]
+			self.assertEqual((held["result"], held["job"]), ("Partial", "OK"), kit)
+			self.assertEqual((held["files_missing"], held["files_extra"]), (0, 1), kit)
+			alert = next(a for a in answer["alerts"] if a["code"] == "STANDBY_CHECK_NOT_PASS")
+			self.assertIn("checked Partial", alert["message"])
+			self.assertNotIn("was OK", alert["message"])
+			self.assertIn("nothing missing, 1 extra file", alert["message"])
+			self.assertNotIn("STANDBY_STALE", self.codes(answer), "weekly standby, 13 h old")
+
+	def test_a_receipt_with_job_and_check(self):
+		body = all_ok()
+		body["kit_version"] = "2026-10-07.8"
+		body["remote_restore_of_my_data"].update({"job": "OK", "check": "Pass", "result": "Pass",
+		                                          "files": "813/812,1204/1204", "files_missing": 0, "files_extra": 1})
+		self.write(body)
+		backup_status.run_ingest()
+		answer = self.tool_data("get_backup_status", {})
+		restore = answer["boxes"][0]["last_standby_restore"]
+		self.assertEqual((restore["result"], restore["job"], restore["files_ok"], restore["files_extra"]),
+		                 ("Pass", "OK", True, 1))
+		self.assertEqual(answer["overall"], "ok")
+
+	def test_files_are_judged_by_nothing_missing(self):
+		self.assertTrue(backup_status._files_ok({"files": "231/230,1/1"}))
+		self.assertFalse(backup_status._files_ok({"files": "229/230"}))
+		self.assertTrue(backup_status._files_ok({"files": "1/2", "files_missing": 0}), "the kit's count wins")
+		self.assertIsNone(backup_status._files_ok({}))
+
+	def test_a_partial_receipt_is_critical_when_anything_was_lost(self):
+		for change in ({"decrypt_fail": "2"}, {"counts_ok": "no"}, {"files_missing": 3}, {"check": "Fail"}):
+			body = all_ok()
+			body["remote_restore_of_my_data"].update({"check": "Partial", **change})
+			self.write(body)
+			alert = next(a for a in self.tool_data("get_backup_status", {})["alerts"]
+			             if a["code"] == "REMOTE_RESTORE_NOT_PASS")
+			self.assertEqual(alert["level"], "critical", change)
+
+
+class NoPeerRestoresUmbrelLocal(BackupStatusCase):
+	def test_no_remote_restore_is_not_raised_and_the_archive_test_is_the_evidence(self):
+		self.write(umbrellocal())
+		answer = self.tool_data("get_backup_status", {})
+		codes = self.codes(answer)
+		self.assertNotIn("NO_REMOTE_RESTORE", codes)
+		self.assertNotIn("ARCHIVE_TEST_DUE", codes)
+		box = answer["boxes"][0]
+		self.assertFalse(box["remote_restore_expected"])
+		self.assertTrue(box["archive_evidence"]["passing"])
+
+	def test_an_old_kit_without_the_flag_still_gets_no_remote_restore(self):
+		self.write(umbrellocal("2026-10-06.6"))
+		self.assertIn("NO_REMOTE_RESTORE", self.codes(self.tool_data("get_backup_status", {})))
+
+	def test_a_late_or_failed_archive_test_is_due(self):
+		for change in ({"at": ago(36 * 24)}, {"check": "Fail"}):
+			body = umbrellocal()
+			body["last_archive_test"].update(change)
+			self.write(body)
+			self.assertIn("ARCHIVE_TEST_DUE", self.codes(self.tool_data("get_backup_status", {})), change)
+
+	def test_the_receipt_limit_follows_the_weekly_standby(self):
+		body = all_ok()
+		body["roles"]["remote_restore_max_hours"] = 198
+		body["remote_restore_of_my_data"]["at"] = ago(100)
+		self.write(body)
+		self.assertNotIn("REMOTE_RESTORE_STALE", self.codes(self.tool_data("get_backup_status", {})))
+		body["remote_restore_of_my_data"]["at"] = ago(200)
+		self.write(body)
+		alert = next(a for a in self.tool_data("get_backup_status", {})["alerts"] if a["code"] == "REMOTE_RESTORE_STALE")
+		self.assertIn("limit 198 h", alert["message"])
+
+
+class TheRegisterOnAnArchiveTestSite(BackupStatusCase):
+	def test_ingest_records_the_own_archive_test_and_the_window_is_satisfied(self):
+		self.write(umbrellocal())
+		before = self.tool_data("get_backup_status", {})
+		self.assertNotIn("NO_PASSING_TEST_IN_WINDOW", self.codes(before), "relaxed: the archive test is the evidence")
+		self.assertEqual(before["erpnext_records"]["file_evidence"][0]["box"], "umbrellocal")
+		report = backup_status.run_ingest()
+		self.assertIn("archive-own", {t["kind"] for t in report["tests"]})
+		after = self.tool_data("get_backup_status", {})
+		self.assertTrue(after["erpnext_records"]["within_window"])
+		self.assertEqual(backup_status.run_ingest()["tests"], [], "idempotent")
+
+	def test_why_the_register_is_empty_is_named(self):
+		self.flags = {}
+		STORE.seed("Company", [{"name": "Second Co"}])
+		self.write(all_ok())
+		answer = self.tool_data("get_backup_status", {})
+		self.assertIn("NO_PASSING_TEST_IN_WINDOW", self.codes(answer))
+		self.assertIn("backup_record_company", answer["erpnext_records"]["why_not"])

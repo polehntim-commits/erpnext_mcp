@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.268.1 — 2026-10-07 — get_backup_status speaks the kit's two words
+
+**No migrate needed.** For erp-backup kit 2026-10-07.8 (older kits still read correctly). Deploy
+`docs/deploy/v0.268.1_backup_status.md`. From the backup kit's spec §6.
+
+1. **`check`, not `result`**, for a restore's verdict: `standby_held_here` and `last_standby_restore` show the check
+   (Pass / Partial / Fail) with the job (OK / FAIL) beside it, and STANDBY_CHECK_NOT_PASS now says "checked Partial"
+   instead of the contradictory "was OK". An older kit's `result` is still read.
+2. **Files are judged by nothing missing** (`files_missing == 0`, else from the `restored/archive` counts), not by
+   equal counts. Extra files are reported, never failed.
+3. **`roles.remote_restore_expected`**: where no peer restores the box by design (umbrel.local), NO_REMOTE_RESTORE is
+   not raised; its own archive test is the evidence (a Pass within `archive_test_max_days`, default 35, else
+   ARCHIVE_TEST_DUE). The receipt's staleness limit is `roles.remote_restore_max_hours` (198 on OML); a weekly standby
+   (`roles.standby_cadence` / `every`) is stale after 7 days + the usual margin.
+4. **A Partial with nothing lost** (counts match, no decrypt failure, nothing missing) is a WARNING; Fail, a missing
+   file, a count mismatch or a decrypt failure stay CRITICAL.
+5. **Archive-test sites and the register**: the ingest now records a box's OWN archive test (`source: own`) on its own
+   Backup Record, and NO_PASSING_TEST_IN_WINDOW is not raised while that test is the passing evidence
+   (`erpnext_records.file_evidence`). When the register is empty, `erpnext_records.why_not` says why the hourly ingest
+   wrote nothing.
+
 ## 0.268.0 — 2026-10-07 — the phone's company switcher
 
 **No migrate needed.** Pairs with FarmOps 0.53.0. Deploy `docs/deploy/v0.268.0_company_switcher.md`. Contract
