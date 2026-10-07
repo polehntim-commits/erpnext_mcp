@@ -5942,10 +5942,17 @@ class LeaveFromAHandset(MobileAPITestCase):
 		self.assertEqual(len(mobile_api.list_leave_requests(status="Open")["requests"]), 2)
 
 	def test_the_company_cannot_be_named_in_the_body(self):
-		"""The rows are scoped after the read to the caller's own entities, which
-		is the same thing in one fewer argument — and a body naming another
-		farm's company would otherwise confirm that it exists."""
-		self.assertNotIn("company", farmops_routes.accepted_arguments(mobile_api.list_leave_requests))
+		"""v0.267.1 (access audit #3): `company` now SELECTS one of the caller's own entities. Naming any other —
+		another farm's, or one that does not exist — is refused with the same sentence, so it is still no oracle."""
+		self.assertIn("company", farmops_routes.accepted_arguments(mobile_api.list_leave_requests))
+		set_roles(WORKER, ["Field Worker", "Foreman"])
+		self.be()
+		refusals = []
+		for name in (OTHER, "No Such Farm LLC"):
+			with self.assertRaises(frappe.PermissionError) as caught:
+				mobile_api.list_leave_requests(company=name)
+			refusals.append(str(caught.exception).replace(name, "<name>"))
+		self.assertEqual(refusals[0], refusals[1])
 
 	# ── the picker ──────────────────────────────────────────────────────────
 	def test_the_type_picker_marks_what_this_worker_may_actually_draw(self):

@@ -741,11 +741,31 @@ def _safe_row(name: str) -> dict:
 
 
 def _mask(row: dict) -> dict:
-	"""Belt to the field-list brace: strip a secret even if one arrives."""
+	"""Belt to the field-list brace: strip a secret even if one arrives.
+
+	v0.267.1 (Tim, access audit #1): the ROUTING number is masked the same way as the account number — last four —
+	for everyone but the payroll / HR principals (the private-HR gate: HR Manager, HR User, System Manager). The
+	NACHA and prenote generators never come through here; they read the stored values directly.
+	"""
 	row.pop("account_number", None)
 	last_four = str(row.get("account_number_last_four") or "")
 	row["account_number_masked"] = f"****{last_four}" if last_four else ""
+	routing = "".join(ch for ch in str(row.get("routing_number") or "") if ch.isdigit())
+	row["routing_number_last_four"] = routing[-4:]
+	if routing and not sees_full_routing():
+		row["routing_number"] = f"*****{routing[-4:]}"
 	return row
+
+
+def sees_full_routing(actor: str = "") -> bool:
+	"""v0.267.1. Payroll / HR (the private-HR gate) read the full routing number; everyone else its last four."""
+	from .. import security
+	from ..api import guard
+
+	actor = actor or security.caller_identity() or str(getattr(frappe.session, "user", "") or "")
+	if not actor or actor == "Guest":
+		return False
+	return bool(guard.roles_held(actor) & guard._gate("private_hr", guard.PRIVATE_HR_ROLES))
 
 
 def _prenote_warnings(account: dict, employee_name: str) -> list[str]:

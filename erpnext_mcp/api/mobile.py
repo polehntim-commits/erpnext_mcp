@@ -11369,14 +11369,16 @@ def list_accident_reports(
 	company=None,
 	limit=None,
 ) -> dict:
-	"""The incident register, filterable."""
+	"""The incident register for ONE company, filterable.
+
+	v0.267.1 (Tim, access audit #3; before Constancy goes live): every count is the selected company's — the caller's
+	first entity when none is named — and nothing is counted across entities.
+	"""
 	guard.require_dispatch_role(user, "Reading the accident register")
 	allowed = guard.require_scope(user)
-	entity = guard.require_company(user, company, allowed)
+	entity = guard.require_company(user, company, allowed) or allowed[0]
 
-	inner = {}
-	if entity:
-		inner["company"] = entity
+	inner = {"company": entity}
 	for key, value in (
 		("status", status),
 		("severity", severity),
@@ -11391,8 +11393,25 @@ def list_accident_reports(
 		inner["limit"] = limit
 
 	data = accident_tools.list_accident_reports(inner).data
-	data["reports"] = guard.scoped(data.get("reports") or [], allowed)
-	data["report_count"] = len(data["reports"])
+	return _accident_totals(data, entity)
+
+
+def _accident_totals(data: dict, entity: str) -> dict:
+	"""v0.267.1. Every list and total rebuilt from the selected company's rows — belt to the query's brace."""
+	reports = [r for r in data.get("reports") or [] if r.get("company") == entity]
+	open_reports = [r for r in reports if r.get("status") != accident_tools.CLOSED]
+	undetermined = [r for r in reports if r.get("osha_recordable") == accident_tools.UNDETERMINED]
+	data.update({
+		"company": entity,
+		"reports": reports,
+		"report_count": len(reports),
+		"open": [r["name"] for r in open_reports],
+		"open_count": len(open_reports),
+		"osha_recordable_count": sum(1 for r in reports if r.get("osha_recordable") == "Yes"),
+		"undetermined_recordability": [r["name"] for r in undetermined],
+		"undetermined_count": len(undetermined),
+		"days_away_total": sum(r.get("days_away_from_work") or 0 for r in reports),
+	})
 	return data
 
 
@@ -21760,17 +21779,17 @@ def create_leave_request(
 @frappe.whitelist(methods=["POST", "GET"])
 @guard.endpoint("list_leave_requests", limit=guard.READ_LIMIT)
 def list_leave_requests(
-	user: str, employee=None, status=None, from_date=None, to_date=None, limit=None
+	user: str, employee=None, status=None, from_date=None, to_date=None, limit=None, company=None
 ) -> dict:
-	"""Leave requests: a worker's own by default, a crew's with the dispatch role.
+	"""Leave requests for ONE company: a worker's own by default, a crew's with the dispatch role.
 
-	`company` IS NOT DECLARED and cannot be delivered. The rows are scoped after
-	the read to the caller's own entities, which is the same thing done in one
-	fewer argument — and it means a body naming another farm's company returns
-	that farm's nothing rather than a refusal that confirms it exists.
+	v0.267.1 (Tim, access audit #3; before Constancy goes live): `company` selects the entity — the caller's first
+	when omitted, refused when it is not theirs — and the read, the rows and every total (`by_status`,
+	`total_days`, `pending_count`) are that company's alone.
 	"""
 	allowed = guard.require_scope(user)
-	inner: dict = {}
+	entity = guard.require_company(user, company, allowed) or allowed[0]
+	inner: dict = {"company": entity}
 	named = str(employee or "").strip()
 	if named or not _is_supervisor(user):
 		# A worker with no dispatch role sees their own and only their own, named
@@ -21784,9 +21803,20 @@ def list_leave_requests(
 		inner["limit"] = limit
 
 	data = hr_tools.list_leave_requests(inner).data
-	data["requests"] = guard.scoped(data.get("requests") or [], allowed)
-	data["count"] = len(data["requests"])
-	data["pending_count"] = sum(1 for row in data["requests"] if row.get("status") == "Open")
+	requests = [row for row in data.get("requests") or [] if row.get("company") == entity]
+	by_status: dict = {}
+	for row in requests:
+		key = str(row.get("status") or "Open")
+		by_status[key] = by_status.get(key, 0) + 1
+	data.update({
+		"company": entity,
+		"requests": requests,
+		"count": len(requests),
+		"by_status": by_status,
+		"pending_count": by_status.get("Open", 0),
+		"total_days": round(sum(float(row.get("total_leave_days") or 0) for row in requests), 3),
+	})
+	data["filters"] = {**(data.get("filters") or {}), "company": entity}
 	return data
 
 
@@ -24819,8 +24849,8 @@ def preview_business_card(user: str, card=None) -> dict:
 	from .. import business_cards
 
 	business_cards.require_role(user)
-	guard.require_scope(user)
-	return business_cards.preview(_object_argument(card, "card"))
+	allowed = guard.require_scope(user)
+	return business_cards.preview(_object_argument(card, "card"), allowed, user)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -24840,7 +24870,7 @@ def save_business_card(
 	from .. import business_cards
 
 	business_cards.require_role(user)
-	guard.require_scope(user)
+	allowed = guard.require_scope(user)
 	decision = {
 		"merge_into": merge_into,
 		"save_as_new": str(save_as_new).lower() in ("1", "true", "yes") if save_as_new not in (None, "") else False,
@@ -24853,6 +24883,7 @@ def save_business_card(
 		{k: v for k, v in decision.items() if v not in (None, "", False)},
 		str(client_request_id or ""),
 		_list_argument(photos, "photos"),
+		allowed,
 	)
 
 
@@ -25177,8 +25208,8 @@ def search_contacts(user: str, query=None, limit=None) -> dict:
 	from .. import business_cards
 
 	business_cards.require_role(user)
-	guard.require_scope(user)
-	return {"contacts": business_cards.search(str(query or ""), limit=int(limit or 50))}
+	allowed = guard.require_scope(user)
+	return {"contacts": business_cards.search(str(query or ""), limit=int(limit or 50), allowed=allowed, user=user)}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -25188,8 +25219,8 @@ def update_contact_where_met(user: str, contact=None, met_at=None, met_on=None) 
 	from .. import business_cards
 
 	business_cards.require_role(user)
-	guard.require_scope(user)
-	return business_cards.update_where_met(user, str(contact or ""), str(met_at or ""), str(met_on or ""))
+	allowed = guard.require_scope(user)
+	return business_cards.update_where_met(user, str(contact or ""), str(met_at or ""), str(met_on or ""), allowed)
 
 
 # ── the IPM relationship graph ── v0.262.0 (docs/contracts/ipm_graph_v0_262.yaml) ──────────────

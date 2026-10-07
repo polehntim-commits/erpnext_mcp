@@ -69,10 +69,11 @@ def employee_of_user(user: str) -> str:
 def visible_sections(viewer: str, employee: str) -> dict:
 	"""{section: True | "reason it is hidden"} for this viewer on this file. Raises NotAllowed."""
 	if viewer and employee_of_user(viewer) == employee:
-		return {name: True for name in SECTIONS} | {"_self": True}
+		return {name: True for name in SECTIONS} | {"_self": True, "_identity": True}
 	held = set(frappe.get_roles(viewer) or []) if viewer else set()
 	if held & FULL_ROLES:
-		return {name: True for name in SECTIONS}
+		# v0.267.1 (Tim, access audit #2): the login ID and device / login IPs are a System Manager's alone.
+		return {name: True for name in SECTIONS} | ({"_identity": True} if "System Manager" in held else {})
 	if HR_USER in held:
 		return {name: True for name in SECTIONS} | {"_no_discipline": True}
 	if FARM_MANAGER in held:
@@ -287,9 +288,12 @@ DEVICE_FIELDS = (
 )
 
 
-def _access(emp: dict, devices_only: bool) -> dict:
+def _access(emp: dict, devices_only: bool, identity: bool = True) -> dict:
+	"""v0.267.1: without `identity` (System Manager, or the worker's own file) the login ID, each device's last IP
+	and the login IPs are withheld — `has_login` still says whether there is one."""
 	user = str(emp.get("user_id") or "")
-	out = {"available": True, "user": user or None, "grant": None, "devices": [], "login_card_filed": False}
+	out = {"available": True, "user": user or None, "has_login": bool(user), "grant": None, "devices": [],
+	       "login_card_filed": False}
 	if user and compat.doctype_exists(GRANT) and frappe.db.exists(GRANT, user):
 		grant = (
 			frappe.db.get_value(
@@ -337,6 +341,13 @@ def _access(emp: dict, devices_only: bool) -> dict:
 		]
 	if not user:
 		out["note"] = "This employee has no user account, so there is no phone or login to show."
+	if not identity:
+		out["user"] = None
+		out["identity_withheld"] = "The login ID and IP addresses are shown to a System Manager only."
+		for device in out["devices"]:
+			device.pop("last_ip", None)
+		for login in out.get("recent_logins") or []:
+			login.pop("from", None)
 	return out
 
 
@@ -540,7 +551,7 @@ def build(employee: str, viewer: str, sections=None, warning_days=None) -> dict:
 	builders = {
 		"identity": lambda: _identity(emp, wins, flags),
 		"badge": lambda: _badge(emp),
-		"access": lambda: _access(emp, bool(allowed.get("_devices_only"))),
+		"access": lambda: _access(emp, bool(allowed.get("_devices_only")), bool(allowed.get("_identity"))),
 		"training": lambda: _training(emp, wins, flags),
 		"signed_documents": lambda: _signed(emp, bool(allowed.get("_no_discipline"))),
 		"housing": lambda: _housing(emp),

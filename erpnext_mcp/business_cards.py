@@ -59,7 +59,13 @@ FIELDS = (
 	 "insert_after": "card_website", "read_only": 1},
 	{"fieldname": "card_client_request_id", "label": "Request ID", "fieldtype": "Data",
 	 "insert_after": "card_captured_by", "read_only": 1, "hidden": 1},
+	# v0.267.1 (Tim, access audit #4; before Constancy goes live). The farm entity whose register holds this contact.
+	{"fieldname": "card_entity", "label": "Farm Entity", "fieldtype": "Link", "options": "Company",
+	 "insert_after": "card_captured_by",
+	 "description": "v0.267.1. On the phone a contact is shown only to people of this entity (blank: only to whoever "
+	                "captured it)."},
 )
+ENTITY = "card_entity"
 
 
 # ── fields ────────────────────────────────────────────────────────────────
@@ -84,6 +90,51 @@ def ensure_fields() -> bool:
 		return True
 	except Exception:  # pragma: no cover - a site that will not take a Custom Field
 		return False
+
+
+# ── which entity's register (v0.267.1) ──────────────────────────────────────
+def _entities(user: str) -> list:
+	from .api import guard
+
+	try:
+		return guard.accessible_companies(user)
+	except Exception:
+		return []
+
+
+def _row(name: str) -> dict:
+	fields = compat.existing_fields(CONTACT, ("name", ENTITY, "card_captured_by", "owner"))
+	return dict(frappe.db.get_value(CONTACT, name, fields, as_dict=True) or {})
+
+
+def visible(row: dict, allowed, user: str) -> bool:
+	"""A contact reaches a phone caller only if it is in one of their entities — or, with no entity recorded
+	(an older contact whose capturer held several entities), only if they captured it. `allowed=None` is the
+	operator's MCP path, which is not scoped."""
+	if allowed is None:
+		return True
+	entity = row.get(ENTITY)
+	if entity:
+		return entity in allowed
+	return bool(user) and (row.get("card_captured_by") or row.get("owner")) == user
+
+
+def backfill_entities() -> dict:
+	"""Stamp older contacts with their capturer's entity when that person holds exactly one. Never guesses."""
+	if not compat.has_field(CONTACT, ENTITY):
+		return {"stamped": 0, "unassigned": 0}
+	stamped = unassigned = 0
+	fields = compat.existing_fields(CONTACT, ("name", ENTITY, "card_captured_by", "owner"))
+	for row in frappe.db.get_all(CONTACT, fields=fields, limit=100000) or []:
+		if row.get(ENTITY):
+			continue
+		entities = _entities(row.get("card_captured_by") or row.get("owner") or "")
+		if len(entities) == 1:
+			frappe.db.set_value(CONTACT, row["name"], ENTITY, entities[0], update_modified=False)
+			stamped += 1
+		else:
+			unassigned += 1
+	return {"stamped": stamped, "unassigned": unassigned}
 
 
 def require_role(user: str) -> None:
@@ -147,8 +198,8 @@ def clean(card: dict) -> dict:
 
 
 # ── what a person decides ───────────────────────────────────────────────────
-def duplicates(card: dict) -> list:
-	"""Contacts already holding one of the card's emails or phones."""
+def duplicates(card: dict, allowed=None, user: str = "") -> list:
+	"""Contacts already holding one of the card's emails or phones (v0.267.1: only those the caller may see)."""
 	from .tools import receipts
 
 	found: dict = {}
@@ -167,7 +218,7 @@ def duplicates(card: dict) -> list:
 	return [
 		{**describe(name), "matched_on": sorted(reasons)}
 		for name, reasons in sorted(found.items())
-		if frappe.db.exists(CONTACT, name)
+		if frappe.db.exists(CONTACT, name) and visible(_row(name), allowed, user)
 	]
 
 
@@ -206,15 +257,15 @@ def match(card: dict) -> dict:
 	return out
 
 
-def preview(card: dict) -> dict:
+def preview(card: dict, allowed=None, user: str = "") -> dict:
 	"""What `save` would face: the duplicates and the match. Reads only."""
 	cleaned = clean(card)
-	return {"card": cleaned, "duplicates": duplicates(cleaned), "match": match(cleaned)}
+	return {"card": cleaned, "duplicates": duplicates(cleaned, allowed, user), "match": match(cleaned)}
 
 
 # ── the write ───────────────────────────────────────────────────────────────
 def save(user: str, card: dict, decision: dict | None = None, client_request_id: str = "",
-	photos: list | None = None) -> dict:
+	photos: list | None = None, allowed=None) -> dict:
 	"""Create or update the Contact. See the module docstring for the two decisions."""
 	decision = decision or {}
 	key = _text(client_request_id, 100)
@@ -226,9 +277,9 @@ def save(user: str, card: dict, decision: dict | None = None, client_request_id:
 
 	cleaned = clean(card)
 	merge_into = _text(decision.get("merge_into"))
-	found = duplicates(cleaned)
+	found = duplicates(cleaned, allowed, user)
 	if merge_into:
-		if not frappe.db.exists(CONTACT, merge_into):
+		if not frappe.db.exists(CONTACT, merge_into) or not visible(_row(merge_into), allowed, user):
 			raise ToolError(f"no Contact called {merge_into!r} to merge into. Nothing was saved.")
 	elif found and not decision.get("save_as_new"):
 		names = ", ".join(f"{d['name']} ({'/'.join(d['matched_on'])})" for d in found)
@@ -242,6 +293,10 @@ def save(user: str, card: dict, decision: dict | None = None, client_request_id:
 
 	doc = frappe.get_doc(CONTACT, merge_into) if merge_into else frappe.new_doc(CONTACT)
 	_fill(doc, cleaned, user, key, merging=bool(merge_into))
+	if compat.has_field(CONTACT, ENTITY) and not doc.get(ENTITY):
+		entities = allowed if allowed is not None else _entities(user)
+		if entities:
+			doc.set(ENTITY, entities[0])
 	if party and not any(
 		row.get("link_doctype") == party[0] and row.get("link_name") == party[1] for row in doc.get("links") or []
 	):
@@ -394,10 +449,10 @@ def _address(contact: str, card: dict, party) -> str | None:
 	return doc.name
 
 
-def update_where_met(user: str, contact: str, met_at: str = "", met_on: str = "") -> dict:
+def update_where_met(user: str, contact: str, met_at: str = "", met_on: str = "", allowed=None) -> dict:
 	"""Correct a contact's "where met" / "met on" (v0.252.0; the phone's edit). Office roles, as saving a card."""
 	require_role(user)
-	if not frappe.db.exists(CONTACT, contact):
+	if not frappe.db.exists(CONTACT, contact) or not visible(_row(contact), allowed, user):
 		raise ToolError(f"no Contact called {contact!r}. Nothing was changed.")
 	values = {}
 	if _text(met_at):
@@ -460,8 +515,9 @@ def describe(name: str) -> dict:
 	}
 
 
-def search(query: str = "", company: str = "", met_at: str = "", limit: int = 50) -> list:
-	"""Contacts by name, company, email, phone or where met. Newest first."""
+def search(query: str = "", company: str = "", met_at: str = "", limit: int = 50, allowed=None, user: str = "") -> list:
+	"""Contacts by name, company, email, phone or where met. Newest first. v0.267.1: with `allowed` (the phone),
+	only the caller's entities' contacts — and blank-entity ones they captured themselves."""
 	from .tools import receipts
 
 	if not compat.doctype_exists(CONTACT):
@@ -470,7 +526,9 @@ def search(query: str = "", company: str = "", met_at: str = "", limit: int = 50
 	digits = receipts.normalize_phone(text) if text else ""
 	fields = compat.existing_fields(CONTACT, ("name", "first_name", "last_name", "company_name", "email_id",
 		"card_met_at", "designation"))
-	rows = frappe.db.get_all(CONTACT, fields=fields, order_by="creation desc", limit=5000) or []
+	scope_fields = compat.existing_fields(CONTACT, (ENTITY, "card_captured_by", "owner"))
+	rows = frappe.db.get_all(CONTACT, fields=list(dict.fromkeys(list(fields) + list(scope_fields))),
+	                         order_by="creation desc", limit=5000) or []
 	phones: dict = {}
 	if digits and compat.doctype_exists("Contact Phone"):
 		for row in frappe.db.get_all("Contact Phone", filters={"parenttype": CONTACT}, fields=["parent", "phone"], limit=20000) or []:
@@ -478,6 +536,8 @@ def search(query: str = "", company: str = "", met_at: str = "", limit: int = 50
 	out = []
 	for row in rows:
 		row = dict(row)
+		if not visible(row, allowed, user):
+			continue
 		hay = " ".join(str(row.get(k) or "") for k in fields).lower()
 		if text and text not in hay and not (digits and digits in phones.get(row["name"], [])):
 			continue

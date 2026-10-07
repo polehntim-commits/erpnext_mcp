@@ -900,6 +900,11 @@ def _business_card_fields() -> None:
 
 		if not business_cards.ensure_fields():
 			print("erpnext_mcp: Contact did not take the business-card fields; save_business_card still files the contact.")
+		# v0.267.1. Older contacts join their capturer's entity when that is unambiguous.
+		report = business_cards.backfill_entities()
+		if report["stamped"] or report["unassigned"]:
+			print(f"erpnext_mcp: contacts given a farm entity: {report['stamped']}; left to their capturer only "
+			      f"(several entities): {report['unassigned']}.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: business-card fields were not added — {type(exc).__name__}: {exc}")
 

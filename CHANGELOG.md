@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.267.1 — 2026-10-06 — four access-audit fixes (before Constancy goes live)
+
+**Migrate needed** (Contact gains `card_entity`; older contacts are stamped where unambiguous). No app change needed.
+Deploy `docs/deploy/v0.267.1_access_audit_fixes.md`. Tim approved all four, 2026-10-06. Each has a leak test with two
+companies on one site (`tests_standalone/test_access_audit_fixes.py`).
+
+1. **Routing number masked** like the account number (`*****6800` and `routing_number_last_four`) everywhere a bank
+   account is read, except for payroll / HR (the private-HR gate: HR Manager, HR User, System Manager). NACHA and
+   prenote files are unchanged.
+2. **Employee file**: the login ID and device / login IP addresses are shown to a System Manager only (and on the
+   worker's own file). HR Manager, HR User and Farm Manager now see `has_login` instead.
+3. **Accident and leave lists are one company's**: the selected company — the caller's first entity when none is
+   named; another is refused — and every total (`open`, `osha_recordable_count`, `undetermined_recordability`,
+   `days_away_total`, `by_status`, `total_days`, `pending_count`) counts that company alone. `list_leave_requests`
+   gains an optional `company`.
+4. **Contacts by farm entity**: each contact belongs to one entity (`card_entity`, stamped when a card is saved). On the
+   phone, search, the where-met edit, duplicate hints and merges see only the caller's entities; an older contact whose
+   capturer held several entities stays visible to that capturer alone until someone sets its entity in the Desk.
+
 ## 0.267.0 — 2026-10-06 — who sees what on the phone, as data
 
 **Migrate needed** (Farm Config Version gains kind "Data Access"; a settings switch). No phone change; FarmOps 0.52.0
