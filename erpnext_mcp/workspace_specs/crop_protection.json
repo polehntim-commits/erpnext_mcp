@@ -5,6 +5,11 @@
  "summary": "Spraying, re-entry and residue. An REI in force keeps workers out of a block until it expires.",
  "shortcuts": [
   {
+   "label": "IPM Map",
+   "type": "Page",
+   "link_to": "ipm-map"
+  },
+  {
    "label": "Spray Applications",
    "type": "DocType",
    "link_to": "Spray Application",
@@ -84,6 +89,19 @@
   {
    "label": "IPM",
    "links": [
+    {
+     "label": "IPM Map",
+     "link_to": "ipm-map",
+     "link_type": "Page"
+    },
+    {
+     "label": "IPM Organisms",
+     "link_to": "IPM Organism"
+    },
+    {
+     "label": "IPM Relationships",
+     "link_to": "IPM Relationship"
+    },
     {
      "label": "IPM Recommendations",
      "link_to": "IPM Recommendation"

@@ -309,3 +309,17 @@ class TheTools(SeedCase):
 		out = self.tool_data("import_ipm_graph", {"data": ImportExportPropose.DATA})
 		self.assertTrue(out["dry_run"])
 		self.assertFalse(frappe.db.exists("IPM Organism", "brown-marmorated-stink-bug"))
+
+
+class SwitchingOffALiteratureLink(SeedCase):
+	"""v0.263.0 fix: disabling the farm's copy switches the literature link off, in the graph AND the options."""
+
+	def test_disabling_harmed_by_moves_the_product_up(self):
+		lit = rel("ladybug", "harmed_by", "warrior-ii")[0]
+		ipm_graph.save_relationship({"enabled": 0}, "tim@example.com", relationship=lit["name"])
+		edges = ipm_graph.graph(crop="Cherries", depth=3, limit=2000)["edges"]
+		self.assertFalse([e for e in edges if (e["subject"], e["relation"], e["object"]) == ("ladybug", "harmed_by", "warrior-ii")])
+		options, _ = ipm_graph.options_for("black-cherry-aphid", "sweet-cherry", 60)
+		warrior = [o for o in options if o["product"] == "warrior-ii"]
+		if warrior:
+			self.assertNotIn("ladybug", warrior[0]["harms_active"])

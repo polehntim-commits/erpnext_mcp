@@ -366,17 +366,9 @@ def graph(crop: str = "", stage=None, block: str = "", depth: int = 2, kinds=Non
 
 	node_filters = {} if include_disabled else {"enabled": 1, "status": ("!=", REJECTED)}
 	nodes = {r["name"]: r for r in _rows(ORGANISM, _NODE_FIELDS, node_filters) if _company_ok(r, company)}
-	edge_filters = {} if include_disabled else {"enabled": 1, "status": ACTIVE}
 	parent = nodes.get(focus, {}).get("parent_organism")
 	scope = {focus, parent} - {None, ""}
-	edges = [r for r in _rows(RELATIONSHIP, _EDGE_FIELDS, edge_filters)
-	         if _company_ok(r, company) and (not r.get("crop") or r.get("crop") in scope)
-	         and r.get("subject") in nodes and r.get("object") in nodes]
-
-	# The farm's copy of a literature edge stands in for it (`save_relationship` writes beside, never over).
-	farm = {(e["subject"], e["relation"], e["object"], e.get("crop") or "") for e in edges if e.get("provenance") != LITERATURE}
-	edges = [e for e in edges if e.get("provenance") != LITERATURE
-	         or (e["subject"], e["relation"], e["object"], e.get("crop") or "") not in farm]
+	edges = effective_edges(nodes, scope, company, include_disabled)
 
 	by_node: dict[str, list] = {}
 	for edge in edges:
@@ -410,6 +402,23 @@ def graph(crop: str = "", stage=None, block: str = "", depth: int = 2, kinds=Non
 		"next_start": start + limit if start + limit < len(ranked) else None,
 		"label_caveat": LABEL_CAVEAT,
 	}
+
+
+def effective_edges(nodes: dict, scope: set, company: str = "", include_disabled: bool = False) -> list[dict]:
+	"""The edges in force between `nodes`, scoped to the crop(s) in `scope` (or unscoped).
+
+	The farm's copy of a literature edge stands in for it (`save_relationship` writes beside, never
+	over) — ENABLED OR NOT: disabling the farm's copy is how a literature link is switched off. v0.263.0
+	fix; v0.262.0 dropped the disabled copy first and the literature edge came back.
+	"""
+	every = [r for r in _rows(RELATIONSHIP, _EDGE_FIELDS)
+	         if _company_ok(r, company) and (not r.get("crop") or r.get("crop") in scope)
+	         and r.get("subject") in nodes and r.get("object") in nodes]
+	farm = {(e["subject"], e["relation"], e["object"], e.get("crop") or "") for e in every
+	        if e.get("provenance") != LITERATURE and e.get("status") != REJECTED}
+	return [e for e in every
+	        if (include_disabled or (compat.checked(e.get("enabled")) and e.get("status") == ACTIVE))
+	        and (e.get("provenance") != LITERATURE or (e["subject"], e["relation"], e["object"], e.get("crop") or "") not in farm)]
 
 
 def organism(name: str, company: str = "") -> dict:
@@ -495,8 +504,7 @@ def options_for(pest: str, crop_node: str, stage: int | None, company: str = "")
 	"""What can be done about `pest`, lowest impact on what is working now first. And the MBTA note."""
 	row = _node_row(pest)
 	nodes = {r["name"]: r for r in _rows(ORGANISM, _NODE_FIELDS, {"enabled": 1}) if _company_ok(r, company)}
-	edges = [r for r in _rows(RELATIONSHIP, _EDGE_FIELDS, {"enabled": 1, "status": ACTIVE})
-	         if _company_ok(r, company) and (not r.get("crop") or r.get("crop") == crop_node)]
+	edges = effective_edges(nodes, {crop_node} - {"", None}, company)
 	protected = row.get("protected_status") in MBTA
 	note = None
 	options: list[dict] = []

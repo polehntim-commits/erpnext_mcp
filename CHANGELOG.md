@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.263.0 — 2026-10-06 — the IPM Map in the Desk
+
+**Migrate needed** (the page `ipm-map`; the Crop Protection workspace gains the IPM Map shortcut and links). No phone
+change. Deploy `docs/deploy/v0.263.0_ipm_desk_map.md`. Tim, 2026-10-06.
+
+- **/app/ipm-map**: the IPM relationship graph, interactive, drawn with cytoscape.js (MIT) VENDORED under
+  `public/vendor/cytoscape` — no CDN, the server runs behind Tailscale. Filters: crop / variety, BBCH stage or a date
+  (the block's stage seen by then), block, kind, relation, provenance, depth, include disabled / proposed. Colour and
+  shape by kind, line style by relation; MBTA species ringed blue, products that would harm a beneficial active now
+  ringed red, inactive faded. Click a node: details, relationships, thresholds, recent observations. Export the view
+  as PNG, SVG (written from the layout; the GPL svg plugin is not shipped) and CSV.
+- **Same source of truth**: `api.ipm_map.view` pages through `ipm_graph.graph()` — the phone's and MCP's — and saves go
+  through `ipm_graph.save_relationship` behind `guard.may_edit_ipm` (Farm Manager, Compliance Officer, System
+  Manager). Others are view-only. Managers add an edge by dragging in Connect mode or with Add relationship (the
+  dialog offers only the ends each relation allows), and edit or disable one by clicking it.
+- Reached from the Crop Protection workspace and from "View in IPM Map" on IPM Organism and IPM Relationship forms.
+- **Fix (v0.262.0)**: disabling the farm's copy of a literature link now switches the link off — in the graph and in
+  the lowest-impact ranking (`ipm_graph.effective_edges`). Before, the literature edge came back.
+
 ## 0.262.0 — 2026-10-06 — the IPM relationship graph
 
 **Migrate needed** (doctypes IPM Organism and IPM Relationship; Pest Action Threshold gains organism / status /

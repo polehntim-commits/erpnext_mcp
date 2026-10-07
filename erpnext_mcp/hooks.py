@@ -640,6 +640,9 @@ doctype_js = {
 		"public/js/geo_map_widget.js",
 		"public/js/lot_line_adjustment_map.js",
 	],
+	#: v0.263.0. "View in IPM Map" on both IPM graph forms.
+	"IPM Organism": ["public/js/ipm_map_link.js"],
+	"IPM Relationship": ["public/js/ipm_map_link.js"],
 }
 
 #: THE ONLY REQUEST-LIFECYCLE HOOK THIS APP INSTALLS. v0.17.2, and it is here
