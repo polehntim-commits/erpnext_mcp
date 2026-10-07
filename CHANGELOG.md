@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.262.0 — 2026-10-06 — the IPM relationship graph
+
+**Migrate needed** (doctypes IPM Organism and IPM Relationship; Pest Action Threshold gains organism / status /
+provenance; the literature graph and twelve sweet-cherry starter thresholds are seeded — the thresholds OFF and
+Proposed). Pairs with FarmOps 0.49.0. Contract `docs/contracts/ipm_graph_v0_262.yaml`; deploy
+`docs/deploy/v0.262.0_ipm_graph.md`. Tim, 2026-10-06.
+
+- **The graph is site data.** Nodes (crop, variety, insect / mite pest, disease, weed, vertebrate pest, beneficial
+  insect / mite / microbe / vertebrate, pollinator, product) and edges (attacks, preys_on, parasitizes, controls,
+  harmed_by, hosts, competes_with, pollinates), each with provenance (Literature, Farm Observed, User Entered, AI
+  Proposed, Imported), confidence, source, crop and BBCH scope and an enabled flag. Seeded from `ipm_reference`
+  (106 nodes, 157 edges) keyed by seed_key; a re-seed refreshes only rows still Literature and keeps a person's
+  disable or reject. A literature edge is never edited: the farm's copy is written beside it and stands in for it.
+- **Vertebrates, with their exact legal status**: starling (not MBTA), robin, cedar waxwing, house finch (MBTA),
+  crow (MBTA, depredation order), mule deer (state game), rabbit, vole, pocket gopher; barn owl, great horned owl,
+  kestrel, red-tailed hawk (MBTA), bats, red fox. MBTA species get non-lethal options only; a rodenticide product
+  carries `ccf_gate: rodent_bait` and is presented as going through the rodent-bait task rules.
+- **Thresholds as data**: twelve Mid-Columbia sweet cherry starters (fruit fly, SWD, black cherry aphid, OBLR,
+  spider mites, San Jose scale, powdery mildew, bacterial canker, starling, robin, vole, pocket gopher), every one
+  with recommended methods, seeded OFF and Proposed for Tim (`approve_pest_action_threshold`).
+- **Lowest impact first**: the threshold status ranks options by what they would harm among the beneficials and
+  pollinators active at the stage — non-lethal and biological first, then products by impact, then efficacy.
+- **Phone routes** `get_ipm_graph`, `get_ipm_organism`, `save_ipm_relationship` (Farm Manager / Compliance Officer /
+  System Manager, refused by name; idempotent), `record_pest_observation` (anyone enrolled; a Crop Observation
+  through the threshold engine, answered with the status and options; idempotent), `get_ipm_threshold_status`.
+  Today tile **IPM map** (`ipm_map`). Phone named routes 220.
+- **MCP**: 5 reads, 8 writes (OFF) — list / get / create / update for nodes and edges, `get_ipm_graph`,
+  `import_ipm_graph` (dry run + diff by default), `export_ipm_graph`, `propose_ipm_relationships` (the AI-assisted
+  import, propose_compliance_rule's rails), `approve_ipm_proposal`, `approve_pest_action_threshold`. Everything pages;
+  nothing caps growth. `set_pest_action_threshold` takes organism / status.
+- Fix: the Desk asset map's build stamp read 0.260.0 through v0.261.0; it reads 0.262.0.
+
 ## 0.261.0 — 2026-10-06 — claiming a task with no signal
 
 **Migrate needed** (six Farm Task Assignment columns; rule `task_claimed_offline_twice` seeded ON; switch

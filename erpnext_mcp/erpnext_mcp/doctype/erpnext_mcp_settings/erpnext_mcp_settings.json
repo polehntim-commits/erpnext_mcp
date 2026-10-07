@@ -1213,6 +1213,19 @@
   "allow_list_time_reviews",
   "allow_review_punches",
   "allow_review_claim_conflict",
+  "allow_list_ipm_organisms",
+  "allow_get_ipm_organism",
+  "allow_list_ipm_relationships",
+  "allow_get_ipm_graph",
+  "allow_export_ipm_graph",
+  "allow_create_ipm_organism",
+  "allow_update_ipm_organism",
+  "allow_create_ipm_relationship",
+  "allow_update_ipm_relationship",
+  "allow_import_ipm_graph",
+  "allow_propose_ipm_relationships",
+  "allow_approve_ipm_proposal",
+  "allow_approve_pest_action_threshold",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9425,6 +9438,97 @@
    "fieldname": "allow_review_claim_conflict",
    "fieldtype": "Check",
    "label": "Review Claim Conflict"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.262.0. The IPM graph's nodes.",
+   "fieldname": "allow_list_ipm_organisms",
+   "fieldtype": "Check",
+   "label": "List IPM Organisms"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.262.0. One IPM graph node with its relationships and thresholds.",
+   "fieldname": "allow_get_ipm_organism",
+   "fieldtype": "Check",
+   "label": "Get IPM Organism"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.262.0. The IPM graph's edges.",
+   "fieldname": "allow_list_ipm_relationships",
+   "fieldtype": "Check",
+   "label": "List IPM Relationships"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.262.0. A crop's IPM neighbourhood, paged.",
+   "fieldname": "allow_get_ipm_graph",
+   "fieldtype": "Check",
+   "label": "Get IPM Graph"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.262.0. The whole IPM graph as JSON or CSV.",
+   "fieldname": "allow_export_ipm_graph",
+   "fieldtype": "Check",
+   "label": "Export IPM Graph"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. Add an IPM graph node.",
+   "fieldname": "allow_create_ipm_organism",
+   "fieldtype": "Check",
+   "label": "Create IPM Organism"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. Edit an IPM graph node.",
+   "fieldname": "allow_update_ipm_organism",
+   "fieldtype": "Check",
+   "label": "Update IPM Organism"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. Add an IPM graph edge.",
+   "fieldname": "allow_create_ipm_relationship",
+   "fieldtype": "Check",
+   "label": "Create IPM Relationship"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. Edit an IPM graph edge (a literature edge gets the farm's copy).",
+   "fieldname": "allow_update_ipm_relationship",
+   "fieldtype": "Check",
+   "label": "Update IPM Relationship"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. Bulk import (dry run by default).",
+   "fieldname": "allow_import_ipm_graph",
+   "fieldtype": "Check",
+   "label": "Import IPM Graph"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. AI-proposed nodes, edges and thresholds, landed off for review.",
+   "fieldname": "allow_propose_ipm_relationships",
+   "fieldtype": "Check",
+   "label": "Propose IPM Relationships"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. Approve or reject IPM proposals.",
+   "fieldname": "allow_approve_ipm_proposal",
+   "fieldtype": "Check",
+   "label": "Approve IPM Proposal"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.262.0. Approve or reject a proposed action threshold.",
+   "fieldname": "allow_approve_pest_action_threshold",
+   "fieldtype": "Check",
+   "label": "Approve Pest Action Threshold"
   },
   {
    "default": "1",

@@ -82,11 +82,10 @@ def _literature_nodes() -> list[dict]:
 		row = {"organism_name": pest["name"], "kind": _PEST_KIND.get(pest.get("kingdom"), "Insect Pest"),
 		       "scientific_name": pest.get("scientific_name"), "description": pest.get("description"),
 		       "source": "; ".join(ipm_reference.SOURCES[:2])}
-		if logic.get("model") == "degree_day" and logic.get("base_temp_c") is not None:
-			to_f = 1.8
-			row["dd_base_f"] = round(float(logic["base_temp_c"]) * 1.8 + 32, 1)
-			if logic.get("first_flight_dd") is not None:
-				row["dd_from"] = round(float(logic["first_flight_dd"]) * to_f, 0)
+		# NO DEGREE-DAY NUMBERS ARE COPIED. The reference states its bases in °C and its DD totals in what
+		# match the published °F models, so any one conversion would be wrong for some model. The pest
+		# DD models (v0.264.0) carry their own parameter table with explicit units and citations.
+		del logic
 		add(row)
 	for ben in ipm_reference.BENEFICIALS:
 		kind = "Pollinator" if ben.get("beneficial_type") == "pollinator" else _BENEFICIAL_KIND.get(ben.get("kingdom"), "Beneficial Insect")

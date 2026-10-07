@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1059 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1072 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 514 read tools are **on** by default and can be switched off individually. A
+All 519 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21003,3 +21003,23 @@ task; a later offline claim, or one a rule would refuse, is a **second claim**: 
 its time and evidence kept, `claim_conflict` saying what happened, the task not moved. Start, pause,
 resume and complete work on it as on any assignment. Rule `task_claimed_offline_twice` raises the
 alert. Contract: `docs/deploy/v0.261.0_offline_claim.md`.
+
+## v0.262.0 — the IPM relationship graph
+
+| Tool | What it does |
+| --- | --- |
+| `list_ipm_organisms` | The graph's nodes (crops, pests, beneficials, vertebrates, pollinators, products), paged. Read |
+| `get_ipm_organism` | One node: legal status, active window, relationships in and out, thresholds. Read |
+| `list_ipm_relationships` | The edges, each with weight, confidence, provenance and scope, paged. Read |
+| `get_ipm_graph` | A crop's (or block's) neighbourhood at a stage, nodes and paged edges, active flags. Read |
+| `export_ipm_graph` | Everything as JSON or CSV, in the shape the import reads. Read |
+| `create_ipm_organism` / `update_ipm_organism` | Add or edit a node; editing a seeded node makes it the farm's. Write |
+| `create_ipm_relationship` / `update_ipm_relationship` | Add or edit an edge; a literature edge gets the farm's copy beside it. Write |
+| `import_ipm_graph` | Bulk JSON / CSV; dry run by default with the add / change / skip / error diff. Write |
+| `propose_ipm_relationships` | AI-read handbook or regulation → nodes, edges, thresholds landed Proposed and off, cited. Write |
+| `approve_ipm_proposal` | A person approves or rejects proposals. Write |
+| `approve_pest_action_threshold` | Approve or reject a Proposed threshold (the seeded cherry starters). Write |
+
+`set_pest_action_threshold` takes `organism` and `status`; `list_pest_action_thresholds` filters by `status` and
+returns `organism`, `status`, `provenance`. Five phone routes and a Today tile (`ipm_map`). Contract:
+`docs/contracts/ipm_graph_v0_262.yaml`.

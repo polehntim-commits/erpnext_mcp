@@ -180,6 +180,10 @@ _THRESHOLD_FIELDS = (
 	"effective_from",
 	"disabled",
 	"notes",
+	# v0.262.0. The IPM graph node, and whether a person has approved it (seeded and AI-proposed rows are not).
+	"organism",
+	"status",
+	"provenance",
 )
 
 
@@ -285,6 +289,20 @@ def set_pest_action_threshold(args: dict) -> ToolResult:
 	doc.source = as_str(args, "source") or None
 	doc.effective_from = as_date(args, "effective_from") or frappe.utils.nowdate()
 	doc.notes = as_str(args, "notes") or None
+	# v0.262.0. The graph node it is for, and Proposed (off until approve_pest_action_threshold) when asked.
+	if as_str(args, "organism") and compat.has_field(THRESHOLD, "organism"):
+		if not frappe.db.exists("IPM Organism", as_str(args, "organism")):
+			raise ToolError(f"no IPM Organism {as_str(args, 'organism')!r}. Nothing was written.")
+		doc.organism = as_str(args, "organism")
+	if compat.has_field(THRESHOLD, "status"):
+		status = as_str(args, "status") or "Approved"
+		if status not in ("Approved", "Proposed"):
+			raise ToolError("status is Approved or Proposed. Nothing was written.")
+		doc.status = status
+		if status == "Proposed":
+			doc.disabled = 1
+		else:
+			doc.approved_by, doc.approved_on = frappe.session.user, frappe.utils.now()
 	doc.insert(ignore_permissions=True)
 
 	warnings = []
@@ -346,6 +364,10 @@ def _describe_threshold(row: dict) -> dict:
 		"effective_from": str(row.get("effective_from") or "") or None,
 		"disabled": compat.checked(row.get("disabled")),
 		"notes": row.get("notes") or None,
+		# v0.262.0.
+		"organism": row.get("organism") or None,
+		"status": row.get("status") or "Approved",
+		"provenance": row.get("provenance") or None,
 	}
 
 
@@ -422,8 +444,10 @@ def list_pest_action_thresholds(args: dict) -> ToolResult:
 	category = _category(args, required=False)
 	if category:
 		filters["threat_category"] = category
-	if not as_bool(args, "include_disabled", False):
+	if not as_bool(args, "include_disabled", False) and not as_str(args, "status"):
 		filters["disabled"] = 0
+	if as_str(args, "status") and compat.has_field(THRESHOLD, "status"):
+		filters["status"] = as_str(args, "status")
 
 	rows = frappe.db.get_all(
 		THRESHOLD,

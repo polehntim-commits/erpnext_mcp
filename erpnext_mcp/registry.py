@@ -192,6 +192,7 @@ from .tools import irrigation_schedules as irrigation_schedule_tools
 from .tools import stages as stage_tools
 from .tools import taskdates as task_date_tools
 from .tools import time_reviews as time_review_tools
+from .tools import ipm_graph_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -17951,6 +17952,239 @@ TOOLS = {
 		mutating=True,
 		title="Review punches",
 	),
+	# ── v0.262.0: the IPM relationship graph (docs/contracts/ipm_graph_v0_262.yaml) ──
+	"list_ipm_organisms": _tool(
+		ipm_graph_tools.list_ipm_organisms,
+		"v0.262.0. The nodes of the IPM relationship graph: crops and varieties, insect and mite pests, diseases, "
+		"weeds, vertebrate pests, beneficial insects / mites / microbes / vertebrates, pollinators and products. "
+		"Seeded from the shipped IPM reference as provenance Literature; the farm's own rows are never touched by a "
+		"re-seed. protected_status flags MBTA species (non-lethal options lead). Paged with start / limit; no cap.",
+		{
+			"kind": _field(_STRING, "One kind, e.g. 'Vertebrate Pest'."),
+			"search": _field(_STRING, "Words in the name, scientific name or aliases."),
+			"provenance": _field(_STRING, "Literature, Farm Observed, User Entered, AI Proposed or Imported."),
+			"status": _field(_STRING, "Proposed, Active or Rejected."),
+			"protected_status": _field(_STRING, "MBTA, MBTA Depredation Order, State Protected or ESA."),
+			"include_disabled": _field(_BOOLEAN, "Include disabled nodes."),
+			"start": _field(_INTEGER, "Page start (default 0)."),
+			"limit": _field(_INTEGER, "Page size (default 500, max 2000)."),
+		},
+		title="List IPM organisms",
+	),
+	"get_ipm_organism": _tool(
+		ipm_graph_tools.get_ipm_organism,
+		"v0.262.0. One IPM graph node: what it is, its legal status and active window, every enabled relationship "
+		"in and out, and its action thresholds (Approved or Proposed).",
+		{"organism": _field(_STRING, "Node id (e.g. 'spotted-wing-drosophila') or name."),
+		 "company": _field(_STRING, "Only this company's rows plus the site-wide ones.")},
+		required=("organism",),
+		title="Get IPM organism",
+	),
+	"list_ipm_relationships": _tool(
+		ipm_graph_tools.list_ipm_relationships,
+		"v0.262.0. The edges of the IPM graph — subject → relation → object: attacks, preys_on, parasitizes, "
+		"controls, harmed_by, hosts, competes_with, pollinates — each with weight (efficacy / toxicity / "
+		"effectiveness / severity), confidence, provenance, source, crop and BBCH scope. Paged; no cap.",
+		{
+			"organism": _field(_STRING, "Edges touching this node (either end)."),
+			"subject": _field(_STRING, "Edges from this node."),
+			"object": _field(_STRING, "Edges to this node."),
+			"relation": _field(_STRING, "One relation."),
+			"crop": _field(_STRING, "Scoped to this crop."),
+			"provenance": _field(_STRING, "One provenance."),
+			"status": _field(_STRING, "Proposed, Active or Rejected."),
+			"include_disabled": _field(_BOOLEAN, "Include disabled edges."),
+			"start": _field(_INTEGER, "Page start."),
+			"limit": _field(_INTEGER, "Page size (default 500, max 2000)."),
+		},
+		title="List IPM relationships",
+	),
+	"get_ipm_graph": _tool(
+		ipm_graph_tools.get_ipm_graph,
+		"v0.262.0. The IPM 'mind map' for any client: a crop's neighbourhood `depth` hops out (1–3), as nodes and "
+		"edges, each flagged active_now at the stage. Give a crop, or a block (its crop, and its stage: the latest "
+		"observed BBCH, else the degree-day estimate), or override the stage. Edges page with start / limit and "
+		"next_start; graph_version changes when anything does. The farm's copy of a literature edge stands in for "
+		"it. The label is the law; this is decision support.",
+		{
+			"crop": _field(_STRING, "Node id, crop name or the reference's spelling ('Cherries')."),
+			"block": _field(_STRING, "A Field: its crop and stage."),
+			"stage": _field(_INTEGER, "BBCH, overriding the block's."),
+			"depth": _field(_INTEGER, "Hops from the crop, 1–3 (default 2)."),
+			"kinds": _field(_STRING_ARRAY, "Only these node kinds (the crop always)."),
+			"company": _field(_STRING, "Only this company's rows plus the site-wide ones."),
+			"include_disabled": _field(_BOOLEAN, "Include disabled / proposed rows."),
+			"start": _field(_INTEGER, "Edge page start."),
+			"limit": _field(_INTEGER, "Edge page size (default 500, max 2000)."),
+		},
+		title="Get IPM graph",
+	),
+	"export_ipm_graph": _tool(
+		ipm_graph_tools.export_ipm_graph,
+		"v0.262.0. Every IPM node and edge in the shape import_ipm_graph reads back: JSON, or CSV with a record "
+		"column (node / edge). Edges page with start / limit.",
+		{
+			"format": _field(_STRING, "json (default) or csv."),
+			"include_literature": _field(_BOOLEAN, "Include the seeded literature rows (default true)."),
+			"start": _field(_INTEGER, "Edge page start."),
+			"limit": _field(_INTEGER, "Edge page size (default 500, max 2000)."),
+		},
+		title="Export IPM graph",
+	),
+	"create_ipm_organism": _tool(
+		ipm_graph_tools.create_ipm_organism,
+		"MUTATING (default OFF). v0.262.0. Add a node to the IPM graph — a variety, a pest, a beneficial, a "
+		"product. Lands Active, provenance User Entered.",
+		{
+			"organism_name": _field(_STRING, "The name."),
+			"kind": _field(_STRING, "Crop, Variety, Insect Pest, Mite Pest, Disease, Weed, Vertebrate Pest, Beneficial "
+			                        "Insect, Beneficial Mite, Beneficial Microbe, Beneficial Vertebrate, Pollinator or Product."),
+			"scientific_name": _field(_STRING, "Scientific name."),
+			"parent_organism": _field(_STRING, "A variety's crop."),
+			"aliases": _field(_STRING, "Other names, one per line."),
+			"description": _field(_STRING, "What it is."),
+			"protected_status": _field(_STRING, "MBTA, MBTA Depredation Order, State Protected or ESA."),
+			"protected_note": _field(_STRING, "What the protection means here."),
+			"ccf_gate": _field(_STRING, "e.g. rodent_bait for a rodenticide product."),
+			"bbch_from": _field(_INTEGER, "Active from BBCH."),
+			"bbch_to": _field(_INTEGER, "Active to BBCH."),
+			"item": _field(_STRING, "A Product's ERPNext Item."),
+			"epa_reg_number": _field(_STRING, "A Product's EPA registration number."),
+			"source": _field(_STRING, "Where this came from."),
+			"company": _field(_STRING, "Only for this company (blank = site-wide)."),
+		},
+		required=("organism_name", "kind"),
+		mutating=True,
+		title="Create IPM organism",
+	),
+	"update_ipm_organism": _tool(
+		ipm_graph_tools.update_ipm_organism,
+		"MUTATING (default OFF). v0.262.0. Edit a node. Editing a seeded (Literature) node makes it the farm's: "
+		"re-seed leaves it alone from then on. enabled=false hides it from the graph.",
+		{
+			"organism": _field(_STRING, "Node id or name."),
+			"organism_name": _field(_STRING, "New name."),
+			"description": _field(_STRING, "Description."),
+			"aliases": _field(_STRING, "Aliases, one per line."),
+			"protected_status": _field(_STRING, "Legal status."),
+			"protected_note": _field(_STRING, "Legal note."),
+			"ccf_gate": _field(_STRING, "Compliance gate."),
+			"bbch_from": _field(_INTEGER, "Active from BBCH."),
+			"bbch_to": _field(_INTEGER, "Active to BBCH."),
+			"enabled": _field(_BOOLEAN, "Shown in the graph."),
+			"notes": _field(_STRING, "Notes."),
+		},
+		required=("organism",),
+		mutating=True,
+		title="Update IPM organism",
+	),
+	"create_ipm_relationship": _tool(
+		ipm_graph_tools.create_ipm_relationship,
+		"MUTATING (default OFF). v0.262.0. Add an edge: subject → relation → object (attacks, preys_on, parasitizes, "
+		"controls, harmed_by, hosts, competes_with, pollinates). The ends are checked (a crop preys on nothing). "
+		"Lands Active, provenance User Entered; the same subject/relation/object/crop as one of the farm's rows "
+		"updates that row.",
+		{
+			"subject": _field(_STRING, "Node id or name."),
+			"relation": _field(_STRING, "The relation."),
+			"object": _field(_STRING, "Node id or name."),
+			"weight": _field(_NUMBER, "0–1: efficacy / toxicity / effectiveness / severity."),
+			"confidence": _field(_NUMBER, "0–1."),
+			"crop": _field(_STRING, "Only for this crop."),
+			"bbch_from": _field(_INTEGER, "From BBCH."),
+			"bbch_to": _field(_INTEGER, "To BBCH."),
+			"source": _field(_STRING, "Where this came from."),
+			"notes": _field(_STRING, "Notes."),
+			"enabled": _field(_BOOLEAN, "On (default)."),
+		},
+		required=("subject", "relation", "object"),
+		mutating=True,
+		title="Create IPM relationship",
+	),
+	"update_ipm_relationship": _tool(
+		ipm_graph_tools.update_ipm_relationship,
+		"MUTATING (default OFF). v0.262.0. Edit an edge — weight, confidence, scope, notes, enabled. A LITERATURE "
+		"edge is never edited: the farm's own copy is written beside it (User Entered) and stands in for it in the "
+		"graph; re-seed never touches it. enabled=false hides an edge without deleting it.",
+		{
+			"relationship": _field(_STRING, "The IPM Relationship docname."),
+			"weight": _field(_NUMBER, "0–1."),
+			"confidence": _field(_NUMBER, "0–1."),
+			"crop": _field(_STRING, "Scope."),
+			"bbch_from": _field(_INTEGER, "From BBCH."),
+			"bbch_to": _field(_INTEGER, "To BBCH."),
+			"notes": _field(_STRING, "Notes."),
+			"enabled": _field(_BOOLEAN, "Shown in the graph."),
+		},
+		required=("relationship",),
+		mutating=True,
+		title="Update IPM relationship",
+	),
+	"import_ipm_graph": _tool(
+		ipm_graph_tools.import_ipm_graph,
+		"MUTATING (default OFF). v0.262.0. Bulk-add nodes and edges from JSON {nodes, edges} or CSV (a record "
+		"column: node / edge; the columns export_ipm_graph writes). DRY RUN BY DEFAULT: returns the add / change / "
+		"skip / error diff and writes nothing. With dry_run=false rows land Proposed and off for "
+		"approve_ipm_proposal, or Active when status says so. Literature rows are never changed; no cap on size.",
+		{
+			"data": _field({"type": ["object", "string"]}, "JSON object or string, or CSV text."),
+			"format": _field(_STRING, "json (default) or csv."),
+			"dry_run": _field(_BOOLEAN, "Default true."),
+			"status": _field(_STRING, "Proposed (default) or Active."),
+		},
+		required=("data",),
+		mutating=True,
+		title="Import IPM graph",
+	),
+	"propose_ipm_relationships": _tool(
+		ipm_graph_tools.propose_ipm_relationships,
+		"MUTATING (default OFF). v0.262.0. THE AI-ASSISTED IMPORT. An agent that has read a handbook page or a "
+		"regulation hands over the nodes, edges and thresholds it found; they land PROPOSED and OFF, provenance AI "
+		"Proposed, citing the source, for a person to approve with approve_ipm_proposal — the same rails as "
+		"propose_compliance_rule: a source is required (source_url / source_section / source_citation), approval "
+		"fields are refused, and a proposed threshold must carry recommended_methods.",
+		{
+			"nodes": _field({"type": "array", "items": {"type": "object"}}, "Organisms: organism_name, kind, …"),
+			"edges": _field({"type": "array", "items": {"type": "object"}}, "subject, relation, object, weight, confidence, crop, notes."),
+			"thresholds": _field({"type": "array", "items": {"type": "object"}},
+			                     "crop, threat, sample_unit, comparison, action_threshold, warning_threshold, recommended_methods."),
+			"source_url": _field(_STRING, "Where it was read."),
+			"source_section": _field(_STRING, "The page or section."),
+			"source_citation": _field(_STRING, "The citation written out."),
+			"source_text": _field(_STRING, "A short quote (trimmed to 240 characters)."),
+			"read_on": _field(_STRING, "YYYY-MM-DD."),
+			"authored_by": _field(_STRING, "Who proposed it (the agent)."),
+		},
+		mutating=True,
+		title="Propose IPM relationships",
+	),
+	"approve_ipm_proposal": _tool(
+		ipm_graph_tools.approve_ipm_proposal,
+		"MUTATING (default OFF). v0.262.0. A person approves (Active, on) or rejects (Rejected, off, kept) proposed "
+		"IPM organisms, relationships and thresholds by docname; records who, when and the note.",
+		{
+			"names": _field(_STRING_ARRAY, "Docnames: organisms, relationships, thresholds."),
+			"decision": _field(_STRING, "approve (default) or reject."),
+			"note": _field(_STRING, "Why."),
+		},
+		required=("names",),
+		mutating=True,
+		title="Approve IPM proposal",
+	),
+	"approve_pest_action_threshold": _tool(
+		ipm_graph_tools.approve_pest_action_threshold,
+		"MUTATING (default OFF). v0.262.0. Approve (enable) or reject a Proposed Pest Action Threshold — the "
+		"Mid-Columbia sweet cherry starters were seeded Proposed and off for Tim. list_pest_action_thresholds "
+		"status Proposed lists them.",
+		{
+			"threshold": _field(_STRING, "One threshold."),
+			"names": _field(_STRING_ARRAY, "Or several."),
+			"decision": _field(_STRING, "approve (default) or reject."),
+			"note": _field(_STRING, "Why."),
+		},
+		mutating=True,
+		title="Approve pest action threshold",
+	),
 	# ── v0.261.0: offline claims ─────────────────────────────────────────────
 	"review_claim_conflict": _tool(
 		time_review_tools.review_claim_conflict,
@@ -31606,6 +31840,8 @@ TOOLS = {
 			"effective_from": _field(_STRING, "YYYY-MM-DD. Default today."),
 			"company": _COMPANY,
 			"notes": _field(_STRING, "Anything else."),
+			"organism": _field(_STRING, "v0.262.0. The IPM graph node this threshold is for."),
+			"status": _field(_STRING, "v0.262.0. Approved (default) or Proposed (lands off for approve_pest_action_threshold)."),
 		},
 		required=("crop", "threat", "threat_category", "action_threshold"),
 		mutating=True,
@@ -31625,6 +31861,7 @@ TOOLS = {
 			"threat": _field(_STRING, "Optional. Narrow to one threat."),
 			"threat_category": _field(_STRING, "Optional. One of the six."),
 			"include_disabled": _field(_BOOLEAN, "Also show retired thresholds. Default false."),
+			"status": _field(_STRING, "v0.262.0. Approved, Proposed or Rejected (shows disabled rows of that status)."),
 			"limit": _LIMIT,
 		},
 		title="List pest action thresholds",

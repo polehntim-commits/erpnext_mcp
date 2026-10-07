@@ -319,6 +319,20 @@ SEEDS = {
 		"show_if": {},
 		"min_app_version": "0.21.0",
 	},
+	# v0.262.0 (docs/contracts/ipm_graph_v0_262.yaml). The IPM relationship graph — pests, beneficials and what
+	# harms them — for everyone enrolled; editing it inside is the Farm Manager's / Compliance Officer's.
+	"ipm_map": {
+		"surface": "today",
+		"title": {"en": "IPM map", "es": "Mapa MIP"},
+		"subtitle": {"en": "Pests, beneficials and what harms them", "es": "Plagas, benéficos y lo que los daña"},
+		"icon": "point.3.connected.trianglepath.dotted",
+		"order": 85,
+		"target": {"kind": "report", "report": "ipm_map"},
+		"audience": {},
+		"badge": {},
+		"show_if": {},
+		"min_app_version": "0.49.0",
+	},
 	"my_feedback": {
 		"surface": "today",
 		"title": {"en": "My notes and replies", "es": "Mis notas y respuestas"},

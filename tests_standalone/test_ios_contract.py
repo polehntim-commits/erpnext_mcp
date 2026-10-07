@@ -5678,3 +5678,103 @@ class _OfflineClaimMirror:
 for _name, _fn in vars(_OfflineClaimMirror).items():
 	if _name.startswith("test_"):
 		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+
+# ── v0.262.0 / app 0.49.0: the IPM relationship graph (docs/contracts/ipm_graph_v0_262.yaml) ──
+class IPMNodeModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("id", str, 0), ("kind", str, 0))
+	LENIENT = (("name", str, 0), ("scientific_name", str, 0), ("parent", str, 0), ("protected_status", str, 0),
+	           ("protected_note", str, 0), ("bbch_from", int, 0), ("bbch_to", int, 0), ("active_now", bool, 0),
+	           ("ccf_gate", str, 0), ("provenance", str, 0), ("enabled", bool, 0))
+
+
+class IPMEdgeModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("id", str, 0), ("subject", str, 0), ("relation", str, 0), ("object", str, 0))
+	LENIENT = (("weight", float, 0), ("confidence", float, 0), ("provenance", str, 0), ("source", str, 0),
+	           ("notes", str, 0), ("crop", str, 0), ("bbch_from", int, 0), ("bbch_to", int, 0),
+	           ("active_now", bool, 0), ("status", str, 0), ("enabled", bool, 0))
+
+
+class IPMGraphModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("graph_version", str, 0),)
+	LENIENT = (("block", str, 0), ("total_edges", int, 0), ("next_start", int, 0), ("can_edit", bool, 0),
+	           ("label_caveat", str, 0))
+	NESTED = (("crop", IPMNodeModel, False, 0), ("nodes", IPMNodeModel, True, 0), ("edges", IPMEdgeModel, True, 0))
+
+
+class IPMOrganismModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	LENIENT = (("description", str, 0), ("can_edit", bool, 0))
+	NESTED = (("node", IPMNodeModel, False, 0), ("edges", IPMEdgeModel, True, 0))
+
+
+class IPMSaveModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	LENIENT = (("created", bool, 0),)
+	NESTED = (("edge", IPMEdgeModel, False, 0),)
+
+
+class IPMOptionModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("kind", str, 0), ("title", str, 0))
+	LENIENT = (("product", str, 0), ("impact", float, 0), ("efficacy", float, 0), ("ccf_gate", str, 0), ("note", str, 0))
+
+
+class IPMThresholdStatusModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("status", str, 0),)
+	LENIENT = (("message", str, 0), ("protected_species_note", str, 0), ("label_caveat", str, 0))
+	NESTED = (("organism", IPMNodeModel, False, 0), ("options", IPMOptionModel, True, 0))
+
+
+class IPMObservationModel(Codable):
+	SWIFT = "IPMGraph.swift"
+	STRICT = (("observation", str, 0),)
+	NESTED = (("threshold_status", IPMThresholdStatusModel, False, 0),)
+
+
+class _IPMMirrors:
+	def _ipm_site(self):
+		from erpnext_mcp import ipm_graph
+
+		ipm_graph.seed()
+		STORE.commit()
+		if not frappe.db.exists("Field", "Block 7 Bing"):
+			STORE.seed("Field", [{"name": "Block 7 Bing", "field_name": "Block 7 Bing", "crop": "Cherries"}])
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		self.be()
+
+	def test_87_get_ipm_graph(self):
+		self._ipm_site()
+		IPMGraphModel.decode(self.wire("get_ipm_graph", crop="Cherries", stage=85, limit=50), "get_ipm_graph")
+
+	def test_88_get_ipm_organism(self):
+		self._ipm_site()
+		IPMOrganismModel.decode(self.wire("get_ipm_organism", organism="american-robin"), "get_ipm_organism")
+
+	def test_89_save_ipm_relationship(self):
+		self._ipm_site()
+		IPMSaveModel.decode(self.wire("save_ipm_relationship", subject="green-lacewing", relation="preys_on",
+		                              object="cherry-slug", client_request_id="contract-89"), "save_ipm_relationship")
+
+	def test_90_record_pest_observation(self):
+		self._ipm_site()
+		IPMObservationModel.decode(self.wire("record_pest_observation", block="Block 7 Bing", organism="spider-mites",
+		                                     count=4, client_request_id="contract-90"), "record_pest_observation")
+
+	def test_91_get_ipm_threshold_status(self):
+		self._ipm_site()
+		IPMThresholdStatusModel.decode(self.wire("get_ipm_threshold_status", organism="vole", block="Block 7 Bing"),
+		                               "get_ipm_threshold_status")
+
+
+for _name, _fn in vars(_IPMMirrors).items():
+	if _name.startswith(("test_", "_ipm_site")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"get_ipm_graph": "test_87", "get_ipm_organism": "test_88",
+                                      "save_ipm_relationship": "test_89", "record_pest_observation": "test_90",
+                                      "get_ipm_threshold_status": "test_91"})

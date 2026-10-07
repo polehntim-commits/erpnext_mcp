@@ -232,6 +232,7 @@ def after_migrate() -> None:
 	_course_videos()
 	_punch_review_rules()
 	_offline_claim_rule()
+	_ipm_graph_seed()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -838,6 +839,22 @@ def _offline_claim_rule() -> None:
 			print("erpnext_mcp: offline claim rule seeded.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: offline claim rule was not seeded — {type(exc).__name__}: {exc}")
+
+
+def _ipm_graph_seed() -> None:
+	"""v0.262.0. The IPM graph's literature nodes and edges, and the cherry starter thresholds (OFF, Proposed).
+	Refreshes only rows still Literature; never touches the farm's. Never raises."""
+	try:
+		from . import ipm_graph
+
+		report = ipm_graph.seed()
+		print(f"erpnext_mcp: IPM graph seeded — {report.get('nodes', 0)} node(s) and {report.get('edges', 0)} edge(s) "
+		      f"added, {report['refreshed']} refreshed, {report['kept']} of the farm's kept; "
+		      f"{report.get('thresholds', 0)} starter threshold(s) proposed (off).")
+		for error in report["errors"][:5]:
+			print(f"erpnext_mcp: IPM seed row skipped — {error}")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: IPM graph was not seeded — {type(exc).__name__}: {exc}")
 
 
 def _business_card_fields() -> None:
