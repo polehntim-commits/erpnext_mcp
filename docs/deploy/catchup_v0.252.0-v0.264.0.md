@@ -1,10 +1,10 @@
-**Deploy: v0.252.0 → v0.261.0 (OML today) — one build, one migrate; FarmOps 0.48.0 (build 43)**
+**Deploy: v0.252.0 → v0.264.0 (OML today) — one build, one migrate; FarmOps 0.50.0 (build 45)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.261.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.264.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`2b93e73`** (`__version__ = "0.261.0"`).
-- **App**: fafo_ios main **`fb26f3e`** — FarmOps **0.48.0 (build 43)**, scheme **FarmOps**.
+- **Server**: erpnext_mcp main **`e400b96`** (`__version__ = "0.264.0"`).
+- **App**: fafo_ios main **`26d1d03`** — FarmOps **0.50.0 (build 45)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
 
@@ -19,26 +19,31 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.259.0 | Form 940 and W-3 via `generate_tax_form` (940 = the FUTA summary's walk; W-3 = the W-2s totalled; `kind_of_payer: 943` for an agricultural filer). |
 | v0.260.0 | **Least-privilege hotfix.** HR reads (others' I-9, discipline, everyone's pay, deductions, personnel files) need HR Manager / HR User — the Farm Owner profile carries HR Manager; accident reports, the compliance calendar, receipts (own only), housing occupants and search filters narrowed. **Check Tim holds HR Manager after the migrate.** |
 | v0.261.0 | Claim a task with no signal: the first claim to reach the server holds it; a later one is kept as a second claim with the worker's time and evidence, flagged "claimed offline by two people" (rule task_claimed_offline_twice ON) for a supervisor to review. Online claims unchanged. Pairs with app 0.48.0. |
+| v0.262.0 | The IPM relationship graph ("mind map"): editable nodes and relationships seeded from the reference (106 / 157), vertebrates with exact MBTA status, twelve sweet-cherry starter thresholds seeded OFF and Proposed, lowest-impact-first options, phone tile IPM map, MCP read / write (writes OFF). Pairs with app 0.49.0. |
+| v0.263.0 | The IPM Map in the Desk (Crop Protection → IPM Map): same graph and same edit rule as the phone; filters, side panel with observations, PNG / SVG / CSV export; library vendored (no CDN). |
+| v0.264.0 | Pest degree days per block on the farm's own weather (Open-Meteo): models and block offsets (slope / aspect / elevation) as config a person publishes, calibration that only drafts; shown in the graph, threshold checks, Desk map, an opt-in map layer, Go / Hold presets (OFF). 4 of 28 pests have models, all marked verify. Pairs with app 0.50.0. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
 | app 0.46.0 | Replies to review: office@ drafts read, corrected and approved (Face ID) or discarded on the phone. |
 | app 0.47.0 | Sign-out leaves nothing of the last person's on a shared phone; unsent queued work is counted in the sign-out warning. |
 | app 0.48.0 | Claim a task with no signal ("Claimed on phone — will confirm when synced"); told, by name, when someone else's claim reached the farm first — your time and photos are kept. |
+| app 0.49.0 | IPM map on the phone: the graph, node detail, log a pest (threshold status, lowest-impact option first), add / edit relationships for managers; works offline. |
+| app 0.50.0 | Degree days per block on the IPM map: next-event dates on pests, a Degree days screen, the offset and its reasons. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.261.0`. Push fafo_ios main and archive
-FarmOps 0.48.0 (build 43).
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.264.0`. Push fafo_ios main and archive
+FarmOps 0.50.0 (build 45).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." and `0.261.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." and `0.264.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.261.0; the asset map's build stamp 0.261.0.
+1. `get_server_status`: 0.264.0; the asset map's build stamp 0.264.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
