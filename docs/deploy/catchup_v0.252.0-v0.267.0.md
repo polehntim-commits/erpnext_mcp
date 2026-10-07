@@ -1,10 +1,10 @@
-**Deploy: v0.252.0 → v0.266.0 (OML today) — one build, one migrate; FarmOps 0.51.0 (build 46)**
+**Deploy: v0.252.0 → v0.267.0 (OML today) — one build, one migrate; FarmOps 0.52.0 (build 47)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.266.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.267.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`c1de899`** (`__version__ = "0.266.0"`).
-- **App**: fafo_ios main **`6d7e800`** — FarmOps **0.51.0 (build 46)**, scheme **FarmOps**.
+- **Server**: erpnext_mcp main **`cf04db6`** (`__version__ = "0.267.0"`).
+- **App**: fafo_ios main **`72d4de0`** — FarmOps **0.52.0 (build 47)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
 
@@ -25,6 +25,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.264.1 | Tim's harvest windows (Mill Creek 24, 40 Acre 6) as calibration seed data; `propose_harvest_calibration` (off) drafts DD calibrations from them — nothing applied. |
 | v0.265.0 | USDA AMS market prices: shipping point (primary), terminal (context, the cost of market access), movement. Idempotent Price Points, no carry-forward, gaps and format changes flagged not dropped. Any commodity as config: sweet cherries and cantaloupe published, ten tree fruit / melons seeded as drafts; the AMS catalog browsable, drafts built from observed data. Fetch once per report, fan out. Daily pull 05:30 only once the key is set. Phone market card and chart routes; MCP reads, writes OFF. |
 | v0.266.0 | Desk **Market Prices** page (candles + volume, season over season, bars, overlays; vendored chart library, no CDN), the market in the pro forma's breakeven sensitivity, phone tile **Market prices** (app 0.51.0+). |
+| v0.267.0 | Who sees what on the phone, as data: one Data Access policy (tiers, gates, restricted fields, all 428 routes) filtering every answer at one exit; seeded to today's behaviour (nothing changes until a System Manager publishes); gates may only narrow (private HR never back to Farm Manager); ten over-shares listed for Tim in `v0.267.0_data_access.md` §4. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -34,20 +35,21 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | app 0.49.0 | IPM map on the phone: the graph, node detail, log a pest (threshold status, lowest-impact option first), add / edit relationships for managers; works offline. |
 | app 0.50.0 | Degree days per block on the IPM map: next-event dates on pests, a Degree days screen, the offset and its reasons. |
 | app 0.51.0 | Market card ("Should I be picking today?") and a stock-style price chart; works offline from the saved copy; no quote never shows an old price. |
+| app 0.52.0 | On-device protection: people/money caches locked when the phone is locked (background-sync stores stay readable after first unlock), all caches out of backups, no HTTP cache, sign-out now wipes four stores it missed. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.266.0`. Push fafo_ios main and archive
-FarmOps 0.51.0 (build 46).
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.267.0`. Push fafo_ios main and archive
+FarmOps 0.52.0 (build 47).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew.", and `0.266.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew.", and `0.267.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.266.0; the asset map's build stamp 0.266.0.
+1. `get_server_status`: 0.267.0; the asset map's build stamp 0.267.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
