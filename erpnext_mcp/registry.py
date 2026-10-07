@@ -8230,6 +8230,7 @@ TOOLS = {
 		"`dry_run=true` computes everything and writes nothing.",
 		{
 			"field": _field(_STRING, "The Field docname, or its field name."),
+			"replace_acreage": _field(_BOOLEAN, "v0.269.0. On a block whose acreage follows its outline, accept a new outline that disagrees grossly with the current acreage (a real redraw, not a cut corner). Default false."),
 			"boundary_geojson": _field(
 				_STRING,
 				"The boundary as GeoJSON, in [longitude, latitude] degrees. A bare geometry, a "

@@ -200,14 +200,32 @@ class Contract(FieldCase):
 
 
 class OutlineByDefault(FieldCase):
-	def test_a_new_block_follows_its_outline_and_an_old_one_is_left_alone(self):
+	def test_a_new_block_without_acreage_follows_its_outline_and_one_with_a_figure_keeps_it(self):
 		if not geo.available():
 			self.skipTest("shapely / h3 not installed — the outline is stored, not measured")
-		doc = frappe.get_doc({"doctype": "Field", "field_name": "New Block", "parcel": "Mill Creek - MC", "acreage": 1,
-		                      "boundary_geojson": json.dumps({"type": "Polygon", "coordinates": [CENTER_RING]})})
+		ring = json.dumps({"type": "Polygon", "coordinates": [CENTER_RING]})
+		doc = frappe.get_doc({"doctype": "Field", "field_name": "New Block", "parcel": "Mill Creek - MC",
+		                      "boundary_geojson": ring})
 		doc.insert(ignore_permissions=True)
 		self.assertEqual(doc.acreage_source, "Outline")
 		self.assertAlmostEqual(float(doc.acreage), round(float(doc.area_computed_acres), 2))
+		typed = frappe.get_doc({"doctype": "Field", "field_name": "FSA Block", "parcel": "Mill Creek - MC", "acreage": 11.5})
+		typed.insert(ignore_permissions=True)
+		self.assertEqual((typed.acreage_source, float(typed.acreage)), ("Manual", 11.5))
+		self.assertIn("created", typed.acreage_override_reason)
+
+	def test_a_gross_redraw_on_an_outline_block_is_refused_unless_meant(self):
+		if not geo.available():
+			self.skipTest("shapely / h3 not installed")
+		self.configure(enabled=1, allow_set_field_boundary=1, allow_set_field_acreage=1)
+		self.tool_data("set_field_acreage", {"field": "mc centerpiece"})  # now Outline, ~11 ac
+		tiny = json.dumps({"type": "Polygon", "coordinates": [[[-121.2308, 45.5850], [-121.2306, 45.5850],
+		                                                      [-121.2306, 45.5852], [-121.2308, 45.5852],
+		                                                      [-121.2308, 45.5850]]]})
+		self.assertIn("different piece of ground", self.tool_error("set_field_boundary", {"field": CENTER, "boundary_geojson": tiny}))
+		data = self.tool_data("set_field_boundary", {"field": CENTER, "boundary_geojson": tiny, "replace_acreage": True})
+		self.assertTrue(data["changed"])
+		self.assertLess(float(frappe.db.get_value("Field", CENTER, "acreage")), 1)
 
 
 class AddTaskHereOffline(FieldCase):

@@ -117,7 +117,7 @@ class Field(Document):
 
 		self._tidy_aliases()
 		if not self.get("acreage_source") and not (self.name and frappe.db.exists("Field", self.name)):
-			self.acreage_source = "Outline"  # a NEW block follows its outline (see before_insert)
+			self._default_acreage_source()
 		# v0.269.0: the boundary first — on an Outline block it sets the acreage the parcel check reads.
 		self._check_boundary()
 		self._check_parcel_acreage(parcel)
@@ -155,9 +155,19 @@ class Field(Document):
 		)
 
 	def before_insert(self):
-		# v0.269.0. A NEW block's acreage follows its outline by default. Set here, not as a column default, so the
-		# migrate does not stamp every existing block "Outline" and quietly change its recorded acreage.
+		# v0.269.0. Set here, not as a column default, so the migrate does not stamp every existing block and
+		# quietly change its recorded acreage.
 		if not self.get("acreage_source"):
+			self._default_acreage_source()
+
+	def _default_acreage_source(self) -> None:
+		"""A new block with no acreage follows its outline (Tim, 2026-10-07). One created WITH a figure — typed in,
+		or FSA's calculated acres from an import — keeps it, as a Manual figure that says where it came from."""
+		if float(self.acreage or 0) > 0:
+			self.acreage_source = "Manual"
+			if not str(self.get("acreage_override_reason") or "").strip():
+				self.acreage_override_reason = "Entered when the block was created."
+		else:
 			self.acreage_source = "Outline"
 
 	def on_update(self):
@@ -356,12 +366,15 @@ class Field(Document):
 		derived.pop("shape", None)
 		for fieldname, value in derived.items():
 			self.set(fieldname, value)
-		# v0.269.0 (Tim): the drawn outline is the acreage on an Outline block — nothing to disagree with.
-		if self.get("acreage_source") == "Outline" and self.area_computed_acres:
-			self.acreage = round(float(self.area_computed_acres), 2)
-			return
 
 		_ratio, verdict = geo.area_disagreement(self.acreage, self.area_computed_acres)
+		# v0.269.0. A gross disagreement is still refused on an Outline block — a walk that cut a corner must not
+		# quietly rewrite the acreage — unless the caller said the new outline is right (`replace_acreage`).
+		if verdict == "refuse" and self.flags.get("replace_acreage"):
+			verdict = "ok"
+		if verdict != "refuse" and self.get("acreage_source") == "Outline" and self.area_computed_acres:
+			self.acreage = round(float(self.area_computed_acres), 2)
+			return
 		if verdict == "refuse":
 			frappe.throw(
 				_(

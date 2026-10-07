@@ -6,7 +6,8 @@ version: "0.269.0"
 
 field_record:   # Field gains (migrate)
   aliases: "one per line. The names people use ('Wind Machine', 'Wind Mecine', 'Center Piece', 'Centerpiece'). The SAME alias on several fields is a NAMED GROUP: 'Bing Block' on Wind Machine and Center Piece resolves to both."
-  acreage_source: "Outline (default) | Manual. Outline: acreage follows the drawn boundary (area_computed_acres) whenever the boundary changes. Manual: kept as entered, with acreage_override_reason."
+  acreage_source: "Outline | Manual. Outline: acreage follows the drawn boundary (area_computed_acres) whenever it changes — except a GROSS disagreement (a walk that cut a corner) is still refused unless set_field_boundary gets replace_acreage: true. Manual: kept as entered, with acreage_override_reason."
+  defaults: "a NEW block created without an acreage is Outline; one created WITH a figure (typed, or FSA's calculated acres from an import) is Manual, reason 'Entered when the block was created.'; an EXISTING block (blank after the migrate) keeps today's behaviour until set_field_acreage switches it"
   acreage_changes: "every acreage change is logged on the Field (Comment): old value, new value, source, reason, who"
 
 lookup:   # field_names.find — one rule everywhere (phone, Desk, MCP)

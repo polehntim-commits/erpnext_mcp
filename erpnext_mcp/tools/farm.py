@@ -1848,7 +1848,8 @@ def set_field_boundary(args: dict) -> ToolResult:
 	follows_outline = compat.has_field(FIELD, "acreage_source") and (
 		frappe.db.get_value(FIELD, row["name"], "acreage_source") == "Outline"
 	)
-	if follows_outline:
+	replace = as_bool(args, "replace_acreage", False)
+	if follows_outline and (verdict != "refuse" or replace):
 		verdict = "ok"
 	if verdict == "refuse":
 		raise ToolError(
@@ -1867,12 +1868,13 @@ def set_field_boundary(args: dict) -> ToolResult:
 			"routinely disagree by a few percent; both figures are kept and neither is "
 			"overwritten."
 		)
-	if follows_outline:
+	if follows_outline and entered:
 		warnings.append(f"Acreage follows the outline on this block: {entered} → {derived['area_computed_acres']} ac.")
 	elif not entered:
 		warnings.append(
 			f"No acreage was recorded on this block, so nothing was compared. The polygon says "
-			f"{derived['area_computed_acres']} acres — set it with update_field if that is right."
+			f"{derived['area_computed_acres']} acres"
+			+ (" and the block now follows it." if follows_outline else " — set it with update_field if that is right.")
 		)
 
 	# v0.32.0. Parcels carry a polygon now, so this is a real check rather than
@@ -1942,6 +1944,8 @@ def set_field_boundary(args: dict) -> ToolResult:
 	doc = frappe.get_doc(FIELD, row["name"])
 	for fieldname, value in derived.items():
 		doc.set(fieldname, value)
+	if follows_outline and replace:
+		doc.flags.replace_acreage = True
 	doc.save(ignore_permissions=True)
 
 	data["changed"] = True

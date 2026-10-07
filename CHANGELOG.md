@@ -13,9 +13,11 @@ settings switches). Pairs with FarmOps 0.54.0. Deploy `docs/deploy/v0.269.0_fiel
   and punctuation. An alias several blocks of one company share is a named group ("Bing Block" → Wind Machine + Center
   Piece); anything else ambiguous comes back as candidates and is never picked silently.
 - **Rename without losing the old name**: `rename_field` keeps the old name as an alias ("Wind Mecine" still resolves).
-- **Acreage follows the drawn outline** on new blocks (Acreage Source = Outline); a manual figure needs a reason; every
-  change is logged on the block with the old value. Existing blocks keep their recorded acreage until switched with
-  `set_field_acreage`.
+- **Acreage follows the drawn outline** (Acreage Source = Outline) on new blocks created without a figure; a block
+  created with one (typed, or FSA's calculated acres) keeps it as Manual. A manual figure needs a reason, and every
+  change is logged on the block with the old value. A gross disagreement (a walk that cut a corner) is still refused
+  unless `set_field_boundary` gets `replace_acreage: true`. Existing blocks keep their recorded acreage until switched
+  with `set_field_acreage`. Create-only routes now accept `client_request_id` on `create_task_from_template`.
 - **The field card** (phone): name and aliases, acreage, crop and variety, open tasks, the valves and hazard pins inside
   its outline, and recent history. **Hazard Marker**: a new fixed asset type for pins a crew drops on anything to avoid.
 - **Field history** on the phone, in the Desk (Field form → History, filters by kind and season, older pages) and over
