@@ -1,0 +1,35 @@
+# The phone's company switcher — the frozen contract. erpnext_mcp v0.268.0; FarmOps 0.53.0 builds against it.
+# Fixtures: tests_standalone/contract/v0_268_0/ (byte-identical copies in FarmOps
+# FarmOpsKit/Tests/FarmOpsKitTests/Fixtures/contract_v0_268_0/). Tim, 2026-10-07.
+
+version: "0.268.0"
+
+why: >
+  A person in more than one farm entity chooses which company the phone shows, once, and every company-scoped list
+  follows it (accidents and leave were the gap: the app never sent a company, so a two-entity manager only ever saw
+  their first). Single-company users see no picker. The server still decides membership.
+
+who_sees_the_picker: "get_current_user_context.companies has 2 or more entries (unchanged field). One entry: no picker, no header needed."
+
+selection:
+  where: "on the phone only — one remembered value per signed-in user, cleared at sign-out (SessionStore.selectedCompany)"
+  default: "get_current_user_context.default_company when it is one of companies, else companies[0]"
+  shown: "the switcher chip in the navigation bar of every company-scoped screen (CompanySwitcher), abbreviation on the chip, full name in the menu"
+
+header:
+  name: "X-FarmOps-Company"
+  value: "the selected company's name exactly as in companies[].name"
+  sent: "on EVERY request while signed in, when a company is selected (the server ignores it on routes that take no company)"
+  server:
+    - "a route that accepts `company` and was not given one in the body gets the header's value (company_scoped_routes.json lists them)"
+    - "a company named in the body wins over the header (both are validated)"
+    - "the header naming a company the caller does not belong to — another farm's, a removed membership, or one that does not exist — is REFUSED on those routes before the route runs: 403, refusal_company_not_member.json. Same refusal for all three (no oracle)."
+    - "routes that take no company ignore the header entirely"
+
+phone_on_refusal: "clear the selection, refresh get_current_user_context (which takes no company, so it is never refused), re-pick the default, retry the call once"
+offline_cache: "every cached answer of a company-scoped route is keyed by the selected company too — switching never shows another company's cached rows"
+role_gating: "unchanged: the switcher changes WHICH company, never WHAT a role may see; every route's own gates still run"
+
+fixtures:
+  company_scoped_routes.json: "sorted list of phone routes that accept `company` (generated from the code; a test keeps it in sync)"
+  refusal_company_not_member.json: "the 403 body"

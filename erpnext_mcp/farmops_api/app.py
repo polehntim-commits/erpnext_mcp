@@ -514,10 +514,15 @@ def _success(data) -> Response:
 	return _json({"message": data})
 
 
-def _failure(status: int, message: str, exception: str = "") -> Response:
-	"""A refusal the phone can read, in the three places it looks for one."""
+def _failure(status: int, message: str, exception: str = "", error_key: str = "") -> Response:
+	"""A refusal the phone can read, in the three places it looks for one.
+
+	v0.268.0: `error_key` too when the refusal carries a translation key — the phone switches on it (the company
+	switcher's `error.mobile.company_not_member`)."""
+	extra = {"error_key": error_key} if error_key else {}
 	return _json(
 		{
+			**extra,
 			"error": message,
 			"exception": exception or message,
 			# Frappe's own shape: a JSON *string* containing an array of JSON
@@ -1434,6 +1439,7 @@ def _dispatch(request: Request, path: str) -> Response:
 				session.status_hint(anticipated or 500),
 				_message_for(exc, anticipated),
 				type(exc).__name__,
+				str(getattr(exc, "translation_key", "") or "") if anticipated else "",
 			)
 
 		# See `session.py`: reads commit too, because `_stamp_last_seen` writes

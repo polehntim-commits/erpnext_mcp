@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.268.0 — 2026-10-07 — the phone's company switcher
+
+**No migrate needed.** Pairs with FarmOps 0.53.0. Deploy `docs/deploy/v0.268.0_company_switcher.md`. Contract
+`docs/contracts/company_switcher_v0_268.yaml` (fixtures `tests_standalone/contract/v0_268_0/`). Tim, 2026-10-07.
+
+- A person in more than one company chooses which one the phone shows, once (the switcher chip in the header), and
+  every company-scoped list follows it — accidents and leave were the gap. Single-company users see no picker.
+- The phone sends the choice as `X-FarmOps-Company` on every request. `guard.endpoint` gives it to each of the 155
+  routes that take `company` when the body names none; a company named in the body wins.
+- The server still decides membership: a company the caller is not in — another farm's, a removed membership, or one
+  that does not exist — is refused alike (403 `CompanyNotMember`, `error_key` `error.mobile.company_not_member`, in
+  Spanish too) before the route runs. Routes that take no company ignore the header. Role gates are unchanged.
+- The /farmops transport now returns `error_key` on a refusal that carries one.
+
 ## 0.267.1 — 2026-10-06 — four access-audit fixes (before Constancy goes live)
 
 **Migrate needed** (Contact gains `card_entity`; older contacts are stamped where unambiguous). No app change needed.

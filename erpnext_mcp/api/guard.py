@@ -70,6 +70,7 @@ IP is worse than one that records none, because it looks like evidence.
 from __future__ import annotations
 
 import functools
+import inspect
 import time
 
 import frappe
@@ -417,6 +418,42 @@ def require_location_role(user: str, action: str) -> None:
 	)
 
 
+#: v0.268.0 (docs/contracts/company_switcher_v0_268.yaml). The company the phone's switcher has selected, sent on
+#: every request. A route that takes `company` and was not given one gets it; a company the caller is not in is
+#: refused before the route runs.
+COMPANY_HEADER = "X-FarmOps-Company"
+
+
+class CompanyNotMember(frappe.PermissionError):
+	"""v0.268.0. The switcher named a company this account does not belong to (or that does not exist)."""
+
+
+def selected_company() -> str:
+	"""The phone's selected company from `X-FarmOps-Company`, or "". Never raises."""
+	try:
+		return str(frappe.get_request_header(COMPANY_HEADER) or "").strip()
+	except Exception:
+		return ""
+
+
+def _apply_selected_company(user: str, kwargs: dict) -> None:
+	"""Fill `company` from the switcher when the body did not name one. Same refusal for every company that is not
+	the caller's — another farm's, a removed membership, a name that does not exist — so it is no oracle."""
+	if str(kwargs.get("company") or "").strip():
+		return
+	chosen = selected_company()
+	if not chosen:
+		return
+	if chosen not in accessible_companies(user):
+		exc = CompanyNotMember(
+			f"{chosen} is not one of this account's companies. Choose one of yours in the company switcher. "
+			"Nothing was read or changed."
+		)
+		exc.translation_key = "error.mobile.company_not_member"
+		raise exc
+	kwargs["company"] = chosen
+
+
 def _require_mobile_grant(user: str) -> None:
 	"""An Active Mobile Access Grant, or nothing doing.
 
@@ -682,6 +719,9 @@ def endpoint(method: str, limit: int = READ_LIMIT, mutating: bool = False):
 	"""
 
 	def decorate(function):
+		# v0.268.0. Whether the company switcher applies to this route at all.
+		takes_company = "company" in inspect.signature(function).parameters
+
 		@functools.wraps(function)
 		def wrapper(*args, **kwargs):
 			ip = security.caller_ip()
@@ -749,6 +789,14 @@ def endpoint(method: str, limit: int = READ_LIMIT, mutating: bool = False):
 				_stamp_error(exc, "error.mobile.disabled")
 				raise
 
+			if takes_company:
+				try:
+					_apply_selected_company(user, kwargs)
+				except CompanyNotMember as exc:
+					_record(method, kwargs, audit.STATUS_UNAUTHORIZED, "permission_error", user, ip, exc)
+					_stamp_error(exc, "error.mobile.company_not_member")
+					raise
+
 			# `resolve_context_user` reads the identity `mcp.handle` normally
 			# captures a line before it becomes the MCP System User. Nothing
 			# captured it on this path, so capture it here — and it is exactly
@@ -795,6 +843,7 @@ def endpoint(method: str, limit: int = READ_LIMIT, mutating: bool = False):
 
 		wrapper.farm_ops_method = method
 		wrapper.farm_ops_mutating = mutating
+		wrapper.farm_ops_takes_company = takes_company
 		return wrapper
 
 	return decorate

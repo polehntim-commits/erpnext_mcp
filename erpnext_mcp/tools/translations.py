@@ -337,6 +337,12 @@ _ERRORS = {
 		"This login is not enrolled for the field app. Ask your operator to enrol you.",
 		"Esta cuenta no está inscrita en la aplicación de campo. Pídele a tu operador que te inscriba.",
 	),
+	# v0.268.0. The company switcher named a company this login is not in. The phone clears its selection and
+	# reloads; the sentence is what a person sees if it cannot.
+	"error.mobile.company_not_member": (
+		"That company is not one of yours. Choose one of your companies in the company switcher.",
+		"Esa empresa no es una de las tuyas. Elige una de tus empresas en el selector de empresa.",
+	),
 	"error.mobile.rate_limited": (
 		"Too many requests. Wait a moment and try again.",
 		"Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.",

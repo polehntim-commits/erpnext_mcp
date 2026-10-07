@@ -1,0 +1,6 @@
+{
+ "_server_messages": "[\"{\\\"message\\\": \\\"<company> is not one of this account's companies. Choose one of yours in the company switcher. Nothing was read or changed.\\\"}\"]",
+ "error": "<company> is not one of this account's companies. Choose one of yours in the company switcher. Nothing was read or changed.",
+ "error_key": "error.mobile.company_not_member",
+ "exception": "CompanyNotMember"
+}
