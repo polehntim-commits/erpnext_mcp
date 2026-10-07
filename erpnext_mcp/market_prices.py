@@ -62,6 +62,9 @@ _COMMON_FIELDS = {
 	"market": ["market_location_name", "market", "city"],
 }
 
+#: Published at install; every other Market Commodity is seeded as a DRAFT for a person to review.
+PUBLISHED_BY_DEFAULT = ("sweet_cherries", "cantaloupe")
+
 CHERRY_SIZES = ["8 1/2 row", "9 row", "9 1/2 row", "10 row", "10 1/2 row", "11 row", "11 1/2 row", "12 row"]
 
 SEED = {
@@ -121,6 +124,48 @@ SEED = {
 }
 
 
+# ── draft seeds: the major tree fruit and melons the AMS shipping-point reports carry ──
+#: Current (2026) shipping-point FRUIT reports, terminal-market FRUIT reports and the national daily movement,
+#: from the public MARS index (listPublishedReports). A draft lists them all; the commodity filter inside each
+#: row keeps only its own, and observing the reports (observe_market_reports) narrows them before publishing.
+FRUIT_SHIPPING_POINT = ("2386", "2390", "2392", "2394", "2395", "2399", "2401", "2402", "2404", "2412")
+FRUIT_TERMINALS = ("2277", "2281", "2285", "2290", "2294", "2302", "2306", "2310", "2314", "2318")
+NATIONAL_MOVEMENT = "3284"
+
+DRAFT_SEEDS = {
+	"apples": ("Apples", ["APPLES"], "07-15", "06-30"),
+	"pears": ("Pears", ["PEARS"], "07-15", "05-31"),
+	"peaches": ("Peaches", ["PEACHES"], "05-01", "10-15"),
+	"nectarines": ("Nectarines", ["NECTARINES"], "05-01", "10-15"),
+	"apricots": ("Apricots", ["APRICOTS"], "05-01", "08-15"),
+	"plums": ("Plums", ["PLUMS", "PLUMS & PLUOTS", "PLUOTS"], "05-15", "10-31"),
+	"grapes": ("Grapes", ["GRAPES", "GRAPES, TABLE"], "05-15", "12-31"),
+	"blueberries": ("Blueberries", ["BLUEBERRIES"], "04-01", "10-15"),
+	"watermelon": ("Watermelon", ["WATERMELONS", "WATERMELON"], "04-01", "10-31"),
+	"honeydew": ("Honeydew", ["HONEYDEWS", "HONEYDEW"], "04-15", "11-15"),
+}
+
+
+def draft_seed_body(key: str) -> dict:
+	"""A DRAFT Market Commodity for one of DRAFT_SEEDS — generic: no sizes or packs assumed (the generic reading
+	and observation fill them), no deductions or breakeven (a person sets those)."""
+	title, names, start, end = DRAFT_SEEDS[key]
+	if start > end:  # a season that runs over the new year (apples, pears)
+		start, end = "01-01", "12-31"
+	return {
+		"schema_version": 1, "key": key, "title": title, "match": {"commodity": names},
+		"season": {"start_mmdd": start, "end_mmdd": end, "week_anchor": "first_quote"},
+		"reports": [{"slug": s, "role": "shipping_point", "label": f"shipping point {s}", "districts": []} for s in FRUIT_SHIPPING_POINT]
+		+ [{"slug": s, "role": "terminal", "label": f"terminal {s}"} for s in FRUIT_TERMINALS]
+		+ [{"slug": NATIONAL_MOVEMENT, "role": "movement", "label": "National daily movement (WA_FV175)"}],
+		"field_map": {role: _COMMON_FIELDS for role in ("shipping_point", "terminal", "movement", "movement_weekly")},
+		"size": {"kind": "auto", "order": "generic", "vocabulary": []},
+		"packs": [], "grower_deductions_per_lb": [], "breakeven": {"analysis": None, "per_lb": None, "label": "not set"},
+		"headline_size": None,
+		"note": "Seeded DRAFT (v0.265.0). Observe the reports, then draft_market_commodity rebuilds it from what they carry; a person publishes.",
+	}
+
+
 # ── config ──────────────────────────────────────────────────────────────────
 def seed_body(key: str) -> dict:
 	return {"schema_version": 1, "key": key, **json.loads(json.dumps(SEED[key]))}
@@ -145,16 +190,8 @@ def config(key: str) -> dict:
 
 
 def commodities() -> list[str]:
-	keys = set(SEED)
-	try:
-		from . import phone_config
-
-		if phone_config.ready():
-			keys |= {r["config_key"] for r in frappe.db.get_all(phone_config.DOCTYPE, filters={"config_kind": KIND},
-			                                                     fields=["config_key"]) or []}
-	except Exception:
-		pass
-	return sorted(keys)
+	"""The commodities the charts, card and pulls serve: the PUBLISHED Market Commodity configs."""
+	return commodities_published()
 
 
 def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
@@ -211,8 +248,60 @@ def _date(value) -> str | None:
 	return None
 
 
+#: Word sizes, biggest first — the generic order when a commodity has no vocabulary for them.
+WORD_SIZES = ("colossal", "super colossal", "jumbo", "extra large", "xl", "large", "medium large", "medium", "small", "extra small", "petite")
+
+_ROW = re.compile(r"^(\d+)(?:\s+1/2|\.5|½)?\s*row\b")
+_COUNT = re.compile(r"^(\d+)\s*(?:s\b|'s\b|count\b|ct\b|size\b)")
+_INCH = re.compile(r"(\d+(?:[ -]\d/\d|\.\d+)?)\s*(?:inch|in\.?|\")(?:\s|$|\b)")
+
+
+def generic_size(raw) -> dict:
+	"""Any AMS size, with no commodity in mind: {label, kind, sort}. `sort` puts bigger fruit first within a
+	kind (row 8½ before 11, 9s before 15s, 3 inch before 2½, jumbo before small); anything unrecognised keeps its
+	own words and sorts last — shown as-is, never dropped."""
+	text = re.sub(r"\s+", " ", str(raw or "").strip())
+	low = text.lower()
+	if not low:
+		return {"label": None, "kind": None, "sort": (9, 0.0, "")}
+	m = _ROW.match(low)
+	if m:
+		half = bool(re.search(r"1/2|\.5|½", low[: m.end()]))
+		number = int(m.group(1)) + (0.5 if half else 0)
+		return {"label": f"{m.group(1)}{' 1/2' if half else ''} row", "kind": "row", "sort": (0, number, "")}
+	m = _COUNT.match(low)
+	if m:
+		return {"label": f"{m.group(1)}s", "kind": "count", "sort": (1, float(m.group(1)), "")}
+	m = _INCH.search(low)
+	if m:
+		raw_n = m.group(1).replace("-", " ")
+		parts = raw_n.split()
+		number = float(parts[0]) + (eval_fraction(parts[1]) if len(parts) > 1 else 0) if "." not in raw_n else float(raw_n)
+		return {"label": text, "kind": "inch", "sort": (2, -number, "")}
+	for rank, word in enumerate(WORD_SIZES):
+		if low == word or low.startswith(word + " "):
+			return {"label": text, "kind": "word", "sort": (3, float(rank), "")}
+	return {"label": text, "kind": "other", "sort": (8, 0.0, low)}
+
+
+def eval_fraction(text: str) -> float:
+	try:
+		a, b = text.split("/")
+		return float(a) / float(b)
+	except (ValueError, ZeroDivisionError):
+		return 0.0
+
+
+def size_order(label, rank=None) -> tuple:
+	"""One ordering for every commodity: the config's vocabulary rank first, then the generic order."""
+	if rank not in (None, "", 0):
+		return (0, float(rank), "")
+	return (1,) + generic_size(label)["sort"]
+
+
 def normalise_size(raw, cfg: dict) -> tuple[str | None, int | None, bool]:
-	"""(label, rank, known). Cherry row sizes and melon counts alike, from the config's vocabulary."""
+	"""(label, rank, recognised). The commodity's vocabulary first (its aliases, its order); otherwise the generic
+	reading — a row size, a count, an inch size, a word size — and otherwise the report's own words, as-is."""
 	text = re.sub(r"\s+", " ", str(raw or "").strip().lower())
 	if not text:
 		return None, None, True
@@ -224,17 +313,47 @@ def normalise_size(raw, cfg: dict) -> tuple[str | None, int | None, bool]:
 	for rank, entry in enumerate(vocab, start=1):  # "10 row size" and "9s (6 size)" style suffixes
 		if text.startswith(entry["label"].lower() + " ") or text.startswith(entry["label"].lower() + "("):
 			return entry["label"], rank, True
-	return str(raw).strip(), None, False
+	g = generic_size(raw)
+	if g["kind"] != "other":
+		for rank, entry in enumerate(vocab, start=1):
+			if entry["label"].lower() == str(g["label"]).lower():
+				return entry["label"], rank, True
+		return g["label"], None, True
+	return g["label"], None, False
+
+
+_LB = re.compile(r"(\d+(?:\.\d+)?)\s*(?:-|\s)?(?:lb|lbs|pound|pounds)\b")
+_KG = re.compile(r"(\d+(?:\.\d+)?)\s*(?:-|\s)?(?:kg|kilo|kilogram)s?\b")
+
+
+def generic_pack(raw) -> dict:
+	"""Net pounds from the pack's own words where they say it: '18 lb cartons' → 18, '10 kg' → 22.05, 'per lb' /
+	'per pound' → 1. Cartons and bins that do not say their weight give None — grower $/lb then needs the
+	commodity config's pack table."""
+	low = str(raw or "").lower()
+	if re.search(r"\bper\s+(?:lb|pound)\b", low):
+		return {"net_lb": 1.0, "unit": "lb"}
+	m = _LB.search(low)
+	if m:
+		return {"net_lb": float(m.group(1)), "unit": "carton" if "carton" in low else "box" if "box" in low else "package"}
+	m = _KG.search(low)
+	if m:
+		return {"net_lb": round(float(m.group(1)) * 2.20462, 2), "unit": "carton" if "carton" in low else "package"}
+	unit = next((u for u in ("bin", "carton", "crate", "flat", "tray", "box", "bag", "sack", "lug") if u in low), "package")
+	return {"net_lb": None, "unit": unit}
 
 
 def normalise_pack(raw, cfg: dict) -> tuple[str | None, float | None, bool]:
+	"""(label, net_lb, recognised). The commodity's pack table first; otherwise the report's words, with net lb
+	read from them when they state it."""
 	text = str(raw or "").strip().lower()
 	if not text:
 		return None, None, True
 	for pack in sorted(cfg.get("packs") or [], key=lambda p: -max(len(m) for m in p.get("match") or [""])):
 		if any(m.lower() in text for m in pack.get("match") or []):
 			return pack["label"], pack.get("net_lb"), True
-	return str(raw).strip(), None, False
+	g = generic_pack(raw)
+	return str(raw).strip(), g["net_lb"], g["net_lb"] is not None
 
 
 def parse_row(row: dict, role: str, report: dict, cfg: dict) -> dict | None:
@@ -339,8 +458,19 @@ def _windows(start: datetime.date, end: datetime.date):
 		day = last + datetime.timedelta(days=1)
 
 
+#: The API's row ceiling for a registered key. A window that comes back AT it is split, never truncated.
+ROW_LIMIT = 100_000
+#: Seconds between live requests in a run, and the 429 back-off: polite to a free public API with no
+#: published request limit (its errors page lists 429).
+REQUEST_PAUSE = 0.5
+RETRIES_429 = 3
+
+
 def http_get(slug: str, start: datetime.date, end: datetime.date, all_sections: bool = False):
-	"""One MARS request. Returns (rows, error). The key comes from ERPNext MCP Settings; never logged."""
+	"""One MARS request. Returns (rows, error). The key comes from ERPNext MCP Settings; never logged.
+	A 429 waits (Retry-After, else 5 s, doubling) and retries."""
+	import time
+
 	import requests
 
 	from .services import usda_prices
@@ -351,17 +481,52 @@ def http_get(slug: str, start: datetime.date, end: datetime.date, all_sections: 
 	query = f"report_begin_date={start:%m/%d/%Y}:{end:%m/%d/%Y}"
 	base = usda_prices.base_url().rstrip("/")
 	url = f"{base}/reports/{slug}?q={query}&allSections=true" if all_sections else f"{base}/reports/{slug}/{DETAILS_PATH}?q={query}"
-	try:
-		response = requests.get(url, auth=(key, ""), timeout=usda_prices.TIMEOUT_SECONDS)
-	except Exception as exc:
-		return None, f"{type(exc).__name__} reaching MARS"
+	wait = 5.0
+	for attempt in range(RETRIES_429 + 1):
+		try:
+			response = requests.get(url, auth=(key, ""), timeout=usda_prices.TIMEOUT_SECONDS)
+		except Exception as exc:
+			return None, f"{type(exc).__name__} reaching MARS"
+		if response.status_code == 429 and attempt < RETRIES_429:
+			try:
+				wait = float(response.headers.get("Retry-After") or wait)
+			except ValueError:
+				pass
+			time.sleep(min(wait, 120))
+			wait *= 2
+			continue
+		break
 	if response.status_code != 200:
 		return None, f"HTTP {response.status_code} from MARS for report {slug}"
 	try:
 		payload = response.json()
 	except ValueError:
 		return None, f"report {slug} answered with something that is not JSON"
+	time.sleep(REQUEST_PAUSE)
 	return extract_rows(payload), None
+
+
+def fetch_window(slug: str, start: datetime.date, end: datetime.date, fetch=http_get, issues: list | None = None):
+	"""All rows of one report over one window — split in halves while a request comes back at the row ceiling,
+	so nothing is cut off. Falls back to allSections on an HTTP error. Returns (rows, error)."""
+	rows, error = fetch(slug, start, end)
+	if rows is None and error and "HTTP" in error:
+		rows, error2 = fetch(slug, start, end, all_sections=True)
+		error = error2 if rows is None else None
+	if rows is None:
+		return None, error
+	if len(rows) >= ROW_LIMIT:
+		if start >= end:
+			if issues is not None:
+				issues.append(("row_limit", start.isoformat(), f"one day of report {slug} reached {ROW_LIMIT} rows"))
+			return rows, None
+		mid_day = start + (end - start) // 2
+		a, ea = fetch_window(slug, start, mid_day, fetch, issues)
+		b, eb = fetch_window(slug, mid_day + datetime.timedelta(days=1), end, fetch, issues)
+		if a is None or b is None:
+			return None, ea or eb
+		return a + b, None
+	return rows, None
 
 
 def extract_rows(payload) -> list[dict]:
@@ -385,75 +550,115 @@ def extract_rows(payload) -> list[dict]:
 
 
 def ingest(key: str, start: str, end: str, roles=None, fetch=http_get) -> dict:
-	"""Fetch every configured report for a commodity over a date range, window by window, and store it.
-	Nothing is dropped silently: unknown sizes / packs, unparseable rows, HTTP errors, field-set changes and
-	in-season days with no shipping-point report all become Market Data Issues."""
-	cfg = config(key)
+	"""One commodity over a date range — `ingest_all` for that one key."""
+	return ingest_all(start, end, keys=[key], roles=roles, fetch=fetch)["commodities"][key]
+
+
+def ingest_all(start: str, end: str, keys=None, roles=None, fetch=http_get) -> dict:
+	"""Every configured commodity over a date range, FETCHING EACH REPORT ONCE per window and fanning its rows
+	out to every commodity that lists it — enabling more crops adds commodities to a report's fan-out, not
+	requests. Nothing is dropped silently: unknown sizes / packs, unparseable rows, HTTP errors, field-set
+	changes, row-ceiling splits and in-season days with no shipping-point report all become Market Data Issues."""
+	keys = list(keys) if keys else commodities_published()
+	cfgs = {key: config(key) for key in keys}
 	first, last = datetime.date.fromisoformat(start), datetime.date.fromisoformat(end)
-	report = {"commodity": key, "from": start, "to": end, "stored": 0, "updated": 0, "unchanged": 0,
-	          "not_quoted": 0, "issues": 0, "rows_seen": 0, "reports": []}
-	shipping_days: set = set()
-	for rep in cfg.get("reports") or []:
-		role = rep.get("role")
-		if roles and role not in roles:
-			continue
-		per = {"slug": rep["slug"], "role": role, "rows": 0, "kept": 0}
-		signature_seen = None
-		for a, b in _windows(first, last):
-			rows, error = fetch(str(rep["slug"]), a, b)
-			if rows is None and error and "HTTP" in error:
-				rows, error2 = fetch(str(rep["slug"]), a, b, all_sections=True)
-				error = error2 if rows is None else None
-			if rows is None:
-				flag("http_error", str(rep["slug"]), key, a.isoformat(), error or "no answer")
-				report["issues"] += 1
+	per = {key: {"commodity": key, "from": start, "to": end, "stored": 0, "updated": 0, "unchanged": 0, "not_quoted": 0,
+	             "issues": 0, "rows_seen": 0, "reports": []} for key in keys}
+	fanout: dict = {}
+	for key, cfg in cfgs.items():
+		for rep in cfg.get("reports") or []:
+			if roles and rep.get("role") not in roles:
 				continue
-			per["rows"] += len(rows)
-			report["rows_seen"] += len(rows)
-			if rows:
+			fanout.setdefault(str(rep["slug"]), []).append((key, rep, cfg))
+	requests_made = 0
+	shipping_days: dict = {key: set() for key in keys}
+	for slug, takers in sorted(fanout.items()):
+		kept = {key: 0 for key, _r, _c in takers}
+		seen_rows = 0
+		checked = False
+		for a, b in _windows(first, last):
+			split_issues: list = []
+			rows, error = fetch_window(slug, a, b, fetch, split_issues)
+			requests_made += 1
+			for kind, day, detail in split_issues:
+				for key, _r, _c in takers:
+					flag(kind, slug, key, day, detail)
+					per[key]["issues"] += 1
+			if rows is None:
+				for key, _r, _c in takers:
+					flag("http_error", slug, key, a.isoformat(), error or "no answer")
+					per[key]["issues"] += 1
+				continue
+			seen_rows += len(rows)
+			if rows and not checked:
+				checked = True
 				signature = sorted({str(k).lower() for r in rows for k in r})
-				if signature_seen is None:
-					signature_seen = signature
-					_check_signature(str(rep["slug"]), key, signature, report)
+				for key, _r, _c in takers:
+					_check_signature(slug, key, signature, per[key])
 			for raw in rows:
-				try:
-					point = parse_row(raw, role, rep, cfg)
-				except Exception as exc:
-					flag("parse_error", str(rep["slug"]), key, None, f"{type(exc).__name__}: {exc}", raw)
-					report["issues"] += 1
-					continue
-				if point is None:
-					continue
-				if not point["report_date"]:
-					flag("parse_error", str(rep["slug"]), key, None, "row has no readable report date", raw)
-					report["issues"] += 1
-					continue
-				if not point["_size_known"] and point["market_type"] != MOVEMENT:
-					flag("unknown_size", str(rep["slug"]), key, point["report_date"], f"size {point['size']!r} is not in the vocabulary", raw)
-					report["issues"] += 1
-				if not point["_pack_known"]:
-					flag("unknown_pack", str(rep["slug"]), key, point["report_date"], f"pack {point['package']!r} is not in packs", raw)
-					report["issues"] += 1
-				try:
-					outcome, _name = store(point, raw, key)
-				except Exception as exc:
-					flag("parse_error", str(rep["slug"]), key, point["report_date"], f"not stored: {exc}", raw)
-					report["issues"] += 1
-					continue
-				report[outcome] += 1
-				per["kept"] += 1
-				if point["quote_status"] == NOT_QUOTED:
-					report["not_quoted"] += 1
-				if point["market_type"] == SHIPPING:
-					shipping_days.add(point["report_date"])
-		report["reports"].append(per)
-	if not roles or "shipping_point" in roles:
+				for key, rep, cfg in takers:
+					try:
+						point = parse_row(raw, rep["role"], rep, cfg)
+					except Exception as exc:
+						flag("parse_error", slug, key, None, f"{type(exc).__name__}: {exc}", raw)
+						per[key]["issues"] += 1
+						continue
+					if point is None:
+						continue
+					_keep(point, raw, key, slug, per[key])
+					kept[key] += 1
+					if point["market_type"] == SHIPPING and point.get("report_date"):
+						shipping_days[key].add(point["report_date"])
+		for key, rep, _c in takers:
+			per[key]["rows_seen"] += seen_rows
+			per[key]["reports"].append({"slug": slug, "role": rep["role"], "rows": seen_rows, "kept": kept[key]})
+	for key, cfg in cfgs.items():
+		if roles and "shipping_point" not in roles:
+			continue
+		slugs = ",".join(str(r["slug"]) for r in cfg.get("reports") or [] if r.get("role") == "shipping_point")
 		for day in in_season_weekdays(cfg, first, last):
-			if day.isoformat() not in shipping_days and not _has_shipping(key, day.isoformat()):
-				flag("report_missing", ",".join(r["slug"] for r in cfg["reports"] if r["role"] == "shipping_point"), key,
-				     day.isoformat(), "no shipping-point quote for an in-season weekday")
-				report["issues"] += 1
-	return report
+			if day.isoformat() not in shipping_days[key] and not _has_shipping(key, day.isoformat()):
+				flag("report_missing", slugs, key, day.isoformat(), "no shipping-point quote for an in-season weekday")
+				per[key]["issues"] += 1
+	return {"from": start, "to": end, "requests": requests_made, "reports": len(fanout), "commodities": per}
+
+
+def _keep(point: dict, raw: dict, key: str, slug: str, totals: dict) -> None:
+	if not point["report_date"]:
+		flag("parse_error", slug, key, None, "row has no readable report date", raw)
+		totals["issues"] += 1
+		return
+	if not point["_size_known"] and point["market_type"] != MOVEMENT:
+		flag("unknown_size", slug, key, point["report_date"], f"size {point['size']!r} is not recognised — kept as-is", raw)
+		totals["issues"] += 1
+	if not point["_pack_known"] and point["market_type"] != MOVEMENT:
+		flag("unknown_pack", slug, key, point["report_date"], f"pack {point['package']!r}: no net weight known", raw)
+		totals["issues"] += 1
+	try:
+		outcome, _name = store(point, raw, key)
+	except Exception as exc:
+		flag("parse_error", slug, key, point["report_date"], f"not stored: {exc}", raw)
+		totals["issues"] += 1
+		return
+	totals[outcome] += 1
+	if point["quote_status"] == NOT_QUOTED:
+		totals["not_quoted"] += 1
+
+
+def commodities_published() -> list[str]:
+	"""Keys with a PUBLISHED Market Commodity — drafts are not pulled until a person publishes them. The two
+	built-in seeds count as published when no Farm Config Version exists yet (a site before its migrate)."""
+	try:
+		from . import phone_config
+
+		if phone_config.ready():
+			rows = frappe.db.get_all(phone_config.DOCTYPE, filters={"config_kind": KIND, "status": phone_config.PUBLISHED},
+			                         fields=["config_key"]) or []
+			if rows or frappe.db.get_all(phone_config.DOCTYPE, filters={"config_kind": KIND}, limit=1):
+				return sorted({r["config_key"] for r in rows})
+	except Exception:
+		pass
+	return sorted(PUBLISHED_BY_DEFAULT)
 
 
 def _has_shipping(key: str, day: str) -> bool:
@@ -655,9 +860,11 @@ def chart(key: str, variety: str = "", size: str = "", district: str = "", inter
 	if interval not in ("day", "week"):
 		raise ValueError("interval is day or week.")
 	rows = points(key, SHIPPING, variety, size, district, start, end, season)
-	sizes = sorted({(r.get("size_rank") or 999, r.get("size") or "") for r in rows})
+	ranks = {}
+	for r in rows:
+		ranks.setdefault(r.get("size") or "", r.get("size_rank"))
 	series = []
-	for _rank, label in sizes:
+	for label in sorted(ranks, key=lambda lab: size_order(lab, ranks[lab])):
 		mine = [r for r in rows if (r.get("size") or "") == label]
 		c, nq = candles(mine, interval)
 		series.append({"size": label or None, "candles": c, "not_quoted_dates": nq})
@@ -692,7 +899,11 @@ def card(key: str = "sweet_cherries", variety: str = "", size: str = "") -> dict
 	rows = points(key, SHIPPING, variety, size)
 	latest_day = max((str(r["report_date"])[:10] for r in rows), default=None)
 	sizes = []
-	for label in sorted({r.get("size") for r in rows if r.get("size")}, key=lambda s: next((r.get("size_rank") or 999 for r in rows if r.get("size") == s), 999)):
+	ranks = {}
+	for r in rows:
+		if r.get("size"):
+			ranks.setdefault(r["size"], r.get("size_rank"))
+	for label in sorted(ranks, key=lambda lab: size_order(lab, ranks[lab])):
 		mine = [r for r in rows if r.get("size") == label]
 		today = [r for r in mine if str(r["report_date"])[:10] == latest_day]
 		row = today[-1] if today else None
@@ -771,16 +982,14 @@ def daily_pull() -> None:
 		if not enabled():
 			return
 		today = datetime.date.fromisoformat(str(frappe.utils.today())[:10])
-		for key in commodities():
-			cfg = config(key)
-			if not in_season(cfg, today):
-				continue
-			try:
-				result = ingest(key, (today - datetime.timedelta(days=7)).isoformat(), today.isoformat())
-				print(f"erpnext_mcp: market prices {key}: {result['stored']} stored, {result['updated']} updated, "
-				      f"{result['not_quoted']} not quoted, {result['issues']} issue(s).")
-			except Exception:
-				frappe.log_error(title=f"market prices daily pull {key}", message=frappe.get_traceback())
+		keys = [k for k in commodities_published() if in_season(config(k), today)]
+		if keys:
+			result = ingest_all((today - datetime.timedelta(days=7)).isoformat(), today.isoformat(), keys=keys)
+			for key, r in result["commodities"].items():
+				print(f"erpnext_mcp: market prices {key}: {r['stored']} stored, {r['updated']} updated, "
+				      f"{r['not_quoted']} not quoted, {r['issues']} issue(s).")
+			print(f"erpnext_mcp: market prices — {result['requests']} request(s) for {result['reports']} report(s), "
+			      f"{len(keys)} commodity / commodities.")
 		frappe.db.commit()
 	except Exception:
 		frappe.log_error(title="market prices daily pull", message=frappe.get_traceback())
@@ -823,3 +1032,222 @@ def probe(slug: str, start: str, end: str, save: bool = True) -> dict:
 			entry["saved"] = doc.file_url
 		out["answers"].append(entry)
 	return out
+
+
+# ── discovery: the catalog, what each report carries, drafts from the data ───
+REPORT = "Market Report"
+PUBLIC_INDEX = "https://marsapi.ams.usda.gov/services/v3.1/public/listPublishedReports/all?format=json"
+_CODE = re.compile(r"\(([A-Z]{2}_[A-Z]{2}\d{3})\)")
+
+
+def classify(title: str, code: str = "") -> str:
+	"""A report's role from its title / code: shipping point, terminal, movement, weekly movement, or other."""
+	t = str(title or "").lower()
+	c = str(code or "").upper()
+	if "shipping point" in t and "trends" not in t and "recap" not in t:
+		return "shipping_point"
+	if "terminal market" in t:
+		return "terminal"
+	if ("movement" in t or "shipments" in t) and "grain" not in t:
+		return "movement_weekly" if re.search(r"FV4\d\d$", c) else "movement"
+	return "other"
+
+
+def http_index():
+	"""The public MARS report index — no key needed. Returns (reports, error)."""
+	import requests
+
+	try:
+		response = requests.get(PUBLIC_INDEX, timeout=60)
+	except Exception as exc:
+		return None, f"{type(exc).__name__} reaching the MARS index"
+	if response.status_code != 200:
+		return None, f"HTTP {response.status_code} from the MARS index"
+	try:
+		payload = response.json()
+	except ValueError:
+		return None, "the MARS index answered with something that is not JSON"
+	return (payload.get("reports") if isinstance(payload, dict) else payload) or [], None
+
+
+def refresh_catalog(fetch_index=http_index) -> dict:
+	"""Every report in the public index → a Market Report row (create or refresh). Fruit and vegetable roles are
+	classified; anything else is kept as `other` so the index is complete."""
+	reports, error = fetch_index()
+	if reports is None:
+		raise ValueError(error or "no answer from the MARS index")
+	now = frappe.utils.now()
+	cutoff = (datetime.date.fromisoformat(str(frappe.utils.today())[:10]) - datetime.timedelta(days=366)).isoformat()
+	made = refreshed = 0
+	for r in reports:
+		slug = str(r.get("id") or r.get("slug_id") or "").strip()
+		if not slug:
+			continue
+		title = str(r.get("reportTitle") or r.get("report_title") or "").strip()
+		code = (_CODE.search(title).group(1) if _CODE.search(title) else str(r.get("slug_name") or ""))
+		published = str(r.get("publishedDate") or r.get("published_date") or "")[:19] or None
+		values = {"report_title": title[:140], "slug_name": code, "role": classify(title, code),
+		          "office": re.split(r"\s+(?:shipping point|terminal market|fruit|vegetables|truck)", title, flags=re.I)[0][:140],
+		          "last_published": published, "stale": 1 if published and published[:10] < cutoff else 0,
+		          "catalog_refreshed": now}
+		if frappe.db.exists(REPORT, slug):
+			frappe.db.set_value(REPORT, slug, values)
+			refreshed += 1
+		else:
+			frappe.get_doc({"doctype": REPORT, "slug_id": slug, **values}).insert(ignore_permissions=True)
+			made += 1
+	return {"reports": len(reports), "created": made, "refreshed": refreshed}
+
+
+def observe(slugs: list, start: str, end: str, fetch=http_get) -> dict:
+	"""Read reports (keyed) over a window and record what each carries, per commodity: rows, priced, not quoted,
+	districts, varieties, sizes (generic labels), packs (with net lb where stated), first / last date. Stores
+	nothing else; this is the data a draft is built from."""
+	first, last = datetime.date.fromisoformat(start), datetime.date.fromisoformat(end)
+	out = []
+	for slug in slugs:
+		role = frappe.db.get_value(REPORT, slug, "role") if frappe.db.exists(REPORT, slug) else None
+		stats: dict = {}
+		error = None
+		for a, b in _windows(first, last):
+			rows, error = fetch_window(str(slug), a, b, fetch)
+			if rows is None:
+				break
+			for raw in rows:
+				name = str(_pick(raw, _COMMON_FIELDS["commodity"]) or "").strip().upper()
+				if not name:
+					continue
+				st = stats.setdefault(name, {"rows": 0, "priced": 0, "not_quoted": 0, "districts": {}, "varieties": {},
+				                             "sizes": {}, "packs": {}, "first": None, "last": None})
+				st["rows"] += 1
+				prices = [_num(_pick(raw, _COMMON_FIELDS[k])) for k in ("low", "high", "mostly_low", "mostly_high")]
+				st["priced" if any(p is not None for p in prices) else "not_quoted"] += 1
+				for field, bucket in (("district", "districts"), ("variety", "varieties")):
+					v = str(_pick(raw, _COMMON_FIELDS[field]) or "").strip()
+					if v:
+						st[bucket][v] = st[bucket].get(v, 0) + 1
+				size = generic_size(_pick(raw, _COMMON_FIELDS["size"]))["label"]
+				if size:
+					st["sizes"][size] = st["sizes"].get(size, 0) + 1
+				pack = str(_pick(raw, _COMMON_FIELDS["pack"]) or "").strip()
+				if pack:
+					st["packs"][pack] = st["packs"].get(pack, 0) + 1
+				day = _date(_pick(raw, _COMMON_FIELDS["report_date"]))
+				if day:
+					st["first"] = min(filter(None, (st["first"], day)))
+					st["last"] = max(filter(None, (st["last"], day)))
+		if frappe.db.exists(REPORT, slug) and error is None:
+			frappe.db.set_value(REPORT, slug, {"observations": json.dumps(stats, sort_keys=True), "observed_from": start,
+			                                   "observed_to": end, "commodities": ", ".join(sorted(stats))[:5000]})
+		out.append({"slug": str(slug), "role": role, "error": error, "commodities": sorted(stats),
+		            "rows": sum(s["rows"] for s in stats.values())})
+	return {"from": start, "to": end, "reports": out}
+
+
+def available(search: str = "", role: str = "", include_stale: bool = False) -> list[dict]:
+	"""The browsable index: every commodity seen in any observed report, with the reports (and roles) that carry
+	it, its districts and how much data — and whether a Market Commodity config already covers it."""
+	filters = {} if include_stale else {"stale": 0}
+	if role:
+		filters["role"] = role
+	rows = frappe.db.get_all(REPORT, filters=filters, fields=["slug_id", "report_title", "role", "observations", "last_published"],
+	                         limit_page_length=0) or []
+	index: dict = {}
+	for r in rows:
+		try:
+			obs = json.loads(r.get("observations") or "{}")
+		except ValueError:
+			obs = {}
+		for name, st in obs.items():
+			if search and search.lower() not in name.lower():
+				continue
+			entry = index.setdefault(name, {"commodity": name, "reports": [], "districts": {}, "rows": 0, "last": None})
+			entry["reports"].append({"slug": r["slug_id"], "title": r["report_title"], "role": r["role"]})
+			entry["rows"] += st.get("rows", 0)
+			for d, n in (st.get("districts") or {}).items():
+				entry["districts"][d] = entry["districts"].get(d, 0) + n
+			entry["last"] = max(filter(None, (entry["last"], st.get("last")))) if st.get("last") or entry["last"] else None
+	configured = {}
+	for key in set(commodities_published()) | set(DRAFT_SEEDS) | set(SEED):
+		try:
+			body = config(key) if key in commodities_published() or key in SEED else draft_seed_body(key)
+		except ValueError:
+			continue
+		for n in (body.get("match") or {}).get("commodity") or []:
+			configured[n.upper()] = key
+	out = []
+	for name, e in sorted(index.items()):
+		e["districts"] = sorted(e["districts"], key=lambda d: -e["districts"][d])
+		e["config"] = configured.get(name)
+		e["published"] = configured.get(name) in commodities_published()
+		out.append(e)
+	return out
+
+
+def draft_from_observations(commodity: str, key: str = "", author: str = "") -> dict:
+	"""A Market Commodity DRAFT built from what the observed reports carry: its reports and roles, districts,
+	the observed sizes in generic order (bigger fruit first; unrecognised sizes kept as-is, last), packs with
+	net lb where the pack says it, a season from the observed dates, the most-quoted size as headline. A person
+	adds deductions and breakeven, reviews and publishes."""
+	from . import phone_config
+
+	name = str(commodity or "").strip().upper()
+	entry = next((e for e in available(name) if e["commodity"] == name), None)
+	if not entry:
+		raise ValueError(f"no observed report carries {name!r} — refresh_market_catalog, then observe_market_reports first.")
+	sizes: dict = {}
+	packs: dict = {}
+	firsts, lasts = [], []
+	reps = []
+	for rep in entry["reports"]:
+		obs = json.loads(frappe.db.get_value(REPORT, rep["slug"], "observations") or "{}").get(name) or {}
+		for k, v in (obs.get("sizes") or {}).items():
+			sizes[k] = sizes.get(k, 0) + v
+		for k, v in (obs.get("packs") or {}).items():
+			packs[k] = packs.get(k, 0) + v
+		firsts += [obs["first"]] if obs.get("first") else []
+		lasts += [obs["last"]] if obs.get("last") else []
+		if rep["role"] in ROLE_TYPE:
+			reps.append({"slug": rep["slug"], "role": rep["role"], "label": rep["title"], "districts": []})
+	if not any(r["role"] == "shipping_point" for r in reps):
+		raise ValueError(f"{name} was seen only outside shipping-point reports; shipping point is the primary line, so no draft.")
+	key = key or re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+	ordered = sorted(sizes, key=size_order)
+	pack_rows = [{"label": p, "match": [p.lower()], "net_lb": generic_pack(p)["net_lb"], "unit": generic_pack(p)["unit"]}
+	             for p in sorted(packs, key=lambda p: -packs[p])]
+	start = min(f[5:] for f in firsts) if firsts else "01-01"
+	end = max(l[5:] for l in lasts) if lasts else "12-31"
+	if start > end:
+		start, end = "01-01", "12-31"
+	body = {"schema_version": 1, "key": key, "title": name.title(), "match": {"commodity": [name]},
+	        "season": {"start_mmdd": start, "end_mmdd": end, "week_anchor": "first_quote"}, "reports": reps,
+	        "field_map": {role: _COMMON_FIELDS for role in ("shipping_point", "terminal", "movement", "movement_weekly")},
+	        "size": {"kind": "auto", "order": "generic",
+	                 "vocabulary": [{"label": s, "aliases": []} for s in ordered]},
+	        "packs": pack_rows, "grower_deductions_per_lb": [],
+	        "breakeven": {"analysis": None, "per_lb": None, "label": "not set"},
+	        "headline_size": max(sizes, key=lambda s: sizes[s]) if sizes else None,
+	        "note": f"Drafted from observed reports ({', '.join(r['slug'] for r in reps)}) by {author or 'draft_market_commodity'}."}
+	doc, report = phone_config.save_draft(KIND, key, body, f"Drafted from observations of {name}.", "AI-proposed")
+	return {"key": key, "draft": phone_config.describe(doc), "validation": report, "body": body,
+	        "next": "Review sizes / packs, add grower deductions and breakeven, then a person publishes it (Desk)."}
+
+
+def seed_drafts() -> list[str]:
+	"""Install: a DRAFT for each of DRAFT_SEEDS that has no Market Commodity rows yet. Never published here."""
+	from . import phone_config
+
+	made = []
+	if not phone_config.ready():
+		return made
+	for key in DRAFT_SEEDS:
+		if phone_config.rows(KIND, key):
+			continue
+		try:
+			phone_config.save_draft(KIND, key, draft_seed_body(key),
+			                        "Seeded DRAFT at install (v0.265.0) — observe the reports, redraft from the data, then publish.",
+			                        "System")
+			made.append(key)
+		except Exception:
+			frappe.log_error(title=f"market commodity draft {key}", message=frappe.get_traceback())
+	return made

@@ -440,6 +440,7 @@ class TheRuleIsNarrowerThanTheBanItReplaced(PermissionsTestCase):
 				"Market",
 				# v0.265.0. USDA market data issues: public market data, site-wide.
 				"Market Data Issue",
+				"Market Report",
 				"Merchant Alias",
 				"Mobile Push Token",
 				"Reference Document",

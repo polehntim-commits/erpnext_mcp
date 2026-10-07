@@ -130,3 +130,64 @@ def probe_market_report(args: dict) -> ToolResult:
 	return ToolResult(data=data, summary=f"report {slug}: " + "; ".join(
 		f"{'allSections' if a['all_sections'] else 'Report Details'} {a['rows']} row(s)" + (f" ({a['error']})" if a["error"] else "")
 		for a in data["answers"]))
+
+
+# ── discovery ───────────────────────────────────────────────────────────────
+def list_market_catalog(args: dict) -> ToolResult:
+	"""The browsable index: commodities seen in observed reports (default), or the report catalog itself."""
+	view = as_str(args, "view") or "commodities"
+	start = as_int(args, "start")
+	start = 0 if start is None else max(0, start)
+	limit = as_int(args, "limit")
+	limit = 200 if limit is None else max(1, limit)
+	if view == "reports":
+		filters = {}
+		if as_str(args, "role"):
+			filters["role"] = as_str(args, "role")
+		if not as_bool(args, "include_stale", False):
+			filters["stale"] = 0
+		if as_str(args, "search"):
+			filters["report_title"] = ("like", f"%{as_str(args, 'search')}%")
+		rows = frappe.db.get_all(mp.REPORT, filters=filters, fields=["slug_id", "report_title", "slug_name", "role", "office",
+		                                                              "last_published", "stale", "commodities", "observed_to"],
+		                         order_by="role asc, report_title asc", limit_start=start, limit_page_length=limit + 1) or []
+		more = len(rows) > limit
+		return ToolResult(data={"view": view, "reports": [dict(r) for r in rows[:limit]], "next_start": start + limit if more else None},
+		                  summary=f"{min(len(rows), limit)} report(s)")
+	entries = mp.available(as_str(args, "search"), as_str(args, "role"), as_bool(args, "include_stale", False))
+	page = entries[start:start + limit]
+	return ToolResult(data={"view": "commodities", "commodities": page, "total": len(entries),
+	                        "next_start": start + limit if start + limit < len(entries) else None,
+	                        "note": "Seen in observed reports only — observe_market_reports adds more. `config` names the "
+	                                "Market Commodity that covers a commodity; `published` whether it is live."},
+	                  summary=f"{len(page)} of {len(entries)} commodity / commodities")
+
+
+def refresh_market_catalog(args: dict) -> ToolResult:
+	data = _wrap(lambda: mp.refresh_catalog())
+	return ToolResult(data=data, summary=f"{data['reports']} report(s) in the MARS index: {data['created']} new, {data['refreshed']} refreshed",
+	                  docstatus_delta="none → 0 (created)")
+
+
+def observe_market_reports(args: dict) -> ToolResult:
+	slugs = [str(s) for s in (args.get("reports") or [])]
+	if not slugs:
+		role = as_str(args, "role") or "shipping_point"
+		slugs = [r["slug_id"] for r in frappe.db.get_all(mp.REPORT, filters={"role": role, "stale": 0}, fields=["slug_id"]) or []]
+	if not slugs:
+		raise ToolError("no reports to observe — run refresh_market_catalog first, or name reports.")
+	today = str(frappe.utils.today())[:10]
+	start = as_str(args, "from") or (datetime.date.fromisoformat(today) - datetime.timedelta(days=14)).isoformat()
+	end = as_str(args, "to") or today
+	data = _wrap(lambda: mp.observe(slugs, start, end))
+	seen = sorted({c for r in data["reports"] for c in r["commodities"]})
+	return ToolResult(data={**data, "commodities_seen": seen},
+	                  summary=f"{len(slugs)} report(s) observed {start}–{end}: {len(seen)} commodity / commodities",
+	                  docstatus_delta="0 → 0 (updated)")
+
+
+def draft_market_commodity(args: dict) -> ToolResult:
+	commodity = as_str(args, "commodity", required=True)
+	data = _wrap(lambda: mp.draft_from_observations(commodity, as_str(args, "key"), frappe.session.user))
+	return ToolResult(data=data, summary=f"drafted Market Commodity {data['key']} — a person publishes it",
+	                  docstatus_delta="none → 0 (draft)")

@@ -1152,9 +1152,9 @@ class Catalogue(SeededTestCase):
 		# v0.202.0 adds one write, `set_uom_aliases`.
 		# v0.206.0 adds five reads and six writes: extraction config, feature flags, triage.
 		# v0.207.0 adds eight reads and eleven writes: phone config, tiles, wizards, the loop, labels.
-		self.assertEqual(len(registry.TOOLS), 1082)
-		self.assertEqual(len(registry.READ_TOOLS), 524)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 558)
+		self.assertEqual(len(registry.TOOLS), 1086)
+		self.assertEqual(len(registry.READ_TOOLS), 525)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 561)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1082 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1086 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 524 read tools are **on** by default and can be switched off individually. A
+All 525 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21047,5 +21047,9 @@ returns `organism`, `status`, `provenance`. Five phone routes and a Today tile (
 | `fetch_market_reports` | Pull a commodity's reports for a date range. Write |
 | `backfill_market_reports` | Pull whole past seasons. Write |
 | `probe_market_report` | Read one USDA report raw and save it as a private File (fixtures). Write |
+| `list_market_catalog` | The USDA AMS index: commodities seen per report (or the report catalog), with their config. Read |
+| `refresh_market_catalog` | Read the public MARS report index into Market Report rows. Write |
+| `observe_market_reports` | Record what reports carry per commodity (districts, varieties, sizes, packs). Write |
+| `draft_market_commodity` | Draft a Market Commodity from observed data; a person publishes. Write |
 
 Commodities are Market Commodity configs (sweet_cherries, cantaloupe seeded). Contract: `docs/contracts/market_prices_v0_265.yaml`.

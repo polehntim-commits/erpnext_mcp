@@ -145,10 +145,18 @@ class FlaggedNotDropped(MarketCase):
 		return [r for r in STORE.rows("Market Data Issue") if r["kind"] == kind]
 
 	def test_unknown_size_and_pack_are_flagged_and_kept(self):
-		self.ingest(rows=[row(D(2026, 7, 6), "13 row size", 30.0, 35.0, pkg="5 kg boxes")])
-		self.assertEqual(len(STORE.rows("USDA Price Quote")), 1)
+		self.ingest(rows=[row(D(2026, 7, 6), "assorted mix", 30.0, 35.0, pkg="bushel bins")])
+		kept = STORE.rows("USDA Price Quote")
+		self.assertEqual([r["size"] for r in kept], ["assorted mix"], "shown as-is, not dropped")
 		self.assertTrue(self.issues("unknown_size"))
 		self.assertTrue(self.issues("unknown_pack"))
+
+	def test_a_size_the_vocabulary_lacks_but_the_generic_reading_knows_is_kept_unflagged(self):
+		self.ingest(rows=[row(D(2026, 7, 6), "13 row size", 30.0, 35.0, pkg="5 kg boxes")])
+		kept = STORE.rows("USDA Price Quote")[0]
+		self.assertEqual((kept["size"], kept["pack_net_lb"]), ("13 row", 11.02))
+		self.assertFalse(self.issues("unknown_size"))
+		self.assertFalse(self.issues("unknown_pack"))
 
 	def test_an_http_error_is_an_issue_not_silence(self):
 		result = self.ingest(errors=["2412"])
@@ -238,8 +246,148 @@ class AnyCommodity(MarketCase):
 		self.assertEqual(mp.normalise_size("8 1/2 row size", cherry)[:2], ("8 1/2 row", 1))
 		self.assertEqual(mp.normalise_size("10.5 row", cherry)[:2], ("10 1/2 row", 5))
 		self.assertEqual(mp.normalise_size("15's", melon)[:2], ("15s", 3))
-		self.assertFalse(mp.normalise_size("jumbo", melon)[2])
+		self.assertEqual(mp.normalise_size("jumbo", melon)[0], "jumbo")
+		self.assertFalse(mp.normalise_size("assorted mix", melon)[2])
+
+	def test_generic_sizes_for_any_commodity(self):
+		order = ["3 inch", "2 1/2 inch"]
+		self.assertEqual(sorted(order, key=lambda s: mp.size_order(s)), ["3 inch", "2 1/2 inch"])
+		self.assertEqual(sorted(["88s", "72s", "100s"], key=mp.size_order), ["72s", "88s", "100s"])
+		self.assertEqual(sorted(["11 row", "8 1/2 row", "10 row"], key=mp.size_order), ["8 1/2 row", "10 row", "11 row"])
+		self.assertEqual(sorted(["small", "jumbo", "large"], key=mp.size_order), ["jumbo", "large", "small"])
+		self.assertEqual(mp.generic_size("2 layer tray pack")["kind"], "other")
+		self.assertEqual(mp.generic_pack("40 lb cartons tray pack")["net_lb"], 40.0)
+		self.assertEqual(mp.generic_pack("per lb")["net_lb"], 1.0)
+		self.assertIsNone(mp.generic_pack("24 inch bins")["net_lb"])
 
 	def test_the_seeds_validate(self):
 		for key in mp.SEED:
 			self.assertEqual(mp.validate(mp.seed_body(key), key)["errors"], [], key)
+
+
+# ── v0.265.0 scope: every AMS commodity, discovered as data ─────────────────
+INDEX = [
+	{"id": 2412, "reportTitle": "YAKIMA Shipping Point Fruit Prices (YA_FV110)", "publishedDate": "2026-10-06 12:00:00 MDT"},
+	{"id": 2402, "reportTitle": "Phoenix Shipping Point Fruit Prices (IX_FV110)", "publishedDate": "2026-10-06 12:00:00 MDT"},
+	{"id": 2290, "reportTitle": "Chicago Terminal Market Fruit Prices (HX_FV010)", "publishedDate": "2026-10-06 12:00:00 MDT"},
+	{"id": 3284, "reportTitle": "NATIONAL TRUCK, AIR, AND BOAT Daily Movement Report", "publishedDate": "2026-10-06 12:00:00 MDT"},
+	{"id": 3258, "reportTitle": "Cherries Shipments (Movement) Weekly (WA_FV415)", "publishedDate": "2025-04-30 12:00:00 MDT"},
+	{"id": 2117, "reportTitle": "Brookhaven Stockyard - Brookhaven, MS", "publishedDate": "2026-10-06 12:00:00 MDT"},
+	{"id": 3333, "reportTitle": "Yakima Shipping Point Prices (SX_FV195)", "publishedDate": "2022-08-01 12:00:00 MDT"},
+]
+
+APPLES = [row(D(2026, 7, 6), "88s", 28.0, 32.0, commodity="APPLES", pkg="cartons tray pack 40 lb", var="GALA"),
+          row(D(2026, 7, 6), "72s", 30.0, 34.0, commodity="APPLES", pkg="cartons tray pack 40 lb", var="GALA"),
+          row(D(2026, 7, 7), "100s", 26.0, 30.0, commodity="APPLES", pkg="cartons tray pack 40 lb", var="FUJI"),
+          row(D(2026, 7, 7), "extra fancy mixed", None, None, commodity="APPLES", pkg="bins", var="FUJI")]
+
+
+class Discovery(MarketCase):
+	def test_the_catalog_is_classified(self):
+		out = mp.refresh_catalog(lambda: (INDEX, None))
+		self.assertEqual(out["created"], len(INDEX))
+		role = {r["name"]: r["role"] for r in STORE.rows("Market Report")}
+		self.assertEqual((role["2412"], role["2290"], role["3284"], role["3258"], role["2117"]),
+		                 ("shipping_point", "terminal", "movement", "movement_weekly", "other"))
+		self.assertEqual(STORE.get_raw("Market Report", "3333")["stale"], 1)
+		self.assertEqual(STORE.get_raw("Market Report", "2412")["slug_name"], "YA_FV110")
+
+	def test_observing_builds_the_available_index_and_a_draft(self):
+		mp.refresh_catalog(lambda: (INDEX, None))
+		fake = FakeMARS({"2412": CHERRY_WEEK + APPLES})
+		mp.observe(["2412"], "2026-07-06", "2026-07-10", fetch=fake)
+		avail = {e["commodity"]: e for e in mp.available()}
+		self.assertEqual(set(avail), {"CHERRIES", "APPLES"})
+		self.assertEqual(avail["CHERRIES"]["config"], "sweet_cherries")
+		self.assertTrue(avail["CHERRIES"]["published"])
+		self.assertEqual(avail["APPLES"]["config"], "apples")
+		self.assertFalse(avail["APPLES"]["published"], "a seeded draft is not live")
+		out = mp.draft_from_observations("APPLES")
+		body = out["body"]
+		self.assertEqual([v["label"] for v in body["size"]["vocabulary"]], ["72s", "88s", "100s", "extra fancy mixed"])
+		self.assertEqual(body["packs"][0]["net_lb"], 40.0)
+		self.assertIsNone(next(p for p in body["packs"] if p["label"] == "bins")["net_lb"])
+		self.assertEqual(out["draft"]["status"], "Draft")
+		self.assertNotIn("apples", mp.commodities_published())
+
+	def test_a_commodity_seen_only_in_terminals_is_not_drafted(self):
+		mp.refresh_catalog(lambda: (INDEX, None))
+		mp.observe(["2290"], "2026-07-06", "2026-07-06", fetch=FakeMARS({"2290": [row(D(2026, 7, 6), "12s", 20, 22, commodity="KIWIFRUIT")]}))
+		with self.assertRaisesRegex(ValueError, "shipping point is the primary line"):
+			mp.draft_from_observations("KIWIFRUIT")
+
+
+class FetchOnceFanOut(MarketCase):
+	def test_one_request_per_report_window_for_every_commodity(self):
+		fake = FakeMARS({"2412": CHERRY_WEEK + APPLES})
+		apples = mp.draft_seed_body("apples")
+		apples["reports"] = [r for r in apples["reports"] if r["slug"] == "2412"]
+		with mp_published({"apples": apples}):
+			out = mp.ingest_all("2026-07-06", "2026-07-10", keys=["sweet_cherries", "apples"], roles=["shipping_point"], fetch=fake)
+		self.assertEqual([c[0] for c in fake.calls].count("2412"), 1, "2412 fetched once for both commodities")
+		self.assertEqual(out["commodities"]["sweet_cherries"]["stored"], 7)
+		self.assertEqual(out["commodities"]["apples"]["stored"], 4)
+		self.assertEqual(out["commodities"]["apples"]["not_quoted"], 1)
+
+	def test_a_window_at_the_row_ceiling_is_split_not_truncated(self):
+		calls = []
+
+		def capped(slug, start, end, all_sections=False):
+			calls.append((start, end))
+			return ([{"x": 1}] * (mp.ROW_LIMIT if start < end else 3)), None
+
+		rows, error = mp.fetch_window("2412", D(2026, 7, 1), D(2026, 7, 4), capped)
+		self.assertIsNone(error)
+		self.assertEqual(len(rows), 12, "four single days of 3 rows, after splitting")
+
+	def test_a_429_waits_and_retries(self):
+		from unittest import mock
+
+		class R:
+			def __init__(self, code, body=None):
+				self.status_code, self.headers, self._body = code, {"Retry-After": "0"}, body
+
+			def json(self):
+				return self._body
+
+		import sys
+		import types
+
+		answers = [R(429), R(200, {"results": [{"commodity": "CHERRIES"}]})]
+		fake_requests = types.SimpleNamespace(get=lambda *a, **k: answers.pop(0))
+		with mock.patch.dict(sys.modules, {"requests": fake_requests}), \
+		     mock.patch("erpnext_mcp.services.usda_prices.api_key", return_value="k"), \
+		     mock.patch("time.sleep"):
+			rows, error = mp.http_get("2412", D(2026, 7, 1), D(2026, 7, 1))
+		self.assertIsNone(error)
+		self.assertEqual(rows, [{"commodity": "CHERRIES"}])
+
+	def test_the_drafts_are_seeded_unpublished(self):
+		from erpnext_mcp import phone_config
+
+		from erpnext_mcp import install
+
+		install._market_commodity_seed()  # what the migrate does: two published, the rest drafts
+		made = [k for k in mp.DRAFT_SEEDS if phone_config.rows(mp.KIND, k)]
+		self.assertEqual(set(made), set(mp.DRAFT_SEEDS))
+		for key in mp.DRAFT_SEEDS:
+			rows = phone_config.rows(mp.KIND, key)
+			self.assertEqual([r["status"] for r in rows], ["Draft"], key)
+		self.assertEqual(sorted(mp.commodities_published()), ["cantaloupe", "sweet_cherries"])
+
+
+import contextlib  # noqa: E402
+
+
+@contextlib.contextmanager
+def mp_published(extra: dict):
+	"""Treat extra config bodies as published for one test."""
+	from unittest import mock
+
+	real = mp.config
+
+	def config(key):
+		return {**extra[key], "_version": "test"} if key in extra else real(key)
+
+	with mock.patch.object(mp, "config", side_effect=config):
+		yield

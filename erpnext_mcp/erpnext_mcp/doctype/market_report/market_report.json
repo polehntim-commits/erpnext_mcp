@@ -1,0 +1,155 @@
+{
+ "actions": [],
+ "autoname": "field:slug_id",
+ "creation": "2026-10-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Market Report",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "report_title",
+ "search_fields": "report_title,slug_name,role,commodities",
+ "description": "v0.265.0. The USDA AMS My Market News catalog: one row per report (from the public MARS index), and — once observed — the commodities, districts, varieties, sizes and packs it carries. The browsable index any commodity is enabled from: draft_market_commodity builds a Market Commodity config from it.",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Foreman"
+  }
+ ],
+ "field_order": [
+  "slug_id",
+  "report_title",
+  "slug_name",
+  "role",
+  "office",
+  "rep_col",
+  "last_published",
+  "stale",
+  "catalog_refreshed",
+  "obs_section",
+  "commodities",
+  "observed_from",
+  "observed_to",
+  "observations"
+ ],
+ "fields": [
+  {
+   "fieldname": "slug_id",
+   "fieldtype": "Data",
+   "label": "Report ID",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "report_title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "slug_name",
+   "fieldtype": "Data",
+   "label": "Code",
+   "description": "e.g. YA_FV110"
+  },
+  {
+   "fieldname": "role",
+   "fieldtype": "Select",
+   "label": "Role",
+   "options": "shipping_point\nterminal\nmovement\nmovement_weekly\nother",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "office",
+   "fieldtype": "Data",
+   "label": "Office / Market",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "rep_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_published",
+   "fieldtype": "Datetime",
+   "label": "Last Published",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "stale",
+   "fieldtype": "Check",
+   "label": "Stale",
+   "description": "Nothing published for over a year.",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "catalog_refreshed",
+   "fieldtype": "Datetime",
+   "label": "Catalog Refreshed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "obs_section",
+   "fieldtype": "Section Break",
+   "label": "What it carries (observed)"
+  },
+  {
+   "fieldname": "commodities",
+   "fieldtype": "Small Text",
+   "label": "Commodities",
+   "in_standard_filter": 1,
+   "description": "Comma list of the AMS commodity names seen in this report — search it to find which reports carry a crop."
+  },
+  {
+   "fieldname": "observed_from",
+   "fieldtype": "Date",
+   "label": "Observed From",
+   "read_only": 1
+  },
+  {
+   "fieldname": "observed_to",
+   "fieldtype": "Date",
+   "label": "Observed To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "observations",
+   "fieldtype": "Code",
+   "label": "Observations",
+   "options": "JSON",
+   "read_only": 1,
+   "description": "Per commodity: rows, priced, not quoted, districts, varieties, sizes, packs, first and last date."
+  }
+ ]
+}

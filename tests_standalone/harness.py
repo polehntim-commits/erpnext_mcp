@@ -1717,6 +1717,7 @@ APP_DOCTYPES = {
 	"IPM Relationship": "ipm_relationship",
 	# v0.265.0. USDA market data issues.
 	"Market Data Issue": "market_data_issue",
+	"Market Report": "market_report",
 	# v0.243.0. No-work notices and their recipients.
 	"Work Notice": "work_notice",
 	"Work Notice Recipient": "work_notice_recipient",

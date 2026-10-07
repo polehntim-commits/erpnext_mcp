@@ -6,7 +6,8 @@ All notable changes to this project are documented here. Versions follow
 ## 0.265.0 — 2026-10-06 — USDA AMS market prices, done right
 
 **Migrate needed** (USDA Price Quote gains the market-point fields; doctype Market Data Issue; Farm Config Version
-kind "Market Commodity" with sweet_cherries and cantaloupe seeded and published; setting `market_prices_enabled`
+kind "Market Commodity" with sweet_cherries and cantaloupe seeded and published and ten more seeded as drafts;
+doctype Market Report; setting `market_prices_enabled`
 OFF; the daily pull at 05:30). Contract `docs/contracts/market_prices_v0_265.yaml`. Deploy
 `docs/deploy/v0.265.0_market_prices.md`. Tim, 2026-10-06.
 
@@ -29,9 +30,20 @@ OFF; the daily pull at 05:30). Contract `docs/contracts/market_prices_v0_265.yam
 - **Grower framing**: shipping point primary; terminal is context, and terminal − shipping is the cost of market
   access, never margin; grower return $/lb = FOB ÷ pack lb − deductions (cherries: Constancy pool ≈ $0.60/lb);
   breakeven from a Pound Breakeven Analysis, else the configured value (Constancy 2027 draft $1.22/lb).
-- **Phone** `get_market_card`, `get_market_chart` (routes 223). **MCP** 4 reads, 3 writes (OFF):
-  get_market_prices, get_price_trend, get_grower_return_vs_breakeven, list_market_data_issues,
-  fetch_market_reports, backfill_market_reports, probe_market_report (read-only against USDA; saves fixtures).
+- **Every AMS commodity, as data** (Tim): the public MARS index becomes Market Report rows (role from title / code,
+  stale flagged); observing reports records what each carries per commodity; `list_market_catalog` is the browsable
+  index; `draft_market_commodity` builds a Market Commodity DRAFT from the observed data for a person to publish.
+  Seeded DRAFTS (never pulled until published): apples, pears, peaches, nectarines, apricots, plums, grapes,
+  blueberries, watermelon, honeydew. Published: sweet cherries and cantaloupe only.
+- **Generic sizes and packs**, no commodity-specific code: row sizes, counts, inch and word sizes in a bigger-first
+  order; anything else kept as-is (flagged); net lb read from a pack's words when stated.
+- **Fetch once, fan out**: each report is fetched once per window for every commodity that lists it; windows at
+  the 100,000-row ceiling split; 0.5 s between requests; 429 back-off. A daily pull is one request per distinct
+  report (about 11 for the two published; about 23 with all twelve).
+- **Phone** `get_market_card`, `get_market_chart` (routes 223). **MCP** 5 reads, 6 writes (OFF):
+  get_market_prices, get_price_trend, get_grower_return_vs_breakeven, list_market_data_issues, list_market_catalog,
+  fetch_market_reports, backfill_market_reports, probe_market_report (read-only against USDA; saves fixtures),
+  refresh_market_catalog, observe_market_reports, draft_market_commodity.
 
 ## 0.264.1 — 2026-10-06 — Tim's harvest windows as calibration proposals
 

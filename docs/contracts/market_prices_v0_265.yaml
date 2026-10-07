@@ -81,9 +81,21 @@ routes:
       seasons: "[{season, week_of_season: [{week, close}]}] — season-over-season, aligned by week of season"
     fixture: get_market_chart.json
 
+discovery:   # every commodity AMS lists — none of it commodity-specific code
+  catalog: "Market Report: one row per report from the public MARS index (no key) — title, code, role (shipping_point | terminal | movement | movement_weekly | other, from the title/code), office, last published, stale"
+  observe: "keyed pull of reports over a window → per commodity: rows, priced, not quoted, districts, varieties, sizes (generic labels), packs, first/last date. No prices stored."
+  available: "the browsable index (list_market_catalog view=commodities): each commodity, the reports and roles carrying it, its districts, and the config covering it (published or draft)"
+  draft: "draft_market_commodity: a Market Commodity DRAFT from observed data — reports, sizes in generic order, packs with net lb where stated, season, headline size. A person publishes."
+  seeded: "published: sweet_cherries, cantaloupe. DRAFTS (unpublished, never pulled): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew."
+sizes_generic: "config vocabulary first, else: row sizes ('9 1/2 row'), counts ('88s', '12 count'), inch sizes, word sizes (jumbo … small); bigger fruit first within a kind; anything else kept AS-IS and last (flagged unknown_size), never dropped"
+packs_generic: "config pack table first, else net lb from the pack's words ('40 lb cartons' 40, '10 kg' 22.05, 'per lb' 1); a pack that does not say its weight keeps net_lb null (flagged unknown_pack — grower $/lb needs it)"
+volume_and_schedule:
+  fetch_once: "ingest_all fetches EACH REPORT ONCE per 31-day window and fans rows out to every published commodity listing it — more commodities add fan-out, not requests"
+  daily: "05:30, published commodities in season, last 7 days: one request per distinct report (cherries + cantaloupe ≈ 11; all twelve seeded ≈ 23)"
+  limits: "100,000 rows a request: a window at the ceiling is split in halves until it fits (a single day at the ceiling is flagged row_limit); 0.5 s between live requests; HTTP 429 waits (Retry-After, else 5 s doubling) up to 3 retries"
 mcp_tools:
-  read: [get_market_prices, get_price_trend, get_grower_return_vs_breakeven, list_market_data_issues]
-  write: [fetch_market_reports, backfill_market_reports, probe_market_report]   # all OFF; probe is read-only against USDA and saves raw answers as fixtures
+  read: [get_market_prices, get_price_trend, get_grower_return_vs_breakeven, list_market_data_issues, list_market_catalog]
+  write: [fetch_market_reports, backfill_market_reports, probe_market_report, refresh_market_catalog, observe_market_reports, draft_market_commodity]   # all OFF; probe is read-only against USDA and saves raw answers as fixtures
 
 data_quality:   # Market Data Issue, one row per (report, date, kind, detail); open until resolved; compliance alert via CCF
-  kinds: [report_missing, unknown_size, unknown_pack, field_set_changed, parse_error, http_error, not_quoted]
+  kinds: [report_missing, unknown_size, unknown_pack, field_set_changed, parse_error, http_error, not_quoted, row_limit]

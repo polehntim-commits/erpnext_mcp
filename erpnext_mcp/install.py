@@ -886,6 +886,9 @@ def _market_commodity_seed() -> None:
 			                         f"Seeded at install (v0.265.0): {key}. Change it with a new version a person publishes.")
 			if name:
 				print(f"erpnext_mcp: Market Commodity {name} seeded.")
+		drafts = market_prices.seed_drafts()
+		if drafts:
+			print(f"erpnext_mcp: Market Commodity drafts seeded (unpublished): {', '.join(drafts)}.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: market commodities were not seeded — {type(exc).__name__}: {exc}")
 

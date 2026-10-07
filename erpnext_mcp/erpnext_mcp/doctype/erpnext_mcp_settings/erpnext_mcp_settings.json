@@ -1237,6 +1237,10 @@
   "allow_fetch_market_reports",
   "allow_backfill_market_reports",
   "allow_probe_market_report",
+  "allow_list_market_catalog",
+  "allow_refresh_market_catalog",
+  "allow_observe_market_reports",
+  "allow_draft_market_commodity",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9617,6 +9621,34 @@
    "fieldname": "allow_probe_market_report",
    "fieldtype": "Check",
    "label": "Probe Market Report"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.265.0. The USDA AMS report catalog and the commodities each carries.",
+   "fieldname": "allow_list_market_catalog",
+   "fieldtype": "Check",
+   "label": "List Market Catalog"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.265.0. Read the public MARS report index into Market Report rows.",
+   "fieldname": "allow_refresh_market_catalog",
+   "fieldtype": "Check",
+   "label": "Refresh Market Catalog"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.265.0. Record what each report carries per commodity (no prices stored).",
+   "fieldname": "allow_observe_market_reports",
+   "fieldtype": "Check",
+   "label": "Observe Market Reports"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.265.0. Draft a Market Commodity config from observed data (a person publishes).",
+   "fieldname": "allow_draft_market_commodity",
+   "fieldtype": "Check",
+   "label": "Draft Market Commodity"
   },
   {
    "default": "1",

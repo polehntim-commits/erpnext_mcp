@@ -79,7 +79,7 @@
    "fieldname": "kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "report_missing\nunknown_size\nunknown_pack\nfield_set_changed\nparse_error\nhttp_error\nnot_quoted",
+   "options": "report_missing\nunknown_size\nunknown_pack\nfield_set_changed\nparse_error\nhttp_error\nnot_quoted\nrow_limit",
    "in_list_view": 1,
    "in_standard_filter": 1
   },

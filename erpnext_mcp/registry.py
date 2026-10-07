@@ -18260,6 +18260,49 @@ TOOLS = {
 		mutating=True,
 		title="Probe market report",
 	),
+	"list_market_catalog": _tool(
+		market_prices_tools.list_market_catalog,
+		"v0.265.0. The browsable USDA AMS index. view=commodities (default): every commodity seen in the observed "
+		"reports — which reports (shipping point / terminal / movement) carry it, its districts, how much data, and "
+		"the Market Commodity config that covers it (published or draft). view=reports: the MARS catalog itself "
+		"(1,690 reports), filterable by role and title. Paged.",
+		{"view": _field(_STRING, "commodities (default) or reports."), "search": _field(_STRING, "Commodity or title words."),
+		 "role": _field(_STRING, "shipping_point, terminal, movement, movement_weekly, other."),
+		 "include_stale": _field(_BOOLEAN, "Include reports nothing has been published in for a year."),
+		 "start": _field(_INTEGER, "Page start."), "limit": _field(_INTEGER, "Page size (default 200).")},
+		title="List market catalog",
+	),
+	"refresh_market_catalog": _tool(
+		market_prices_tools.refresh_market_catalog,
+		"MUTATING (default OFF). v0.265.0. Read USDA's public MARS report index (no key) into Market Report rows: "
+		"every report, its role (shipping point / terminal / movement) from its title and code, office, last "
+		"published, stale.",
+		{},
+		mutating=True,
+		title="Refresh market catalog",
+	),
+	"observe_market_reports": _tool(
+		market_prices_tools.observe_market_reports,
+		"MUTATING (default OFF). v0.265.0. Read reports (keyed; default every current shipping-point report, the last "
+		"14 days) and record what each carries per commodity — districts, varieties, sizes, packs, dates — so any "
+		"commodity can be drafted from the data. Stores no prices.",
+		{"reports": _field(_STRING_ARRAY, "Report IDs; omit for every current report of `role`."),
+		 "role": _field(_STRING, "shipping_point (default), terminal, movement."),
+		 "from": _field(_STRING, "YYYY-MM-DD."), "to": _field(_STRING, "YYYY-MM-DD.")},
+		mutating=True,
+		title="Observe market reports",
+	),
+	"draft_market_commodity": _tool(
+		market_prices_tools.draft_market_commodity,
+		"MUTATING (default OFF). v0.265.0. Build a Market Commodity DRAFT from what the observed reports carry: its "
+		"reports and roles, sizes in generic order (row sizes, counts, inch and word sizes; unrecognised kept as-is), "
+		"packs with net lb where stated, season and headline size. A person adds deductions and breakeven and "
+		"publishes it; nothing is pulled until then.",
+		{"commodity": _field(_STRING, "The AMS commodity name, e.g. APPLES."), "key": _field(_STRING, "Config key (default from the name).")},
+		required=("commodity",),
+		mutating=True,
+		title="Draft market commodity",
+	),
 	# ── v0.264.0: pest degree days per block ────────────────────────────────
 	"get_pest_dd_status": _tool(
 		ipm_graph_tools.get_pest_dd_status,
