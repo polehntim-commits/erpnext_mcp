@@ -41,7 +41,10 @@ def dd_site(case) -> None:
 	for patcher in (mock.patch.object(degree_days, "daily_temps", side_effect=weather),
 	                mock.patch.object(ccf_providers, "forecast_enabled", return_value=True),
 	                mock.patch.object(pest_dd, "_aspect_summary", return_value=None),
-	                mock.patch.object(pest_dd.frappe.utils, "today", return_value=AS_OF)):
+	                mock.patch.object(pest_dd.frappe.utils, "today", return_value=AS_OF),
+	                # The H3 cell id needs the h3 package, which one venv lacks ("lat,lon" there): pinned, so the
+	                # contract fixture is the same on every interpreter.
+	                mock.patch.object(ccf_providers, "_cell", return_value="8728f66e4ffffff")):
 		patcher.start()
 		case.addCleanup(patcher.stop)
 
