@@ -393,6 +393,12 @@ ALLOWLIST = {
 	"mean 'not recorded'. A stated zero and a never-set field are the same stored value, "
 	"so the distinction this would preserve does not survive the round trip. Found and "
 	"reverted in v0.132.0.",
+	(
+		"erpnext_mcp/offline_claims.py",
+		'as_int(args, "actual_duration_minutes") or dispatch.active_minutes(doc)',
+	): "v0.261.0. The second claim's completion, the same line as complete_farm_task's entry above and "
+	"for the same reason: actual_duration_minutes is an Int with no default and a stated 0 reads back as "
+	"'not recorded', so the segments' sum is the honest figure.",
 	# ── owned by another session's in-flight work ────────────────────────────
 	(
 		"erpnext_mcp/tools/mobile.py",
