@@ -1241,6 +1241,7 @@
   "allow_refresh_market_catalog",
   "allow_observe_market_reports",
   "allow_draft_market_commodity",
+  "allow_get_data_access_policy",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -9649,6 +9650,13 @@
    "fieldname": "allow_draft_market_commodity",
    "fieldtype": "Check",
    "label": "Draft Market Commodity"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.267.0. The Data Access policy: who sees what on the phone.",
+   "fieldname": "allow_get_data_access_policy",
+   "fieldtype": "Check",
+   "label": "Get Data Access Policy"
   },
   {
    "default": "1",

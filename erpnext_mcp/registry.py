@@ -194,6 +194,7 @@ from .tools import taskdates as task_date_tools
 from .tools import time_reviews as time_review_tools
 from .tools import ipm_graph_tools
 from .tools import market_prices_tools
+from .tools import data_access_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18271,6 +18272,16 @@ TOOLS = {
 		 "include_stale": _field(_BOOLEAN, "Include reports nothing has been published in for a year."),
 		 "start": _field(_INTEGER, "Page start."), "limit": _field(_INTEGER, "Page size (default 200).")},
 		title="List market catalog",
+	),
+	"get_data_access_policy": _tool(
+		data_access_tools.get_data_access_policy,
+		"v0.267.0. Who sees what on the phone: the Data Access policy in force (published, else the seed = today's "
+		"behaviour) — tiers, the gates' roles, the personal resources and their restricted fields, every route. With "
+		"route (and tier): that route's gates and, for that tier, the fields hidden and the row scope. Changes nothing; "
+		"a System Manager publishes the policy in the Desk.",
+		{"route": _field(_STRING, "A phone route, e.g. get_accident_report."),
+		 "tier": _field(_STRING, "worker, crew_lead, foreman, manager, hr, accounts.")},
+		title="Get data access policy",
 	),
 	"refresh_market_catalog": _tool(
 		market_prices_tools.refresh_market_catalog,

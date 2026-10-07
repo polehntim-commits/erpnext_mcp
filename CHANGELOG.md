@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.267.0 — 2026-10-06 — who sees what on the phone, as data
+
+**Migrate needed** (Farm Config Version gains kind "Data Access"; a settings switch). No phone change; FarmOps 0.52.0
+(on-device protection) pairs with it. Deploy `docs/deploy/v0.267.0_data_access.md`. Steps 2–3 of the audit's plan
+(step 1 was v0.260.0). Tim, 2026-10-06.
+
+- **One policy** (Farm Config Version, kind Data Access, key `farm`): tiers (worker, crew lead, foreman, manager, hr,
+  accounts), the gates' roles, the personal resources each answer carries with their restricted fields and row scope,
+  and every one of the 428 phone routes. Until one is published the seed is the policy, and the seed is TODAY'S
+  behaviour — publishing it unchanged changes nothing.
+- **Enforced in one place**: `guard.endpoint` filters every answer through it after `strip_secrets`. It can only
+  remove a field or a row, never add; a route's own code gates still run first.
+- **The gates read it**: private HR, compliance, receipt review, dispatch, location and IPM editing take their roles
+  from the policy. A gate may only NARROW within its ceiling — the private HR reads cannot be widened back to Farm
+  Manager, everybody's receipts stay with the reviewers.
+- **Publishing it** is a System Manager's, in the Desk only (never over MCP, never AI); rollback the same.
+- **Tile audiences by tier**: `{"tiers": ["foreman", "manager"]}`.
+- **Tests from the policy**: every phone route listed, each route's declared gates equal the gates its code calls,
+  and a leak matrix over every route × tier × restricted field.
+- **MCP** `get_data_access_policy` (read): the policy, or what one tier sees on one route.
+- The survey behind the seed found ten places where a lower tier receives more than it needs today; each is a
+  one-line policy edit listed in the deploy file for Tim to decide (nothing was narrowed silently).
+
 ## 0.266.0 — 2026-10-06 — the market dashboard, and the market in the pro forma
 
 **Migrate needed** (the page `market-prices`; the Market & Sales workspace gains it). Pairs with FarmOps 0.51.0.

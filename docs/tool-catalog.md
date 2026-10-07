@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1086 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1087 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 525 read tools are **on** by default and can be switched off individually. A
+All 526 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21053,6 +21053,15 @@ returns `organism`, `status`, `provenance`. Five phone routes and a Today tile (
 | `draft_market_commodity` | Draft a Market Commodity from observed data; a person publishes. Write |
 
 Commodities are Market Commodity configs (sweet_cherries, cantaloupe seeded). Contract: `docs/contracts/market_prices_v0_265.yaml`.
+
+## v0.267.0 — data access as data
+
+| Tool | What it does |
+| --- | --- |
+| `get_data_access_policy` | Who sees what on the phone: tiers, gates, restricted fields per resource, every route; per route and tier, what is hidden. Read |
+
+The policy is a Farm Config Version (kind Data Access, key `farm`); a System Manager publishes it in the Desk. Contract:
+`docs/contracts/data_access_v0_267.yaml`.
 
 ## v0.266.0 — the market dashboard
 

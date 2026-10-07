@@ -1,0 +1,43 @@
+# Data access as data — the frozen contract. erpnext_mcp v0.267.0 (steps 2 and 3 of
+# docs/design/role_data_access_audit.md §5; step 1 was v0.260.0). FarmOps 0.52.0 does step 4 (on-device protection).
+# The phone's answers do not change shape: this release moves WHO-SEES-WHAT into one published policy and filters every
+# answer through it on the way out. Seeded to today's behaviour.
+
+version: "0.267.0"
+
+policy:   # Farm Config Version, kind "Data Access" (slug data_access), key "farm"; Draft → preview → publish
+  publish: "Desk only, System Manager only (never over MCP, never AI). Rollback the same."
+  until_published: "the seed (erpnext_mcp/seed_data/data_access_policy.json) is the policy — today's behaviour"
+  tiers: "[{tier, roles}] — worker (Field Worker, Farm Worker), crew_lead (Crew Leader), foreman (Foreman), manager (Farm Manager, Compliance Officer), hr (HR Manager, HR User), accounts (Accounts Manager, Accounts User). System Manager is every tier."
+  gates:
+    meaning: "{gate: {roles}} — the role sets guard.require_* check"
+    names: [private_hr, compliance, receipt_review, dispatch, location, ipm_edit]
+    narrow_only: "each gate has a CEILING; a policy may remove roles, never add past it. private_hr ceiling = HR Manager, HR User, System Manager (never Farm Manager). receipt_review ceiling = Farm Manager, Accounts Manager, Accounts User, System Manager. Others: any enrolled role."
+  resources:
+    meaning: "{resource: {owner_key, department_key, hide: remove|null (null keeps the key, as get_employee does today), fields: {field: [tiers that may see it]}, scope: {tier: all|own|department|none}}}"
+    rules:
+      - "a field not listed is not restricted"
+      - "a listed field reaches a caller only if one of their tiers is listed for it"
+      - "your OWN row (owner_key = your Employee id or login) is never trimmed"
+      - "scope drops rows outside it: own = yours; department = your Employee department; none = nothing"
+  routes:
+    meaning: "{method: {gates: [gate], resources: [{resource, at}]}} — EVERY phone route is listed"
+    at: "where the resource sits in the answer: '' = the answer itself, 'rows' = a key, 'unit.occupants' = nested; lists are walked"
+    gates: "the gates the route's own code calls (test: must match the source)"
+
+enforcement:
+  where: "guard.endpoint, after strip_secrets: data_access.apply(method, user, answer)"
+  only_removes: "the filter can drop a field or a row, never add one; a route's code gates still run first — so a policy can tighten, never loosen"
+  gates: "guard.require_private_hr / require_compliance_role / reviews_receipts / require_dispatch_role / require_location_role / may_edit_ipm read their roles from the policy (within the ceiling); the constants are the fallback"
+  tiles: "a tile audience may name tiers: {tiers: [foreman, manager]} — resolved through the policy (as well as roles / users / companies)"
+
+mcp_tools:
+  read: [get_data_access_policy]   # the policy, or what one tier sees on one route; nothing is changed
+  write: []                         # drafting is the generic config tools; publishing is the Desk's
+
+tests:
+  - "every phone route is in the policy's routes (a new route cannot ship unclassified)"
+  - "each route's declared gates equal the gates its code calls"
+  - "matrix: for every route × tier, a synthetic answer carrying every restricted field reaches the tier only with the fields it may see; own rows whole; out-of-scope rows dropped"
+  - "a policy widening private_hr to Farm Manager does not validate; publishing over MCP is refused; a Farm Manager cannot publish it in the Desk"
+  - "the seed changes nothing: the routes' existing tests pass with apply in the path"

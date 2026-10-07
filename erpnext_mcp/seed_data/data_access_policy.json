@@ -1,0 +1,1594 @@
+{
+ "schema_version": 1,
+ "tiers": [
+  {
+   "tier": "worker",
+   "roles": [
+    "Field Worker",
+    "Farm Worker"
+   ]
+  },
+  {
+   "tier": "crew_lead",
+   "roles": [
+    "Crew Leader"
+   ]
+  },
+  {
+   "tier": "foreman",
+   "roles": [
+    "Foreman"
+   ]
+  },
+  {
+   "tier": "manager",
+   "roles": [
+    "Farm Manager",
+    "Compliance Officer"
+   ]
+  },
+  {
+   "tier": "hr",
+   "roles": [
+    "HR Manager",
+    "HR User"
+   ]
+  },
+  {
+   "tier": "accounts",
+   "roles": [
+    "Accounts Manager",
+    "Accounts User"
+   ]
+  }
+ ],
+ "gates": {
+  "private_hr": {
+   "roles": [
+    "HR Manager",
+    "HR User",
+    "System Manager"
+   ]
+  },
+  "compliance": {
+   "roles": [
+    "Compliance Officer",
+    "Farm Manager",
+    "Foreman",
+    "System Manager"
+   ]
+  },
+  "receipt_review": {
+   "roles": [
+    "Accounts Manager",
+    "Accounts User",
+    "Farm Manager",
+    "System Manager"
+   ]
+  },
+  "dispatch": {
+   "roles": [
+    "Farm Manager",
+    "Foreman"
+   ]
+  },
+  "location": {
+   "roles": [
+    "Farm Manager"
+   ]
+  },
+  "ipm_edit": {
+   "roles": [
+    "Compliance Officer",
+    "Farm Manager",
+    "System Manager"
+   ]
+  }
+ },
+ "resources": {
+  "i9_form": {
+   "note": "Somebody else's I-9: HR only (v0.260.0). Your own is whole.",
+   "owner_key": "employee",
+   "fields": {
+    "legal_first_name": [
+     "hr"
+    ],
+    "legal_middle_name": [
+     "hr"
+    ],
+    "legal_last_name": [
+     "hr"
+    ],
+    "other_last_names": [
+     "hr"
+    ],
+    "address_street": [
+     "hr"
+    ],
+    "address_city": [
+     "hr"
+    ],
+    "address_state": [
+     "hr"
+    ],
+    "address_zip": [
+     "hr"
+    ],
+    "date_of_birth": [
+     "hr"
+    ],
+    "ssn_last_four": [
+     "hr"
+    ],
+    "email": [
+     "hr"
+    ],
+    "phone": [
+     "hr"
+    ],
+    "citizenship_status": [
+     "hr"
+    ],
+    "alien_registration_number": [
+     "hr"
+    ],
+    "i94_admission_number": [
+     "hr"
+    ],
+    "foreign_passport_number": [
+     "hr"
+    ],
+    "foreign_passport_country": [
+     "hr"
+    ],
+    "alien_work_authorization_expiry": [
+     "hr"
+    ],
+    "section_1_signed_ip": [
+     "hr"
+    ],
+    "section_1_signed_gps": [
+     "hr"
+    ],
+    "section_2_signed_ip": [
+     "hr"
+    ],
+    "section_2_signed_gps": [
+     "hr"
+    ],
+    "preparer_name": [
+     "hr"
+    ],
+    "preparer_address": [
+     "hr"
+    ],
+    "document_path": [
+     "hr"
+    ],
+    "list_a_doc_number": [
+     "hr"
+    ],
+    "list_a_doc_authority": [
+     "hr"
+    ],
+    "list_a_doc_copy": [
+     "hr"
+    ],
+    "list_b_doc_number": [
+     "hr"
+    ],
+    "list_b_doc_authority": [
+     "hr"
+    ],
+    "list_b_doc_copy": [
+     "hr"
+    ],
+    "list_c_doc_number": [
+     "hr"
+    ],
+    "list_c_doc_authority": [
+     "hr"
+    ],
+    "list_c_doc_copy": [
+     "hr"
+    ],
+    "verifier_name": [
+     "hr"
+    ],
+    "generated_pdf": [
+     "hr"
+    ],
+    "signed_pdf": [
+     "hr"
+    ]
+   }
+  },
+  "i9_reverification": {
+   "note": "Reverification rows on another's I-9: HR only.",
+   "fields": {
+    "document_number": [
+     "hr"
+    ],
+    "issuing_authority": [
+     "hr"
+    ],
+    "verifier_name": [
+     "hr"
+    ],
+    "signed_ip": [
+     "hr"
+    ],
+    "notes": [
+     "hr"
+    ]
+   }
+  },
+  "employee_personal": {
+   "note": "get_employee nulls these unless HR or your own (v0.260.0).",
+   "owner_key": "name",
+   "hide": "null",
+   "fields": {
+    "gender": [
+     "hr"
+    ],
+    "date_of_birth": [
+     "hr"
+    ],
+    "personal_email": [
+     "hr"
+    ],
+    "cell_number": [
+     "hr"
+    ],
+    "user_id": [
+     "hr"
+    ]
+   }
+  },
+  "pay_line": {
+   "note": "Everyone's pay: HR only (the route is private_hr-gated).",
+   "owner_key": "employee_id",
+   "fields": {
+    "gross_pay": [
+     "hr"
+    ],
+    "federal_tax": [
+     "hr"
+    ],
+    "state_tax": [
+     "hr"
+    ],
+    "ss_employee": [
+     "hr"
+    ],
+    "medicare_employee": [
+     "hr"
+    ],
+    "total_deductions": [
+     "hr"
+    ],
+    "other_deductions": [
+     "hr"
+    ],
+    "net_pay": [
+     "hr"
+    ],
+    "hours_worked": [
+     "hr"
+    ],
+    "piece_units": [
+     "hr"
+    ],
+    "ytd": [
+     "hr"
+    ],
+    "file_url": [
+     "hr"
+    ]
+   }
+  },
+  "pay_stub": {
+   "note": "A pay stub: HR only.",
+   "owner_key": "employee",
+   "fields": {
+    "gross_pay": [
+     "hr"
+    ],
+    "federal_tax": [
+     "hr"
+    ],
+    "state_tax": [
+     "hr"
+    ],
+    "ss_employee": [
+     "hr"
+    ],
+    "medicare_employee": [
+     "hr"
+    ],
+    "total_deductions": [
+     "hr"
+    ],
+    "other_deductions": [
+     "hr"
+    ],
+    "net_pay": [
+     "hr"
+    ],
+    "hours_worked": [
+     "hr"
+    ],
+    "piece_units": [
+     "hr"
+    ],
+    "ytd": [
+     "hr"
+    ],
+    "file_url": [
+     "hr"
+    ]
+   }
+  },
+  "deduction": {
+   "note": "Deductions and garnishments: HR only.",
+   "owner_key": "employee",
+   "fields": {
+    "deduction_type": [
+     "hr"
+    ],
+    "deduction_category": [
+     "hr"
+    ],
+    "amount": [
+     "hr"
+    ],
+    "amount_type": [
+     "hr"
+    ],
+    "basis": [
+     "hr"
+    ],
+    "max_per_period": [
+     "hr"
+    ],
+    "exempt_amount": [
+     "hr"
+    ],
+    "arrears_over_12_weeks": [
+     "hr"
+    ],
+    "supports_other_dependents": [
+     "hr"
+    ],
+    "reference": [
+     "hr"
+    ],
+    "label": [
+     "hr"
+    ],
+    "notes": [
+     "hr"
+    ],
+    "limit_rule": [
+     "hr"
+    ]
+   }
+  },
+  "discipline_step": {
+   "note": "Discipline narrative: HR only; the subject reads their own whole.",
+   "owner_key": "employee",
+   "fields": {
+    "incident_description": [
+     "hr"
+    ],
+    "policy_violated": [
+     "hr"
+    ],
+    "witnesses": [
+     "hr"
+    ],
+    "expected_improvement": [
+     "hr"
+    ],
+    "consequence_of_no_improvement": [
+     "hr"
+    ],
+    "suspension_start": [
+     "hr"
+    ],
+    "suspension_end": [
+     "hr"
+    ],
+    "employee_statement": [
+     "hr"
+    ],
+    "resolution_summary": [
+     "hr"
+    ],
+    "escalation_note": [
+     "hr"
+    ],
+    "reported_by": [
+     "hr"
+    ],
+    "issued_by": [
+     "hr"
+    ]
+   }
+  },
+  "accident_report": {
+   "note": "Injury details: Foreman / Farm Manager (dispatch) and HR; the injured person reads their own.",
+   "owner_key": "injured_person",
+   "fields": {
+    "injured_person_name": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "injury_type": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "body_part": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "medical_treatment": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "treatment_facility": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "days_away_from_work": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "days_restricted_duty": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "incident_description": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "root_cause": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "contributing_factors": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "closure_summary": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "latitude": [
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "longitude": [
+     "foreman",
+     "manager",
+     "hr"
+    ]
+   }
+  },
+  "compliance_alert": {
+   "note": "Alert text that may name a person: the compliance gate's tiers.",
+   "owner_key": "subject_employee",
+   "fields": {
+    "explanation": [
+     "foreman",
+     "manager"
+    ],
+    "subject_employee": [
+     "foreman",
+     "manager"
+    ],
+    "subject_employee_name": [
+     "foreman",
+     "manager"
+    ]
+   }
+  },
+  "expense_receipt": {
+   "note": "Everybody's spending: receipt reviewers; everyone else their own (v0.260.0).",
+   "owner_key": "submitted_by",
+   "scope": {
+    "worker": "own",
+    "crew_lead": "own",
+    "foreman": "own",
+    "hr": "own",
+    "manager": "all",
+    "accounts": "all"
+   },
+   "fields": {}
+  },
+  "housing_occupant": {
+   "note": "Occupants and deposits on a housing scan: Farm Manager and HR (TODAY: HR_ROLES includes Farm Manager).",
+   "owner_key": "employee",
+   "fields": {
+    "employee_name": [
+     "manager",
+     "hr"
+    ],
+    "deposit_paid": [
+     "manager",
+     "hr"
+    ],
+    "deposit_returned": [
+     "manager",
+     "hr"
+    ],
+    "deposit_outstanding": [
+     "manager",
+     "hr"
+    ],
+    "housing_deduction_from_wages": [
+     "manager",
+     "hr"
+    ],
+    "notes": [
+     "manager",
+     "hr"
+    ]
+   }
+  },
+  "leave_request": {
+   "note": "Leave reasons: Foreman / Farm Manager; everyone else their own.",
+   "owner_key": "employee",
+   "scope": {
+    "worker": "own",
+    "crew_lead": "own",
+    "hr": "own",
+    "accounts": "own",
+    "foreman": "all",
+    "manager": "all"
+   },
+   "fields": {
+    "description": [
+     "foreman",
+     "manager"
+    ]
+   }
+  },
+  "crew_pay": {
+   "note": "Pay type and rate on the crew timeline: TODAY every shift role, Crew Leader included — a candidate to narrow.",
+   "owner_key": "employee",
+   "fields": {
+    "pay_type": [
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr"
+    ],
+    "pay_rate": [
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr"
+    ]
+   }
+  },
+  "stock_value": {
+   "note": "Stock valuation: TODAY every tier — a candidate to narrow to manager / accounts.",
+   "fields": {
+    "valuation_rate": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ],
+    "stock_value": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ],
+    "total_value": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ],
+    "value_change": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ]
+   }
+  },
+  "supplier_tax": {
+   "note": "Supplier tax id: TODAY every tier — a candidate to narrow to accounts / manager.",
+   "fields": {
+    "tax_id": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ],
+    "tax_category": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ],
+    "tax_withholding_category": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ]
+   }
+  },
+  "bank_account": {
+   "note": "Your own accounts. routing_number is unmasked TODAY — a candidate to remove (get_my_direct_deposit masks it).",
+   "owner_key": "employee",
+   "fields": {
+    "routing_number": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ]
+   }
+  },
+  "badge_holder": {
+   "note": "A badge scan: TODAY every tier sees badge notes and photo — a candidate to narrow notes to foreman / manager.",
+   "owner_key": "employee",
+   "fields": {
+    "notes": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ],
+    "photo_url": [
+     "worker",
+     "crew_lead",
+     "foreman",
+     "manager",
+     "hr",
+     "accounts"
+    ]
+   }
+  }
+ },
+ "routes": {
+  "acknowledge_discipline_record": {},
+  "acknowledge_shadow_log": {},
+  "add_authorized_signer": {},
+  "add_my_bank_account": {},
+  "add_session_attendee": {},
+  "add_task_note": {},
+  "add_task_note_via_mobile": {},
+  "add_to_crew_task": {},
+  "add_worker_to_shift": {},
+  "advance_policy_review": {},
+  "answer_work_notice": {},
+  "approve_access_request": {},
+  "approve_leave_request": {},
+  "approve_reply": {},
+  "approve_task_step": {},
+  "assign_farm_task": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "assign_housing": {},
+  "assign_soil_profile": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "attach_asset_document": {},
+  "attach_audio_note": {},
+  "attach_file_to_document": {
+   "gates": [
+    "location"
+   ]
+  },
+  "attach_onboarding_document": {},
+  "attach_training_certificate": {},
+  "cancel_card_print_job": {},
+  "cancel_shift": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "check_in_training_day": {},
+  "claim_task": {},
+  "classify_receipt": {},
+  "clock_in_crew": {},
+  "clock_out_worker": {},
+  "close_accident_investigation": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "collect_signature": {},
+  "complete_task_via_mobile": {},
+  "complete_training_session": {},
+  "confirm_shipment_movement": {},
+  "create_accident_report": {},
+  "create_acquisition_target": {},
+  "create_branch": {},
+  "create_competitive_move": {},
+  "create_corrective_action_record": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_department": {},
+  "create_designation": {},
+  "create_detector_test": {},
+  "create_discipline_record": {},
+  "create_dispute": {},
+  "create_employee": {},
+  "create_employee_grade": {},
+  "create_employment_type": {},
+  "create_expense_receipt": {},
+  "create_farm_location": {},
+  "create_farm_task": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_field": {},
+  "create_food_safety_plan": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_hazard_analysis": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_housing_assignment": {},
+  "create_housing_inspection": {},
+  "create_housing_unit": {},
+  "create_i9_form": {},
+  "create_iot_device": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_iot_reading": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_irrigation_zone": {},
+  "create_item": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_leave_request": {},
+  "create_market_participant": {},
+  "create_monitoring_record": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_mrl_record": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_parcel": {},
+  "create_payroll_deduction": {},
+  "create_preventive_control": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_recall_plan": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_scale_ticket": {},
+  "create_soil_compaction_profile": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_stock_entry": {},
+  "create_strategic_objective": {},
+  "create_strategic_plan": {},
+  "create_supplier_verification": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_task_from_template": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_traceability_lot": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "create_training_session": {},
+  "create_verification_record": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "delete_farm_location": {
+   "gates": [
+    "location"
+   ]
+  },
+  "deny_access_request": {},
+  "discard_reply": {},
+  "dismiss_compliance_alert": {
+   "gates": [
+    "compliance"
+   ]
+  },
+  "end_shift": {},
+  "end_shift_break": {},
+  "end_stale_shift": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "finalize_staged_file": {},
+  "find_item_by_barcode": {},
+  "finish_bank_verification": {},
+  "generate_asset_qr": {},
+  "generate_employee_badge_qr": {},
+  "generate_i9_pdf": {},
+  "generate_w4_pdf": {},
+  "get_941_prefill": {
+   "gates": [
+    "private_hr"
+   ]
+  },
+  "get_accident_report": {
+   "gates": [
+    "dispatch"
+   ],
+   "resources": [
+    {
+     "resource": "accident_report",
+     "at": ""
+    }
+   ]
+  },
+  "get_acquisition_target": {},
+  "get_active_model": {},
+  "get_active_rei": {},
+  "get_asset_detail": {},
+  "get_asset_reference": {},
+  "get_attachment_content": {},
+  "get_available_actions": {},
+  "get_block_stages": {},
+  "get_break_policy": {},
+  "get_break_schedule": {},
+  "get_certification": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "get_competitive_move": {},
+  "get_compliance_inbox": {},
+  "get_corrective_action_record": {},
+  "get_crew_overview": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "get_current_user_context": {},
+  "get_device_readings": {},
+  "get_discipline_record": {
+   "resources": [
+    {
+     "resource": "discipline_step",
+     "at": ""
+    }
+   ]
+  },
+  "get_discipline_report": {
+   "gates": [
+    "private_hr"
+   ],
+   "resources": [
+    {
+     "resource": "discipline_step",
+     "at": "steps"
+    }
+   ]
+  },
+  "get_document_preview": {},
+  "get_document_validation": {},
+  "get_employee": {
+   "resources": [
+    {
+     "resource": "employee_personal",
+     "at": ""
+    }
+   ]
+  },
+  "get_employee_badge_pass": {},
+  "get_employee_file": {},
+  "get_expense_account_map": {},
+  "get_expense_receipt": {
+   "resources": [
+    {
+     "resource": "expense_receipt",
+     "at": ""
+    }
+   ]
+  },
+  "get_extraction_config": {},
+  "get_feature_flags": {},
+  "get_food_safety_dashboard": {},
+  "get_food_safety_plan": {},
+  "get_futa_summary": {
+   "gates": [
+    "private_hr"
+   ]
+  },
+  "get_hazard_analysis": {},
+  "get_i9_form": {
+   "gates": [
+    "private_hr"
+   ],
+   "resources": [
+    {
+     "resource": "i9_form",
+     "at": ""
+    },
+    {
+     "resource": "i9_reverification",
+     "at": "reverifications"
+    }
+   ]
+  },
+  "get_inspection": {},
+  "get_inspection_evidence": {},
+  "get_iot_device": {},
+  "get_ipm_graph": {
+   "gates": [
+    "ipm_edit"
+   ]
+  },
+  "get_ipm_organism": {
+   "gates": [
+    "ipm_edit"
+   ]
+  },
+  "get_ipm_reference": {},
+  "get_ipm_threshold_status": {},
+  "get_irrigation_valve": {},
+  "get_irrigation_zone": {},
+  "get_item_label": {},
+  "get_item_label_file": {},
+  "get_lot_timeline": {},
+  "get_map_overlays": {},
+  "get_market_card": {},
+  "get_market_chart": {},
+  "get_market_participant": {},
+  "get_model_file_chunk": {},
+  "get_monitoring_record": {},
+  "get_mrl_for_chemical_crop_market": {},
+  "get_mrl_record": {},
+  "get_my_course": {},
+  "get_my_direct_deposit": {},
+  "get_my_housing": {},
+  "get_my_i9": {},
+  "get_my_pay_stub_pdf": {},
+  "get_my_w4": {},
+  "get_offline_scan_pack": {},
+  "get_osha_300_log": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "get_osha_300a_summary": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "get_payroll_deduction": {
+   "gates": [
+    "private_hr"
+   ],
+   "resources": [
+    {
+     "resource": "deduction",
+     "at": "deduction"
+    }
+   ]
+  },
+  "get_payroll_register": {
+   "gates": [
+    "private_hr"
+   ],
+   "resources": [
+    {
+     "resource": "pay_line",
+     "at": "employees"
+    }
+   ]
+  },
+  "get_pest_dd_status": {},
+  "get_preventive_control": {},
+  "get_recall_plan": {},
+  "get_receipt_image": {},
+  "get_reply_to_review": {},
+  "get_shadow_log_entry": {},
+  "get_shift": {},
+  "get_shift_crew_timeline": {
+   "resources": [
+    {
+     "resource": "crew_pay",
+     "at": "crew"
+    }
+   ]
+  },
+  "get_shift_production": {},
+  "get_shift_track": {},
+  "get_shipment": {},
+  "get_shipment_readiness": {},
+  "get_slope_aspect_layer": {},
+  "get_slope_grade_layer": {},
+  "get_spray_application": {},
+  "get_spray_application_report": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "get_staged_upload": {},
+  "get_state_tax_remittance": {
+   "gates": [
+    "private_hr"
+   ]
+  },
+  "get_stock_balance": {
+   "resources": [
+    {
+     "resource": "stock_value",
+     "at": "balances"
+    }
+   ]
+  },
+  "get_stock_ledger": {
+   "resources": [
+    {
+     "resource": "stock_value",
+     "at": "movements"
+    }
+   ]
+  },
+  "get_strategic_objective": {},
+  "get_strategic_plan": {},
+  "get_supplier_verification": {},
+  "get_task": {},
+  "get_task_evidence": {},
+  "get_task_sops": {},
+  "get_tax_deposit_schedule": {},
+  "get_tax_remittance_summary": {
+   "gates": [
+    "private_hr"
+   ]
+  },
+  "get_tiles": {},
+  "get_traceability_lot": {},
+  "get_training_cards": {},
+  "get_training_certificate": {},
+  "get_training_compliance_report": {},
+  "get_training_curriculum": {},
+  "get_training_session": {},
+  "get_translation_bundle": {},
+  "get_valve_runtime": {},
+  "get_variety_care_recipe": {},
+  "get_verification_record": {},
+  "get_warehouse_summary": {
+   "resources": [
+    {
+     "resource": "stock_value",
+     "at": "items"
+    }
+   ]
+  },
+  "get_wizard_definition": {},
+  "get_worker_detail": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "index_lot_events": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "issue_enrollment_link": {},
+  "link_asset_warehouse": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "link_badge_to_employee": {},
+  "link_item_barcode": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "link_tasks_via_mobile": {},
+  "link_title_to_asset": {},
+  "list_access_inventory": {},
+  "list_accident_reports": {
+   "gates": [
+    "dispatch"
+   ],
+   "resources": [
+    {
+     "resource": "accident_report",
+     "at": "reports"
+    }
+   ]
+  },
+  "list_acquisition_targets": {},
+  "list_active_reis": {},
+  "list_active_shifts": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "list_app_feedback": {},
+  "list_approvable_people": {},
+  "list_asset_types": {},
+  "list_assignable_workers": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "list_attachments": {},
+  "list_authorized_signers": {},
+  "list_available_housing": {},
+  "list_available_tasks": {},
+  "list_branches": {},
+  "list_card_print_jobs": {},
+  "list_certifications": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "list_competitive_moves": {},
+  "list_compliance_alerts": {
+   "gates": [
+    "compliance"
+   ],
+   "resources": [
+    {
+     "resource": "compliance_alert",
+     "at": "alerts"
+    }
+   ]
+  },
+  "list_corrective_action_records": {},
+  "list_cost_centers": {},
+  "list_crew_candidates": {},
+  "list_crew_task_members": {},
+  "list_crew_tasks": {},
+  "list_departments": {},
+  "list_designations": {},
+  "list_discipline_history": {
+   "gates": [
+    "private_hr"
+   ]
+  },
+  "list_dispatched_tasks": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "list_employee_deductions": {
+   "gates": [
+    "private_hr"
+   ],
+   "resources": [
+    {
+     "resource": "deduction",
+     "at": "deductions"
+    }
+   ]
+  },
+  "list_employee_grades": {},
+  "list_employment_types": {},
+  "list_expense_receipts": {
+   "gates": [
+    "receipt_review"
+   ],
+   "resources": [
+    {
+     "resource": "expense_receipt",
+     "at": "receipts"
+    }
+   ]
+  },
+  "list_farm_locations": {},
+  "list_farm_task_templates": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "list_field_boundaries": {},
+  "list_food_safety_plans": {},
+  "list_hazard_analyses": {},
+  "list_housing_units": {},
+  "list_i9_document_types": {},
+  "list_inspection_evidence": {},
+  "list_iot_devices": {},
+  "list_iot_readings": {},
+  "list_irrigation_valves": {},
+  "list_item_groups": {},
+  "list_leave_requests": {
+   "resources": [
+    {
+     "resource": "leave_request",
+     "at": "requests"
+    }
+   ]
+  },
+  "list_leave_types": {},
+  "list_market_participants": {},
+  "list_monitoring_records": {},
+  "list_mrl_records": {},
+  "list_my_bank_accounts": {
+   "resources": [
+    {
+     "resource": "bank_account",
+     "at": "accounts"
+    }
+   ]
+  },
+  "list_my_inspections": {},
+  "list_my_pay_stubs": {},
+  "list_my_sop_reviews": {},
+  "list_my_suggested_tasks": {},
+  "list_my_tasks": {},
+  "list_my_trainings": {},
+  "list_my_work_notices": {},
+  "list_onboarding_reference_data": {},
+  "list_org_reference_data": {},
+  "list_payroll_deductions": {
+   "gates": [
+    "private_hr"
+   ],
+   "resources": [
+    {
+     "resource": "deduction",
+     "at": "deductions"
+    }
+   ]
+  },
+  "list_preventive_controls": {},
+  "list_punch_reviews": {},
+  "list_recall_plans": {},
+  "list_reorder_alerts": {},
+  "list_replies_to_review": {},
+  "list_scale_tickets": {},
+  "list_shadow_log_entries": {},
+  "list_shifts": {},
+  "list_shipments": {},
+  "list_soil_compaction_profiles": {},
+  "list_spray_applications": {},
+  "list_startable_inspections": {},
+  "list_strategic_objectives": {},
+  "list_strategic_plans": {},
+  "list_supplier_verifications": {},
+  "list_suppliers": {
+   "resources": [
+    {
+     "resource": "supplier_tax",
+     "at": "suppliers"
+    }
+   ]
+  },
+  "list_tag_print_queue": {},
+  "list_task_evidence": {},
+  "list_task_notes": {},
+  "list_tasks_by_location": {},
+  "list_time_reviews": {},
+  "list_traceability_lots": {},
+  "list_trade_documents": {},
+  "list_training_sessions": {},
+  "list_training_signoffs": {},
+  "list_uoms": {},
+  "list_verification_records": {},
+  "list_warehouses": {},
+  "list_wizard_definitions": {},
+  "log_asset_state_change": {},
+  "log_shift_break": {},
+  "log_shift_event": {},
+  "log_shift_location": {},
+  "match_product": {},
+  "materialize_task_for_alert": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "merge_task_via_mobile": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "move_asset": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "my_day_check": {},
+  "normalize_merchant": {},
+  "override_task_hold": {},
+  "pause_task_via_mobile": {},
+  "peek_access_request": {},
+  "preview_business_card": {},
+  "print_tags_for_location": {},
+  "reactivate_employee": {},
+  "recall_drill": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "record_asset_stock_movement": {},
+  "record_block_stage": {},
+  "record_cte": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "record_label_viewed": {},
+  "record_my_video_view": {},
+  "record_pest_observation": {},
+  "record_spray_application": {},
+  "record_training": {},
+  "rectify_alert": {},
+  "register_asset": {},
+  "register_product_label": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "register_push_token": {},
+  "reject_leave_request": {},
+  "reject_task": {},
+  "remove_authorized_signer": {},
+  "remove_from_crew_task": {},
+  "render_pay_stub": {
+   "gates": [
+    "private_hr"
+   ],
+   "resources": [
+    {
+     "resource": "pay_stub",
+     "at": ""
+    }
+   ]
+  },
+  "render_training_sign_in_sheet": {},
+  "renew_certification": {},
+  "reply_to_app_feedback": {},
+  "report_asset_issue": {},
+  "report_device_capabilities": {},
+  "report_field_task": {},
+  "report_lost_device": {},
+  "request_badge_photo": {},
+  "request_card_back": {},
+  "request_card_print": {},
+  "resolve_badge": {
+   "resources": [
+    {
+     "resource": "badge_holder",
+     "at": ""
+    }
+   ]
+  },
+  "resolve_punch_review": {},
+  "resume_task_via_mobile": {},
+  "retry_card_print_job": {},
+  "reverify_i9": {},
+  "review_punches": {},
+  "review_sop": {},
+  "save_business_card": {},
+  "save_ipm_relationship": {
+   "gates": [
+    "ipm_edit"
+   ]
+  },
+  "scan_asset": {},
+  "scan_valve": {},
+  "seal_bin": {},
+  "seal_signed_document": {},
+  "search_contacts": {},
+  "search_employees": {},
+  "search_items": {},
+  "search_link": {},
+  "set_building_occupancy": {
+   "gates": [
+    "location"
+   ]
+  },
+  "set_employee_contact_fields": {},
+  "set_employee_org_fields": {},
+  "set_employee_photo": {},
+  "set_field_boundary": {},
+  "set_parcel_boundary": {},
+  "set_zone_boundary": {},
+  "sign_off_training": {},
+  "sign_session_attendance": {},
+  "sign_training_supervisor_review": {},
+  "stage_file_chunk": {},
+  "start_bank_verification": {},
+  "start_inspection": {},
+  "start_shift": {},
+  "start_task": {},
+  "start_template_task": {},
+  "submit_app_feedback": {},
+  "submit_direct_deposit_change": {},
+  "submit_form_signature": {},
+  "submit_i9_section_1": {},
+  "submit_i9_section_2": {},
+  "submit_inspection": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "submit_my_quiz_attempt": {},
+  "submit_w4": {},
+  "submit_wizard_via_mobile": {},
+  "sync_bucket_entries": {},
+  "trace_backward": {},
+  "trace_forward": {},
+  "trace_lot_backward": {},
+  "trace_lot_forward": {},
+  "undo_asset_move": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "universal_scan": {
+   "resources": [
+    {
+     "resource": "housing_occupant",
+     "at": "entity.current_assignments"
+    },
+    {
+     "resource": "housing_occupant",
+     "at": "entity.assignment_history"
+    },
+    {
+     "resource": "badge_holder",
+     "at": "entity"
+    }
+   ]
+  },
+  "unregister_push_token": {},
+  "update_accident_investigation": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_acquisition_target": {},
+  "update_authorized_signer": {},
+  "update_branch": {},
+  "update_competitive_move": {},
+  "update_contact_where_met": {},
+  "update_corrective_action_record": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_crew_task_member": {},
+  "update_crew_task_sections": {},
+  "update_department": {},
+  "update_designation": {},
+  "update_employee_grade": {},
+  "update_employment_type": {},
+  "update_expense_receipt": {},
+  "update_farm_location": {
+   "gates": [
+    "location"
+   ]
+  },
+  "update_food_safety_plan": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_hazard_analysis": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_iot_device": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_irrigation_valve": {},
+  "update_item_units": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_market_participant": {},
+  "update_mrl_record": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_my_bank_account": {},
+  "update_payroll_deduction": {},
+  "update_preventive_control": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_recall_plan": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_regulatory_filing": {},
+  "update_reply_draft": {},
+  "update_soil_compaction_profile": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_strategic_objective": {},
+  "update_strategic_plan": {},
+  "update_supplier_verification": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "update_training_type": {},
+  "upgrade_device_key": {},
+  "upload_bank_form": {},
+  "upload_signed_i9": {},
+  "validate_document": {}
+ }
+}

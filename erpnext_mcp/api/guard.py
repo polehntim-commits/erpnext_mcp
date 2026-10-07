@@ -316,9 +316,17 @@ def _held(user: str) -> set:
 	return set(roles_held(user or str(getattr(frappe.session, "user", "") or "")))
 
 
+def _gate(name: str, default: frozenset) -> frozenset:
+	"""v0.267.0. A gate's roles from the published Data Access policy — never wider than its ceiling — else the
+	constant above. `data_access.gate_roles`; docs/contracts/data_access_v0_267.yaml."""
+	from .. import data_access
+
+	return data_access.gate_roles(name, default)
+
+
 def may_edit_ipm(user: str) -> bool:
-	"""v0.262.0. Farm Manager, Compliance Officer or System Manager."""
-	return bool(_held(user) & IPM_EDIT_ROLES)
+	"""v0.262.0. Farm Manager, Compliance Officer or System Manager (v0.267.0: the policy's ipm_edit gate)."""
+	return bool(_held(user) & _gate("ipm_edit", IPM_EDIT_ROLES))
 
 
 def require_ipm_editor(user: str, action: str) -> None:
@@ -326,28 +334,30 @@ def require_ipm_editor(user: str, action: str) -> None:
 	if may_edit_ipm(user):
 		return
 	raise frappe.PermissionError(
-		f"{action} is restricted to {', '.join(sorted(IPM_EDIT_ROLES))}. Nothing was read or changed.")
+		f"{action} is restricted to {', '.join(sorted(_gate('ipm_edit', IPM_EDIT_ROLES)))}. Nothing was read or changed.")
 
 
 def require_private_hr(user: str, action: str) -> None:
 	"""v0.260.0. HR Manager, HR User or System Manager — the private personnel reads. Refused by name."""
-	if _held(user) & PRIVATE_HR_ROLES:
+	allowed = _gate("private_hr", PRIVATE_HR_ROLES)
+	if _held(user) & allowed:
 		return
 	raise frappe.PermissionError(
-		f"{action} is restricted to {', '.join(sorted(PRIVATE_HR_ROLES))}. Nothing was read.")
+		f"{action} is restricted to {', '.join(sorted(allowed))}. Nothing was read.")
 
 
 def require_compliance_role(user: str, action: str) -> None:
 	"""v0.260.0. Compliance Officer, Foreman, Farm Manager or System Manager."""
-	if _held(user) & COMPLIANCE_ROLES:
+	allowed = _gate("compliance", COMPLIANCE_ROLES)
+	if _held(user) & allowed:
 		return
 	raise frappe.PermissionError(
-		f"{action} is restricted to {', '.join(sorted(COMPLIANCE_ROLES))}. Nothing was read or changed.")
+		f"{action} is restricted to {', '.join(sorted(allowed))}. Nothing was read or changed.")
 
 
 def reviews_receipts(user: str) -> bool:
 	"""v0.260.0. True for those who read everybody's receipts; everyone else reads their own."""
-	return bool(_held(user) & RECEIPT_REVIEW_ROLES)
+	return bool(_held(user) & _gate("receipt_review", RECEIPT_REVIEW_ROLES))
 
 
 def require_dispatch_role(user: str, action: str) -> None:
@@ -369,10 +379,11 @@ def require_dispatch_role(user: str, action: str) -> None:
 	`endpoint` files the refusal as `unauthorized` rather than as an error the
 	operator would go looking for a bug behind.
 	"""
-	if roles_held(user) & DISPATCH_ROLES:
+	allowed = _gate("dispatch", DISPATCH_ROLES)
+	if roles_held(user) & allowed:
 		return
 	raise frappe.PermissionError(
-		f"{action} is restricted to {' and '.join(sorted(DISPATCH_ROLES))}. This account holds a "
+		f"{action} is restricted to {' and '.join(sorted(allowed))}. This account holds a "
 		"Farm Ops credential and none of those roles, so it may work its own tasks — list_my_tasks, "
 		"list_available_tasks, claim_task, start_task, complete_task_via_mobile, reject_task and "
 		"report_field_task are all open to it. Nothing was read and nothing was changed."
@@ -393,10 +404,11 @@ def require_location_role(user: str, action: str) -> None:
 	it is "the office adds it and you pick it from the list five minutes later".
 	A refusal that does not say so reads as the feature being broken.
 	"""
-	if roles_held(user) & LOCATION_ROLES:
+	allowed = _gate("location", LOCATION_ROLES)
+	if roles_held(user) & allowed:
 		return
 	raise frappe.PermissionError(
-		f"{action} is restricted to {' and '.join(sorted(LOCATION_ROLES))}. A register entry is "
+		f"{action} is restricted to {' and '.join(sorted(allowed))}. A register entry is "
 		"permanent in a way a task is not — every task, spray record and acre of cost allocation "
 		"is routed through the docname, and a duplicate block created at a tailgate is one the "
 		"farm's own reports will never merge. This account may READ the registers: "
@@ -746,6 +758,11 @@ def endpoint(method: str, limit: int = READ_LIMIT, mutating: bool = False):
 
 			try:
 				result = strip_secrets(function(user, *args, **kwargs))
+				# v0.267.0. Who sees what, as data: the published Data Access policy trims fields and rows this
+				# caller's tiers may not see. It only removes. docs/contracts/data_access_v0_267.yaml.
+				from .. import data_access
+
+				result = data_access.apply(method, user, result)
 			except ToolError as exc:
 				# An expected, caller-correctable failure from the tool layer.
 				# It becomes a Frappe validation error so the message reaches the

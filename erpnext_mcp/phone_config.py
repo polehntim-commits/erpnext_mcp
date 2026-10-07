@@ -40,7 +40,10 @@ KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "
          # v0.264.0. The pest degree-day models and the per-block offsets (`pest_dd`); a person publishes.
          "IPM Setting": "ipm_setting",
          # v0.265.0. One per commodity: its USDA reports, field names, sizes, packs, deductions, breakeven.
-         "Market Commodity": "market_commodity"}
+         "Market Commodity": "market_commodity",
+         # v0.267.0. Who sees what on the phone (`data_access`): tiers, gates, resources, routes. Never served to a
+         # phone; published and rolled back only in the Desk, by a System Manager.
+         "Data Access": "data_access"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -188,6 +191,10 @@ def _validator(kind: str):
 		from . import market_prices
 
 		return market_prices.validate
+	if kind == "Data Access":
+		from . import data_access
+
+		return data_access.validate
 	from . import label_compliance
 
 	return label_compliance.validate
@@ -323,12 +330,20 @@ def matches(person: dict, audience: dict | None) -> bool:
 			),
 		),
 		("certifications", lambda wanted: _certified(person, wanted)),
+		# v0.267.0. A tier from the Data Access policy (foreman, manager, …), resolved through its roles.
+		("tiers", lambda wanted: bool(set(wanted) & _tiers(person))),
 	)
 	for axis, test in checks:
 		wanted = [str(v).strip() for v in audience.get(axis) or [] if str(v).strip()]
 		if wanted and not test(wanted):
 			return False
 	return True
+
+
+def _tiers(person: dict) -> set:
+	from . import data_access
+
+	return data_access.tiers_of(person.get("roles") or [])
 
 
 def _certified(person: dict, wanted: list) -> bool:
@@ -347,13 +362,18 @@ def audience_problems(audience) -> list:
 	if audience is None:
 		return []
 	if not isinstance(audience, dict):
-		return ["audience must be an object of roles, companies, skills, certifications, users"]
+		return ["audience must be an object of roles, companies, skills, certifications, users, tiers"]
 	out = []
 	for axis, values in audience.items():
-		if axis not in ("roles", "companies", "skills", "certifications", "users"):
+		if axis not in ("roles", "companies", "skills", "certifications", "users", "tiers"):
 			out.append(f"audience.{axis} is not an audience axis")
 		elif not isinstance(values, list):
 			out.append(f"audience.{axis} must be a list")
+		elif axis == "tiers":
+			from . import data_access
+
+			out += [f"audience.tiers: {t!r} is not one of {', '.join(data_access.TIERS)}"
+			        for t in values if t not in data_access.TIERS]
 	if not out and not audience_people(audience):
 		out.append("the audience resolves to nobody: no active mobile user matches every axis")
 	return out
@@ -413,7 +433,27 @@ def _publishable(doc) -> dict:
 	return report
 
 
+def _require_access_publisher(kind) -> None:
+	"""v0.267.0. The Data Access policy changes what every phone may see: a System Manager, in the Desk, only."""
+	if kind != "Data Access":
+		return
+	from . import config_lifecycle
+
+	user = str(getattr(frappe.session, "user", "") or "")
+	if not config_lifecycle.in_desk() or "System Manager" not in set(frappe.get_roles(user) or []):
+		raise ConfigError("the Data Access policy is published, staged, rolled back or retired only in the Desk, by a "
+		                  "System Manager. Nothing was changed.")
+
+
+def _forget_policy(kind) -> None:
+	if kind == "Data Access":
+		from . import data_access
+
+		data_access.forget()
+
+
 def stage(kind, key, version, change_note, actor, users=(), roles=(), companies=()):
+	_require_access_publisher(kind)
 	doc = _require(kind, key, version)
 	if doc.status != DRAFT:
 		raise ConfigError(f"{version_string(doc)} is {doc.status}; only a Draft is staged.")
@@ -443,6 +483,7 @@ def stage(kind, key, version, change_note, actor, users=(), roles=(), companies=
 
 
 def publish(kind, key, version, change_note, actor):
+	_require_access_publisher(kind)
 	doc = _require(kind, key, version)
 	if doc.status == PUBLISHED:
 		return doc, "", True
@@ -459,10 +500,12 @@ def publish(kind, key, version, change_note, actor):
 	doc.status = PUBLISHED
 	_stamp(doc, "published", actor, change_note)
 	_save(doc)
+	_forget_policy(kind)
 	return doc, previous, False
 
 
 def rollback(kind, key, change_note, actor):
+	_require_access_publisher(kind)
 	current = doc_of(kind, key, status=PUBLISHED)
 	if current is None:
 		raise ConfigError(f"{KINDS[kind]} {key!r} has no Published version to roll back.")
@@ -477,10 +520,12 @@ def rollback(kind, key, change_note, actor):
 	target.status = PUBLISHED
 	_stamp(target, "published", actor, change_note)
 	_save(target)
+	_forget_policy(kind)
 	return target, current.name
 
 
 def retire(kind, key, change_note, actor):
+	_require_access_publisher(kind)
 	moved = []
 	for row in rows(kind, key, (DRAFT, STAGED, PUBLISHED)):
 		doc = frappe.get_doc(DOCTYPE, row["name"])
@@ -489,6 +534,7 @@ def retire(kind, key, change_note, actor):
 	_switch_off_rollout(kind, key)
 	if not moved and not rows(kind, key):
 		raise ConfigError(f"no {KINDS[kind]} called {key!r}.")
+	_forget_policy(kind)
 	return moved
 
 
