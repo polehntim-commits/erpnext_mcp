@@ -25190,3 +25190,149 @@ def update_contact_where_met(user: str, contact=None, met_at=None, met_on=None) 
 	business_cards.require_role(user)
 	guard.require_scope(user)
 	return business_cards.update_where_met(user, str(contact or ""), str(met_at or ""), str(met_on or ""))
+
+
+# ── the IPM relationship graph ── v0.262.0 (docs/contracts/ipm_graph_v0_262.yaml) ──────────────
+# Anybody enrolled views the graph and logs what they see; editing relationships is the Farm Manager's,
+# the Compliance Officer's or a System Manager's (Tim, 2026-10-06), refused by name.
+def _ipm_ready() -> None:
+	from .. import ipm_graph
+
+	if not ipm_graph.installed():
+		frappe.throw("The IPM graph is not on this site yet (needs v0.262.0's migrate).", frappe.ValidationError)
+
+
+def _ipm_company(user: str, allowed: list, block: str = "") -> str:
+	if block:
+		owner = frappe.db.get_value("Field", block, "owning_entity") if compat.has_field("Field", "owning_entity") else None
+		if owner and owner in set(allowed):
+			return str(owner)
+	return str(allowed[0]) if allowed else ""
+
+
+def _ipm_value(fn):
+	try:
+		return fn()
+	except ValueError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_ipm_graph", limit=guard.READ_LIMIT)
+def get_ipm_graph(user: str, crop=None, block=None, stage=None, depth=None, kinds=None, start=None,
+                  limit=None) -> dict:
+	"""The crop's neighbourhood — active pests, the beneficials working now, the products that harm them.
+	Cached on the phone by `graph_version`."""
+	from .. import ipm_graph
+
+	allowed = guard.require_scope(user)
+	_ipm_ready()
+	block = guard.require_docname("Field", block, "block") if block else ""
+	answer = _ipm_value(lambda: ipm_graph.graph(
+		crop=str(crop or ""), stage=stage, block=block, depth=int(depth or 2), kinds=kinds,
+		start=int(start or 0), limit=int(limit or ipm_graph.DEFAULT_LIMIT), company=_ipm_company(user, allowed, block)))
+	answer["can_edit"] = guard.may_edit_ipm(user)
+	return answer
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_ipm_organism", limit=guard.READ_LIMIT)
+def get_ipm_organism(user: str, organism=None) -> dict:
+	"""One node: what it is, every enabled relationship in and out, and its thresholds."""
+	from .. import ipm_graph
+
+	allowed = guard.require_scope(user)
+	_ipm_ready()
+	name = guard.require_docname("IPM Organism", organism, "organism")
+	answer = ipm_graph.organism(name, _ipm_company(user, allowed))
+	answer["can_edit"] = guard.may_edit_ipm(user)
+	return answer
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("save_ipm_relationship", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("save_ipm_relationship")
+def save_ipm_relationship(user: str, relationship=None, subject=None, relation=None, object=None, weight=None,
+                          confidence=None, notes=None, crop=None, bbch_from=None, bbch_to=None, enabled=None,
+                          client_request_id=None) -> dict:
+	"""Add or edit one relationship from the phone. Lands Active, provenance User Entered. A literature
+	edge is never changed: the farm's own copy is written beside it, and re-seed never touches it."""
+	from .. import ipm_graph
+
+	guard.require_ipm_editor(user, "Editing the IPM graph")
+	guard.require_scope(user)
+	_ipm_ready()
+	values = {k: v for k, v in {"subject": subject, "relation": relation, "object": object, "weight": weight,
+	                            "confidence": confidence, "notes": notes, "crop": crop, "bbch_from": bbch_from,
+	                            "bbch_to": bbch_to, "enabled": enabled}.items() if v not in (None, "")}
+	if not relationship and not all(values.get(k) for k in ("subject", "relation", "object")):
+		frappe.throw("subject, relation and object are required to add a relationship.", frappe.ValidationError)
+	edge, created = ipm_graph.save_relationship(values, user, relationship=str(relationship or ""))
+	return {"edge": edge, "created": created}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("record_pest_observation", mutating=True, limit=guard.WRITE_LIMIT)
+@request_receipts.idempotent("record_pest_observation")
+def record_pest_observation(user: str, block=None, organism=None, count=None, sample_unit=None, sample_size=None,
+                            percent_affected=None, beneficials_observed=None, beneficial=None, notes=None, gps=None,
+                            observed_at=None, client_request_id=None) -> dict:
+	"""A worker logs a pest they saw (v0.262.0). Filed as a Crop Observation through the threshold engine;
+	the answer is the threshold status with the lowest-impact option first.
+
+	The organism must be a graph node — a pest, disease, weed or vertebrate — so the threat column holds a
+	name the thresholds and the pressure roll-up match, never free text."""
+	from .. import ipm_graph
+	from ..tools import cropprotect
+
+	allowed = guard.require_scope(user)
+	_ipm_ready()
+	block = guard.require_docname("Field", block, "block")
+	name = guard.require_docname("IPM Organism", organism, "organism")
+	node = frappe.db.get_value("IPM Organism", name, ["organism_name", "kind"], as_dict=True)
+	category = ipm_graph.THREAT_CATEGORY.get(node.get("kind"))
+	if not category:
+		frappe.throw(f"{node.get('organism_name')} is a {node.get('kind')}, not a pest, disease, weed or vertebrate.",
+		             frappe.ValidationError)
+	if count in (None, "") and percent_affected in (None, ""):
+		frappe.throw("count or percent_affected is required — zero is a real observation.", frappe.ValidationError)
+	company = _ipm_company(user, allowed, block)
+	context = ipm_graph.block_context(block)
+	when, note = _tap_time(observed_at)
+	args = {
+		"company": company, "block": block, "block_doctype": "Field", "threat": node["organism_name"],
+		"threat_category": category, "crop": context["crop"] or "",
+		"count_observed": count if count not in (None, "") else percent_affected,
+		"sample_unit": sample_unit or "", "sample_size": sample_size, "percent_affected": percent_affected,
+		"beneficials_observed": beneficials_observed, "notes": notes or "", "observer": user,
+		"growth_stage_code": str(context["stage"]) if context["stage"] is not None else "",
+	}
+	if beneficial:
+		args["beneficial_name"] = frappe.db.get_value("IPM Organism", beneficial, "organism_name") or str(beneficial)
+	if when:
+		args["observed_at"] = when
+		args["observed_on"] = when[:10]
+	try:
+		filed = cropprotect.create_crop_observation({k: v for k, v in args.items() if v not in (None, "")})
+	except Exception as exc:
+		_clean_error(exc)
+	if gps and compat.has_field("Crop Observation", "observed_gps"):
+		frappe.db.set_value("Crop Observation", filed.data["name"], "observed_gps", str(gps)[:140])
+	status = ipm_graph.threshold_status(name, block=block, count=args["count_observed"], sample_unit=sample_unit or "",
+	                                    sample_size=sample_size, beneficials=beneficials_observed, company=company)
+	return _with_time_note({"observation": filed.data["name"], "threshold_status": status}, note)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_ipm_threshold_status", limit=guard.READ_LIMIT)
+def get_ipm_threshold_status(user: str, organism=None, block=None, crop=None, count=None, sample_unit=None) -> dict:
+	"""Where a pest stands against its threshold and what to do, lowest impact first. No count: the
+	threshold and the options without a comparison."""
+	from .. import ipm_graph
+
+	allowed = guard.require_scope(user)
+	_ipm_ready()
+	name = guard.require_docname("IPM Organism", organism, "organism")
+	block = guard.require_docname("Field", block, "block") if block else ""
+	return ipm_graph.threshold_status(name, block=block, crop=str(crop or ""), count=count,
+	                                  sample_unit=str(sample_unit or ""), company=_ipm_company(user, allowed, block))

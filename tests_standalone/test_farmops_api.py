@@ -546,6 +546,11 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/update_reply_draft",
 		"/mobile/approve_reply",
 		"/mobile/discard_reply",
+		"/mobile/get_ipm_graph",
+		"/mobile/get_ipm_organism",
+		"/mobile/save_ipm_relationship",
+		"/mobile/record_pest_observation",
+		"/mobile/get_ipm_threshold_status",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -2991,6 +2996,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.262.0. Editing the IPM graph: Farm Manager, Compliance Officer, System Manager (require_ipm_editor).
+		"save_ipm_relationship",
 		# v0.258.0. office@ replies to review: approver roles (reviewer_roles), refused by name.
 		"list_replies_to_review",
 		"get_reply_to_review",
@@ -3123,6 +3130,11 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.262.0. The IPM graph: view it, log what you see, see the threshold and the options.
+		"get_ipm_graph",
+		"get_ipm_organism",
+		"record_pest_observation",
+		"get_ipm_threshold_status",
 		# v0.255.0. A Library document cited on an asset in the caller's company (as the asset's own folder).
 		"get_asset_reference",
 		# v0.252.0. The caller's own Start / End of Day.
@@ -3380,7 +3392,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 215, "a method is named in two sets at once")
+		self.assertEqual(len(named), 220, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

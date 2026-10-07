@@ -215,6 +215,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"update_reply_draft",
 		"approve_reply",
 		"discard_reply",
+		# v0.262.0. The IPM relationship graph (app 0.49.0, IPMGraphAPI.swift).
+		"get_ipm_graph",
+		"get_ipm_organism",
+		"save_ipm_relationship",
+		"record_pest_observation",
+		"get_ipm_threshold_status",
 		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
 		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).

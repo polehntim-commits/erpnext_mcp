@@ -209,3 +209,23 @@ mcp_tools:
   existing_extended:
     set_pest_action_threshold: "takes organism, status"
     list_pest_action_thresholds: "returns organism, status; filter status"
+
+# ── the Today tile that opens it ─────────────────────────────────────────────
+tile:
+  key: ipm_map
+  surface: today
+  title: {en: "IPM map", es: "Mapa MIP"}
+  subtitle: {en: "Pests, beneficials and what harms them", es: "Plagas, benéficos y lo que los daña"}
+  icon: "point.3.connected.trianglepath.dotted"
+  target: {kind: report, report: ipm_map}
+  audience: "everyone enrolled"
+  min_app_version: "0.49.0"
+
+# ── the phone, app 0.49.0 ────────────────────────────────────────────────────
+phone:
+  cache: "get_ipm_graph saved per (crop|block, stage) with its graph_version; shown offline, said as saved"
+  queue:
+    save_ipm_relationship: "queued offline with client_request_id (only when can_edit)"
+    record_pest_observation: "queued offline with client_request_id and observed_at = the tap"
+  gating: "edit controls only when can_edit; a 403 'is restricted to' is shown, never retried"
+  observation_hook: "after record_pest_observation, show threshold_status: status, message, options in order (lowest impact first), protected_species_note, label_caveat"

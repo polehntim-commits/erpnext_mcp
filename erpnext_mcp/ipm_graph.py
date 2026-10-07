@@ -337,8 +337,8 @@ def version() -> str:
 	"""Changes whenever a node or an edge does: the phone's cache key."""
 	parts = []
 	for doctype in (ORGANISM, RELATIONSHIP):
-		rows = frappe.db.get_all(doctype, fields=["max(modified) as m", "count(name) as n"]) or [{}]
-		parts.append(f"{rows[0].get('m')}|{rows[0].get('n')}")
+		newest = frappe.db.get_all(doctype, fields=["name", "modified"], order_by="modified desc", limit=1) or [{}]
+		parts.append(f"{newest[0].get('modified')}|{newest[0].get('name')}|{frappe.db.count(doctype)}")
 	return hashlib.sha1("/".join(parts).encode()).hexdigest()[:16]
 
 
@@ -863,6 +863,8 @@ def _propose_threshold(raw: dict, citation: str, author: str) -> str:
 	organism = raw.get("organism") or values["threat"]
 	try:
 		values["organism"] = _node_ref(organism)
+		if not values.get("threat_category"):
+			values["threat_category"] = THREAT_CATEGORY.get(frappe.db.get_value(ORGANISM, values["organism"], "kind"))
 	except frappe.ValidationError:
 		pass
 	doc = frappe.get_doc({"doctype": THRESHOLD, **values, "disabled": 1, "status": PROPOSED, "provenance": AI,

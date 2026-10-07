@@ -119,6 +119,8 @@ FARM_OPS_ROLES = frozenset({"Field Worker", "Farm Worker", "Foreman", "Crew Lead
 PRIVATE_HR_ROLES = frozenset({"HR Manager", "HR User", "System Manager"})
 #: v0.260.0. Who reads the compliance calendar and dismisses its alerts — what the app's Compliance tab already used.
 COMPLIANCE_ROLES = frozenset({"Compliance Officer", "Foreman", "Farm Manager", "System Manager"})
+#: v0.262.0. Who edits the IPM graph (Tim: manager / compliance only). Workers view it and log observations.
+IPM_EDIT_ROLES = frozenset({"Farm Manager", "Compliance Officer", "System Manager"})
 #: v0.260.0. Who reads everybody's expense receipts; everyone else reads their own.
 RECEIPT_REVIEW_ROLES = frozenset({"Farm Manager", "Accounts Manager", "Accounts User", "System Manager"})
 
@@ -312,6 +314,19 @@ def roles_held(user: str) -> set:
 
 def _held(user: str) -> set:
 	return set(roles_held(user or str(getattr(frappe.session, "user", "") or "")))
+
+
+def may_edit_ipm(user: str) -> bool:
+	"""v0.262.0. Farm Manager, Compliance Officer or System Manager."""
+	return bool(_held(user) & IPM_EDIT_ROLES)
+
+
+def require_ipm_editor(user: str, action: str) -> None:
+	"""v0.262.0. The IPM graph's editors. Refused by name."""
+	if may_edit_ipm(user):
+		return
+	raise frappe.PermissionError(
+		f"{action} is restricted to {', '.join(sorted(IPM_EDIT_ROLES))}. Nothing was read or changed.")
 
 
 def require_private_hr(user: str, action: str) -> None:

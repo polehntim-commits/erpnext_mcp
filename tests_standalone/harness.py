@@ -1712,6 +1712,9 @@ APP_DOCTYPES = {
 	"Reference Document": "reference_document",
 	"Reference Page": "reference_page",
 	"Reference Citation": "reference_citation",
+	# v0.262.0. The IPM relationship graph: nodes and edges.
+	"IPM Organism": "ipm_organism",
+	"IPM Relationship": "ipm_relationship",
 	# v0.243.0. No-work notices and their recipients.
 	"Work Notice": "work_notice",
 	"Work Notice Recipient": "work_notice_recipient",
