@@ -21053,3 +21053,9 @@ returns `organism`, `status`, `provenance`. Five phone routes and a Today tile (
 | `draft_market_commodity` | Draft a Market Commodity from observed data; a person publishes. Write |
 
 Commodities are Market Commodity configs (sweet_cherries, cantaloupe seeded). Contract: `docs/contracts/market_prices_v0_265.yaml`.
+
+## v0.266.0 — the market dashboard
+
+No new tools. `get_price_trend` carries `season_curve` (harvest timing); `get_breakeven_sensitivity` carries
+`market_reference` (what the market has paid, p10 / p50 / p90 per season). The Desk page `/app/market-prices`
+draws candles with a volume pane, season-over-season and weekly bars on the same data.

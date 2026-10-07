@@ -69,6 +69,7 @@ def get_price_trend(args: dict) -> ToolResult:
 	vol = mp.volume_series(key, interval="week")
 	data["signal"] = mp.signal(mp.week_change(rows), mp._pct(vol[-1]["value"], vol[-2]["value"]) if len(vol) >= 2 else None)
 	data["percentiles"] = mp.percentiles(key, as_str(args, "size"))
+	data["season_curve"] = mp.season_curve(key, as_str(args, "size"))
 	return ToolResult(data=data, summary=f"{key}: {sum(len(s['candles']) for s in data['series'])} {interval} candle(s) across "
 	                                     f"{len(data['series'])} size(s); signal {data['signal']['label']}")
 

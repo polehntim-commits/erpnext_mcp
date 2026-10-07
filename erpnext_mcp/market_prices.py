@@ -1251,3 +1251,60 @@ def seed_drafts() -> list[str]:
 		except Exception:
 			frappe.log_error(title=f"market commodity draft {key}", message=frappe.get_traceback())
 	return made
+
+
+def commodity_for_crop(crop: str) -> str | None:
+	"""The Market Commodity a crop name means ('Cherries', 'Sweet Cherry' → sweet_cherries), or None."""
+	text = str(crop or "").strip().lower()
+	if not text:
+		return None
+	for key in commodities():
+		try:
+			cfg = config(key)
+		except ValueError:
+			continue
+		names = [key.replace("_", " "), str(cfg.get("title") or "").lower()] + [c.lower() for c in (cfg.get("match") or {}).get("commodity") or []]
+		if any(text == n or text.rstrip("s") in n or n.rstrip("s") in text for n in names if n):
+			return key
+	return None
+
+
+def reference_for_crop(crop: str, unit_label: str = "") -> dict | None:
+	"""v0.266.0. Historical shipping-point ranges for a pro forma's price sensitivity: p10 / p50 / p90 per season
+	in $ per pack, and in grower $/lb (after deductions) when the analysis is in pounds. None when no commodity
+	matches or there is no priced history."""
+	key = commodity_for_crop(crop)
+	if not key:
+		return None
+	cfg = config(key)
+	rows = percentiles(key, cfg.get("headline_size") or "")
+	if not rows:
+		return None
+	net = next((p.get("net_lb") for p in cfg.get("packs") or [] if p.get("net_lb")), None)
+	pound = str(unit_label or "").lower() in ("pound", "lb")
+	for r in rows:
+		for q in ("p10", "p50", "p90"):
+			r[f"grower_{q}_per_lb"] = grower_return_per_lb(r[q], net, cfg) if r[q] is not None else None
+	return {"commodity": key, "size": cfg.get("headline_size"), "pack_net_lb": net, "seasons": rows,
+	        "in_analysis_units": "grower $/lb" if pound else "$ per pack (FOB)",
+	        "note": "Shipping-point FOB from USDA AMS; grower $/lb after the configured deductions. History, not a forecast."}
+
+
+def season_curve(key: str, size: str = "") -> dict:
+	"""v0.266.0. For harvest timing: the median weekly shipping-point close by week of season across past seasons,
+	the week it has usually peaked, and this season's current week. History, not a forecast."""
+	cfg = config(key)
+	lines = week_of_season(points(key, SHIPPING, size=size or cfg.get("headline_size") or ""))
+	if not lines:
+		return {"weeks": [], "peak_week": None, "current_week": None, "seasons": 0}
+	by_week: dict = {}
+	for line in lines:
+		for p in line["week_of_season"]:
+			if p["close"] is not None:
+				by_week.setdefault(p["week"], []).append(p["close"])
+	weeks = [{"week": w, "median_close": round(statistics.median(v), 2), "seasons": len(v)} for w, v in sorted(by_week.items())]
+	peak = max(weeks, key=lambda w: w["median_close"]) if weeks else None
+	this_year = int(str(frappe.utils.today())[:4])
+	current = next((l["week_of_season"][-1]["week"] for l in lines if l["season"] == this_year and l["week_of_season"]), None)
+	return {"weeks": weeks, "peak_week": peak["week"] if peak else None, "current_week": current, "seasons": len(lines),
+	        "note": "Median of each season's weekly close, aligned by week of season. History, not a forecast."}

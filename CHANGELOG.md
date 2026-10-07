@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.266.0 — 2026-10-06 — the market dashboard, and the market in the pro forma
+
+**Migrate needed** (the page `market-prices`; the Market & Sales workspace gains it). Pairs with FarmOps 0.51.0.
+Deploy `docs/deploy/v0.266.0_market_dashboard.md`. Tim, 2026-10-06.
+
+- **/app/market-prices**, stock-market style, on TradingView lightweight-charts 4.2.3 (Apache-2.0) VENDORED under
+  `public/vendor/lightweight-charts` — no CDN, attribution kept: a candlestick pane per size (selector, or small
+  multiples for every size) with a VOLUME bar pane under it on the same time axis (two synced charts), crosshair
+  readout (O / H / L / C, volume), zoom and pan, daily / weekly, season and date range, variety and district.
+  A weekday with no quote is a visible gap; a listed-but-unpriced day carries a "no quote" marker — nothing is
+  filled. Overlays: terminal (context), grower return $/lb and breakeven $/lb on the left scale.
+- Season over season aligned by week of season, and weekly closes by size as BAR charts (the Desk's frappe.Chart),
+  the p10 / p50 / p90 table, open data issues, the card (shipping point, week-on-week and signal, grower return vs
+  breakeven, terminal and the cost of market access, movement).
+- **Pro forma**: `get_breakeven_sensitivity` carries `market_reference` — what the market has actually paid
+  (p10 / p50 / p90 per season, in $ per pack and grower $/lb) for the commodity the analysis's crop maps to.
+- **Harvest timing**: `season_curve` — the median weekly close by week of season across past seasons, the usual
+  peak week and this season's week — in the dashboard and `get_price_trend`.
+
 ## 0.265.0 — 2026-10-06 — USDA AMS market prices, done right
 
 **Migrate needed** (USDA Price Quote gains the market-point fields; doctype Market Data Issue; Farm Config Version

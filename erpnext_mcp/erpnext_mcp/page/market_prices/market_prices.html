@@ -1,0 +1,48 @@
+<div class="mk-wrap">
+	<!-- SPDX-License-Identifier: MIT
+
+		The shell of /app/market-prices (v0.266.0). Markup only: market_prices.js fills it from
+		erpnext_mcp.api.market_dashboard, which answers from the same market_prices module the phone and MCP use.
+		Comments and style live INSIDE the root element; visible text uses &#39; for an apostrophe.
+	-->
+	<style>
+		.mk-wrap { display: flex; flex-direction: column; gap: 10px; }
+		.mk-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+		.mk-bar .form-group { margin: 0; min-width: 130px; }
+		.mk-checks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; align-items: center; }
+		.mk-checks label { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
+		.mk-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+		.mk-tile { border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 10px; background: var(--card-bg); }
+		.mk-tile .mk-k { font-size: 11px; color: var(--text-muted); }
+		.mk-tile .mk-v { font-size: 18px; font-weight: 600; }
+		.mk-tile .mk-s { font-size: 11px; color: var(--text-muted); }
+		.mk-up { color: #1a7f37; } .mk-down { color: #c62828; }
+		.mk-price { height: 380px; border: 1px solid var(--border-color); border-radius: 8px 8px 0 0; }
+		.mk-volume { height: 120px; border: 1px solid var(--border-color); border-top: 0; border-radius: 0 0 8px 8px; }
+		.mk-multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; }
+		.mk-multiples .mk-mini { height: 220px; border: 1px solid var(--border-color); border-radius: 8px; position: relative; }
+		.mk-mini-title { position: absolute; top: 4px; left: 8px; font-size: 12px; font-weight: 600; z-index: 3; }
+		.mk-tip { font-size: 12px; color: var(--text-muted); min-height: 18px; }
+		.mk-section { font-weight: 600; margin-top: 6px; }
+		.mk-issues { font-size: 12px; }
+		.mk-caveat { font-size: 11px; color: var(--text-muted); }
+	</style>
+	<div class="mk-bar mk-filters"></div>
+	<div class="mk-bar mk-checks mk-overlays"></div>
+	<div class="mk-card"></div>
+	<div class="mk-tip"></div>
+	<div class="mk-single">
+		<div class="mk-price"></div>
+		<div class="mk-volume"></div>
+	</div>
+	<div class="mk-multiples" style="display:none"></div>
+	<div class="mk-section">Season over season (aligned by week of season)</div>
+	<div class="mk-seasons"></div>
+	<div class="mk-section">Weekly close by size (bars)</div>
+	<div class="mk-bars"></div>
+	<div class="mk-section">Historical ranges for the pro forma (shipping-point mid, per season)</div>
+	<div class="mk-pct"></div>
+	<div class="mk-section">Data to look at</div>
+	<div class="mk-issues"></div>
+	<div class="mk-caveat"></div>
+</div>

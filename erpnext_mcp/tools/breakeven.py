@@ -1630,6 +1630,15 @@ def list_breakeven_analyses(args: dict) -> ToolResult:
 
 
 # ── 5. sensitivity ──────────────────────────────────────────────────────────
+def _market_reference(doc):
+	try:
+		from .. import market_prices
+
+		return market_prices.reference_for_crop(str(doc.crop_type or ""), str(doc.unit_label or ""))
+	except Exception:  # pragma: no cover - market data is context; it never fails the sensitivity
+		return None
+
+
 def get_breakeven_sensitivity(args: dict) -> ToolResult:
 	"""What-if over one variable, across a range. Read-only.
 
@@ -1709,6 +1718,8 @@ def get_breakeven_sensitivity(args: dict) -> ToolResult:
 			"scenarios": rows,
 			"scenario_count": len(rows),
 			"sensitivity": sensitivity,
+			# v0.266.0. What the market has actually paid, for the price assumption's range (USDA AMS history).
+			"market_reference": _market_reference(doc),
 			"no_volume_breaks_even_at": [row["change_pct"] for row in flips],
 			"note": (
 				f"{len(flips)} scenario(s) have a contribution margin at or below zero: at those "

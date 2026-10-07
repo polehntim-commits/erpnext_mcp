@@ -5,6 +5,11 @@
  "summary": "From the contract to the scale to the truck, and who else is in the market.",
  "shortcuts": [
   {
+   "label": "Market Prices",
+   "type": "Page",
+   "link_to": "market-prices"
+  },
+  {
    "label": "Revenue Contracts",
    "type": "DocType",
    "link_to": "Revenue Contract",
@@ -114,6 +119,19 @@
   {
    "label": "Markets",
    "links": [
+    {
+     "label": "Market Prices",
+     "link_to": "market-prices",
+     "link_type": "Page"
+    },
+    {
+     "label": "Market Data Issues",
+     "link_to": "Market Data Issue"
+    },
+    {
+     "label": "USDA Price Points",
+     "link_to": "USDA Price Quote"
+    },
     {
      "label": "Markets",
      "link_to": "Market"
