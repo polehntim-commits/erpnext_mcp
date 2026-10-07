@@ -328,6 +328,15 @@ class TheFormScripts(unittest.TestCase):
 						"script silently.",
 					)
 
+	#: v0.263.0. Form scripts that draw NO map — a button to /app/ipm-map — and so load no widget. Named,
+	#: rather than inferred, so a map form that forgot its widget still fails below.
+	NOT_MAPS = {"IPM Organism": ["public/js/ipm_map_link.js"], "IPM Relationship": ["public/js/ipm_map_link.js"]}
+
+	def test_the_non_map_scripts_are_exactly_these(self):
+		for doctype, files in self.NOT_MAPS.items():
+			self.assertEqual(hooks.doctype_js.get(doctype), files)
+			self.assertNotIn(self.SHARED_WIDGET, files)
+
 	def test_the_shared_widget_is_listed_first_everywhere(self):
 		"""ORDER IS LOAD ORDER. Frappe concatenates these into one script in the
 		order given, and each per-doctype file calls into the widget as it is
@@ -350,6 +359,8 @@ class TheFormScripts(unittest.TestCase):
 		handler it installs.
 		"""
 		for doctype, files in hooks.doctype_js.items():
+			if doctype in self.NOT_MAPS:
+				continue
 			with self.subTest(doctype=doctype):
 				self.assertIsInstance(files, list)
 				self.assertEqual(files[0], self.SHARED_WIDGET)
