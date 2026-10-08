@@ -36,17 +36,20 @@ What changes to make P1–P3 real (all on code that is not yet deployed, so it i
 **Today: 1,136 tools on main, 590 of them writes.** The switch-trim study counts 952 write tools ON across both
 servers and 238 needed daily. Of 590 write tools, only about 130 were called at all since early August.
 
-| Family | Today | Proposed | How |
-|---|---:|---:|---|
-| Readers (get / list / search / trace) | 389 | ~30 | `get_record(type, name)`, `list_records(type, filters, fields, page)` over the same per-type readers and permissions; computed reports through one `report(kind, …)` (extends the existing `run_report`); keep unique analyses (trace, breakeven …) |
-| Create / update / delete | 226 | ~25 | `record(action=create\|update\|deactivate\|delete, type, …)`, which dispatches to **the existing per-register function** (no validation is rewritten). Special flows stay (spray application, onboarding …) |
-| Actions and computations (generate / compute / import / export / run) | 202 | ~60 | `generate(kind=qr\|badge\|sheet\|packet\|pdf …)`, `import_data(kind)`, `export_data(kind)`; unique computations stay |
-| Special: money, HR, signing, security | 175 | ~150 | I-9, payroll, NACHA, bank, tax, W-4, garnishments, signing, sealing, tokens, roles: **kept as they are** (some render / preview pairs merge) |
-| Config lifecycle and rules | 62 | 3 | `config(action=list\|get\|diff\|preview\|draft\|stage\|publish\|rollback, kind)`, `propose_rule`, `test_rule` |
-| State changes (submit / cancel / approve / close …) | 37 | 2 | `transition(type, name, action)` with each doctype's existing guard (built on `advance_workflow`); bank and payroll submits stay separate |
-| Templates | 28 | 2 | `template(action=create\|update\|preview\|enable\|list\|get, kind=task\|inspection\|training\|trade_document\|wizard\|job …)` |
-| Share and one-time links | 17 | 1 | `share_link(action=create\|extend\|revoke\|list\|log, kind=contractor\|delivery\|pickup\|pollination\|packer\|upload\|enrollment)` |
-| **Total** | **1,136** | **~270** | first estimates; step 0 produces the exact mapping file |
+| Family | OML (v0.255) | umbrel (v0.269) | main (v0.276.1) | Proposed | Generic tool (what it replaces) |
+|---|---:|---:|---:|---:|---|
+| Readers | 363 | 375 | 389 | ~30 | **`get_record(type, name)`** and **`list_records(type, filters, fields, page)`** replace the plain `get_<x>` / `list_<x>`; **`report(kind, …)`** (extends `run_report`) replaces the `get_<x>_report` / `_summary` family; unique analyses stay (trace, breakeven, …) |
+| Create / update / delete | 214 | 221 | 226 | ~25 | **`record(action=create\|update\|deactivate\|delete, type, …)`** (built on `update_document`'s whitelist) replaces `create_<x>` / `update_<x>` / `delete_<x>` for registers with no special rules; each kind calls the old function |
+| Actions and computations | 174 | 188 | 202 | ~60 | **`generate(kind)`**, **`import_data(kind)`**, **`export_data(kind)`** replace the generate_* / import_* / export_* families; unique computations stay |
+| Special: money, HR, signing, security | 172 | 173 | 175 | ~150 | **kept**: I-9, payroll, NACHA, bank, tax, W-4, garnishments, signing, sealing, tokens, roles |
+| Config lifecycle and rules | 61 | 62 | 62 | 3 | **`config(action=list\|get\|diff\|preview\|draft\|stage\|publish\|rollback, kind)`** replaces the per-kind phone / extraction / label-profile / payroll-setting / commodity tools; plus `propose_rule`, `test_rule` |
+| Submit / cancel / approve | 35 | 36 | 37 | 2 | **`submit_document(type, name)`** and **`cancel_document(type, name, reason)`**, with approve / reject / close via `transition(type, name, action)` on `advance_workflow`; type guards kept; bank and payroll submits stay separate |
+| Templates | 28 | 28 | 28 | 2 | **`template(action=create\|update\|preview\|enable\|list\|get, kind=task\|inspection\|training\|trade_document\|wizard\|job\|…)`** replaces the create / update / preview / approve / deactivate tools of each template kind |
+| Share and one-time links | 9 | 10 | 17 | 1 | **`share_link(action=create\|extend\|revoke\|list\|log, kind=contractor\|delivery\|pickup\|pollination\|packer\|upload\|enrollment)`** |
+| **Total** | **1,056** | **1,093** | **1,136** | **~270** | first estimates; step 0 produces the exact old → new mapping file |
+
+Write tools ON (the switch-trim study): 952 across both servers, 238 needed daily. Of main's 590 write tools, ~130
+were called at all since early August.
 
 **Rules that keep it safe**
 1. **No behaviour lost.** A generic tool is a dispatcher. Each `type` / `kind` calls the function the old tool
@@ -62,7 +65,7 @@ servers and 238 needed daily. Of 590 write tools, only about 130 were called at 
    client sees only its switched-on groups. Per-tool checkboxes stay as overrides. "On when needed" uses the
    existing timed switches by default. This replaces ticking about 1,095 boxes in about 130 sections, and lines up
    with the switch-trim study's KEEP ON / ON WHEN NEEDED / KEEP OFF buckets.
-5. **Attribution.** Every call records the client and model and the human it acts for, not just Administrator.
+5. **Attribution and the MCP System User.** Every call records the client and model and the human it acts for, not just Administrator.
    Calls run as a dedicated limited-role MCP System User (`plan_mcp_system_user` already lists the roles). The
    Action Log is paginated (it caps at 500 today).
 
