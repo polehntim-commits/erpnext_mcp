@@ -266,3 +266,53 @@ class HarvestCalibration(DDCase):
 		out = pest_dd.propose_harvest_calibration({"Mill Creek": BLOCK})
 		self.assertEqual(len(out["skipped"]), 6)
 		self.assertIn("40 Acre", out["skipped"][0]["why"])
+
+
+class Units(DDCase):
+	"""v0.276.1. Every pest model is °F base and °F·day totals — the same basis as get_degree_days."""
+
+	def test_the_engine_sums_fahrenheit_days(self):
+		# 70 / 50 °F at base 41 °F is 19 °F·day a day; summed as °C·day at base 5 °C it would be 10.6, and the
+		# fruit fly's 950 would land five weeks later. The emergence date is the °F one.
+		st = pest_dd.status(BLOCK, "western-cherry-fruit-fly", AS_OF)
+		self.assertEqual(st["dd_to_date"], 46 * 19.0)
+		self.assertEqual(st["events"][0]["date"], "2026-04-19")
+
+	def test_every_reference_model_states_its_units_and_matches_the_engine(self):
+		from erpnext_mcp import ipm_reference
+
+		engine = pest_dd.DEFAULT_MODELS["models"]
+		for pest in ipm_reference.PEST_MODELS:
+			logic = pest.get("emergence_logic") or {}
+			if logic.get("model") != "degree_day":
+				continue
+			self.assertEqual(logic["dd_unit"], "°F·day", pest["name"])
+			self.assertAlmostEqual(logic["base_f"], round(logic["base_temp_c"] * 1.8 + 32), delta=0.5, msg=pest["name"])
+			key = pest["name"].lower().replace(" ", "-")
+			if key in engine:
+				self.assertEqual(engine[key]["base_f"], logic["base_f"], key)
+
+	def test_a_celsius_model_is_refused(self):
+		body = {"key": pest_dd.MODELS_KEY, "models": {
+			"x": {"base_f": 5, "biofix": "mar1", "events": [{"name": "e", "dd": 950}], "citation": "c"},
+			"y": {"base_f": 41, "dd_unit": "°C·day", "biofix": "mar1", "events": [{"name": "e", "dd": 528}], "citation": "c"}}}
+		errors = pest_dd.validate(body)["errors"]
+		self.assertTrue(any("x: base_f 5 is not a plausible °F base" in e for e in errors), errors)
+		self.assertTrue(any("y: dd_unit" in e for e in errors), errors)
+		self.assertEqual(pest_dd.validate(pest_dd.DEFAULT_MODELS)["errors"], [])
+
+
+class OnlyTheDaysAsked(V12TestCase):
+	def test_a_past_window_gets_no_forecast_days(self):
+		from erpnext_mcp.services import weather as svc
+
+		def answer(url, params, label):
+			days = ["2026-07-30", "2026-07-31", "2026-10-07", "2026-10-08"]
+			return {"daily": {"time": days, "temperature_2m_max": [80.0] * 4, "temperature_2m_min": [55.0] * 4}}
+
+		degree_days._CACHE.clear()
+		with mock.patch.object(svc, "_get_json", side_effect=answer), \
+				mock.patch.object(degree_days, "_today", return_value=datetime.date(2026, 10, 8)), \
+				mock.patch.object(ccf_providers, "_cell", return_value="cell"):
+			temps = degree_days.daily_temps(45.6, -121.2, datetime.date(2026, 7, 1), datetime.date(2026, 7, 31))
+		self.assertEqual(sorted(temps), ["2026-07-30", "2026-07-31"])

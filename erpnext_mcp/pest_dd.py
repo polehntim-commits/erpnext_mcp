@@ -156,6 +156,14 @@ def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
 			except (TypeError, ValueError):
 				errors.append(f"{name}: base_f (°F) is required.")
 				continue
+			# v0.276.1. Every model is °F and °F·day, like get_degree_days. A base below 32 or above 65 is almost
+			# certainly a °C figure pasted in; a model that says it is in °C·day is refused rather than guessed.
+			if not 32.0 <= base <= 65.0:
+				errors.append(f"{name}: base_f {base:g} is not a plausible °F base (32–65) — is it °C? "
+				              f"{base:g} °C is {base * 1.8 + 32:g} °F.")
+			unit = str(model.get("dd_unit") or "°F·day").replace(" ", "").casefold()
+			if unit not in ("°f·day", "°f-day", "fday", "f·day", "degf·day", "°f·days"):
+				errors.append(f"{name}: dd_unit {model.get('dd_unit')!r} — totals must be °F·day (°C·day × 1.8).")
 			upper = model.get("upper_f")
 			if upper not in (None, "") and float(upper) <= base:
 				errors.append(f"{name}: upper_f must be above base_f.")

@@ -113,6 +113,9 @@ def daily_temps(lat: float, lon: float, start: datetime.date, end: datetime.date
 		f"degree-days:{cell}",
 	) or {}
 	_merge(out, payload)
+	# v0.276.1. Only the days asked for. The forecast call always answers around TODAY, so for a past `as_of` it
+	# added October days to a July series — a projection could have read them.
+	out = {day: value for day, value in out.items() if start.isoformat() <= day <= end.isoformat()}
 	# v0.264.0. The grid cell's own elevation, which Open-Meteo states with every answer: the pest DD
 	# lapse-rate offset compares the block's ground with it.
 	if isinstance(payload, dict) and payload.get("elevation") is not None:

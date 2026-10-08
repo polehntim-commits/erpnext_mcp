@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.276.1 — 2026-10-08 — degree-day units made explicit; a past date reads only its own days
+
+**No migrate.** Deploy `docs/deploy/v0.276.1_dd_units.md`.
+
+- **Checked: the engine was right.** Every pest model is computed in °F with °F·day totals on the same Open-Meteo
+  °F weather as `get_degree_days`. Western cherry fruit fly is base 41 °F, 950 °F·day from 1 Mar — on Mill Creek's
+  2026 weather that is first emergence ~May 18; summed as °C·day on a 5 °C base it would have been ~June 23. The
+  live OML base-50 total (1,411.7 °F·day to Jul 15) reproduces from the same archive within 3% (point vs grid cell).
+- **The trap removed**: the shipped IPM reference stated bases in °C beside totals in °F·day. Each degree-day
+  model now carries `base_f` and `dd_unit: °F·day` (and a note); the AI pest-research prompt asks for °F and °F·day.
+- **A guard**: a pest model whose base is not a plausible °F base (32–65) or whose `dd_unit` is not °F·day is
+  refused at draft / publish, with the °F conversion in the message.
+- **Fix**: `get_degree_days` / pest degree days for a PAST date mixed today's forecast days into the series (a
+  July series ended in October). Only the days asked for are used now.
+- Of the 28 pests in the reference, 4 have degree-day models (fruit fly, SWD, codling moth, leafroller); 1 is
+  phenology (black cherry aphid, bud break); 23 have none.
+
 ## 0.276.0 — 2026-10-08 — the packer portal
 
 **Migrate needed** (doctype Packer Share with its blocks, credentials and access log; six MCP switches; the page

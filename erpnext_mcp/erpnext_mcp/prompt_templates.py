@@ -380,9 +380,10 @@ _register(
 		"common pests. Output ONLY a valid JSON array, no other text. Each element: "
 		'{{"name": "Pest Name", "scientific_name": "Sci Name", "kingdom": "Insect/Fungus/etc", '
 		'"description": "Brief desc", "emergence_logic": {{"model": "degree_day", '
-		'"base_temp": 10, "threshold": 450}}, "population_range": "Spring-Fall", '
+		'"base_f": 50, "dd_unit": "°F·day", "threshold_dd_f": 450}}, "population_range": "Spring-Fall", '
 		'"cycles": "2-3 gen/year", "research_notes": {{"source": "URL or ref"}}}}. '
-		"Base this on the latest research for specialty crops."
+		"Give every degree-day base in °F and every total in °F·day (convert a °C model: base × 1.8 + 32, "
+		"totals × 1.8). Base this on the latest research for specialty crops."
 	),
 	user="Research pests for {crop} in {climate}.{location_context}",
 )

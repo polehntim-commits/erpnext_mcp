@@ -72,6 +72,9 @@ PEST_MODELS = [
 		"emergence_logic": {
 			"model": "degree_day",
 			"base_temp_c": 7.2,
+			"base_f": 45.0,
+			"dd_unit": "°F·day",
+			"units_note": "The base is given in °C AND °F; every degree-day total is in °F·day (the published WSU / UC models). Never sum °C·days against these totals.",
 			"biofix": "Jan 1",
 			"first_flight_dd": 150,
 			"peak_dd": 600,
@@ -89,6 +92,9 @@ PEST_MODELS = [
 		"emergence_logic": {
 			"model": "degree_day",
 			"base_temp_c": 5.0,
+			"base_f": 41.0,
+			"dd_unit": "°F·day",
+			"units_note": "The base is given in °C AND °F; every degree-day total is in °F·day (the published WSU / UC models). Never sum °C·days against these totals.",
 			"biofix": "Mar 1",
 			"first_flight_dd": 950,
 			"peak_dd": 1100,
@@ -116,6 +122,9 @@ PEST_MODELS = [
 		"emergence_logic": {
 			"model": "degree_day",
 			"base_temp_c": 10.0,
+			"base_f": 50.0,
+			"dd_unit": "°F·day",
+			"units_note": "The base is given in °C AND °F; every degree-day total is in °F·day (the published WSU / UC models). Never sum °C·days against these totals.",
 			"biofix": "first_sustained_moth_catch",
 			"egg_hatch_dd": 220,
 		},
@@ -128,7 +137,8 @@ PEST_MODELS = [
 		"kingdom": "Insect",
 		"description": "Tortricid moth whose larvae web and roll leaves, feed on fruit surface. "
 		"Important in organic systems where broad-spectrum sprays are limited.",
-		"emergence_logic": {"model": "degree_day", "base_temp_c": 6.1, "biofix": "first_moth_catch"},
+		"emergence_logic": {"model": "degree_day", "base_temp_c": 6.1, "base_f": 43.0, "dd_unit": "°F·day",
+		                    "biofix": "first_moth_catch"},
 		"population_range": "Two generations: June and August",
 		"cycles": "2 generations/year",
 	},
