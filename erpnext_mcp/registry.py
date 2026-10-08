@@ -203,6 +203,7 @@ from .tools import shop_queue_tools
 from .tools import live_budget_tools
 from .tools import pollination_tools
 from .tools import packer_portal_tools
+from .tools import template_tool
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18743,6 +18744,38 @@ TOOLS = {
 		"v0.276.0. Every view, download and feed pull: when, which contact, what, from where. Read-only.",
 		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "company": _field(_STRING, "All of a company's shares."), "limit": _field(_INTEGER, "Default 200.")},
 		title="List packer access log",
+	),
+	"template": _tool(
+		template_tool.template,
+		"MUTATING (default OFF). v0.279.0. ONE tool for every kind of template: farm_task (also shop work, daily checks, "
+		"scouting), inspection, training_type, trade_document, reporting, asset_type, and the config kinds wizard, "
+		"job_template, seasonal_program, market_commodity, supplier_connector, input_plan, pollination_plan.\n\n"
+		"action: kinds (list the kinds) | describe (one kind's body fields — start here) | list | get | create | update "
+		"| fork (copy one under new_name, with overrides) | preview (what it would produce, with warnings) | enable | "
+		"disable | history | diff | stage | publish | rollback (config kinds).\n\n"
+		"Each action runs the kind's EXISTING tool (create_farm_task_template, draft_config, …) with that tool's own "
+		"validation, permissions and switch: a write needs allow_template AND the kind's own switch. An AI-drafted "
+		"config version is published by a person in the Desk, as before. The per-kind tools remain available.",
+		{"action": _field(_STRING, "kinds, describe, list, get, create, update, fork, preview, enable, disable, history, diff, stage, publish, rollback."),
+		 "kind": _field(_STRING, "The template kind (template action=kinds lists them)."),
+		 "name": _field(_STRING, "The template (its name, or the config key)."),
+		 "body": _field(_OBJECT, "create / update / preview: the template's fields, as describe shows them."),
+		 "new_name": _field(_STRING, "fork: the copy's name."),
+		 "overrides": _field(_OBJECT, "fork: fields to change on the copy."),
+		 "version": _field(_INTEGER, "Config kinds: a version (get, fork, preview, stage, publish)."),
+		 "from_version": _field(_INTEGER, "diff: from this version (default live)."),
+		 "to_version": _field(_INTEGER, "diff: to this version."),
+		 "to": _field(_INTEGER, "rollback: back to this version."),
+		 "change_note": _field(_STRING, "Why — stage / publish / rollback, and a draft's note."),
+		 "reason": _field(_STRING, "disable: why (inspection and training types require it)."),
+		 "filters": _field(_OBJECT, "list: the kind's own list filters."),
+		 "status": _field(_STRING, "list (config kinds): Draft, Staged, Published …"),
+		 "company": _field(_STRING, "preview (farm_task): what a timed template would raise today for this company."),
+		 "users": _field(_STRING_ARRAY, "stage: users."), "roles": _field(_STRING_ARRAY, "stage: roles."),
+		 "companies": _field(_STRING_ARRAY, "stage: companies.")},
+		required=("action",),
+		mutating=True,
+		title="Template (every kind)",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

@@ -50,12 +50,23 @@ KINDS = {
 	"quiz": {"label": "Quiz", "store": "Farm Config Version (Quiz)", "key": "course key, e.g. d_6c_dozer_operator"},
 	"pest_dd_models": {"label": "Pest DD models", "store": "Farm Config Version (IPM Setting)", "key": "pest_dd_models"},
 	"pest_dd_offsets": {"label": "Pest DD block offsets", "store": "Farm Config Version (IPM Setting)", "key": "pest_dd_offsets"},
+	# v0.279.0. The config kinds added since v0.264 (they had no MCP draft / stage / publish path until now). Each is
+	# validated by its own module's validator through phone_config; AI drafts go live only in the Desk (decision 5).
+	"market_commodity": {"label": "Market Commodity", "store": "Farm Config Version", "key": "commodity key, e.g. sweet_cherries"},
+	"seasonal_program": {"label": "Seasonal Program", "store": "Farm Config Version", "key": "fall_winterize / spring_startup"},
+	"job_template": {"label": "Job Template", "store": "Farm Config Version", "key": "orchard_removal, supplier_delivery …"},
+	"supplier_connector": {"label": "Supplier Connector", "store": "Farm Config Version", "key": "e.g. wilbur_ellis_portal_csv"},
+	"input_plan": {"label": "Input Plan", "store": "Farm Config Version", "key": "<company>_<year>"},
+	"pollination_plan": {"label": "Pollination Plan", "store": "Farm Config Version", "key": "<company>_<season>"},
 }
 PAYROLL_KINDS = ("overtime_rule",)
 #: v0.264.0. The pest degree-day models and block offsets (Farm Config Version, IPM Setting). AI may draft;
 #: a person publishes in the Desk — calibration suggests, it never applies.
 IPM_KINDS = ("pest_dd_models", "pest_dd_offsets")
 PHONE_KINDS = ("wizard", "tile", "label_profile", "quiz")
+#: v0.279.0. Farm Config Version kinds with no special handling: read, stage, publish and roll back through the
+#: generic phone-config path; drafted with phone_config.save_draft; previewed by their own validator.
+FCV_KINDS = ("market_commodity", "seasonal_program", "job_template", "supplier_connector", "input_plan", "pollination_plan")
 RULE_KINDS = ("compliance_rule", "trigger_rule")
 MAX_PREVIEW_DAYS = 31
 
@@ -75,7 +86,7 @@ def _data(result) -> dict:
 def list_configs(args: dict) -> ToolResult:
 	kind = kind_of(args)
 	key = as_str(args, "key")
-	if kind in PHONE_KINDS:
+	if kind in PHONE_KINDS + FCV_KINDS:
 		data = _data(phone_configs.list_phone_configs({"kind": kind, "key": key, "status": as_str(args, "status")}))
 	elif kind in IPM_KINDS:
 		data = _data(phone_configs.list_phone_configs({"kind": "ipm_setting", "key": kind, "status": as_str(args, "status")}))
@@ -124,7 +135,7 @@ def _get(kind: str, key: str, version) -> dict:
 			return _data(phone_configs.get_phone_config(inner))
 		except ToolError:
 			return {"built_in": True, "in_force": payroll_settings.overtime()}
-	if kind in PHONE_KINDS:
+	if kind in PHONE_KINDS + FCV_KINDS:
 		inner = {"kind": kind, "key": key}
 		if version not in (None, ""):
 			inner["version"] = version
@@ -277,6 +288,19 @@ def preview_config(args: dict) -> ToolResult:
 			summary=("identical pay" if data["identical"] else f"{data['changed']} employee(s) paid differently, "
 			         f"{len(data['flagged'])} over {data['flag_threshold_pct']:g}%") + " (nothing written)",
 		)
+	if kind in FCV_KINDS:
+		from .. import phone_config
+
+		body = args.get("body")
+		if not isinstance(body, dict):
+			current = _get(kind, key, args.get("version")) if key else {}
+			body = current.get("body") if isinstance(current.get("body"), dict) else None
+		if not isinstance(body, dict):
+			raise ToolError("body (or key / version of a saved one) is what to preview.")
+		report = phone_config.validate(phone_config.SLUG_KINDS[kind], key or "preview", body, for_publish=True)
+		return ToolResult(data={"kind": kind, "key": key or None, "errors": report.get("errors") or [],
+		                        "warnings": report.get("warnings") or [], "written": False},
+		                  summary=f"{len(report.get('errors') or [])} error(s), {len(report.get('warnings') or [])} warning(s)")
 	if kind in IPM_KINDS:
 		from .. import pest_dd
 
@@ -460,6 +484,22 @@ def draft_config(args: dict) -> ToolResult:
 			summary=f"drafted {doc.name}",
 			docstatus_delta="0 → 0 (draft)",
 		)
+	if kind in FCV_KINDS:
+		from .. import phone_config
+
+		body = args.get("body")
+		if not isinstance(body, dict):
+			raise ToolError(f"body is the whole {kind} (get_config shows the version in force).")
+		try:
+			doc, report = phone_config.save_draft(phone_config.SLUG_KINDS[kind], key, body,
+			                                      notes or "Drafted through draft_config.", "AI-proposed")
+		except phone_config.ConfigError as exc:
+			raise ToolError(str(exc)) from None
+		return ToolResult(
+			data={"kind": kind, "key": key, "draft": phone_config.describe(doc), "authored_by": "AI-proposed",
+			      "warnings": (report or {}).get("warnings") if isinstance(report, dict) else None,
+			      "next": "preview_config; a person publishes an AI-drafted version in the Desk."},
+			summary=f"drafted {doc.name}", docstatus_delta="0 → 0 (draft)")
 	if kind in PHONE_KINDS:
 		from .. import phone_config
 
@@ -517,7 +557,7 @@ def stage_config(args: dict) -> ToolResult:
 	_require_kind_allowed("stage", kind)
 	key = as_str(args, "key", required=True)
 	version = args.get("version")
-	if kind in PHONE_KINDS:
+	if kind in PHONE_KINDS + FCV_KINDS:
 		data = _data(phone_configs.stage_phone_config(
 			{"kind": kind, "key": key, "version": version, "change_note": as_str(args, "change_note", required=True),
 			 "users": args.get("users") or [], "roles": args.get("roles") or [], "companies": args.get("companies") or []}))
@@ -554,7 +594,7 @@ def publish_config(args: dict) -> ToolResult:
 	_require_kind_allowed("publish", kind)
 	key = as_str(args, "key", required=True)
 	version = args.get("version")
-	if kind in PHONE_KINDS:
+	if kind in PHONE_KINDS + FCV_KINDS:
 		data = _data(phone_configs.publish_phone_config(
 			{"kind": kind, "key": key, "version": version, "change_note": as_str(args, "change_note", required=True)}))
 	elif kind == "extraction_config":
@@ -588,7 +628,7 @@ def rollback_config(args: dict) -> ToolResult:
 	key = as_str(args, "key", required=True)
 	note = as_str(args, "change_note", required=True)
 	retire = as_str(args, "to") == "none"
-	if kind in PHONE_KINDS:
+	if kind in PHONE_KINDS + FCV_KINDS:
 		handler = phone_configs.retire_phone_config if retire else phone_configs.rollback_phone_config
 		data = _data(handler({"kind": kind, "key": key, "change_note": note}))
 	elif kind in RULE_KINDS and retire:

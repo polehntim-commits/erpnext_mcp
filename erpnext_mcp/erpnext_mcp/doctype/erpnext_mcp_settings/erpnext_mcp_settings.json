@@ -1291,6 +1291,7 @@
   "allow_get_packer_share",
   "allow_get_packer_pack",
   "allow_list_packer_access_log",
+  "allow_template",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -11030,6 +11031,13 @@
    "fieldname": "allow_list_packer_access_log",
    "fieldtype": "Check",
    "label": "List Packer Access Log"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.279.0. One tool for every template kind. Each write still needs that kind's own switch.",
+   "fieldname": "allow_template",
+   "fieldtype": "Check",
+   "label": "Template (every kind)"
   }
  ],
  "index_web_pages_for_search": 0,

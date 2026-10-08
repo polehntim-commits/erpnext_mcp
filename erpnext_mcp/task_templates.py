@@ -134,6 +134,7 @@ TEMPLATE_FIELDS = (
 	# v0.278.0. Category, skill and timing; the shop fields (v0.273.0).
 	"category", "skill_level", "schedule", "schedule_every", "schedule_weekday", "window_start", "window_end",
 	"schedule_target", "schedule_crop", "bbch_from", "bbch_to", "dd_from", "dd_to", "shop_work", "shop_skill",
+	"tools_parts", "safety_note",
 )
 
 
@@ -319,6 +320,11 @@ def describe(name: str, with_checklist: bool = False) -> dict:
 	for field, tag in SOP_DOCUMENT_FIELDS:
 		described[field] = sop.get(tag)
 	described["sop_languages"] = [tag for _, tag in SOP_DOCUMENT_FIELDS if sop.get(tag)]
+	# v0.279.0. Category, skill and timing (v0.278.0) — present only where set, so a template without them reads as
+	# it always did (and `template action=fork` carries them to the copy).
+	for key in (*PLAN_FIELDS, "shop_work", "shop_skill", "tools_parts", "safety_note"):
+		if row.get(key) not in (None, "", 0):
+			described[key] = row.get(key)
 	if with_checklist:
 		described["checklist"] = checklist
 	return described

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1136 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1137 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -21180,3 +21180,13 @@ until `pollination_enabled`. Contract: `docs/contracts/pollination_v0_275.yaml`.
 | `list_packer_access_log` | Every view, download and feed pull. Read |
 
 Off per company until `packer_portal_enabled`. Contract: `docs/contracts/packer_portal_v0_276.yaml`.
+
+## v0.279.0 — one template tool (consolidation phase 1)
+
+| Tool | What it does |
+| --- | --- |
+| `template` | Every template kind through one call: kinds, describe, list, get, create, update, fork, preview, enable, disable, history, diff, stage, publish, rollback. Each action runs the kind's existing tool under that tool's own switch. Write |
+
+The per-kind template tools stay. Six config kinds (market_commodity, seasonal_program, job_template,
+supplier_connector, input_plan, pollination_plan) join the generic config tools (list / get / draft / stage /
+publish / rollback / diff / preview_config).

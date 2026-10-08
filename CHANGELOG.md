@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.279.0 — 2026-10-08 — one template tool (consolidation phase 1)
+
+**No migrate** (one new switch, off). Deploy `docs/deploy/v0.279.0_template_tool.md`.
+Tools: **1,136 → 1,137** (one added; nothing removed or hidden — Tim: keep the old tools for a while).
+
+- **`template(action, kind, …)`** builds, edits, previews, forks, versions and publishes every kind of template:
+  farm_task (also shop work, daily checks, scouting), inspection, training_type, trade_document, reporting,
+  asset_type, and the config kinds wizard, job_template, seasonal_program, market_commodity, supplier_connector,
+  input_plan, pollination_plan. Actions: kinds, describe, list, get, create, update, fork, preview, enable, disable,
+  history, diff, stage, publish, rollback.
+- **Nothing new underneath.** Every action runs the kind's existing tool — its validation, permissions, site check
+  and switch. A write needs `allow_template` AND the kind's own switch, so turning the tool on widens nothing. An
+  AI-drafted config version is still published only by a person.
+- **`describe`** gives any kind's body from the existing tools' own schemas (v0.278.0's timing fields showed up
+  with no code change); **`fork`** copies a template (any version of a config kind) under a new name with overrides.
+- **Six config kinds join the generic config tools** (list / get / draft / stage / publish / rollback / diff /
+  preview_config): market_commodity, seasonal_program, job_template, supplier_connector, input_plan,
+  pollination_plan — they had no MCP draft / publish path before.
+- `get_farm_task_template` now returns a template's category, skill level, timing and shop fields when set.
+
 ## 0.278.0 — 2026-10-08 — category, skill and timing on task templates
 
 **Migrate needed** (fields on Farm Task Template and Farm Task; one daily job). **No new tools** (1,136 before and
