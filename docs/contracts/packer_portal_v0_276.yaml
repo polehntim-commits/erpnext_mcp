@@ -1,0 +1,34 @@
+# The packer portal — the frozen contract. erpnext_mcp v0.276.0. No phone route.
+
+version: "0.276.0"
+
+switch:
+  packer_portal_enabled: "Farm Feature Flag per company — no credential is issued, and every credential answers 404, until on"
+
+packer_share:   # doctype Packer Share, PKS-YYYY-#####
+  company: "the issuing grower (Constancy Farms, LLC)"
+  packer_name: "e.g. Orchard View Farms (OVF)"
+  season: "YYYY — the default season shown"
+  markets: "one per line — MRL status is shown for each (default US, Canada)"
+  sections: "{sprays, ipm, projections, clearance, feed}: 1 / 0"
+  blocks: "[{field, block_ticker, variety, committed_note}] — the packer sees the ticker"
+  credentials: "[{contact_name, contact_email, token_hash, issued_at, expires_at, revoked, revoked_reason, last_used, uses}]"
+  access_log: "[{at, contact_name, what (page | data | download <fmt> | feed), detail, ip, user_agent}] — the newest 5,000"
+
+sections:   # each row passes an allow-list; nothing else leaves
+  sprays: "[block, variety, date, product, epa_reg_number, rate, rate_uom, rei_hours, phi_days, phi_clears_on, target, lot_no, mrl: {market: '<ppm> ppm' | 'no record' | 'not approved'}]"
+  ipm: "[block, date, type, threat, count, sample_size, percent_affected, threshold_exceeded, beneficials, stage]"
+  projections: "[block, variety, acres, tons_per_acre, projected_tons, seasons_used, window_start, window_end, notes]"
+  clearance: "[block, variety, status: Clear | Not yet | Check, phi_clears_on, open_rei_until, mrl_gaps, reasons]"
+  never: "costs, prices, labour, people, applicators, HR, blocks not on the share, other companies' blocks"
+
+public:   # under /farmops/api — no Funnel change
+  page: "GET /packer/<credential> — a fixed HTML shell (noindex), data set by textContent from …/data (addendum H7 exception, as the job page)"
+  data: "GET /packer/<credential>/data[?season=YYYY] — the sections as JSON"
+  download: "GET /packer/<credential>/download?format=csv|xlsx|pdf|json[&block=<ticker>][&season=YYYY] — attachment"
+  feed: "GET /packer-feed[?season=YYYY] with Authorization: Bearer <credential> — the JSON; 404 when the share's feed is off"
+  rules: "60 requests / minute / address; every credential that will not work (unknown, expired, revoked, share revoked, portal off) gets the same 404; 25 bad credentials from one address in an hour → one audit row; no-store, no-referrer, DENY framing, the page CSP"
+
+mcp_tools:
+  read: [get_packer_share, get_packer_pack, list_packer_access_log]
+  write: [create_packer_share, issue_packer_credential, revoke_packer_access]

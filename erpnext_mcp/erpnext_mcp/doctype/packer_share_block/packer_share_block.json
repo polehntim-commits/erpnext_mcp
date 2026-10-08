@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "creation": "2026-10-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Packer Share Block",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "field",
+  "block_ticker",
+  "variety",
+  "committed_note"
+ ],
+ "fields": [
+  {
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "label": "Block",
+   "options": "Field",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "block_ticker",
+   "fieldtype": "Data",
+   "label": "Ticker",
+   "in_list_view": 1,
+   "description": "What the packer sees — the block's ticker code."
+  },
+  {
+   "fieldname": "variety",
+   "fieldtype": "Data",
+   "label": "Variety",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "committed_note",
+   "fieldtype": "Data",
+   "label": "Commitment"
+  }
+ ],
+ "istable": 1,
+ "permissions": []
+}

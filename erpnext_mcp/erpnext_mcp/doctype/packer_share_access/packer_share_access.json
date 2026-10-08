@@ -1,0 +1,61 @@
+{
+ "actions": [],
+ "creation": "2026-10-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Packer Share Access",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "at",
+  "contact_name",
+  "what",
+  "detail",
+  "ip",
+  "user_agent"
+ ],
+ "fields": [
+  {
+   "fieldname": "at",
+   "fieldtype": "Datetime",
+   "label": "At",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "contact_name",
+   "fieldtype": "Data",
+   "label": "Contact",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "what",
+   "fieldtype": "Data",
+   "label": "What",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "detail",
+   "fieldtype": "Data",
+   "label": "Detail"
+  },
+  {
+   "fieldname": "ip",
+   "fieldtype": "Data",
+   "label": "From"
+  },
+  {
+   "fieldname": "user_agent",
+   "fieldtype": "Data",
+   "label": "Browser"
+  }
+ ],
+ "istable": 1,
+ "permissions": []
+}

@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.276.0 — 2026-10-08 — the packer portal
+
+**Migrate needed** (doctype Packer Share with its blocks, credentials and access log; six MCP switches; the page
+script). No phone update. Deploy `docs/deploy/v0.276.0_packer_portal.md`. Contract
+`docs/contracts/packer_portal_v0_276.yaml`.
+
+- **A read-only share for the packer** the fruit is committed to (OVF for Constancy): the committed blocks by ticker
+  code, the season, the export markets, and sections on / off — sprays, IPM, projections, clear to harvest, feed.
+- **What they see**: sprays (product, EPA number, rate, date, REI / PHI, lot, MRL status per export market from the
+  MRL records); IPM observations and threshold events; projections (tons by block from past seasons' scale tickets
+  per acre × acres, the harvest window from past first / last tickets, Brix notes); clear to harvest per block (PHI,
+  an open re-entry interval, a product / market without an MRL on file).
+- **Never**: costs, prices, labour, people, HR, other buyers' or other companies' blocks — one allow-list per section.
+- **Downloads**: CSV (the spray record with MRL by market), XLSX (four sheets), a PDF pack per block or season (the
+  spray record, MRL by market, IPM, pre-harvest status — GlobalG.A.P. fields), and the same data as JSON.
+- **Access**: a named credential per contact (32 random bytes shown once, only the hash kept, 400 days by default,
+  revocable); the page at `/farmops/api/packer/<credential>`, the feed at `/farmops/api/packer-feed` with the
+  credential as a Bearer token; every view, download and feed pull logged (contact, time, address, browser); the
+  same 404 for every credential that will not work; rate-limited; noindex, no-store, no-referrer, the page's CSP.
+  Addendum H7: the second HTML answer under /farmops, built exactly like the job page.
+- **Off per company** until `packer_portal_enabled` — Constancy stays inactive until go-live.
+- **MCP**: create_packer_share, issue_packer_credential, revoke_packer_access (write, OFF); get_packer_share,
+  get_packer_pack (json / csv / xlsx / pdf), list_packer_access_log (read).
+
 ## 0.275.0 — 2026-10-08 — pollination: the hive map
 
 **Migrate needed** (Farm Config Version kind "Pollination Plan"; Contractor Job kind Pollination and its Operation

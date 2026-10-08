@@ -1,0 +1,151 @@
+{
+ "actions": [],
+ "creation": "2026-10-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Packer Share",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "share_title",
+  "company",
+  "packer_name",
+  "customer",
+  "status",
+  "col1",
+  "season",
+  "markets",
+  "sections",
+  "blocks_section",
+  "blocks",
+  "access_section",
+  "credentials",
+  "log_section",
+  "access_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "share_title",
+   "fieldtype": "Data",
+   "label": "Share",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Issuing Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "packer_name",
+   "fieldtype": "Data",
+   "label": "Packer",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "e.g. Orchard View Farms (OVF)."
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nRevoked",
+   "default": "Active",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "season",
+   "fieldtype": "Data",
+   "label": "Season",
+   "description": "YYYY — what the share shows by default."
+  },
+  {
+   "fieldname": "markets",
+   "fieldtype": "Small Text",
+   "label": "Export Markets",
+   "description": "One per line (US, Canada, Japan, Korea, Taiwan, EU …): MRL status is shown for these."
+  },
+  {
+   "fieldname": "sections",
+   "fieldtype": "JSON",
+   "label": "Sections",
+   "description": "On / off per section: {\"sprays\": 1, \"ipm\": 1, \"projections\": 1, \"clearance\": 1, \"feed\": 1}."
+  },
+  {
+   "fieldname": "blocks_section",
+   "fieldtype": "Section Break",
+   "label": "Committed Blocks"
+  },
+  {
+   "fieldname": "blocks",
+   "fieldtype": "Table",
+   "label": "Blocks",
+   "options": "Packer Share Block"
+  },
+  {
+   "fieldname": "access_section",
+   "fieldtype": "Section Break",
+   "label": "Who Has Access"
+  },
+  {
+   "fieldname": "credentials",
+   "fieldtype": "Table",
+   "label": "Credentials",
+   "options": "Packer Share Credential"
+  },
+  {
+   "fieldname": "log_section",
+   "fieldtype": "Section Break",
+   "label": "Access Log"
+  },
+  {
+   "fieldname": "access_log",
+   "fieldtype": "Table",
+   "label": "Access Log",
+   "options": "Packer Share Access"
+  }
+ ],
+ "track_changes": 1,
+ "autoname": "format:PKS-{YYYY}-{#####}",
+ "title_field": "share_title",
+ "description": "v0.276.0. A read-only share for a packer: the committed blocks' sprays, IPM, projections and clear-to-harvest, by named revocable credential, every view and download logged. docs/contracts/packer_portal_v0_276.yaml.",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  }
+ ]
+}

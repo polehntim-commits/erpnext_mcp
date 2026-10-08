@@ -1733,6 +1733,11 @@ APP_DOCTYPES = {
 	# v0.272.0. Chemical receiving (`receiving`).
 	"Supplier Delivery Intake": "supplier_delivery_intake",
 	"Supplier Delivery Intake Line": "supplier_delivery_intake_line",
+	# v0.276.0. The packer portal (`packer_portal`).
+	"Packer Share": "packer_share",
+	"Packer Share Block": "packer_share_block",
+	"Packer Share Credential": "packer_share_credential",
+	"Packer Share Access": "packer_share_access",
 	# v0.243.0. No-work notices and their recipients.
 	"Work Notice": "work_notice",
 	"Work Notice Recipient": "work_notice_recipient",
@@ -2682,6 +2687,9 @@ CHILD_TABLES = {
 	("Contractor Job", "events"): "Contractor Job Event",
 	("Contractor Job Link", "views"): "Contractor Job Link View",
 	("Supplier Delivery Intake", "lines"): "Supplier Delivery Intake Line",
+	("Packer Share", "blocks"): "Packer Share Block",
+	("Packer Share", "credentials"): "Packer Share Credential",
+	("Packer Share", "access_log"): "Packer Share Access",
 	("Wizard Definition", "steps"): "Wizard Step",
 	("Wizard Step", "fields"): "Wizard Field",
 	("Journal Entry", "accounts"): "Journal Entry Account",

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1130 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1136 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 543 read tools are **on** by default and can be switched off individually. A
+All 546 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21167,3 +21167,16 @@ Plans are Farm Config Versions (kind Input Plan). Off per company until `live_bu
 
 Plans are Farm Config Versions (kind Pollination Plan). Jobs are Contractor Jobs of kind Pollination. Off per company
 until `pollination_enabled`. Contract: `docs/contracts/pollination_v0_275.yaml`.
+
+## v0.276.0 — the packer portal
+
+| Tool | What it does |
+| --- | --- |
+| `create_packer_share` | A read-only share for a packer: committed blocks (tickers), season, markets, sections. Write |
+| `issue_packer_credential` | A named credential (link + feed token), shown once. Write |
+| `revoke_packer_access` | Revoke one contact or the whole share. Write |
+| `get_packer_share` | Credentials (never the token) and exactly what the page shows. Read |
+| `get_packer_pack` | The pack as json / csv / xlsx / pdf for a block or every block. Read |
+| `list_packer_access_log` | Every view, download and feed pull. Read |
+
+Off per company until `packer_portal_enabled`. Contract: `docs/contracts/packer_portal_v0_276.yaml`.

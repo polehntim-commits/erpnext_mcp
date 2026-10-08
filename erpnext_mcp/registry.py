@@ -202,6 +202,7 @@ from .tools import receiving_tools
 from .tools import shop_queue_tools
 from .tools import live_budget_tools
 from .tools import pollination_tools
+from .tools import packer_portal_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18644,6 +18645,65 @@ TOOLS = {
 		required=("job", "invoice"),
 		mutating=True,
 		title="Link pollination invoice",
+	),
+	"create_packer_share": _tool(
+		packer_portal_tools.create_packer_share,
+		"MUTATING (default OFF). v0.276.0. A read-only share for the packer the fruit is committed to (e.g. OVF): the "
+		"committed blocks (by name, alias or ticker — the packer sees ticker codes), the season, the export markets "
+		"MRL status is shown for, and sections on / off (sprays, ipm, projections, clearance, feed). Never costs, "
+		"prices, labour, people or other blocks.",
+		{"company": _field(_STRING, "The issuing company (the grower)."), "packer_name": _field(_STRING, "e.g. Orchard View Farms."),
+		 "fields": _field(_STRING, "Committed blocks, comma-separated."), "season": _field(_STRING, "YYYY."),
+		 "markets": _field(_STRING, "Export markets, comma-separated (default US, Canada)."),
+		 "sections": _field(_OBJECT, "{sprays: 1, ipm: 1, projections: 1, clearance: 1, feed: 1}"),
+		 "customer": _field(_STRING, "Optional Customer."), "title": _field(_STRING, "Default: packer — company season.")},
+		required=("company", "packer_name", "fields"),
+		mutating=True,
+		title="Create packer share",
+	),
+	"issue_packer_credential": _tool(
+		packer_portal_tools.issue_packer_credential,
+		"MUTATING (default OFF). v0.276.0. A named credential for one contact at the packer — shown ONCE (only its hash "
+		"is kept): the portal link, and the same credential as a Bearer token for the JSON feed. Live until revoked or "
+		"its expiry (400 days by default). Refused until packer_portal_enabled is on for the company.",
+		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "contact_name": _field(_STRING, "The person."), "contact_email": _field(_STRING, "Their email (record only)."),
+		 "days": _field(_INTEGER, "Life in days (default 400).")},
+		required=("share", "contact_name"),
+		mutating=True,
+		title="Issue packer credential",
+	),
+	"revoke_packer_access": _tool(
+		packer_portal_tools.revoke_packer_access,
+		"MUTATING (default OFF). v0.276.0. Revoke one contact's credential, or (no contact) the whole share. It answers "
+		"'not found' from then on.",
+		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "contact_name": _field(_STRING, "One contact; omit for the whole share."), "reason": _field(_STRING, "Why.")},
+		required=("share",),
+		mutating=True,
+		title="Revoke packer access",
+	),
+	"get_packer_share": _tool(
+		packer_portal_tools.get_packer_share,
+		"v0.276.0. One packer share: its credentials (contact, issued, expiry, revoked, last used, uses — never the "
+		"token) and exactly what the packer's page shows. Read-only.",
+		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "season": _field(_STRING, "YYYY; default the share's.")},
+		required=("share",),
+		title="Get packer share",
+	),
+	"get_packer_pack": _tool(
+		packer_portal_tools.get_packer_pack,
+		"v0.276.0. The packer's pack for one block (ticker) or every committed block and a season: json (the data), "
+		"csv (the spray record), xlsx (sprays, IPM, projections, clear to harvest) or pdf (the spray record, MRL by "
+		"market, IPM, pre-harvest status — GlobalG.A.P. fields), as base64. Read-only.",
+		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "block": _field(_STRING, "A ticker; omit for all."), "season": _field(_STRING, "YYYY."),
+		 "format": _field(_STRING, "json (default), csv, xlsx or pdf.")},
+		required=("share",),
+		title="Get packer pack",
+	),
+	"list_packer_access_log": _tool(
+		packer_portal_tools.list_packer_access_log,
+		"v0.276.0. Every view, download and feed pull: when, which contact, what, from where. Read-only.",
+		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "company": _field(_STRING, "All of a company's shares."), "limit": _field(_INTEGER, "Default 200.")},
+		title="List packer access log",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

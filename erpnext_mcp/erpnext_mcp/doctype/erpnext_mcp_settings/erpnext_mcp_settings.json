@@ -1285,6 +1285,12 @@
   "allow_resolve_pollination_flag",
   "allow_release_hive_gather",
   "allow_link_pollination_invoice",
+  "allow_create_packer_share",
+  "allow_issue_packer_credential",
+  "allow_revoke_packer_access",
+  "allow_get_packer_share",
+  "allow_get_packer_pack",
+  "allow_list_packer_access_log",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -10982,6 +10988,48 @@
    "fieldname": "allow_link_pollination_invoice",
    "fieldtype": "Check",
    "label": "Link Pollination Invoice"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.276.0. A read-only share for a packer.",
+   "fieldname": "allow_create_packer_share",
+   "fieldtype": "Check",
+   "label": "Create Packer Share"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.276.0. A named credential, shown once.",
+   "fieldname": "allow_issue_packer_credential",
+   "fieldtype": "Check",
+   "label": "Issue Packer Credential"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.276.0. Revoke a contact or a share.",
+   "fieldname": "allow_revoke_packer_access",
+   "fieldtype": "Check",
+   "label": "Revoke Packer Access"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.276.0. A share, its credentials and page.",
+   "fieldname": "allow_get_packer_share",
+   "fieldtype": "Check",
+   "label": "Get Packer Share"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.276.0. The pack as json / csv / xlsx / pdf.",
+   "fieldname": "allow_get_packer_pack",
+   "fieldtype": "Check",
+   "label": "Get Packer Pack"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.276.0. Every view and download.",
+   "fieldname": "allow_list_packer_access_log",
+   "fieldtype": "Check",
+   "label": "List Packer Access Log"
   }
  ],
  "index_web_pages_for_search": 0,

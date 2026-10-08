@@ -228,6 +228,10 @@ JOB_PREFIX = f"{PREFIX}/job/"
 JOB_ASSETS_PREFIX = f"{PREFIX}/job-assets/"
 JOB_LIMIT = 60
 JOB_BAD_TOKEN_ALERT = 25
+#: v0.276.0. The packer portal: the page, its data and downloads by credential in the path; the feed by Bearer.
+PACKER_PREFIX = f"{PREFIX}/packer/"
+PACKER_FEED = f"{PREFIX}/packer-feed"
+PACKER_LIMIT = 60
 
 BRAND_DESCRIBED_ROUTE = {
 	"path": f"{BRAND_PREFIX}{{company}}",
@@ -1206,7 +1210,22 @@ _JOB_ASSETS = {
 	"images/layers-2x.png": ("vendor/leaflet/images/layers-2x.png", "image/png"),
 	"job.js": ("job_page/job.js", "application/javascript"),
 	"job.css": ("job_page/job.css", "text/css"),
+	# v0.276.0. The packer portal's page.
+	"packer.js": ("job_page/packer.js", "application/javascript"),
 }
+
+_PACKER_SHELL = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Grower records</title>
+<link rel="stylesheet" href="/farmops/api/job-assets/job.css">
+</head><body>
+<header><h1 id="title">Loading…</h1><p id="dates"></p></header>
+<main id="body"></main>
+<script src="/farmops/api/job-assets/packer.js"></script>
+</body></html>
+"""
 
 
 def _job_headers(response: Response, cache: str = "no-store") -> Response:
@@ -1294,6 +1313,90 @@ def _job(request: Request, path: str) -> Response:
 			session.rollback()
 			return _job_headers(_failure(400, str(exc)))
 		return _job_headers(_failure(404, NOT_FOUND))
+
+
+def _packer_found(request: Request, token: str):
+	from .. import packer_portal
+
+	ip = _peer(request)
+	found = packer_portal.find(token)
+	if found is None:
+		session.commit()
+		if guard._count(f"packer-bad:{ip or 'unknown'}", 3600) == JOB_BAD_TOKEN_ALERT:
+			audit.record("farmops:packer", {"ip": ip}, audit.STATUS_ERROR,
+			             f"Error — {JOB_BAD_TOKEN_ALERT} unknown packer credentials from {ip} within an hour",
+			             caller_ip=ip, commit=True)
+	return found
+
+
+def _packer(request: Request, path: str) -> Response:
+	"""`/packer/<token>` (the page), `…/data`, `…/download?format=&block=&season=`. v0.276.0.
+
+	The same rules as the job page (v0.271.0): the credential is proved first and every one that will not work gets
+	the same 404; metered per address; no-store, noindex, no-referrer and the page's CSP on every answer. ADDENDUM H7
+	EXCEPTION: the second HTML answer under /farmops — a fixed shell with no data; the data is JSON set by textContent.
+	"""
+	from .. import packer_portal
+
+	token, _, action = path[len(PACKER_PREFIX):].partition("/")
+	ip = _peer(request)
+	if guard._count(f"packer:{ip or 'unknown'}", 60) > PACKER_LIMIT:
+		return _failure(429, TOO_MANY)
+	if request.method not in ("GET", "HEAD"):
+		return _job_headers(_failure(404, NOT_FOUND))
+	with session.request_session(request=request, body={}):
+		found = _packer_found(request, token)
+		if found is None:
+			return _job_headers(_failure(404, NOT_FOUND))
+		agent = str(request.headers.get("User-Agent") or "")
+		try:
+			if action == "":
+				packer_portal.log(found, "page", ip=ip, user_agent=agent)
+				session.commit()
+				return _job_headers(Response(_PACKER_SHELL, status=200, content_type="text/html; charset=utf-8"))
+			season = str(request.args.get("season") or "")[:4]
+			if action == "data":
+				data = packer_portal.page(found["share"], season)
+				packer_portal.log(found, "data", detail=season, ip=ip, user_agent=agent)
+				session.commit()
+				return _job_headers(_json(data))
+			if action == "download":
+				fmt = str(request.args.get("format") or "csv")
+				block = str(request.args.get("block") or "")[:40]
+				body, kind, name = packer_portal.pack(found["share"], block=block, season=season, fmt=fmt)
+				packer_portal.log(found, f"download {fmt}", detail=f"{block or 'all blocks'} {season}".strip(), ip=ip,
+				                  user_agent=agent)
+				session.commit()
+				response = Response(body, status=200, content_type=kind)
+				response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
+				return _job_headers(response)
+		except packer_portal.PortalError as exc:
+			session.rollback()
+			return _job_headers(_failure(400, str(exc)))
+		return _job_headers(_failure(404, NOT_FOUND))
+
+
+def _packer_feed(request: Request) -> Response:
+	"""`GET /packer-feed` with `Authorization: Bearer <credential>` — the same data as JSON, for the packer's system."""
+	from .. import packer_portal
+
+	ip = _peer(request)
+	if guard._count(f"packer:{ip or 'unknown'}", 60) > PACKER_LIMIT:
+		return _failure(429, TOO_MANY)
+	header = str(request.headers.get("Authorization") or "")
+	token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+	with session.request_session(request=request, body={}):
+		found = _packer_found(request, token) if token else None
+		if found is None:
+			return _job_headers(_failure(404, NOT_FOUND))
+		share = frappe.get_doc(packer_portal.SHARE, found["share"])
+		if not int(packer_portal._json(share.sections, {}).get("feed", 1) or 0):
+			return _job_headers(_failure(404, NOT_FOUND))
+		season = str(request.args.get("season") or "")[:4]
+		data = packer_portal.page(found["share"], season)
+		packer_portal.log(found, "feed", detail=season, ip=ip, user_agent=str(request.headers.get("User-Agent") or ""))
+		session.commit()
+		return _job_headers(_json(data))
 
 
 def _scan_page(path: str) -> Response:
@@ -1503,6 +1606,12 @@ def _dispatch(request: Request, path: str) -> Response:
 
 	if path.startswith(JOB_PREFIX):
 		return _job(request, path)
+
+	if path.startswith(PACKER_PREFIX):
+		return _packer(request, path)
+
+	if path == PACKER_FEED and request.method == "GET":
+		return _packer_feed(request)
 
 	if path.startswith(SCAN_PREFIX) and request.method == "GET":
 		if _open_route_limited(request):
