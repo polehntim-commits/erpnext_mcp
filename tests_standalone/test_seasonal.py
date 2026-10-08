@@ -14,7 +14,7 @@ import frappe
 from erpnext_mcp import config_lifecycle, phone_config, seasonal, task_templates, tile_queries
 
 from .fixtures import MAIN, OTHER, V12TestCase
-from .harness import STORE, set_roles
+from .harness import STORE
 
 SPRAYER = "Winterize — Sprayer"
 TRACTOR = "Winterize — Tractor / machine / vehicle"
@@ -136,7 +136,6 @@ class TheTileAndTheReads(SeasonalCase):
 		self.enable(SPRAYER, FROST)
 		self.publish()
 		seasonal.run(lambda c: freeze_on("2026-10-12"))
-		set_roles("Administrator", ["Farm Manager"])
 		tile = tile_queries.seasonal_open("Administrator", MAIN, {})
 		self.assertEqual(tile["count"], 3)
 		status = self.tool_data("get_winterize_status", {"company": MAIN})
