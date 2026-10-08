@@ -237,6 +237,7 @@ def after_migrate() -> None:
 	_market_commodity_seed()
 	_seasonal_seed()
 	_job_template_seed()
+	_receiving_seed()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -888,6 +889,19 @@ def _job_template_seed() -> None:
 			      f"`{job_links.FLAG}` is turned on for it.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: job templates were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _receiving_seed() -> None:
+	"""v0.272.0. Example Supplier Connectors as DRAFTS (portal CSV, emailed PDF, the API stub). Never raises."""
+	try:
+		from . import receiving
+
+		made = receiving.seed()["drafts"]
+		if made:
+			print(f"erpnext_mcp: supplier connectors seeded as drafts (check against a real export, then publish): "
+			      f"{', '.join(made)}. Receiving stays off per company until `{receiving.FLAG}` is turned on for it.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: supplier connectors were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _seasonal_seed() -> None:

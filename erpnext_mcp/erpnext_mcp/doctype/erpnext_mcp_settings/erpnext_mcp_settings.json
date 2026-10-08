@@ -1258,6 +1258,16 @@
   "allow_revoke_job_link",
   "allow_list_job_links",
   "allow_close_contractor_job",
+  "allow_open_delivery_intake",
+  "allow_set_delivery_lines",
+  "allow_ingest_supplier_csv",
+  "allow_ingest_delivery_email",
+  "allow_resolve_delivery_line",
+  "allow_draft_delivery_receipt",
+  "allow_get_delivery_intake",
+  "allow_list_delivery_intakes",
+  "allow_list_supplier_connectors",
+  "allow_trace_input_lot",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -10766,6 +10776,76 @@
    "fieldname": "allow_close_contractor_job",
    "fieldtype": "Check",
    "label": "Close Contractor Job"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.272.0. An intake for one supplier delivery / return.",
+   "fieldname": "allow_open_delivery_intake",
+   "fieldtype": "Check",
+   "label": "Open Delivery Intake"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.272.0. Replace an intake's lines; match and reconcile.",
+   "fieldname": "allow_set_delivery_lines",
+   "fieldtype": "Check",
+   "label": "Set Delivery Lines"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.272.0. A portal CSV export through its connector.",
+   "fieldname": "allow_ingest_supplier_csv",
+   "fieldtype": "Check",
+   "label": "Ingest Supplier CSV"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.272.0. An emailed PDF invoice / ticket through its connector.",
+   "fieldname": "allow_ingest_delivery_email",
+   "fieldtype": "Check",
+   "label": "Ingest Delivery Email"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.272.0. Settle one line: Item / unit / qty, accept or reject.",
+   "fieldname": "allow_resolve_delivery_line",
+   "fieldtype": "Check",
+   "label": "Resolve Delivery Line"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.272.0. A DRAFT Purchase Receipt with batches, and the check-in task.",
+   "fieldname": "allow_draft_delivery_receipt",
+   "fieldtype": "Check",
+   "label": "Draft Delivery Receipt"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.272.0. One delivery's audit packet.",
+   "fieldname": "allow_get_delivery_intake",
+   "fieldtype": "Check",
+   "label": "Get Delivery Intake"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.272.0. Delivery intakes by company / status / supplier.",
+   "fieldname": "allow_list_delivery_intakes",
+   "fieldtype": "Check",
+   "label": "List Delivery Intakes"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.272.0. How each supplier's documents are read.",
+   "fieldname": "allow_list_supplier_connectors",
+   "fieldtype": "Check",
+   "label": "List Supplier Connectors"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.272.0. A delivered lot forward to the sprays that used it.",
+   "fieldname": "allow_trace_input_lot",
+   "fieldtype": "Check",
+   "label": "Trace Input Lot"
   }
  ],
  "index_web_pages_for_search": 0,

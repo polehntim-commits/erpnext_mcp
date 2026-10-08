@@ -6037,3 +6037,89 @@ for _name, _fn in vars(_JobMirrors).items():
 TheContractIsComplete.COVERED.update({"list_contractor_jobs": "test_98", "get_contractor_job": "test_99",
                                       "mark_contractor_job_ready": "test_100", "create_job_link": "test_101",
                                       "revoke_job_link": "test_102"})
+
+
+# ── v0.272.0. Chemical receiving (Receiving.swift, app 0.56.0) ─────────────────────────────────────────────────────
+class DeliveryIntakeRowModel(Codable):
+	SWIFT = "Receiving.swift"
+	STRICT = (("name", str, 0), ("status", str, 0))
+	LENIENT = (("supplier", str, 0), ("source", str, 0), ("document_no", str, 0), ("purchase_order", str, 0),
+	           ("purchase_receipt", str, 0))
+
+
+class DeliveryIntakeListModel(Codable):
+	SWIFT = "Receiving.swift"
+	LENIENT = (("company", str, 0), ("enabled", bool, 0))
+	NESTED = (("intakes", DeliveryIntakeRowModel, True, 0),)
+
+
+class DeliveryLineModel(Codable):
+	SWIFT = "Receiving.swift"
+	STRICT = (("idx", int, 0), ("qty", float, 0))
+	LENIENT = (("as_read", str, 0), ("item_code", str, 0), ("uom", str, 0), ("lot_no", str, 0), ("match", str, 0),
+	           ("matched_by", str, 0), ("delta", float, 0), ("resolution", str, 0), ("needs_a_person", bool, 0),
+	           ("restricted_use", bool, 0), ("freeze_sensitive", bool, 0), ("sds_on_file", bool, 0))
+
+
+class DeliveryIntakeModel(Codable):
+	SWIFT = "Receiving.swift"
+	STRICT = (("intake", str, 0), ("status", str, 0))
+	LENIENT = (("supplier", str, 0), ("purchase_order", str, 0), ("document_no", str, 0), ("purchase_receipt", str, 0),
+	           ("check_in_task", str, 0), ("may_settle", bool, 0))
+	NESTED = (("lines", DeliveryLineModel, True, 0),)
+
+
+class DraftReceiptModel(Codable):
+	SWIFT = "Receiving.swift"
+	STRICT = (("intake", str, 0), ("purchase_receipt", str, 0))
+	LENIENT = (("check_in_task", str, 0), ("warehouse", str, 0), ("already", bool, 0))
+
+
+class _ReceivingMirrors:
+	LINES = '[{"item_text": "Captan 80 WDG", "qty": 50, "lot_no": "C1"}]'
+
+	def _receiving_site(self):
+		from erpnext_mcp import receiving
+
+		from .harness import set_roles
+		from .test_receiving import receiving_site, turn_on
+
+		po = receiving_site()
+		turn_on()
+		self.intake = receiving.open_intake(MAIN, purchase_order=po, source="ticket_photo")
+		STORE.commit()
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		self.be()
+
+	def test_103_list_delivery_intakes(self):
+		self._receiving_site()
+		DeliveryIntakeListModel.decode(self.wire("list_delivery_intakes"), "list_delivery_intakes")
+
+	def test_104_get_delivery_intake(self):
+		self._receiving_site()
+		DeliveryIntakeModel.decode(self.wire("get_delivery_intake", intake=self.intake), "get_delivery_intake")
+
+	def test_105_submit_delivery_lines(self):
+		self._receiving_site()
+		DeliveryIntakeModel.decode(self.wire("submit_delivery_lines", intake=self.intake, lines=self.LINES),
+		                           "submit_delivery_lines")
+
+	def test_106_resolve_delivery_line(self):
+		self._receiving_site()
+		self.wire("submit_delivery_lines", intake=self.intake, lines=self.LINES)
+		DeliveryIntakeModel.decode(self.wire("resolve_delivery_line", intake=self.intake, idx=1, resolution="Accept"),
+		                           "resolve_delivery_line")
+
+	def test_107_draft_delivery_receipt(self):
+		self._receiving_site()
+		self.wire("submit_delivery_lines", intake=self.intake, lines=self.LINES)
+		DraftReceiptModel.decode(self.wire("draft_delivery_receipt", intake=self.intake), "draft_delivery_receipt")
+
+
+for _name, _fn in vars(_ReceivingMirrors).items():
+	if _name.startswith(("test_", "_receiving_site", "LINES")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"list_delivery_intakes": "test_103", "get_delivery_intake": "test_104",
+                                      "submit_delivery_lines": "test_105", "resolve_delivery_line": "test_106",
+                                      "draft_delivery_receipt": "test_107"})

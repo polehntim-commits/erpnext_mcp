@@ -1,0 +1,67 @@
+{
+ "message": {
+  "check_in_task": null,
+  "company": "Example Trading Co",
+  "direction": "Delivery",
+  "document_no": "T-1001",
+  "intake": "SDI-00001",
+  "job": null,
+  "lines": [
+   {
+    "as_read": "Captan 80 WDG",
+    "batch_no": null,
+    "delta": -10.0,
+    "epa_reg_number": "66330-38",
+    "expiry_date": null,
+    "freeze_sensitive": false,
+    "idx": 1,
+    "item_code": "CAPTAN-80",
+    "lot_no": "C2609A",
+    "match": "short",
+    "matched_by": "EPA number",
+    "needs_a_person": false,
+    "open_on_po": 50.0,
+    "po_item": "<po_item>",
+    "qty": 40.0,
+    "resolution": "Accept",
+    "restricted_use": false,
+    "sds_on_file": true,
+    "uom": "lb"
+   },
+   {
+    "as_read": "Lorsban 4E",
+    "batch_no": null,
+    "delta": 0.0,
+    "epa_reg_number": null,
+    "expiry_date": null,
+    "freeze_sensitive": true,
+    "idx": 2,
+    "item_code": "LORSBAN-4E",
+    "lot_no": "L7781",
+    "match": "ok",
+    "matched_by": "name on the PO",
+    "needs_a_person": false,
+    "open_on_po": 4.0,
+    "po_item": "<po_item>",
+    "qty": 4.0,
+    "resolution": null,
+    "restricted_use": true,
+    "sds_on_file": false,
+    "uom": "gal"
+   }
+  ],
+  "ordered_not_delivered": [
+   {
+    "item_code": "SUPERIOR-OIL",
+    "item_name": null,
+    "open": 30.0,
+    "po_item": "<po_item>"
+   }
+  ],
+  "purchase_order": "PO-00001",
+  "purchase_receipt": null,
+  "source": "phone_extraction",
+  "status": "Matched",
+  "supplier": "Wilbur-Ellis"
+ }
+}

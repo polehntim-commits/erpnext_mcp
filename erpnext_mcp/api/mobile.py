@@ -25569,3 +25569,105 @@ def revoke_job_link(user: str, link=None, reason=None) -> dict:
 	job = frappe.db.get_value(job_links.LINK, str(link or ""), "job")
 	_job_in_scope(user, job, allowed)
 	return job_links.revoke(str(link), user, str(reason or ""))
+
+
+# ── v0.272.0. Chemical receiving (docs/contracts/chemical_receiving_v0_272.yaml) ─────────────────────────────────────
+#: Who settles a delivery's lines and drafts its receipt from the phone. Reading, and posting the lines read off a
+#: ticket, is Foreman / Farm Manager (dispatch) — the person at the shed when the truck comes.
+RECEIVING_ROLES = frozenset({"Farm Manager", "System Manager"})
+
+
+def _intake_in_scope(user: str, intake, allowed: list) -> str:
+	from .. import receiving
+
+	name = str(intake or "").strip()
+	company = frappe.db.get_value(receiving.INTAKE, name, "company") if name else None
+	if not company or company not in allowed:
+		raise frappe.DoesNotExistError(f"No delivery {name!r}.")
+	return name
+
+
+def _receiving_error(exc) -> None:
+	_clean_error(f"{exc} Nothing was changed.")
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_delivery_intakes", limit=guard.READ_LIMIT)
+def list_delivery_intakes(user: str, company=None, status=None) -> dict:
+	"""Supplier deliveries in the caller's company, newest first — Foreman and Farm Manager."""
+	from .. import receiving
+
+	guard.require_dispatch_role(user, "Reading deliveries")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or allowed[0]
+	rows = receiving.list_intakes(entity, str(status or ""), "", 100)
+	return {"company": entity, "enabled": receiving.enabled(entity),
+	        "intakes": [{k: (str(v) if v is not None and k in ("creation",) else v) for k, v in dict(r).items()}
+	                    for r in rows]}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_delivery_intake", limit=guard.READ_LIMIT)
+def get_delivery_intake(user: str, intake=None) -> dict:
+	"""One delivery: its lines, matches, what needs a person, the draft receipt and check-in — Foreman and up."""
+	from .. import receiving
+
+	guard.require_dispatch_role(user, "Reading a delivery")
+	name = _intake_in_scope(user, intake, guard.require_scope(user))
+	data = receiving.summary(name)
+	data["may_settle"] = bool(guard.roles_held(user) & RECEIVING_ROLES)
+	return data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("submit_delivery_lines", mutating=True, limit=guard.WRITE_LIMIT)
+def submit_delivery_lines(user: str, intake=None, lines=None, document_no=None, document_date=None, po_number=None) -> dict:
+	"""The lines read off the ticket on the phone (Vision + on-device model), checked and matched here."""
+	from .. import receiving
+
+	guard.require_dispatch_role(user, "Entering a delivery's lines")
+	name = _intake_in_scope(user, intake, guard.require_scope(user))
+	if isinstance(lines, str):
+		try:
+			lines = json.loads(lines)
+		except ValueError:
+			_clean_error("lines: a JSON list. Nothing was changed.")
+	try:
+		return receiving.set_lines(name, lines, document_no=str(document_no or ""),
+		                           document_date=str(document_date or ""), po_number=str(po_number or ""),
+		                           source="phone_extraction", actor=user)
+	except receiving.ReceivingError as exc:
+		_receiving_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("resolve_delivery_line", mutating=True, limit=guard.WRITE_LIMIT)
+def resolve_delivery_line(user: str, intake=None, idx=None, resolution=None, item_code=None, uom=None, qty=None,
+                          note=None) -> dict:
+	"""Settle one line (Item / unit / qty; accept or reject) — Farm Manager."""
+	from .. import receiving
+
+	if not guard.roles_held(user) & RECEIVING_ROLES:
+		raise frappe.PermissionError("Settling a delivery is restricted to Farm Manager, System Manager. Nothing was changed.")
+	name = _intake_in_scope(user, intake, guard.require_scope(user))
+	try:
+		return receiving.resolve_line(name, int(idx) if str(idx or "").isdigit() else 0,
+		                              resolution=str(resolution or ""), item_code=str(item_code or ""),
+		                              uom=str(uom or ""), qty=qty, note=str(note or ""), actor=user)
+	except receiving.ReceivingError as exc:
+		_receiving_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("draft_delivery_receipt", mutating=True, limit=guard.WRITE_LIMIT)
+def draft_delivery_receipt(user: str, intake=None) -> dict:
+	"""The DRAFT Purchase Receipt and the check-in task — Farm Manager. Never submits."""
+	from .. import receiving
+
+	if not guard.roles_held(user) & RECEIVING_ROLES:
+		raise frappe.PermissionError("Drafting a receipt is restricted to Farm Manager, System Manager. Nothing was changed.")
+	name = _intake_in_scope(user, intake, guard.require_scope(user))
+	try:
+		return receiving.draft_receipt(name, user)
+	except receiving.ReceivingError as exc:
+		_receiving_error(exc)

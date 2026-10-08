@@ -1,0 +1,220 @@
+{
+ "actions": [],
+ "creation": "2026-10-07 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Supplier Delivery Intake",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "company",
+  "supplier",
+  "purchase_order",
+  "job",
+  "direction",
+  "return_against",
+  "col1",
+  "status",
+  "source",
+  "connector",
+  "document_no",
+  "document_date",
+  "po_number_read",
+  "source_file",
+  "communication",
+  "lines_section",
+  "lines",
+  "missing_lines",
+  "validation",
+  "receipt_section",
+  "purchase_receipt",
+  "check_in_task",
+  "drafted_by",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "purchase_order",
+   "fieldtype": "Link",
+   "label": "Purchase Order",
+   "options": "Purchase Order"
+  },
+  {
+   "fieldname": "job",
+   "fieldtype": "Link",
+   "label": "Delivery Job",
+   "options": "Contractor Job"
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "label": "Direction",
+   "options": "Delivery\nReturn",
+   "default": "Delivery"
+  },
+  {
+   "fieldname": "return_against",
+   "fieldtype": "Link",
+   "label": "Return Against",
+   "options": "Purchase Receipt",
+   "depends_on": "eval:doc.direction=='Return'"
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Awaiting Lines\nNeeds Review\nMatched\nReceipt Drafted\nReturn Drafted\nRejected",
+   "default": "Awaiting Lines",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Lines From",
+   "options": "ticket_photo\nemail_pdf\nportal_csv\nrest_api\nedi\nagxml\nphone_extraction\nmanual"
+  },
+  {
+   "fieldname": "connector",
+   "fieldtype": "Data",
+   "label": "Supplier Connector"
+  },
+  {
+   "fieldname": "document_no",
+   "fieldtype": "Data",
+   "label": "Ticket / Invoice No"
+  },
+  {
+   "fieldname": "document_date",
+   "fieldtype": "Date",
+   "label": "Document Date"
+  },
+  {
+   "fieldname": "po_number_read",
+   "fieldtype": "Data",
+   "label": "PO No on the Document"
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Data",
+   "label": "Source File"
+  },
+  {
+   "fieldname": "communication",
+   "fieldtype": "Data",
+   "label": "Email"
+  },
+  {
+   "fieldname": "lines_section",
+   "fieldtype": "Section Break",
+   "label": "Lines"
+  },
+  {
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Lines",
+   "options": "Supplier Delivery Intake Line"
+  },
+  {
+   "fieldname": "missing_lines",
+   "fieldtype": "JSON",
+   "label": "Ordered, Not Delivered",
+   "description": "PO lines still open that no delivery line covers — a backorder, not a refusal."
+  },
+  {
+   "fieldname": "validation",
+   "fieldtype": "JSON",
+   "label": "Checks",
+   "description": "What the document had to survive: quantities, EPA numbers, lots."
+  },
+  {
+   "fieldname": "receipt_section",
+   "fieldtype": "Section Break",
+   "label": "Receipt"
+  },
+  {
+   "fieldname": "purchase_receipt",
+   "fieldtype": "Link",
+   "label": "Purchase Receipt (Draft)",
+   "options": "Purchase Receipt"
+  },
+  {
+   "fieldname": "check_in_task",
+   "fieldtype": "Data",
+   "label": "Check-in Task"
+  },
+  {
+   "fieldname": "drafted_by",
+   "fieldtype": "Data",
+   "label": "Drafted By"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "track_changes": 1,
+ "autoname": "format:SDI-{YYYY}-{#####}",
+ "title_field": "supplier",
+ "description": "v0.272.0. One supplier delivery (or return): lines read from the ticket photo, the emailed invoice or the portal CSV, matched to the PO, reconciled, then a DRAFT Purchase Receipt a person submits. docs/contracts/chemical_receiving_v0_272.yaml.",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Accounts User"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Foreman"
+  }
+ ]
+}

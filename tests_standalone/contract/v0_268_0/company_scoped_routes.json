@@ -86,6 +86,7 @@
  "list_cost_centers",
  "list_crew_candidates",
  "list_crew_tasks",
+ "list_delivery_intakes",
  "list_departments",
  "list_designations",
  "list_dispatched_tasks",

@@ -1,0 +1,13 @@
+{
+ "message": {
+  "already": false,
+  "check_in_task": "FT-2026-07-00001",
+  "docstatus": 0,
+  "intake": "SDI-00001",
+  "lines": 2,
+  "next_step": "A person checks the draft against the ticket and submits it in ERPNext.",
+  "notes": [],
+  "purchase_receipt": "PR-00001",
+  "warehouse": "Chemical Shed - ETC"
+ }
+}

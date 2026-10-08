@@ -520,6 +520,12 @@ ROUTES = (
 	Route("/mobile", mobile_api.mark_contractor_job_ready),
 	Route("/mobile", mobile_api.create_job_link),
 	Route("/mobile", mobile_api.revoke_job_link),
+	# v0.272.0. Chemical receiving (app 0.56.0).
+	Route("/mobile", mobile_api.list_delivery_intakes),
+	Route("/mobile", mobile_api.get_delivery_intake),
+	Route("/mobile", mobile_api.submit_delivery_lines),
+	Route("/mobile", mobile_api.resolve_delivery_line),
+	Route("/mobile", mobile_api.draft_delivery_receipt),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

@@ -865,6 +865,7 @@
     "compliance"
    ]
   },
+  "draft_delivery_receipt": {},
   "end_shift": {},
   "end_shift_break": {},
   "end_stale_shift": {
@@ -925,6 +926,11 @@
    ]
   },
   "get_current_user_context": {},
+  "get_delivery_intake": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "get_device_readings": {},
   "get_discipline_record": {
    "resources": [
@@ -1225,6 +1231,11 @@
   "list_crew_candidates": {},
   "list_crew_task_members": {},
   "list_crew_tasks": {},
+  "list_delivery_intakes": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "list_departments": {},
   "list_designations": {},
   "list_discipline_history": {
@@ -1440,6 +1451,7 @@
     }
    ]
   },
+  "resolve_delivery_line": {},
   "resolve_punch_review": {},
   "resume_task_via_mobile": {},
   "retry_card_print_job": {},
@@ -1482,6 +1494,11 @@
   "start_task": {},
   "start_template_task": {},
   "submit_app_feedback": {},
+  "submit_delivery_lines": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "submit_direct_deposit_change": {},
   "submit_form_signature": {},
   "submit_i9_section_1": {},

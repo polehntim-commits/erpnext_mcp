@@ -928,6 +928,8 @@ class TheSeededTemplates(V12TestCase):
 		*(spec["template_name"] for spec in __import__("erpnext_mcp.seasonal", fromlist=["SEED_TEMPLATES"]).SEED_TEMPLATES),
 		# v0.271.0. Contractor-job prep (`test_job_links`).
 		*(spec["template_name"] for spec in __import__("erpnext_mcp.job_links", fromlist=["PREP_TASK_TEMPLATES"]).PREP_TASK_TEMPLATES),
+		# v0.272.0. Checking a chemical delivery into the shed (`test_receiving`).
+		__import__("erpnext_mcp.receiving", fromlist=["CHECK_IN"]).CHECK_IN,
 	)
 
 	def test_they_are_all_seeded(self):

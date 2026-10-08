@@ -3,6 +3,43 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.272.0 — 2026-10-07 — chemical receiving
+
+**Migrate needed** (doctypes Supplier Delivery Intake and its lines; Farm Config Version kind "Supplier Connector";
+four connectors seeded as DRAFTS; the "Chemical delivery check-in" template; ten MCP switches). Pairs with FarmOps
+0.56.0 (the phone's receiving screen). Deploy `docs/deploy/v0.272.0_chemical_receiving.md`. Contract
+`docs/contracts/chemical_receiving_v0_272.yaml`.
+
+- **Receiving is OFF per company** until `chemical_receiving_enabled` is turned on for it (Constancy stays inactive);
+  the shed is the company's `chemical_storage_warehouse`; an optional `receiving_qty_tolerance_pct`.
+- **Lines from documents, not the driver.** The driver taps Delivered and photographs the ticket (v0.271.0's link) —
+  that opens the intake. The lines come from: the ticket read on the phone (Apple Vision + the on-device model, posted
+  to `submit_delivery_lines`), the emailed invoice / ticket PDF at office@ (`ingest_delivery_email`), or the supplier
+  portal's CSV export (`ingest_supplier_csv`). No supplier offers growers an invoice API (researched: My Wilbur-Ellis,
+  Nutrien Digital Hub, CHS Connect, Helena Agri Hub are portals; Agvance's API is the retailer's; AgGateway EDI /
+  agXML are business-to-business).
+- **Supplier Connector** (config, one per supplier and channel): channel `email_pdf` / `portal_csv` (read today) or
+  `rest_api` / `edi` / `agxml` (configuration only — "not available yet"), senders, CSV columns, the PDF line pattern,
+  their item numbers → our Items. Adapter interface `fetch(since)` / `to_lines(payload)`. Seeded drafts: Wilbur-Ellis
+  portal CSV and emailed PDF, Nutrien portal CSV, an Agvance API stub — check each against a real export, then publish.
+- **Checked, matched, reconciled.** Quantities over 0, EPA numbers the shape of one, a product on every line. Items by
+  the connector's map, the Item code, the EPA number (an Item on the PO first) or the PO line's name; each line
+  against what is still open on its PO line: ok / short / over / substitution (another Item with the ordered
+  product's EPA number) / not ordered / unmatched / unit to check; PO lines nobody delivered are listed as a backorder.
+  A person accepts or rejects what is not ok, or names the right Item / unit / qty.
+- **A DRAFT Purchase Receipt** into chemical storage, linked to the PO lines, one Batch per lot (Items that track
+  batches), the lot always kept on the intake; returns as a draft return against the receipt. Never submitted here.
+- **Check-in crew task** "Chemical delivery check-in": count, lots, leaks and labels, SDS on file (the task names the
+  products with none — an SDS is a file on the Item named "SDS" / "Safety Data Sheet"), stored per label —
+  freeze-sensitive read from the label's storage wording, restricted-use products locked. The RUP products are on the
+  task, so the existing Applicator License gate decides who can claim it.
+- **Lot → spray**: a spray product line may carry `lot_no`; `trace_input_lot` follows a delivered lot to the sprays
+  that recorded it, and to the sprays of that product while it was in the shed.
+- **MCP**: open_delivery_intake, set_delivery_lines, ingest_supplier_csv, ingest_delivery_email,
+  resolve_delivery_line, draft_delivery_receipt (write, OFF); get_delivery_intake (the audit packet),
+  list_delivery_intakes, list_supplier_connectors, trace_input_lot (read). **Phone routes** list / get / submit lines
+  (Foreman and up) / resolve / draft (Farm Manager) (routes 236).
+
 ## 0.271.0 — 2026-10-07 — contractor and supplier job links
 
 **Migrate needed** (doctypes Contractor Job and Contractor Job Link; Farm Config Version kind "Job Template"; three

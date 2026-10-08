@@ -1,0 +1,144 @@
+{
+ "actions": [],
+ "creation": "2026-10-07 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Supplier Delivery Intake Line",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "line_text",
+  "sku",
+  "item_code",
+  "qty",
+  "uom",
+  "lot_no",
+  "expiry_date",
+  "epa_reg_number",
+  "po_item",
+  "po_qty_open",
+  "match_by",
+  "match",
+  "delta",
+  "resolution",
+  "resolution_note",
+  "batch_no",
+  "restricted_use",
+  "freeze_sensitive",
+  "sds_on_file"
+ ],
+ "fields": [
+  {
+   "fieldname": "line_text",
+   "fieldtype": "Small Text",
+   "label": "As Read",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sku",
+   "fieldtype": "Data",
+   "label": "Supplier Item No"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Data",
+   "label": "UOM"
+  },
+  {
+   "fieldname": "lot_no",
+   "fieldtype": "Data",
+   "label": "Lot",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Expiry"
+  },
+  {
+   "fieldname": "epa_reg_number",
+   "fieldtype": "Data",
+   "label": "EPA Reg No"
+  },
+  {
+   "fieldname": "po_item",
+   "fieldtype": "Data",
+   "label": "PO Line"
+  },
+  {
+   "fieldname": "po_qty_open",
+   "fieldtype": "Float",
+   "label": "Open on PO"
+  },
+  {
+   "fieldname": "match_by",
+   "fieldtype": "Data",
+   "label": "Matched By"
+  },
+  {
+   "fieldname": "match",
+   "fieldtype": "Select",
+   "label": "Match",
+   "options": "ok\nshort\nover\nsubstitution\nnot_ordered\nunmatched\nuom_check",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "delta",
+   "fieldtype": "Float",
+   "label": "Over (+) / Short (−)"
+  },
+  {
+   "fieldname": "resolution",
+   "fieldtype": "Select",
+   "label": "Resolution",
+   "options": "\nAccept\nReject"
+  },
+  {
+   "fieldname": "resolution_note",
+   "fieldtype": "Data",
+   "label": "Resolution Note"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Data",
+   "label": "Batch"
+  },
+  {
+   "fieldname": "restricted_use",
+   "fieldtype": "Check",
+   "label": "Restricted Use"
+  },
+  {
+   "fieldname": "freeze_sensitive",
+   "fieldtype": "Check",
+   "label": "Freeze Sensitive"
+  },
+  {
+   "fieldname": "sds_on_file",
+   "fieldtype": "Check",
+   "label": "SDS on File"
+  }
+ ],
+ "istable": 1,
+ "permissions": []
+}

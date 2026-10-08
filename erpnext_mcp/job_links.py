@@ -505,7 +505,19 @@ def record_event(link: dict, event: str, *, note: str = "", name_given: str = ""
 		doc.done_at = frappe.utils.now()
 		prompts = _post_completion(doc)
 	doc.save(ignore_permissions=True)
+	if event == "Delivered":
+		_receiving(doc.name)
 	return {"event": event, "status": doc.status, "prompts": prompts}
+
+
+def _receiving(job: str, file: str = "") -> None:
+	"""v0.272.0. A delivery job's ticket photo / Delivered tap opens its receiving intake — never fails the driver."""
+	try:
+		from . import receiving
+
+		receiving.from_job(job, file=file)
+	except Exception as exc:  # the driver's tap is kept whatever receiving thinks of it
+		frappe.log_error(title="erpnext_mcp: receiving intake", message=f"{job}: {type(exc).__name__}: {exc}")
 
 
 def _post_completion(doc) -> list:
@@ -565,4 +577,6 @@ def attach_photo(link: dict, content: bytes, ip: str = "", kind: str = "Photo") 
 	                        "attached_to_name": doc.name, "is_private": 1, "content": content})
 	saved.insert(ignore_permissions=True)
 	record_event(link, "Photo", ip=ip, file=saved.name, note=kind if kind != "Photo" else "")
+	if kind == "Delivery ticket":
+		_receiving(doc.name, saved.name)
 	return {"saved": True}

@@ -1,0 +1,52 @@
+# Chemical receiving — the frozen contract. erpnext_mcp v0.272.0; FarmOps 0.56.0 builds against it.
+# Fixtures: tests_standalone/contract/v0_272_0/ (byte-identical in FarmOps FarmOpsKit/Tests/FarmOpsKitTests/Fixtures/
+# contract_v0_272_0/).
+
+version: "0.272.0"
+
+switches:   # Farm Feature Flags, per company
+  chemical_receiving_enabled: "Flag. OFF for every company until turned on for it — every write is refused until then (Constancy stays inactive)"
+  chemical_storage_warehouse: "Text. The Warehouse the shed is; a draft receipt goes there"
+  receiving_qty_tolerance_pct: "Threshold. Optional; within it a line is ok rather than short / over"
+
+supplier_connector:   # Farm Config Version, kind "Supplier Connector" (slug supplier_connector). Seeded as DRAFTS
+  supplier: "the Supplier name"
+  channel: "email_pdf | portal_csv (read today) | rest_api | edi | agxml (configuration only: 'not available yet')"
+  companies: "[company] — which company an emailed document is for (email_pdf)"
+  match: "{senders: [domain or address]} — whose email this connector reads (exact domain or subdomain; a lookalike is not it)"
+  csv: "{columns: {item, sku, qty, uom, lot, expiry, epa, document_no, po_number, date: 'their column header'}, delimiter}"
+  pdf: "{line_pattern: regex with named groups qty and item or sku (uom, lot, epa, expiry optional), document_no_pattern, po_pattern, date_pattern}"
+  item_map: "{their item number: our Item}"
+  adapter: "fetch(since) → documents; to_lines(payload) → [{document_no, po_number, date, lines}]"
+
+intake:   # doctype Supplier Delivery Intake, SDI-YYYY-#####
+  sources: "ticket_photo (the job link's Delivered / ticket photo opens it) | email_pdf | portal_csv | phone_extraction | manual"
+  status: "Awaiting Lines → Needs Review (a line a person must settle) | Matched → Receipt Drafted (or Return Drafted) | Rejected"
+  checks: "qty > 0; an EPA number the shape of one (e.g. 524-537); a product on every line — refused by name, nothing kept"
+  matching: "connector item_map → Item code → EPA number (an Item on the PO first) → the PO line's name"
+  match: "ok | short | over | substitution (another Item with the ordered product's EPA number) | not_ordered | unmatched | uom_check"
+  ordered_not_delivered: "PO lines still open that no line covers — a backorder, not a refusal"
+  resolution: "Accept (receive as delivered) | Reject (off the receipt) — a Farm Manager; or name the right Item / unit / qty (re-matched)"
+  line_flags: "restricted_use (Item), freeze_sensitive (the label's storage wording), sds_on_file (a file on the Item named SDS / Safety Data Sheet)"
+
+draft_receipt:
+  what: "a DRAFT Purchase Receipt (docstatus 0) into chemical_storage_warehouse, PO lines linked (a substitution is received unlinked), rate from the PO"
+  lots: "one Batch per Item + lot for Items with Has Batch No (a lot another Item already uses gets the Item prefixed); the lot is always kept on the intake"
+  returns: "direction Return → a draft return (is_return) against return_against"
+  never: "submits, moves stock, or pays"
+  check_in_task: "'Chemical delivery check-in' (Inspection, photos) with the products, lots and flags in its notes and the products in materials_used — so a restricted-use product needs the Applicator License to claim it. Not drawn down: it is not a spray"
+
+trace:
+  spray_lot: "a spray product line may carry lot_no (create_spray_application products[].lot_no)"
+  trace_input_lot: "the deliveries a lot came in on; sprays that recorded it (exact) and sprays of that product since it arrived (by date)"
+
+phone:   # /farmops/api/mobile/<route>
+  list_delivery_intakes: {who: "Foreman, Farm Manager", params: {company, status}, answer: "{company, enabled, intakes: [{name, status, supplier, source, document_no, purchase_order, purchase_receipt, creation}]}", fixture: list_delivery_intakes.json}
+  get_delivery_intake: {who: "Foreman, Farm Manager", params: {intake}, answer: "{intake, status, supplier, purchase_order, document_no, lines: [{idx, as_read, item_code, qty, uom, lot_no, match, matched_by, delta, resolution, needs_a_person, restricted_use, freeze_sensitive, sds_on_file}], ordered_not_delivered, purchase_receipt, check_in_task, may_settle}", fixture: get_delivery_intake.json}
+  submit_delivery_lines: {who: "Foreman, Farm Manager", params: {intake, lines: "JSON [{item_text or sku or item_code, qty, uom, lot_no, expiry_date, epa_reg_number}]", document_no, document_date, po_number}, answer: "as get_delivery_intake", fixture: submit_delivery_lines.json, phone: "lines read off the ticket photo on the phone (Vision + Foundation Models)"}
+  resolve_delivery_line: {who: "Farm Manager, System Manager", params: {intake, idx, resolution, item_code, uom, qty, note}, fixture: resolve_delivery_line.json}
+  draft_delivery_receipt: {who: "Farm Manager, System Manager", params: {intake}, answer: "{intake, purchase_receipt, docstatus: 0, warehouse, lines, notes, check_in_task, already, next_step}", fixture: draft_delivery_receipt.json}
+
+mcp_tools:
+  read: [get_delivery_intake, list_delivery_intakes, list_supplier_connectors, trace_input_lot]
+  write: [open_delivery_intake, set_delivery_lines, ingest_supplier_csv, ingest_delivery_email, resolve_delivery_line, draft_delivery_receipt]

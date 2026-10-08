@@ -1004,6 +1004,9 @@ ERPNEXT_SCHEMA = {
 		"purchase_order",
 		"items",
 		"owner",
+		# v0.272.0. A supplier return drafted from a receiving intake.
+		"is_return",
+		"return_against",
 	],
 	"Purchase Receipt Item": [
 		"name",
@@ -1018,9 +1021,23 @@ ERPNEXT_SCHEMA = {
 		"purchase_order",
 		"purchase_order_item",
 		"cost_center",
+		# v0.272.0. The lot a delivery came in, and the unit it was counted in.
+		"batch_no",
+		"uom",
 		"parent",
 		"parenttype",
 		"parentfield",
+	],
+	# v0.272.0. A supplier's lot, as ERPNext keeps it (the name is the batch id).
+	"Batch": [
+		"name",
+		"batch_id",
+		"item",
+		"supplier",
+		"expiry_date",
+		"reference_doctype",
+		"reference_name",
+		"description",
 	],
 	# v0.70.0 widened this from the eleven columns `get_outstanding_invoices`
 	# reads to what a Sales Invoice this app WRITES actually carries. The
@@ -1724,6 +1741,9 @@ APP_DOCTYPES = {
 	"Contractor Job Event": "contractor_job_event",
 	"Contractor Job Link": "contractor_job_link",
 	"Contractor Job Link View": "contractor_job_link_view",
+	# v0.272.0. Chemical receiving (`receiving`).
+	"Supplier Delivery Intake": "supplier_delivery_intake",
+	"Supplier Delivery Intake Line": "supplier_delivery_intake_line",
 	# v0.243.0. No-work notices and their recipients.
 	"Work Notice": "work_notice",
 	"Work Notice Recipient": "work_notice_recipient",
@@ -2248,6 +2268,10 @@ ERPNEXT_FIELD_LINKS = {
 	("Purchase Receipt Item", "warehouse"): ("Link", "Warehouse"),
 	("Purchase Receipt Item", "purchase_order"): ("Link", "Purchase Order"),
 	("Purchase Receipt Item", "cost_center"): ("Link", "Cost Center"),
+	("Purchase Receipt Item", "batch_no"): ("Link", "Batch"),
+	("Purchase Receipt", "return_against"): ("Link", "Purchase Receipt"),
+	("Batch", "item"): ("Link", "Item"),
+	("Batch", "supplier"): ("Link", "Supplier"),
 	# Purchase Invoice's own Links are declared here even though the doctype
 	# stays absent by default — a test that registers it with
 	# `harness.purchase_invoice_fields()` gets these for free rather than
@@ -2668,6 +2692,7 @@ CHILD_TABLES = {
 	("Contractor Job", "fields"): "Contractor Job Field",
 	("Contractor Job", "events"): "Contractor Job Event",
 	("Contractor Job Link", "views"): "Contractor Job Link View",
+	("Supplier Delivery Intake", "lines"): "Supplier Delivery Intake Line",
 	("Wizard Definition", "steps"): "Wizard Step",
 	("Wizard Step", "fields"): "Wizard Field",
 	("Journal Entry", "accounts"): "Journal Entry Account",
@@ -5008,6 +5033,8 @@ CHILD_TABLE_SOURCES = {
 	"Item Barcode": (("Item", "barcodes"),),
 	# v0.271.0. `delete_farm_location` asks whether a contractor job names the block.
 	"Contractor Job Field": (("Contractor Job", "fields"),),
+	# v0.272.0. `receiving.trace_lot` finds a lot across every delivery by querying the lines directly.
+	"Supplier Delivery Intake Line": (("Supplier Delivery Intake", "lines"),),
 	# v0.68.0. `tools/fill_pipeline.py` reads this child doctype directly with a
 	# `parenttype`/`parent` filter — once to count acknowledgments per change for
 	# list_fill_threshold_changes, once to know who has already acknowledged the

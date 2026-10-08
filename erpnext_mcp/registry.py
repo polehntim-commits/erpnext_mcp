@@ -198,6 +198,7 @@ from .tools import data_access_tools
 from .tools import field_self_service
 from .tools import seasonal_tools
 from .tools import job_link_tools
+from .tools import receiving_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18353,6 +18354,119 @@ TOOLS = {
 		required=("job",),
 		mutating=True,
 		title="Close contractor job",
+	),
+	"open_delivery_intake": _tool(
+		receiving_tools.open_delivery_intake,
+		"MUTATING (default OFF). v0.272.0. Chemical receiving: open the intake for one supplier delivery (or a Return "
+		"against a Purchase Receipt), optionally with its lines — they are matched to the PO and Items and reconciled "
+		"(ok / short / over / substitution / not ordered / unmatched / unit to check). Refused for a company until "
+		"chemical_receiving_enabled is on for it. A delivery job's ticket photo opens one by itself.",
+		{"company": _field(_STRING, "The receiving company."), "supplier": _field(_STRING, "Default: the PO's."),
+		 "purchase_order": _field(_STRING, "The order delivered against."), "job": _field(_STRING, "The delivery job."),
+		 "source": _field(_STRING, "ticket_photo, email_pdf, portal_csv, phone_extraction or manual (default)."),
+		 "connector": _field(_STRING, "The Supplier Connector (its item numbers map to ours)."),
+		 "direction": _field(_STRING, "Delivery (default) or Return."),
+		 "return_against": _field(_STRING, "For a Return: the Purchase Receipt it goes back against."),
+		 "lines": _field({"type": "array", "items": {"type": "object"}}, "[{item_text or sku or item_code, qty, uom, lot_no, expiry_date, epa_reg_number}] as on the ticket / invoice."), "document_no": _field(_STRING, "Ticket / invoice number."),
+		 "document_date": _field(_STRING, "YYYY-MM-DD or MM/DD/YYYY."), "notes": _field(_STRING, "Notes.")},
+		required=("company",),
+		mutating=True,
+		title="Open delivery intake",
+	),
+	"set_delivery_lines": _tool(
+		receiving_tools.set_delivery_lines,
+		"MUTATING (default OFF). v0.272.0. Replace a delivery intake's lines (typed from the ticket, or read off it) "
+		"and match / reconcile them again. Checked first: quantities over 0, EPA numbers the right shape, a product "
+		"on every line.",
+		{"intake": _field(_STRING, "SDI-…"), "lines": _field({"type": "array", "items": {"type": "object"}}, "[{item_text or sku or item_code, qty, uom, lot_no, expiry_date, epa_reg_number}] as on the ticket / invoice."), "document_no": _field(_STRING, "Ticket / invoice number."),
+		 "document_date": _field(_STRING, "Date on the document."), "po_number": _field(_STRING, "PO number printed on it."),
+		 "source": _field(_STRING, "Where the lines came from.")},
+		required=("intake", "lines"),
+		mutating=True,
+		title="Set delivery lines",
+	),
+	"ingest_supplier_csv": _tool(
+		receiving_tools.ingest_supplier_csv,
+		"MUTATING (default OFF). v0.272.0. A supplier portal's CSV export (My Wilbur-Ellis, Nutrien Digital Hub, CHS "
+		"Connect …) read through its published portal_csv Supplier Connector: one intake per invoice / ticket number, "
+		"lines matched and reconciled. An invoice number already taken in is reported, not doubled.",
+		{"company": _field(_STRING, "The receiving company."), "connector": _field(_STRING, "The portal_csv connector."),
+		 "csv_text": _field(_STRING, "The export's contents."), "file": _field(_STRING, "Or an uploaded File's name."),
+		 "purchase_order": _field(_STRING, "Default: the PO number in the export.")},
+		required=("company", "connector"),
+		mutating=True,
+		title="Ingest supplier CSV",
+	),
+	"ingest_delivery_email": _tool(
+		receiving_tools.ingest_delivery_email,
+		"MUTATING (default OFF). v0.272.0. An office@ email with a supplier's PDF invoice / delivery ticket: the PDF's "
+		"text read with the email_pdf connector that recognises the sender (its line pattern), one intake per PDF. "
+		"A PDF already taken in is skipped.",
+		{"communication": _field(_STRING, "The received email."), "company": _field(_STRING, "Default: the connector's first company."),
+		 "connector": _field(_STRING, "Default: found by the sender.")},
+		required=("communication",),
+		mutating=True,
+		title="Ingest delivery email",
+	),
+	"resolve_delivery_line": _tool(
+		receiving_tools.resolve_delivery_line,
+		"MUTATING (default OFF). v0.272.0. Settle one line a person must look at: name the right Item, unit or qty "
+		"(re-matched), then Accept (receive it as delivered — short, over or a substitution) or Reject (refused at "
+		"the door, left off the receipt).",
+		{"intake": _field(_STRING, "SDI-…"), "idx": _field(_INTEGER, "The line, from 1."),
+		 "resolution": _field(_STRING, "Accept or Reject."), "item_code": _field(_STRING, "The right Item."),
+		 "uom": _field(_STRING, "The unit it was counted in."), "qty": _field(_NUMBER, "The real count."),
+		 "note": _field(_STRING, "Why.")},
+		required=("intake", "idx"),
+		mutating=True,
+		title="Resolve delivery line",
+	),
+	"draft_delivery_receipt": _tool(
+		receiving_tools.draft_delivery_receipt,
+		"MUTATING (default OFF). v0.272.0. From a Matched intake: a DRAFT Purchase Receipt (or return) into the "
+		"company's chemical_storage_warehouse, linked to the PO lines, one Batch per lot for Items that track batches; "
+		"then the 'Chemical delivery check-in' crew task (count, lots, labels, SDS, storage; restricted-use products "
+		"need the Applicator License to claim it). Never submits — a person checks it against the ticket.",
+		{"intake": _field(_STRING, "SDI-…")},
+		required=("intake",),
+		mutating=True,
+		title="Draft delivery receipt",
+	),
+	"get_delivery_intake": _tool(
+		receiving_tools.get_delivery_intake,
+		"v0.272.0. One supplier delivery as an audit packet: source document, lines as read, the Item and PO line "
+		"each matched to and how, short / over / substitutions and what a person decided, ordered-but-not-delivered "
+		"lines, restricted-use products, products with no SDS on file, the draft receipt and the check-in task. "
+		"Read-only.",
+		{"intake": _field(_STRING, "SDI-…")},
+		required=("intake",),
+		title="Get delivery intake",
+	),
+	"list_delivery_intakes": _tool(
+		receiving_tools.list_delivery_intakes,
+		"v0.272.0. Supplier delivery intakes, newest first, by company / status (Awaiting Lines, Needs Review, Matched, "
+		"Receipt Drafted, Return Drafted, Rejected) / supplier. Read-only.",
+		{"company": _field(_STRING, "One company."), "status": _field(_STRING, "One status."),
+		 "supplier": _field(_STRING, "One supplier."), "limit": _field(_INTEGER, "Default 50.")},
+		title="List delivery intakes",
+	),
+	"list_supplier_connectors": _tool(
+		receiving_tools.list_supplier_connectors,
+		"v0.272.0. How each supplier's documents are read (Supplier Connector config): channel (email_pdf and "
+		"portal_csv read today; rest_api / edi / agxml are configuration only), senders, CSV columns, PDF line pattern, "
+		"item number map. Read-only; edit and publish them with the config tools or the Desk.",
+		{"supplier": _field(_STRING, "One supplier."), "channel": _field(_STRING, "One channel."),
+		 "include_drafts": _field(_BOOLEAN, "Include unpublished (seeded) ones. Default false.")},
+		title="List supplier connectors",
+	),
+	"trace_input_lot": _tool(
+		receiving_tools.trace_input_lot,
+		"v0.272.0. A delivered chemical lot forward: the delivery and draft receipt it came in on, and the spray "
+		"applications that used that product — exactly where the applicator recorded the lot, otherwise every spray "
+		"of that product since it arrived. Read-only.",
+		{"lot": _field(_STRING, "The lot number on the jug."), "item_code": _field(_STRING, "Narrow to one Item.")},
+		required=("lot",),
+		title="Trace input lot",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

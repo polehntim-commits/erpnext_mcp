@@ -642,6 +642,9 @@ def _mix_products(args: dict, key: str = "products") -> list[dict]:
 				"phi_days": phi_days,
 				"epa_reg_number": str(entry.get("epa_reg_number") or epa or "").strip() or None,
 				"target": str(entry.get("target") or "").strip() or None,
+				# v0.272.0. The lot the jug came from, when the applicator records it — `trace_input_lot`
+				# then follows that lot exactly instead of by the dates it was in the shed.
+				**({"lot_no": str(entry.get("lot_no")).strip()[:80]} if str(entry.get("lot_no") or "").strip() else {}),
 			}
 		)
 	return out

@@ -47,7 +47,10 @@ KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "
          # v0.270.0. A seasonal work list (`seasonal`): Fall winterize, Spring start-up. A person publishes.
          "Seasonal Program": "seasonal_program",
          # v0.271.0. A contractor / supplier job type (`job_links`): scope, prep tasks, hazards, actions, link life.
-         "Job Template": "job_template"}
+         "Job Template": "job_template",
+         # v0.272.0. How a supplier's documents are read (`receiving`): channel, sender, CSV columns, PDF line
+         # pattern, their item numbers → ours. Seeded as drafts; a person publishes.
+         "Supplier Connector": "supplier_connector"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -207,6 +210,10 @@ def _validator(kind: str):
 		from . import job_links
 
 		return job_links.validate
+	if kind == "Supplier Connector":
+		from . import receiving
+
+		return receiving.validate
 	from . import label_compliance
 
 	return label_compliance.validate

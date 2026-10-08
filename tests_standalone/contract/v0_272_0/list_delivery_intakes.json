@@ -1,0 +1,19 @@
+{
+ "message": {
+  "company": "Example Trading Co",
+  "enabled": true,
+  "intakes": [
+   {
+    "company": "Example Trading Co",
+    "creation": "<creation>",
+    "document_no": "T-1001",
+    "name": "SDI-00001",
+    "purchase_order": "PO-00001",
+    "purchase_receipt": null,
+    "source": "phone_extraction",
+    "status": "Matched",
+    "supplier": "Wilbur-Ellis"
+   }
+  ]
+ }
+}

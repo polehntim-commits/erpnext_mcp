@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1103 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1113 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 532 read tools are **on** by default and can be switched off individually. A
+All 536 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21107,3 +21107,22 @@ Contract: `docs/contracts/seasonal_v0_270.yaml`.
 
 Templates are Farm Config Versions (kind Job Template). Sharing is off per company until `job_links_enabled`. Contract:
 `docs/contracts/job_links_v0_271.yaml`.
+
+## v0.272.0 — chemical receiving
+
+| Tool | What it does |
+| --- | --- |
+| `open_delivery_intake` | An intake for one supplier delivery (or return), optionally with its lines. Write |
+| `set_delivery_lines` | Replace an intake's lines; checked, matched to the PO and Items, reconciled. Write |
+| `ingest_supplier_csv` | A portal CSV export through its connector — one intake per invoice / ticket. Write |
+| `ingest_delivery_email` | An emailed PDF invoice / ticket through the connector that knows the sender. Write |
+| `resolve_delivery_line` | Settle a line: right Item / unit / qty, then accept or reject. Write |
+| `draft_delivery_receipt` | A DRAFT Purchase Receipt into chemical storage, a Batch per lot, and the check-in task. Write |
+| `get_delivery_intake` | One delivery's audit packet. Read |
+| `list_delivery_intakes` | Intakes by company / status / supplier. Read |
+| `list_supplier_connectors` | How each supplier's documents are read. Read |
+| `trace_input_lot` | A delivered lot forward to the sprays that used it. Read |
+
+Connectors are Farm Config Versions (kind Supplier Connector), seeded as drafts. Receiving is off per company until
+`chemical_receiving_enabled`; the warehouse is `chemical_storage_warehouse`. Contract:
+`docs/contracts/chemical_receiving_v0_272.yaml`.
