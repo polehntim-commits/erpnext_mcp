@@ -236,6 +236,7 @@ def after_migrate() -> None:
 	_pest_dd_seed()
 	_market_commodity_seed()
 	_seasonal_seed()
+	_job_template_seed()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -874,6 +875,19 @@ def _pest_dd_seed() -> None:
 				print(f"erpnext_mcp: IPM setting {name} seeded.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: pest DD settings were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _job_template_seed() -> None:
+	"""v0.271.0. The three job templates (orchard removal, supplier delivery, supplier pickup). Never raises."""
+	try:
+		from . import job_links
+
+		made = job_links.seed()["published"]
+		if made:
+			print(f"erpnext_mcp: job templates seeded: {', '.join(made)}. Sharing stays off per company until "
+			      f"`{job_links.FLAG}` is turned on for it.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: job templates were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _seasonal_seed() -> None:

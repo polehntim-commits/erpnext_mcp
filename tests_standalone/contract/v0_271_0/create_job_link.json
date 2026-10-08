@@ -1,0 +1,9 @@
+{
+ "message": {
+  "expires_at": "<expires_at>",
+  "job": "CJ-00001",
+  "link": "<link>",
+  "shown_once": "Copy or share it now — only its hash is kept.",
+  "url": "https://test.localhost/farmops/api/job/TOKEN-FOR-THE-FIXTURE"
+ }
+}

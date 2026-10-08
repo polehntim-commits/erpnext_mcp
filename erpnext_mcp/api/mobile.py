@@ -4030,7 +4030,7 @@ def upload_signed_i9(
 		"employee": data.get("employee"),
 		"employee_name": data.get("employee_name"),
 		"status": data.get("status"),
-		"signed_pdf": data.get("signed_pdf"),
+		"signed_pdf": data.get('signed_pdf'),
 		"file_token": data.get("file_docname"),
 		"replaced": data.get("replaced"),
 		# WHICH COLUMNS THIS UPLOAD ACTUALLY FILLED. A phone that sent a moment
@@ -5225,7 +5225,7 @@ def collect_signature(
 		"task": (data.get("task") or {}).get("task"),
 		"task_completed": bool((data.get("task") or {}).get("completed")),
 		"task_note": (data.get("task") or {}).get("note"),
-		"pdf_regenerated": bool((data.get("pdf") or {}).get("regenerated")),
+		"pdf_regenerated": bool((data.get('pdf') or {}).get('regenerated')),
 	}
 
 
@@ -5476,7 +5476,7 @@ def submit_form_signature(
 		"evidence_note": (data.get("evidence") or {}).get("note") or None,
 		# See the docstring. The page carries the capture stamped in, and the
 		# bytes travel because a private File is a login page to this caller.
-		"pdf": _signed_pdf(data.get("pdf") or {}) if wants_pdf else None,
+		"pdf": _signed_pdf(data.get('pdf') or {}) if wants_pdf else None,
 		# v0.63.0. Step 5, taken automatically and reported honestly. See `_seal`.
 		"seal": _seal(data.get("doctype"), data.get("name"), wants_seal),
 	}
@@ -6818,7 +6818,7 @@ def list_attachments(user: str, doctype=None, docname=None) -> dict:
 	for row in data.get("attachments") or []:
 		if hidden and (
 			str(row.get("file_url") or "") in hidden
-			or str(row.get("attached_to_field") or "") in ("generated_pdf", "signature")
+			or str(row.get('attached_to_field') or "") in ("generated_pdf", "signature")
 		):
 			continue
 		rows.append(
@@ -25471,3 +25471,101 @@ def get_field_history(user: str, field=None, types=None, from_date=None, to_date
 		limit=int(limit) if str(limit or "").isdigit() else 50, before=str(before or ""),
 		include_sensitive=history.may_see_sensitive(guard.roles_held(user)),
 	)
+
+
+# ── v0.271.0. Contractor / supplier jobs and their share links (docs/contracts/job_links_v0_271.yaml) ──────────────
+#: Who creates, readies and shares a job link from the phone (Tim: managers create links; workers cannot).
+JOB_LINK_ROLES = frozenset({"Farm Manager", "System Manager"})
+
+
+def _require_job_manager(user: str, action: str) -> None:
+	if not guard.roles_held(user) & JOB_LINK_ROLES:
+		raise frappe.PermissionError(f"{action} is restricted to {', '.join(sorted(JOB_LINK_ROLES))}. Nothing was changed.")
+
+
+def _job_in_scope(user: str, job, allowed: list) -> str:
+	from .. import job_links
+
+	name = str(job or "").strip()
+	company = frappe.db.get_value(job_links.JOB, name, "company") if name else None
+	if not company or company not in allowed:
+		raise frappe.DoesNotExistError(f"No job {name!r}.")
+	return name
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("list_contractor_jobs", limit=guard.READ_LIMIT)
+def list_contractor_jobs(user: str, company=None, include_closed=None) -> dict:
+	"""Contractor and supplier jobs in the caller's company — Foreman and Farm Manager."""
+	from .. import job_links
+
+	guard.require_dispatch_role(user, "Reading contractor jobs")
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) or allowed[0]
+	filters = {"company": entity}
+	if str(include_closed or "").lower() not in ("1", "true", "yes"):
+		filters["status"] = ("not in", list(job_links.CLOSED))
+	rows = frappe.db.get_all(job_links.JOB, filters=filters, fields=["name", "job_title", "kind", "status", "supplier",
+	                                                                 "start_date", "end_date"],
+	                         order_by="creation desc", limit=200) or []
+	return {"company": entity, "jobs": [{k: (str(v) if v is not None and k.endswith("_date") else v) for k, v in dict(r).items()}
+	                                    for r in rows]}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_contractor_job", limit=guard.READ_LIMIT)
+def get_contractor_job(user: str, job=None) -> dict:
+	"""One job: readiness, what its page shows, its links — Foreman and Farm Manager."""
+	from .. import job_links
+
+	guard.require_dispatch_role(user, "Reading a contractor job")
+	allowed = guard.require_scope(user)
+	name = _job_in_scope(user, job, allowed)
+	doc = frappe.get_doc(job_links.JOB, name)
+	return {**job_links.readiness(name), "title": doc.job_title, "kind": doc.kind, "page": job_links.page_data(name),
+	        "links": job_links.links_of(name, include_views=False),
+	        "events": [{"event": e.get("event"), "at": str(e.get("at") or ""), "note": e.get("note"), "name_given": e.get("name_given")}
+	                   for e in doc.get("events") or []]}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("mark_contractor_job_ready", mutating=True, limit=guard.WRITE_LIMIT)
+def mark_contractor_job_ready(user: str, job=None, override_reason=None) -> dict:
+	"""Ready for the contractor: prep done, or a recorded reason — Farm Manager."""
+	from .. import job_links
+
+	_require_job_manager(user, "Marking a contractor job ready")
+	allowed = guard.require_scope(user)
+	name = _job_in_scope(user, job, allowed)
+	try:
+		return job_links.mark_ready(name, user, str(override_reason or ""))
+	except job_links.JobError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("create_job_link", mutating=True, limit=guard.WRITE_LIMIT)
+def create_job_link(user: str, job=None, days=None) -> dict:
+	"""A shareable link — the app opens the share sheet / Messages with it; nothing is sent from here."""
+	from .. import job_links
+
+	_require_job_manager(user, "Sharing a contractor job")
+	allowed = guard.require_scope(user)
+	name = _job_in_scope(user, job, allowed)
+	try:
+		return job_links.issue_link(name, user, int(days) if str(days or "").isdigit() else None)
+	except job_links.JobError as exc:
+		_clean_error(exc)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("revoke_job_link", mutating=True, limit=guard.WRITE_LIMIT)
+def revoke_job_link(user: str, link=None, reason=None) -> dict:
+	"""Stop a link now — Farm Manager."""
+	from .. import job_links
+
+	_require_job_manager(user, "Revoking a job link")
+	allowed = guard.require_scope(user)
+	job = frappe.db.get_value(job_links.LINK, str(link or ""), "job")
+	_job_in_scope(user, job, allowed)
+	return job_links.revoke(str(link), user, str(reason or ""))

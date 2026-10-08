@@ -798,6 +798,7 @@
     "dispatch"
    ]
   },
+  "create_job_link": {},
   "create_leave_request": {},
   "create_market_participant": {},
   "create_monitoring_record": {
@@ -912,6 +913,11 @@
   },
   "get_competitive_move": {},
   "get_compliance_inbox": {},
+  "get_contractor_job": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "get_corrective_action_record": {},
   "get_crew_overview": {
    "gates": [
@@ -1209,6 +1215,11 @@
     }
    ]
   },
+  "list_contractor_jobs": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "list_corrective_action_records": {},
   "list_cost_centers": {},
   "list_crew_candidates": {},
@@ -1346,6 +1357,7 @@
   "log_shift_break": {},
   "log_shift_event": {},
   "log_shift_location": {},
+  "mark_contractor_job_ready": {},
   "match_product": {},
   "materialize_task_for_alert": {
    "gates": [
@@ -1434,6 +1446,7 @@
   "reverify_i9": {},
   "review_punches": {},
   "review_sop": {},
+  "revoke_job_link": {},
   "save_business_card": {},
   "save_ipm_relationship": {
    "gates": [

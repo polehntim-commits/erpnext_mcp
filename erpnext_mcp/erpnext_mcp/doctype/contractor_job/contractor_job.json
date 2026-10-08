@@ -1,0 +1,295 @@
+{
+ "actions": [],
+ "creation": "2026-10-07 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Contractor Job",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "job_title",
+  "template",
+  "kind",
+  "status",
+  "company",
+  "supplier",
+  "purchase_order",
+  "col1",
+  "start_date",
+  "end_date",
+  "contact_name",
+  "contact_phone",
+  "show_contact_phone",
+  "scope_section",
+  "scope",
+  "fields",
+  "hazard_layers",
+  "access_section",
+  "entrance_lat",
+  "entrance_lon",
+  "gate_notes",
+  "delivery_spot_label",
+  "delivery_spot_lat",
+  "delivery_spot_lon",
+  "col2",
+  "sop_link",
+  "show_sop",
+  "actions",
+  "prep_section",
+  "prep_tasks",
+  "prep_override_reason",
+  "prep_override_by",
+  "ready_at",
+  "done_at",
+  "post_completion",
+  "events_section",
+  "events"
+ ],
+ "fields": [
+  {
+   "fieldname": "job_title",
+   "fieldtype": "Data",
+   "label": "Job",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Data",
+   "label": "Job Template",
+   "description": "The Job Template config key (e.g. orchard_removal)."
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Contractor Work\nSupplier Delivery\nSupplier Pickup",
+   "default": "Contractor Work",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nReady\nShared\nIn Progress\nDone\nClosed\nCancelled",
+   "default": "Draft",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Issuing Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Contractor / Supplier",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "purchase_order",
+   "fieldtype": "Link",
+   "label": "Purchase Order",
+   "options": "Purchase Order"
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break",
+   "label": "Col1"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End"
+  },
+  {
+   "fieldname": "contact_name",
+   "fieldtype": "Data",
+   "label": "Farm Contact"
+  },
+  {
+   "fieldname": "contact_phone",
+   "fieldtype": "Data",
+   "label": "Contact Phone"
+  },
+  {
+   "fieldname": "show_contact_phone",
+   "fieldtype": "Check",
+   "label": "Show the Phone on the Page",
+   "default": "0"
+  },
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "Scope"
+  },
+  {
+   "fieldname": "scope",
+   "fieldtype": "Text",
+   "label": "Scope"
+  },
+  {
+   "fieldname": "fields",
+   "fieldtype": "Table",
+   "label": "Fields",
+   "options": "Contractor Job Field"
+  },
+  {
+   "fieldname": "hazard_layers",
+   "fieldtype": "Small Text",
+   "label": "Hazard Layers",
+   "description": "One per line: valves, hazards. What the page draws as protect / avoid."
+  },
+  {
+   "fieldname": "access_section",
+   "fieldtype": "Section Break",
+   "label": "Access"
+  },
+  {
+   "fieldname": "entrance_lat",
+   "fieldtype": "Float",
+   "label": "Entrance Latitude",
+   "precision": "7"
+  },
+  {
+   "fieldname": "entrance_lon",
+   "fieldtype": "Float",
+   "label": "Entrance Longitude",
+   "precision": "7"
+  },
+  {
+   "fieldname": "gate_notes",
+   "fieldtype": "Small Text",
+   "label": "Gate / Access Notes"
+  },
+  {
+   "fieldname": "delivery_spot_label",
+   "fieldtype": "Data",
+   "label": "Delivery Spot"
+  },
+  {
+   "fieldname": "delivery_spot_lat",
+   "fieldtype": "Float",
+   "label": "Delivery Spot Latitude",
+   "precision": "7"
+  },
+  {
+   "fieldname": "delivery_spot_lon",
+   "fieldtype": "Float",
+   "label": "Delivery Spot Longitude",
+   "precision": "7"
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break",
+   "label": "Col2"
+  },
+  {
+   "fieldname": "sop_link",
+   "fieldtype": "Data",
+   "label": "SOP Link"
+  },
+  {
+   "fieldname": "show_sop",
+   "fieldtype": "Check",
+   "label": "Show the SOP Link",
+   "default": "0"
+  },
+  {
+   "fieldname": "actions",
+   "fieldtype": "JSON",
+   "label": "Contractor Actions",
+   "description": "Which actions the page offers, e.g. {\"arrived\": true, \"done\": true, \"photos\": true, \"note\": true}."
+  },
+  {
+   "fieldname": "prep_section",
+   "fieldtype": "Section Break",
+   "label": "Before the Contractor"
+  },
+  {
+   "fieldname": "prep_tasks",
+   "fieldtype": "Small Text",
+   "label": "Prep Tasks",
+   "description": "Farm Task names, one per line. 'Ready for contractor' waits for all of them."
+  },
+  {
+   "fieldname": "prep_override_reason",
+   "fieldtype": "Small Text",
+   "label": "Ready Without Prep — Reason"
+  },
+  {
+   "fieldname": "prep_override_by",
+   "fieldtype": "Data",
+   "label": "Override By"
+  },
+  {
+   "fieldname": "ready_at",
+   "fieldtype": "Datetime",
+   "label": "Ready At"
+  },
+  {
+   "fieldname": "done_at",
+   "fieldtype": "Datetime",
+   "label": "Done At"
+  },
+  {
+   "fieldname": "post_completion",
+   "fieldtype": "JSON",
+   "label": "After Completion",
+   "description": "Prompts raised when the contractor marks done (e.g. lease crop class)."
+  },
+  {
+   "fieldname": "events_section",
+   "fieldtype": "Section Break",
+   "label": "On the Page"
+  },
+  {
+   "fieldname": "events",
+   "fieldtype": "Table",
+   "label": "Events",
+   "options": "Contractor Job Event"
+  }
+ ],
+ "track_changes": 1,
+ "description": "v0.271.0. A contractor work order or supplier delivery / pickup, shared by a time-limited link (Contractor Job Link). docs/contracts/job_links_v0_271.yaml.",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Foreman"
+  }
+ ],
+ "autoname": "format:CJ-{YYYY}-{#####}",
+ "title_field": "job_title"
+}

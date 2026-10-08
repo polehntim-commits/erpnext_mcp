@@ -1,0 +1,8 @@
+/* v0.271.0. The public Contractor Job page — mobile-first, no web fonts, small. */
+*{box-sizing:border-box}body{margin:0;font:16px/1.4 -apple-system,system-ui,sans-serif;color:#1b1f23;background:#f6f7f8}
+header{padding:12px 14px;background:#2f5d3a;color:#fff}header h1{margin:0;font-size:19px}header p{margin:2px 0 0;opacity:.85;font-size:14px}
+#map{height:52vh;min-height:260px}section{padding:12px 14px;border-bottom:1px solid #e3e5e8;background:#fff}
+h2{font-size:15px;margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em;color:#57606a}
+.btn{display:inline-block;padding:11px 14px;margin:4px 6px 4px 0;border-radius:8px;border:0;font-size:16px;background:#2f5d3a;color:#fff;text-decoration:none}
+.btn.alt{background:#e8ecef;color:#1b1f23}textarea,input{width:100%;font-size:16px;padding:8px;border:1px solid #ccd;border-radius:6px}
+.small{font-size:13px;color:#57606a}.ok{color:#2f5d3a;font-weight:600}.err{color:#a40e26}ul{padding-left:18px;margin:4px 0}

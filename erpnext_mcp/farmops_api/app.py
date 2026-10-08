@@ -222,6 +222,12 @@ _EXTENSION_FOR_TYPE = {
 
 #: `GET /brand/<company>` — the company's logo, for email. v0.216.1. See `_brand_image`.
 BRAND_PREFIX = f"{PREFIX}/brand/"
+#: v0.271.0 (docs/contracts/job_links_v0_271.yaml). A contractor / supplier job page, by its link token. THE ONE
+#: HTML ANSWER under /farmops — a narrow, documented exception to addendum H7 (see `_job_page`).
+JOB_PREFIX = f"{PREFIX}/job/"
+JOB_ASSETS_PREFIX = f"{PREFIX}/job-assets/"
+JOB_LIMIT = 60
+JOB_BAD_TOKEN_ALERT = 25
 
 BRAND_DESCRIBED_ROUTE = {
 	"path": f"{BRAND_PREFIX}{{company}}",
@@ -1167,6 +1173,128 @@ def _device_key_route(request: Request, path: str):
 		return _success(answer)
 
 
+_JOB_SHELL = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Farm job</title>
+<link rel="stylesheet" href="/farmops/api/job-assets/leaflet.css">
+<link rel="stylesheet" href="/farmops/api/job-assets/job.css">
+</head><body>
+<header><h1 id="title">Loading…</h1><p id="dates"></p></header>
+<div id="map"></div><main id="body"></main>
+<script src="/farmops/api/job-assets/leaflet.js"></script>
+<script src="/farmops/api/job-assets/job.js"></script>
+</body></html>
+"""
+
+#: The page's Content Security Policy: its own scripts and styles only, map tiles from the two public tile hosts,
+#: nothing framed, no form posts elsewhere.
+_JOB_CSP = (
+	"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+	"img-src 'self' data: https://basemap.nationalmap.gov https://tile.openstreetmap.org; "
+	"frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+)
+
+_JOB_ASSETS = {
+	"leaflet.js": ("vendor/leaflet/leaflet.js", "application/javascript"),
+	"leaflet.css": ("vendor/leaflet/leaflet.css", "text/css"),
+	"images/marker-icon.png": ("vendor/leaflet/images/marker-icon.png", "image/png"),
+	"images/marker-icon-2x.png": ("vendor/leaflet/images/marker-icon-2x.png", "image/png"),
+	"images/marker-shadow.png": ("vendor/leaflet/images/marker-shadow.png", "image/png"),
+	"images/layers.png": ("vendor/leaflet/images/layers.png", "image/png"),
+	"images/layers-2x.png": ("vendor/leaflet/images/layers-2x.png", "image/png"),
+	"job.js": ("job_page/job.js", "application/javascript"),
+	"job.css": ("job_page/job.css", "text/css"),
+}
+
+
+def _job_headers(response: Response, cache: str = "no-store") -> Response:
+	response.headers["Cache-Control"] = cache
+	response.headers["X-Content-Type-Options"] = "nosniff"
+	response.headers["X-Robots-Tag"] = "noindex, nofollow"
+	response.headers["X-Frame-Options"] = "DENY"
+	# The token is in the URL: no browser may send it on to a tile server as a Referer.
+	response.headers["Referrer-Policy"] = "no-referrer"
+	response.headers["Content-Security-Policy"] = _JOB_CSP
+	return response
+
+
+def _job_asset(path: str) -> Response:
+	"""The page's own static files — a fixed list, nothing else on disk is reachable."""
+	import os
+
+	entry = _JOB_ASSETS.get(path[len(JOB_ASSETS_PREFIX):])
+	if not entry:
+		return _failure(404, NOT_FOUND)
+	full = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public", entry[0])
+	try:
+		with open(full, "rb") as handle:
+			data = handle.read()
+	except OSError:
+		return _failure(404, NOT_FOUND)
+	return _job_headers(Response(data, status=200, content_type=entry[1]), cache="public, max-age=86400")
+
+
+def _job(request: Request, path: str) -> Response:
+	"""`/job/<token>` (the page), `/job/<token>/data`, `POST …/event`, `POST …/photo`. v0.271.0.
+
+	THE TOKEN IS PROVED FIRST, and every token that will not work — unknown, expired, revoked, the job closed, the
+	company's sharing off — gets the same 404. Metered per address before any session opens; a burst of bad tokens
+	from one address is written to the audit log once. Every answer carries no-store, noindex and the page's CSP.
+
+	ADDENDUM H7 EXCEPTION (v0.271.0, Tim's request for a contractor page): this is the one HTML answer under
+	/farmops. The HTML is a fixed shell with no data in it; the data is JSON from `…/data`, set into the page with
+	textContent by `job.js`; the CSP allows only this service's own scripts and the two tile hosts.
+	"""
+	from .. import job_links
+
+	rest = path[len(JOB_PREFIX):]
+	token, _, action = rest.partition("/")
+	ip = _peer(request)
+	if guard._count(f"job:{ip or 'unknown'}", 60) > JOB_LIMIT:
+		return _failure(429, TOO_MANY)
+	with session.request_session(request=request, body={}):
+		link = job_links.find(token)
+		if link is None:
+			session.commit()  # `find` may have marked a link Expired
+			if guard._count(f"job-bad:{ip or 'unknown'}", 3600) == JOB_BAD_TOKEN_ALERT:
+				audit.record("farmops:job", {"ip": ip}, audit.STATUS_ERROR,
+				             f"Error — {JOB_BAD_TOKEN_ALERT} unknown job-link tokens from {ip} within an hour",
+				             caller_ip=ip, commit=True)
+			return _job_headers(_failure(404, NOT_FOUND))
+		agent = str(request.headers.get("User-Agent") or "")
+		try:
+			if action == "" and request.method in ("GET", "HEAD"):
+				job_links.record_view(link["name"], "page", ip, agent)
+				session.commit()
+				return _job_headers(Response(_JOB_SHELL, status=200, content_type="text/html; charset=utf-8"))
+			if action == "data" and request.method == "GET":
+				job_links.record_view(link["name"], "data", ip, agent)
+				data = job_links.page_data(link["job"])
+				session.commit()
+				return _job_headers(_json(data))
+			if action == "event" and request.method == "POST":
+				body = _body(request)
+				answer = job_links.record_event(link, str(body.get("event") or ""), note=str(body.get("note") or ""),
+				                                name_given=str(body.get("name") or ""), ip=ip)
+				job_links.record_view(link["name"], "event", ip, agent)
+				session.commit()
+				return _job_headers(_json({"ok": True, "status": answer.get("status")}))
+			if action == "photo" and request.method == "POST":
+				request.max_content_length = job_links.MAX_PHOTO_BYTES
+				content = request.get_data(cache=False)
+				kind = "ticket" if request.args.get("kind") == "ticket" else "photo"
+				job_links.attach_photo(link, content, ip=ip, kind="Delivery ticket" if kind == "ticket" else "Photo")
+				job_links.record_view(link["name"], "photo", ip, agent)
+				session.commit()
+				return _job_headers(_json({"ok": True}))
+		except job_links.JobError as exc:
+			session.rollback()
+			return _job_headers(_failure(400, str(exc)))
+		return _job_headers(_failure(404, NOT_FOUND))
+
+
 def _scan_page(path: str) -> Response:
 	"""What a tag's QR shows a phone camera that is not the app. v0.216.0.
 
@@ -1331,6 +1459,13 @@ def dispatch(request: Request) -> Response:
 	"""
 	path = (request.path or "").rstrip("/") or "/"
 
+	# v0.271.0: a job page's photo has its own ceiling too (job_links.MAX_PHOTO_BYTES), checked after the token.
+	if path.startswith(JOB_PREFIX) and path.endswith("/photo"):
+		try:
+			return _job(request, path)
+		except RequestEntityTooLarge:
+			return _failure(413, TOO_LARGE)
+
 	# v0.244.0: the one route with its own ceiling, set by its link once the token is
 	# proved. Everything else meets `_MAX_BODY` below, unchanged.
 	if path.startswith(UPLOAD_PREFIX):
@@ -1361,6 +1496,12 @@ def _dispatch(request: Request, path: str) -> Response:
 
 	if path.startswith(BRAND_PREFIX) and request.method in ("GET", "HEAD"):
 		return _brand_image(request, path)
+
+	if path.startswith(JOB_ASSETS_PREFIX) and request.method in ("GET", "HEAD"):
+		return _job_asset(path)
+
+	if path.startswith(JOB_PREFIX):
+		return _job(request, path)
 
 	if path.startswith(SCAN_PREFIX) and request.method == "GET":
 		if _open_route_limited(request):

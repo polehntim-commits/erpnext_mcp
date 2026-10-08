@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "creation": "2026-10-07 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Contractor Job Field",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "field",
+  "field_name"
+ ],
+ "fields": [
+  {
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "label": "Field",
+   "options": "Field",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "field_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "in_list_view": 1
+  }
+ ],
+ "istable": 1,
+ "permissions": []
+}

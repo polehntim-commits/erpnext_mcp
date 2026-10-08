@@ -514,6 +514,12 @@ ROUTES = (
 	Route("/mobile", mobile_api.find_fields),
 	Route("/mobile", mobile_api.get_field_card),
 	Route("/mobile", mobile_api.get_field_history),
+	# v0.271.0. Contractor / supplier jobs and their share links (app 0.55.0).
+	Route("/mobile", mobile_api.list_contractor_jobs),
+	Route("/mobile", mobile_api.get_contractor_job),
+	Route("/mobile", mobile_api.mark_contractor_job_ready),
+	Route("/mobile", mobile_api.create_job_link),
+	Route("/mobile", mobile_api.revoke_job_link),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

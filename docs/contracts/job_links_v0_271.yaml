@@ -1,0 +1,46 @@
+# Contractor and supplier job links — the frozen contract. erpnext_mcp v0.271.0; FarmOps 0.55.0 builds against it.
+# Fixtures: tests_standalone/contract/v0_271_0/ (byte-identical in FarmOps FarmOpsKit/Tests/FarmOpsKitTests/Fixtures/
+# contract_v0_271_0/). First real use: KEWI Construction removing the old Bing trees (Wind Machine + Center Piece).
+
+version: "0.271.0"
+
+job_template:   # Farm Config Version, kind "Job Template" (slug job_template). Seeded PUBLISHED: shapes, not commitments
+  kind: "contractor_work | supplier_delivery | supplier_pickup"
+  default_scope: string
+  prep_tasks: "[Farm Task Template names] raised per block when a job is created (orchard_removal: Gather sprinklers before removal, Mark valves before removal)"
+  hazard_layers: "[valves, hazards] drawn as protect / avoid"
+  actions: "{arrived, done, photos, note}"
+  link_days: "1–365, the default link life"
+  show_sop: "false by default"
+  post_completion: "[{prompt, message}] raised as a Compliance Alert for a person when the job is done — never a change (orchard_removal: lease crop class → fallow / replant)"
+
+contractor_job:   # doctype Contractor Job, CJ-YYYY-#####
+  status: "Draft → Ready (prep done, or a recorded override) → Shared (a link issued) → In Progress (arrived) → Done → Closed | Cancelled"
+  fields: "blocks by name or alias (release A lookup); a named group counts"
+  sharing: "OFF per issuing company until the feature flag job_links_enabled is on for it — a job for a company that is not live (Constancy) stays a draft"
+
+link:   # doctype Contractor Job Link
+  token: "32 random bytes (token_urlsafe), shown ONCE; only SHA-256 kept"
+  url: "<farmops_public_url>/farmops/api/job/<token> — under the existing Funnel path; nothing in Funnel changes"
+  life: "issue → the earlier of: job closed / cancelled, the job's end date 23:59, issue + link_days. Extend; revoke any time."
+  bad_token: "unknown, expired, revoked, closed job, sharing off — all the same 404 'Not found.'; 25 bad tokens from one address in an hour → one audit row"
+  log: "every page view, data read, event and photo: time, address, browser"
+  limits: "60 requests / minute / address; photos 8 MB, JPEG / PNG / HEIC by their first bytes, stored private on the job"
+
+public_page:   # the ONE text/html answer under /farmops — a narrow exception to addendum H7
+  html: "a fixed shell with no data; job.js reads ./data and sets text with textContent"
+  headers: "Cache-Control no-store; X-Robots-Tag noindex, nofollow; X-Frame-Options DENY; Referrer-Policy no-referrer; nosniff; CSP default-src 'none', script/style 'self', img 'self' data: basemap.nationalmap.gov tile.openstreetmap.org, connect 'self', frame-ancestors 'none'"
+  map: "Leaflet 1.9.4 vendored (BSD-2), served at /farmops/api/job-assets/; tiles: USGS The National Map imagery (public domain) and OpenStreetMap (ODbL, attributed; light use under its tile policy)"
+  data: "ONLY: title, kind, status, scope, dates, contact name (+ phone only if shown), entrance, delivery spot, gate notes, SOP link only if shown, this job's block outlines, the valves / hazards inside them (no asset names), PO lines (item, qty, uom — no prices), which actions are offered, which were done"
+  actions: "Contractor Work: Arrived, Done; Supplier Delivery: Delivered; Supplier Pickup: Picked Up; + Note, Photo (delivery: the ticket)"
+
+phone_routes:   # app 0.55.0
+  list_contractor_jobs: {who: "Foreman, Farm Manager", answer: "{company, jobs: [{name, job_title, kind, status, supplier, start_date, end_date}]}", fixture: list_contractor_jobs.json}
+  get_contractor_job: {who: "Foreman, Farm Manager", answer: "{job, status, title, kind, prep_tasks, prep_done, open_prep, overridden, ready, sharing_enabled, page, links, events}", fixture: get_contractor_job.json}
+  mark_contractor_job_ready: {who: "Farm Manager, System Manager", params: {job, override_reason}}
+  create_job_link: {who: "Farm Manager, System Manager", answer: "{link, url, expires_at, job, shown_once}", fixture: create_job_link.json, phone: "opens the share sheet / Messages with url; the server sends nothing"}
+  revoke_job_link: {who: "Farm Manager, System Manager", params: {link, reason}}
+
+mcp_tools:
+  read: [get_contractor_job, list_job_links]
+  write: [create_contractor_job, mark_contractor_job_ready, create_job_link, extend_job_link, revoke_job_link, close_contractor_job]

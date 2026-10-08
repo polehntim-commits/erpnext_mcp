@@ -1250,6 +1250,14 @@
   "allow_create_task_on_field",
   "allow_list_seasonal_work",
   "allow_get_winterize_status",
+  "allow_create_contractor_job",
+  "allow_get_contractor_job",
+  "allow_mark_contractor_job_ready",
+  "allow_create_job_link",
+  "allow_extend_job_link",
+  "allow_revoke_job_link",
+  "allow_list_job_links",
+  "allow_close_contractor_job",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -10702,6 +10710,62 @@
    "fieldname": "allow_get_winterize_status",
    "fieldtype": "Check",
    "label": "Get Winterize Status"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.271.0. A contractor / supplier job (draft) from a template.",
+   "fieldname": "allow_create_contractor_job",
+   "fieldtype": "Check",
+   "label": "Create Contractor Job"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.271.0. A job, its page, links and reports.",
+   "fieldname": "allow_get_contractor_job",
+   "fieldtype": "Check",
+   "label": "Get Contractor Job"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.271.0. Ready for the contractor.",
+   "fieldname": "allow_mark_contractor_job_ready",
+   "fieldtype": "Check",
+   "label": "Mark Contractor Job Ready"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.271.0. A shareable job link (shown once).",
+   "fieldname": "allow_create_job_link",
+   "fieldtype": "Check",
+   "label": "Create Job Link"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.271.0. Keep a job link live longer.",
+   "fieldname": "allow_extend_job_link",
+   "fieldtype": "Check",
+   "label": "Extend Job Link"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.271.0. Stop a job link.",
+   "fieldname": "allow_revoke_job_link",
+   "fieldtype": "Check",
+   "label": "Revoke Job Link"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.271.0. Job links and their view logs.",
+   "fieldname": "allow_list_job_links",
+   "fieldtype": "Check",
+   "label": "List Job Links"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.271.0. Close or cancel a job; its links stop.",
+   "fieldname": "allow_close_contractor_job",
+   "fieldtype": "Check",
+   "label": "Close Contractor Job"
   }
  ],
  "index_web_pages_for_search": 0,

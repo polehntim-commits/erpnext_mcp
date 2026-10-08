@@ -1,0 +1,16 @@
+{
+ "message": {
+  "company": "Example Trading Co",
+  "jobs": [
+   {
+    "end_date": "2026-11-15",
+    "job_title": "Remove the old Bing",
+    "kind": "Contractor Work",
+    "name": "CJ-00001",
+    "start_date": "2026-10-20",
+    "status": "Shared",
+    "supplier": null
+   }
+  ]
+ }
+}

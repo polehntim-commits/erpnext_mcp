@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.271.0 — 2026-10-07 — contractor and supplier job links
+
+**Migrate needed** (doctypes Contractor Job and Contractor Job Link; Farm Config Version kind "Job Template"; three
+templates and two prep checklists seeded; eight MCP switches). Pairs with FarmOps 0.55.0. Deploy
+`docs/deploy/v0.271.0_job_links.md`. Contract `docs/contracts/job_links_v0_271.yaml`. First use: KEWI Construction
+removing the old Bing (Wind Machine + Center Piece) — prepared later, not created by this release.
+
+- **Templates as data** (Job Template): Orchard removal (prep: gather sprinklers, mark valves, per block; hazards:
+  valves and pins; after completion: a lease crop-class PROMPT), Supplier delivery, Supplier pickup. New job types are
+  new templates.
+- **Contractor Job**: blocks by name or alias (a named group counts), scope, dates, contact, entrance pin, gate notes,
+  delivery spot; created as a DRAFT with its prep tasks; "Ready" when prep is done or with a recorded reason.
+- **Sharing is OFF per issuing company** until `job_links_enabled` is turned on for it — a Constancy job stays a draft.
+- **The link**: 32 random bytes shown once, only the hash kept; live until the job closes or its end date (whichever
+  first), extend, revoke; every view logged; the same 404 for every bad token; rate-limited; bad-token bursts audited.
+- **The public page** `/farmops/api/job/<token>` — under the existing Funnel path, no Funnel change: Leaflet 1.9.4
+  vendored, USGS imagery and OpenStreetMap (attributed), this job's outlines, valves to protect and hazards to avoid,
+  entrance and Directions (Apple / Google Maps), scope, dates, contact (phone only if Tim shows it); the contractor's
+  Arrived / Done (delivery: Delivered + ticket photo), photos (private, 8 MB, images only) and a note. Nothing else:
+  no other block, asset name, person, price or company.
+- **Addendum H7 exception**: the one HTML answer under /farmops — a fixed shell with no data, data as JSON set by
+  textContent, a strict CSP, no-referrer (the token never reaches a tile server), noindex, no-store, no framing.
+- **MCP**: create_contractor_job, mark_contractor_job_ready, create_job_link, extend_job_link, revoke_job_link,
+  close_contractor_job (write, OFF); get_contractor_job, list_job_links (read). **Phone routes** list / get / ready /
+  share / revoke (routes 231).
+
 ## 0.270.0 — 2026-10-07 — seasonal work lists: winterize this fall
 
 **Migrate needed** (Farm Config Version kind "Seasonal Program"; eleven checklist templates seeded DISABLED; two

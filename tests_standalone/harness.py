@@ -1718,6 +1718,12 @@ APP_DOCTYPES = {
 	# v0.265.0. USDA market data issues.
 	"Market Data Issue": "market_data_issue",
 	"Market Report": "market_report",
+	# v0.271.0. Contractor / supplier jobs and their share links.
+	"Contractor Job": "contractor_job",
+	"Contractor Job Field": "contractor_job_field",
+	"Contractor Job Event": "contractor_job_event",
+	"Contractor Job Link": "contractor_job_link",
+	"Contractor Job Link View": "contractor_job_link_view",
 	# v0.243.0. No-work notices and their recipients.
 	"Work Notice": "work_notice",
 	"Work Notice Recipient": "work_notice_recipient",
@@ -2659,6 +2665,9 @@ CHILD_TABLES = {
 	("Inspection Template", "references"): "Reference Citation",
 	("Asset Register", "references"): "Reference Citation",
 	("Accident Report", "witnesses"): "Accident Witness",
+	("Contractor Job", "fields"): "Contractor Job Field",
+	("Contractor Job", "events"): "Contractor Job Event",
+	("Contractor Job Link", "views"): "Contractor Job Link View",
 	("Wizard Definition", "steps"): "Wizard Step",
 	("Wizard Step", "fields"): "Wizard Field",
 	("Journal Entry", "accounts"): "Journal Entry Account",

@@ -230,6 +230,12 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"find_fields",
 		"get_field_card",
 		"get_field_history",
+		# v0.271.0. Contractor / supplier jobs and links (app 0.55.0).
+		"list_contractor_jobs",
+		"get_contractor_job",
+		"mark_contractor_job_ready",
+		"create_job_link",
+		"revoke_job_link",
 		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
 		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).

@@ -5955,3 +5955,85 @@ for _name, _fn in vars(_FieldMirrors).items():
 		setattr(EveryMobileMethodDecodes, _name, _fn)
 
 TheContractIsComplete.COVERED.update({"find_fields": "test_95", "get_field_card": "test_96", "get_field_history": "test_97"})
+
+
+# ── v0.271.0. Contractor / supplier jobs and links (ContractorJobs.swift, app 0.55.0) ─────────────────────────────
+class ContractorJobRowModel(Codable):
+	SWIFT = "ContractorJobs.swift"
+	STRICT = (("name", str, 0), ("status", str, 0))
+	LENIENT = (("job_title", str, 0), ("kind", str, 0), ("supplier", str, 0), ("start_date", str, 0), ("end_date", str, 0))
+
+
+class ContractorJobListModel(Codable):
+	SWIFT = "ContractorJobs.swift"
+	LENIENT = (("company", str, 0),)
+	NESTED = (("jobs", ContractorJobRowModel, True, 0),)
+
+
+class ContractorPrepModel(Codable):
+	SWIFT = "ContractorJobs.swift"
+	STRICT = (("task", str, 0),)
+	LENIENT = (("state", str, 0),)
+
+
+class ContractorJobModel(Codable):
+	SWIFT = "ContractorJobs.swift"
+	STRICT = (("job", str, 0), ("status", str, 0))
+	LENIENT = (("title", str, 0), ("kind", str, 0))
+	NESTED = (("prep_tasks", ContractorPrepModel, True, 0),)
+
+
+class JobLinkModel(Codable):
+	SWIFT = "ContractorJobs.swift"
+	STRICT = (("url", str, 0), ("job", str, 0))
+	LENIENT = (("link", str, 0), ("expires_at", str, 0))
+
+
+class _JobMirrors:
+	def _job_site(self):
+		from erpnext_mcp import flags, job_links, task_templates
+
+		from .harness import set_roles
+		from .test_field_self_service import mill_creek
+
+		mill_creek(self)
+		task_templates.seed_farm_task_templates()
+		job_links.seed()
+		self.job = job_links.create_job("orchard_removal", MAIN, fields=["Bing Block"], title="Remove the old Bing")
+		flags.upsert(job_links.FLAG, "Flag", True, company=MAIN, description="test", owner_area="job_links", active=True)
+		STORE.commit()
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		self.be()
+
+	def test_98_list_contractor_jobs(self):
+		self._job_site()
+		ContractorJobListModel.decode(self.wire("list_contractor_jobs"), "list_contractor_jobs")
+
+	def test_99_get_contractor_job(self):
+		self._job_site()
+		ContractorJobModel.decode(self.wire("get_contractor_job", job=self.job), "get_contractor_job")
+
+	def test_100_mark_contractor_job_ready(self):
+		self._job_site()
+		ContractorJobModel.decode({**self.wire("mark_contractor_job_ready", job=self.job, override_reason="t"),
+		                           "status": "Ready"}, "mark_contractor_job_ready")
+
+	def test_101_create_job_link(self):
+		self._job_site()
+		self.wire("mark_contractor_job_ready", job=self.job, override_reason="t")
+		JobLinkModel.decode(self.wire("create_job_link", job=self.job), "create_job_link")
+
+	def test_102_revoke_job_link(self):
+		self._job_site()
+		self.wire("mark_contractor_job_ready", job=self.job, override_reason="t")
+		link = self.wire("create_job_link", job=self.job)["link"]
+		self.assertEqual(self.wire("revoke_job_link", link=link)["status"], "Revoked")
+
+
+for _name, _fn in vars(_JobMirrors).items():
+	if _name.startswith(("test_", "_job_site")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"list_contractor_jobs": "test_98", "get_contractor_job": "test_99",
+                                      "mark_contractor_job_ready": "test_100", "create_job_link": "test_101",
+                                      "revoke_job_link": "test_102"})

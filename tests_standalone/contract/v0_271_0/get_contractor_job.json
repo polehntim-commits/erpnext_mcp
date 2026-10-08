@@ -1,0 +1,154 @@
+{
+ "message": {
+  "events": [],
+  "job": "CJ-00001",
+  "kind": "Contractor Work",
+  "links": [
+   {
+    "expires_at": "<expires_at>",
+    "issued_at": "<issued_at>",
+    "issued_by": "ana@example.test",
+    "job": "CJ-00001",
+    "last_viewed_at": null,
+    "name": "<name>",
+    "revoked_at": null,
+    "revoked_by": null,
+    "status": "Active",
+    "view_count": 0
+   }
+  ],
+  "open_prep": [
+   "FT-2026-07-00001",
+   "FT-2026-07-00002",
+   "FT-2026-07-00003",
+   "FT-2026-07-00004"
+  ],
+  "overridden": true,
+  "page": {
+   "actions": {
+    "events": [
+     "Arrived",
+     "Done"
+    ],
+    "note": true,
+    "photos": true
+   },
+   "blocks": [
+    {
+     "geojson": {
+      "coordinates": [
+       [
+        [
+         -121.23084,
+         45.586328
+        ],
+        [
+         -121.229051,
+         45.585234
+        ],
+        [
+         -121.230893,
+         45.58415
+        ],
+        [
+         -121.232513,
+         45.584564
+        ],
+        [
+         -121.232781,
+         45.585921
+        ],
+        [
+         -121.23084,
+         45.586328
+        ]
+       ]
+      ],
+      "type": "Polygon"
+     },
+     "label": "MC Centerpiece"
+    },
+    {
+     "geojson": {
+      "coordinates": [
+       [
+        [
+         -121.230948,
+         45.584074
+        ],
+        [
+         -121.229023,
+         45.585151
+        ],
+        [
+         -121.2267,
+         45.583757
+        ],
+        [
+         -121.228154,
+         45.582431
+        ],
+        [
+         -121.230948,
+         45.584074
+        ]
+       ]
+      ],
+      "type": "Polygon"
+     },
+     "label": "Wind Mecine"
+    }
+   ],
+   "contact": {
+    "name": "Tim",
+    "phone": null
+   },
+   "delivery_spot": null,
+   "done": [],
+   "end_date": "2026-11-15",
+   "entrance": {
+    "lat": 45.5838,
+    "lon": -121.2276
+   },
+   "expected": [],
+   "gate_notes": "Gate code at the shop.",
+   "hazards": [
+    {
+     "kind": "valve",
+     "label": "Valve — protect",
+     "lat": 45.5852,
+     "lon": -121.231
+    }
+   ],
+   "kind": "Contractor Work",
+   "scope": "Remove the trees in the blocks shown: push or pull, stump / grind, and haul off the debris. Protect the valves and lines marked on the map.",
+   "sop_link": null,
+   "start_date": "2026-10-20",
+   "status": "Shared",
+   "title": "Remove the old Bing"
+  },
+  "prep_done": false,
+  "prep_tasks": [
+   {
+    "state": "Available",
+    "task": "FT-2026-07-00001"
+   },
+   {
+    "state": "Available",
+    "task": "FT-2026-07-00002"
+   },
+   {
+    "state": "Available",
+    "task": "FT-2026-07-00003"
+   },
+   {
+    "state": "Available",
+    "task": "FT-2026-07-00004"
+   }
+  ],
+  "ready": true,
+  "sharing_enabled": true,
+  "status": "Shared",
+  "title": "Remove the old Bing"
+ }
+}

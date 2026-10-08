@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1095 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1103 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 530 read tools are **on** by default and can be switched off individually. A
+All 532 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21091,3 +21091,19 @@ Contract: `docs/contracts/field_self_service_v0_269.yaml`.
 
 Programs are Farm Config Versions (kind Seasonal Program), published in the Desk; checklists are Farm Task Templates.
 Contract: `docs/contracts/seasonal_v0_270.yaml`.
+
+## v0.271.0 — contractor and supplier job links
+
+| Tool | What it does |
+| --- | --- |
+| `create_contractor_job` | A work order / delivery / pickup from a Job Template, blocks by name or alias; a draft with prep tasks. Write |
+| `get_contractor_job` | Readiness, exactly what the page shows, links and views, what the contractor reported. Read |
+| `mark_contractor_job_ready` | Ready for the contractor (prep done, or a recorded reason). Write |
+| `create_job_link` | A shareable link, shown once; live until the job closes or its end date. Write |
+| `extend_job_link` | Keep a link live longer. Write |
+| `revoke_job_link` | Stop a link now. Write |
+| `list_job_links` | Links, expiry and view logs. Read |
+| `close_contractor_job` | Close or cancel a job; its links stop. Write |
+
+Templates are Farm Config Versions (kind Job Template). Sharing is off per company until `job_links_enabled`. Contract:
+`docs/contracts/job_links_v0_271.yaml`.

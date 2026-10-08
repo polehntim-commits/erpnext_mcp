@@ -45,7 +45,9 @@ KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "
          # phone; published and rolled back only in the Desk, by a System Manager.
          "Data Access": "data_access",
          # v0.270.0. A seasonal work list (`seasonal`): Fall winterize, Spring start-up. A person publishes.
-         "Seasonal Program": "seasonal_program"}
+         "Seasonal Program": "seasonal_program",
+         # v0.271.0. A contractor / supplier job type (`job_links`): scope, prep tasks, hazards, actions, link life.
+         "Job Template": "job_template"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -201,6 +203,10 @@ def _validator(kind: str):
 		from . import seasonal
 
 		return seasonal.validate
+	if kind == "Job Template":
+		from . import job_links
+
+		return job_links.validate
 	from . import label_compliance
 
 	return label_compliance.validate

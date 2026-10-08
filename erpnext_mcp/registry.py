@@ -197,6 +197,7 @@ from .tools import market_prices_tools
 from .tools import data_access_tools
 from .tools import field_self_service
 from .tools import seasonal_tools
+from .tools import job_link_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18275,6 +18276,83 @@ TOOLS = {
 		 "include_stale": _field(_BOOLEAN, "Include reports nothing has been published in for a year."),
 		 "start": _field(_INTEGER, "Page start."), "limit": _field(_INTEGER, "Page size (default 200).")},
 		title="List market catalog",
+	),
+	"create_contractor_job": _tool(
+		job_link_tools.create_contractor_job,
+		"MUTATING (default OFF). v0.271.0. A contractor work order or supplier delivery / pickup from a Job Template "
+		"(orchard_removal, supplier_delivery, supplier_pickup, or any Tim adds) — e.g. 'Orchard removal, Wind Machine + "
+		"Center Piece, KEWI Construction, Oct 20–Nov 15'. Fields by name or alias (a named group counts). Created as a "
+		"DRAFT with its prep tasks raised per block; sharing stays off for a company until job_links_enabled is on.",
+		{"template": _field(_STRING, "Job Template key."), "company": _field(_STRING, "The issuing company."),
+		 "fields": _field(_STRING, "Block names or aliases, comma-separated."), "supplier": _field(_STRING, "Contractor / supplier."),
+		 "purchase_order": _field(_STRING, "Optional PO — its lines show on a delivery page."),
+		 "title": _field(_STRING, "Default: the template's title."), "scope": _field(_STRING, "Default: the template's scope."),
+		 "start_date": _field(_STRING, "YYYY-MM-DD."), "end_date": _field(_STRING, "YYYY-MM-DD — the link never outlives it."),
+		 "contact_name": _field(_STRING, "Farm contact."), "contact_phone": _field(_STRING, "Their phone."),
+		 "show_contact_phone": _field(_BOOLEAN, "Show the phone on the page. Default false."),
+		 "entrance": _field(_STRING, "'lat, lon' of the entrance / staging pin."), "gate_notes": _field(_STRING, "Gate and access notes."),
+		 "delivery_spot": _field(_STRING, "'lat, lon' of the delivery spot."), "delivery_spot_label": _field(_STRING, "e.g. Mix-load pad.")},
+		required=("template", "company"),
+		mutating=True,
+		title="Create contractor job",
+	),
+	"get_contractor_job": _tool(
+		job_link_tools.get_contractor_job,
+		"v0.271.0. One contractor / supplier job: readiness (prep tasks), exactly what its public page shows, its links "
+		"(status, expiry, views with time and address) and what the contractor reported (arrived, done, delivered, "
+		"notes, photos). Read-only.",
+		{"job": _field(_STRING, "The job, e.g. CJ-2026-00001.")},
+		required=("job",),
+		title="Get contractor job",
+	),
+	"mark_contractor_job_ready": _tool(
+		job_link_tools.mark_contractor_job_ready,
+		"MUTATING (default OFF). v0.271.0. Ready for the contractor: every prep task done, or override_reason says why "
+		"it is ready anyway (recorded).",
+		{"job": _field(_STRING, "The job."), "override_reason": _field(_STRING, "Required when prep is not done.")},
+		required=("job",),
+		mutating=True,
+		title="Mark contractor job ready",
+	),
+	"create_job_link": _tool(
+		job_link_tools.create_job_link,
+		"MUTATING (default OFF). v0.271.0. A shareable link to a ready job — shown ONCE (only its hash is kept). Live "
+		"until the job closes or its end date, whichever first. Tim texts it himself; nothing is sent from here.",
+		{"job": _field(_STRING, "The job."), "days": _field(_INTEGER, "Default: the template's link life.")},
+		required=("job",),
+		mutating=True,
+		title="Create job link",
+	),
+	"extend_job_link": _tool(
+		job_link_tools.extend_job_link,
+		"MUTATING (default OFF). v0.271.0. Keep a link live longer: days from now, or until a date.",
+		{"link": _field(_STRING, "The link id."), "days": _field(_INTEGER, "Default 7."), "until": _field(_STRING, "YYYY-MM-DD.")},
+		required=("link",),
+		mutating=True,
+		title="Extend job link",
+	),
+	"revoke_job_link": _tool(
+		job_link_tools.revoke_job_link,
+		"MUTATING (default OFF). v0.271.0. Stop a link now. It answers 'not found' from then on.",
+		{"link": _field(_STRING, "The link id."), "reason": _field(_STRING, "Why.")},
+		required=("link",),
+		mutating=True,
+		title="Revoke job link",
+	),
+	"list_job_links": _tool(
+		job_link_tools.list_job_links,
+		"v0.271.0. Job links with their status, expiry and view log (time, address, what was opened). Read-only.",
+		{"job": _field(_STRING, "One job."), "company": _field(_STRING, "One issuing company."),
+		 "include_views": _field(_BOOLEAN, "Default true.")},
+		title="List job links",
+	),
+	"close_contractor_job": _tool(
+		job_link_tools.close_contractor_job,
+		"MUTATING (default OFF). v0.271.0. Close (or cancel) a job; every link to it stops working.",
+		{"job": _field(_STRING, "The job."), "cancel": _field(_BOOLEAN, "Cancel rather than close.")},
+		required=("job",),
+		mutating=True,
+		title="Close contractor job",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

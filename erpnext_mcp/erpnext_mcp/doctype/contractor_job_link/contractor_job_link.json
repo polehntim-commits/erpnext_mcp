@@ -1,0 +1,140 @@
+{
+ "actions": [],
+ "creation": "2026-10-07 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Contractor Job Link",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "job",
+  "company",
+  "status",
+  "token_hash",
+  "issued_by",
+  "issued_at",
+  "expires_at",
+  "revoked_at",
+  "revoked_by",
+  "revoked_reason",
+  "view_count",
+  "last_viewed_at",
+  "views"
+ ],
+ "fields": [
+  {
+   "fieldname": "job",
+   "fieldtype": "Link",
+   "label": "Contractor Job",
+   "options": "Contractor Job",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Issuing Company",
+   "options": "Company",
+   "fetch_from": "job.company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nRevoked\nExpired",
+   "default": "Active",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "token_hash",
+   "fieldtype": "Data",
+   "label": "Token (SHA-256)",
+   "read_only": 1,
+   "unique": 1,
+   "description": "Only the hash is kept; the link itself is shown once, when issued."
+  },
+  {
+   "fieldname": "issued_by",
+   "fieldtype": "Data",
+   "label": "Issued By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "issued_at",
+   "fieldtype": "Datetime",
+   "label": "Issued At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "revoked_at",
+   "fieldtype": "Datetime",
+   "label": "Revoked At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_by",
+   "fieldtype": "Data",
+   "label": "Revoked By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_reason",
+   "fieldtype": "Small Text",
+   "label": "Revoke Reason"
+  },
+  {
+   "fieldname": "view_count",
+   "fieldtype": "Int",
+   "label": "Views",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "last_viewed_at",
+   "fieldtype": "Datetime",
+   "label": "Last Viewed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "views",
+   "fieldtype": "Table",
+   "label": "View Log",
+   "options": "Contractor Job Link View"
+  }
+ ],
+ "track_changes": 1,
+ "description": "v0.271.0. One shareable link to one Contractor Job. Live from issue until the job closes or its end date; revocable; every view logged.",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  }
+ ],
+ "autoname": "hash"
+}

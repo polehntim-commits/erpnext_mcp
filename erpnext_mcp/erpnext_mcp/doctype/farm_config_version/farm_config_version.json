@@ -35,7 +35,7 @@
    "fieldname": "config_kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "Wizard\nTile\nLabel Profile\nPayroll Setting\nQuiz\nIPM Setting\nMarket Commodity\nData Access\nSeasonal Program",
+   "options": "Wizard\nTile\nLabel Profile\nPayroll Setting\nQuiz\nIPM Setting\nMarket Commodity\nData Access\nSeasonal Program\nJob Template",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
