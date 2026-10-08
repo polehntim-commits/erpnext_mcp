@@ -632,6 +632,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.direct_deposit.activate_due",
 					# v0.270.0. Seasonal programs (winterize / start-up): nothing until one is published.
 					"erpnext_mcp.seasonal.daily",
+					# v0.274.0. Live budget alerts; off unless enabled.
+					"erpnext_mcp.live_budget.daily",
 				],
 				"weekly": ["erpnext_mcp.drift.scan"],
 			},

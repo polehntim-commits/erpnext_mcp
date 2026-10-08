@@ -50,7 +50,10 @@ KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "
          "Job Template": "job_template",
          # v0.272.0. How a supplier's documents are read (`receiving`): channel, sender, CSV columns, PDF line
          # pattern, their item numbers → ours. Seeded as drafts; a person publishes.
-         "Supplier Connector": "supplier_connector"}
+         "Supplier Connector": "supplier_connector",
+         # v0.274.0. A company's budget for a year (`live_budget`): lines with account / cost centre, acres, the spray
+         # program, thresholds — imported from the pro forma as a draft; a person publishes.
+         "Input Plan": "input_plan"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -214,6 +217,10 @@ def _validator(kind: str):
 		from . import receiving
 
 		return receiving.validate
+	if kind == "Input Plan":
+		from . import live_budget
+
+		return live_budget.validate
 	from . import label_compliance
 
 	return label_compliance.validate

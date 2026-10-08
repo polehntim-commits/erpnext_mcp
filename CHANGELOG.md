@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.274.0 — 2026-10-08 — the live budget
+
+**Migrate needed** (Farm Config Version kind "Input Plan"; a daily job; six MCP switches). No phone update.
+Deploy `docs/deploy/v0.274.0_live_budget.md`. Contract `docs/contracts/live_budget_v0_274.yaml`.
+
+- **Input Plan** (config, one per company and year), imported from the lender pro forma (`import_input_plan`, an
+  uploaded .xlsx) as a DRAFT a person publishes: the Growing Budget lines at the dollars the P&L uses, each line's
+  ERPNext account and cost centre from the CoA Mapping sheet (unmapped lines listed, never guessed), acres by
+  variety, the spray program ($/acre per application by category, which varieties get it, the month), thresholds
+  (90% / 100%) and the Material Request approval threshold. Read with the standard library (`xlsx_lite`): values
+  only, nothing executed. The pro forma's numbers live in the site, not in this repository.
+- **The live view** (`get_live_budget`) per account and cost centre: budget (year and to date — even months unless a
+  line says otherwise), actual (GL), committed (open POs not received; Material Requests not ordered, at valuation —
+  an estimate, said so), forecast (actual + committed + the plan ahead), variance, % used and the level; spending on
+  accounts the plan lacks is listed. A daily job raises one alert per line and level.
+- **What the spray program still needs** (`forecast_input_needs`): dollars by month and category. Products and rates
+  come when the program names them.
+- **Asking for inputs** (`request_inputs`): netted against the chemical shed's stock, a DRAFT Material Request, its
+  value, the budget line it lands on and what is left, and whether it needs approval.
+- **ERPNext Budgets** (`draft_erpnext_budget`): drafts per cost centre, action Warn; what the site lacks is skipped
+  and listed.
+- **Spray materials per block** (`get_input_cost_by_block`) at each Item's valuation.
+- **OFF per company** until `live_budget_enabled` (the alerts, requests and Budgets) — Constancy stays inactive.
+
 ## 0.273.0 — 2026-10-07 — the shop queue
 
 **Migrate needed** (four fields on Farm Task Template; thirteen shop templates — three enabled, ten Mid-Columbia

@@ -200,6 +200,7 @@ from .tools import seasonal_tools
 from .tools import job_link_tools
 from .tools import receiving_tools
 from .tools import shop_queue_tools
+from .tools import live_budget_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18500,6 +18501,65 @@ TOOLS = {
 		required=("company", "template"),
 		mutating=True,
 		title="Add shop item",
+	),
+	"import_input_plan": _tool(
+		live_budget_tools.import_input_plan,
+		"MUTATING (default OFF). v0.274.0. The lender pro forma workbook (an uploaded .xlsx File) → a DRAFT Input Plan "
+		"for one company and year: the Growing Budget lines with the dollars the P&L uses, each line's ERPNext account "
+		"and cost centre from the CoA Mapping sheet (unmapped lines listed), acres by variety, the spray program. A "
+		"person checks and publishes it. Read with the standard library; nothing in the workbook is executed.",
+		{"company": _field(_STRING, "The company."), "file": _field(_STRING, "The uploaded workbook's File name."), "year": _field(_INTEGER, "The budget year (default this year).")},
+		required=("company", "file"),
+		mutating=True,
+		title="Import input plan",
+	),
+	"get_live_budget": _tool(
+		live_budget_tools.get_live_budget,
+		"v0.274.0. The live budget per account and cost centre: budget (year and to date), actual (the ledger), "
+		"committed (open POs not received; Material Requests not ordered, at valuation — an estimate), forecast "
+		"(actual + committed + the plan still ahead), variance, % used and the level (ok / warn at 90% / over at 100%); "
+		"spending on accounts the plan does not have is listed. Read-only.",
+		{"company": _field(_STRING, "The company."), "year": _field(_INTEGER, "The budget year (default this year)."), "as_of": _field(_STRING, "YYYY-MM-DD; default today.")},
+		required=("company",),
+		title="Get live budget",
+	),
+	"forecast_input_needs": _tool(
+		live_budget_tools.forecast_input_needs,
+		"v0.274.0. Spray materials still ahead this year from the plan's spray program — each application by month, "
+		"category ($/acre × the acres of the varieties that get it), totals by category. Dollars, not products, until "
+		"the program names products and rates. Read-only.",
+		{"company": _field(_STRING, "The company."), "year": _field(_INTEGER, "The budget year (default this year)."), "as_of": _field(_STRING, "YYYY-MM-DD; default today.")},
+		required=("company",),
+		title="Forecast input needs",
+	),
+	"request_inputs": _tool(
+		live_budget_tools.request_inputs,
+		"MUTATING (default OFF). v0.274.0. Ask for inputs: netted against the chemical shed's stock, a DRAFT Material "
+		"Request for the rest, its estimated value, the budget line it lands on and what is left there, and whether it "
+		"needs approval (the plan's threshold). Refused until live_budget_enabled is on for the company.",
+		{"company": _field(_STRING, "The company."), "items": _field({"type": "array", "items": {"type": "object"}}, "[{item_code, qty}]"),
+		 "needed_by": _field(_STRING, "YYYY-MM-DD.")},
+		required=("company", "items"),
+		mutating=True,
+		title="Request inputs",
+	),
+	"draft_erpnext_budget": _tool(
+		live_budget_tools.draft_erpnext_budget,
+		"MUTATING (default OFF). v0.274.0. ERPNext Budgets from the published Input Plan — one per cost centre, its "
+		"accounts and amounts, action Warn — as DRAFTS (cost centres or accounts not on the site yet are skipped and "
+		"listed). Refused until live_budget_enabled is on for the company.",
+		{"company": _field(_STRING, "The company."), "year": _field(_INTEGER, "The budget year (default this year).")},
+		required=("company",),
+		mutating=True,
+		title="Draft ERPNext budget",
+	),
+	"get_input_cost_by_block": _tool(
+		live_budget_tools.get_input_cost_by_block,
+		"v0.274.0. Spray materials put on each block this year at each Item's valuation (rate per acre × the block's "
+		"acres on the application × $/unit), per block and per acre. Read-only.",
+		{"company": _field(_STRING, "The company."), "year": _field(_INTEGER, "The budget year (default this year).")},
+		required=("company",),
+		title="Get input cost by block",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

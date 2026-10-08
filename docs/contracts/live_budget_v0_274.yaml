@@ -1,0 +1,40 @@
+# The live budget — the frozen contract. erpnext_mcp v0.274.0. No phone route yet.
+
+version: "0.274.0"
+
+switch:
+  live_budget_enabled: "Farm Feature Flag per company. OFF: no alerts, request_inputs and draft_erpnext_budget refused. Reads and the import (a draft) work regardless"
+
+input_plan:   # Farm Config Version, kind "Input Plan" (slug input_plan), key "<company slug>_<year>"
+  company: string
+  year: "YYYY"
+  source: "the workbook's file name"
+  acres: "{variety: acres} — from the pro forma's Cost per Acre sheet"
+  lines: "[{code, line, section, basis, annual, account, cost_center, months?: [12 fractions summing to 1]}] — from Growing Budget (the 'Used <year> $/yr' column) and CoA Mapping (account + cost centre by the model line's text)"
+  spray_program: "[{n, timing, target, per_acre: {category: $}, varieties: [names]}] — from Spray Program"
+  timing_months: "{timing word: month} — delayed dormant 3, bloom 4, petal fall 5, shuck 5, first cover 5, straw color 6, pre-harvest 6, late cover 7"
+  thresholds: "{warn_pct: 90, over_pct: 100}"
+  approval: "{material_request_over: dollars}"
+  checks: "errors — no company / year / lines, a code twice, a negative annual, months not 12 fractions summing to 1; warnings — a line with no account (planned, but no actual can reach it)"
+
+xlsx_lite:
+  reads: "cached cell values by sheet (shared and inline strings, numbers, booleans); dates as serials"
+  never: "evaluates formulas, follows external links or runs macros"
+  limits: "20 MB, 400,000 cells"
+
+live:   # get_live_budget(company, year, as_of)
+  row: "{account, cost_center, lines, budget, budget_to_date, actual, committed, forecast, variance, used_pct, level: ok | warn | over}"
+  actual: "GL Entry debit − credit, not cancelled, 1 Jan → as_of, same account (and cost centre when the line has one)"
+  committed: "open Purchase Orders (submitted, not Closed / Completed): (qty − received) × rate; Material Requests not ordered: (qty − ordered) × the Item's valuation — an estimate"
+  forecast: "actual + committed + the plan for the months after as_of"
+  unplanned: "[{account, cost_center, actual, committed}] — spending on accounts the plan does not have"
+  alerts: "daily, companies with the switch on: one Compliance Alert per line and level — budget_warn (Info) at warn_pct, budget_over (Warning) at over_pct"
+
+forecast_input_needs: "[{month, timing, category, acres, per_acre, dollars}] for applications after as_of; by_category; total"
+request_inputs: "netted against chemical_storage_warehouse stock → DRAFT Material Request (Purchase) for the rest; estimated_value; budget [{account, this_request, left_in_budget, over_after}]; needs_approval"
+draft_erpnext_budget: "one DRAFT Budget per cost centre (budget_against Cost Center), accounts and amounts from the plan, action_if_annual_budget_exceeded and _accumulated_monthly_ = Warn; cost centres / accounts not on the site are skipped and listed"
+input_cost_by_block: "Spray Applications of the year: rate_per_acre × the block's acres on the application × the Item's valuation_rate; per block and per acre"
+
+mcp_tools:
+  read: [get_live_budget, forecast_input_needs, get_input_cost_by_block]
+  write: [import_input_plan, request_inputs, draft_erpnext_budget]

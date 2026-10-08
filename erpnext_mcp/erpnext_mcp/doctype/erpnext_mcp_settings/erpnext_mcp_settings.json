@@ -1271,6 +1271,12 @@
   "allow_list_shop_backlog",
   "allow_get_weather_day_plan",
   "allow_add_shop_item",
+  "allow_import_input_plan",
+  "allow_get_live_budget",
+  "allow_forecast_input_needs",
+  "allow_request_inputs",
+  "allow_draft_erpnext_budget",
+  "allow_get_input_cost_by_block",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -10870,6 +10876,48 @@
    "fieldname": "allow_add_shop_item",
    "fieldtype": "Check",
    "label": "Add Shop Item"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.274.0. The pro forma → a draft Input Plan.",
+   "fieldname": "allow_import_input_plan",
+   "fieldtype": "Check",
+   "label": "Import Input Plan"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.274.0. Budget / actual / committed / forecast.",
+   "fieldname": "allow_get_live_budget",
+   "fieldtype": "Check",
+   "label": "Get Live Budget"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.274.0. Spray materials still ahead, by month and category.",
+   "fieldname": "allow_forecast_input_needs",
+   "fieldtype": "Check",
+   "label": "Forecast Input Needs"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.274.0. A draft Material Request netted against stock.",
+   "fieldname": "allow_request_inputs",
+   "fieldtype": "Check",
+   "label": "Request Inputs"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.274.0. Draft ERPNext Budgets (Warn) from the plan.",
+   "fieldname": "allow_draft_erpnext_budget",
+   "fieldtype": "Check",
+   "label": "Draft ERPNext Budget"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.274.0. Spray materials per block.",
+   "fieldname": "allow_get_input_cost_by_block",
+   "fieldtype": "Check",
+   "label": "Get Input Cost By Block"
   }
  ],
  "index_web_pages_for_search": 0,

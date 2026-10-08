@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1116 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1122 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 538 read tools are **on** by default and can be switched off individually. A
+All 541 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21137,3 +21137,17 @@ Connectors are Farm Config Versions (kind Supplier Connector), seeded as drafts.
 
 Shop work is a tick on a Farm Task Template; thresholds and hours are per-company flags (`shop_day_*`). Contract:
 `docs/contracts/shop_queue_v0_273.yaml`.
+
+## v0.274.0 — the live budget
+
+| Tool | What it does |
+| --- | --- |
+| `import_input_plan` | The pro forma workbook → a draft Input Plan (lines, accounts, cost centres, acres, spray program). Write |
+| `get_live_budget` | Budget / actual / committed / forecast per account and cost centre, with 90% / 100% levels. Read |
+| `forecast_input_needs` | Spray materials still ahead, by month and category. Read |
+| `request_inputs` | A draft Material Request netted against the shed, valued and placed on the budget. Write |
+| `draft_erpnext_budget` | Draft ERPNext Budgets (action Warn) from the plan. Write |
+| `get_input_cost_by_block` | Spray materials per block this year. Read |
+
+Plans are Farm Config Versions (kind Input Plan). Off per company until `live_budget_enabled`. Contract:
+`docs/contracts/live_budget_v0_274.yaml`.

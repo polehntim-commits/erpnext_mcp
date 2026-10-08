@@ -462,6 +462,8 @@ scheduler_events = {
 		# v0.270.0. Seasonal programs (Fall winterize, Spring start-up): raise per-asset tasks on the date or the
 		# first forecast freeze, alert on what is still open as the deadline nears. Nothing until one is published.
 		"erpnext_mcp.seasonal.daily",
+		# v0.274.0. Budget lines at 90% / 100% of their year → one alert per level; off unless live_budget_enabled.
+		"erpnext_mcp.live_budget.daily",
 	],
 	"weekly": [
 		"erpnext_mcp.drift.scan",
