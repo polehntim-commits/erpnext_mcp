@@ -1268,6 +1268,9 @@
   "allow_list_delivery_intakes",
   "allow_list_supplier_connectors",
   "allow_trace_input_lot",
+  "allow_list_shop_backlog",
+  "allow_get_weather_day_plan",
+  "allow_add_shop_item",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -10846,6 +10849,27 @@
    "fieldname": "allow_trace_input_lot",
    "fieldtype": "Check",
    "label": "Trace Input Lot"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.273.0. The shop queue and its suggestions.",
+   "fieldname": "allow_list_shop_backlog",
+   "fieldtype": "Check",
+   "label": "List Shop Backlog"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.273.0. A day's shop-day verdict and list.",
+   "fieldname": "allow_get_weather_day_plan",
+   "fieldtype": "Check",
+   "label": "Get Weather Day Plan"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.273.0. A shop task from a template.",
+   "fieldname": "allow_add_shop_item",
+   "fieldtype": "Check",
+   "label": "Add Shop Item"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -199,6 +199,7 @@ from .tools import field_self_service
 from .tools import seasonal_tools
 from .tools import job_link_tools
 from .tools import receiving_tools
+from .tools import shop_queue_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18467,6 +18468,38 @@ TOOLS = {
 		{"lot": _field(_STRING, "The lot number on the jug."), "item_code": _field(_STRING, "Narrow to one Item.")},
 		required=("lot",),
 		title="Trace input lot",
+	),
+	"list_shop_backlog": _tool(
+		shop_queue_tools.list_shop_backlog,
+		"v0.273.0. The shop queue: open indoor work for a weather day, in order — winterize first, then machine "
+		"repairs and services, shop-work templates, training — each with its time, skill (any / learner OK / "
+		"skilled), tools & parts and safety note; and SUGGESTIONS that are due but not yet tasks (a machine's "
+		"service, low stock to count, tags to print). Read-only.",
+		{"company": _field(_STRING, "The company.")},
+		required=("company",),
+		title="List shop backlog",
+	),
+	"get_weather_day_plan": _tool(
+		shop_queue_tools.get_weather_day_plan,
+		"v0.273.0. Is a day a shop day — rain likely, wind, a freezing high, or declared (shop_day_declared) — with "
+		"each reason, and the shop list filled to the hours there are (shop_day_hours × people). Skilled jobs carry a "
+		"pairing note naming learners (the shop_learner skill). Read-only.",
+		{"company": _field(_STRING, "The company."), "date": _field(_STRING, "YYYY-MM-DD; default today."),
+		 "people": _field(_INTEGER, "People on the shop list (default 1).")},
+		required=("company",),
+		title="Get weather day plan",
+	),
+	"add_shop_item": _tool(
+		shop_queue_tools.add_shop_item,
+		"MUTATING (default OFF). v0.273.0. Put a job on the shop queue: a Farm Task from a template (a suggestion's "
+		"template — 'Service — machine due', 'Count and reorder — shop and shed', 'Print and hang asset tags' — or any "
+		"template ticked Shop work), optionally on a machine.",
+		{"company": _field(_STRING, "The company."), "template": _field(_STRING, "The template's name."),
+		 "title": _field(_STRING, "Default: the template's."), "asset": _field(_STRING, "The machine, for a service or repair."),
+		 "notes": _field(_STRING, "Anything about this one.")},
+		required=("company", "template"),
+		mutating=True,
+		title="Add shop item",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

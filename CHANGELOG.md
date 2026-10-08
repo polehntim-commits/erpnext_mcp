@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.273.0 — 2026-10-07 — the shop queue
+
+**Migrate needed** (four fields on Farm Task Template; thirteen shop templates — three enabled, ten Mid-Columbia
+starters disabled; the Today tile "Shop work today"; an hourly job; three MCP switches). No phone update: the tile
+is a list the app already shows. Deploy `docs/deploy/v0.273.0_shop_queue.md`. Contract
+`docs/contracts/shop_queue_v0_273.yaml`.
+
+- **Shop work is a tick on a template** (Farm Task Template → Shop Work: skill any / learner OK / skilled, tools &
+  parts, safety note). No new register: the backlog is the open tasks that are shop work — winterize first, then
+  machine repairs and services (an asset issue somebody reported is already one), shop templates, training.
+- **Suggestions** beside it — due but not yet a task: a machine whose service is due, low stock to count and reorder,
+  tags waiting to print. `add_shop_item` turns one into a task ("Service — machine due", "Count and reorder — shop
+  and shed", "Print and hang asset tags" are seeded enabled for that).
+- **A weather day** from today's forecast at the farm: rain likely (60% or 0.10 in), wind (20 mph, gusts 30), or a
+  high at or below 32 °F — each a per-company flag (`shop_day_rain_pct`, `shop_day_rain_in`, `shop_day_wind_mph`,
+  `shop_day_gust_mph`, `shop_day_cold_f`); or declared (smoke, a burn ban) with `shop_day_declared` = the date.
+- **The plan** fills `shop_day_hours` (8) per person; skilled jobs carry a pairing note naming learners (the
+  `shop_learner` skill on the Employee). Today tile **Shop work today** (Foreman / Farm Manager) — empty on a working
+  day.
+- **The evening notice** "tomorrow looks like a shop day" — an Info alert at `shop_evening_hour` (17), once a day,
+  only where `shop_evening_notice` is on. Nothing is sent to the crew.
+- **Starter templates (disabled)**: sharpen and oil pruning tools, service chainsaws and pole saws, rebuild sprinkler
+  heads, repair picking bins, grease and inspect bin trailers and forks, inspect and repair ladders, sharpen mower
+  blades, clean and organise the shop, sprayer nozzle check before calibration.
+- **MCP**: list_shop_backlog, get_weather_day_plan (read); add_shop_item (write, OFF).
+
 ## 0.272.0 — 2026-10-07 — chemical receiving
 
 **Migrate needed** (doctypes Supplier Delivery Intake and its lines; Farm Config Version kind "Supplier Connector";

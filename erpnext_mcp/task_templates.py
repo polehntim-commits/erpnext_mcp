@@ -416,6 +416,12 @@ def build_template(spec: dict):
 	for key in ("title_es", "instructions_es", "required_certification"):
 		if spec.get(key):
 			doc.set(key, str(spec[key]).strip())
+	# v0.273.0. Shop work for a weather day (shop_queue.py).
+	if spec.get("shop_work") and compat.has_field(TEMPLATE_DOCTYPE, "shop_work"):
+		doc.shop_work = 1
+		for key in ("shop_skill", "tools_parts", "safety_note"):
+			if spec.get(key):
+				doc.set(key, str(spec[key]).strip())
 	if spec.get("is_crew_task") and compat.has_field(TEMPLATE_DOCTYPE, "work_mode"):
 		doc.work_mode = "Crew"
 		doc.crew_piece_unit = str(spec.get("crew_piece_unit") or "").strip() or None
@@ -691,8 +697,11 @@ def seed_farm_task_templates() -> dict:
 	from .job_links import PREP_TASK_TEMPLATES as JOB_PREP
 	# v0.272.0. Checking a chemical delivery into the shed — enabled; raised only where receiving is on.
 	from .receiving import CHECK_IN_TEMPLATE as CHECK_IN
+	# v0.273.0. Shop work for a weather day: three the queue's suggestions raise (enabled) and ten Mid-Columbia
+	# starters (DISABLED until somebody enables them).
+	from .shop_queue import SEED_TEMPLATES as SHOP
 
-	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204, BADGE_PHOTO, *SEASONAL, *JOB_PREP, CHECK_IN):
+	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204, BADGE_PHOTO, *SEASONAL, *JOB_PREP, CHECK_IN, *SHOP):
 		name = spec["template_name"]
 		try:
 			if frappe.db.exists(TEMPLATE_DOCTYPE, {"template_name": name}):

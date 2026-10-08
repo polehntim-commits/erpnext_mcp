@@ -1,0 +1,35 @@
+# The shop queue — the frozen contract. erpnext_mcp v0.273.0. No phone route: the Today tile is a list_query.
+
+version: "0.273.0"
+
+template_fields:   # Farm Task Template
+  shop_work: "Check — its open tasks are on the shop queue"
+  shop_skill: "Any | Learner OK | Skilled"
+  tools_parts: "Small Text"
+  safety_note: "Small Text"
+
+backlog:   # open Farm Tasks (Available, Claimed, In-Progress, Paused) of one company — no new register
+  kinds: "seasonal (source_workorder seasonal:…) | machine (Repair / Maintenance on an asset, not on a block) | shop (template ticked Shop work) | training (task type Training)"
+  order: "seasonal, machine, shop, training; then urgency, due date, age"
+  item: "{task, title, kind, task_type, asset, state, urgency, due_date, minutes, skill, tools_parts, safety_note, assigned_to, created}"
+  suggestions: "[{kind: maintenance_due | reorder | tags, ref, title, why, template}] — due, not yet a task"
+
+weather_day:
+  reasons: "rain likely (precip_prob_pct ≥ shop_day_rain_pct 60) or rain (precip_in ≥ shop_day_rain_in 0.10); wind (wind_mph ≥ shop_day_wind_mph 20) or gusts (gust_mph ≥ shop_day_gust_mph 30); a high ≤ shop_day_cold_f 32 °F; or declared (shop_day_declared = 'YYYY-MM-DD reason')"
+  forecast: "the company's first outlined block, ccf_providers.fetch_forecast; none → only a declared day counts"
+
+plan:
+  hours: "shop_day_hours (8) × people"
+  items: "the backlog in order, filled to the minutes; items empty on a working day (would_do shows what would be done)"
+  pairing: "Skilled → 'Pair a learner with someone who knows this job (learners)'; Learner OK → 'A learner can take this one.' Learners: Employees whose skill field lists shop_learner"
+
+evening_notice:
+  when: "hourly job at shop_evening_hour (17), companies with shop_evening_notice on"
+  what: "one Info Compliance Alert per company per day, alert_type shop_day_tomorrow — nothing sent to the crew"
+
+tile:
+  shop_today: "Today, Foreman / Farm Manager / System Manager; list_query shop_today → rows {doctype: Farm Task, name, title, subtitle (pairing or reasons), state, due_date}"
+
+mcp_tools:
+  read: [list_shop_backlog, get_weather_day_plan]
+  write: [add_shop_item]

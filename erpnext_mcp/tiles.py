@@ -502,6 +502,23 @@ SEASONAL_TILES = {
 }
 
 
+#: v0.273.0. The shop list on a weather day (shop_queue.py) — empty, so no badge, on a working day.
+SHOP_TILES = {
+	"shop_today": {
+		"surface": "today",
+		"title": {"en": "Shop work today", "es": "Trabajo de taller hoy"},
+		"subtitle": {"en": "Weather day — indoor jobs", "es": "Día de mal tiempo — trabajos bajo techo"},
+		"icon": "hammer",
+		"order": 73,
+		"target": {"kind": "list_query", "query": "shop_today", "params": {}},
+		"audience": {"roles": ["Foreman", "Farm Manager", "System Manager"]},
+		"badge": {"query": "shop_today", "params": {}},
+		"show_if": {},
+		"min_app_version": "0.21.0",
+	},
+}
+
+
 def seed() -> list:
 	made = []
 	for key, body in PAYROLL_TILES.items():
@@ -522,6 +539,10 @@ def seed() -> list:
 			made.append(name)
 	for key, body in SEASONAL_TILES.items():
 		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.270.0).")
+		if name:
+			made.append(name)
+	for key, body in SHOP_TILES.items():
+		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.273.0).")
 		if name:
 			made.append(name)
 	return made

@@ -620,6 +620,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.upload_links.sweep",
 					# v0.253.0. Go / Hold re-judged as the forecast changes.
 					"erpnext_mcp.go_hold.scheduled_forecast_refresh",
+					# v0.273.0. The evening shop-day notice; off unless enabled.
+					"erpnext_mcp.shop_queue.hourly",
 				],
 				"daily": [
 					"erpnext_mcp.tools.uploads.collect_expired_sessions",

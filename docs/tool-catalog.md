@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1113 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1116 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 536 read tools are **on** by default and can be switched off individually. A
+All 538 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21126,3 +21126,14 @@ Templates are Farm Config Versions (kind Job Template). Sharing is off per compa
 Connectors are Farm Config Versions (kind Supplier Connector), seeded as drafts. Receiving is off per company until
 `chemical_receiving_enabled`; the warehouse is `chemical_storage_warehouse`. Contract:
 `docs/contracts/chemical_receiving_v0_272.yaml`.
+
+## v0.273.0 — the shop queue
+
+| Tool | What it does |
+| --- | --- |
+| `list_shop_backlog` | Open indoor work in order (winterize first), time / skill / tools / safety, and suggestions due but not yet tasks. Read |
+| `get_weather_day_plan` | A day's shop-day verdict with reasons, and the list filled to the hours there are. Read |
+| `add_shop_item` | A shop task from a template, optionally on a machine. Write |
+
+Shop work is a tick on a Farm Task Template; thresholds and hours are per-company flags (`shop_day_*`). Contract:
+`docs/contracts/shop_queue_v0_273.yaml`.

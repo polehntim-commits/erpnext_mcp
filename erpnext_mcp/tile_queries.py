@@ -302,8 +302,24 @@ def seasonal_open(user, company, params):
 	return _answer(out)
 
 
+def shop_today(user, company, params):
+	"""v0.273.0. On a weather day, the shop list for the caller's company; nothing on a working day."""
+	from . import shop_queue
+
+	companies = _companies(user, company)
+	out = []
+	for entity in companies[:1]:
+		plan = shop_queue.day_plan(entity)
+		for item in plan["items"]:
+			out.append({"doctype": "Farm Task", "name": item["task"], "title": item["title"] or item["task"],
+			            "subtitle": item.get("pairing") or ", ".join(plan["reasons"]), "state": item["state"],
+			            "due_date": item["due_date"]})
+	return _answer(out)
+
+
 QUERIES = {
 	"my_tasks_open": (my_tasks_open, {}, ()),
+	"shop_today": (shop_today, {}, ()),
 	"my_tasks_overdue": (my_tasks_overdue, {}, ()),
 	"available_tasks": (available_tasks, {}, ()),
 	"compliance_inbox": (compliance_inbox, {}, ()),

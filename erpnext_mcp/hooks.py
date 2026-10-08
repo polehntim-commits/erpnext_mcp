@@ -447,6 +447,9 @@ scheduler_events = {
 		#: moved off clears within the hour. The forecast is fetched at most every two hours per cell;
 		#: only a changed verdict is written. Nothing without forecasts on and a weather rule live.
 		"erpnext_mcp.go_hold.scheduled_forecast_refresh",
+		#: v0.273.0. "Tomorrow looks like a shop day" — an Info alert at the farm's evening hour, once a day, only
+		#: for a company with `shop_evening_notice` on. Sends nothing to the crew.
+		"erpnext_mcp.shop_queue.hourly",
 	],
 	"daily": [
 		"erpnext_mcp.tools.uploads.collect_expired_sessions",

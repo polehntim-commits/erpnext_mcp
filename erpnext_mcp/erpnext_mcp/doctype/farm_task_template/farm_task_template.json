@@ -56,7 +56,12 @@
   "regime_section",
   "compliance_regimes",
   "references_section",
-  "references"
+  "references",
+  "shop_section",
+  "shop_work",
+  "shop_skill",
+  "tools_parts",
+  "safety_note"
  ],
  "fields": [
   {
@@ -383,6 +388,39 @@
    "label": "References",
    "options": "Reference Citation",
    "description": "v0.238.0. What this cites from the Reference Library, by page."
+  },
+  {
+   "fieldname": "shop_section",
+   "fieldtype": "Section Break",
+   "label": "Shop Work",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "shop_work",
+   "fieldtype": "Check",
+   "label": "Shop Work",
+   "default": "0",
+   "description": "v0.273.0. Indoor work for a weather day: its open tasks are on the shop queue."
+  },
+  {
+   "fieldname": "shop_skill",
+   "fieldtype": "Select",
+   "label": "Skill",
+   "options": "\nAny\nLearner OK\nSkilled",
+   "depends_on": "eval:doc.shop_work",
+   "description": "Skilled jobs are listed with a pairing note for a learner."
+  },
+  {
+   "fieldname": "tools_parts",
+   "fieldtype": "Small Text",
+   "label": "Tools & Parts",
+   "depends_on": "eval:doc.shop_work"
+  },
+  {
+   "fieldname": "safety_note",
+   "fieldtype": "Small Text",
+   "label": "Safety Note",
+   "depends_on": "eval:doc.shop_work"
   }
  ],
  "index_web_pages_for_search": 0,
