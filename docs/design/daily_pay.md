@@ -1,6 +1,6 @@
 # Daily pay with a weekly overtime true-up — design for Tim's approval
 
-**Status: DRAFT, 2026-10-05. Nothing is built.** Queued as "daily pay: design only" (2026-10-03). This note
+**Status: APPROVED 2026-10-08 (Tim, all eight defaults in §9a). Built LAST in the queue, as policies.** Queued as "daily pay: design only" (2026-10-03). This note
 proposes the shape, names what it reuses, and lists the decisions only Tim can make (§9). Payroll stays
 human: every run, file and payment is started and approved by a person, exactly as today.
 
@@ -105,3 +105,23 @@ rates are tight. The weekly settlement does **not** claw makeup back.
 4. Phone: opt-in, today's pay, the tile and the run action; payroll calendar entries.
 5. A parallel-run proof before switching it on: a past week computed both ways, with the per-worker difference
    explained to the cent (the same discipline as the v0.235.0 overtime-setting move).
+
+## 9a. Tim's decisions (2026-10-08) — the seeded Pay Policy defaults
+
+All eight approved as written. Each is a field of the **Pay Policy** config (draft → stage → preview → publish →
+rollback; preview reruns a past week per worker), so Tim can change any of them later without a release. The legal
+floors are the dated, sourced **Wage Floor** table; a policy below the floor in effect is refused at publish.
+
+| # | Decision | Seeded policy value |
+|---|---|---|
+| 1 | Model | `model: daily_periods` (A — each day its own pay period; ordinary wages) |
+| 2 | Who / switching | `eligible_employment_types: [field types]`, `opt_in: signed_request`, `switch_effective: workweek_boundary` |
+| 3 | Workweek | `workweek_start: Sunday 00:00` (ends Saturday 23:59) |
+| 4 | Cutoff | `daily_cutoff: "18:00"`, `pay_reviewed_punches_only: true` |
+| 5 | Money lands | `ach_timing: next_business_day` (`same_day` + bank cutoff is a later setting) |
+| 6 | Overtime | `overtime: {mode: never_below_state_floor, threshold_hours: 40, multiplier: 1.5}` — the higher of the floor and 40 h |
+| 7 | No direct deposit | `no_direct_deposit: weekly_only` |
+| 8 | Cost | `accept_daily_min_wage_makeup: true`, `accept_ach_fees: true`, `weekly_cost_report: true` |
+
+The existing `payroll_setting:overtime_rule` (40 h / 1.5×) folds into `overtime`. Build plan §10 is unchanged,
+with the Pay Policy and Wage Floor kinds as step 1.
