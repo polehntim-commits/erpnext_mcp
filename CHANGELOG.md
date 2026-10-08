@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.270.0 — 2026-10-07 — seasonal work lists: winterize this fall
+
+**Migrate needed** (Farm Config Version kind "Seasonal Program"; eleven checklist templates seeded DISABLED; two
+programs seeded as DRAFTS; a Today tile; two read switches; a daily job). No phone release: FarmOps 0.54 shows the
+tasks, checklists and photos it already knows. Deploy `docs/deploy/v0.270.0_winterize.md`. Contract
+`docs/contracts/seasonal_v0_270.yaml`. Tim, 2026-10-07: freeze season is weeks away.
+
+- **Fall winterize** and **Spring start-up** as data: a program says when (a fixed date Tim edits — Oct 25 — and/or the
+  first forecast hard freeze, ≤ 28 °F within 10 days, from the farm's own forecast; only inside its season window) and
+  what (per asset type, which checklist; per company, the farm-level items).
+- When it fires, **one task per active asset** of each type, due by the freeze or the date, with a photo of the finished
+  job; once per season, never twice. Irrigation is per zone and water source, not per valve.
+- Checklists (drafts to edit): sprayer, tractor / machine / vehicle (incl. the mini excavator when typed so), mower /
+  implement, irrigation, wind machine off-season, shop / pump house, frost-protection readiness and freeze-sensitive
+  chemicals (one each per company).
+- **Overdue**: anything still open 3 days before the deadline (or after it) becomes a compliance alert naming the asset.
+- **Today tile "Seasonal work"** (Foreman, Farm Manager); **MCP** `list_seasonal_work`, `get_winterize_status`.
+- Nothing runs until a program is published AND its checklists are enabled.
+
 ## 0.269.0 — 2026-10-07 — fields Tim can find and define himself
 
 **Migrate needed** (Field gains Also Known As, Acreage Source, Acreage Override Reason; asset type Hazard Marker; six

@@ -924,6 +924,8 @@ class TheSeededTemplates(V12TestCase):
 		"Rodent Bait Occupant Notice (EN/ES)",
 		# v0.214.0. The portrait for the ID card, as a task (`test_badge_photo`).
 		"Badge photo",
+		# v0.270.0. Fall winterize / Spring start-up checklists, seeded DISABLED (`test_seasonal`).
+		*(spec["template_name"] for spec in __import__("erpnext_mcp.seasonal", fromlist=["SEED_TEMPLATES"]).SEED_TEMPLATES),
 	)
 
 	def test_they_are_all_seeded(self):

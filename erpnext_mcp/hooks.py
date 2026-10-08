@@ -456,6 +456,9 @@ scheduler_events = {
 		# v0.225.0. A verified, approved, prenoted direct-deposit account becomes the one paid
 		# once its hold passes. Writes only Employee Bank Account rows; never raises.
 		"erpnext_mcp.direct_deposit.activate_due",
+		# v0.270.0. Seasonal programs (Fall winterize, Spring start-up): raise per-asset tasks on the date or the
+		# first forecast freeze, alert on what is still open as the deadline nears. Nothing until one is published.
+		"erpnext_mcp.seasonal.daily",
 	],
 	"weekly": [
 		"erpnext_mcp.drift.scan",

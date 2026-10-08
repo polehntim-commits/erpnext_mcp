@@ -628,6 +628,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.payroll_calendar.send_reminders",
 					# v0.225.0. Direct-deposit activation after the hold.
 					"erpnext_mcp.direct_deposit.activate_due",
+					# v0.270.0. Seasonal programs (winterize / start-up): nothing until one is published.
+					"erpnext_mcp.seasonal.daily",
 				],
 				"weekly": ["erpnext_mcp.drift.scan"],
 			},

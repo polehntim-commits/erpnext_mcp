@@ -685,7 +685,10 @@ def seed_farm_task_templates() -> dict:
 	from .badge_photo import SEED_TEMPLATE as BADGE_PHOTO
 	from .rodent_bait import SEED_TASK_TEMPLATES_V204
 
-	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204, BADGE_PHOTO):
+	# v0.270.0. Fall winterize / Spring start-up checklists, DISABLED until Tim enables them (seasonal.py).
+	from .seasonal import SEED_TEMPLATES as SEASONAL
+
+	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204, BADGE_PHOTO, *SEASONAL):
 		name = spec["template_name"]
 		try:
 			if frappe.db.exists(TEMPLATE_DOCTYPE, {"template_name": name}):

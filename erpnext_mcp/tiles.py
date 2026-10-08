@@ -485,6 +485,23 @@ PAYROLL_TILES = {
 }
 
 
+#: v0.270.0 (docs/contracts/seasonal_v0_270.yaml). Open winterize / start-up tasks, for the people who run them.
+SEASONAL_TILES = {
+	"seasonal_work": {
+		"surface": "today",
+		"title": {"en": "Seasonal work", "es": "Trabajo de temporada"},
+		"subtitle": {"en": "Winterize and spring start-up", "es": "Invierno y arranque de primavera"},
+		"icon": "wrench.and.screwdriver",
+		"order": 74,
+		"target": {"kind": "list_query", "query": "seasonal_open", "params": {}},
+		"audience": {"roles": ["Foreman", "Farm Manager", "System Manager"]},
+		"badge": {"query": "seasonal_open", "params": {}},
+		"show_if": {},
+		"min_app_version": "0.21.0",
+	},
+}
+
+
 def seed() -> list:
 	made = []
 	for key, body in PAYROLL_TILES.items():
@@ -501,6 +518,10 @@ def seed() -> list:
 			made.append(name)
 	for key, body in CREW_TILES.items():
 		name = phone_config.seed("Tile", key, body, "Built-in Work tile, seeded at install (v0.213.0).")
+		if name:
+			made.append(name)
+	for key, body in SEASONAL_TILES.items():
+		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.270.0).")
 		if name:
 			made.append(name)
 	return made

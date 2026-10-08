@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1093 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1095 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 528 read tools are **on** by default and can be switched off individually. A
+All 530 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21081,3 +21081,13 @@ draws candles with a volume pane, season-over-season and weekly bars on the same
 | `create_task_on_field` | A Farm Task on a block named the way people say it. Write |
 
 Contract: `docs/contracts/field_self_service_v0_269.yaml`.
+
+## v0.270.0 — seasonal work lists (winterize first)
+
+| Tool | What it does |
+| --- | --- |
+| `list_seasonal_work` | Seasonal programs, their date / freeze trigger per company, checklists by asset type, done / open. Read |
+| `get_winterize_status` | This season's winterization per asset — done, and what is still open. Read |
+
+Programs are Farm Config Versions (kind Seasonal Program), published in the Desk; checklists are Farm Task Templates.
+Contract: `docs/contracts/seasonal_v0_270.yaml`.

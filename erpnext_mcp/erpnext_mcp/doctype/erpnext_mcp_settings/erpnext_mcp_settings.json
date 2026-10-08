@@ -1248,6 +1248,8 @@
   "allow_rename_field",
   "allow_set_field_acreage",
   "allow_create_task_on_field",
+  "allow_list_seasonal_work",
+  "allow_get_winterize_status",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -10686,6 +10688,20 @@
    "fieldname": "allow_create_task_on_field",
    "fieldtype": "Check",
    "label": "Create Task On Field"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.270.0. The seasonal work lists and their triggers.",
+   "fieldname": "allow_list_seasonal_work",
+   "fieldtype": "Check",
+   "label": "List Seasonal Work"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.270.0. Winterization done / open per asset.",
+   "fieldname": "allow_get_winterize_status",
+   "fieldtype": "Check",
+   "label": "Get Winterize Status"
   }
  ],
  "index_web_pages_for_search": 0,

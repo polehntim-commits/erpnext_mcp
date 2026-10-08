@@ -235,6 +235,7 @@ def after_migrate() -> None:
 	_ipm_graph_seed()
 	_pest_dd_seed()
 	_market_commodity_seed()
+	_seasonal_seed()
 	_reporting_templates()
 	_translations()
 	_breakeven_account_fields()
@@ -873,6 +874,19 @@ def _pest_dd_seed() -> None:
 				print(f"erpnext_mcp: IPM setting {name} seeded.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: pest DD settings were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _seasonal_seed() -> None:
+	"""v0.270.0. Fall winterize / Spring start-up as DRAFT programs (their checklists are seeded disabled with the
+	task templates). Never raises."""
+	try:
+		from . import seasonal
+
+		made = seasonal.seed()["drafts"]
+		if made:
+			print(f"erpnext_mcp: seasonal programs seeded as drafts (publish in the Desk): {', '.join(made)}.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: seasonal programs were not seeded — {type(exc).__name__}: {exc}")
 
 
 def _market_commodity_seed() -> None:

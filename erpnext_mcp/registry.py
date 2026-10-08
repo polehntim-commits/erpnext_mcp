@@ -196,6 +196,7 @@ from .tools import ipm_graph_tools
 from .tools import market_prices_tools
 from .tools import data_access_tools
 from .tools import field_self_service
+from .tools import seasonal_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18274,6 +18275,22 @@ TOOLS = {
 		 "include_stale": _field(_BOOLEAN, "Include reports nothing has been published in for a year."),
 		 "start": _field(_INTEGER, "Page start."), "limit": _field(_INTEGER, "Page size (default 200).")},
 		title="List market catalog",
+	),
+	"list_seasonal_work": _tool(
+		seasonal_tools.list_seasonal_work,
+		"v0.270.0. The seasonal work lists (Fall winterize, Spring start-up): published or draft, the trigger (a fixed "
+		"date Tim edits and/or the first forecast hard freeze), whether it has fired per company and why, each checklist "
+		"by asset type and whether it is enabled, and done / open this season. Read-only.",
+		{"company": _field(_STRING, "One company (default all).")},
+		title="List seasonal work",
+	),
+	"get_winterize_status": _tool(
+		seasonal_tools.get_winterize_status,
+		"v0.270.0. This season's winterization per asset: how many done, which are still open (soonest due first, "
+		"with the asset). program spring_startup for the spring list.",
+		{"program": _field(_STRING, "fall_winterize (default) or spring_startup."),
+		 "company": _field(_STRING, "One company (default all)."), "year": _field(_INTEGER, "Default this year.")},
+		title="Get winterize status",
 	),
 	"find_fields": _tool(
 		field_self_service.find_fields,

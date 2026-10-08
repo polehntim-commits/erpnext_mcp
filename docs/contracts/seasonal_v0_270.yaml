@@ -1,0 +1,30 @@
+# Seasonal work lists — Fall winterize and Spring start-up first. erpnext_mcp v0.270.0 (server only; FarmOps 0.54
+# shows the tasks, checklists and photos it already knows). Tim, 2026-10-07: winterization is needed this fall.
+
+version: "0.270.0"
+
+program:   # Farm Config Version, kind "Seasonal Program" (slug seasonal_program); Draft → publish (Desk) → roll back
+  keys_seeded: [fall_winterize, spring_startup]   # DRAFTS — nothing runs until Tim publishes
+  trigger:
+    fixed_mmdd: "a date Tim edits (fall default 10-25; spring 03-01)"
+    freeze_tmin_f: "the first forecast day at or below this (fall default 28 °F) within freeze_lookahead_days (10) — the farm's own Open-Meteo forecast at a block of that company"
+    window_from_mmdd / window_to_mmdd: "the season the trigger may fire in (fall 09-01..12-31) — a June cold snap raises nothing"
+    fires: "on the fixed date, or as soon as a qualifying freeze is in the forecast, whichever comes first"
+  deadline: "the earlier of the freeze day and the fixed date — the tasks' due date"
+  alert_lead_days: "3 — every task still open this many days before the deadline (or past it) becomes a Compliance Alert naming the asset"
+  items: "[{template, asset_types: [..]}] one task per ACTIVE asset of those types per company; [{template, scope: company}] one per company"
+
+checklists:   # Farm Task Templates seeded DISABLED (create-only); a disabled one raises nothing, even in a published program
+  fall: ["Winterize — Sprayer", "Winterize — Tractor / machine / vehicle", "Winterize — Mower / implement", "Winterize — Irrigation (per zone and water source, not per valve)", "Winterize — Wind machine (off-season check)", "Winterize — Shop / pump house", "Frost protection readiness (per company)", "Chemical storage — freeze-sensitive products (per company)"]
+  spring: ["Spring start-up — Sprayer", "Spring start-up — Irrigation", "Spring start-up — Tractor / machine / vehicle"]
+  evidence: "a photo of the finished job (required checklist item); completion per asset"
+
+tasks:
+  key: "source_workorder = seasonal:<program>:<year>:<asset or company>:<template> — once per season"
+  origin: compliance_rule
+  asset: "the Asset Register row (so it lands in the asset's history)"
+
+phone: "Today tile 'Seasonal work' (Foreman, Farm Manager, System Manager): open seasonal tasks, soonest due first (list query seasonal_open)"
+
+mcp_tools:
+  read: [list_seasonal_work, get_winterize_status]

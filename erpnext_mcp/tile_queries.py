@@ -284,6 +284,24 @@ def replies_to_review(user, company, params):
 
 
 #: id → (function, params schema {name: type}, roles gate or ()).
+def seasonal_open(user, company, params):
+	"""v0.270.0. Open winterize / spring start-up tasks in the caller's companies, soonest due first."""
+	from . import seasonal
+
+	filters = {"source_workorder": ("like", "seasonal:%"), "state": ("in", list(seasonal.OPEN_STATES))}
+	companies = _companies(user, company)
+	if companies:
+		filters["company"] = ("in", companies)
+	rows = frappe.db.get_all("Farm Task", filters=filters, fields=["name", "task_name", "location", "state", "due_date"],
+	                         order_by="due_date asc", limit=500) or []
+	out = []
+	for r in rows:
+		row = _task_row(dict(r))
+		row["due_date"] = str(r.get("due_date") or "") or None
+		out.append(row)
+	return _answer(out)
+
+
 QUERIES = {
 	"my_tasks_open": (my_tasks_open, {}, ()),
 	"my_tasks_overdue": (my_tasks_overdue, {}, ()),
@@ -303,6 +321,8 @@ QUERIES = {
 	),
 	# v0.227.0. Punches to review (`punch_times`).
 	"punch_reviews": (punch_reviews, {}, ("Farm Manager", "HR Manager", "HR User", "System Manager")),
+	# v0.270.0. Fall winterize / Spring start-up (seasonal.py).
+	"seasonal_open": (seasonal_open, {}, ("Foreman", "Farm Manager", "System Manager")),
 	# v0.258.0. Off until office@ drafting is on; see AVAILABLE.
 	"replies_to_review": (
 		replies_to_review,
