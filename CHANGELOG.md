@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.275.0 — 2026-10-08 — pollination: the hive map
+
+**Migrate needed** (Farm Config Version kind "Pollination Plan"; Contractor Job kind Pollination and its Operation
+field; the job template "pollination"; the "Distribute hives" / "Gather hives" templates; Go / Hold preset
+`go_hold_spray_bees_out` seeded OFF; a daily job; eight MCP switches; three phone routes). Pairs with FarmOps 0.57.0
+(the hive map on the phone). Deploy `docs/deploy/v0.275.0_pollination.md`. Contract
+`docs/contracts/pollination_v0_275.yaml`.
+
+- **The plan** (`plan_hive_placement`, saved as a DRAFT Pollination Plan a person publishes): blocks by name or alias;
+  hives = acres × hives_per_acre (1) on pallets of hives_per_pallet (4), pallets_per_drop (1); drop points on an even
+  grid inside each outline, clear of valves and hazard pins (30 ft); the loading area; the crew's trips from it
+  batched by the machine (6 pallets a trip, 4 mph, handling and loading minutes) with times. Pure-Python geometry.
+- **The season** (`create_pollination_job`, off per company until `pollination_enabled`): a Contractor Job of kind
+  Pollination — the beekeeper's link shows the loading area and takes Delivered (hives, pallets, frame strength)
+  and Picked up; "Distribute hives — trip n" tasks held as drafts until Delivered; "Gather hives — trip n" (reverse
+  order) held until petal fall (BBCH 69 recorded on a block; one alert) or `release_hive_gather`.
+- **Five counts**: expected, delivered, placed (distribution trips done), gathered, picked up — each mismatch a
+  Warning flag to the managers until resolved with a reason (`resolve_pollination_flag`).
+- **The pickup gate**: the beekeeper's Picked up is refused until every gather-up trip is done.
+- **Drops move by drag** (`update_hive_drops`, phone or MCP): inside the job's blocks only, near a hazard warned,
+  trips re-planned; refused once distribution has started.
+- **Bees and sprays**: the rule engine reads `pollination.hives_out` and `pollination.bee_toxic` (a product on the
+  task is harmed_by a Pollinator in the IPM map — the farm adds those edges); `go_hold_spray_bees_out` holds such a
+  spray while hives are out (seeded OFF, Advisory).
+- **Rental check** (`link_pollination_invoice`): the beekeeper's Purchase Invoice against the hives delivered at the
+  plan's rate — supplier, hives billed, amount — never changing the invoice.
+- **History per block** (`get_pollination_status field=`): each season's counts and the drops on that block.
+- **Phone routes**: get_hive_map, get_pollination_status (Foreman and up), update_hive_drops (Farm Manager) (routes
+  239).
+
 ## 0.274.0 — 2026-10-08 — the live budget
 
 **Migrate needed** (Farm Config Version kind "Input Plan"; a daily job; six MCP switches). No phone update.

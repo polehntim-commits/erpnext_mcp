@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1122 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1130 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 541 read tools are **on** by default and can be switched off individually. A
+All 543 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21151,3 +21151,19 @@ Shop work is a tick on a Farm Task Template; thresholds and hours are per-compan
 
 Plans are Farm Config Versions (kind Input Plan). Off per company until `live_budget_enabled`. Contract:
 `docs/contracts/live_budget_v0_274.yaml`.
+
+## v0.275.0 — pollination
+
+| Tool | What it does |
+| --- | --- |
+| `plan_hive_placement` | Drop points inside the outlines, clear of hazards; the crew's trips; a draft Pollination Plan. Write |
+| `update_hive_drops` | Move drops on the season's job; trips re-planned. Write |
+| `get_hive_map` | Outlines, hazards, the loading area, drops and trips. Read |
+| `create_pollination_job` | The beekeeper's job and the crew's trips (held until delivery / petal fall). Write |
+| `get_pollination_status` | The five counts, flags, pickup, invoice check — or a block's seasons. Read |
+| `resolve_pollination_flag` | Settle a count mismatch with the reason. Write |
+| `release_hive_gather` | The gather-up trips on the board now. Write |
+| `link_pollination_invoice` | The rental invoice against the hives delivered (read-only on the invoice). Write |
+
+Plans are Farm Config Versions (kind Pollination Plan). Jobs are Contractor Jobs of kind Pollination. Off per company
+until `pollination_enabled`. Contract: `docs/contracts/pollination_v0_275.yaml`.

@@ -25671,3 +25671,57 @@ def draft_delivery_receipt(user: str, intake=None) -> dict:
 		return receiving.draft_receipt(name, user)
 	except receiving.ReceivingError as exc:
 		_receiving_error(exc)
+
+
+# ── v0.275.0. Pollination: the hive map and the counts (docs/contracts/pollination_v0_275.yaml) ───────────────────
+def _pollination_job(user: str, job, allowed: list) -> str:
+	name = str(job or "").strip()
+	row = frappe.db.get_value("Contractor Job", name, ["company", "kind"], as_dict=True) if name else None
+	if not row or row.get("company") not in allowed or row.get("kind") != "Pollination":
+		raise frappe.DoesNotExistError(f"No pollination job {name!r}.")
+	return name
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_hive_map", limit=guard.READ_LIMIT)
+def get_hive_map(user: str, job=None) -> dict:
+	"""Outlines, hazards, the loading area, drops and trips — Foreman and Farm Manager."""
+	from .. import pollination
+
+	guard.require_dispatch_role(user, "Reading the hive map")
+	name = _pollination_job(user, job, guard.require_scope(user))
+	data = pollination.hive_map(name)
+	data["may_move"] = bool(guard.roles_held(user) & JOB_LINK_ROLES)
+	return data
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("update_hive_drops", mutating=True, limit=guard.WRITE_LIMIT)
+def update_hive_drops(user: str, job=None, moves=None) -> dict:
+	"""Move drops (the drag) — Farm Manager. Inside the job's blocks; refused once distribution has started."""
+	from .. import pollination
+
+	_require_job_manager(user, "Moving hive drops")
+	name = _pollination_job(user, job, guard.require_scope(user))
+	if isinstance(moves, str):
+		try:
+			moves = json.loads(moves)
+		except ValueError:
+			_clean_error("moves: a JSON list of {id, lat, lon}. Nothing was changed.")
+	try:
+		return pollination.update_drops(name, moves or [], user)
+	except pollination.PollinationError as exc:
+		_clean_error(f"{exc} Nothing was changed.")
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("get_pollination_status", limit=guard.READ_LIMIT)
+def get_pollination_status(user: str, job=None) -> dict:
+	"""The five counts, the flags, whether the beekeeper may pick up — Foreman and Farm Manager."""
+	from .. import pollination
+
+	guard.require_dispatch_role(user, "Reading pollination counts")
+	name = _pollination_job(user, job, guard.require_scope(user))
+	data = pollination.status(name)
+	data["invoice"] = None  # money stays in the Desk
+	return data

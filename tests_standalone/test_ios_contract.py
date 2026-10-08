@@ -6123,3 +6123,82 @@ for _name, _fn in vars(_ReceivingMirrors).items():
 TheContractIsComplete.COVERED.update({"list_delivery_intakes": "test_103", "get_delivery_intake": "test_104",
                                       "submit_delivery_lines": "test_105", "resolve_delivery_line": "test_106",
                                       "draft_delivery_receipt": "test_107"})
+
+
+# ── v0.275.0. Pollination (Pollination.swift, app 0.57.0) ────────────────────────────────────────────────────────
+class HiveDropModel(Codable):
+	SWIFT = "Pollination.swift"
+	STRICT = (("id", str, 0), ("lat", float, 0), ("lon", float, 0), ("hives", int, 0))
+	LENIENT = (("block", str, 0), ("block_name", str, 0), ("pallets", int, 0))
+
+
+class HiveTripModel(Codable):
+	SWIFT = "Pollination.swift"
+	STRICT = (("trip", int, 0),)
+	LENIENT = (("task", str, 0), ("hives", int, 0), ("pallets", int, 0), ("minutes", int, 0))
+
+
+class HiveMapModel(Codable):
+	SWIFT = "Pollination.swift"
+	STRICT = (("job", str, 0),)
+	LENIENT = (("may_move", bool, 0),)
+	NESTED = (("drops", HiveDropModel, True, 0), ("distribute", HiveTripModel, True, 0),
+	          ("gather", HiveTripModel, True, 0))
+
+
+class PollinationCountsModel(Codable):
+	SWIFT = "Pollination.swift"
+	STRICT = (("expected", int, 0),)
+	LENIENT = (("delivered", int, 0), ("placed", int, 0), ("gathered", int, 0), ("picked_up", int, 0))
+
+
+class PollinationStatusModel(Codable):
+	SWIFT = "Pollination.swift"
+	STRICT = (("job", str, 0),)
+	LENIENT = (("status", str, 0), ("pickup_allowed", bool, 0))
+	NESTED = (("counts", PollinationCountsModel, False, 0),)
+
+
+class _PollinationMirrors:
+	def _pollination_site(self):
+		from erpnext_mcp import config_lifecycle, flags, job_links, phone_config, pollination, task_templates
+
+		from .harness import set_roles
+		from .test_field_self_service import mill_creek
+
+		mill_creek(self)
+		task_templates.seed_farm_task_templates()
+		job_links.seed()
+		out = pollination.place(MAIN, 2027, ["Bing Block"], loading_area=(45.5850, -121.2295))
+		with config_lifecycle.desk_action():
+			phone_config.publish(pollination.KIND, out["plan"], out["version"], "test", "Administrator")
+		flags.upsert(pollination.FLAG, "Flag", True, company=MAIN, description="t", owner_area="p", active=True)
+		STORE.commit()
+		self.pollination_job = pollination.create_job(MAIN, 2027)["job"]
+		STORE.commit()
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		self.be()
+
+	def test_108_get_hive_map(self):
+		self._pollination_site()
+		HiveMapModel.decode(self.wire("get_hive_map", job=self.pollination_job), "get_hive_map")
+
+	def test_109_update_hive_drops(self):
+		self._pollination_site()
+		drop = self.wire("get_hive_map", job=self.pollination_job)["drops"][0]
+		answer = self.wire("update_hive_drops", job=self.pollination_job,
+		                   moves=json.dumps([{"id": drop["id"], "lat": drop["lat"], "lon": drop["lon"]}]))
+		self.assertEqual(answer["expected"], 24)
+
+	def test_110_get_pollination_status(self):
+		self._pollination_site()
+		PollinationStatusModel.decode(self.wire("get_pollination_status", job=self.pollination_job),
+		                              "get_pollination_status")
+
+
+for _name, _fn in vars(_PollinationMirrors).items():
+	if _name.startswith(("test_", "_pollination_site")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"get_hive_map": "test_108", "update_hive_drops": "test_109",
+                                      "get_pollination_status": "test_110"})

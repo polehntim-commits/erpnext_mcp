@@ -1,0 +1,54 @@
+# Pollination: the hive map — the frozen contract. erpnext_mcp v0.275.0; FarmOps 0.57.0 builds against it.
+# Fixtures: tests_standalone/contract/v0_275_0/ (byte-identical in FarmOps FarmOpsKit/Tests/FarmOpsKitTests/Fixtures/
+# contract_v0_275_0/).
+
+version: "0.275.0"
+
+switches:
+  pollination_enabled: "Farm Feature Flag per company — create_pollination_job refused until on"
+  job_links_enabled: "the beekeeper's link, as for every job (v0.271.0)"
+
+pollination_plan:   # Farm Config Version, kind "Pollination Plan" (slug pollination_plan), key "<company slug>_<season>"
+  company: string
+  season: "YYYY"
+  fields: "[Field] — blocks by name or alias when placed"
+  hives_per_acre: "1.0 — hives per block = round(acres × this), acres = the outline's, else the recorded"
+  hives_per_pallet: 4
+  pallets_per_drop: 1
+  clearance_ft: "30 — from valves and hazard pins inside the block"
+  loading_area: "[lat, lon] where the beekeeper sets the pallets down"
+  machine: "{pallets_per_trip: 6, speed_mph: 4, handling_min_per_drop: 4, load_min_per_trip: 10}"
+  petal_fall_bbch: "69 — a recorded stage at or past it releases the gather-up"
+  rental: "{rate_per_hive}"
+  drops: "[{id, block, block_name, lat, lon, hives, pallets}] — an even grid inside the outline, clear of hazards"
+
+job:   # Contractor Job, kind Pollination, template "pollination"
+  events: "Delivered {counts: {hives, pallets, frame_strength}} → In Progress, distribution trips released; Picked Up {counts} — refused until every gather-up trip is done"
+  operation: "{plan, plan_version, season, drops, loading_area, expected, distribute: [trip], gather: [trip], resolutions, invoice}"
+  trip: "{trip, drops: [id], hives, pallets, feet, minutes, task} — nearest-first from the loading area, batched by pallets_per_trip; gather in reverse"
+  tasks: "'Distribute hives — trip n of m (h hives)' and 'Gather hives — …', drafts until released; source_workorder pollination:<job>:<template>:<n>"
+
+counts:
+  expected: "the drops' hives"
+  delivered: "the beekeeper's Delivered hives"
+  placed: "hives on distribution trips Completed"
+  gathered: "hives on gather-up trips Completed"
+  picked_up: "the beekeeper's Picked Up hives"
+  flags: "<earlier>_vs_<later> when they differ (placed / gathered only once their trips are all done) → a Warning Compliance Alert pollination_<flag>; resolve with a reason (the alert is dismissed with it)"
+
+bees:   # the rule engine (ccf provider "pollination")
+  hives_out: "bool — a Pollination job covering the task's block has Delivered and not Picked Up"
+  bee_toxic: "bool — a product on the task (materials_used, bait product, tank mix) is a Product node whose item / EPA number matches, and a Pollinator node is harmed_by it with weight ≥ 0.3"
+  preset: "go_hold_spray_bees_out (Spray tasks): Go if no hives out OR not bee-toxic — seeded OFF, Advisory"
+
+petal_fall: "daily: jobs with hives delivered; a block's latest recorded stage ≥ petal_fall_bbch → gather-up trips released, one Info alert pollination_petal_fall"
+invoice: "link_pollination_invoice: Purchase Invoice supplier, Σ item qty vs delivered hives, grand_total vs delivered × rate_per_hive → issues; the invoice is never changed"
+
+phone:   # /farmops/api/mobile/<route>
+  get_hive_map: {who: "Foreman, Farm Manager", params: {job}, answer: "{job, loading_area, drops, blocks: [{block, label, geojson, hazards}], distribute, gather, may_move}", fixture: get_hive_map.json}
+  update_hive_drops: {who: "Farm Manager, System Manager", params: {job, moves: "JSON [{id, lat, lon, hives?}]"}, answer: "{job, drops, expected, warnings, trips}"}
+  get_pollination_status: {who: "Foreman, Farm Manager", params: {job}, answer: "{job, counts: {expected, delivered, placed, gathered, picked_up}, flags, status, pickup_allowed, gather_open, invoice: null}", fixture: get_pollination_status.json}
+
+mcp_tools:
+  read: [get_hive_map, get_pollination_status]
+  write: [plan_hive_placement, update_hive_drops, create_pollination_job, resolve_pollination_flag, release_hive_gather, link_pollination_invoice]

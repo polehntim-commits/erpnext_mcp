@@ -242,6 +242,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"submit_delivery_lines",
 		"resolve_delivery_line",
 		"draft_delivery_receipt",
+		# v0.275.0. Pollination (app 0.57.0).
+		"get_hive_map",
+		"update_hive_drops",
+		"get_pollination_status",
 		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
 		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).

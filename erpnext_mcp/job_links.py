@@ -34,12 +34,17 @@ LINK = "Contractor Job Link"
 KIND = "Job Template"
 TASK = "Farm Task"
 FLAG = "job_links_enabled"
-KINDS = {"contractor_work": "Contractor Work", "supplier_delivery": "Supplier Delivery", "supplier_pickup": "Supplier Pickup"}
+KINDS = {"contractor_work": "Contractor Work", "supplier_delivery": "Supplier Delivery", "supplier_pickup": "Supplier Pickup",
+         "pollination": "Pollination"}
 EVENTS_BY_KIND = {
 	"Contractor Work": ("Arrived", "Done"),
 	"Supplier Delivery": ("Delivered",),
 	"Supplier Pickup": ("Picked Up",),
+	# v0.275.0. The beekeeper: Delivered (with counts) when the hives arrive, Picked up when they leave.
+	"Pollination": ("Delivered", "Picked Up"),
 }
+#: Counts a page may send with an event (whole numbers; frame strength may be a decimal).
+COUNT_KEYS = ("hives", "pallets", "frame_strength")
 DONE_EVENTS = ("Done", "Delivered", "Picked Up")
 CLOSED = ("Closed", "Cancelled")
 MAX_PHOTO_BYTES = 8 * 1024 * 1024
@@ -76,6 +81,19 @@ SEED_TEMPLATES = {
 		"hazard_layers": [],
 		"actions": {"photos": True, "note": True},
 		"link_days": 14,
+		"show_sop": False,
+		"post_completion": [],
+	},
+	"pollination": {
+		"title": {"en": "Pollination — hive delivery and pickup", "es": "Polinización — entrega y recogida de colmenas"},
+		"kind": "pollination",
+		"default_scope": "Set the pallets at the loading area marked on the map and tap Delivered with the count. We "
+		                 "place them in the blocks and bring them back to the same spot after petal fall; tap Picked up "
+		                 "when you take them.",
+		"prep_tasks": [],
+		"hazard_layers": [],
+		"actions": {"photos": True, "note": True, "counts": list(("hives", "pallets", "frame_strength"))},
+		"link_days": 90,
 		"show_sop": False,
 		"post_completion": [],
 	},
@@ -473,7 +491,8 @@ def page_data(job: str) -> dict:
 		"hazards": _hazards(doc),
 		"expected": _expected_lines(doc),
 		"actions": {"events": list(EVENTS_BY_KIND.get(doc.kind, ())),
-		            "photos": bool(actions.get("photos", True)), "note": bool(actions.get("note", True))},
+		            "photos": bool(actions.get("photos", True)), "note": bool(actions.get("note", True)),
+		            **({"counts": [k for k in actions["counts"] if k in COUNT_KEYS]} if actions.get("counts") else {})},
 		"done": [e for e in events],
 	}
 
@@ -494,20 +513,53 @@ def record_event(link: dict, event: str, *, note: str = "", name_given: str = ""
 		raise JobError(f"{event!r} is not an action on this job.")
 	if event in DONE_EVENTS and any(e.get("event") == event for e in doc.get("events") or []):
 		return {"event": event, "already": True, "status": doc.status}
+	counts = _clean_counts(counts)
+	if doc.kind == "Pollination" and event == "Picked Up":
+		from . import pollination
+
+		ready, waiting = pollination.can_pick_up(doc.name)
+		if not ready:
+			raise JobError(f"Not yet — the crew is still bringing the hives back ({len(waiting)} trip(s) to go). "
+			               "We will tell you when they are all at the loading area.")
 	doc.append("events", {"event": event, "at": frappe.utils.now(), "ip": (ip or "")[:60],
 	                      "name_given": str(name_given or "")[:80] or None, "note": str(note or "")[:MAX_NOTE] or None,
 	                      "counts": json.dumps(counts) if counts else None, "file": file or None})
 	if event == "Arrived" and doc.status in ("Ready", "Shared"):
 		doc.status = "In Progress"
 	prompts = []
-	if event in DONE_EVENTS:
+	if event in DONE_EVENTS and not (doc.kind == "Pollination" and event == "Delivered"):
 		doc.status = "Done"
 		doc.done_at = frappe.utils.now()
 		prompts = _post_completion(doc)
+	elif doc.kind == "Pollination" and event == "Delivered":
+		doc.status = "In Progress"
 	doc.save(ignore_permissions=True)
-	if event == "Delivered":
+	if doc.kind == "Pollination" and event in ("Delivered", "Picked Up"):
+		from . import pollination
+
+		pollination.on_event(doc.name, event)
+	elif event == "Delivered":
 		_receiving(doc.name)
 	return {"event": event, "status": doc.status, "prompts": prompts}
+
+
+def _clean_counts(raw) -> dict | None:
+	"""Only the known counts, as numbers ≥ 0; anything else is dropped."""
+	if not isinstance(raw, dict):
+		return None
+	out = {}
+	for key in COUNT_KEYS:
+		value = raw.get(key)
+		if value in (None, ""):
+			continue
+		try:
+			number = float(value)
+		except (TypeError, ValueError):
+			raise JobError(f"{key}: a number") from None
+		if number < 0 or number > 100000:
+			raise JobError(f"{key}: 0–100000")
+		out[key] = int(number) if key != "frame_strength" else round(number, 1)
+	return out or None
 
 
 def _receiving(job: str, file: str = "") -> None:

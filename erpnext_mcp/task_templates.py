@@ -700,8 +700,11 @@ def seed_farm_task_templates() -> dict:
 	# v0.273.0. Shop work for a weather day: three the queue's suggestions raise (enabled) and ten Mid-Columbia
 	# starters (DISABLED until somebody enables them).
 	from .shop_queue import SEED_TEMPLATES as SHOP
+	# v0.275.0. The crew's hive trips (distribute / gather) — enabled; raised only by a pollination job.
+	from .pollination import TASK_TEMPLATES as HIVES
 
-	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204, BADGE_PHOTO, *SEASONAL, *JOB_PREP, CHECK_IN, *SHOP):
+	for spec in (*SEED_TEMPLATES, *SEED_TASK_TEMPLATES_V204, BADGE_PHOTO, *SEASONAL, *JOB_PREP, CHECK_IN, *SHOP,
+	             *HIVES):
 		name = spec["template_name"]
 		try:
 			if frappe.db.exists(TEMPLATE_DOCTYPE, {"template_name": name}):

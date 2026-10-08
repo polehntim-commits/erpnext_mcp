@@ -59,9 +59,16 @@
 		var msg = el("p", "", "small"); var note = el("textarea"); note.rows = 2; note.placeholder = "Note (optional)";
 		var who = el("input"); who.placeholder = "Your name (optional)";
 		var done = (d.done || []).map(function (e) { return e.event; });
+		// v0.275.0. Counts with the tap (pollination: hives, pallets, frame strength).
+		var countInputs = {};
+		(d.actions.counts || []).forEach(function (k) {
+			var label = el("label", k.replace(/_/g, " ") + " "); var i = el("input"); i.type = "number"; i.min = "0";
+			i.inputMode = "decimal"; label.appendChild(i); countInputs[k] = i; act.appendChild(label);
+		});
+		function counts() { var c = {}; Object.keys(countInputs).forEach(function (k) { if (countInputs[k].value !== "") c[k] = Number(countInputs[k].value); }); return c; }
 		(d.actions.events || []).forEach(function (ev) {
 			var b = el("button", done.indexOf(ev) >= 0 ? ev + " ✓" : ev, "btn"); b.disabled = done.indexOf(ev) >= 0;
-			b.onclick = function () { post("/event", JSON.stringify({ event: ev, note: note.value, name: who.value }))
+			b.onclick = function () { post("/event", JSON.stringify({ event: ev, note: note.value, name: who.value, counts: counts() }))
 				.then(function () { b.textContent = ev + " ✓"; b.disabled = true; msg.textContent = "Saved. Thank you."; msg.className = "ok"; })
 				.catch(function (e) { msg.textContent = e.message; msg.className = "err"; }); };
 			act.appendChild(b);

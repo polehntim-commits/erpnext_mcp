@@ -464,6 +464,8 @@ scheduler_events = {
 		"erpnext_mcp.seasonal.daily",
 		# v0.274.0. Budget lines at 90% / 100% of their year → one alert per level; off unless live_budget_enabled.
 		"erpnext_mcp.live_budget.daily",
+		# v0.275.0. Petal fall on a block with hives out → the gather-up released and the managers told, once.
+		"erpnext_mcp.pollination.daily",
 	],
 	"weekly": [
 		"erpnext_mcp.drift.scan",

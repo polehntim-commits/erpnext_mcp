@@ -50,7 +50,8 @@
   "done_at",
   "post_completion",
   "events_section",
-  "events"
+  "events",
+  "operation"
  ],
  "fields": [
   {
@@ -70,7 +71,7 @@
    "fieldname": "kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "Contractor Work\nSupplier Delivery\nSupplier Pickup",
+   "options": "Contractor Work\nSupplier Delivery\nSupplier Pickup\nPollination",
    "default": "Contractor Work",
    "in_list_view": 1
   },
@@ -262,6 +263,12 @@
    "fieldtype": "Table",
    "label": "Events",
    "options": "Contractor Job Event"
+  },
+  {
+   "fieldname": "operation",
+   "fieldtype": "JSON",
+   "label": "Operation",
+   "description": "v0.275.0. A pollination season's working copy: drops, trips, counts, resolutions, invoice check."
   }
  ],
  "track_changes": 1,

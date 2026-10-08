@@ -1277,6 +1277,14 @@
   "allow_request_inputs",
   "allow_draft_erpnext_budget",
   "allow_get_input_cost_by_block",
+  "allow_plan_hive_placement",
+  "allow_update_hive_drops",
+  "allow_get_hive_map",
+  "allow_create_pollination_job",
+  "allow_get_pollination_status",
+  "allow_resolve_pollination_flag",
+  "allow_release_hive_gather",
+  "allow_link_pollination_invoice",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -10918,6 +10926,62 @@
    "fieldname": "allow_get_input_cost_by_block",
    "fieldtype": "Check",
    "label": "Get Input Cost By Block"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.275.0. Drop points and trips; a draft plan.",
+   "fieldname": "allow_plan_hive_placement",
+   "fieldtype": "Check",
+   "label": "Plan Hive Placement"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.275.0. Move drops on the season's job.",
+   "fieldname": "allow_update_hive_drops",
+   "fieldtype": "Check",
+   "label": "Update Hive Drops"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.275.0. The season's hive map.",
+   "fieldname": "allow_get_hive_map",
+   "fieldtype": "Check",
+   "label": "Get Hive Map"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.275.0. The season's job and crew trips.",
+   "fieldname": "allow_create_pollination_job",
+   "fieldtype": "Check",
+   "label": "Create Pollination Job"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.275.0. Counts, flags, pickup, invoice; block history.",
+   "fieldname": "allow_get_pollination_status",
+   "fieldtype": "Check",
+   "label": "Get Pollination Status"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.275.0. Settle a count mismatch.",
+   "fieldname": "allow_resolve_pollination_flag",
+   "fieldtype": "Check",
+   "label": "Resolve Pollination Flag"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.275.0. Gather-up trips on the board now.",
+   "fieldname": "allow_release_hive_gather",
+   "fieldtype": "Check",
+   "label": "Release Hive Gather"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.275.0. Check the rental invoice.",
+   "fieldname": "allow_link_pollination_invoice",
+   "fieldtype": "Check",
+   "label": "Link Pollination Invoice"
   }
  ],
  "index_web_pages_for_search": 0,

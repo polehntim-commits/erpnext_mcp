@@ -543,6 +543,23 @@ def preset_specs() -> list:
 			[{"field": "task_type", "op": "eq", "value": "Harvest"}],
 			"Fruit quality and crew safety in the heat.",
 		),
+		# v0.275.0. Rented hives on the block and a product the IPM graph says harms a pollinator (pollination.py).
+		_preset(
+			"go_hold_spray_bees_out",
+			"Spraying: hives are out on this block",
+			"While rented hives are on a block (delivered, not yet picked up), a spray with a product a pollinator "
+			"is harmed_by in the IPM map waits until the hives are gathered. Add harmed_by edges for Honeybee / Mason "
+			"Bee to the products that harm them; the rule reads them. Advisory.",
+			{"any": [
+				{"id": "no_hives", "path": "pollination.hives_out", "op": "eq", "value": False,
+				 "reason": {"en": "Hives are out on this block", "es": "Hay colmenas en este bloque"}},
+				{"id": "not_bee_toxic", "path": "pollination.bee_toxic", "op": "eq", "value": False,
+				 "reason": {"en": "A product on this task harms bees (IPM map)",
+				            "es": "Un producto de esta tarea daña a las abejas (mapa MIP)"}},
+			]},
+			[{"field": "task_type", "op": "eq", "value": "Spray"}],
+			"Keep bee-toxic sprays off a block while the rented hives are on it.",
+		),
 	]
 
 

@@ -984,6 +984,11 @@
    ]
   },
   "get_hazard_analysis": {},
+  "get_hive_map": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "get_i9_form": {
    "gates": [
     "private_hr"
@@ -1067,6 +1072,11 @@
    ]
   },
   "get_pest_dd_status": {},
+  "get_pollination_status": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "get_preventive_control": {},
   "get_recall_plan": {},
   "get_receipt_image": {},
@@ -1575,6 +1585,7 @@
     "dispatch"
    ]
   },
+  "update_hive_drops": {},
   "update_iot_device": {
    "gates": [
     "dispatch"

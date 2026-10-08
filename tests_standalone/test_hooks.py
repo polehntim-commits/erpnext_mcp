@@ -634,6 +634,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.seasonal.daily",
 					# v0.274.0. Live budget alerts; off unless enabled.
 					"erpnext_mcp.live_budget.daily",
+					# v0.275.0. Petal fall → gather the hives.
+					"erpnext_mcp.pollination.daily",
 				],
 				"weekly": ["erpnext_mcp.drift.scan"],
 			},

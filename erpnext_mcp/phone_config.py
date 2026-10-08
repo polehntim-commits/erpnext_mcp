@@ -53,7 +53,9 @@ KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "
          "Supplier Connector": "supplier_connector",
          # v0.274.0. A company's budget for a year (`live_budget`): lines with account / cost centre, acres, the spray
          # program, thresholds — imported from the pro forma as a draft; a person publishes.
-         "Input Plan": "input_plan"}
+         "Input Plan": "input_plan",
+         # v0.275.0. Where the hives go and how they move (`pollination`): blocks, drops, loading area, machine.
+         "Pollination Plan": "pollination_plan"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -221,6 +223,10 @@ def _validator(kind: str):
 		from . import live_budget
 
 		return live_budget.validate
+	if kind == "Pollination Plan":
+		from . import pollination
+
+		return pollination.validate
 	from . import label_compliance
 
 	return label_compliance.validate

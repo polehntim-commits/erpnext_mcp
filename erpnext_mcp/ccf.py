@@ -850,3 +850,8 @@ _offline_claims.register(_sys.modules[__name__])
 from . import pest_dd as _pest_dd  # noqa: E402
 
 _pest_dd.register(_sys.modules[__name__])
+
+# v0.275.0. Rented hives on the block and bee-toxic products on the task.
+from . import pollination as _pollination  # noqa: E402
+
+_pollination.register(_sys.modules[__name__])

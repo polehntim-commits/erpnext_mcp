@@ -526,6 +526,10 @@ ROUTES = (
 	Route("/mobile", mobile_api.submit_delivery_lines),
 	Route("/mobile", mobile_api.resolve_delivery_line),
 	Route("/mobile", mobile_api.draft_delivery_receipt),
+	# v0.275.0. Pollination: the hive map and the counts (app 0.57.0).
+	Route("/mobile", mobile_api.get_hive_map),
+	Route("/mobile", mobile_api.update_hive_drops),
+	Route("/mobile", mobile_api.get_pollination_status),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

@@ -201,6 +201,7 @@ from .tools import job_link_tools
 from .tools import receiving_tools
 from .tools import shop_queue_tools
 from .tools import live_budget_tools
+from .tools import pollination_tools
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18560,6 +18561,89 @@ TOOLS = {
 		{"company": _field(_STRING, "The company."), "year": _field(_INTEGER, "The budget year (default this year).")},
 		required=("company",),
 		title="Get input cost by block",
+	),
+	"plan_hive_placement": _tool(
+		pollination_tools.plan_hive_placement,
+		"MUTATING (default OFF). v0.275.0. Where the rented hives go: drop points spread evenly inside each block's "
+		"outline (by name or alias), clear of valves and hazard pins, hives = acres × hives_per_acre on pallets of "
+		"hives_per_pallet; the crew's trips from the loading area batched by the machine's pallets per trip, with "
+		"times. Saved as a DRAFT Pollination Plan a person checks and publishes (save=false previews).",
+		{"company": _field(_STRING, "The company."), "season": _field(_INTEGER, "The year (default this year)."), "fields": _field(_STRING, "Blocks by name or alias, comma-separated."),
+		 "loading_area": _field(_STRING, "'lat, lon' where the beekeeper sets the pallets down."),
+		 "hives_per_acre": _field(_NUMBER, "Default 1."), "hives_per_pallet": _field(_INTEGER, "Default 4."),
+		 "pallets_per_drop": _field(_INTEGER, "Default 1."), "clearance_ft": _field(_NUMBER, "From hazards; default 30."),
+		 "petal_fall_bbch": _field(_INTEGER, "Gather-up stage; default 69."), "rate_per_hive": _field(_NUMBER, "Rental $/hive."),
+		 "machine": _field(_OBJECT, "{pallets_per_trip: 6, speed_mph: 4, handling_min_per_drop: 4, load_min_per_trip: 10}"),
+		 "save": _field(_BOOLEAN, "Default true.")},
+		required=("company", "fields"),
+		mutating=True,
+		title="Plan hive placement",
+	),
+	"update_hive_drops": _tool(
+		pollination_tools.update_hive_drops,
+		"MUTATING (default OFF). v0.275.0. Move drops on the season's job (the drag on the map): each must stay inside "
+		"one of the job's blocks; near a hazard is warned. The crew's trips are re-planned. Refused once distribution "
+		"has started.",
+		{"job": _field(_STRING, "The season's pollination job (CJ-…)."), "moves": _field({"type": "array", "items": {"type": "object"}}, "[{id, lat, lon, hives?}]")},
+		required=("job", "moves"),
+		mutating=True,
+		title="Update hive drops",
+	),
+	"get_hive_map": _tool(
+		pollination_tools.get_hive_map,
+		"v0.275.0. The season's hive map: block outlines and their hazards, the loading area, every drop (block, "
+		"hives, pallets, where), the distribution and gather-up trips with their tasks. Read-only.",
+		{"job": _field(_STRING, "The season's pollination job (CJ-…).")},
+		required=("job",),
+		title="Get hive map",
+	),
+	"create_pollination_job": _tool(
+		pollination_tools.create_pollination_job,
+		"MUTATING (default OFF). v0.275.0. The season's pollination job from the published plan: the beekeeper's job "
+		"(link: the loading area, Delivered with hives / pallets / frame strength, Picked up), 'Distribute hives — "
+		"trip n' tasks held until the beekeeper taps Delivered, 'Gather hives — trip n' held until petal fall. "
+		"Refused until pollination_enabled is on for the company.",
+		{"company": _field(_STRING, "The company."), "season": _field(_INTEGER, "The year (default this year)."), "supplier": _field(_STRING, "The beekeeper (Supplier)."), "start_date": _field(_STRING, "YYYY-MM-DD."),
+		 "end_date": _field(_STRING, "YYYY-MM-DD."), "contact_name": _field(_STRING, "Farm contact."),
+		 "contact_phone": _field(_STRING, "Their phone.")},
+		required=("company",),
+		mutating=True,
+		title="Create pollination job",
+	),
+	"get_pollination_status": _tool(
+		pollination_tools.get_pollination_status,
+		"v0.275.0. With job: the five counts (expected, delivered, placed, gathered, picked up), each mismatch flag "
+		"and how it was resolved, whether the beekeeper may pick up, the invoice check. With field: that block's "
+		"pollination seasons. Read-only.",
+		{"job": _field(_STRING, "The season's pollination job (CJ-…)."), "field": _field(_STRING, "A block, for its history."), "company": _field(_STRING, "The company.")},
+		title="Get pollination status",
+	),
+	"resolve_pollination_flag": _tool(
+		pollination_tools.resolve_pollination_flag,
+		"MUTATING (default OFF). v0.275.0. Settle a count mismatch with the reason (e.g. 'two dead-outs stayed with "
+		"the beekeeper'); the flag's alert is dismissed with it.",
+		{"job": _field(_STRING, "The season's pollination job (CJ-…)."), "flag": _field(_STRING, "e.g. delivered_vs_placed."), "note": _field(_STRING, "Why.")},
+		required=("job", "flag", "note"),
+		mutating=True,
+		title="Resolve pollination flag",
+	),
+	"release_hive_gather": _tool(
+		pollination_tools.release_hive_gather,
+		"MUTATING (default OFF). v0.275.0. Put the gather-up trips on the board now (petal fall does it by itself "
+		"from the block's recorded stage).",
+		{"job": _field(_STRING, "The season's pollination job (CJ-…).")},
+		required=("job",),
+		mutating=True,
+		title="Release hive gather",
+	),
+	"link_pollination_invoice": _tool(
+		pollination_tools.link_pollination_invoice,
+		"MUTATING (default OFF; writes only to the job). v0.275.0. The beekeeper's Purchase Invoice against the hives "
+		"delivered at the plan's rate: supplier, hives billed, amount. The invoice is read, never changed.",
+		{"job": _field(_STRING, "The season's pollination job (CJ-…)."), "invoice": _field(_STRING, "The Purchase Invoice.")},
+		required=("job", "invoice"),
+		mutating=True,
+		title="Link pollination invoice",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

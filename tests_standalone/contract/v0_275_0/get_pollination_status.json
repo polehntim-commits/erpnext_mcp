@@ -1,0 +1,20 @@
+{
+ "message": {
+  "counts": {
+   "delivered": null,
+   "expected": 24,
+   "gathered": 0,
+   "picked_up": null,
+   "placed": 0
+  },
+  "flags": [],
+  "gather_open": [
+   "FT-2027-03-00003",
+   "FT-2027-03-00004"
+  ],
+  "invoice": null,
+  "job": "CJ-00001",
+  "pickup_allowed": false,
+  "status": "Draft"
+ }
+}

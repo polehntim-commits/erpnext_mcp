@@ -932,6 +932,8 @@ class TheSeededTemplates(V12TestCase):
 		__import__("erpnext_mcp.receiving", fromlist=["CHECK_IN"]).CHECK_IN,
 		# v0.273.0. The shop queue's templates (`test_shop_queue`).
 		*(spec["template_name"] for spec in __import__("erpnext_mcp.shop_queue", fromlist=["SEED_TEMPLATES"]).SEED_TEMPLATES),
+		# v0.275.0. Hive trips (`test_pollination`).
+		*(spec["template_name"] for spec in __import__("erpnext_mcp.pollination", fromlist=["TASK_TEMPLATES"]).TASK_TEMPLATES),
 	)
 
 	def test_they_are_all_seeded(self):

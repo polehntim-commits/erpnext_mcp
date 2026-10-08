@@ -1277,7 +1277,8 @@ def _job(request: Request, path: str) -> Response:
 			if action == "event" and request.method == "POST":
 				body = _body(request)
 				answer = job_links.record_event(link, str(body.get("event") or ""), note=str(body.get("note") or ""),
-				                                name_given=str(body.get("name") or ""), ip=ip)
+				                                name_given=str(body.get("name") or ""), ip=ip,
+				                                counts=body.get("counts") if isinstance(body.get("counts"), dict) else None)
 				job_links.record_view(link["name"], "event", ip, agent)
 				session.commit()
 				return _job_headers(_json({"ok": True, "status": answer.get("status")}))

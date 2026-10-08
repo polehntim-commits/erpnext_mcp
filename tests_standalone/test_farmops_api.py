@@ -567,6 +567,9 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/submit_delivery_lines",
 		"/mobile/resolve_delivery_line",
 		"/mobile/draft_delivery_receipt",
+		"/mobile/get_hive_map",
+		"/mobile/update_hive_drops",
+		"/mobile/get_pollination_status",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -3012,6 +3015,11 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.275.0. Pollination: reading the map and counts is Foreman / Farm Manager (dispatch); moving drops is
+		# Farm Manager / System Manager (JOB_LINK_ROLES).
+		"get_hive_map",
+		"update_hive_drops",
+		"get_pollination_status",
 		# v0.272.0. Chemical receiving: reading and posting a ticket's lines is Foreman / Farm Manager (dispatch);
 		# settling a line and drafting the receipt is Farm Manager / System Manager (RECEIVING_ROLES).
 		"list_delivery_intakes",
@@ -3431,7 +3439,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 236, "a method is named in two sets at once")
+		self.assertEqual(len(named), 239, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

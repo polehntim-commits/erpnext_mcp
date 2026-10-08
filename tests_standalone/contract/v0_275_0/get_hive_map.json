@@ -1,0 +1,210 @@
+{
+ "message": {
+  "blocks": [
+   {
+    "block": "Bing Block - MC",
+    "geojson": {
+     "coordinates": [
+      [
+       [
+        -121.23084,
+        45.586328
+       ],
+       [
+        -121.229051,
+        45.585234
+       ],
+       [
+        -121.230893,
+        45.58415
+       ],
+       [
+        -121.232513,
+        45.584564
+       ],
+       [
+        -121.232781,
+        45.585921
+       ],
+       [
+        -121.23084,
+        45.586328
+       ]
+      ]
+     ],
+     "type": "Polygon"
+    },
+    "hazards": [
+     {
+      "kind": "valve",
+      "lat": 45.5852,
+      "lon": -121.231,
+      "name": "MC-V1"
+     }
+    ],
+    "label": "MC Centerpiece"
+   },
+   {
+    "block": "Wind Mecine - MC",
+    "geojson": {
+     "coordinates": [
+      [
+       [
+        -121.230948,
+        45.584074
+       ],
+       [
+        -121.229023,
+        45.585151
+       ],
+       [
+        -121.2267,
+        45.583757
+       ],
+       [
+        -121.228154,
+        45.582431
+       ],
+       [
+        -121.230948,
+        45.584074
+       ]
+      ]
+     ],
+     "type": "Polygon"
+    },
+    "hazards": [],
+    "label": "Wind Mecine"
+   }
+  ],
+  "distribute": [
+   {
+    "drops": [
+     "BingBlockM-2",
+     "WindMecine-2",
+     "WindMecine-3",
+     "WindMecine-1",
+     "WindMecine-4",
+     "BingBlockM-1"
+    ],
+    "feet": 3625,
+    "hives": 21,
+    "minutes": 44,
+    "pallets": 6,
+    "task": "FT-2027-03-00001",
+    "trip": 1
+   },
+   {
+    "drops": [
+     "BingBlockM-3"
+    ],
+    "feet": 1409,
+    "hives": 3,
+    "minutes": 18,
+    "pallets": 1,
+    "task": "FT-2027-03-00002",
+    "trip": 2
+   }
+  ],
+  "drops": [
+   {
+    "block": "Bing Block - MC",
+    "block_name": "MC Centerpiece",
+    "hives": 4,
+    "id": "<volatile>",
+    "lat": 45.584735,
+    "lon": -121.231945,
+    "pallets": 1
+   },
+   {
+    "block": "Bing Block - MC",
+    "block_name": "MC Centerpiece",
+    "hives": 4,
+    "id": "<volatile>",
+    "lat": 45.584735,
+    "lon": -121.230273,
+    "pallets": 1
+   },
+   {
+    "block": "Bing Block - MC",
+    "block_name": "MC Centerpiece",
+    "hives": 3,
+    "id": "<volatile>",
+    "lat": 45.585905,
+    "lon": -121.231945,
+    "pallets": 1
+   },
+   {
+    "block": "Wind Mecine - MC",
+    "block_name": "Wind Mecine",
+    "hives": 4,
+    "id": "<volatile>",
+    "lat": 45.582945,
+    "lon": -121.228746,
+    "pallets": 1
+   },
+   {
+    "block": "Wind Mecine - MC",
+    "block_name": "Wind Mecine",
+    "hives": 4,
+    "id": "<volatile>",
+    "lat": 45.583972,
+    "lon": -121.230214,
+    "pallets": 1
+   },
+   {
+    "block": "Wind Mecine - MC",
+    "block_name": "Wind Mecine",
+    "hives": 4,
+    "id": "<volatile>",
+    "lat": 45.583972,
+    "lon": -121.228746,
+    "pallets": 1
+   },
+   {
+    "block": "Wind Mecine - MC",
+    "block_name": "Wind Mecine",
+    "hives": 1,
+    "id": "<volatile>",
+    "lat": 45.583972,
+    "lon": -121.227278,
+    "pallets": 1
+   }
+  ],
+  "gather": [
+   {
+    "drops": [
+     "BingBlockM-3"
+    ],
+    "feet": 1409,
+    "hives": 3,
+    "minutes": 18,
+    "pallets": 1,
+    "task": "FT-2027-03-00003",
+    "trip": 1
+   },
+   {
+    "drops": [
+     "BingBlockM-2",
+     "WindMecine-2",
+     "WindMecine-3",
+     "WindMecine-1",
+     "WindMecine-4",
+     "BingBlockM-1"
+    ],
+    "feet": 3625,
+    "hives": 21,
+    "minutes": 44,
+    "pallets": 6,
+    "task": "FT-2027-03-00004",
+    "trip": 2
+   }
+  ],
+  "job": "CJ-00001",
+  "loading_area": [
+   45.585,
+   -121.2295
+  ],
+  "may_move": true
+ }
+}
