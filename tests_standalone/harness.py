@@ -5006,6 +5006,8 @@ CHILD_TABLE_SOURCES = {
 	# and the tool would report an empty catalogue as an answer.
 	"Item Default": (("Item", "item_defaults"),),
 	"Item Barcode": (("Item", "barcodes"),),
+	# v0.271.0. `delete_farm_location` asks whether a contractor job names the block.
+	"Contractor Job Field": (("Contractor Job", "fields"),),
 	# v0.68.0. `tools/fill_pipeline.py` reads this child doctype directly with a
 	# `parenttype`/`parent` filter — once to count acknowledgments per change for
 	# list_fill_threshold_changes, once to know who has already acknowledged the

@@ -81,6 +81,7 @@
  "list_certifications",
  "list_competitive_moves",
  "list_compliance_alerts",
+ "list_contractor_jobs",
  "list_corrective_action_records",
  "list_cost_centers",
  "list_crew_candidates",
