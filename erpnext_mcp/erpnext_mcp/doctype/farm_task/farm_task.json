@@ -104,7 +104,9 @@
   "go_hold_reasons",
   "go_hold_checked_at",
   "go_hold_override",
-  "go_hold_log"
+  "go_hold_log",
+  "category",
+  "skill_level"
  ],
  "fields": [
   {
@@ -795,6 +797,19 @@
    "read_only": 1,
    "depends_on": "go_hold",
    "description": "v0.240.0. Each check, newest first: every rule's id, version, verdict and the values it read."
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Data",
+   "label": "Work Category",
+   "description": "v0.278.0. Copied from the template; Go / Hold rules match on it."
+  },
+  {
+   "fieldname": "skill_level",
+   "fieldtype": "Select",
+   "label": "Skill Level",
+   "options": "\nAny\nLearner OK\nSupervised\nSkilled",
+   "description": "v0.278.0. Copied from the template."
   }
  ],
  "index_web_pages_for_search": 0,

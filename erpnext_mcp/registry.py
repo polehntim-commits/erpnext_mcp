@@ -11796,6 +11796,20 @@ TOOLS = {
 		"several compliance records from one trip to one place. This is the shape "
 		"of a SINGLE TASK.",
 		{
+			# v0.278.0. Category, skill and timing.
+			"category": _field(_STRING, "Work category — pruning, spray, fruit_fly_cover, swd_cover, burn, irrigation, harvest, scouting, shop, winterize … Go / Hold rules match it."),
+			"skill_level": _field(_STRING, "Any, Learner OK, Supervised or Skilled."),
+			"schedule": _field(_STRING, "Repeats: Once a year, Daily, Weekly or Monthly (raised only where scheduled_templates_enabled is on for the company). Empty: never on its own."),
+			"schedule_every": _field(_INTEGER, "Every N days / weeks / months (default 1)."),
+			"schedule_weekday": _field(_STRING, "Weekly: Mon … Sun."),
+			"window_start": _field(_STRING, "MM-DD — the season it may be raised in (with window_end; may wrap the new year)."),
+			"window_end": _field(_STRING, "MM-DD."),
+			"schedule_target": _field(_STRING, "'The company' (one task) or 'Each block of the crop' (one per block)."),
+			"schedule_crop": _field(_STRING, "The crop, for each block of the crop (e.g. Cherry)."),
+			"bbch_from": _field(_INTEGER, "Raise only when the block's recorded stage is at least this BBCH."),
+			"bbch_to": _field(_INTEGER, "… and at most this BBCH."),
+			"dd_from": _field(_NUMBER, "Raise only when the block's growing degree days (°F·day since biofix, get_degree_days) are at least this."),
+			"dd_to": _field(_NUMBER, "… and at most this."),
 			"template_name": _field(
 				_STRING,
 				"REQUIRED, and the docname. What a foreman calls the job out loud: 'Cabin "
@@ -11924,6 +11938,20 @@ TOOLS = {
 		"every task it ever raised readable, which is what an auditor asking "
 		"'what did this job ask for last season' needs.",
 		{
+			# v0.278.0. Category, skill and timing.
+			"category": _field(_STRING, "Work category — pruning, spray, fruit_fly_cover, swd_cover, burn, irrigation, harvest, scouting, shop, winterize … Go / Hold rules match it."),
+			"skill_level": _field(_STRING, "Any, Learner OK, Supervised or Skilled."),
+			"schedule": _field(_STRING, "Repeats: Once a year, Daily, Weekly or Monthly (raised only where scheduled_templates_enabled is on for the company). Empty: never on its own."),
+			"schedule_every": _field(_INTEGER, "Every N days / weeks / months (default 1)."),
+			"schedule_weekday": _field(_STRING, "Weekly: Mon … Sun."),
+			"window_start": _field(_STRING, "MM-DD — the season it may be raised in (with window_end; may wrap the new year)."),
+			"window_end": _field(_STRING, "MM-DD."),
+			"schedule_target": _field(_STRING, "'The company' (one task) or 'Each block of the crop' (one per block)."),
+			"schedule_crop": _field(_STRING, "The crop, for each block of the crop (e.g. Cherry)."),
+			"bbch_from": _field(_INTEGER, "Raise only when the block's recorded stage is at least this BBCH."),
+			"bbch_to": _field(_INTEGER, "… and at most this BBCH."),
+			"dd_from": _field(_NUMBER, "Raise only when the block's growing degree days (°F·day since biofix, get_degree_days) are at least this."),
+			"dd_to": _field(_NUMBER, "… and at most this."),
 			"template": _field(_STRING, "Which template — by name or docname. REQUIRED."),
 			"task_type": _field(_STRING, "New task type."),
 			"description": _field(_STRING, "New description."),
@@ -12707,6 +12735,7 @@ TOOLS = {
 				_OBJECT, "Task facts conditions read: occupancy_at_creation, bait_placement, asset_type …"
 			),
 			"answers": _field(_OBJECT, "Answers so far, to see what show_if reveals."),
+			"company": _field(_STRING, "v0.278.0. For a timed template: show what it would raise today for this company."),
 		},
 		title="Preview a farm task template on the phone",
 		available=_needs_doctype("Farm Task Template"),

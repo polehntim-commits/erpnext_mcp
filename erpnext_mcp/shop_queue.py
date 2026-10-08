@@ -60,7 +60,7 @@ def shop_templates() -> dict:
 	"""{template docname: {shop_skill, tools_parts, safety_note, template_name}} for templates ticked Shop work."""
 	if not compat.has_field(TEMPLATE, "shop_work"):
 		return {}
-	fields = compat.existing_fields(TEMPLATE, ("name", "template_name", "shop_skill", "tools_parts", "safety_note",
+	fields = compat.existing_fields(TEMPLATE, ("name", "template_name", "shop_skill", "skill_level", "tools_parts", "safety_note",
 	                                           "estimated_duration_minutes", "enabled"))
 	return {r["name"]: dict(r) for r in frappe.db.get_all(TEMPLATE, filters={"shop_work": 1}, fields=fields,
 	                                                      limit=2000) or []}
@@ -103,7 +103,7 @@ def backlog(company: str) -> list:
 			"asset": task.get("asset"), "state": task.get("state"), "urgency": task.get("urgency") or "Normal",
 			"due_date": str(task.get("due_date") or "") or None,
 			"minutes": int(task.get("estimated_duration_minutes") or meta.get("estimated_duration_minutes") or 60),
-			"skill": meta.get("shop_skill") or ("Skilled" if kind == "machine" else "Any"),
+			"skill": meta.get("skill_level") or meta.get("shop_skill") or ("Skilled" if kind == "machine" else "Any"),
 			"tools_parts": meta.get("tools_parts") or None, "safety_note": meta.get("safety_note") or None,
 			"assigned_to": task.get("assigned_to"), "created": str(task.get("creation") or "")[:10] or None,
 		})
@@ -239,7 +239,7 @@ def day_plan(company: str, day: str = "", people: int = 0, forecast=None) -> dic
 		if used + item["minutes"] > budget and picked:
 			continue
 		used += item["minutes"]
-		if item["skill"] == "Skilled":
+		if item["skill"] in ("Skilled", "Supervised"):
 			item["pairing"] = ("Pair a learner with someone who knows this job" +
 			                   (f" ({', '.join(pairs[:3])})" if pairs else "") + ".")
 		elif item["skill"] == "Learner OK":

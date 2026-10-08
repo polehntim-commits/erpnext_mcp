@@ -209,6 +209,13 @@ def create_farm_task_template(args: dict) -> ToolResult:
 
 	if spec.get("daily_check") not in (None, "", "Start of Day", "End of Day"):
 		raise ToolError("daily_check is 'Start of Day', 'End of Day' or empty. Nothing was created.")
+	# v0.278.0. Category, skill and timing — validated together, refused naming every problem.
+	plan = {k: args[k] for k in task_templates.PLAN_FIELDS if k in args}
+	if plan:
+		try:
+			spec.update(task_templates.plan_values(plan))
+		except ValueError as exc:
+			raise ToolError(f"{exc}. Nothing was created.") from None
 	doc = task_templates.build_template(spec)
 	doc.insert(ignore_permissions=True)
 	# v0.277.0. BLANK MEANS SHARED. Frappe fills an empty Company link from the caller's default company on insert;
@@ -276,6 +283,19 @@ def update_farm_task_template(args: dict) -> ToolResult:
 			if str(getattr(doc, field, "") or "") != value:
 				changes[field] = {"from": getattr(doc, field, "") or "", "to": value}
 			setattr(doc, field, value)
+
+	# v0.278.0. Category, skill and timing: the change checked against what the template already says.
+	plan = {k: args[k] for k in task_templates.PLAN_FIELDS if k in args}
+	if plan and compat.has_field(TEMPLATE, "category"):
+		try:
+			values = task_templates.plan_values(plan, {k: doc.get(k) for k in task_templates.PLAN_FIELDS})
+		except ValueError as exc:
+			raise ToolError(f"{exc}. Nothing was changed.") from None
+		for key in plan:
+			value = values.get(key)
+			if str(doc.get(key) or "") != str(value or ""):
+				changes[key] = {"from": doc.get(key) or "", "to": value or ""}
+			doc.set(key, value if value not in ("",) else None)
 
 	for field, doctype in _CHOICE_FIELDS:
 		if field in args:
@@ -615,6 +635,15 @@ def preview_farm_task_template(args: dict) -> ToolResult:
 		report = form_schema.validate(fields)
 		problems = render_problems(name, row)
 	context = {"language": language, "task_type": row.get("task_type") or "", "template": name, **context}
+	# v0.278.0. A timed template: what it would raise today, for the company asked about (or its own).
+	schedule = None
+	if row.get("schedule"):
+		from .. import template_schedule
+
+		company = resolve_company(as_str(args, "company")) if args.get("company") else row.get("company")
+		schedule = {"repeats": row.get("schedule"), "target": row.get("schedule_target"),
+		            "today": [i for i in template_schedule.due(company, None) if i["template"] == name] if company else None,
+		            "note": None if company else "name a company to see what it would raise today"}
 	phone = form_schema.for_phone(fields, answers)
 	shown = form_schema.visible(fields, answers, context)
 	return ToolResult(
@@ -629,6 +658,9 @@ def preview_farm_task_template(args: dict) -> ToolResult:
 				else row.get("instructions")
 			),
 			"task_type": row.get("task_type"),
+			"category": row.get("category") or None,
+			"skill_level": row.get("skill_level") or None,
+			"schedule": schedule,
 			"form": phone,
 			"form_is_legacy_checklist": not task_templates.form_of(row),
 			"rendered": form_schema.resolve_language(shown, language),
@@ -737,6 +769,10 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 		default_name = f"{default_name} — {location}"
 	doc.task_name = (as_str(args, "task_name") or default_name)[:140]
 	doc.task_type = shape["task_type"]
+	# v0.278.0. The work category (Go / Hold matches it) and the skill level, copied.
+	for key in ("category", "skill_level"):
+		if shape.get(key) and compat.has_field(FARM_TASK, key):
+			doc.set(key, shape[key])
 	# v0.203.0. `origin` and `fields` are for this app's own triggers (a bait
 	# product issued to a cabin raises a `field_reported` placement carrying the
 	# product) and are not arguments a caller can send.

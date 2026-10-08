@@ -469,6 +469,8 @@ scheduler_events = {
 		"erpnext_mcp.live_budget.daily",
 		# v0.275.0. Petal fall on a block with hives out → the gather-up released and the managers told, once.
 		"erpnext_mcp.pollination.daily",
+		# v0.278.0. Templates that raise their own tasks (date, repeat, stage, degree days); off unless enabled.
+		"erpnext_mcp.template_schedule.daily",
 	],
 	"weekly": [
 		"erpnext_mcp.drift.scan",

@@ -131,6 +131,9 @@ TEMPLATE_FIELDS = (
 	"creation",
 	"modified",
 	"owner",
+	# v0.278.0. Category, skill and timing; the shop fields (v0.273.0).
+	"category", "skill_level", "schedule", "schedule_every", "schedule_weekday", "window_start", "window_end",
+	"schedule_target", "schedule_crop", "bbch_from", "bbch_to", "dd_from", "dd_to", "shop_work", "shop_skill",
 )
 
 
@@ -356,6 +359,9 @@ def snapshot(name: str) -> dict:
 		"form_schema": form_of(row),
 		# v0.205.0. Who may do it, COPIED the same way.
 		"required_certification": str(row.get("required_certification") or ""),
+		# v0.278.0. The work category and skill level, COPIED (Go / Hold matches the category).
+		"category": str(row.get("category") or ""),
+		"skill_level": str(row.get("skill_level") or row.get("shop_skill") or ""),
 		# v0.213.0. Whether it is a crew job, what it counts and its sections, COPIED.
 		"is_crew_task": str(row.get("work_mode") or "") == "Crew",
 		"crew_piece_unit": str(row.get("crew_piece_unit") or ""),
@@ -374,6 +380,73 @@ def snapshot(name: str) -> dict:
 			]
 		},
 	}
+
+
+#: v0.278.0. Category, skill and timing on a template. One list so build, update and the copy to a task agree.
+PLAN_FIELDS = ("category", "skill_level", "schedule", "schedule_every", "schedule_weekday", "window_start", "window_end",
+               "schedule_target", "schedule_crop", "bbch_from", "bbch_to", "dd_from", "dd_to")
+SKILL_LEVELS = ("Any", "Learner OK", "Supervised", "Skilled")
+SCHEDULES = ("Once a year", "Daily", "Weekly", "Monthly")
+TARGETS = ("The company", "Each block of the crop")
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def _mmdd(value) -> bool:
+	import re as _re
+
+	text = str(value or "")
+	if not _re.fullmatch(r"(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])", text):
+		return False
+	return True
+
+
+def plan_values(source: dict, current: dict | None = None) -> dict:
+	"""The plan fields from a spec / tool arguments, validated against each other. Raises ValueError naming every
+	problem. `current` is the template as it stands (an update passes only what changes)."""
+	merged = {**{k: (current or {}).get(k) for k in PLAN_FIELDS}, **{k: source[k] for k in PLAN_FIELDS if k in source}}
+	problems = []
+	if merged.get("skill_level") not in (None, "") and merged["skill_level"] not in SKILL_LEVELS:
+		problems.append(f"skill_level is one of {', '.join(SKILL_LEVELS)}")
+	schedule = merged.get("schedule") or ""
+	if schedule and schedule not in SCHEDULES:
+		problems.append(f"schedule is one of {', '.join(SCHEDULES)}")
+	every = merged.get("schedule_every")
+	if every not in (None, "") and (not str(every).isdigit() or int(every) < 1):
+		problems.append("schedule_every is a whole number, 1 or more")
+	if merged.get("schedule_weekday") not in (None, "") and merged["schedule_weekday"] not in WEEKDAYS:
+		problems.append(f"schedule_weekday is one of {', '.join(WEEKDAYS)}")
+	for key in ("window_start", "window_end"):
+		if merged.get(key) not in (None, "") and not _mmdd(merged[key]):
+			problems.append(f"{key} is a month-day like 03-15")
+	if bool(merged.get("window_start")) != bool(merged.get("window_end")):
+		problems.append("window_start and window_end go together")
+	target = merged.get("schedule_target") or ""
+	if target and target not in TARGETS:
+		problems.append(f"schedule_target is one of {', '.join(TARGETS)}")
+	if schedule and not target:
+		problems.append("a schedule needs schedule_target (the company, or each block of a crop)")
+	if target == "Each block of the crop" and not merged.get("schedule_crop"):
+		problems.append("each block of the crop: name the crop (schedule_crop)")
+	for low, high, top in (("bbch_from", "bbch_to", 99), ("dd_from", "dd_to", 20000)):
+		values = {}
+		for key in (low, high):
+			raw = merged.get(key)
+			if raw in (None, ""):
+				continue
+			try:
+				values[key] = float(raw)
+			except (TypeError, ValueError):
+				problems.append(f"{key} is a number")
+				continue
+			if not 0 <= values[key] <= top:
+				problems.append(f"{key} is 0–{top}")
+		if len(values) == 2 and values[low] > values[high]:
+			problems.append(f"{low} is above {high}")
+		if values and target != "Each block of the crop":
+			problems.append(f"{low} / {high} need schedule_target 'Each block of the crop' (a stage is a block's)")
+	if problems:
+		raise ValueError("; ".join(problems))
+	return {k: merged.get(k) for k in PLAN_FIELDS}
 
 
 def build_template(spec: dict):
@@ -416,6 +489,11 @@ def build_template(spec: dict):
 	for key in ("title_es", "instructions_es", "required_certification"):
 		if spec.get(key):
 			doc.set(key, str(spec[key]).strip())
+	# v0.278.0. Category, skill and timing.
+	if any(spec.get(k) not in (None, "") for k in PLAN_FIELDS) and compat.has_field(TEMPLATE_DOCTYPE, "category"):
+		for key, value in plan_values(spec).items():
+			if value not in (None, ""):
+				doc.set(key, value)
 	# v0.273.0. Shop work for a weather day (shop_queue.py).
 	if spec.get("shop_work") and compat.has_field(TEMPLATE_DOCTYPE, "shop_work"):
 		doc.shop_work = 1

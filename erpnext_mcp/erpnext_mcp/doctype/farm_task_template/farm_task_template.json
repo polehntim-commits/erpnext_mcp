@@ -61,7 +61,22 @@
   "shop_work",
   "shop_skill",
   "tools_parts",
-  "safety_note"
+  "safety_note",
+  "timing_section",
+  "category",
+  "skill_level",
+  "schedule",
+  "schedule_every",
+  "schedule_weekday",
+  "timing_col",
+  "window_start",
+  "window_end",
+  "schedule_target",
+  "schedule_crop",
+  "bbch_from",
+  "bbch_to",
+  "dd_from",
+  "dd_to"
  ],
  "fields": [
   {
@@ -421,6 +436,99 @@
    "fieldtype": "Small Text",
    "label": "Safety Note",
    "depends_on": "eval:doc.shop_work"
+  },
+  {
+   "fieldname": "timing_section",
+   "fieldtype": "Section Break",
+   "label": "Category, Skill and Timing",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Data",
+   "label": "Work Category",
+   "description": "v0.278.0. What kind of work this is — pruning, spray, fruit_fly_cover, swd_cover, burn, irrigation, harvest, scouting, shop, winterize … Go / Hold rules match on it (not on words in the task name)."
+  },
+  {
+   "fieldname": "skill_level",
+   "fieldtype": "Select",
+   "label": "Skill Level",
+   "options": "\nAny\nLearner OK\nSupervised\nSkilled",
+   "description": "Who may take it: anybody, a learner, a learner with somebody watching, or only someone who knows it."
+  },
+  {
+   "fieldname": "schedule",
+   "fieldtype": "Select",
+   "label": "Repeats",
+   "options": "\nOnce a year\nDaily\nWeekly\nMonthly",
+   "description": "Raise tasks from this template on a schedule (needs scheduled_templates_enabled for the company)."
+  },
+  {
+   "fieldname": "schedule_every",
+   "fieldtype": "Int",
+   "label": "Every",
+   "default": "1",
+   "depends_on": "eval:doc.schedule"
+  },
+  {
+   "fieldname": "schedule_weekday",
+   "fieldtype": "Select",
+   "label": "On",
+   "options": "\nMon\nTue\nWed\nThu\nFri\nSat\nSun",
+   "depends_on": "eval:doc.schedule=='Weekly'"
+  },
+  {
+   "fieldname": "timing_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "window_start",
+   "fieldtype": "Data",
+   "label": "From (MM-DD)",
+   "depends_on": "eval:doc.schedule"
+  },
+  {
+   "fieldname": "window_end",
+   "fieldtype": "Data",
+   "label": "Until (MM-DD)",
+   "depends_on": "eval:doc.schedule"
+  },
+  {
+   "fieldname": "schedule_target",
+   "fieldtype": "Select",
+   "label": "Raise For",
+   "options": "\nThe company\nEach block of the crop",
+   "depends_on": "eval:doc.schedule"
+  },
+  {
+   "fieldname": "schedule_crop",
+   "fieldtype": "Data",
+   "label": "Crop",
+   "depends_on": "eval:doc.schedule_target=='Each block of the crop'"
+  },
+  {
+   "fieldname": "bbch_from",
+   "fieldtype": "Int",
+   "label": "Stage From (BBCH)",
+   "depends_on": "eval:doc.schedule_target=='Each block of the crop'"
+  },
+  {
+   "fieldname": "bbch_to",
+   "fieldtype": "Int",
+   "label": "Stage To (BBCH)",
+   "depends_on": "eval:doc.schedule_target=='Each block of the crop'"
+  },
+  {
+   "fieldname": "dd_from",
+   "fieldtype": "Float",
+   "label": "Degree Days From (°F·day)",
+   "depends_on": "eval:doc.schedule_target=='Each block of the crop'"
+  },
+  {
+   "fieldname": "dd_to",
+   "fieldtype": "Float",
+   "label": "Degree Days To (°F·day)",
+   "depends_on": "eval:doc.schedule_target=='Each block of the crop'"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -638,6 +638,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.live_budget.daily",
 					# v0.275.0. Petal fall → gather the hives.
 					"erpnext_mcp.pollination.daily",
+					# v0.278.0. Scheduled templates; off unless enabled.
+					"erpnext_mcp.template_schedule.daily",
 				],
 				"weekly": ["erpnext_mcp.drift.scan"],
 			},

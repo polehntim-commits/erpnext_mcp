@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.278.0 — 2026-10-08 — category, skill and timing on task templates
+
+**Migrate needed** (fields on Farm Task Template and Farm Task; one daily job). **No new tools** (1,136 before and
+after): create / update / preview_farm_task_template take the new fields. Deploy `docs/deploy/v0.278.0_template_plan.md`.
+
+- **Work category** on a template (pruning, spray, fruit_fly_cover, swd_cover, burn, irrigation, harvest, scouting,
+  shop, winterize …), copied to its tasks. **Go / Hold presets match the category**; the old word in the task name
+  still matches a task raised without one. Presets nobody touched move to the new scope at migrate.
+- **Skill level** (Any / Learner OK / Supervised / Skilled) on every template, copied to the task; the shop queue
+  reads it (supervised and skilled jobs get the pairing note).
+- **Timing**: a template can raise its own tasks — once a year, daily, weekly (on a weekday) or monthly, every N, in
+  a season window (MM-DD to MM-DD, may wrap the year), for the company or for each block of a crop, gated by the
+  block's recorded BBCH stage and / or its growing degree days (°F·day, as `get_degree_days`). Once per period and
+  place (the key is the task's source); a block with no recorded stage waits and the run says why. Off per company
+  until `scheduled_templates_enabled`. `preview_farm_task_template(company=…)` shows what it would raise today.
+- Bad timing is refused naming every problem (unknown repeat, a malformed month-day, a window with one end, a stage
+  range upside down, a stage gate on a company-level template).
+
 ## 0.277.0 — 2026-10-08 — field fixes from the OML cleanup and the year schedule
 
 **No migrate** (one new hourly job). No new tools. Deploy `docs/deploy/v0.277.0_field_fixes.md`.

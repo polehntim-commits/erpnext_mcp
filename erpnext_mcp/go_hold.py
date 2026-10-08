@@ -456,7 +456,7 @@ def preset_specs() -> list:
 				{"id": "no_frost", "path": "weather.forecast.daily[0..1].tmin_f", "agg": "min", "op": "gt", "value": 28,
 				 "reason": {"en": "Frost forecast", "es": "Pronóstico de helada"}},
 			]},
-			[{"field": "task_name", "op": "contains", "value": "prun"}],
+			[{"field": "", "op": "any", "value": [{"field": "category", "op": "eq", "value": "pruning"}, {"field": "task_name", "op": "contains", "value": "prun"}]}],
 			"Prune in dry weather so wounds close before bacterial canker gets in.",
 		),
 		# v0.264.0. Pest degree-day windows on the block (pest_dd): a spray aimed at a pest goes when that pest
@@ -471,7 +471,7 @@ def preset_specs() -> list:
 			 "basis": "published", "source": "pest_dd_models: western-cherry-fruit-fly first emergence (verify the model)",
 			 "reason": {"en": "Cherry fruit fly not emerged yet on this block by its degree days",
 			            "es": "La mosca de la cereza aún no ha emergido en este bloque según sus grados-día"}},
-			[{"field": "task_type", "op": "eq", "value": "Spray"}, {"field": "task_name", "op": "contains", "value": "fruit fly"}],
+			[{"field": "task_type", "op": "eq", "value": "Spray"}, {"field": "", "op": "any", "value": [{"field": "category", "op": "eq", "value": "fruit_fly_cover"}, {"field": "task_name", "op": "contains", "value": "fruit fly"}]}],
 			"Time fruit fly cover sprays to emergence on each block.",
 		),
 		_preset(
@@ -483,7 +483,7 @@ def preset_specs() -> list:
 			 "basis": "published", "source": "pest_dd_models: spotted-wing-drosophila first flight (verify the model)",
 			 "reason": {"en": "SWD not flying yet on this block by its degree days",
 			            "es": "La SWD aún no vuela en este bloque según sus grados-día"}},
-			[{"field": "task_type", "op": "eq", "value": "Spray"}, {"field": "task_name", "op": "contains", "value": "SWD"}],
+			[{"field": "task_type", "op": "eq", "value": "Spray"}, {"field": "", "op": "any", "value": [{"field": "category", "op": "eq", "value": "swd_cover"}, {"field": "task_name", "op": "contains", "value": "SWD"}]}],
 			"Time SWD sprays to first flight on each block.",
 		),
 		_preset(
@@ -507,7 +507,7 @@ def preset_specs() -> list:
 				{"id": "not_hot", "path": "weather.forecast.daily[0..1].tmax_f", "agg": "max", "op": "lt", "value": 85,
 				 "reason": {"en": "Hot and dry — no burning", "es": "Calor y seco — no se quema"}},
 			]},
-			[{"field": "task_name", "op": "contains", "value": "burn"}],
+			[{"field": "", "op": "any", "value": [{"field": "category", "op": "eq", "value": "burn"}, {"field": "task_name", "op": "contains", "value": "burn"}]}],
 			"Burn piles only when a fire stays where it is put.",
 		),
 		# v0.245.0. Work an SOP covers waits for that SOP's approval. Advisory first (the design note's
@@ -566,6 +566,17 @@ def preset_specs() -> list:
 #: v0.255.0. Trees a preset SHIPPED WITH EARLIER, by rule id. Seeding is create-only, so a site that ran
 #: v0.240.0–v0.252.0 kept the old tree when v0.253.0 changed the defaults (decision 15 / 19: the rain
 #: chance over 0.05 in, dry 48 h). `refresh_presets` replaces one of these — and only one of these.
+#: v0.278.0. Scopes a preset SHIPPED WITH EARLIER (matching words in the task name). A preset nobody touched moves
+#: to today's scope — the template's work category, or the old word for a task raised without one.
+SUPERSEDED_SCOPES = {
+	"go_hold_pruning_canker": [[{"field": "task_name", "op": "contains", "value": "prun"}]],
+	"go_hold_spray_fruit_fly_window": [[{"field": "task_type", "op": "eq", "value": "Spray"},
+	                                    {"field": "task_name", "op": "contains", "value": "fruit fly"}]],
+	"go_hold_spray_swd_window": [[{"field": "task_type", "op": "eq", "value": "Spray"},
+	                              {"field": "task_name", "op": "contains", "value": "SWD"}]],
+	"go_hold_burn": [[{"field": "task_name", "op": "contains", "value": "burn"}]],
+}
+
 SUPERSEDED_TREES = {
 	"go_hold_pruning_canker": (
 		{"all": [
@@ -588,6 +599,7 @@ def refresh_presets() -> list:
 	if not compat.doctype_exists(compliance_rules.DOCTYPE):
 		return refreshed
 	for spec in preset_specs():
+		_refresh_scope(spec, refreshed)
 		olds = SUPERSEDED_TREES.get(spec["rule_id"])
 		if not olds:
 			continue
@@ -609,6 +621,28 @@ def refresh_presets() -> list:
 		except Exception:
 			frappe.log_error(title=f"Go/Hold preset {spec['rule_id']} not refreshed", message=frappe.get_traceback())
 	return refreshed
+
+
+def _refresh_scope(spec: dict, refreshed: list) -> None:
+	olds = SUPERSEDED_SCOPES.get(spec["rule_id"])
+	if not olds:
+		return
+	try:
+		row = frappe.db.get_value(
+			compliance_rules.DOCTYPE, {"rule_id": spec["rule_id"]},
+			["name", "enabled", "version", "human_approved_by", "scope_filters_json"], as_dict=True)
+		if not row or compat.checked(row.get("enabled")) or int(row.get("version") or 1) > 1 or row.get("human_approved_by"):
+			return
+		shipped_state = [{"field": "state", "op": "in", "value": list(OPEN_STATES)}]
+		current = compliance_rules.parse_filters(row.get("scope_filters_json"))
+		if current not in [compliance_rules.parse_filters(shipped_state + old) for old in olds]:
+			return
+		frappe.db.set_value(compliance_rules.DOCTYPE, row["name"], "scope_filters_json",
+		                    json.dumps(compliance_rules.parse_filters(spec["scope_filters"])))
+		if spec["rule_id"] not in refreshed:
+			refreshed.append(spec["rule_id"])
+	except Exception:
+		frappe.log_error(title=f"Go/Hold preset {spec['rule_id']} scope not refreshed", message=frappe.get_traceback())
 
 
 def seed() -> list:
