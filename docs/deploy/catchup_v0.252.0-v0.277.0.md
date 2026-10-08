@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.276.1 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
+**Deploy: v0.252.0 → v0.277.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.276.1.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.277.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`0612499`** (`__version__ = "0.276.1"`).
+- **Server**: erpnext_mcp main **`0194bdd`** (`__version__ = "0.277.0"`).
 - **App**: fafo_ios main **`25de4f5`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -38,6 +38,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.275.0 | Pollination: drop points inside the outlines clear of hazards (hives by acre on pallets), crew trips batched by the machine; the beekeeper's link (Delivered with counts, Picked up); distribution trips held until delivery, gather-up until petal fall; the pickup gate; five counts reconciled with flags; drops moved by drag; a bee-toxic spray hold from the IPM map (seeded OFF); the rental invoice check. OFF per company until pollination_enabled. Migrate. Pairs with app 0.57.0. |
 | v0.276.0 | The packer portal (OVF): a read-only share of the committed blocks by ticker — sprays with MRL by market, IPM, projections, clear to harvest; CSV / XLSX / PDF / JSON and a Bearer feed; a named revocable credential per contact; every view and download logged; never costs, people or other blocks. OFF per company until packer_portal_enabled. Migrate. |
 | v0.276.1 | Degree-day units made explicit: the engine was already °F (fruit fly base 41 °F, 950 °F·day → ~May 18 at Mill Creek in 2026); a °C model is refused; a past date's series no longer picks up today's forecast days. No migrate. |
+| v0.277.0 | Field fixes: update_field takes a block's variety mix (the argument was never offered); variety did-you-mean; scouting stages reach the block hourly; a blank company means a shared template; task types read from the doctype (Irrigation tasks no longer created as Other). No migrate. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -57,17 +58,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.276.1`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.277.0`. Push fafo_ios main and archive
 FarmOps 0.57.0 (build 53).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.276.1`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.277.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.276.1; the asset map's build stamp 0.276.1.
+1. `get_server_status`: 0.277.0; the asset map's build stamp 0.277.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
