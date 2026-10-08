@@ -1336,3 +1336,53 @@ class WovenNotShadow(FarmTestCase):
 		before.pop("notes")
 		after.pop("notes")
 		self.assertEqual(before, after)
+
+
+class TimsVarietyMixes(FieldVarietiesTestCase):
+	"""v0.277.0. The OML cleanup: Pearls spelled right, a three-way mix, Bing + Van with Van's share unknown."""
+
+	def setUp(self):
+		super().setUp()
+		self.a_parcel()
+		self.a_field(variety=None, varieties=[{"variety": "Burgundy Pearl", "percentage": 100}])
+
+	def test_the_tool_says_it_takes_varieties(self):
+		from erpnext_mcp import registry
+
+		for name in ("update_field", "create_field"):
+			self.assertIn("varieties", registry.TOOLS[name]["inputSchema"]["properties"], name)
+
+	def test_a_three_way_mix_with_its_planting_year(self):
+		rows = [{"variety": v, "percentage": p, "planting_year": 2018}
+		        for v, p in (("Black Pearl", 33.3), ("Ebony Pearl", 33.3), ("Burgundy Pearl", 33.4))]
+		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3", "varieties": rows})
+		self.assertEqual([(r["variety"], r["percentage"], r["planting_year"]) for r in data["varieties"]],
+		                 [("Black Pearl", 33.3, 2018), ("Ebony Pearl", 33.3, 2018), ("Burgundy Pearl", 33.4, 2018)])
+
+	def test_a_pollinizer_with_an_unknown_share(self):
+		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3",
+		                                       "varieties": [{"variety": "Bing"}, {"variety": "Van"}]})
+		self.assertEqual([r["percentage"] for r in data["varieties"]], [None, None], "unknown, not 0%")
+
+	def test_a_typo_against_the_catalogue_gets_a_did_you_mean(self):
+		self.a_crop("Cherry", ["Black Pearl", "Ebony Pearl", "Burgundy Pearl"])
+		error = self.tool_error("update_field", {"field": "Yellow Camp Block 3", "crop": "Cherry",
+		                                         "varieties": [{"variety": "Black Peral"}]})
+		self.assertIn("Did you mean 'Black Pearl'?", error)
+		error = self.tool_error("update_field", {"field": "Yellow Camp Block 3", "crop": "Cherry",
+		                                         "variety": "Ebony Peral", "varieties": []})
+		self.assertIn("Did you mean 'Ebony Pearl'?", error)
+
+	def test_the_catalogue_spelling_is_written_back_on_the_single_variety(self):
+		self.a_crop("Cherry", ["Black Pearl"])
+		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3", "crop": "Cherry",
+		                                       "variety": "black pearl", "varieties": []})
+		self.assertEqual(data["variety"], "Black Pearl")
+
+	def test_no_catalogue_a_warning_names_the_farms_own_spelling(self):
+		other = dict(STORE.get_raw("Field", "Yellow Camp Block 3 - MC"))
+		STORE.seed("Field", [{**{k: other.get(k) for k in ("parcel", "owning_entity", "crop")},
+		                      "name": "Block 9 - MC", "field_name": "Block 9", "variety": "Burgundy Pearl"}])
+		data = self.tool_data("update_field", {"field": "Yellow Camp Block 3",
+		                                       "varieties": [{"variety": "Burgundy Peral"}, {"variety": "Black Pearl"}]})
+		self.assertTrue(any("did you mean 'Burgundy Pearl'" in w for w in data["warnings"]), data["warnings"])

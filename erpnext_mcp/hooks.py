@@ -450,6 +450,9 @@ scheduler_events = {
 		#: v0.273.0. "Tomorrow looks like a shop day" — an Info alert at the farm's evening hour, once a day, only
 		#: for a company with `shop_evening_notice` on. Sends nothing to the crew.
 		"erpnext_mcp.shop_queue.hourly",
+		#: v0.277.0. Scouting completions → Crop Observations (BBCH, counts, Brix) within the hour, so stage-triggered
+		#: work sees the stage the scout recorded. The same idempotent sweep as index_scouting_observations.
+		"erpnext_mcp.tools.scouting.scheduled_index",
 	],
 	"daily": [
 		"erpnext_mcp.tools.uploads.collect_expired_sessions",

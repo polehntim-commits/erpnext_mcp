@@ -56,6 +56,18 @@ TICKER_MAX = 10
 _CROP_VARIETY_SCAN_CAP = 500
 
 
+def did_you_mean(name: str, choices) -> str:
+	"""v0.277.0. The closest spelling among `choices` ('Black Peral' → 'Black Pearl'), or ''."""
+	import difflib
+
+	choices = [str(c) for c in choices if str(c or "").strip()]
+	hit = difflib.get_close_matches(str(name or "").strip(), choices, n=1, cutoff=0.75) or difflib.get_close_matches(
+		str(name or "").strip().casefold(), [c.casefold() for c in choices], n=1, cutoff=0.75)
+	if not hit:
+		return ""
+	return next((c for c in choices if c.casefold() == hit[0].casefold()), hit[0])
+
+
 def _crop_variety_index(crop_name) -> dict:
 	"""Casefolded variety name → the catalogue's own spelling, for one crop.
 
@@ -122,6 +134,7 @@ class Field(Document):
 		self._check_boundary()
 		self._check_parcel_acreage(parcel)
 		self._check_block_ticker()
+		self._check_variety()
 		self._check_varieties()
 		self._derive_organic_certified()
 		self._check_ndvi()
@@ -179,6 +192,27 @@ class Field(Document):
 			except Exception:  # pragma: no cover - a site whose Comment will not take it keeps the change
 				pass
 
+	def _check_variety(self) -> None:
+		"""v0.277.0. The single `variety` column gets the rows' rule: where the crop has a catalogue, the name must be
+		in it (catalogue spelling written back), with a did-you-mean when it is close. No catalogue, no check —
+		`update_field` then warns with the closest spelling already on the farm."""
+		variety = str(self.get("variety") or "").strip()
+		if not variety:
+			return
+		known = _crop_variety_index(self.crop)
+		if not known:
+			return
+		found = known.get(variety.casefold())
+		if found:
+			self.variety = found
+			return
+		guess = did_you_mean(variety, known.values())
+		frappe.throw(
+			_("Variety {0!r} is not among {1}'s recorded varieties: {2}.{3}").format(
+				variety, self.crop, ", ".join(sorted(known.values())), f" Did you mean {guess!r}?" if guess else ""),
+			title=_("No Such Variety"),
+		)
+
 	def _check_varieties(self) -> None:
 		"""Every `varieties` row must name this block's crop's own catalogue variety
 		where that catalogue exists to check against, and the table cannot claim
@@ -215,13 +249,15 @@ class Field(Document):
 			if known:
 				found = known.get(variety.casefold())
 				if not found:
+					guess = did_you_mean(variety, known.values())
 					frappe.throw(
 						_(
 							"Row {0} of Varieties names {1!r}, which is not among {2}'s own "
-							"recorded varieties: {3}. Add it to the Crop's Varieties table first, "
+							"recorded varieties: {3}.{4} Add it to the Crop's Varieties table first, "
 							"or correct the spelling — a name the catalogue does not have is a "
 							"row that looks recorded and links to nothing."
-						).format(index, variety, self.crop, ", ".join(sorted(known.values()))),
+						).format(index, variety, self.crop, ", ".join(sorted(known.values())),
+						         f" Did you mean {guess!r}?" if guess else ""),
 						title=_("No Such Variety"),
 					)
 				row.variety = found

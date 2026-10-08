@@ -211,6 +211,10 @@ def create_farm_task_template(args: dict) -> ToolResult:
 		raise ToolError("daily_check is 'Start of Day', 'End of Day' or empty. Nothing was created.")
 	doc = task_templates.build_template(spec)
 	doc.insert(ignore_permissions=True)
+	# v0.277.0. BLANK MEANS SHARED. Frappe fills an empty Company link from the caller's default company on insert;
+	# a template created without one is meant for every company, so the fill is undone.
+	if not spec.get("company") and doc.get("company"):
+		frappe.db.set_value(task_templates.TEMPLATE_DOCTYPE, doc.name, "company", None)
 	described = task_templates.describe(doc.name, with_checklist=True)
 
 	warnings = [line for line in (_creates_record_warning(spec["creates_record"]),) if line]

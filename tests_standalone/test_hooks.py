@@ -622,6 +622,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.go_hold.scheduled_forecast_refresh",
 					# v0.273.0. The evening shop-day notice; off unless enabled.
 					"erpnext_mcp.shop_queue.hourly",
+					# v0.277.0. Scouting → Crop Observation, hourly.
+					"erpnext_mcp.tools.scouting.scheduled_index",
 				],
 				"daily": [
 					"erpnext_mcp.tools.uploads.collect_expired_sessions",

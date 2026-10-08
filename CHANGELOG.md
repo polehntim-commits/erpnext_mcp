@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.277.0 — 2026-10-08 — field fixes from the OML cleanup and the year schedule
+
+**No migrate** (one new hourly job). No new tools. Deploy `docs/deploy/v0.277.0_field_fixes.md`.
+
+- **A block's variety mix is settable**: `update_field(varieties=[{variety, percentage, planting_year}])` (and
+  `create_field`) — the server has replaced the table since v0.142.0, but the tool never advertised the argument and
+  its schema forbids unknown keys, so no client could send it. A percentage left out is shown as unknown (Van as
+  Centerpiece's pollinizer).
+- **Variety spelling**: where the crop has a variety catalogue, the single `variety` is now checked like the rows
+  (catalogue spelling written back), and a miss says "Did you mean 'Black Pearl'?". With no catalogue, `update_field`
+  warns with the closest spelling already on the farm.
+- **Scouting reaches the block**: the Crop Observation (BBCH, counts, Brix) was written only when somebody ran
+  `index_scouting_observations`. The same idempotent sweep now runs hourly over the last two days, so stage-
+  triggered work sees the stage the scout entered. `scouting_auto_index` (Farm Feature Flag) turns it off.
+- **Blank company = shared template**: `create_farm_task_template` with no company no longer takes the caller's
+  default company.
+- **Task types**: the tools' descriptions are now read from Farm Task's own list (they omitted Pest Control,
+  Maintenance and Irrigation — which is why irrigation work was created as "Other" and `go_hold_irrigation_rain`,
+  which matches task type Irrigation, never fired).
+
 ## 0.276.1 — 2026-10-08 — degree-day units made explicit; a past date reads only its own days
 
 **No migrate.** Deploy `docs/deploy/v0.276.1_dd_units.md`.

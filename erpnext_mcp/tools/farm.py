@@ -572,6 +572,23 @@ def _resolve_parcel(args: dict, key: str = "parcel", required: bool = True) -> s
 	return str(parcel_row(value, _entity(args) or "")["name"])
 
 
+def _spelling_warnings(doc) -> list:
+	"""v0.277.0. A crop with no catalogue cannot refuse a typo, so name the closest spelling already on the farm."""
+	from ..erpnext_mcp.doctype.field.field import _crop_variety_index, did_you_mean
+
+	if _crop_variety_index(doc.get("crop")):
+		return []
+	names = [str(doc.get("variety") or "")] + [str(r.get("variety") or "") for r in doc.get("varieties") or []]
+	known = [k for k in _known_varieties(doc.get("owning_entity") or "") if k not in names]
+	out = []
+	for name in [n for n in dict.fromkeys(names) if n.strip()]:
+		guess = did_you_mean(name, known)
+		if guess and guess != name:
+			out.append(f"variety {name!r}: did you mean {guess!r}? (already on the farm; {doc.get('crop') or 'this crop'} "
+			           "has no variety catalogue to check against — add one on the Crop to make this a refusal)")
+	return out
+
+
 def _known_varieties(company: str = "") -> list:
 	"""Every variety already recorded on this site, for a caller to suggest from.
 
@@ -1173,7 +1190,7 @@ def update_field(args: dict) -> ToolResult:
 		data={
 			**described,
 			"changed": {key: [before, after] for key, (before, after) in changes.items()},
-			"warnings": _field_warnings(described, described["parcel"]),
+			"warnings": _field_warnings(described, described["parcel"]) + _spelling_warnings(doc),
 		},
 		summary=f"{doc.name}: {len(changes)} field(s) changed",
 		docstatus_delta="0 → 0 (updated)",

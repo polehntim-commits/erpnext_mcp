@@ -483,3 +483,20 @@ class TheGpsContractSurvivesTheRoundTrip(PhoneScoutingTestCase):
 			)
 		self.assertIn("gpss", str(caught.exception))
 		self.assertFalse([row for row in STORE.rows(FARM_TASK) if row.get("task_name") == "Scout the ridge"])
+
+
+# ── v0.277.0. Nobody has to run the sweep ─────────────────────────────────────
+class TheStageReachesTheBlockWithinTheHour(PhoneScoutingTestCase):
+	def test_the_hourly_sweep_files_the_round_and_the_block_has_its_stage(self):
+		from erpnext_mcp import flags, growth_stage
+		from erpnext_mcp.tools import scouting
+
+		self.walk(growth_stage_code="61")
+		self.be("Administrator")
+		self.assertEqual(growth_stage.latest(self.block), None, "not filed yet — the completion alone does not")
+		out = scouting.scheduled_index()
+		self.assertEqual(out["counts"]["observations_written"], 1)
+		self.assertEqual(growth_stage.latest(self.block)["growth_stage_code"], "61")
+		self.assertEqual(scouting.scheduled_index()["counts"]["observations_written"], 0, "idempotent")
+		flags.upsert(scouting.AUTO_FLAG, "Flag", False, description="t", owner_area="scouting", active=True)
+		self.assertIn("off", scouting.scheduled_index()["skipped"])

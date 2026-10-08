@@ -1113,3 +1113,42 @@ class TheRepointedField(V12TestCase):
 		self.assertEqual(
 			frappe.db.get_value("Compliance Rule", name, "producer_task_template"), "Smoke Detector Test"
 		)
+
+
+class V277Fixes(TemplateTestCase):
+	def test_a_blank_company_stays_shared_even_with_a_default_company(self):
+		from unittest import mock
+
+		import frappe
+
+		from erpnext_mcp import task_templates
+
+		real = task_templates.build_template
+
+		def stamped(spec):
+			doc = real(spec)
+			doc.company = MAIN  # what Frappe's default-company fill does to an empty Company link on insert
+			return doc
+
+		with mock.patch.object(task_templates, "build_template", side_effect=stamped):
+			self.tool_data("create_farm_task_template", {"template_name": "Shared walk", "task_type": "Inspection",
+			                                             "evidence_required": {"photos": True}})
+			self.tool_data("create_farm_task_template", {"template_name": "Main walk", "task_type": "Inspection",
+			                                             "evidence_required": {"photos": True}, "company": MAIN})
+		self.assertIsNone(frappe.db.get_value("Farm Task Template", {"template_name": "Shared walk"}, "company"))
+		self.assertEqual(frappe.db.get_value("Farm Task Template", {"template_name": "Main walk"}, "company"), MAIN)
+
+	def test_every_task_type_the_server_accepts_is_in_the_tools_own_words(self):
+		import json
+		import os
+
+		from erpnext_mcp import registry
+
+		here = os.path.dirname(registry.__file__)
+		with open(os.path.join(here, "erpnext_mcp", "doctype", "farm_task", "farm_task.json"), encoding="utf-8") as h:
+			options = next(f["options"] for f in json.load(h)["fields"] if f["fieldname"] == "task_type").split("\n")
+		for name in ("create_farm_task", "create_farm_task_template", "list_available_tasks"):
+			text = registry.TOOLS[name]["inputSchema"]["properties"]["task_type"]["description"]
+			for option in ("Irrigation", "Maintenance", "Pest Control"):
+				self.assertIn(option, text, (name, option))
+		self.assertEqual(registry.TASK_TYPES_TEXT.count(","), len(options) - 2)

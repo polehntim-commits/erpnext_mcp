@@ -228,10 +228,36 @@ def index_scouting_observations(args: dict) -> ToolResult:
 	scouting that would not index.
 	"""
 	_require()
-	actor = employee_tool.require_shift_role()
+	return _index(args, employee_tool.require_shift_role())
 
+
+#: v0.277.0. The sweep on a schedule: a scout's stage, counts and Brix reach the block within the hour, without
+#: anybody remembering to run `index_scouting_observations`. Off only if `scouting_auto_index` is set false.
+AUTO_FLAG = "scouting_auto_index"
+AUTO_DAYS = 2
+
+
+def scheduled_index() -> dict:
+	"""Hourly: the last two days' scouting completions filed as Crop Observations. Idempotent; never raises."""
+	from .. import compat as _compat
+	from .. import flags
+
+	if not _compat.doctype_exists(OBSERVATION) or not _compat.doctype_exists(FARM_TASK_ASSIGNMENT):
+		return {"skipped": "not installed"}
+	if not flags.value(AUTO_FLAG, default=True):
+		return {"skipped": "scouting_auto_index is off"}
+	today = frappe.utils.getdate(frappe.utils.today())
+	start = str(frappe.utils.add_days(today, -AUTO_DAYS))
+	try:
+		return _index({"date_from": start, "date_to": str(today)}, "scheduler (scouting_auto_index)").data
+	except Exception:
+		frappe.log_error(title="erpnext_mcp: scheduled scouting index", message=frappe.get_traceback())
+		return {"error": True}
+
+
+def _index(args: dict, actor: str) -> ToolResult:
 	company = resolve_company(as_str(args, "company"), required=False)
-	if company:
+	if company and not actor.startswith("scheduler"):
 		employee_tool.require_company_scope(actor, company)
 
 	date_from = as_date(args, "date_from")

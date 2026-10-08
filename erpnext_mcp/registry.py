@@ -227,6 +227,20 @@ _BOOLEAN = {"type": "boolean"}
 _OBJECT = {"type": "object"}
 _STRING_ARRAY = {"type": "array", "items": {"type": "string"}}
 
+#: v0.277.0. The task types the server accepts, read from Farm Task's own options — so a tool's description can never
+#: list fewer than the doctype allows again (it omitted Pest Control, Maintenance and Irrigation).
+def _task_types_text() -> str:
+	import json as _json
+	import os as _os
+
+	path = _os.path.join(_os.path.dirname(__file__), "erpnext_mcp", "doctype", "farm_task", "farm_task.json")
+	with open(path, encoding="utf-8") as handle:
+		options = next(f["options"] for f in _json.load(handle)["fields"] if f["fieldname"] == "task_type").split("\n")
+	return ", ".join(options[:-1]) + " or " + options[-1]
+
+
+TASK_TYPES_TEXT = _task_types_text()
+
 #: v0.148.0. The same paragraph on the three asset-register writes that can put a
 #: machine on the books, written once because three copies of it would be three
 #: descriptions that drift. Concatenated into each tool's own description rather
@@ -7718,6 +7732,7 @@ TOOLS = {
 				"Bing, Rainier, Sweetheart, Chelan, Skeena — or whatever is actually planted. "
 				"Free text; list_fields reports what this site already uses.",
 			),
+			"varieties": _field({"type": "array", "items": {"type": "object"}}, "v0.277.0 (the server has taken it since v0.142.0): the block's variety mix [{variety, percentage, planting_year}] — REPLACES the whole table; [] clears it. Leave percentage out when the share is unknown (shown as unknown). Varieties are checked against the crop's own catalogue, with a did-you-mean."),
 			"rootstock": _field(_STRING, "Mazzard, Gisela 6, Krymsk 5."),
 			"planting_year": _field(_INTEGER, "The year the trees went in."),
 			"planting_density_per_acre": _field(_INTEGER, "Trees per acre."),
@@ -7806,6 +7821,7 @@ TOOLS = {
 			"acreage": _field(_NUMBER, "New acreage."),
 			"crop": _field(_STRING, "New crop."),
 			"variety": _field(_STRING, "New variety."),
+			"varieties": _field({"type": "array", "items": {"type": "object"}}, "v0.277.0 (the server has taken it since v0.142.0): the block's variety mix [{variety, percentage, planting_year}] — REPLACES the whole table; [] clears it. Leave percentage out when the share is unknown (shown as unknown). Varieties are checked against the crop's own catalogue, with a did-you-mean."),
 			"rootstock": _field(_STRING, "New rootstock."),
 			"planting_year": _field(_INTEGER, "New planting year."),
 			"planting_density_per_acre": _field(_INTEGER, "New trees per acre."),
@@ -11010,8 +11026,7 @@ TOOLS = {
 			"skill": _field(_STRING, "Only tasks needing this skill, e.g. 'camp_maintenance'."),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
-				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other.",
+				TASK_TYPES_TEXT + ".",
 			),
 			"urgency": _field(_STRING, "Low, Normal, High or Critical."),
 			"company": _COMPANY,
@@ -11124,8 +11139,7 @@ TOOLS = {
 			),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
-				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other.",
+				TASK_TYPES_TEXT + ".",
 			),
 			"evidence_required": _field(
 				_OBJECT,
@@ -11238,8 +11252,7 @@ TOOLS = {
 			"location": _field(_STRING, "The docname of the cabin, block, zone or parcel."),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
-				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other. Default Repair.",
+				TASK_TYPES_TEXT + ". Default Repair.",
 			),
 			"skill_required": _field(_STRING, "e.g. 'camp_maintenance', 'applicator_license'."),
 			"urgency": _field(
@@ -11290,8 +11303,7 @@ TOOLS = {
 			"reported_by": _field(_STRING, "The Employee id of the worker reporting. REQUIRED."),
 			"task_type": _field(
 				_STRING,
-				"Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
-				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other. Default Repair.",
+				TASK_TYPES_TEXT + ". Default Repair.",
 			),
 			"skill_required": _field(
 				_STRING,
@@ -11791,9 +11803,7 @@ TOOLS = {
 			),
 			"task_type": _field(
 				_STRING,
-				"REQUIRED. Inspection, Test, Spray, Repair, Harvest, Scouting, Training, "
-				"Compliance-Audit, Hiring, Housing-Cleanup, Water-Sampling or Other — the same "
-				"vocabulary Farm Task uses.",
+				"REQUIRED. " + TASK_TYPES_TEXT + " — the same vocabulary Farm Task uses.",
 			),
 			"evidence_required": _field(
 				_OBJECT,
@@ -13244,7 +13254,7 @@ TOOLS = {
 				_STRING, "Only tasks at this place (a Housing Unit, Field, Zone or Parcel docname)."
 			),
 			"skill": _field(_STRING, "Only tasks needing this skill, e.g. 'camp_maintenance'."),
-			"task_type": _field(_STRING, "Inspection, Test, Spray, Repair, Harvest, Training, and so on."),
+			"task_type": _field(_STRING, TASK_TYPES_TEXT + "."),
 			"urgency": _field(_STRING, "Low, Normal, High or Critical."),
 			"company": _field(_STRING, "One of the caller's entities. Defaults to their preferred one."),
 			"user": _field(_STRING, "Only when the request carries no per-user credential."),
@@ -13328,7 +13338,7 @@ TOOLS = {
 				_STRING, "Only this place (a Housing Unit, Field, Zone or Parcel docname)."
 			),
 			"skill": _field(_STRING, "Only tasks needing this skill, e.g. 'camp_maintenance'."),
-			"task_type": _field(_STRING, "Inspection, Test, Spray, Repair, Harvest, Training, and so on."),
+			"task_type": _field(_STRING, TASK_TYPES_TEXT + "."),
 			"urgency": _field(_STRING, "Low, Normal, High or Critical — applied to the pool half only."),
 			"company": _field(_STRING, "One of the caller's entities. Defaults to their preferred one."),
 			"user": _field(_STRING, "Only when the request carries no per-user credential."),
