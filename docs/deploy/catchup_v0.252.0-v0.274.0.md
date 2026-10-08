@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.273.0 (OML today) — one build, one migrate; FarmOps 0.56.0 (build 52)**
+**Deploy: v0.252.0 → v0.274.0 (OML today) — one build, one migrate; FarmOps 0.56.0 (build 52)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.273.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.274.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`5043407`** (`__version__ = "0.273.0"`).
+- **Server**: erpnext_mcp main **`79f8d85`** (`__version__ = "0.274.0"`).
 - **App**: fafo_ios main **`e43e376`** — FarmOps **0.56.0 (build 52)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -34,6 +34,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.271.0 | Contractor and supplier job links: a work order / delivery / pickup from a template (orchard removal, supplier delivery, supplier pickup), blocks by name or alias, prep tasks raised per block (gather sprinklers, mark valves); a time-limited link shown once, a map page with only that job (blocks, valves, hazards, entrance, Directions), arrived / done / delivered / ticket photo, view log; sharing OFF per company until job_links_enabled. Migrate. Pairs with app 0.55.0. |
 | v0.272.0 | Chemical receiving: a supplier delivery's lines from documents — the ticket read on the phone, the emailed invoice PDF, the portal CSV — through Supplier Connectors (config, seeded as drafts); matched to the PO and Items and reconciled (short / over / substitution / not ordered); a person settles the rest; a DRAFT Purchase Receipt into chemical storage with a Batch per lot; the check-in task (count, lots, labels, SDS, storage; restricted-use needs the Applicator License); lot → spray trace. OFF per company until chemical_receiving_enabled. Migrate. Pairs with app 0.56.0. |
 | v0.273.0 | The shop queue: Shop work as a tick on a task template; the backlog is the open shop tasks (winterize first, machine repairs, shop templates, training) plus suggestions from what is due (service, low stock, tags); a weather day from the forecast (rain, wind, a freezing high) or declared; a list filled to the hours with learner pairing; Today tile Shop work today; an opt-in evening notice. Ten Mid-Columbia starter templates, disabled. Migrate. |
+| v0.274.0 | The live budget: the lender pro forma imported as a draft Input Plan (Growing Budget lines, accounts and cost centres from the CoA Mapping, acres, the spray program); budget / actual / committed / forecast per account and cost centre with 90% / 100% alerts; spray materials still ahead; requests netted against the shed (draft Material Request); ERPNext Budgets drafted with Warn; spray cost per block. OFF per company until live_budget_enabled. Migrate. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -52,17 +53,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.273.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.274.0`. Push fafo_ios main and archive
 FarmOps 0.56.0 (build 52).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.273.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.274.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.273.0; the asset map's build stamp 0.273.0.
+1. `get_server_status`: 0.274.0; the asset map's build stamp 0.274.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
