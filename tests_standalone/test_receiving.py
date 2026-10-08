@@ -25,7 +25,7 @@ from erpnext_mcp import (
 from erpnext_mcp.api import mobile as mobile_api
 
 from . import test_contract_v0_262_0 as v262
-from .harness import STORE, set_roles
+from .harness import STORE, register_doctype, set_roles
 from .test_api_mobile import MAIN, WORKER
 from .test_farmops_api import PREFIX, FarmOpsAPITestCase
 
@@ -55,6 +55,9 @@ def _item(code, name, uom, *, epa="", batch=0, rup=0, storage=""):
 def receiving_site() -> str:
 	"""Wilbur-Ellis, the chemical shed, four products and a submitted PO for three of them. Returns the PO."""
 	compliance_fields.install_compliance_fields()
+	# The fixture site has no Batch register (a real configuration — see test_stock_inventory); this one does.
+	register_doctype("Batch", [{"fieldname": f, "fieldtype": "Data"} for f in
+	                           ("batch_id", "item", "supplier", "expiry_date", "reference_doctype", "reference_name")])
 	STORE.seed("Supplier", [{"name": SUPPLIER, "supplier_name": SUPPLIER}])
 	STORE.seed("Warehouse", [{"name": SHED, "warehouse_name": "Chemical Shed", "company": MAIN}])
 	STORE.seed("UOM", [{"name": "Lb", "enabled": 1}, {"name": "Gal", "enabled": 1}])

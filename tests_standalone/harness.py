@@ -1028,17 +1028,6 @@ ERPNEXT_SCHEMA = {
 		"parenttype",
 		"parentfield",
 	],
-	# v0.272.0. A supplier's lot, as ERPNext keeps it (the name is the batch id).
-	"Batch": [
-		"name",
-		"batch_id",
-		"item",
-		"supplier",
-		"expiry_date",
-		"reference_doctype",
-		"reference_name",
-		"description",
-	],
 	# v0.70.0 widened this from the eleven columns `get_outstanding_invoices`
 	# reads to what a Sales Invoice this app WRITES actually carries. The
 	# `settlement_statement` link is deliberately NOT here: it is a Custom Field
