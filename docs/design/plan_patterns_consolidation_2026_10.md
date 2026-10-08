@@ -51,6 +51,40 @@ servers and 238 needed daily. Of 590 write tools, only about 130 were called at 
 Write tools ON (the switch-trim study): 952 across both servers, 238 needed daily. Of main's 590 write tools, ~130
 were called at all since early August.
 
+**The template tool in full (Tim's requirement, 2026-10-08).** Every kind of template is buildable and editable over
+MCP through ONE tool, with preview and enable through the config lifecycle:
+
+`template(action, kind, name?, body?, …)`
+
+| action | does |
+|---|---|
+| `kinds` | list the template kinds (this is `list_template_kinds`) |
+| `describe` | one kind's body schema: fields, types, allowed values, required, defaults, an example, the actions it supports (this is `describe_template_kind`), generated from the kind's own definition so a new field needs no code change in the tool |
+| `list` / `get` | the kind's templates / one template with its current version |
+| `create` / `update` | one schema-driven body; validated by **that kind's existing rules** (the same function the old per-kind tool called); refused with every problem named, nothing half-written |
+| `fork` | clone an existing template (any version) under a new name, optionally with field overrides — the fast way to make a new template from a close one |
+| `preview` | what the body would produce, with warnings (e.g. a creates_record with no builder, a checklist item with no evidence, a stage window that can never fire), without saving |
+| `enable` / `disable` | in service or not; existing instances unaffected |
+| `history` / `diff` | every version and what changed between two |
+| `stage` / `publish` / `rollback` | the config lifecycle, for kinds that are versioned config |
+
+| Kind | Stored as (unchanged) | Validation reused | Versions |
+|---|---|---|---|
+| farm task (incl. shop backlog item, daily check, scouting) | Farm Task Template | `task_templates.build_template` + `render_problems` | template `version` / form hash + Frappe history |
+| inspection | Inspection Template | its approve flow and checks | its versions |
+| training type | Training Type | its controller | Frappe history |
+| trade document | Trade Document Template | its controller | Frappe history |
+| wizard | config kind Wizard | `phone_config` validator | config versions |
+| contractor job / supplier delivery / supplier pickup / pollination | config kind Job Template | `job_links.validate` | config versions |
+| seasonal checklist (winterize / start-up) | config kind Seasonal Program (+ its farm task templates) | `seasonal.validate` | config versions |
+| job link page | config kind Share Link Kind (P2) | the share-link engine's validator | config versions |
+| market commodity | config kind Market Commodity | `market_prices.validate` | config versions |
+| (later) supplier connector, input plan, pollination plan, pay policy, variety list, DD stage table | their config kinds | their validators | config versions |
+
+Adding a kind is one registry entry (storage, validator, schema source); the tool, `kinds`, `describe`, `fork`,
+`preview` and `history` work for it without new code. Today's ~28 template tools and the per-kind config tools fold
+into this one (old names kept as logged aliases, §2 rules).
+
 **Rules that keep it safe**
 1. **No behaviour lost.** A generic tool is a dispatcher. Each `type` / `kind` calls the function the old tool
    called, with the same validation, permissions, company scoping and answer shape.
