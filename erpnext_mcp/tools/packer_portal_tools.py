@@ -11,7 +11,7 @@ import base64
 
 import frappe
 
-from .. import packer_portal
+from .. import compat, packer_portal
 from ..args import as_int, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -79,7 +79,7 @@ def get_packer_share(args: dict) -> ToolResult:
 	share = _share(args)
 	doc = frappe.get_doc(packer_portal.SHARE, share)
 	creds = [{"contact": c.get("contact_name"), "email": c.get("contact_email"), "issued_at": str(c.get("issued_at") or ""),
-	          "expires_at": str(c.get("expires_at") or ""), "revoked": bool(int(c.get("revoked") or 0)),
+	          "expires_at": str(c.get("expires_at") or ""), "revoked": bool(compat.checked(c.get("revoked"))),
 	          "last_used": str(c.get("last_used") or "") or None, "uses": int(c.get("uses") or 0)}
 	         for c in doc.get("credentials") or []]
 	data = {"share": share, "packer": doc.packer_name, "company": doc.company, "status": doc.status,

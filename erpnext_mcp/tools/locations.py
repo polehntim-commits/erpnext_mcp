@@ -145,6 +145,9 @@ STATIC_REFERRERS = {
 		# v0.271.0. A contractor job's blocks (a child table of Contractor Job). Deleting a block a removal or
 		# delivery job names would leave the contractor's page drawing ground that is gone.
 		("Contractor Job Field", "field"),
+		# v0.276.0. A block committed to a packer (a child table of Packer Share): deleting it would leave the
+		# packer's portal pointing at ground that is gone.
+		("Packer Share Block", "field"),
 		# v0.118.0. The device sits in the block; the reading carries a COPY of
 		# where its device sat when it was taken, which is why both are here and
 		# neither is redundant — deleting a block has to reach the historical

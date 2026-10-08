@@ -5030,6 +5030,8 @@ CHILD_TABLE_SOURCES = {
 	"Item Barcode": (("Item", "barcodes"),),
 	# v0.271.0. `delete_farm_location` asks whether a contractor job names the block.
 	"Contractor Job Field": (("Contractor Job", "fields"),),
+	# v0.276.0. `delete_farm_location` asks whether a packer share names the block.
+	"Packer Share Block": (("Packer Share", "blocks"),),
 	# v0.272.0. `receiving.trace_lot` finds a lot across every delivery by querying the lines directly.
 	"Supplier Delivery Intake Line": (("Supplier Delivery Intake", "lines"),),
 	# v0.68.0. `tools/fill_pipeline.py` reads this child doctype directly with a

@@ -153,7 +153,7 @@ def revoke(share: str, contact_name: str = "", reason: str = "", actor: str = ""
 	for row in doc.get("credentials") or []:
 		if contact_name and row.get("contact_name") != contact_name:
 			continue
-		if not int(row.get("revoked") or 0):
+		if not compat.checked(row.get("revoked")):
 			_set(row, "revoked", 1)
 			_set(row, "revoked_reason", (reason or "revoked")[:140])
 			hit += 1
@@ -184,7 +184,7 @@ def find(token: str) -> dict | None:
 		for index, cred in enumerate(doc.get("credentials") or []):
 			if cred.get("token_hash") != wanted:
 				continue
-			if int(cred.get("revoked") or 0) or (cred.get("expires_at") and str(cred.get("expires_at"))[:19] < now):
+			if compat.checked(cred.get("revoked")) or (cred.get("expires_at") and str(cred.get("expires_at"))[:19] < now):
 				return None
 			return {"share": doc.name, "company": doc.company, "contact": cred.get("contact_name"), "index": index}
 	return None
