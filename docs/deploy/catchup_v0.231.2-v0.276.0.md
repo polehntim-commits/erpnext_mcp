@@ -1,13 +1,13 @@
-**Deploy: catch-up v0.231.2 → v0.274.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.56.0 (build 52)**
+**Deploy: catch-up v0.231.2 → v0.276.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.57.0 (build 53)**
 
-For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.274.0, and
+For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.276.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
 ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime rule into data with identical
 output, proven on the payroll suite).
 
-- **Server**: erpnext_mcp main **`79f8d85`** (`__version__ = "0.274.0"`).
-- **App**: fafo_ios main **`e43e376`** — FarmOps **0.56.0 (build 52)**, scheme **FarmOps**. It needs v0.252.0's
-  routes (v0.271.0's for Contractor jobs, v0.272.0's for Deliveries), so deploy the server first.
+- **Server**: erpnext_mcp main **`7e54e72`** (`__version__ = "0.276.0"`).
+- **App**: fafo_ios main **`25de4f5`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**. It needs v0.252.0's
+  routes (v0.271.0's for Contractor jobs, v0.272.0's for Deliveries, v0.275.0's for the hive map), so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 
 **What each release added, in plain words**
@@ -61,6 +61,8 @@ output, proven on the payroll suite).
 | v0.272.0 | Chemical receiving: a supplier delivery's lines from documents — the ticket read on the phone, the emailed invoice PDF, the portal CSV — through Supplier Connectors (config, seeded as drafts); matched to the PO and Items and reconciled (short / over / substitution / not ordered); a person settles the rest; a DRAFT Purchase Receipt into chemical storage with a Batch per lot; the check-in task (count, lots, labels, SDS, storage; restricted-use needs the Applicator License); lot → spray trace. OFF per company until chemical_receiving_enabled. Migrate. Pairs with app 0.56.0. |
 | v0.273.0 | The shop queue: Shop work as a tick on a task template; the backlog is the open shop tasks (winterize first, machine repairs, shop templates, training) plus suggestions from what is due (service, low stock, tags); a weather day from the forecast (rain, wind, a freezing high) or declared; a list filled to the hours with learner pairing; Today tile Shop work today; an opt-in evening notice. Ten Mid-Columbia starter templates, disabled. Migrate. |
 | v0.274.0 | The live budget: the lender pro forma imported as a draft Input Plan (Growing Budget lines, accounts and cost centres from the CoA Mapping, acres, the spray program); budget / actual / committed / forecast per account and cost centre with 90% / 100% alerts; spray materials still ahead; requests netted against the shed (draft Material Request); ERPNext Budgets drafted with Warn; spray cost per block. OFF per company until live_budget_enabled. Migrate. |
+| v0.275.0 | Pollination: drop points inside the outlines clear of hazards (hives by acre on pallets), crew trips batched by the machine; the beekeeper's link (Delivered with counts, Picked up); distribution trips held until delivery, gather-up until petal fall; the pickup gate; five counts reconciled with flags; drops moved by drag; a bee-toxic spray hold from the IPM map (seeded OFF); the rental invoice check. OFF per company until pollination_enabled. Migrate. Pairs with app 0.57.0. |
+| v0.276.0 | The packer portal (OVF): a read-only share of the committed blocks by ticker — sprays with MRL by market, IPM, projections, clear to harvest; CSV / XLSX / PDF / JSON and a Bearer feed; a named revocable credential per contact; every view and download logged; never costs, people or other blocks. OFF per company until packer_portal_enabled. Migrate. |
 | app 0.38.8 | Due dates and overdue on task rows and a Due section on Today, computed on the phone (works offline). |
 | app 0.39.0 | Go / Hold chips and card, supervisor override, crop-stage picker (offline), Today: work notices, notices to decide, "Good to do today", SOPs to review; approved SOPs in "How this job is done". Spanish (tú). |
 | app 0.40.0 | The course player: course videos with how much was watched, the knowledge check, trainer sign-off. |
@@ -81,11 +83,12 @@ output, proven on the payroll suite).
 | app 0.54.0 | Tap a block on the map for its card (aliases, acreage, open tasks, hazards, history with filters); long-press to add a task there (offline, no duplicates on retry); drop valve / hazard pins; draw, edit or walk a block's outline. |
 | app 0.55.0 | Work → Contractor jobs (Foreman / Farm Manager): readiness, the contractor's page, links and what the contractor reported; a Farm Manager marks ready, shares a one-time link through the share sheet, or revokes it. |
 | app 0.56.0 | Work → Deliveries (Foreman / Farm Manager): read the ticket with the camera (on-device), correct the lines, send; match badges and flags; a Farm Manager accepts / rejects lines and drafts the receipt. |
+| app 0.57.0 | Contractor jobs → a Pollination job opens the hive map: blocks, hazards, the loading area, every drop, the trips and the five counts; a Farm Manager drags a drop to move it. |
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main (`79f8d85`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.274.0`. Push fafo_ios main
-(`e43e376`) and archive FarmOps 0.56.0 (build 52), scheme **FarmOps**.
+Push erpnext_mcp main (`7e54e72`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.276.0`. Push fafo_ios main
+(`25de4f5`) and archive FarmOps 0.57.0 (build 53), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
 chooses. The full command list is in `~/Desktop/deploy-catchup-latest.txt`.
@@ -104,15 +107,15 @@ Expect from the migrate (first run only):
 7. "rain archive check rule seeded OFF: weather_check_pruning_rain."
 8. "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded
    (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …"
-9. `__version__ = "0.274.0"`.
+9. `__version__ = "0.276.0"`.
 
 **3. Checks after the migrate**
 
-1. `get_server_status`: 0.274.0. Desk → any Asset Register form: the map's build stamp reads 0.274.0.
+1. `get_server_status`: 0.276.0. Desk → any Asset Register form: the map's build stamp reads 0.276.0.
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets and weather_check_pruning_rain, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
-4. Phone 0.56.0: Today (a Market prices tile) and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
+4. Phone 0.57.0: Today (a Market prices tile) and a task open normally; a task with no rule shows no Go / Hold chip. Business card scan
    works for a Foreman. Work → Contractor jobs and Deliveries open (Deliveries says receiving is off until it is turned on).
 5. Punch review (`v0.251.0_punch_review.md`): this week's flagged punches appear as compliance alerts and under
    "Punches to review" on Today for a Foreman / Farm Manager; `preview_payroll_for_period` warns on unreviewed punches
@@ -120,7 +123,7 @@ Expect from the migrate (first run only):
 6. Business-card merge (`v0.252.0_day_checks.md` §5): on OML, re-run the Ben Sheppard merge with Met At
    "Sheppard's, 440 Riverside Dr, Hood River, OR 97031" (or correct it from the phone: Contacts → Where met); Met At
    now reads that, and Sheppards-Office-1 links to Supplier Sheppard's.
-7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`, `v0.255.0_asset_library.md`, `v0.256.0_receipt_relink.md`, `v0.257.0_mcp_system_user.md`, `v0.258.0_replies_to_review.md`, `v0.274.0_live_budget.md`, `v0.273.0_shop_queue.md`, `v0.272.0_chemical_receiving.md`, `v0.271.0_job_links.md`, `v0.270.0_winterize.md`, `v0.269.0_field_self_service.md`, `v0.268.1_backup_status.md`, `v0.268.0_company_switcher.md`, `v0.267.1_access_audit_fixes.md`, `v0.267.0_data_access.md`, `v0.266.0_market_dashboard.md`, `v0.265.0_market_prices.md`, `v0.264.1_harvest_calibration.md`, `v0.264.0_pest_dd.md`, `v0.263.0_ipm_desk_map.md`, `v0.262.0_ipm_graph.md`, `v0.261.0_offline_claim.md`, `v0.260.0_data_access_hotfix.md`, `v0.259.0_940_w3.md`,
+7. Per feature, when Tim turns it on: the release's own file (`v0.236.0_task_dates.md` … `v0.252.0_day_checks.md`, `v0.253.0_dry_day.md`, `v0.254.0_spanish_errors.md`, `v0.255.0_asset_library.md`, `v0.256.0_receipt_relink.md`, `v0.257.0_mcp_system_user.md`, `v0.258.0_replies_to_review.md`, `v0.276.0_packer_portal.md`, `v0.275.0_pollination.md`, `v0.274.0_live_budget.md`, `v0.273.0_shop_queue.md`, `v0.272.0_chemical_receiving.md`, `v0.271.0_job_links.md`, `v0.270.0_winterize.md`, `v0.269.0_field_self_service.md`, `v0.268.1_backup_status.md`, `v0.268.0_company_switcher.md`, `v0.267.1_access_audit_fixes.md`, `v0.267.0_data_access.md`, `v0.266.0_market_dashboard.md`, `v0.265.0_market_prices.md`, `v0.264.1_harvest_calibration.md`, `v0.264.0_pest_dd.md`, `v0.263.0_ipm_desk_map.md`, `v0.262.0_ipm_graph.md`, `v0.261.0_offline_claim.md`, `v0.260.0_data_access_hotfix.md`, `v0.259.0_940_w3.md`,
    `app_0.39.0_work_timing.md`, `app_0.40.0_course_player.md`, `app_0.41.0_punch_review.md`,
    `app_0.42.0_my_day_contacts.md`, `app_0.43.0_spanish_sweep.md`, `app_0.44.0_server_spanish.md`, `app_0.45.0_asset_library.md`, `app_0.46.0_replies_to_review.md`, `app_0.47.0_signout.md`, `app_0.48.0_offline_claim.md`, `v0.262.0_ipm_graph.md` (app 0.49.0), `v0.264.0_pest_dd.md` (app 0.50.0), `v0.265.0_market_prices.md` (app 0.51.0)).
 
