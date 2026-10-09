@@ -36405,16 +36405,22 @@ def tools_list() -> dict:
 	does not exist, and saying so keeps the catalogue an honest description of
 	what will work.
 	"""
+	from . import superseded
+
+	listed = [name for name in TOOLS if settings.tool_enabled(name) and oauth.permits(name) and is_available(name)]
+	# v0.283.0: with hide_superseded_tools on (default off), an old tool whose generic tool is listed here is left
+	# out — still callable by name. See superseded.py.
+	if superseded.hide_enabled():
+		listed = [name for name in listed if not superseded.hidden(name)]
 	return {
 		"tools": [
 			{
 				"name": name,
-				"description": spec["description"],
-				"inputSchema": spec["inputSchema"],
-				"annotations": spec["annotations"],
+				"description": TOOLS[name]["description"],
+				"inputSchema": TOOLS[name]["inputSchema"],
+				"annotations": TOOLS[name]["annotations"],
 			}
-			for name, spec in TOOLS.items()
-			if settings.tool_enabled(name) and oauth.permits(name) and is_available(name)
+			for name in listed
 		]
 	}
 

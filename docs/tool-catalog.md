@@ -21191,6 +21191,12 @@ The per-kind template tools stay. Six config kinds (market_commodity, seasonal_p
 supplier_connector, input_plan, pollination_plan) join the generic config tools (list / get / draft / stage /
 publish / rollback / diff / preview_config).
 
+## v0.283.0 — exposure and attribution (consolidation phase 5)
+
+No new tools. ERPNext MCP Settings → *Hide Tools A Generic Tool Covers* (off by default) leaves out of the tool list
+each old tool whose generic tool (template, config, share_link, document, record) is listed for the client; hidden
+tools stay callable by name. MCP Action Log rows gain *Superseded By*, *Agent Client* and *Acting For*.
+
 ## v0.282.0 — one share-link tool (consolidation phase 4)
 
 | Tool | What it does |

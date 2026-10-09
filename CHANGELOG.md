@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.283.0 — 2026-10-08 — exposure and attribution (consolidation phase 5)
+
+**Migrate** (three new MCP Action Log columns, one new setting, off). Deploy `docs/deploy/v0.283.0_exposure_attribution.md`.
+Tools: **1,141 → 1,141** (none added, none removed).
+
+- **Hide what a generic tool covers — a setting, OFF by default.** ERPNext MCP Settings → Tool Permissions → *Hide
+  Tools A Generic Tool Covers* (`hide_superseded_tools`). On, an old per-type tool leaves `tools/list` only while the
+  generic tool that runs it (template, config, share_link, document, record) is itself listed for that client, so no
+  capability ever drops out of view. With all five generic tools on, up to 445 tools leave the list (1,141 → ~696).
+  Hidden tools stay callable by name under their own switch — the 3 AM run, the receipts run and the backup check
+  call by name and are unaffected.
+- **The map is read from the generic tools themselves** (`superseded.py`): exactly the tools they run, nothing they
+  cannot do. Money, HR and security tools are never in it.
+- **Every old-name call is logged** with *Superseded By* on its MCP Action Log row — the evidence the
+  30-days-of-zero-use rule needs. A call through a generic tool is one row under the generic name.
+- **Attribution:** every row now also carries *Agent Client* (the client program's User-Agent — the attribution there
+  is when no X-Agent-Model is sent, as on OML today) and *Acting For* (the `X-Acting-For` header, or the OAuth grant's
+  approver). The user a call ran as is the row's owner (the MCP System User when one is set), as before.
+- Existing pieces this phase reuses rather than rebuilds: the settings form's domains and job-title presets
+  (`tool_groups.py`), per-domain OAuth write scopes, `mcp_system_user` / `plan_mcp_system_user`, and the
+  X-Agent-Model / X-Agent-Session columns.
+
 ## 0.282.0 — 2026-10-08 — one share-link tool (consolidation phase 4)
 
 **No migrate** (one new switch, off). Deploy `docs/deploy/v0.282.0_share_link.md`.

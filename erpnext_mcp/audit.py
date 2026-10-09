@@ -68,6 +68,12 @@ _SECRET_HINTS = ("token", "password", "secret", "api_key", "apikey", "credential
 #: Nothing gates on them, and the authenticated user is still the identity.
 AGENT_MODEL_HEADER = "X-Agent-Model"
 AGENT_SESSION_HEADER = "X-Agent-Session"
+#: v0.283.0. WHO IT ACTS FOR, AND WHAT IT RAN AS. `X-Acting-For` is the client's claim of the person it works for
+#: (an OAuth grant's approver when not sent); `User-Agent` names the client program when no model header came —
+#: on OML no client sends X-Agent-Model, so the program is the attribution there is. The user the call ran as is
+#: the row's `owner` (the MCP System User, or Administrator when none is set). `superseded_by` names the generic
+#: tool that now covers an old tool's call (superseded.py) — the evidence for retiring a name.
+ACTING_FOR_HEADER = "X-Acting-For"
 _MAX_AGENT = 140
 
 
@@ -97,6 +103,7 @@ def record(
 				"result_summary": _truncate(summary or "", _MAX_SUMMARY),
 				"docstatus_delta": (docstatus_delta or "")[:140],
 				**_agent_columns(),
+				**_superseded_column(tool_name),
 			}
 		)
 		doc.flags.ignore_permissions = True
@@ -154,7 +161,42 @@ def _agent_columns() -> dict:
 		out["agent_model"] = model
 	if session:
 		out["agent_session"] = session
+	out.update(_caller_columns())
 	return out
+
+
+def _caller_columns() -> dict:
+	"""v0.283.0: the client program and the person acted for. NEVER RAISES; empty parts are left out.
+
+	The user the call ran as is the row's own `owner` (mcp.py sets the session user before any tool runs)."""
+	out = {}
+	try:
+		client = frappe.get_request_header("User-Agent") or ""
+		acting_for = frappe.get_request_header(ACTING_FOR_HEADER) or ""
+	except Exception:
+		client = acting_for = ""
+	if not acting_for:
+		try:
+			from . import oauth
+
+			acting_for = (oauth.current() or {}).get("sub") or ""
+		except Exception:  # pragma: no cover
+			acting_for = ""
+	for key, value in (("agent_client", client), ("acting_for", acting_for)):
+		value = _clean_agent(value)
+		if value:
+			out[key] = value
+	return out
+
+
+def _superseded_column(tool_name: str) -> dict:
+	try:
+		from . import superseded
+
+		generic = superseded.superseded_by(tool_name or "")
+	except Exception:
+		generic = ""
+	return {"superseded_by": generic} if generic else {}
 
 
 def _arguments_json(arguments: dict | None) -> str:

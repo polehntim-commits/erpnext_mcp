@@ -69,6 +69,7 @@
   "require_user_context",
   "mcp_system_user",
   "tool_console_section",
+  "hide_superseded_tools",
   "tool_console_html",
   "read_tools_section",
   "allow_get_company_topology",
@@ -1968,6 +1969,13 @@
    "fieldname": "tool_console_section",
    "fieldtype": "Section Break",
    "label": "Tool Permissions"
+  },
+  {
+   "default": "0",
+   "description": "v0.283.0. On: an old per-type tool is left out of the tool list while the generic tool that covers it (template, config, record, document, share_link) is on for that client — fewer tools for a model to read. Hidden tools stay callable by name under their own switch, so scheduled runs that call by name are unaffected. Every old-name call is logged with Superseded By. Off by default; clients reconnect to see a change.",
+   "fieldname": "hide_superseded_tools",
+   "fieldtype": "Check",
+   "label": "Hide Tools A Generic Tool Covers"
   },
   {
    "fieldname": "tool_console_html",

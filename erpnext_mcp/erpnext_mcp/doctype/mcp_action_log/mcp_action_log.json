@@ -15,6 +15,9 @@
   "caller_ip",
   "agent_model",
   "agent_session",
+  "agent_client",
+  "acting_for",
+  "superseded_by",
   "docstatus_delta",
   "detail_section",
   "result_summary",
@@ -86,6 +89,30 @@
    "search_index": 1
   },
   {
+   "description": "v0.283.0. The client program, from its User-Agent header (e.g. claude-code/\u2026, python-httpx/\u2026). The client's claim; attribution only.",
+   "fieldname": "agent_client",
+   "fieldtype": "Data",
+   "label": "Agent Client",
+   "read_only": 1
+  },
+  {
+   "description": "v0.283.0. The person the client says it works for (X-Acting-For header), or the OAuth grant's approver. A claim, for attribution; nothing gates on it.",
+   "fieldname": "acting_for",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Acting For",
+   "read_only": 1
+  },
+  {
+   "description": "v0.283.0. For a call by an old tool name: the generic tool (template, config, record, document, share_link) that now covers it. Empty for everything else. The evidence for retiring a name after 30 days of zero use.",
+   "fieldname": "superseded_by",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Superseded By",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "description": "Document-state change, for mutations only: 'none to 0 (draft)', '0 to 1 (submitted)', '1 to 2 (cancelled)'. Empty for reads.",
    "fieldname": "docstatus_delta",
    "fieldtype": "Data",
@@ -117,7 +144,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-27 19:00:00.000000",
+ "modified": "2026-10-08 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "MCP Action Log",
