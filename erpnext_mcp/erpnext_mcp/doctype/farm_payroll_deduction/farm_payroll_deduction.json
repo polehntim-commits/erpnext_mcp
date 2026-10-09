@@ -29,6 +29,13 @@
   "arrears_over_12_weeks",
   "col_break_garnishment",
   "exempt_amount",
+  "arrears_section",
+  "arrears_opening",
+  "arrears_per_period",
+  "consumer_debt",
+  "arrears_balance",
+  "ledger_section",
+  "ledger",
   "dates_section",
   "effective_from",
   "effective_to",
@@ -208,6 +215,52 @@
    "label": "Exempt Amount (Pub 1494)"
   },
   {
+   "fieldname": "arrears_section",
+   "fieldtype": "Section Break",
+   "label": "Arrears (v0.292.0)",
+   "description": "The middle path (Garnishment Policy): each period takes the current amount, then as much of the arrears as fits under the cap; what does not fit carries forward. The order's own arrears schedule overrides the policy, still capped."
+  },
+  {
+   "fieldname": "arrears_opening",
+   "fieldtype": "Currency",
+   "label": "Arrears on the order",
+   "default": "0",
+   "description": "The arrears the order (or the agency's notice) states as owed when it was served."
+  },
+  {
+   "fieldname": "arrears_per_period",
+   "fieldtype": "Currency",
+   "label": "Arrears per period (order's terms)",
+   "default": "0",
+   "description": "If the order sets an arrears payment per period, enter it; 0 means the policy decides (catch up as much as fits)."
+  },
+  {
+   "fieldname": "consumer_debt",
+   "fieldtype": "Check",
+   "label": "Consumer debt",
+   "default": "0",
+   "description": "A judgment for consumer debt — Washington exempts more of it (RCW 6.27.150(4))."
+  },
+  {
+   "fieldname": "arrears_balance",
+   "fieldtype": "Currency",
+   "label": "Arrears now",
+   "read_only": 1,
+   "description": "Arrears on the order, plus what was carried forward, less what was caught up — from the ledger below (cancelled payroll entries excluded)."
+  },
+  {
+   "fieldname": "ledger_section",
+   "fieldtype": "Section Break",
+   "label": "Withholding ledger"
+  },
+  {
+   "fieldname": "ledger",
+   "fieldtype": "Table",
+   "label": "Ledger",
+   "options": "Farm Payroll Deduction Ledger",
+   "read_only": 1
+  },
+  {
    "fieldname": "dates_section",
    "fieldtype": "Section Break",
    "label": "In Force"
@@ -253,7 +306,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-17 09:00:00.000000",
+ "modified": "2026-10-09 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Payroll Deduction",

@@ -17533,10 +17533,10 @@ TOOLS = {
 	"list_configs": _tool(
 		config_tools.list_configs,
 		"v0.234.0. Versions and status of one kind of configuration — every 'flow data, not code' feature "
-		"through one tool. kind: wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz. Routed to the store that kind already uses, so the answer is the "
+		"through one tool. kind: wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz. Routed to the store that kind already uses, so the answer is the "
 		"same one the specific tool gives.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Only this config (wizard / tile / label key, document type, template, rule)."),
 			"status": _field(_STRING, "Phone kinds: Draft, Staged, Published, Superseded, Retired."),
 			"limit": _field(_INTEGER, "At most this many (default 100)."),
@@ -17546,10 +17546,10 @@ TOOLS = {
 	),
 	"get_config": _tool(
 		config_tools.get_config,
-		"v0.234.0. One configuration version — body, provenance, validation — of any kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz). "
+		"v0.234.0. One configuration version — body, provenance, validation — of any kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz). "
 		"Without version, the one in force.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "A version number (phone kinds, extraction configs). Default: in force."),
 		},
@@ -17561,7 +17561,7 @@ TOOLS = {
 		"v0.234.0. What changed between two versions of a configuration, field by field (bookkeeping such "
 		"as timestamps and hashes left out). Leave a version out for the one in force.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"from_version": _field(_INTEGER, "The older version (default: in force)."),
 			"to_version": _field(_INTEGER, "The newer version (default: in force)."),
@@ -17576,7 +17576,7 @@ TOOLS = {
 		"form, or a compliance / Work Timing rule over one or more past days — with an UNSAVED patch "
 		"(e.g. a new condition_tree) and compare_to: live side by side.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Which config (rules: rule_id or docname)."),
 			"patch": _field(_OBJECT, "Rules: unsaved field changes to try, e.g. {\"condition_tree\": {…}}."),
 			"as_of": _field(_STRING, "Rules: the (latest) day judged, YYYY-MM-DD. Default today."),
@@ -17600,13 +17600,13 @@ TOOLS = {
 	# ── v0.234.1: one config lifecycle — the generic writes ────────────────
 	"draft_config": _tool(
 		config_tools.draft_config,
-		"MUTATING (default OFF). v0.234.1. Create or change a DRAFT of any configuration kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz), "
+		"MUTATING (default OFF). v0.234.1. Create or change a DRAFT of any configuration kind (wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz), "
 		"routed to the specific tool so every check still runs. Over MCP a draft is always AI-proposed: it "
 		"can be previewed (preview_config) and staged, and it is PUBLISHED ONLY IN THE DESK OR ON THE PHONE "
 		"(Tim's decision 5). Phone kinds and extraction configs take `body`; rules and templates take "
 		"`fields` (the same arguments their create/propose/update tools take).",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Which config (key, document type, template name or rule_id)."),
 			"body": _field(_OBJECT, "Phone kinds / extraction config: the whole body."),
 			"fields": _field(_OBJECT, "Rules and templates: the fields to set, e.g. {\"condition_tree\": {…}}."),
@@ -17622,7 +17622,7 @@ TOOLS = {
 		"effect for them (decision 4). Phone kinds: users / roles / companies; extraction configs: users. "
 		"Rules and templates have no staged audience yet.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "The draft's version."),
 			"change_note": _field(_STRING, "Why (phone kinds)."),
@@ -17641,7 +17641,7 @@ TOOLS = {
 		"5, for every kind. Rules: approve; inspection templates: approve; phone kinds and extraction: "
 		"publish the version named.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"version": _field(_INTEGER, "Phone kinds / extraction: the version."),
 			"change_note": _field(_STRING, "Why (phone kinds)."),
@@ -17655,7 +17655,7 @@ TOOLS = {
 		"MUTATING (default OFF). v0.234.1. Back to the previous published version (phone kinds), or `to: "
 		"none` to retire a phone config or switch off a rule / inspection template. History is kept.",
 		{
-			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz."),
+			"kind": _field(_STRING, "wizard, tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz."),
 			"key": _field(_STRING, "Which config."),
 			"to": _field(_STRING, "'none' to retire / deactivate instead of rolling back."),
 			"change_note": _field(_STRING, "Why."),
@@ -18809,7 +18809,7 @@ TOOLS = {
 		config_tool.config,
 		"MUTATING (default OFF). v0.280.0. ONE tool for every kind of configuration through its lifecycle: wizard, "
 		"tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, "
-		"overtime_rule, pay_policy, wage_floor, oregon_withholding, sop, quiz, pest_dd_models, pest_dd_offsets, "
+		"overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, sop, quiz, pest_dd_models, pest_dd_offsets, "
 		"market_commodity, seasonal_program, job_template, "
 		"supplier_connector, input_plan, pollination_plan.\n\n"
 		"action: kinds | describe (one kind's shape and rules — start here) | list | get | diff | preview | draft | "
@@ -33819,6 +33819,7 @@ TOOLS = {
 				"Federal, state, Social Security and Medicare for the period, summed. What "
 				"disposable earnings is measured from.",
 			),
+			"work_state": _field(_STRING, "v0.292.0. Preview only: OR or WA applies that state's garnishment rule as well."),
 			"pay_frequency": _field(
 				_STRING,
 				"Weekly, Biweekly, Semimonthly or Monthly. Decides the CCPA exempt floor — "
@@ -33915,6 +33916,9 @@ TOOLS = {
 				_BOOLEAN,
 				"Child support only. Adds 5 points to the ceiling, so 50 becomes 55 and 60 becomes 65.",
 			),
+			"arrears_opening": _field(_NUMBER, "v0.292.0. Garnishment arrears stated on the order (or owed when it was filed). Carry-forwards add to it, catch-ups take from it."),
+			"arrears_per_period": _field(_NUMBER, "v0.292.0. The order's own arrears payment per period, if it sets one — used instead of the default catch-up, still capped."),
+			"consumer_debt": _field(_BOOLEAN, "v0.292.0. A consumer-debt judgment — Washington's stricter RCW 6.27.150(4) exemption applies."),
 			"exempt_amount": _field(
 				_NUMBER,
 				"Tax levy only. What the levy notice leaves the employee per period, from "
@@ -33963,6 +33967,9 @@ TOOLS = {
 			"fica_exempt": _field(_BOOLEAN, "Override the category. Only meaningful on a pre-tax row."),
 			"supports_other_dependents": _field(_BOOLEAN, "Child support ceiling: 50% rather than 60%."),
 			"arrears_over_12_weeks": _field(_BOOLEAN, "Child support ceiling: adds 5 points."),
+			"arrears_opening": _field(_NUMBER, "v0.292.0. Garnishment arrears stated on the order (or owed when it was filed). Carry-forwards add to it, catch-ups take from it."),
+			"arrears_per_period": _field(_NUMBER, "v0.292.0. The order's own arrears payment per period, if it sets one — used instead of the default catch-up, still capped."),
+			"consumer_debt": _field(_BOOLEAN, "v0.292.0. A consumer-debt judgment — Washington's stricter RCW 6.27.150(4) exemption applies."),
 			"exempt_amount": _field(_NUMBER, "Tax levy only. Publication 1494 exempt amount."),
 			"label": _field(_STRING, "Pay stub label."),
 			"notes": _field(_STRING, "Anything the fields cannot hold."),
@@ -34138,6 +34145,9 @@ TOOLS = {
 				_BOOLEAN,
 				"Child support only. Adds 5 points to the ceiling, so 50 becomes 55 and 60 becomes 65.",
 			),
+			"arrears_opening": _field(_NUMBER, "v0.292.0. Garnishment arrears stated on the order (or owed when it was filed). Carry-forwards add to it, catch-ups take from it."),
+			"arrears_per_period": _field(_NUMBER, "v0.292.0. The order's own arrears payment per period, if it sets one — used instead of the default catch-up, still capped."),
+			"consumer_debt": _field(_BOOLEAN, "v0.292.0. A consumer-debt judgment — Washington's stricter RCW 6.27.150(4) exemption applies."),
 			"exempt_amount": _field(
 				_NUMBER,
 				"Tax levy only. What the levy notice leaves the employee per period, from "

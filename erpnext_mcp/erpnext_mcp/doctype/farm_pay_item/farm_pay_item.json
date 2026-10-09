@@ -1,0 +1,152 @@
+{
+ "actions": [],
+ "autoname": "format:FPI-{YYYY}-{#####}",
+ "creation": "2026-10-09 22:00:00.000000",
+ "description": "v0.292.0. A bonus, commission or profit-share payout paid with a pay run. Counts as earnings for garnishment caps (CCPA earnings include bonuses and commissions).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "company",
+  "kind",
+  "amount",
+  "pay_on",
+  "col_1",
+  "treatment",
+  "status",
+  "payroll_entry",
+  "reference",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Employee Name",
+   "fetch_from": "employee.employee_name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Bonus\nProfit Share\nCommission\nOther",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "pay_on",
+   "fieldtype": "Date",
+   "label": "Pay With The Run Covering",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Paid by the payroll run whose period includes this date."
+  },
+  {
+   "fieldname": "col_1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "treatment",
+   "fieldtype": "Select",
+   "label": "Tax Treatment",
+   "options": "Wages\nNot subject to withholding",
+   "default": "Wages",
+   "reqd": 1,
+   "description": "Wages: taxed and withheld with the period's pay. Not subject to withholding: e.g. a fishing-boat crew share under IRC 3121(b)(20) \u2014 no income tax or FICA is withheld, but it still counts as earnings for garnishment (15 U.S.C. 1672(a)). Have the CPA confirm the treatment for each kind."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nPaid\nCancelled",
+   "default": "Pending",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "payroll_entry",
+   "fieldtype": "Link",
+   "label": "Paid In",
+   "options": "Farm Payroll Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference",
+   "fieldtype": "Data",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-09 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Pay Item",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "HR Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "title_field": "employee_name"
+}

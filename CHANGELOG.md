@@ -3,6 +3,48 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.292.0 — 2026-10-09 — garnishments: catch-up and carry-forward (the middle path), pay items
+
+**Migrate**: two new doctypes (Farm Pay Item, and the Farm Payroll Deduction Ledger child table), arrears fields on
+Farm Payroll Deduction, and two new payroll settings (`garnishment_policy`, `garnishment_limits`). Deploy
+`docs/deploy/v0.292.0_garnishment.md`. Tools: **1,142 → 1,142**; existing tools gain arguments (reused, no new
+tool). **Payroll / CPA should review this before it is used live.**
+
+- **The middle path, as a payroll setting rather than code.** `garnishment_policy` is a Farm Config Version: dated,
+  published by a person, and previewable. Each period an order takes its current amount, then as much of its
+  arrears as still fits under the cap. What the current amount cannot take is carried forward into the arrears and
+  shows on the next settlement. An order's own `arrears_per_period` replaces the default, and is still capped.
+  Setting `catch_up: none` turns catch-up off.
+- **The limits are dated, sourced rows** (`garnishment_limits`):
+  - federal: 25% / 30× federal minimum wage; support 50 / 55 / 60 / 65%; student loans 15%;
+  - Oregon, ORS 18.385 as amended by SB 1595: the weekly floor is $338, then **$400 from 2026-07-01**;
+  - Washington, RCW 6.27.150: 35× minimum wage, and for consumer debt 35× the state minimum wage or 80%.
+
+  The stricter of federal and state applies.
+- **Priority across orders:** child support first (every order's current support before any arrears, prorated),
+  then tax levies (outside Title III), then student loans, then creditor orders. Creditors get what is left of the
+  25% after support. Sources are 42 U.S.C. 666(b)(7), ORS 25.378, ORS 18.385(5), 29 CFR 870.11(b)(1)–(2) and
+  IRC 6334, and they are recorded in the policy.
+- **Logged and shown.**
+  - Every saved run, including the daily-pay settlement, appends a line to each order's ledger: amount ordered,
+    taken, arrears caught up, carried forward, the cap and its rule, and arrears before and after.
+  - Cancelled runs never count.
+  - `get_garnishment` and `get_payroll_deduction` show the arrears and the ledger.
+  - `get_payroll_register` gains a `garnishments` section (HR roles only).
+  - The run result lists `garnishment_ledger`.
+- **Pay items (Farm Pay Item):** bonuses, commissions and profit-share payouts, paid by the run whose period covers
+  `pay_on`, then marked Paid.
+  - "Wages" items are taxed with the period's pay.
+  - "Not subject to withholding" items (a fishing-boat crew share, IRC 3121(b)(20)) are added after withholding.
+  - Both count as earnings for disposable earnings and the caps (15 U.S.C. 1672(a)).
+  - Daily-pay workers' items are paid in the weekly settlement.
+- **Daily-pay settlement:** if the settlement's net is short, the catch-up gives way first, and the rest is carried
+  forward rather than only reported.
+- Tests (`test_garnishment_catch_up`): cap hit, carry-forward, multiple orders, a near-minimum-wage week (Oregon's
+  $400 floor), a share-payout week, and the ledger, register and settlement through saved runs.
+- Not done (for review): bonuses do not yet change the FLSA regular rate, and a pay item for someone with no salary
+  structure stays Pending.
+
 ## 0.291.0 — 2026-10-09 — payroll tax corrections: Oregon's formula and OR-W-4, the W-4 Step 2 schedule, the real 2025 table
 
 **Migrate** (W-4 Form gains the OR-W-4 fields; Federal Tax Table gains `schedule`; tables and the Oregon formula

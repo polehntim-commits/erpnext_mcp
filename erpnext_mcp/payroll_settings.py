@@ -19,9 +19,9 @@ scope and keep their own tools.
 from __future__ import annotations
 
 import contextlib
-import itertools
 import contextvars
 import datetime
+import itertools
 
 import frappe
 
@@ -34,7 +34,10 @@ PAY_POLICY_KEY = "pay_policy"
 WAGE_FLOOR_KEY = "wage_floor"
 #: v0.291.0. Oregon's withholding formula (150-206-436) as a dated setting: a new year's figures are a new version.
 OREGON_KEY = "oregon_withholding"
-KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY, OREGON_KEY)
+#: v0.292.0. Garnishment: the catch-up policy (Tim's middle path) and the dated, sourced limits it never exceeds.
+GARNISHMENT_POLICY_KEY = "garnishment_policy"
+GARNISHMENT_LIMITS_KEY = "garnishment_limits"
+KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY, OREGON_KEY, GARNISHMENT_POLICY_KEY, GARNISHMENT_LIMITS_KEY)
 WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 MIN_WAGE_REGIONS = ("standard", "portland_metro", "non_urban")
 
@@ -230,6 +233,69 @@ def oregon_withholding(as_of: str = "") -> dict:
 	return {**merged, "version": version}
 
 
+# ── Garnishment (v0.292.0) ────────────────────────────────────────────────────
+_FED = "15 U.S.C. 1673; 29 CFR 870.10-.11; DOL Fact Sheet #30"
+_OR = "ORS 18.385 as amended by Or. Laws 2024 ch. 100 (SB 1595) §3"
+_WA = "RCW 6.27.150"
+#: The limits as dated, sourced rows. A garnishment never takes more than the stricter of federal and state.
+SEED_GARNISHMENT_LIMITS = [
+	{"scope": "federal", "effective_from": "2009-07-24", "source": _FED + "; FLSA §6 ($7.25 since 2009-07-24)",
+	 "federal_minimum_wage": 7.25, "ordinary_rate": 0.25,
+	 "period_multipliers": {"Weekly": 30, "Biweekly": 60, "Semimonthly": 65, "Monthly": 130},
+	 "support_rates": {"supporting": 0.50, "supporting_arrears": 0.55, "not_supporting": 0.60,
+	                   "not_supporting_arrears": 0.65},
+	 "student_loan_rate": 0.15},
+	*[{"scope": "state", "state": "OR", "effective_from": day, "source": _OR, "ordinary_rate": 0.25,
+	   "floors": {"Weekly": w, "Biweekly": b, "Semimonthly": h, "Monthly": m}}
+	  for day, w, b, h, m in (("2000-01-01", 254, 509, 545, 1090), ("2025-01-01", 305, 611, 655, 1309),
+	                          ("2025-07-01", 338, 675, 737, 1458), ("2026-07-01", 400, 832, 912, 1792))],
+	{"scope": "state", "state": "WA", "effective_from": "2026-01-01", "source": _WA + " (1) and (4)",
+	 "ordinary_rate": 0.25,
+	 # (1) other judgments: exempt the greater of 75% or 35 × the federal minimum wage (35 × 7.25 a week).
+	 "floors": {"Weekly": 253.75, "Biweekly": 507.50, "Semimonthly": 549.79, "Monthly": 1099.58},
+	 # (4) consumer debt: exempt the greater of 80% or 35 × the state minimum wage ($17.13 in 2026).
+	 "consumer": {"rate": 0.20, "floors": {"Weekly": 599.55, "Biweekly": 1199.10, "Semimonthly": 1298.93,
+	                                       "Monthly": 2597.85}, "source": _WA + "(4)"}},
+]
+#: Tim's decision (2026-10-09): the middle path, as policy. Priority as the law orders it — sources below.
+DEFAULT_GARNISHMENT_POLICY = {
+	"catch_up": "middle_path",
+	"carry_forward": True,
+	"current_before_arrears": True,
+	"priority": ["child_support", "tax_levy", "student_loan", "wage_garnishment"],
+	"priority_source": ("Support first: 42 U.S.C. 666(b)(7) and ORS 25.378 (income withholding for support has "
+	                    "priority over any other legal process); tax levies next and outside Title III: 29 CFR "
+	                    "870.11(b)(2), IRC 6334; creditor orders share what is left of the ordinary pool: 29 CFR "
+	                    "870.11(b)(1), ORS 18.385(5); within a kind, first in time."),
+	"order_terms_override": True,
+}
+
+
+def garnishment_policy(as_of: str = "") -> dict:
+	body, version = _body(GARNISHMENT_POLICY_KEY, as_of)
+	return {**DEFAULT_GARNISHMENT_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_GARNISHMENT_POLICY},
+	        "version": version}
+
+
+def garnishment_limits(as_of: str = "", state: str = "") -> dict:
+	"""{federal: row, state: row or None} in force on the day — the newest row of each scope on or before it."""
+	body, version = _body(GARNISHMENT_LIMITS_KEY, as_of)
+	rows = body.get("rows") or SEED_GARNISHMENT_LIMITS
+	day = _day(as_of)
+	best: dict = {}
+	for row in rows:
+		effective = str(row.get("effective_from") or "")[:10]
+		if not effective or effective > day:
+			continue
+		key = (row.get("scope"), str(row.get("state") or "").upper())
+		if key not in best or effective > str(best[key]["effective_from"]):
+			best[key] = row
+	federal = best.get(("federal", ""))
+	states = {code: dict(row) for (scope, code), row in best.items() if scope == "state" and code}
+	return {"federal": dict(federal or {}), "state": states.get(str(state or "").upper()), "states": states,
+	        "version": version}
+
+
 def ot_multiplier(as_of: str = "") -> float:
 	return overtime(as_of)["multiplier"]
 
@@ -250,6 +316,10 @@ def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
 		return _validate_floor(body, for_publish)
 	if key == OREGON_KEY:
 		return _validate_oregon(body, for_publish)
+	if key == GARNISHMENT_POLICY_KEY:
+		return _validate_garnishment_policy(body, for_publish)
+	if key == GARNISHMENT_LIMITS_KEY:
+		return _validate_garnishment_limits(body, for_publish)
 	errors, warnings = [], []
 	if key != OVERTIME_KEY:
 		errors.append(f"a payroll setting is one of: {', '.join(KEYS)}")
@@ -384,6 +454,61 @@ def _validate_oregon(body: dict, for_publish: bool) -> dict:
 	return {"errors": errors, "warnings": warnings}
 
 
+def _validate_garnishment_policy(body: dict, for_publish: bool) -> dict:
+	errors = []
+	if body.get("catch_up", "middle_path") not in ("middle_path", "none"):
+		errors.append("catch_up is middle_path (current amount, then arrears up to the cap) or none")
+	priority = list(body.get("priority") or DEFAULT_GARNISHMENT_POLICY["priority"])
+	if priority[:1] != ["child_support"]:
+		errors.append("priority must begin with child_support — income withholding for support has priority over "
+		              "any other legal process (42 U.S.C. 666(b)(7))")
+	if "tax_levy" in priority and "wage_garnishment" in priority and \
+			priority.index("tax_levy") > priority.index("wage_garnishment"):
+		errors.append("priority: tax levies come before creditor orders")
+	if not str(body.get("priority_source") or DEFAULT_GARNISHMENT_POLICY["priority_source"]).strip():
+		errors.append("priority_source: where the ordering comes from")
+	effective = _effective(body, errors)
+	if for_publish and not errors:
+		_publish_guard(effective, errors)
+	return {"errors": errors, "warnings": []}
+
+
+def _validate_garnishment_limits(body: dict, for_publish: bool) -> dict:
+	errors = []
+	rows = body.get("rows")
+	if not isinstance(rows, list) or not rows:
+		errors.append("rows: the limits, one per scope (federal / state) and date")
+		rows = []
+	if not any(r.get("scope") == "federal" for r in rows):
+		errors.append("a federal row is required — Title III applies everywhere")
+	for index, row in enumerate(rows):
+		where = f"rows[{index}]"
+		if not str(row.get("source") or "").strip():
+			errors.append(f"{where}: source — every limit names where it comes from")
+		try:
+			datetime.date.fromisoformat(str(row.get("effective_from") or "")[:10])
+		except ValueError:
+			errors.append(f"{where}: effective_from is YYYY-MM-DD")
+		rate = row.get("ordinary_rate", 0.25)
+		try:
+			if not 0 <= float(rate) <= 0.25:
+				errors.append(f"{where}: ordinary_rate is 0–0.25 (a state may be stricter than Title III, never looser)")
+		except (TypeError, ValueError):
+			errors.append(f"{where}: ordinary_rate is a fraction, e.g. 0.25")
+		if row.get("scope") == "federal":
+			try:
+				if float(row.get("federal_minimum_wage") or 0) <= 0:
+					errors.append(f"{where}: federal_minimum_wage — the 30× floor is built on it")
+			except (TypeError, ValueError):
+				errors.append(f"{where}: federal_minimum_wage is a dollar amount, e.g. 7.25")
+		if row.get("scope") == "state" and len(str(row.get("state") or "")) != 2:
+			errors.append(f"{where}: state is a two-letter code")
+	effective = _effective(body, errors)
+	if for_publish and not errors:
+		_publish_guard(effective, errors)
+	return {"errors": errors, "warnings": []}
+
+
 def _validate_floor(body: dict, for_publish: bool) -> dict:
 	errors, warnings = [], []
 	rows = body.get("rows")
@@ -452,6 +577,12 @@ def seed_body(key: str = OVERTIME_KEY) -> dict:
 		from .state_withholding import OR_WITHHOLDING_2026
 
 		return {"schema_version": 1, "key": key, **OR_WITHHOLDING_2026}
+	if key == GARNISHMENT_POLICY_KEY:
+		return {"schema_version": 1, "key": key, **DEFAULT_GARNISHMENT_POLICY, "effective_from": "2026-10-09",
+		        "basis": "Tim's decision 2026-10-09: the middle path, as a policy (not hard-coded)."}
+	if key == GARNISHMENT_LIMITS_KEY:
+		return {"schema_version": 1, "key": key, "effective_from": "2009-07-24",
+		        "rows": [dict(r) for r in SEED_GARNISHMENT_LIMITS]}
 	return {"schema_version": 1, "key": OVERTIME_KEY, **DEFAULT_OVERTIME, "effective_from": "2020-01-01",
 	        "basis": "OR HB 4002 and WA SB 5172, fully phased: 40 hours a workweek, 1.5× the regular rate."}
 

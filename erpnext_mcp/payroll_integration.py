@@ -902,6 +902,8 @@ def build_payroll_inputs(
 	pay_frequency: str = "Biweekly",
 	ytd_by_employee: dict | None = None,
 	deductions_by_employee: dict | None = None,
+	garnishment: dict | None = None,
+	pay_items_by_employee: dict | None = None,
 ) -> list[dict]:
 	"""Marry timesheet aggregates to structures and tax configuration.
 
@@ -933,6 +935,10 @@ def build_payroll_inputs(
 			salary structure or a bracket table can sensibly be one object read
 			by forty slips; a child support order cannot, and a bug that let one
 			leak across employees would garnish the wrong person's wages.
+		garnishment: v0.292.0. {"limits": payroll_settings.garnishment_limits(...),
+			"policy": payroll_settings.garnishment_policy(...)} for the run.
+		pay_items_by_employee: v0.292.0. Employee → their Pending Farm Pay Items
+			paid with this run (bonuses, profit shares). Per employee, like deductions.
 	"""
 	inputs = []
 	for employee in sorted(employee_aggregates or {}):
@@ -985,6 +991,10 @@ def build_payroll_inputs(
 					# to `payroll_calc.MINIMUM_WAGE_RATES`, which is what every
 					# caller got before a table existed to configure.
 					"min_wage_rates": dict(min_wage_rates or {}) or None,
+					# v0.292.0. Garnishment limits and catch-up policy, and this employee's pay items.
+					"garnishment_limits": (garnishment or {}).get("limits"),
+					"garnishment_policy": (garnishment or {}).get("policy"),
+					"pay_items": list((pay_items_by_employee or {}).get(employee) or []),
 				},
 				"aggregate": aggregate,
 				"min_wage_regions": structure.get("min_wage_regions") or {},
@@ -1055,6 +1065,8 @@ def run_integrated_payroll(
 	workweek_anchor=None,
 	include_unworked: bool = True,
 	deductions_by_employee: dict | None = None,
+	garnishment: dict | None = None,
+	pay_items_by_employee: dict | None = None,
 ) -> list[dict]:
 	"""Shifts in, payroll slips out.
 
@@ -1079,6 +1091,11 @@ def run_integrated_payroll(
 		workweek_anchor=workweek_anchor,
 	)
 
+	# v0.292.0. Somebody being paid a bonus or profit share is on the run even with no hours in the period.
+	for employee in sorted(pay_items_by_employee or {}):
+		if employee and employee not in aggregates and _structure_for(salary_structures, employee):
+			aggregates[employee] = empty_aggregate(employee, "")
+
 	if include_unworked:
 		for row in _structure_rows(salary_structures):
 			employee = str(row.get("employee") or "")
@@ -1101,6 +1118,8 @@ def run_integrated_payroll(
 		pay_frequency=pay_frequency,
 		ytd_by_employee=ytd_by_employee,
 		deductions_by_employee=deductions_by_employee,
+		garnishment=garnishment,
+		pay_items_by_employee=pay_items_by_employee,
 	)
 
 	slips = []

@@ -1,0 +1,113 @@
+{
+ "actions": [],
+ "creation": "2026-10-09 22:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "payroll_entry",
+  "pay_period_end",
+  "run_kind",
+  "current_requested",
+  "current_taken",
+  "catch_up_taken",
+  "carried_forward",
+  "cap_amount",
+  "cap_rule",
+  "arrears_before",
+  "arrears_after",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "payroll_entry",
+   "fieldtype": "Link",
+   "label": "Payroll Entry",
+   "options": "Farm Payroll Entry",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "pay_period_end",
+   "fieldtype": "Date",
+   "label": "Period End",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "run_kind",
+   "fieldtype": "Data",
+   "label": "Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_requested",
+   "fieldtype": "Currency",
+   "label": "Current Ordered",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_taken",
+   "fieldtype": "Currency",
+   "label": "Current Taken",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "catch_up_taken",
+   "fieldtype": "Currency",
+   "label": "Arrears Caught Up",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "carried_forward",
+   "fieldtype": "Currency",
+   "label": "Carried Forward",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "cap_amount",
+   "fieldtype": "Currency",
+   "label": "Cap",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cap_rule",
+   "fieldtype": "Data",
+   "label": "Cap Rule",
+   "read_only": 1
+  },
+  {
+   "fieldname": "arrears_before",
+   "fieldtype": "Currency",
+   "label": "Arrears Before",
+   "read_only": 1
+  },
+  {
+   "fieldname": "arrears_after",
+   "fieldtype": "Currency",
+   "label": "Arrears After",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Why",
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-09 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Payroll Deduction Ledger",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

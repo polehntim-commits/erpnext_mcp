@@ -760,7 +760,9 @@ def _payroll_settings_seed() -> None:
 		# than the state). Daily pay itself stays off until `daily_pay_enabled` is turned on for a company.
 		for key, note in ((payroll_settings.WAGE_FLOOR_KEY, "Oregon and Washington floors as of 2026-10-09, each sourced (v0.287.0)."),
 		                  (payroll_settings.PAY_POLICY_KEY, "Tim's eight daily-pay decisions, 2026-10-08 (v0.287.0)."),
-		                  (payroll_settings.OREGON_KEY, "Oregon's 2026 withholding formula, 150-206-436 (v0.291.0).")):
+		                  (payroll_settings.OREGON_KEY, "Oregon's 2026 withholding formula, 150-206-436 (v0.291.0)."),
+		                  (payroll_settings.GARNISHMENT_POLICY_KEY, "Garnishment middle path, Tim 2026-10-09 (v0.292.0)."),
+		                  (payroll_settings.GARNISHMENT_LIMITS_KEY, "Federal, Oregon and Washington garnishment limits, sourced (v0.292.0).")):
 			name = phone_config.seed(payroll_settings.KIND, key, payroll_settings.seed_body(key), note)
 			if name:
 				print(f"erpnext_mcp: payroll setting {name} seeded.")

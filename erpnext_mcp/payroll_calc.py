@@ -772,6 +772,19 @@ def calculate_full_payroll(
 		else min_wage_result["meets_minimum_wage"]
 	)
 
+	# ── Pay items (v0.292.0) ──────────────────────────────────────────
+	#
+	# Bonuses, commissions and profit-share payouts paid with this run (Farm Pay
+	# Item). "Wages" items are taxed and withheld with the period's pay; items
+	# marked "Not subject to withholding" (a fishing-boat crew share, IRC
+	# 3121(b)(20)) join gross AFTER the engines. Both are earnings for the
+	# garnishment caps — 15 U.S.C. 1672(a) counts bonuses and commissions. Added
+	# after the minimum-wage test so a bonus never pays for a floor makeup.
+	pay_items = [dict(item) for item in tax_config.get("pay_items") or [] if float(item.get("amount") or 0) > 0]
+	pay_items_wages = round(sum(float(i["amount"]) for i in pay_items if i.get("treatment") != "Not subject to withholding"), 2)
+	pay_items_not_withheld = round(sum(float(i["amount"]) for i in pay_items if i.get("treatment") == "Not subject to withholding"), 2)
+	gross_pay = round(gross_pay + pay_items_wages, 2)
+
 	# ── Pre-tax deductions ────────────────────────────────────────────
 	#
 	# BEFORE THE ENGINES, because that is the entire difference between a
@@ -883,6 +896,8 @@ def calculate_full_payroll(
 			# The same two figures the floor was tested against, so what a state is
 			# taxed on and what it was checked against are the same number.
 			state_gross = round(info.get("earned", 0.0) + info.get("makeup", 0.0), 2)
+			if ws == primary_state:
+				state_gross = round(state_gross + pay_items_wages, 2)
 			info["gross"] = state_gross
 
 			if ws in state_configs:
@@ -924,12 +939,23 @@ def calculate_full_payroll(
 	# the pre-tax elections above are not required by law however much they
 	# reduced the tax — subtracting them here would let an employee shrink the
 	# base a court order is measured against by raising their own 401(k) rate.
+	gross_pay = round(gross_pay + pay_items_not_withheld, 2)
 	disposable = payroll_deductions.disposable_earnings(gross_pay, statutory_deductions)
+	# v0.292.0. The dated, sourced limits (payroll_settings.garnishment_limits) for the slip's state, and the
+	# catch-up policy. Absent, the engine falls back to the federal defaults and the middle path.
+	all_limits = tax_config.get("garnishment_limits") or {}
+	limits = (
+		{"federal": all_limits.get("federal"), "state": (all_limits.get("states") or {}).get(primary_state)}
+		if all_limits
+		else None
+	)
 	garnishments = payroll_deductions.apply_garnishments(
 		disposable,
 		deduction_rows,
 		pay_frequency=pay_frequency,
 		state_cap_rate=tax_config.get("garnishment_state_cap_rate"),
+		limits=limits,
+		policy=tax_config.get("garnishment_policy"),
 	)
 
 	# Post-tax voluntary deductions take what the orders left, and no more. A
@@ -1021,9 +1047,12 @@ def calculate_full_payroll(
 		"fica_taxable_gross": fica_taxable_gross,
 		"disposable_earnings": disposable,
 		"garnishment_detail": garnishments,
-		# What an order asked for and the pay could not give. NOT carried
-		# forward into the next period — see `payroll_deductions` — so this list
-		# is the only place it is said, and somebody has to read it.
+		"pay_items": pay_items,
+		"pay_items_wages": pay_items_wages,
+		"pay_items_not_withheld": pay_items_not_withheld,
+		# What an order asked for and the pay could not give. Since v0.292.0 a
+		# garnishment's unpaid current amount is CARRIED FORWARD into its arrears
+		# (garnishment_ledger) and caught up later under the caps.
 		"deduction_shortfalls": (pre_tax["shortfalls"] + garnishments["shortfalls"] + post_tax["shortfalls"]),
 		"total_deductions": total_deductions,
 		"net_pay": net_pay,

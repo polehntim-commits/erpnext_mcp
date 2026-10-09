@@ -1795,6 +1795,8 @@ APP_DOCTYPES = {
 	"Office Mail": "office_mail",
 	"Farm Salary Structure": "farm_salary_structure",
 	"Farm Payroll Deduction": "farm_payroll_deduction",
+	"Farm Payroll Deduction Ledger": "farm_payroll_deduction_ledger",
+	"Farm Pay Item": "farm_pay_item",
 	# The court order the deduction above exists under. Separate because a
 	# payroll run should not have to parse a court order, and because a case
 	# number, a balance and a date of service are what answers a court — none of
@@ -2688,6 +2690,7 @@ CHILD_TABLES = {
 	("Contractor Job", "events"): "Contractor Job Event",
 	("Supplier Delivery Intake", "lines"): "Supplier Delivery Intake Line",
 	("Packer Share", "blocks"): "Packer Share Block",
+	("Farm Payroll Deduction", "ledger"): "Farm Payroll Deduction Ledger",
 	("Wizard Definition", "steps"): "Wizard Step",
 	("Wizard Step", "fields"): "Wizard Field",
 	("Journal Entry", "accounts"): "Journal Entry Account",

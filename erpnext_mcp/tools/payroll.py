@@ -77,6 +77,10 @@ _DEDUCTION_FIELDS = (
 	"effective_to",
 	"reference",
 	"label",
+	# v0.292.0. The order's arrears and its own arrears schedule, and Washington's consumer-debt flag.
+	"arrears_opening",
+	"arrears_per_period",
+	"consumer_debt",
 )
 EMPLOYEE = "Employee"
 W4_FORM = "W-4 Form"
@@ -1438,6 +1442,16 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		deduction_sources = {"note": "a Daily run withholds taxes only; deductions and garnishments are taken in the "
 		                             "weekly settlement (docs/design/daily_pay.md §5)."}
 
+	# v0.292.0. Garnishment limits and catch-up policy in force at the period end, and the period's pay items
+	# (bonuses, profit shares). A Daily run pays neither; the settlement does.
+	from .. import pay_items as items
+
+	garnishment = {"limits": payroll_settings.garnishment_limits(str(end)),
+	               "policy": payroll_settings.garnishment_policy(str(end))}
+	items_by_employee = {} if daily is not None else items.pending(company, str(start), str(end))
+	items_by_employee = {e: rows for e, rows in items_by_employee.items() if e in structures}
+	known = sorted(set(known) | set(items_by_employee))
+
 	w4_map = _load_w4_map(known)
 	slips = payroll_integration.run_integrated_payroll(
 		shifts,
@@ -1458,6 +1472,8 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		workweek_anchor=anchor,
 		include_unworked=include_unworked,
 		deductions_by_employee=deductions_by_employee,
+		garnishment=garnishment,
+		pay_items_by_employee=items_by_employee,
 	)
 
 	aggregates = payroll_integration.aggregate_shifts_for_period(
@@ -1478,7 +1494,12 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	context = {
 		"company": company,
 		# v0.235.0. Which payroll settings this run used — a pay run is answerable to its rules.
-		"config_versions": {"overtime_rule": rule["version"]},
+		"config_versions": {"overtime_rule": rule["version"],
+		                    "garnishment_policy": garnishment["policy"].get("version"),
+		                    "garnishment_limits": garnishment["limits"].get("version")},
+		# v0.292.0. Bonuses and profit shares paid with this run; each counts as earnings for the garnishment caps.
+		"pay_items": [{"employee": e, **{k: r.get(k) for k in ("name", "kind", "amount", "treatment", "pay_on")}}
+		              for e, rows in sorted(items_by_employee.items()) for r in rows],
 		"pay_period_start": str(start),
 		"pay_period_end": str(end),
 		"pay_frequency": pay_frequency,
@@ -1568,6 +1589,10 @@ def _slip_view(slip: dict, verbose: bool) -> dict:
 		"federal_taxable_gross": slip.get("federal_taxable_gross") or 0,
 		"fica_taxable_gross": slip.get("fica_taxable_gross") or 0,
 		"disposable_earnings": slip.get("disposable_earnings") or 0,
+		# v0.292.0. Bonuses and profit shares paid with this slip.
+		"pay_items": slip.get("pay_items") or [],
+		"pay_items_wages": slip.get("pay_items_wages") or 0,
+		"pay_items_not_withheld": slip.get("pay_items_not_withheld") or 0,
 		"total_deductions": slip.get("total_deductions"),
 		"net_pay": slip.get("net_pay"),
 		"social_security_employer": slip.get("social_security_employer"),
@@ -1702,6 +1727,14 @@ def run_payroll_for_period(args: dict) -> ToolResult:
 	entry.flags.ignore_permissions = True
 	entry.insert()
 
+	# v0.292.0. Every garnishment catch-up and carry-forward goes into the order's ledger, and the pay items this
+	# run carried are Paid.
+	from .. import garnishment_ledger, pay_items
+
+	ledger = garnishment_ledger.record(entry.name, slips, context.get("run_kind") or "Regular",
+	                                   context["pay_period_end"])
+	paid_items = pay_items.mark_paid(entry.name, slips)
+
 	# See the sibling note in calculate_payroll: a bucket this run just paid
 	# must not still read as payable to the next one.
 	for slip in slips:
@@ -1714,6 +1747,8 @@ def run_payroll_for_period(args: dict) -> ToolResult:
 	data["name"] = entry.name
 	data["status"] = "Calculated"
 	data["totals"] = totals
+	data["garnishment_ledger"] = ledger
+	data["pay_items_paid"] = paid_items
 	data["slips"] = [_slip_view(slip, False) for slip in slips]
 
 	return ToolResult(
@@ -2092,6 +2127,7 @@ def get_payroll_register(args: dict) -> ToolResult:
 			"without this tool changing."
 		),
 	}
+	data["garnishments"] = _register_garnishments(company, date_from, date_to, {str(e.get("name")) for e in counted})
 	return ToolResult(
 		data=data,
 		summary=f"Payroll register for {company}, {date_from} to {date_to}: {len(employees)} "
@@ -2099,6 +2135,23 @@ def get_payroll_register(args: dict) -> ToolResult:
 		f"net ${totals['net_pay']:,.2f}, employer taxes ${employer_total:,.2f}, "
 		f"grand total labor cost ${data['grand_total_labor_cost']:,.2f}",
 	)
+
+
+def _register_garnishments(company: str, date_from, date_to, entries: set) -> dict:
+	"""v0.292.0. The week's garnishments: who, which order, taken, the cap, arrears left. HR roles only (v0.260.0)."""
+	from .. import garnishment_ledger
+	from .employee import require_hr_role
+
+	try:
+		require_hr_role()
+	except ToolError:
+		return {"shown": False, "reason": "garnishment detail is HR data — read it with an HR role."}
+	rows = [r for r in garnishment_ledger.report(company, str(date_from), str(date_to)) if r.get("entry") in entries]
+	return {"shown": True, "rows": rows,
+	        "total_taken": round(sum(r["current_taken"] + r["arrears_caught_up"] for r in rows), 2),
+	        "total_carried_forward": round(sum(r["carried_forward"] for r in rows), 2),
+	        "rule": "current amount first, then arrears as far as the cap allows; what does not fit is carried "
+	                "forward (payroll setting garnishment_policy). Have payroll/CPA review before live use."}
 
 
 def _stub_slip(doc, employee: str) -> tuple[dict, str]:
@@ -3036,9 +3089,11 @@ def _load_deductions(
 	)
 	live = [row for row in rows if payroll_deductions.is_active(row, on_date)]
 
+	from .. import garnishment_ledger
+
 	by_employee: dict[str, list[dict]] = {}
-	for row in live:
-		by_employee.setdefault(str(row.get("employee") or ""), []).append(dict(row))
+	for row in garnishment_ledger.with_balances([dict(r) for r in live]):
+		by_employee.setdefault(str(row.get("employee") or ""), []).append(row)
 
 	return by_employee, {
 		"available": True,

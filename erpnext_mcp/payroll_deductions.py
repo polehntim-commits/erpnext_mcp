@@ -117,10 +117,10 @@ reported as a shortfall line with what was asked and what was taken. A payroll
 run that hands somebody a negative cheque is a payroll run nobody looks at
 twice, and the shortfall is the fact the payroll clerk has to act on.
 
-IT DOES NOT CARRY ARREARS FORWARD. What a period could not take is reported and
-is not remembered: the next period computes from its own pay. Accruing a
-balance would make this module stateful and would quietly build a debt no
-document authorises. `shortfalls` is the list somebody reads.
+ARREARS (v0.292.0, Tim's middle path). The module stays stateless: the caller passes each order's
+`arrears_balance` (from the order and its ledger) and the policy, and every line reports its current amount,
+catch-up, cap and the arrears after — which the caller writes to the ledger. What a period could not take is CARRIED
+FORWARD, never dropped and never taken beyond a cap.
 
 IT GIVES NO LEGAL ADVICE AND MAKES NO DETERMINATION. The state rule that beats
 the federal one is not here — several states cap ordinary garnishment below 25%,
@@ -729,168 +729,223 @@ def _line(row: dict, schedule: dict, taken: float, pre_tax: bool, fica_exempt: b
 	}
 
 
+#: v0.292.0. The default catch-up policy when the caller passes none (payroll setting `garnishment_policy` is the
+#: live one): the middle path — the current amount, then as much of the arrears as still fits under the cap.
+DEFAULT_GARNISHMENT_POLICY = {"catch_up": "middle_path", "carry_forward": True, "current_before_arrears": True}
+
+
+def _arrears_wanted(row: dict, policy: dict) -> float:
+	"""How much of this order's arrears to try for this period, before any cap.
+
+	The ORDER'S OWN TERMS WIN: an order that sets an arrears amount per period gets that (never more than the balance).
+	Otherwise the policy decides — `middle_path` tries for the whole balance and lets the cap say how much fits;
+	`none` takes the current amount only and lets the arrears stand.
+	"""
+	balance = max(_as_float(row.get("arrears_balance")), 0.0)
+	if balance <= 0:
+		return 0.0
+	ordered = max(_as_float(row.get("arrears_per_period")), 0.0)
+	if ordered > 0:
+		return round(min(ordered, balance), 2)
+	if (policy or {}).get("catch_up", "middle_path") == "none":
+		return 0.0
+	return round(balance, 2)
+
+
+def _limits(limits: dict | None, pay_frequency: str, minimum_wage: float, state_cap_rate) -> dict:
+	"""The ordinary-garnishment rule for this period: the STRICTER of federal and state (15 U.S.C. §1677)."""
+	federal = dict((limits or {}).get("federal") or {})
+	state = dict((limits or {}).get("state") or {})
+	raw_wage = federal.get("federal_minimum_wage")
+	fmw = _as_float(raw_wage) if raw_wage not in (None, "") else minimum_wage
+	multipliers = federal.get("period_multipliers") or CCPA_PERIOD_MULTIPLIERS
+	fed_floor = round(_as_float(multipliers.get(pay_frequency, multipliers.get("Weekly", 30.0))) * fmw, 2)
+	rate = _as_float(federal.get("ordinary_rate"), CCPA_ORDINARY_RATE)
+	floor, floor_source = fed_floor, f"30x federal minimum wage (${fmw:.2f})"
+	if state:
+		state_rate = _as_float(state.get("ordinary_rate"), rate)
+		if 0.0 <= state_rate < rate:
+			rate = state_rate
+		state_floor = _as_float((state.get("floors") or {}).get(pay_frequency), 0.0)
+		if state_floor > floor:
+			floor, floor_source = state_floor, f"{state.get('state')} minimum exemption (${state_floor:,.2f})"
+	legacy = _as_float(state_cap_rate, -1.0)
+	if 0.0 <= legacy < rate:
+		rate = legacy
+	return {"rate": rate, "floor": floor, "floor_source": floor_source, "federal": federal, "state": state,
+	        "support_rates": federal.get("support_rates") or {},
+	        "student_loan_rate": _as_float(federal.get("student_loan_rate"), STUDENT_LOAN_RATE)}
+
+
+def _ordinary_ceiling(disposable: float, rule: dict) -> dict:
+	by_rate = round(disposable * rule["rate"], 2)
+	above_floor = round(max(disposable - rule["floor"], 0.0), 2)
+	ceiling = min(by_rate, above_floor)
+	return {"ceiling": round(ceiling, 2), "rate": rule["rate"], "disposable_earnings": round(disposable, 2),
+	        "by_percentage": by_rate, "by_minimum_wage_floor": above_floor, "exempt_floor": rule["floor"],
+	        "binding_rule": rule["floor_source"] if above_floor <= by_rate else f"{rule['rate']:.0%} of disposable earnings"}
+
+
+def _support_rate(rows: list, rates: dict) -> tuple:
+	supports_others = all(_as_bool(r.get("supports_other_dependents", True)) for r in rows or [])
+	arrears = any(_as_bool(r.get("arrears_over_12_weeks")) for r in rows or [])
+	key = ("supporting" if supports_others else "not_supporting") + ("_arrears" if arrears else "")
+	default = {"supporting": 0.50, "supporting_arrears": 0.55, "not_supporting": 0.60, "not_supporting_arrears": 0.65}
+	return _as_float((rates or {}).get(key), default[key]), supports_others, arrears
+
+
+def _finish(line: dict, current: float, catch_up: float, current_taken: float, catch_up_taken: float, row: dict,
+            rule: str, cap: float, reason: str, shortfalls: list) -> dict:
+	"""The line's catch-up and carry-forward book-keeping — what the ledger, the stub and the report read."""
+	before = round(max(_as_float(row.get("arrears_balance")), 0.0), 2)
+	carried = round(max(current - current_taken, 0.0), 2)
+	line.update({"amount": round(current_taken + catch_up_taken, 2), "requested": round(current + catch_up, 2),
+	             "current_requested": round(current, 2), "current_taken": round(current_taken, 2),
+	             "catch_up_requested": round(catch_up, 2), "catch_up_taken": round(catch_up_taken, 2),
+	             "arrears_before": before, "carried_forward": carried,
+	             "arrears_after": round(before - catch_up_taken + carried, 2),
+	             "limit_rule": rule, "limit_ceiling": round(cap, 2), "cap_amount": round(cap, 2),
+	             "arrears_per_period": round(max(_as_float(row.get("arrears_per_period")), 0.0), 2)})
+	if carried > 0.005:
+		line["shortfall"] = carried
+		line["shortfall_reason"] = reason + " — carried forward to the next period"
+		shortfalls.append(dict(line))
+	return line
+
+
+def take_less(line: dict, take: float, reason: str) -> dict:
+	"""A garnishment line cut to `take` when the cash is not there (a daily-pay settlement's net). v0.292.0.
+
+	The arrears catch-up gives way first, then the current amount; what the current amount loses is carried forward
+	exactly as a cap would carry it, so the ledger and the next period see the same arithmetic either way.
+	"""
+	line = dict(line)
+	take = round(max(min(_as_float(take), _as_float(line.get("amount"))), 0.0), 2)
+	cut = round(_as_float(line.get("amount")) - take, 2)
+	if cut <= 0:
+		return line
+	catch_up = _as_float(line.get("catch_up_taken"))
+	catch_cut = min(catch_up, cut)
+	current_taken = round(_as_float(line.get("current_taken", line.get("amount"))) - (cut - catch_cut), 2)
+	catch_up = round(catch_up - catch_cut, 2)
+	current = _as_float(line.get("current_requested", line.get("requested")))
+	carried = round(max(current - current_taken, 0.0), 2)
+	before = _as_float(line.get("arrears_before"))
+	line.update({"amount": take, "current_taken": current_taken, "catch_up_taken": catch_up,
+	             "carried_forward": carried, "arrears_after": round(before - catch_up + carried, 2),
+	             "shortfall": carried, "shortfall_reason": reason + (" — carried forward to the next period"
+	                                                                  if carried > 0.005 else "")})
+	return line
+
+
 def apply_garnishments(
 	disposable: float,
 	rows: list[dict],
 	pay_frequency: str = "Biweekly",
 	minimum_wage: float = FEDERAL_MINIMUM_WAGE,
 	state_cap_rate: float | None = None,
+	limits: dict | None = None,
+	policy: dict | None = None,
 ) -> dict:
-	"""Court orders against the CCPA ceilings, in legal priority order.
+	"""Court orders against the caps, in legal priority order, with arrears catch-up and carry-forward. v0.292.0.
 
-	The four ceilings of the module docstring, applied in the one order that makes
-	them consistent:
+	PRIORITY (the policy's `priority`, checked by its validator; sources there): 1. child support, against its own
+	§1673(b)(2) ceiling of 50-65% — several orders prorated by amount, every order's CURRENT support before any order's
+	arrears (42 U.S.C. §666(b)(5); ORS 25.378); 2. federal and state tax levies, outside Title III (29 CFR
+	870.11(b)(2)); 3. student loans at 15%, inside the ordinary pool; 4. creditor orders out of what is left of the
+	ordinary pool after support (29 CFR 870.11(b)(1); ORS 18.385(5)). The ordinary pool is the STRICTER of federal (25%
+	/ 30× federal minimum wage) and the state's dated rule (`limits`) — Oregon's ORS 18.385 floor, Washington's RCW
+	6.27.150 — and a consumer-debt order in a state with its own rule gets that ceiling too.
 
-	  1. CHILD SUPPORT first, against its own §1673(b)(2) ceiling of 50-65%.
-	     Several orders that will not fit are PRORATED by ordered amount.
-	  2. TAX LEVIES next and OUTSIDE the Title III pool entirely — 29 CFR
-	     870.11(b)(2) — bounded only by an exempt amount on the row, if given.
-	  3. STUDENT LOANS at 15% of disposable, inside the ordinary pool.
-	  4. ORDINARY GARNISHMENTS out of what is left of the 25% pool AFTER support
-	     has taken its share. 29 CFR 870.11(b)(1): the ordinary garnishment does
-	     not get a fresh 25% of its own, and when support has taken 25% or more
-	     the correct answer here is zero.
-
-	Everything a ceiling refused is reported on the line as a `shortfall` with the
-	rule that refused it named, because an employer who withholds less than an
-	order demands has to answer the court for the difference and "the CCPA capped
-	it" is the answer.
+	CATCH-UP AND CARRY-FORWARD (`policy`, default the middle path): each order takes its current amount, then as much
+	of its arrears (`arrears_balance`, kept by the caller's ledger) as still fits — or the order's own
+	`arrears_per_period` where it sets one, still capped. What the current amount could not take is CARRIED FORWARD
+	into the arrears and reported. Nothing here ever exceeds a cap; every line says which cap bound it.
 	"""
+	policy = {**DEFAULT_GARNISHMENT_POLICY, **(policy or {})}
 	disposable = max(_as_float(disposable), 0.0)
-	ordinary = ordinary_garnishment_ceiling(disposable, pay_frequency, minimum_wage, state_cap_rate)
+	rule = _limits(limits, pay_frequency, minimum_wage, state_cap_rate)
+	ordinary = _ordinary_ceiling(disposable, rule)
 
 	garnishments = [row for row in rows if row_type(row) == "garnishment"]
 	support_rows = [row for row in garnishments if _limit_of(row) == "child_support"]
 	levy_rows = [row for row in garnishments if _limit_of(row) == "exempt_from_ccpa"]
 	loan_rows = [row for row in garnishments if _limit_of(row) == "student_loan"]
-	other_rows = [
-		row
-		for row in garnishments
-		if _limit_of(row) not in ("child_support", "exempt_from_ccpa", "student_loan")
-	]
+	other_rows = [row for row in garnishments
+	              if _limit_of(row) not in ("child_support", "exempt_from_ccpa", "student_loan")]
+	lines, shortfalls = [], []
 
-	lines = []
-	shortfalls = []
-
-	# ── 1. Child support, against its own ceiling ────────────────────────────
-	support = child_support_ceiling(disposable, support_rows)
+	# ── 1. Child support: every order's current support, then arrears, under one ceiling ─────────────
+	rate, supports_others, arrears_flag = _support_rate(support_rows, rule["support_rates"])
+	support_ceiling = round(disposable * rate, 2)
+	support = {"ceiling": support_ceiling, "rate": rate, "supports_other_dependents": supports_others,
+	           "arrears_over_12_weeks": arrears_flag, "basis": "15 U.S.C. 1673(b)(2)"}
 	support_taken = 0.0
 	if support_rows:
-		requests = []
-		for row in support_rows:
-			schedule = scheduled_amount(row, disposable, disposable)
-			requests.append((row, schedule))
-		total_requested = round(sum(item[1]["requested"] for item in requests), 2)
-		ceiling = support["ceiling"]
-		prorated = total_requested > ceiling + 0.005
-
-		remaining = ceiling
-		for row, schedule in requests:
-			requested = schedule["requested"]
-			if prorated and total_requested > 0:
-				allowed = round(ceiling * (requested / total_requested), 2)
-			else:
-				allowed = requested
-			taken = round(max(min(allowed, requested, remaining), 0.0), 2)
-			remaining = round(max(remaining - taken, 0.0), 2)
-			support_taken += taken
-
-			line = _line(row, schedule, taken, pre_tax=False, fica_exempt=False)
-			line["limit_rule"] = "child_support"
-			line["limit_ceiling"] = ceiling
+		current = [scheduled_amount(row, disposable, disposable) for row in support_rows]
+		wanted_current = [c["requested"] for c in current]
+		room = support_ceiling
+		taken_current = _share(wanted_current, room)
+		room = round(room - sum(taken_current), 2)
+		wanted_arrears = [_arrears_wanted(row, policy) for row in support_rows]
+		taken_arrears = _share(wanted_arrears, room)
+		prorated = sum(wanted_current) > support_ceiling + 0.005
+		for row, schedule, cur, cur_t, arr, arr_t in zip(support_rows, current, wanted_current, taken_current,
+		                                                 wanted_arrears, taken_arrears, strict=True):
+			line = _line(row, schedule, 0.0, pre_tax=False, fica_exempt=False)
 			line["prorated"] = bool(prorated)
-			if taken < requested - 0.005:
-				line["shortfall"] = round(requested - taken, 2)
-				line["shortfall_reason"] = (
-					f"child support ceiling of {support['rate']:.0%} of disposable earnings "
-					f"(${ceiling:,.2f})" + (" shared pro rata across the orders on file" if prorated else "")
-				)
-				shortfalls.append(dict(line))
-			lines.append(line)
+			reason = (f"child support ceiling of {rate:.0%} of disposable earnings (${support_ceiling:,.2f})"
+			          + (" shared pro rata across the orders on file" if prorated else ""))
+			lines.append(_finish(line, cur, arr, cur_t, arr_t, row, "child_support", support_ceiling, reason, shortfalls))
+			support_taken += cur_t + arr_t
 	support_taken = round(support_taken, 2)
 
 	# ── 2. Tax levies, outside Title III ─────────────────────────────────────
 	levy_taken = 0.0
 	for row in levy_rows:
 		schedule = scheduled_amount(row, disposable, disposable)
-		requested = schedule["requested"]
-		# IRC §6334(d) leaves the taxpayer an exempt amount the IRS computes on
-		# Publication 1494 from filing status and dependents. This app does not
-		# carry that table, so the figure is whatever the notice said and was
-		# typed onto the row. Absent one, the levy takes what it asks for —
-		# which is what the notice instructs — bounded only by the pay itself.
 		exempt = max(_as_float(row.get("exempt_amount")), 0.0)
 		room = round(max(disposable - support_taken - levy_taken - exempt, 0.0), 2)
-		taken = round(max(min(requested, room), 0.0), 2)
-		levy_taken = round(levy_taken + taken, 2)
-
-		line = _line(row, schedule, taken, pre_tax=False, fica_exempt=False)
-		line["limit_rule"] = "exempt_from_ccpa"
-		line["limit_ceiling"] = room
+		cur = schedule["requested"]
+		cur_t = round(min(cur, room), 2)
+		arr = _arrears_wanted(row, policy)
+		arr_t = round(min(arr, room - cur_t), 2)
+		levy_taken = round(levy_taken + cur_t + arr_t, 2)
+		line = _line(row, schedule, 0.0, pre_tax=False, fica_exempt=False)
 		line["exempt_amount"] = round(exempt, 2)
-		if taken < requested - 0.005:
-			line["shortfall"] = round(requested - taken, 2)
-			line["shortfall_reason"] = (
-				"disposable earnings exhausted; a tax levy is not limited by the CCPA "
-				"(29 CFR 870.11(b)(2)) but cannot exceed the pay"
-				+ (f", and ${exempt:,.2f} is exempt under IRC 6334(d)" if exempt else "")
-			)
-			shortfalls.append(dict(line))
-		lines.append(line)
+		reason = ("disposable earnings exhausted; a tax levy is not limited by the CCPA (29 CFR 870.11(b)(2)) but "
+		          "cannot exceed the pay" + (f", and ${exempt:,.2f} is exempt under IRC 6334(d)" if exempt else ""))
+		lines.append(_finish(line, cur, arr, cur_t, arr_t, row, "exempt_from_ccpa", room, reason, shortfalls))
 
-	# ── 3 & 4. The shared ordinary pool ──────────────────────────────────────
-	#
-	# 29 CFR 870.11(b)(1). Support has already come out of the same 25%, so what
-	# is left is the ceiling less what support took — not a fresh 25%. Where
-	# support took a quarter or more of disposable earnings this is zero, and a
-	# creditor collects nothing this period. That is the rule working.
+	# ── 3 & 4. The shared ordinary pool: student loans, then creditor orders ───────────────
 	pool = round(max(ordinary["ceiling"] - support_taken, 0.0), 2)
 	pool_opening = pool
-
-	for row in loan_rows:
+	consumer = (rule["state"].get("consumer") or {}) if rule["state"] else {}
+	for row in loan_rows + other_rows:
 		schedule = scheduled_amount(row, disposable, disposable)
-		requested = schedule["requested"]
-		# 20 U.S.C. §1095a(a)(1): 15% of disposable pay for this order, and still
-		# inside the pool it shares with any creditor garnishment.
-		own_ceiling = round(disposable * STUDENT_LOAN_RATE, 2)
-		allowed = round(min(own_ceiling, pool), 2)
-		taken = round(max(min(requested, allowed), 0.0), 2)
-		pool = round(max(pool - taken, 0.0), 2)
-
-		line = _line(row, schedule, taken, pre_tax=False, fica_exempt=False)
-		line["limit_rule"] = "student_loan"
-		line["limit_ceiling"] = allowed
-		if taken < requested - 0.005:
-			line["shortfall"] = round(requested - taken, 2)
-			line["shortfall_reason"] = (
-				f"student loan garnishment is capped at {STUDENT_LOAN_RATE:.0%} of disposable "
-				f"earnings (${own_ceiling:,.2f}) and shares the CCPA pool"
-			)
-			shortfalls.append(dict(line))
-		lines.append(line)
-
-	for row in other_rows:
-		schedule = scheduled_amount(row, disposable, disposable)
-		requested = schedule["requested"]
-		taken = round(max(min(requested, pool), 0.0), 2)
-		pool = round(max(pool - taken, 0.0), 2)
-
-		line = _line(row, schedule, taken, pre_tax=False, fica_exempt=False)
-		line["limit_rule"] = "ordinary"
-		line["limit_ceiling"] = ordinary["ceiling"]
-		if taken < requested - 0.005:
-			line["shortfall"] = round(requested - taken, 2)
-			line["shortfall_reason"] = (
-				f"CCPA ordinary garnishment ceiling: {ordinary['binding_rule']} "
-				f"(${ordinary['ceiling']:,.2f})"
-				+ (
-					f", of which ${support_taken:,.2f} was taken by support orders (29 CFR 870.11(b)(1))"
-					if support_taken > 0
-					else ""
-				)
-			)
-			shortfalls.append(dict(line))
-		lines.append(line)
+		is_loan = row in loan_rows
+		own = pool
+		rule_name, reason = "ordinary", f"ordinary garnishment ceiling: {ordinary['binding_rule']} (${ordinary['ceiling']:,.2f})"
+		if is_loan:
+			own = round(min(disposable * rule["student_loan_rate"], pool), 2)
+			rule_name = "student_loan"
+			reason = (f"student loan garnishment is capped at {rule['student_loan_rate']:.0%} of disposable earnings "
+			          "and shares the CCPA pool")
+		elif _as_bool(row.get("consumer_debt")) and consumer:
+			c_floor = _as_float((consumer.get("floors") or {}).get(pay_frequency), 0.0)
+			c_cap = min(disposable * _as_float(consumer.get("rate"), rule["rate"]), max(disposable - c_floor, 0.0))
+			own = round(min(c_cap, pool), 2)
+			rule_name = "consumer_debt"
+			reason = f"{rule['state'].get('state')} consumer-debt ceiling ({consumer.get('source')})"
+		if support_taken > 0 and not is_loan:
+			reason += f", of which ${support_taken:,.2f} was taken by support orders (29 CFR 870.11(b)(1))"
+		cur = schedule["requested"]
+		cur_t = round(max(min(cur, own), 0.0), 2)
+		arr = _arrears_wanted(row, policy)
+		arr_t = round(max(min(arr, own - cur_t), 0.0), 2)
+		pool = round(max(pool - cur_t - arr_t, 0.0), 2)
+		line = _line(row, schedule, 0.0, pre_tax=False, fica_exempt=False)
+		lines.append(_finish(line, cur, arr, cur_t, arr_t, row, rule_name, own, reason, shortfalls))
 
 	total = round(sum(line["amount"] for line in lines), 2)
 	return {
@@ -904,7 +959,28 @@ def apply_garnishments(
 		"tax_levy_withheld": round(levy_taken, 2),
 		"ordinary_pool": pool_opening,
 		"ordinary_pool_remaining": pool,
+		"catch_up_taken": round(sum(line.get("catch_up_taken", 0) for line in lines), 2),
+		"carried_forward": round(sum(line.get("carried_forward", 0) for line in lines), 2),
+		"policy": policy,
+		"limits_applied": {"rate": rule["rate"], "floor": rule["floor"], "floor_source": rule["floor_source"],
+		                   "state": (rule["state"] or {}).get("state")},
 	}
+
+
+def _share(wanted: list, room: float) -> list:
+	"""Give each request its amount, or — when they will not all fit — a share in proportion, never above `room`."""
+	total = sum(wanted)
+	room = max(room, 0.0)
+	if total <= room + 0.005:
+		return [round(w, 2) for w in wanted]
+	if total <= 0:
+		return [0.0 for _ in wanted]
+	shares = [round(room * (w / total), 2) for w in wanted]
+	excess = round(sum(shares) - room, 2)
+	if excess > 0 and shares:  # rounding never takes a cent over the ceiling
+		i = shares.index(max(shares))
+		shares[i] = round(shares[i] - excess, 2)
+	return shares
 
 
 def _limit_of(row: dict) -> str:

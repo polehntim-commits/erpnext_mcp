@@ -285,8 +285,10 @@ def settlement(company: str, start, end) -> tuple:
 
 	§5. Deductions and garnishments are taken here, against the WEEK's disposable earnings (the CCPA's ceilings are
 	weekly), out of this settlement's net only — a daily payment is never clawed back and never made negative. What
-	the settlement cannot cover is reported as a shortfall, and shown again on next week's settlement; it is not
-	collected automatically, because arrears must stay inside the same ceilings and that is a person's call.
+	the settlement cannot cover is reported as a shortfall and, since v0.292.0, CARRIED FORWARD into the order's
+	arrears (garnishment_ledger) and caught up on later periods inside the same ceilings — the payroll setting
+	`garnishment_policy`, default the middle path. The week's pay items (bonuses, profit shares) are paid here and
+	count as earnings for the caps.
 	"""
 	from . import payroll_calc, payroll_deductions, payroll_settings
 	from .tools import payroll as runs
@@ -298,8 +300,14 @@ def settlement(company: str, start, end) -> tuple:
 		                    f"{workweek_start(start) + datetime.timedelta(days=6)} (Pay Policy workweek_start).")
 	if not enabled(company):
 		raise DailyPayError(f"daily pay is off for {company} — turn on `{FLAG}` for it when it goes live.")
+	from . import pay_items as items
+
 	by_employee = week_daily_slips(company, start, end)
 	deductions_by_employee, _sources = runs._load_deductions(company, end, list(by_employee))
+	# v0.292.0. The week's bonuses and profit-share payouts are paid with the settlement, and count for the caps.
+	items_by_employee = items.pending(company, start, end, list(by_employee))
+	limits = payroll_settings.garnishment_limits(end)
+	policy = payroll_settings.garnishment_policy(end)
 	ytd_by_employee = runs._load_ytd(company, start, list(by_employee))
 	slips, held, notes = [], [], []
 	for employee, days in sorted(by_employee.items()):
@@ -323,6 +331,7 @@ def settlement(company: str, start, end) -> tuple:
 
 		tax_config = runs._build_tax_config(employee, "Weekly", company, end)
 		tax_config["pay_frequency"] = "Weekly"
+		tax_config["pay_items"] = items_by_employee.get(employee) or []
 		ytd = ytd_by_employee.get(employee) or {}
 		tax_config["ytd_gross"] = round(_num(ytd.get("ytd_gross")) + straight, 2)
 		tax_config["ytd_ss_withheld"] = round(_num(ytd.get("ytd_ss_withheld")) + sum(_num(d["social_security"])
@@ -352,19 +361,25 @@ def settlement(company: str, start, end) -> tuple:
 			             f"{payroll_deductions.row_label(row)} is not taken for a daily-pay worker (it would have to "
 			             "change wages already paid) — keep this worker weekly, or make it after-tax")
 		statutory = _num(slip.get("statutory_deductions"))
-		week_gross = round(straight + premium, 2)
+		paid_now = _num(slip.get("gross_pay"))  # the premium plus the week's pay items
+		week_gross = round(straight + paid_now, 2)
 		disposable = payroll_deductions.disposable_earnings(week_gross, round(daily_taxes + statutory, 2))
+		limit_rows = {"federal": limits.get("federal"), "state": (limits.get("states") or {}).get(state)}
 		garnish = payroll_deductions.apply_garnishments(disposable, rows, pay_frequency="Weekly",
-		                                                state_cap_rate=tax_config.get("garnishment_state_cap_rate"))
-		cash = round(max(premium - statutory, 0.0), 2)
+		                                                state_cap_rate=tax_config.get("garnishment_state_cap_rate"),
+		                                                limits=limit_rows, policy=policy)
+		cash = round(max(paid_now - statutory, 0.0), 2)
 		garnished = 0.0
-		lines, shortfalls = [], list(garnish.get("shortfalls") or [])
+		lines = []
+		shortfalls = list(garnish.get("shortfalls") or [])
 		for line in garnish["lines"]:
 			take = round(min(_num(line["amount"]), cash), 2)
 			if take < _num(line["amount"]):
-				short = {**line, "amount": take, "shortfall": round(_num(line["amount"]) - take + _num(line.get("shortfall")), 2),
-				         "shortfall_reason": "the settlement's net was short — daily wages already paid are never taken back"}
-				shortfalls.append(short)
+				short = payroll_deductions.take_less(
+					line, take, "the settlement's net was short — daily wages already paid are never taken back")
+				shortfalls = [s for s in shortfalls if s.get("deduction") != line.get("deduction")]
+				if _num(short.get("shortfall")) > 0.005:
+					shortfalls.append(short)
 				line = short
 			cash = round(cash - take, 2)
 			garnished += take
@@ -376,12 +391,12 @@ def settlement(company: str, start, end) -> tuple:
 		withholdings = round(_num(summary.get("total")), 2)
 		slip.update({
 			"total_hours": hours, "regular_hours": round(hours - overtime_hours, 2), "overtime_hours": overtime_hours,
-			"earned_gross": premium, "minimum_wage_makeup": 0, "gross_pay": premium,
+			"earned_gross": premium, "minimum_wage_makeup": 0, "gross_pay": paid_now,
 			"deduction_lines": lines, "deduction_shortfalls": shortfalls,
 			"garnishment_total": round(garnished, 2),
 			"post_tax_deductions": round(_num(post.get("total")), 2), "pre_tax_deductions": 0,
 			"total_deduction_withholdings": withholdings, "disposable_earnings": disposable,
-			"total_deductions": round(statutory + withholdings, 2), "net_pay": round(premium - statutory - withholdings, 2),
+			"total_deductions": round(statutory + withholdings, 2), "net_pay": round(paid_now - statutory - withholdings, 2),
 			"settlement": {"week": [start, end], "days_paid": [d["day"] for d in days],
 			               "daily_entries": sorted({d["entry"] for d in days}), "week_hours": hours,
 			               "straight_time_earnings": straight, "regular_rate": regular_rate,

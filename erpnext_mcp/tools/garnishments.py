@@ -330,6 +330,14 @@ def get_garnishment(args: dict) -> ToolResult:
 
 	described = _describe(dict(row))
 	data = {"garnishment": described, "competing_orders": _competing(dict(row))}
+	# v0.292.0. The arrears and every catch-up and carry-forward — what is explained to the worker and the agency.
+	deduction = str(row.get("payroll_deduction") or "")
+	if deduction and frappe.db.exists(PAYROLL_DEDUCTION, deduction):
+		from .payroll_deductions import arrears_view
+
+		arrears = arrears_view(deduction, dict(frappe.get_doc(PAYROLL_DEDUCTION, deduction).as_dict()))
+		if arrears:
+			data["arrears"] = arrears
 	notes = _notes(dict(row))
 	if notes:
 		data["notes"] = notes
@@ -536,6 +544,13 @@ def _deduction_payload(doc, args: dict) -> dict:
 		exempt = as_float(args.get("exempt_amount"), "exempt_amount")
 		if exempt:
 			payload["exempt_amount"] = exempt
+	# v0.292.0. Arrears stated on the order and the order's own catch-up schedule, if it sets one.
+	for field in ("arrears_opening", "arrears_per_period"):
+		value = as_float(args.get(field), field)
+		if value:
+			payload[field] = value
+	if as_bool(args, "consumer_debt"):
+		payload["consumer_debt"] = True
 	return {key: value for key, value in payload.items() if value not in (None, "")}
 
 
@@ -604,14 +619,35 @@ def update_garnishment(args: dict) -> ToolResult:
 		doc.total_withheld = float(doc.total_withheld or 0) + increment
 		changed.append("total_withheld")
 
-	if not changed:
+	# v0.292.0. The arrears live on the deduction payroll reads, so they are written there.
+	arrears_updates = {}
+	for field in ("arrears_opening", "arrears_per_period"):
+		if args.get(field) not in (None, ""):
+			arrears_updates[field] = as_float(args.get(field), field)
+	if as_bool(args, "consumer_debt") is not None:
+		arrears_updates["consumer_debt"] = 1 if as_bool(args, "consumer_debt") else 0
+	deduction_name = str(doc.payroll_deduction or "").strip()
+	if arrears_updates and not (deduction_name and frappe.db.exists(PAYROLL_DEDUCTION, deduction_name)):
+		raise ToolError(f"{name} has no payroll deduction to hold arrears. Nothing was changed.")
+
+	if not changed and not arrears_updates:
 		raise ToolError(
 			"nothing to change: no writable field was supplied. Writable fields are "
-			f"{', '.join(_WRITABLE)}, plus add_withheld."
+			f"{', '.join(_WRITABLE)}, plus add_withheld, arrears_opening, arrears_per_period and consumer_debt."
 		)
 
 	doc.save(ignore_permissions=True)
 	mirrored = _mirror_to_deduction(doc, changed)
+	for field, value in arrears_updates.items():
+		was = frappe.db.get_value(PAYROLL_DEDUCTION, deduction_name, field)
+		if was != value:
+			frappe.db.set_value(PAYROLL_DEDUCTION, deduction_name, field, value)
+			mirrored.append({"deduction": deduction_name, "field": field, "before": was, "after": value})
+	if "arrears_opening" in arrears_updates:
+		from .. import garnishment_ledger
+
+		frappe.db.set_value(PAYROLL_DEDUCTION, deduction_name, "arrears_balance",
+		                    garnishment_ledger.balance(deduction_name))
 
 	row = dict(doc.as_dict())
 	described = _describe(row)

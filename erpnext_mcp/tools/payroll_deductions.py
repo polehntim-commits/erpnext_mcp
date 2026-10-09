@@ -58,6 +58,11 @@ _WRITABLE = (
 	"supports_other_dependents",
 	"arrears_over_12_weeks",
 	"exempt_amount",
+	# v0.292.0. Arrears stated on the order, the order's own catch-up amount per period, and a Washington
+	# consumer-debt judgment (RCW 6.27.150(4)).
+	"arrears_opening",
+	"arrears_per_period",
+	"consumer_debt",
 	"effective_from",
 	"effective_to",
 	"reference",
@@ -73,7 +78,7 @@ _SELECTS = ("deduction_type", "deduction_category", "status", "amount_type", "ba
 #: The Checks. Kept apart because a Check that was never passed has to stay
 #: unset rather than become 0 — the engine reads "unset" as "follow the
 #: category", and writing a 0 would silently turn a health premium post-tax.
-_CHECKS = ("pre_tax", "fica_exempt", "supports_other_dependents", "arrears_over_12_weeks")
+_CHECKS = ("pre_tax", "fica_exempt", "supports_other_dependents", "arrears_over_12_weeks", "consumer_debt")
 
 _FIELDS = (
 	"name",
@@ -93,6 +98,10 @@ _FIELDS = (
 	"supports_other_dependents",
 	"arrears_over_12_weeks",
 	"exempt_amount",
+	"arrears_opening",
+	"arrears_per_period",
+	"consumer_debt",
+	"arrears_balance",
 	"effective_from",
 	"effective_to",
 	"reference",
@@ -261,6 +270,18 @@ def _notes(row: dict) -> list[str]:
 # ── reads ───────────────────────────────────────────────────────────────────
 
 
+def arrears_view(name: str, row: dict | None = None) -> dict:
+	"""v0.292.0. A garnishment's arrears now and every catch-up and carry-forward in its ledger."""
+	from .. import garnishment_ledger
+
+	row = row or {}
+	if payroll_deductions.row_type(row) != "garnishment" or not garnishment_ledger.ready():
+		return {}
+	return {"arrears_opening": row.get("arrears_opening") or 0, "arrears_per_period": row.get("arrears_per_period") or 0,
+	        "balance": garnishment_ledger.balance(name, row.get("arrears_opening")),
+	        "ledger": garnishment_ledger.report(deduction=name)}
+
+
 def get_payroll_deduction(args: dict) -> ToolResult:
 	"""One deduction in full, with what the payroll engine will make of it.
 
@@ -284,6 +305,9 @@ def get_payroll_deduction(args: dict) -> ToolResult:
 	)
 	described = _describe(dict(row))
 	data = {"deduction": described}
+	arrears = arrears_view(name, dict(row))
+	if arrears:
+		data["arrears"] = arrears
 	notes = _notes(dict(row))
 	if notes:
 		data["notes"] = notes
@@ -421,7 +445,15 @@ def list_employee_deductions(args: dict) -> ToolResult:
 		statutory = as_float(args.get("statutory_withholding"), "statutory_withholding")
 		pre_tax = payroll_deductions.calculate_pre_tax_deductions(gross, live)
 		disposable = payroll_deductions.disposable_earnings(gross, statutory)
-		garnishments = payroll_deductions.apply_garnishments(disposable, live, pay_frequency)
+		# v0.292.0. The same dated limits, catch-up policy and arrears balances a run uses. The state's own rule
+		# applies when `work_state` is given.
+		from .. import garnishment_ledger, payroll_settings
+
+		limits = payroll_settings.garnishment_limits(on_date, as_str(args, "work_state").upper())
+		garnishments = payroll_deductions.apply_garnishments(
+			disposable, garnishment_ledger.with_balances([dict(r) for r in live]), pay_frequency,
+			limits={"federal": limits["federal"], "state": limits["state"]},
+			policy=payroll_settings.garnishment_policy(on_date))
 		cash = max(gross - pre_tax["total"] - statutory - garnishments["total"], 0.0)
 		post_tax = payroll_deductions.apply_post_tax_deductions(cash, live, gross, disposable)
 		lines = pre_tax["lines"] + garnishments["lines"] + post_tax["lines"]
@@ -598,7 +630,7 @@ def _apply(doc, args: dict, creating: bool) -> list[str]:
 			doc.set(field, 1 if value else 0)
 		elif field in ("effective_from", "effective_to"):
 			doc.set(field, as_date(args, field))
-		elif field in ("amount", "max_per_period", "exempt_amount"):
+		elif field in ("amount", "max_per_period", "exempt_amount", "arrears_opening", "arrears_per_period"):
 			doc.set(field, as_float(args.get(field), field))
 		elif field == "priority":
 			doc.set(field, as_int(args, field) or 0)
