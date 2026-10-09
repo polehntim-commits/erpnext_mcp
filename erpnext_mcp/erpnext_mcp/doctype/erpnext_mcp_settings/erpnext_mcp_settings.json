@@ -1078,6 +1078,7 @@
   "allow_list_error_logs",
   "diagnostics_col",
   "allow_query_doctype",
+  "allow_get_superseded_usage",
   "allow_list_sidecar_routes",
   "breakeven_section",
   "allow_get_breakeven_analysis",
@@ -8579,6 +8580,13 @@
    "fieldname": "allow_query_doctype",
    "fieldtype": "Check",
    "label": "Query Any Doctype"
+  },
+  {
+   "default": "1",
+   "description": "v0.284.0. Old tool names still being called now that a generic tool covers them, and the covered names nobody called — the 30-day evidence. Read-only.",
+   "fieldname": "allow_get_superseded_usage",
+   "fieldtype": "Check",
+   "label": "Get Superseded Usage"
   },
   {
    "default": "1",

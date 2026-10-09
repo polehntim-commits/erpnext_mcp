@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.284.0 — 2026-10-08 — the whole Action Log, and the 30-day evidence (consolidation phase 6)
+
+**No migrate** (one new read switch, on). Deploy `docs/deploy/v0.284.0_action_log_paging.md`.
+Tools: **1,141 → 1,142** (one read tool added; nothing removed or hidden).
+
+- **`query_doctype` pages** past its 500-row cap: pass `start` (the previous answer's `next_start`) with the same
+  filters and `order_by`. Every register pages this way — the MCP Action Log included, which before this could only
+  be read 500 rows (about a day and a half on OML) at a time.
+- **`get_superseded_usage(days=30)`** — read-only. From the Action Log's Superseded By column (v0.283.0): each old
+  tool name still being called, with calls, last call, the client programs and addresses, and refusals; and every
+  covered name with no old-name call in the window, by generic tool. `window_covered` is false while the log is
+  younger than the window, so "zero calls" is never read as 30 days of zero calls too early. Nothing is hidden or
+  removed; retiring a name stays Tim's decision.
+- Reused, not added: `query_doctype` for paging (one argument), the existing Action Log columns for the evidence.
+
 ## 0.283.0 — 2026-10-08 — exposure and attribution (consolidation phase 5)
 
 **Migrate** (three new MCP Action Log columns, one new setting, off). Deploy `docs/deploy/v0.283.0_exposure_attribution.md`.

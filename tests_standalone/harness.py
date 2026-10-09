@@ -4730,6 +4730,7 @@ class FakeDB:
 		as_dict=True,
 		distinct=False,
 		group_by=None,
+		limit_start=None,
 		**kwargs,
 	):
 		_reject_table_fields(doctype, fields)
@@ -4745,6 +4746,8 @@ class FakeDB:
 
 		if order_by:
 			rows = _sorted(rows, order_by)
+		if limit_start:
+			rows = rows[int(limit_start) :]
 		cap = limit or limit_page_length
 		if cap:
 			rows = rows[: int(cap)]
@@ -5162,6 +5165,9 @@ def _aggregate(rows: list[dict], expressions: list[str]) -> FrappeDict:
 			out[alias] = sum(float(row.get(column) or 0) for row in rows) or 0
 		elif function == "count":
 			out[alias] = len(rows)
+		elif function == "max":
+			values = [row.get(column) for row in rows if row.get(column) not in (None, "")]
+			out[alias] = max(values) if values else None
 		else:  # pragma: no cover
 			raise NotImplementedError(f"stub aggregate {function!r}")
 	return out

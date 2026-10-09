@@ -31409,10 +31409,26 @@ TOOLS = {
 				"One column and an optional direction: 'creation desc', 'name'. Defaults to "
 				"'modified desc'. Two columns is not available here.",
 			),
-			"limit": _field(_INTEGER, "Maximum rows. Capped at 500."),
+			"limit": _field(_INTEGER, "Maximum rows per page. Capped at 500."),
+			"start": _field(
+				_INTEGER,
+				"v0.284.0. Rows to skip — the previous answer's next_start — to page past 500 with the same "
+				"filters and order_by (e.g. the whole MCP Action Log, order_by 'timestamp desc').",
+			),
 		},
 		required=("doctype",),
 		title="Query any doctype",
+	),
+	"get_superseded_usage": _tool(
+		diagnostics.get_superseded_usage,
+		"v0.284.0. Read-only. Which OLD tool names are still being called now that a generic tool (template, config, "
+		"share_link, document, record) covers them — per tool: calls, last call, the client programs and addresses "
+		"that made them, how many were refused — and which covered names had NO old-name call in the window. The "
+		"evidence for the 30-days-of-zero-use rule; read from MCP Action Log's Superseded By column (v0.283.0).\n\n"
+		"window_covered is false while the log is younger than the window: zero calls then means none since the log "
+		"began. Nothing here hides or removes a tool; retiring a name is Tim's decision.",
+		{"days": _field(_INTEGER, "The window in days. Default 30, at most 365.")},
+		title="Superseded tool usage",
 	),
 	"update_document": _tool(
 		generic_update.update_document,

@@ -78,3 +78,71 @@ def hidden(tool_name: str) -> bool:
 	from . import oauth, registry
 
 	return settings.tool_enabled(generic) and oauth.permits(generic) and registry.is_available(generic)
+
+
+#: Rows read for one usage report. A month of OML's log is ~10,000 rows; past this the answer says it stopped.
+USAGE_ROW_CAP = 200000
+
+
+def usage(days: int = 30) -> dict:
+	"""Old-name calls in the last `days`, per tool, and the covered tools with none — the 30-day evidence.
+
+	Read from MCP Action Log's Superseded By column, so it counts calls made by an old name only (a call through a
+	generic tool is logged under the generic name). `log_starts` is the oldest row on the site: when it is newer
+	than the window's start, the window is not yet fully covered and `window_covered` is false — zero calls then
+	means "none since the log began", not 30 days of none. Removing a name stays Tim's call.
+	"""
+	import frappe
+
+	from . import audit
+
+	days = max(1, min(int(30 if days is None else days), 365))
+	since = frappe.utils.add_days(frappe.utils.now(), -days)
+	rows = frappe.db.get_all(
+		audit.LOG_DOCTYPE,
+		filters={"timestamp": (">=", since), "superseded_by": ("is", "set")},
+		fields=["tool_name", "superseded_by", "timestamp", "agent_client", "agent_model", "caller_ip", "result_status"],
+		order_by="timestamp desc",
+		limit=USAGE_ROW_CAP + 1,
+	) or []
+	capped = len(rows) > USAGE_ROW_CAP
+	rows = rows[:USAGE_ROW_CAP]
+	used: dict = {}
+	for row in rows:
+		entry = used.setdefault(row.get("tool_name"), {
+			"tool": row.get("tool_name"), "covered_by": row.get("superseded_by"), "calls": 0, "last_call": None,
+			"clients": set(), "addresses": set(), "refused": 0})
+		entry["calls"] += 1
+		stamp = str(row.get("timestamp") or "")
+		if stamp and (entry["last_call"] is None or stamp > entry["last_call"]):
+			entry["last_call"] = stamp
+		for key, column in (("clients", "agent_client"), ("clients", "agent_model"), ("addresses", "caller_ip")):
+			if row.get(column):
+				entry[key].add(str(row[column]))
+		if row.get("result_status") in ("Blocked", "Error"):
+			entry["refused"] += 1
+	used_rows = sorted(({**e, "clients": sorted(e["clients"]), "addresses": sorted(e["addresses"])}
+	                    for e in used.values()), key=lambda e: (-e["calls"], e["tool"]))
+	unused: dict = {}
+	for old, generic in sorted(covering().items()):
+		if old not in used:
+			unused.setdefault(generic, []).append(old)
+	oldest = frappe.db.get_all(audit.LOG_DOCTYPE, fields=["timestamp"], order_by="timestamp asc", limit=1) or []
+	log_starts = str(oldest[0].get("timestamp")) if oldest else None
+	covered = bool(log_starts) and log_starts <= str(since)
+	return {
+		"days": days,
+		"since": str(since),
+		"log_starts": log_starts,
+		"window_covered": covered,
+		"old_name_calls": sum(e["calls"] for e in used_rows),
+		"used": used_rows,
+		"unused_count": sum(len(v) for v in unused.values()),
+		"unused": unused,
+		"rows_capped": capped,
+		"hide_superseded_tools": hide_enabled(),
+		"note": ("Old-name calls only; a call through a generic tool is logged under the generic name. A tool in "
+		         "`unused` had no old-name call in the window" + ("" if covered else
+		         " — but the log does not reach back the whole window yet, so this is not yet 30 days of evidence")
+		         + ". Removing any name needs Tim's OK; nothing here removes or hides anything."),
+	}

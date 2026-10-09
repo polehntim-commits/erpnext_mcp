@@ -632,6 +632,7 @@ def query_doctype(args: dict) -> ToolResult:
 	filters = _requested_filters(args)
 	order_by = _requested_order(doctype, args)
 	limit = min(as_limit(args), REGISTER_CAP)
+	start = max(0, as_int(args, "start", 0))
 
 	principal, bounding = _acting_principal()
 	selected = _visible_fields(doctype, fields)
@@ -661,6 +662,7 @@ def query_doctype(args: dict) -> ToolResult:
 					filters=filters,
 					fields=selected,
 					order_by=order_by,
+					limit_start=start,
 					limit=limit + 1,
 				)
 				or []
@@ -680,6 +682,9 @@ def query_doctype(args: dict) -> ToolResult:
 		"doctype": doctype,
 		"count": len(records),
 		"limit": limit,
+		"start": start,
+		# v0.284.0: the next page. Pass it back as `start` with the same filters and order to read on past the cap.
+		"next_start": start + len(records) if truncated else None,
 		"truncated": truncated,
 		"fields": selected,
 		"filters": filters,
@@ -715,8 +720,8 @@ def query_doctype(args: dict) -> ToolResult:
 		)
 	if truncated:
 		data["truncated_note"] = (
-			f"More than {limit} rows matched. Narrow with `filters` rather than raising the "
-			"limit — this is a query tool and not an export."
+			f"More than {limit} rows matched from row {start}. Narrow with `filters`, or read on with "
+			f"start={start + len(records)} (next_start) and the same filters and order_by."
 		)
 	return ToolResult(
 		data=data,
@@ -834,5 +839,18 @@ def list_sidecar_routes(args: dict) -> ToolResult:
 #: exists. Mirrors `app_feedback.LIST_ARGUMENTS`.
 STATUS_ARGUMENTS: tuple = ()
 ERROR_LOG_ARGUMENTS = ("minutes", "hours", "since", "method", "contains", "seen", "limit")
-QUERY_ARGUMENTS = ("doctype", "filters", "fields", "order_by", "limit")
+QUERY_ARGUMENTS = ("doctype", "filters", "fields", "order_by", "limit", "start")
 ROUTE_ARGUMENTS = ("contains", "group", "mutating")
+
+
+def get_superseded_usage(args: dict) -> ToolResult:
+	"""v0.284.0. Read-only. Who still calls old tool names, and which covered names nobody has called."""
+	from .. import superseded
+
+	data = superseded.usage(as_int(args, "days", 30))
+	used = data["used"]
+	summary = (f"{data['old_name_calls']} old-name call(s) to {len(used)} tool(s) in {data['days']} days; "
+	           f"{data['unused_count']} covered tool(s) uncalled" + ("" if data["window_covered"] else
+	                                                                 " (log shorter than the window)"))
+	return ToolResult(data=data, summary=summary)
+

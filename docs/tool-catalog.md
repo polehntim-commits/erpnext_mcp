@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1141 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1142 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 546 read tools are **on** by default and can be switched off individually. A
+All 547 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21190,6 +21190,13 @@ Off per company until `packer_portal_enabled`. Contract: `docs/contracts/packer_
 The per-kind template tools stay. Six config kinds (market_commodity, seasonal_program, job_template,
 supplier_connector, input_plan, pollination_plan) join the generic config tools (list / get / draft / stage /
 publish / rollback / diff / preview_config).
+
+## v0.284.0 — the whole Action Log, and the 30-day evidence (consolidation phase 6)
+
+| Tool | What it does |
+| --- | --- |
+| `query_doctype` | Now pages: `start` / `next_start` read past the 500-row cap, e.g. the whole MCP Action Log. Read |
+| `get_superseded_usage` | Old tool names still called now that a generic tool covers them (calls, last call, clients), and the covered names nobody called in the window. Read |
 
 ## v0.283.0 — exposure and attribution (consolidation phase 5)
 
