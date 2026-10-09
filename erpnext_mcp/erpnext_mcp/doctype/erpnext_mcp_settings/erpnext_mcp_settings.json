@@ -1292,6 +1292,7 @@
   "allow_get_packer_pack",
   "allow_list_packer_access_log",
   "allow_template",
+  "allow_config",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -11038,6 +11039,13 @@
    "fieldname": "allow_template",
    "fieldtype": "Check",
    "label": "Template (every kind)"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.280.0. One tool for every config kind's lifecycle. Each write still needs that action's own switch.",
+   "fieldname": "allow_config",
+   "fieldtype": "Check",
+   "label": "Config (every kind)"
   }
  ],
  "index_web_pages_for_search": 0,

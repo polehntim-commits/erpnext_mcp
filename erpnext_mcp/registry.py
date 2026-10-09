@@ -204,6 +204,7 @@ from .tools import live_budget_tools
 from .tools import pollination_tools
 from .tools import packer_portal_tools
 from .tools import template_tool
+from .tools import config_tool
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18776,6 +18777,44 @@ TOOLS = {
 		required=("action",),
 		mutating=True,
 		title="Template (every kind)",
+	),
+	"config": _tool(
+		config_tool.config,
+		"MUTATING (default OFF). v0.280.0. ONE tool for every kind of configuration through its lifecycle: wizard, "
+		"tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, "
+		"overtime_rule, sop, quiz, pest_dd_models, pest_dd_offsets, market_commodity, seasonal_program, job_template, "
+		"supplier_connector, input_plan, pollination_plan.\n\n"
+		"action: kinds | describe (one kind's shape and rules — start here) | list | get | diff | preview | draft | "
+		"stage | publish | rollback.\n\n"
+		"Each action runs the existing lifecycle tool (list_configs … rollback_config) under its own switch, so every "
+		"kind keeps its rules: an AI draft goes live only when a person publishes it; payroll settings and pest DD "
+		"models only in the Desk. A write needs allow_config AND that action's own switch. The per-action tools remain.",
+		{"action": _field(_STRING, "kinds, describe, list, get, diff, preview, draft, stage, publish, rollback."),
+		 "kind": _field(_STRING, "The config kind (config action=kinds lists them)."),
+		 "name": _field(_STRING, "The config's key (alias: key)."),
+		 "key": _field(_STRING, "Same as name."),
+		 "version": _field(_INTEGER, "A version (get, preview, stage, publish)."),
+		 "status": _field(_STRING, "list: Draft, Staged, Published, Superseded, Retired."),
+		 "limit": _field(_INTEGER, "list: how many."),
+		 "body": _field(_OBJECT, "draft / preview: the whole config body."),
+		 "fields": _field(_OBJECT, "draft: a partial change, where the kind takes one."),
+		 "notes": _field(_STRING, "draft: the note on the draft."),
+		 "from_version": _field(_INTEGER, "diff: from (default live)."), "to_version": _field(_INTEGER, "diff: to."),
+		 "patch": _field(_OBJECT, "preview: a change to try."), "as_of": _field(_STRING, "preview: YYYY-MM-DD."),
+		 "days": _field(_INTEGER, "preview: how many days."), "compare_to": _field(_STRING, "preview: compare with."),
+		 "company": _field(_STRING, "preview: company."), "answers": _field(_OBJECT, "preview (wizard): answers."),
+		 "language": _field(_STRING, "preview: en or es."), "surface": _field(_STRING, "preview (tile): surface."),
+		 "as_user": _field(_STRING, "preview: as this user."), "item": _field(_STRING, "preview (label profile): item."),
+		 "validation": _field(_OBJECT, "preview (extraction): a document to validate."),
+		 "template_body": _field(_OBJECT, "preview (task_template): an unsaved template."),
+		 "context": _field(_OBJECT, "preview: context facts."),
+		 "change_note": _field(_STRING, "stage / publish / rollback: why."),
+		 "users": _field(_STRING_ARRAY, "stage: users."), "roles": _field(_STRING_ARRAY, "stage: roles."),
+		 "companies": _field(_STRING_ARRAY, "stage: companies."),
+		 "to": _field(_STRING, "rollback: a version, or 'none' to retire.")},
+		required=("action",),
+		mutating=True,
+		title="Config (every kind)",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.280.0 — 2026-10-08 — one config tool (consolidation phase 2)
+
+**No migrate** (one new switch, off). Deploy `docs/deploy/v0.280.0_config_tool.md`.
+Tools: **1,137 → 1,138** (one added; nothing removed or hidden).
+
+- **`config(action, kind, …)`** — kinds, describe, list, get, diff, preview, draft, stage, publish, rollback — for
+  all 19 config kinds: wizard, tile, label_profile, extraction_config, inspection_template, task_template,
+  compliance_rule, trigger_rule, overtime_rule, sop, quiz, pest_dd_models, pest_dd_offsets, market_commodity,
+  seasonal_program, job_template, supplier_connector, input_plan, pollination_plan.
+- **Every action runs the existing lifecycle tool** (list_configs … rollback_config) under its own switch, so each
+  kind's rules hold: an AI draft goes live only when a person publishes it; payroll settings and pest DD models only
+  in the Desk; the per-kind allow lists still apply. A write needs `allow_config` AND that action's own switch.
+- **`describe`** gives a kind's label, store, key, rules, a saved example body with its fields, and the arguments
+  each action takes (read from the lifecycle tools, so new arguments flow through).
+
 ## 0.279.0 — 2026-10-08 — one template tool (consolidation phase 1)
 
 **No migrate** (one new switch, off). Deploy `docs/deploy/v0.279.0_template_tool.md`.
