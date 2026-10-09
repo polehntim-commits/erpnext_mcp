@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.282.0 — 2026-10-08 — one share-link tool (consolidation phase 4)
+
+**No migrate** (one new switch, off). Deploy `docs/deploy/v0.282.0_share_link.md`.
+Tools: **1,140 → 1,141** (one added; nothing removed or hidden).
+
+- **`share_link(action, kind, …)`** — kinds, describe, setup, create, extend, revoke, get, list, log — for every link
+  handed to someone outside: `job` (contractor, supplier delivery / pickup, beekeeper; those names work as aliases),
+  `packer` (the share, then one credential per contact), `upload` (one-time upload links), `enrollment` (a new
+  phone's single-use pickup link).
+- **Each action runs the kind's existing tool under its own switch**, so tokens are still shown once and only hashed,
+  and expiry and the view log are the kind's own. A write needs `allow_share_link` AND that tool's switch.
+- `describe` says what `name` means for the kind (the job, the link id, the Packer Share, the UPL-… id, the account)
+  and lists each action's arguments.
+- The per-kind tools stay. The later P2 step (one Share Link record under all kinds) keeps these calls unchanged.
+
 ## 0.281.0 — 2026-10-08 — one record tool, one document tool (consolidation phase 3)
 
 **No migrate** (two new switches, off). Deploy `docs/deploy/v0.281.0_record_document.md`.

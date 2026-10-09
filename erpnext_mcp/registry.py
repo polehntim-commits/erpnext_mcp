@@ -206,6 +206,7 @@ from .tools import packer_portal_tools
 from .tools import template_tool
 from .tools import config_tool
 from .tools import record_tool
+from .tools import share_tool
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18857,6 +18858,33 @@ TOOLS = {
 		required=("action",),
 		mutating=True,
 		title="Document (submit, cancel, approve …)",
+	),
+	"share_link": _tool(
+		share_tool.share_link,
+		"MUTATING (default OFF). v0.282.0. ONE tool for every link handed to someone outside the farm: job links "
+		"(contractor, supplier delivery / pickup, beekeeper), the packer portal (a share, then one credential per "
+		"contact), one-time upload links, and a new phone's pickup link.\n\n"
+		"kind: job (aliases contractor, delivery, pickup, pollination) | packer | upload | enrollment.\n"
+		"action: kinds | describe (what name means and each action's arguments — start here) | setup (packer: the "
+		"share) | create | extend | revoke | get | list | log (the view log).\n\n"
+		"A created link or credential is shown ONCE (only its hash is kept); nothing is sent from here. Each action runs "
+		"the kind's existing tool under its own switch, so expiry, the view log and the token rules are the kind's own; "
+		"a write needs allow_share_link AND that tool's switch. The per-kind tools remain.",
+		{"action": _field(_STRING, "kinds, describe, setup, create, extend, revoke, get, list, log."),
+		 "kind": _field(_STRING, "job, packer, upload, enrollment (or contractor, delivery, pickup, pollination)."),
+		 "name": _field(_STRING, "What the action is on: the job, the link id, the Packer Share, the UPL-… id, the "
+		                         "account (share_link action=describe says which)."),
+		 "body": _field(_OBJECT, "Any other argument the kind's own tool takes (describe lists them)."),
+		 "days": _field(_INTEGER, "create / extend: life in days."), "until": _field(_STRING, "extend: YYYY-MM-DD."),
+		 "reason": _field(_STRING, "revoke: why."), "contact_name": _field(_STRING, "packer: the person."),
+		 "contact_email": _field(_STRING, "packer: their email (record only)."),
+		 "company": _field(_STRING, "list / log: one company."), "limit": _field(_INTEGER, "list / log: how many."),
+		 "minutes": _field(_INTEGER, "enrollment: life in minutes."),
+		 "device_name": _field(_STRING, "enrollment: a label for the phone."),
+		 "season": _field(_STRING, "packer get: YYYY."), "status": _field(_STRING, "upload list: a status.")},
+		required=("action",),
+		mutating=True,
+		title="Share link (every kind)",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

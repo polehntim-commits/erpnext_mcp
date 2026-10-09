@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1140 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1141 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -21190,6 +21190,14 @@ Off per company until `packer_portal_enabled`. Contract: `docs/contracts/packer_
 The per-kind template tools stay. Six config kinds (market_commodity, seasonal_program, job_template,
 supplier_connector, input_plan, pollination_plan) join the generic config tools (list / get / draft / stage /
 publish / rollback / diff / preview_config).
+
+## v0.282.0 — one share-link tool (consolidation phase 4)
+
+| Tool | What it does |
+| --- | --- |
+| `share_link` | Every outside link — job (contractor, delivery, pickup, beekeeper), packer portal, upload, phone enrolment: kinds, describe, setup, create, extend, revoke, get, list, log. Each action runs the kind's existing tool under its own switch. Write |
+
+The per-kind link tools stay.
 
 ## v0.281.0 — one record tool, one document tool (consolidation phase 3)
 

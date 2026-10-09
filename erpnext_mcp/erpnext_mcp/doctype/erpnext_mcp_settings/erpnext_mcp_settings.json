@@ -1295,6 +1295,7 @@
   "allow_config",
   "allow_record",
   "allow_document",
+  "allow_share_link",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -11062,6 +11063,13 @@
    "fieldname": "allow_document",
    "fieldtype": "Check",
    "label": "Document (submit, cancel, approve …)"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.282.0. One tool for every outside link: job links, packer portal, upload links, phone pickup links. Each write still needs that kind's own switch.",
+   "fieldname": "allow_share_link",
+   "fieldtype": "Check",
+   "label": "Share link (every kind)"
   }
  ],
  "index_web_pages_for_search": 0,
