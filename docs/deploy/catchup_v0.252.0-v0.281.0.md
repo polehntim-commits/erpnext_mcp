@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.280.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
+**Deploy: v0.252.0 → v0.281.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.280.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.281.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`f6f3814`** (`__version__ = "0.280.0"`).
+- **Server**: erpnext_mcp main **`4d71f30`** (`__version__ = "0.281.0"`).
 - **App**: fafo_ios main **`25de4f5`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -42,6 +42,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.278.0 | Category, skill and timing on task templates: Go / Hold matches the work category (not words in the task name); templates raise their own tasks on a repeat, in a season window, by crop stage or degree days (off until scheduled_templates_enabled). Migrate. No new tools. |
 | v0.279.0 | One template tool: `template(action, kind)` builds, edits, previews, forks, versions and publishes every template kind through the kinds' existing tools (each under its own switch); six newer config kinds join the generic config tools. Tools 1,136 → 1,137; nothing removed. No migrate. |
 | v0.280.0 | One config tool: `config(action, kind)` runs the existing lifecycle tools for all 19 config kinds, each under its own switch and rules. Tools 1,137 → 1,138; nothing removed. No migrate. |
+| v0.281.0 | One record tool and one document tool: `record(action, type)` over 134 registers and `document(action, type, name)` over 31 documents' state changes, each run by the type's existing tool under its own switch; money, HR and security excluded. Tools 1,138 → 1,140; nothing removed. No migrate. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -61,17 +62,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.280.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.281.0`. Push fafo_ios main and archive
 FarmOps 0.57.0 (build 53).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.280.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.281.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.280.0; the asset map's build stamp 0.280.0.
+1. `get_server_status`: 0.281.0; the asset map's build stamp 0.281.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
