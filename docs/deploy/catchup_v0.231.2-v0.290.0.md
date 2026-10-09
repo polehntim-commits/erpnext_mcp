@@ -6,7 +6,7 @@ ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime
 output, proven on the payroll suite).
 
 - **Server**: erpnext_mcp main **`4faf87a`** (`__version__ = "0.290.0"`).
-- **App**: fafo_ios main **`baafbde`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**. It needs v0.252.0's
+- **App**: fafo_ios main **`baafbde`** — FarmOps **0.58.0 (build 54)**, scheme **FarmOps**. It needs v0.252.0's
   routes (v0.271.0's for Contractor jobs, v0.272.0's for Deliveries, v0.275.0's for the hive map), so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 

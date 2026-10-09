@@ -4,7 +4,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
 - **Server**: erpnext_mcp main **`4faf87a`** (`__version__ = "0.290.0"`).
-- **App**: fafo_ios main **`baafbde`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**.
+- **App**: fafo_ios main **`baafbde`** — FarmOps **0.58.0 (build 54)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
 
