@@ -16123,9 +16123,11 @@ TOOLS = {
 			"workweek_anchor": _field(_STRING, "First day of the declared workweek as YYYY-MM-DD."),
 			"run_kind": _field(
 				_STRING,
-				"v0.288.0. Regular (default) or Daily. Daily: ONE day (start = end) for the workers on daily pay — "
-				"straight time, piece and the day's minimum-wage makeup, taxes only, reviewed punches only; who waits "
-				"and why is on the answer. With daily pay on for the company, a Regular run leaves those workers out.",
+				"v0.288.0. Regular (default), Daily or Settlement. Daily: ONE day (start = end) for the workers on daily "
+				"pay — straight time, piece and the day's minimum-wage makeup, taxes only, reviewed punches only; who "
+				"waits and why is on the answer. Settlement (v0.289.0): one closed workweek (start = the Pay Policy's "
+				"workweek start) — the overtime premium on the week's regular rate, and the week's deductions and "
+				"garnishments. With daily pay on for the company, a Regular run leaves those workers out.",
 			),
 			"detail": _field(
 				_BOOLEAN,
@@ -16163,9 +16165,11 @@ TOOLS = {
 			"workweek_anchor": _field(_STRING, "First day of the declared workweek as YYYY-MM-DD."),
 			"run_kind": _field(
 				_STRING,
-				"v0.288.0. Regular (default) or Daily. Daily: ONE day (start = end) for the workers on daily pay — "
-				"straight time, piece and the day's minimum-wage makeup, taxes only, reviewed punches only; who waits "
-				"and why is on the answer. With daily pay on for the company, a Regular run leaves those workers out.",
+				"v0.288.0. Regular (default), Daily or Settlement. Daily: ONE day (start = end) for the workers on daily "
+				"pay — straight time, piece and the day's minimum-wage makeup, taxes only, reviewed punches only; who "
+				"waits and why is on the answer. Settlement (v0.289.0): one closed workweek (start = the Pay Policy's "
+				"workweek start) — the overtime premium on the week's regular rate, and the week's deductions and "
+				"garnishments. With daily pay on for the company, a Regular run leaves those workers out.",
 			),
 		},
 		required=("pay_period_start", "pay_period_end"),

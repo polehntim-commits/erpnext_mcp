@@ -1,6 +1,6 @@
 # Daily pay with a weekly overtime true-up — design for Tim's approval
 
-**Status: APPROVED 2026-10-08 (Tim, all eight defaults in §9a). Building: step 1 (policies, fields) v0.287.0; step 2 (the daily run) v0.288.0.** Queued as "daily pay: design only" (2026-10-03). This note
+**Status: APPROVED 2026-10-08 (Tim, all eight defaults in §9a). Building: step 1 (policies, fields) v0.287.0; step 2 (the daily run) v0.288.0; step 3 (the weekly settlement) v0.289.0. Next: the phone. Deviation (§5): a settlement shortfall is reported and carried as a note, not collected automatically.** Queued as "daily pay: design only" (2026-10-03). This note
 proposes the shape, names what it reuses, and lists the decisions only Tim can make (§9). Payroll stays
 human: every run, file and payment is started and approved by a person, exactly as today.
 

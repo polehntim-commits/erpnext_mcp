@@ -1335,9 +1335,20 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	from .. import daily_pay
 
 	run_kind = as_str(args, "run_kind") or "Regular"
-	if run_kind not in ("Regular", "Daily"):
-		raise ToolError("run_kind is Regular or Daily (the weekly Settlement run is not built yet). Nothing was "
-		                f"{'created' if creating else 'calculated'}.")
+	if run_kind not in ("Regular", "Daily", "Settlement"):
+		raise ToolError(f"run_kind is Regular, Daily or Settlement. Nothing was {'created' if creating else 'calculated'}.")
+	if run_kind == "Settlement":
+		# v0.289.0: the closed workweek for the workers paid daily — the overtime premium on the week's regular rate,
+		# and the week's deductions and garnishments (daily_pay.settlement).
+		try:
+			slips, held, notes = daily_pay.settlement(company, str(start), str(end))
+		except daily_pay.DailyPayError as exc:
+			raise ToolError(f"{exc} Nothing was {'created' if creating else 'calculated'}.") from None
+		context = {"company": company, "pay_period_start": str(start), "pay_period_end": str(end),
+		           "pay_frequency": "Weekly", "run_kind": "Settlement", "daily_pay_held": held, "notes": notes,
+		           "daily_pay_left_out": [], "employees_missing_structures": [], "employees_missing_piece_rates": [],
+		           "config_versions": {"overtime_rule": (slips[0]["settlement"]["rule"] if slips else None)}}
+		return context, slips, payroll_integration.summarize_payroll_run(slips)
 	daily = None
 	if run_kind == "Daily":
 		if str(start) != str(end):
@@ -1562,6 +1573,8 @@ def _slip_view(slip: dict, verbose: bool) -> dict:
 		"minimum_wage_by_state": slip.get("minimum_wage_by_state"),
 		"weeks": slip.get("weeks"),
 		"open_shifts": slip.get("open_shifts"),
+		# v0.289.0. A Settlement slip's working: the week's hours, straight-time earnings, regular rate, premium.
+		**({"settlement": slip["settlement"]} if slip.get("settlement") else {}),
 	}
 	if verbose:
 		view["timesheet"] = slip.get("timesheet")
@@ -1737,6 +1750,8 @@ def _slip_row(slip: dict) -> dict:
 		detail["_garnishment_detail"] = slip["garnishment_detail"]
 	if slip.get("deduction_shortfalls"):
 		detail["_deduction_shortfalls"] = slip["deduction_shortfalls"]
+	if slip.get("settlement"):
+		detail["_settlement"] = slip["settlement"]  # v0.289.0: how the week's premium was reached
 	minimum = slip.get("minimum_wage_detail") or {}
 	meets = minimum.get("meets_minimum_wage")
 	if meets is None:

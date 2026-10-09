@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.289.0 — 2026-10-09 — daily pay, step 3: the weekly settlement
+
+**No migrate.** Deploy `docs/deploy/v0.289.0_settlement.md`. Tools: **1,142 → 1,142** (`run_kind=Settlement` on the
+existing period tools).
+
+- **`run_payroll_for_period(run_kind=Settlement)`** for one closed workweek (the Pay Policy's workweek, Sunday–
+  Saturday): per worker paid daily that week, the **overtime premium on the week's regular rate** — the week's
+  straight-time earnings (hourly, piece, paid rest, minimum-wage makeup: everything the daily runs paid) over its
+  hours, × the hours over the threshold in force × (multiplier − 1). Five nine-hour days at $20: 5 × $20 × 0.5 =
+  **$50.00**.
+- **Income tax by the aggregate method** (IRS Pub 15 §7): the week's tax on the whole week's pay, less what the daily
+  runs withheld — not the weekly table on the premium alone, which would under-withhold. FICA is flat.
+- **Deductions and garnishments against the WEEK's disposable earnings** (the CCPA's ceilings are weekly), taken out
+  of the settlement's own net only. A daily payment is never taken back or made negative; what does not fit is a
+  shortfall with its reason, and shows again on next week's settlement — it is not collected automatically (arrears
+  stay inside the same ceilings; a person decides). Pre-tax elections are not taken for daily-pay workers (they
+  would change wages already paid) and are named on the run.
+- One settlement per worker per week; a second is held with the entry that settled it.
+
 ## 0.288.0 — 2026-10-09 — daily pay, step 2: the daily run
 
 **No migrate.** Deploy `docs/deploy/v0.288.0_daily_run.md`. Tools: **1,142 → 1,142** — the existing period tools take
