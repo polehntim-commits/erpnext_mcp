@@ -1,4 +1,4 @@
-**Deploy: catch-up v0.231.2 → v0.290.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.57.0 (build 53)**
+**Deploy: catch-up v0.231.2 → v0.290.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.58.0 (build 54)**
 
 For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.290.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
@@ -6,7 +6,7 @@ ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime
 output, proven on the payroll suite).
 
 - **Server**: erpnext_mcp main **`4faf87a`** (`__version__ = "0.290.0"`).
-- **App**: fafo_ios main **`25de4f5`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**. It needs v0.252.0's
+- **App**: fafo_ios main **`baafbde`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**. It needs v0.252.0's
   routes (v0.271.0's for Contractor jobs, v0.272.0's for Deliveries, v0.275.0's for the hive map), so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
 
@@ -100,11 +100,12 @@ output, proven on the payroll suite).
 | app 0.55.0 | Work → Contractor jobs (Foreman / Farm Manager): readiness, the contractor's page, links and what the contractor reported; a Farm Manager marks ready, shares a one-time link through the share sheet, or revokes it. |
 | app 0.56.0 | Work → Deliveries (Foreman / Farm Manager): read the ticket with the camera (on-device), correct the lines, send; match badges and flags; a Farm Manager accepts / rejects lines and drafts the receipt. |
 | app 0.57.0 | Contractor jobs → a Pollination job opens the hive map: blocks, hazards, the loading area, every drop, the trips and the five counts; a Farm Manager drags a drop to move it. |
+| app 0.58.0 | Daily pay: My records → Daily pay (terms in English / Spanish, signed to start or stop, from the next Sunday); Today's pay tile for HR / Farm Manager (who is due, who waits and why, run the day). Needs v0.290.0. |
 
 **1. Build (Tim)**
 
 Push erpnext_mcp main (`4faf87a`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.290.0`. Push fafo_ios main
-(`25de4f5`) and archive FarmOps 0.57.0 (build 53), scheme **FarmOps**.
+(`baafbde`) and archive FarmOps 0.58.0 (build 54), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
 chooses. The full command list is in `~/Desktop/deploy-catchup-latest.txt`.

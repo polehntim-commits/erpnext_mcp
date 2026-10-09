@@ -1,10 +1,10 @@
-**Deploy: v0.252.0 → v0.290.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
+**Deploy: v0.252.0 → v0.290.0 (OML today) — one build, one migrate; FarmOps 0.58.0 (build 54)**
 
 For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.290.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
 - **Server**: erpnext_mcp main **`4faf87a`** (`__version__ = "0.290.0"`).
-- **App**: fafo_ios main **`25de4f5`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**.
+- **App**: fafo_ios main **`baafbde`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
 
@@ -69,11 +69,12 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | app 0.55.0 | Work → Contractor jobs (Foreman / Farm Manager): readiness, the contractor's page, links and what the contractor reported; a Farm Manager marks ready, shares a one-time link through the share sheet, or revokes it. |
 | app 0.56.0 | Work → Deliveries (Foreman / Farm Manager): read the ticket with the camera (on-device), correct the lines, send; match badges and flags; a Farm Manager accepts / rejects lines and drafts the receipt. |
 | app 0.57.0 | Contractor jobs → a Pollination job opens the hive map: blocks, hazards, the loading area, every drop, the trips and the five counts; a Farm Manager drags a drop to move it. |
+| app 0.58.0 | Daily pay: My records → Daily pay (terms in English / Spanish, signed to start or stop, from the next Sunday); Today's pay tile for HR / Farm Manager (who is due, who waits and why, run the day). Needs v0.290.0. |
 
 **1. Build (Tim)**
 
 Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.290.0`. Push fafo_ios main and archive
-FarmOps 0.57.0 (build 53).
+FarmOps 0.58.0 (build 54).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
