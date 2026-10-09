@@ -26,6 +26,14 @@ import frappe
 
 KIND = "Payroll Setting"
 OVERTIME_KEY = "overtime_rule"
+#: v0.287.0 (daily pay, docs/design/daily_pay.md §9a). Every pay decision is a policy; the legal floors are a dated,
+#: sourced table. Both are keys of this same Payroll Setting kind, so they share its effective dates, human-only
+#: publish and preview-a-real-pay-period.
+PAY_POLICY_KEY = "pay_policy"
+WAGE_FLOOR_KEY = "wage_floor"
+KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY)
+WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+MIN_WAGE_REGIONS = ("standard", "portland_metro", "non_urban")
 
 #: Today's law, as the code had it: OR HB 4002 and WA SB 5172, fully phased.
 DEFAULT_OVERTIME = {"weekly_threshold_hours": 40.0, "multiplier": 1.5}
@@ -34,6 +42,23 @@ DEFAULT_OVERTIME = {"weekly_threshold_hours": 40.0, "multiplier": 1.5}
 DEFAULT_FLAG_PCT = 2.0
 
 _OVERLAY: contextvars.ContextVar = contextvars.ContextVar("erpnext_mcp_payroll_overlay", default=None)
+#: v0.287.0. The pay period a run is calculating, so a reader asked without a date answers the setting in force for
+#: THAT period (a rerun of April pays April's rule) rather than today's.
+_AS_OF: contextvars.ContextVar = contextvars.ContextVar("erpnext_mcp_payroll_as_of", default="")
+
+
+@contextlib.contextmanager
+def period(as_of):
+	"""During a pay run: readers default to the settings in force on `as_of` (the period end)."""
+	token = _AS_OF.set(str(as_of or "")[:10])
+	try:
+		yield
+	finally:
+		_AS_OF.reset(token)
+
+
+def _day(as_of: str = "") -> str:
+	return str(as_of or _AS_OF.get() or frappe.utils.today())[:10]
 
 
 @contextlib.contextmanager
@@ -86,13 +111,34 @@ def _published(key: str, as_of: str = "") -> tuple[dict, str]:
 	return {}, "built-in"
 
 
-def overtime(as_of: str = "") -> dict:
-	"""`{weekly_threshold_hours, multiplier, version}` in force on `as_of`."""
-	staged = (_OVERLAY.get() or {}).get(OVERTIME_KEY)
+def _body(key: str, as_of: str = "") -> tuple[dict, str]:
+	"""(body, version) for a key: the preview overlay first, else the version in force on the day."""
+	staged = (_OVERLAY.get() or {}).get(key)
 	if staged is not None:
-		body, version = staged, "preview"
-	else:
-		body, version = _published(OVERTIME_KEY, as_of)
+		return staged, "preview"
+	return _published(key, _day(as_of))
+
+
+def overtime(as_of: str = "", state: str = "") -> dict:
+	"""`{weekly_threshold_hours, multiplier, version}` in force on `as_of`.
+
+	v0.287.0: a published Pay Policy's `overtime` wins over the older `overtime_rule` (it folds in). In its
+	`never_below_state_floor` mode the threshold is the LOWER of the policy's hours and the state's agricultural
+	threshold in force (Wage Floor) — never less generous than the law. With 40 hours and floors of 40–48, that is
+	40, exactly what the overtime rule paid.
+	"""
+	policy, policy_version = _body(PAY_POLICY_KEY, as_of)
+	if policy.get("overtime"):
+		ot = dict(policy["overtime"])
+		out = {"weekly_threshold_hours": float(ot.get("threshold_hours") or DEFAULT_OVERTIME["weekly_threshold_hours"]),
+		       "multiplier": float(ot.get("multiplier") or DEFAULT_OVERTIME["multiplier"])}
+		if ot.get("mode", "never_below_state_floor") == "never_below_state_floor" and state:
+			floor = ag_overtime_threshold(state, as_of)
+			if floor is not None:
+				out["weekly_threshold_hours"] = min(out["weekly_threshold_hours"], floor)
+		out["version"] = policy_version
+		return out
+	body, version = _body(OVERTIME_KEY, as_of)
 	out = dict(DEFAULT_OVERTIME)
 	for field in out:
 		try:
@@ -102,6 +148,74 @@ def overtime(as_of: str = "") -> dict:
 			pass
 	out["version"] = version
 	return out
+
+
+# ── the Wage Floor: dated, sourced law (v0.287.0) ─────────────────────────────
+def floor_rows(as_of: str = "") -> list:
+	body, _v = _body(WAGE_FLOOR_KEY, as_of)
+	return list(body.get("rows") or [])
+
+
+def _in_force(rows: list, day: str) -> dict:
+	"""The newest row per (state, kind, region) whose effective_from is on or before `day`."""
+	best: dict = {}
+	for row in rows:
+		effective = str(row.get("effective_from") or "")[:10]
+		if not effective or effective > day:
+			continue
+		key = (str(row.get("state") or "").upper(), row.get("kind"), row.get("region") or "")
+		if key not in best or effective > str(best[key].get("effective_from"))[:10]:
+			best[key] = row
+	return best
+
+
+def minimum_wages(as_of: str = "") -> dict:
+	"""{state: {region: rate}} in force on the day, from the Wage Floor."""
+	out: dict = {}
+	for (state, kind, region), row in _in_force(floor_rows(as_of), _day(as_of)).items():
+		if kind == "minimum_wage":
+			out.setdefault(state, {})[region or "standard"] = float(row["rate"])
+	return out
+
+
+def ag_overtime_threshold(state: str, as_of: str = ""):
+	row = _in_force(floor_rows(as_of), _day(as_of)).get((str(state or "").upper(), "ag_overtime_threshold", ""))
+	return float(row["hours"]) if row else None
+
+
+def apply_wage_floor(rates: dict, as_of: str = "") -> dict:
+	"""The run's minimum-wage table, never below the Wage Floor in force: the higher of each rate."""
+	out = {state: dict(regions) for state, regions in (rates or {}).items()}
+	for state, regions in minimum_wages(as_of).items():
+		for region, rate in regions.items():
+			current = out.setdefault(state, {}).get(region)
+			if current is None or rate > float(current):
+				out[state][region] = rate
+	return out
+
+
+# ── the Pay Policy (v0.287.0) ─────────────────────────────────────────────────
+#: Tim's eight decisions (2026-10-08, docs/design/daily_pay.md §9a), as the seeded policy.
+DEFAULT_PAY_POLICY = {
+	"model": "daily_periods",
+	"eligible_employment_types": ["Seasonal", "Piece Rate", "Hourly"],
+	"opt_in": "signed_request",
+	"switch_effective": "workweek_boundary",
+	"workweek_start": "Sunday",
+	"daily_cutoff": "18:00",
+	"pay_reviewed_punches_only": True,
+	"ach_timing": "next_business_day",
+	"overtime": {"mode": "never_below_state_floor", "threshold_hours": 40, "multiplier": 1.5},
+	"no_direct_deposit": "weekly_only",
+	"accept_daily_min_wage_makeup": True,
+	"accept_ach_fees": True,
+	"weekly_cost_report": True,
+}
+
+
+def pay_policy(as_of: str = "") -> dict:
+	body, version = _body(PAY_POLICY_KEY, as_of)
+	return {**DEFAULT_PAY_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_PAY_POLICY}, "version": version}
 
 
 def ot_multiplier(as_of: str = "") -> float:
@@ -118,9 +232,13 @@ def weekly_threshold(as_of: str = "") -> float:
 
 
 def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
+	if key == PAY_POLICY_KEY:
+		return _validate_policy(body, for_publish)
+	if key == WAGE_FLOOR_KEY:
+		return _validate_floor(body, for_publish)
 	errors, warnings = [], []
 	if key != OVERTIME_KEY:
-		errors.append(f"the only payroll setting so far is {OVERTIME_KEY!r}")
+		errors.append(f"a payroll setting is one of: {', '.join(KEYS)}")
 		return {"errors": errors, "warnings": warnings}
 	try:
 		threshold = float(body.get("weekly_threshold_hours"))
@@ -149,12 +267,129 @@ def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
 	return {"errors": errors, "warnings": warnings}
 
 
+def _effective(body: dict, errors: list) -> str:
+	effective = str(body.get("effective_from") or "")[:10]
+	try:
+		datetime.date.fromisoformat(effective)
+	except ValueError:
+		errors.append("effective_from (YYYY-MM-DD) is required: a payroll setting starts on a date")
+	return effective
+
+
+def _publish_guard(effective: str, errors: list) -> None:
+	submitted = _submitted_after(effective)
+	if submitted:
+		errors.append(f"effective_from {effective} is inside a submitted pay period ({submitted}); a published "
+		              "setting never changes a payroll that has been run — choose a date after it")
+
+
+def _validate_policy(body: dict, for_publish: bool) -> dict:
+	errors, warnings = [], []
+	choices = {"model": ("daily_periods",), "opt_in": ("signed_request",), "switch_effective": ("workweek_boundary",),
+	           "ach_timing": ("next_business_day", "same_day"), "no_direct_deposit": ("weekly_only", "daily_check")}
+	for field, allowed in choices.items():
+		if body.get(field, DEFAULT_PAY_POLICY[field]) not in allowed:
+			hint = " (weekly pay with daily advances — option B — is not built)" if field == "model" else ""
+			errors.append(f"{field} is one of: {', '.join(allowed)}{hint}")
+	if body.get("workweek_start", "Sunday") not in WEEKDAYS:
+		errors.append(f"workweek_start is one of: {', '.join(WEEKDAYS)}")
+	cutoff = str(body.get("daily_cutoff", "18:00"))
+	try:
+		datetime.time.fromisoformat(cutoff)
+	except ValueError:
+		errors.append("daily_cutoff is a time, HH:MM — e.g. 18:00")
+	types = body.get("eligible_employment_types", DEFAULT_PAY_POLICY["eligible_employment_types"])
+	if not isinstance(types, list) or not all(isinstance(t, str) and t.strip() for t in types):
+		errors.append("eligible_employment_types is a list of Employment Type names")
+	ot = body.get("overtime") or {}
+	mode = ot.get("mode", "never_below_state_floor")
+	if mode not in ("never_below_state_floor", "farm_threshold"):
+		errors.append("overtime.mode is never_below_state_floor or farm_threshold")
+	try:
+		hours = float(ot.get("threshold_hours", 40))
+		if not 1 <= hours <= 80:
+			errors.append("overtime.threshold_hours is 1–80")
+	except (TypeError, ValueError):
+		errors.append("overtime.threshold_hours is a number of hours")
+		hours = None
+	try:
+		multiplier = float(ot.get("multiplier", 1.5))
+		if not 1.5 <= multiplier <= 3.0:
+			errors.append("overtime.multiplier is 1.5–3.0 (the law's floor is time and a half)")
+	except (TypeError, ValueError):
+		errors.append("overtime.multiplier is a number, e.g. 1.5")
+	for flag in ("pay_reviewed_punches_only", "accept_daily_min_wage_makeup", "accept_ach_fees", "weekly_cost_report"):
+		if flag in body and not isinstance(body[flag], bool):
+			errors.append(f"{flag} is true or false")
+	if body.get("pay_reviewed_punches_only") is False:
+		warnings.append("pay_reviewed_punches_only is off — a daily run would pay punches nobody has reviewed")
+	effective = _effective(body, errors)
+	if mode == "farm_threshold" and hours is not None and not errors:
+		# A farm threshold may never be less generous than the law on any date from effective_from on: the floor in
+		# force that day, and every later floor.
+		floors = [r for r in floor_rows() if r.get("kind") == "ag_overtime_threshold"]
+		binding = list(_in_force(floors, effective).values())
+		binding += [r for r in floors if str(r.get("effective_from") or "")[:10] > effective]
+		for row in binding:
+			if hours > float(row.get("hours") or 0):
+				errors.append(f"overtime after {hours:g} hours is below the floor: {row.get('state')} requires "
+				              f"overtime after {float(row['hours']):g} hours from {row.get('effective_from')} "
+				              f"({row.get('source')}). Use never_below_state_floor, or a lower threshold")
+	if for_publish and not errors:
+		_publish_guard(effective, errors)
+	return {"errors": errors, "warnings": warnings}
+
+
+def _validate_floor(body: dict, for_publish: bool) -> dict:
+	errors, warnings = [], []
+	rows = body.get("rows")
+	if not isinstance(rows, list) or not rows:
+		errors.append("rows: the floors, one per state, kind, region and date")
+		rows = []
+	for index, row in enumerate(rows):
+		where = f"rows[{index}]"
+		state = str(row.get("state") or "")
+		if len(state) != 2 or not state.isalpha():
+			errors.append(f"{where}: state is a two-letter code")
+		try:
+			datetime.date.fromisoformat(str(row.get("effective_from") or "")[:10])
+		except ValueError:
+			errors.append(f"{where}: effective_from is YYYY-MM-DD")
+		if not str(row.get("source") or "").strip():
+			errors.append(f"{where}: source — every floor names where it comes from")
+		kind = row.get("kind")
+		if kind == "minimum_wage":
+			if (row.get("region") or "standard") not in MIN_WAGE_REGIONS:
+				errors.append(f"{where}: region is one of {', '.join(MIN_WAGE_REGIONS)}")
+			try:
+				if float(row.get("rate")) <= 0:
+					errors.append(f"{where}: rate is above zero")
+			except (TypeError, ValueError):
+				errors.append(f"{where}: rate is dollars an hour")
+		elif kind == "ag_overtime_threshold":
+			try:
+				if not 1 <= float(row.get("hours")) <= 80:
+					errors.append(f"{where}: hours is 1–80")
+			except (TypeError, ValueError):
+				errors.append(f"{where}: hours is a number of hours")
+		else:
+			errors.append(f"{where}: kind is minimum_wage or ag_overtime_threshold")
+	effective = _effective(body, errors)
+	if for_publish and not errors:
+		_publish_guard(effective, errors)
+	return {"errors": errors, "warnings": warnings}
+
+
 def _submitted_after(day: str) -> str:
-	"""A submitted Farm Payroll Entry whose period ends on or after `day`, or ""."""
+	"""A submitted Farm Payroll Entry whose period ends on or after `day`, or "".
+
+	v0.287.0: Farm Payroll Entry is not a submittable doctype — "Submitted" is its `status` — so the v0.235.0 filter
+	on docstatus never matched and this guard never fired.
+	"""
 	try:
 		rows = frappe.db.get_all(
 			"Farm Payroll Entry",
-			filters={"docstatus": 1, "pay_period_end": (">=", day)},
+			filters={"status": "Submitted", "pay_period_end": (">=", day)},
 			fields=["name"],
 			limit=1,
 		)
@@ -163,9 +398,36 @@ def _submitted_after(day: str) -> str:
 	return rows[0]["name"] if rows else ""
 
 
-def seed_body() -> dict:
+def seed_body(key: str = OVERTIME_KEY) -> dict:
+	if key == PAY_POLICY_KEY:
+		return {"schema_version": 1, "key": key, **DEFAULT_PAY_POLICY, "effective_from": "2026-10-08",
+		        "basis": "Tim's eight decisions, 2026-10-08 (docs/design/daily_pay.md §9a)."}
+	if key == WAGE_FLOOR_KEY:
+		return {"schema_version": 1, "key": key, "effective_from": "2023-01-01", "rows": [dict(r) for r in SEED_FLOORS]}
 	return {"schema_version": 1, "key": OVERTIME_KEY, **DEFAULT_OVERTIME, "effective_from": "2020-01-01",
 	        "basis": "OR HB 4002 and WA SB 5172, fully phased: 40 hours a workweek, 1.5× the regular rate."}
+
+
+_BOLI = "Oregon BOLI minimum wage schedule, oregon.gov/boli/workers/pages/minimum-wage-schedule.aspx"
+_BOLI_AG = "Oregon HB 4002 (2022); BOLI, oregon.gov/boli/employers/Pages/minimum-wage-and-overtime-in-agriculture.aspx"
+_LNI = "Washington L&I, lni.wa.gov (2026 rate announced 2025-09-30)"
+#: v0.287.0. The floors as of 2026-10-09, each with its source. A new legal rate is a new row (a new version of this
+#: setting, published by a person) — never a release.
+SEED_FLOORS = (
+	{"state": "OR", "kind": "minimum_wage", "region": "standard", "rate": 15.05, "effective_from": "2025-07-01", "source": _BOLI},
+	{"state": "OR", "kind": "minimum_wage", "region": "portland_metro", "rate": 16.30, "effective_from": "2025-07-01", "source": _BOLI},
+	{"state": "OR", "kind": "minimum_wage", "region": "non_urban", "rate": 14.05, "effective_from": "2025-07-01", "source": _BOLI},
+	{"state": "OR", "kind": "minimum_wage", "region": "standard", "rate": 15.55, "effective_from": "2026-07-01", "source": _BOLI},
+	{"state": "OR", "kind": "minimum_wage", "region": "portland_metro", "rate": 16.80, "effective_from": "2026-07-01", "source": _BOLI},
+	{"state": "OR", "kind": "minimum_wage", "region": "non_urban", "rate": 14.55, "effective_from": "2026-07-01", "source": _BOLI},
+	{"state": "OR", "kind": "ag_overtime_threshold", "hours": 55, "effective_from": "2023-01-01", "source": _BOLI_AG},
+	{"state": "OR", "kind": "ag_overtime_threshold", "hours": 48, "effective_from": "2025-01-01", "source": _BOLI_AG},
+	{"state": "OR", "kind": "ag_overtime_threshold", "hours": 40, "effective_from": "2027-01-01", "source": _BOLI_AG},
+	{"state": "WA", "kind": "minimum_wage", "region": "standard", "rate": 16.66, "effective_from": "2025-01-01", "source": _LNI},
+	{"state": "WA", "kind": "minimum_wage", "region": "standard", "rate": 17.13, "effective_from": "2026-01-01", "source": _LNI},
+	{"state": "WA", "kind": "ag_overtime_threshold", "hours": 40, "effective_from": "2024-01-01",
+	 "source": "Washington SB 5172 (2021), fully phased 2024-01-01"},
+)
 
 
 def flag_pct() -> float:

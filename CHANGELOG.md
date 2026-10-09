@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.287.0 — 2026-10-09 — daily pay, step 1: the Pay Policy and the Wage Floor
+
+**Migrate** (two Employee fields, a Farm Payroll Entry field and option; two payroll settings seeded). Deploy
+`docs/deploy/v0.287.0_pay_policy.md`. Tools: **1,142 → 1,142** — the new kinds go through the existing config tools.
+
+- **Wage Floor** (payroll setting `wage_floor`): the law as dated, sourced rows — Oregon minimum wage by region
+  (2025-07-01 $15.05 / $16.30 / $14.05; 2026-07-01 **$15.55 / $16.80 / $14.55**), Oregon agricultural overtime
+  (55 h 2023, 48 h 2025, 40 h 2027), Washington ($16.66 2025, **$17.13 2026**; 40 h ag overtime since 2024). A new
+  legal rate is a new version, not a release. **Every run now pays at least the floor in force at the period's end** —
+  the minimum-wage table compiled into the code was the 2024–25 one (Oregon $14.70), and neither server had set its
+  own. No payroll had been run on either server.
+- **Pay Policy** (payroll setting `pay_policy`): Tim's eight decisions as data — daily periods, field employment types
+  by signed request, switch at a workweek boundary, Sunday workweek, 18:00 cutoff, reviewed punches only, next-business-
+  day ACH, overtime after 40 h never less generous than the state, weekly without direct deposit, cost report on.
+  Its overtime folds in the old `overtime_rule`; the preview against a period with five overtime hours is identical
+  to the cent. A farm threshold less generous than the law, on any date from its start, is refused.
+- **Runs read their own period's settings.** The overtime multiplier deep in the pay calculation read TODAY's rule; a
+  rerun of an old period now pays that period's rule.
+- **The payroll-setting publish guard fires.** It filtered `docstatus = 1`, which Farm Payroll Entry never has.
+- Employee gains `daily_pay` / `daily_pay_since`; Farm Payroll Entry gains the `Daily` frequency and `run_kind`
+  (Regular / Daily / Settlement). `daily_pay.eligibility()` names every reason a worker is or is not on daily pay.
+  Daily pay stays OFF per company (`daily_pay_enabled`). Nothing runs daily yet — that is v0.288.0.
+
 ## 0.286.1 — 2026-10-09 — federal withholding fixes (found while building daily pay)
 
 **No migrate** — the install seeds the 2026 federal tables on the next migrate run anyway. Deploy

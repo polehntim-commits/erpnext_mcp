@@ -43,6 +43,10 @@ KINDS = {
 	# v0.235.0. Payroll settings (decision 9): stricter — publish, stage and roll back are a
 	# person's, in the Desk; a preview reruns a real pay period live and staged.
 	"overtime_rule": {"label": "Overtime rule", "store": "Farm Config Version (Payroll Setting)", "key": "overtime_rule"},
+	# v0.287.0. Daily pay as policies (docs/design/daily_pay.md §9a): the farm's Pay Policy and the dated, sourced
+	# Wage Floor. Same Payroll Setting rules as the overtime rule.
+	"pay_policy": {"label": "Pay Policy", "store": "Farm Config Version (Payroll Setting)", "key": "pay_policy"},
+	"wage_floor": {"label": "Wage Floor", "store": "Farm Config Version (Payroll Setting)", "key": "wage_floor"},
 	# v0.245.0. An SOP version (Compliance Policy). Stage = submit for review; approval (publish) is a
 	# person's, in the Desk or on the phone — never over MCP.
 	"sop": {"label": "SOP", "store": "Compliance Policy", "key": "policy docname"},
@@ -59,7 +63,7 @@ KINDS = {
 	"input_plan": {"label": "Input Plan", "store": "Farm Config Version", "key": "<company>_<year>"},
 	"pollination_plan": {"label": "Pollination Plan", "store": "Farm Config Version", "key": "<company>_<season>"},
 }
-PAYROLL_KINDS = ("overtime_rule",)
+PAYROLL_KINDS = ("overtime_rule", "pay_policy", "wage_floor")
 #: v0.264.0. The pest degree-day models and block offsets (Farm Config Version, IPM Setting). AI may draft;
 #: a person publishes in the Desk — calibration suggests, it never applies.
 IPM_KINDS = ("pest_dd_models", "pest_dd_offsets")
@@ -134,7 +138,10 @@ def _get(kind: str, key: str, version) -> dict:
 		try:
 			return _data(phone_configs.get_phone_config(inner))
 		except ToolError:
-			return {"built_in": True, "in_force": payroll_settings.overtime()}
+			built_in = {"overtime_rule": payroll_settings.overtime, "pay_policy": payroll_settings.pay_policy,
+			            "wage_floor": lambda: {"rows": payroll_settings.floor_rows(),
+			                                   "minimum_wages": payroll_settings.minimum_wages()}}[kind]
+			return {"built_in": True, "in_force": built_in()}
 	if kind in PHONE_KINDS + FCV_KINDS:
 		inner = {"kind": kind, "key": key}
 		if version not in (None, ""):
@@ -278,7 +285,7 @@ def preview_config(args: dict) -> ToolResult:
 
 		body = args.get("body")
 		if not isinstance(body, dict):
-			raise ToolError("body is the overtime rule to try: {weekly_threshold_hours, multiplier, effective_from}.")
+			raise ToolError(f"body is the {kind} to try, with its effective_from (config action=describe kind={kind}).")
 		try:
 			data = payroll_settings.preview(kind, {"schema_version": 1, "key": kind, **body}, args)
 		except ValueError as exc:
@@ -435,7 +442,7 @@ def draft_config(args: dict) -> ToolResult:
 
 		body = args.get("body")
 		if not isinstance(body, dict):
-			raise ToolError("body is required: {weekly_threshold_hours, multiplier, effective_from}.")
+			raise ToolError(f"body is required: the whole {kind}, with its effective_from (config action=describe kind={kind}).")
 		try:
 			doc, _report = phone_config.save_draft(payroll_settings.KIND, kind, {"schema_version": 1, "key": kind, **body},
 			                                       notes or "Drafted through draft_config.", "AI-proposed")

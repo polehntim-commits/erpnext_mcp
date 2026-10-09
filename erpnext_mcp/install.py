@@ -226,6 +226,7 @@ def after_migrate() -> None:
 	_asset_tag_urls()
 	_business_card_fields()
 	_payroll_settings_seed()
+	_daily_pay_fields()
 	_task_due_rule()
 	_daily_check_templates()
 	_go_hold_presets()
@@ -754,8 +755,28 @@ def _payroll_settings_seed() -> None:
 		)
 		if name:
 			print(f"erpnext_mcp: payroll setting {name} seeded — 40 hours a workweek, 1.5×, as before.")
+		# v0.287.0. The Wage Floor (dated, sourced law) and the Pay Policy (Tim's eight decisions, §9a). Published:
+		# the floor is the law, and the policy's overtime equals the rule above (40 h, 1.5×, never less generous
+		# than the state). Daily pay itself stays off until `daily_pay_enabled` is turned on for a company.
+		for key, note in ((payroll_settings.WAGE_FLOOR_KEY, "Oregon and Washington floors as of 2026-10-09, each sourced (v0.287.0)."),
+		                  (payroll_settings.PAY_POLICY_KEY, "Tim's eight daily-pay decisions, 2026-10-08 (v0.287.0).")):
+			name = phone_config.seed(payroll_settings.KIND, key, payroll_settings.seed_body(key), note)
+			if name:
+				print(f"erpnext_mcp: payroll setting {name} seeded.")
 	except Exception as exc:  # pragma: no cover
-		print(f"erpnext_mcp: the overtime rule was not seeded — {type(exc).__name__}: {exc}")
+		print(f"erpnext_mcp: the payroll settings were not seeded — {type(exc).__name__}: {exc}")
+def _daily_pay_fields() -> None:
+	"""v0.287.0. Employee.daily_pay / daily_pay_since. Create-only; never raises."""
+	try:
+		from . import daily_pay
+
+		made = daily_pay.install_fields()
+		if made:
+			print(f"erpnext_mcp: daily pay fields added — {', '.join(made)} (daily pay is off until daily_pay_enabled).")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: the daily pay fields were not added — {type(exc).__name__}: {exc}")
+
+
 def _task_due_rule() -> None:
 	"""v0.236.0. The overdue / due-soon rule on Farm Task, seeded OFF for a person to approve
 	in the Desk (decision 5). Create-only; never raises."""

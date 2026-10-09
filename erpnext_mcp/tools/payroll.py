@@ -399,6 +399,21 @@ def list_salary_structures(args: dict) -> ToolResult:
 	return ToolResult(data=data, summary=f"{len(rows)} salary structure(s)")
 
 
+def _in_period(tool):
+	"""v0.287.0: run a payroll tool inside its period's settings (see `_period_run`)."""
+
+	def wrapped(args: dict) -> ToolResult:
+		from .. import payroll_settings
+
+		end = args.get("pay_period_end") if isinstance(args, dict) else None
+		with payroll_settings.period(str(end or "")[:10]):
+			return tool(args)
+
+	wrapped.__name__, wrapped.__doc__, wrapped.__wrapped__ = tool.__name__, tool.__doc__, tool
+	return wrapped
+
+
+@_in_period
 def preview_payroll(args: dict) -> ToolResult:
 	"""Dry-run payroll for a single employee — no records created."""
 	employee = _resolve_employee(args)
@@ -928,6 +943,7 @@ def deactivate_salary_structure(args: dict) -> ToolResult:
 	)
 
 
+@_in_period
 def calculate_payroll(args: dict) -> ToolResult:
 	"""Generate a full payroll entry for a pay period (Draft status)."""
 	company = resolve_company(as_str(args, "company"), required=True)
@@ -1287,6 +1303,16 @@ def get_employee_timesheet_summary(args: dict) -> ToolResult:
 
 
 def _period_run(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
+	"""v0.287.0: run inside the period's settings — every payroll setting read during it (the overtime multiplier
+	deep in payroll_calc included) is the one in force at the period's END, not today's."""
+	from .. import payroll_settings
+
+	end = as_date(args, "pay_period_end", required=True)
+	with payroll_settings.period(end):
+		return _period_run_at(args, creating)
+
+
+def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	"""Everything both period tools do before they diverge.
 
 	One function because a preview that computed anything differently from the
@@ -1335,7 +1361,8 @@ def _period_run(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	# down — a per-employee lookup inside the loop would read the same three
 	# configurations forty times for one answer.
 	state_configs = _load_state_configs(company)
-	min_wage_rates = state_min_wage_rates(state_configs)
+	# v0.287.0: never below the dated, sourced Wage Floor in force at the period's end.
+	min_wage_rates = payroll_settings.apply_wage_floor(state_min_wage_rates(state_configs), str(end))
 	for structure in structures.values():
 		structure["min_wage_regions"] = _min_wage_regions(structure, min_wage_rates)
 
@@ -3165,8 +3192,15 @@ def _build_tax_config(employee: str, pay_frequency: str, company: str | None = N
 		# the SAME state configurations the withholding engines are handed, so what
 		# a state charges and what it says an hour is worth cannot come from two
 		# different rows.
-		"min_wage_rates": state_min_wage_rates(state_configs),
+		"min_wage_rates": _floor(state_min_wage_rates(state_configs), pay_date),
 	}
+
+
+def _floor(rates: dict, pay_date) -> dict:
+	"""v0.287.0: the site's rates, never below the Wage Floor in force on the pay date."""
+	from .. import payroll_settings
+
+	return payroll_settings.apply_wage_floor(rates, str(pay_date or "")[:10])
 
 
 def _load_w4_data(employee: str) -> dict:
