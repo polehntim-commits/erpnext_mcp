@@ -1033,6 +1033,7 @@
   "get_mrl_for_chemical_crop_market": {},
   "get_mrl_record": {},
   "get_my_course": {},
+  "get_my_daily_pay": {},
   "get_my_direct_deposit": {},
   "get_my_housing": {},
   "get_my_i9": {},
@@ -1138,6 +1139,7 @@
    ]
   },
   "get_tiles": {},
+  "get_todays_pay": {},
   "get_traceability_lot": {},
   "get_training_cards": {},
   "get_training_certificate": {},
@@ -1453,6 +1455,7 @@
   "request_badge_photo": {},
   "request_card_back": {},
   "request_card_print": {},
+  "request_daily_pay": {},
   "resolve_badge": {
    "resources": [
     {
@@ -1469,6 +1472,7 @@
   "review_punches": {},
   "review_sop": {},
   "revoke_job_link": {},
+  "run_todays_pay": {},
   "save_business_card": {},
   "save_ipm_relationship": {
    "gates": [

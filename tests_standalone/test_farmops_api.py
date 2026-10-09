@@ -570,6 +570,10 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/get_hive_map",
 		"/mobile/update_hive_drops",
 		"/mobile/get_pollination_status",
+		"/mobile/get_my_daily_pay",
+		"/mobile/request_daily_pay",
+		"/mobile/get_todays_pay",
+		"/mobile/run_todays_pay",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -3015,6 +3019,10 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	SURFACE_BEFORE_V0_123: ClassVar[int] = 202
 
 	DISPATCH_GATED: ClassVar[set[str]] = {
+		# v0.290.0. Today's pay — reading who is due and running the day — is HR / Farm Manager / System Manager
+		# (`DAILY_PAY_ROLES`, `_require_roles`).
+		"get_todays_pay",
+		"run_todays_pay",
 		# v0.275.0. Pollination: reading the map and counts is Foreman / Farm Manager (dispatch); moving drops is
 		# Farm Manager / System Manager (JOB_LINK_ROLES).
 		"get_hive_map",
@@ -3420,6 +3428,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# until direct_deposit_self_service, gated in `direct_deposit`.
 		"get_my_direct_deposit",
 		"submit_direct_deposit_change",
+		# v0.290.0. Your OWN daily pay opt-in — no argument names a person; off until daily_pay_enabled.
+		"get_my_daily_pay",
+		"request_daily_pay",
 		"start_bank_verification",
 		"finish_bank_verification",
 		"upload_bank_form",
@@ -3439,7 +3450,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 239, "a method is named in two sets at once")
+		self.assertEqual(len(named), 243, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

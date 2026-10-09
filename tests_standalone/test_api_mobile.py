@@ -246,6 +246,11 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"get_hive_map",
 		"update_hive_drops",
 		"get_pollination_status",
+		# v0.290.0. Daily pay (app 0.58.0, DailyPayAPI.swift).
+		"get_my_daily_pay",
+		"request_daily_pay",
+		"get_todays_pay",
+		"run_todays_pay",
 		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
 		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).

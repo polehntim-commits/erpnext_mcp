@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.290.0 — 2026-10-09 — daily pay, step 4: the phone (server side; app 0.58.0)
+
+**Migrate** (one Employee field, `daily_pay_until`). Deploy `docs/deploy/v0.290.0_daily_pay_phone.md`. Tools:
+**1,142 → 1,142**. Four phone routes:
+
+- **`get_my_daily_pay`** — whether you are paid daily and, if not, every reason; your direct deposit; when a change
+  would take effect; the terms in plain words (English, or Spanish with tú).
+- **`request_daily_pay(start)`** — your signed request to start or stop (Face ID when device keys are on, a Signing
+  Evidence row either way), effective at the next workweek (Pay Policy `switch_effective`). Stopping keeps daily pay
+  to the end of this workweek; a second start while on is refused; starting again before a stop lands cancels it.
+- **`get_todays_pay`** (HR / Farm Manager) — who is due, who waits and why, and the total: a preview, nothing written.
+- **`run_todays_pay`** (HR / Farm Manager) — the day's Daily run as a Calculated entry. Submitting it and making the
+  bank file stay in the Desk, as for every payroll.
+- A **Today's pay** tile (HR / Farm Manager; hidden until daily pay is on for a company) opens the app's screen.
+- Still OFF per company (`daily_pay_enabled`): a worker is told it is not offered yet.
+
 ## 0.289.0 — 2026-10-09 — daily pay, step 3: the weekly settlement
 
 **No migrate.** Deploy `docs/deploy/v0.289.0_settlement.md`. Tools: **1,142 → 1,142** (`run_kind=Settlement` on the

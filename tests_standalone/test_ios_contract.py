@@ -6202,3 +6202,65 @@ for _name, _fn in vars(_PollinationMirrors).items():
 
 TheContractIsComplete.COVERED.update({"get_hive_map": "test_108", "update_hive_drops": "test_109",
                                       "get_pollination_status": "test_110"})
+
+
+# ── v0.290.0. Daily pay (app 0.58.0) ──────────────────────────────────────────
+class DailyPayMineModel(Codable):
+	SWIFT = "DailyPay.swift"
+	STRICT = (("employee", str, 0), ("available", bool, 0), ("on", bool, 0), ("next_change_on", str, 0))
+	LENIENT = (("paid_daily_today", bool, 0), ("direct_deposit", bool, 0), ("device_keys", bool, 0), ("terms", list, 0),
+	           ("reasons", list, 0))
+	NULLABLE = (("since", str, 0), ("until", str, 0))
+
+
+class DailyPayRequestModel(Codable):
+	SWIFT = "DailyPay.swift"
+	STRICT = (("employee", str, 0), ("action", str, 0), ("effective", str, 0), ("note", str, 0))
+	NULLABLE = (("signing_evidence", str, 0),)
+
+
+class TodaysPayModel(Codable):
+	SWIFT = "DailyPay.swift"
+	STRICT = (("company", str, 0), ("day", str, 0), ("ready", bool, 0))
+	LENIENT = (("pay", list, 0), ("held", list, 0), ("message", str, 0))
+
+
+class _DailyPayMirrors:
+	def _daily_pay_site(self):
+		from erpnext_mcp import daily_pay, flags
+
+		from .harness import set_roles
+		from .test_api_mobile import WORKER_EMPLOYEE
+
+		daily_pay.install_fields()
+		flags.upsert(daily_pay.FLAG, "Flag", True, company=MAIN, description="t", owner_area="payroll", active=True)
+		frappe.db.set_value("Employee", WORKER_EMPLOYEE, "employment_type", "Seasonal")
+		STORE.commit()
+		set_roles(WORKER, ["Field Worker", "Farm Manager"])
+		self.be()
+
+	def test_111_get_my_daily_pay(self):
+		self._daily_pay_site()
+		DailyPayMineModel.decode(self.wire("get_my_daily_pay", lang="es"), "get_my_daily_pay")
+
+	def test_112_request_daily_pay(self):
+		self._daily_pay_site()
+		DailyPayRequestModel.decode(self.wire("request_daily_pay", start="1"), "request_daily_pay")
+
+	def test_113_get_todays_pay(self):
+		self._daily_pay_site()
+		TodaysPayModel.decode(self.wire("get_todays_pay", day="2026-01-05"), "get_todays_pay")
+
+	def test_114_run_todays_pay(self):
+		# Nobody is on daily pay that day, so the run is refused — in words, and nothing is written.
+		self._daily_pay_site()
+		with self.assertRaisesRegex(Exception, "nobody is due daily pay"):
+			self.wire("run_todays_pay", day="2026-01-05")
+
+
+for _name, _fn in vars(_DailyPayMirrors).items():
+	if _name.startswith(("test_", "_daily_pay_site")):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"get_my_daily_pay": "test_111", "request_daily_pay": "test_112",
+                                      "get_todays_pay": "test_113", "run_todays_pay": "test_114"})

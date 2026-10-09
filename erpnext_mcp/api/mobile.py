@@ -2155,6 +2155,73 @@ def submit_direct_deposit_change(
 	return _dd(lambda dd: dd.submit(user, body, caller["device"], caller["key_bound"], caller["ip"]))
 
 
+# ── v0.290.0. Daily pay (docs/design/daily_pay.md §8) ───────────────────────────────────────────────────────────
+#: Who sees today's pay and starts the daily run from the phone: the people who already run payroll.
+DAILY_PAY_ROLES = ("HR Manager", "HR User", "Farm Manager", "System Manager")
+
+
+def _daily(call):
+	from .. import daily_pay
+
+	try:
+		return call(daily_pay)
+	except daily_pay.Refused as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_my_daily_pay", limit=guard.READ_LIMIT)
+def get_my_daily_pay(user: str, lang=None) -> dict:
+	"""Whether you are paid daily, why or why not, and the terms you sign to start or stop."""
+	guard.require_scope(user)
+	return _daily(lambda dp: dp.mine(user, str(lang or "en")))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("request_daily_pay", mutating=True, limit=guard.WRITE_LIMIT)
+def request_daily_pay(user: str, start=None, signature=None) -> dict:
+	"""Your signed request to start (or stop) daily pay — effective at the next workweek."""
+	guard.require_scope(user)
+	caller = _dd_caller()
+	go = str(start).strip().lower() in ("1", "true", "yes", "start")
+	return _daily(lambda dp: dp.request(user, go, str(signature or ""), caller["device"], caller["key_bound"],
+	                                    caller["ip"]))
+
+
+def _daily_company(user: str, company) -> str:
+	"""The company asked for (refused if not the caller's), else the caller's first."""
+	allowed = guard.require_scope(user)
+	return guard.require_company(user, company, allowed) or allowed[0]
+
+
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("get_todays_pay", limit=guard.READ_LIMIT)
+def get_todays_pay(user: str, company=None, day=None) -> dict:
+	"""Who is due today's pay, who waits and why, and the total — a preview, nothing written."""
+	_require_roles(user, DAILY_PAY_ROLES, "Today's pay")
+	return _daily(lambda dp: dp.today(_daily_company(user, company), str(day or "")))
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("run_todays_pay", mutating=True, limit=guard.WRITE_LIMIT)
+def run_todays_pay(user: str, company=None, day=None) -> dict:
+	"""Run today's pay: a Calculated Daily payroll entry. Submitting it and the bank file stay in the Desk."""
+	_require_roles(user, DAILY_PAY_ROLES, "Running today's pay")
+	chosen = _daily_company(user, company)
+	when = str(day or frappe.utils.today())[:10]
+	from ..tools import payroll as payroll_tools
+
+	result = payroll_tools.run_payroll_for_period({"company": chosen, "pay_period_start": when,
+	                                               "pay_period_end": when, "run_kind": "Daily"})
+	data = result.data or {}
+	return {"entry": data.get("name"), "status": data.get("status"), "day": when, "company": chosen,
+	        "paid": len(data.get("slips") or []), "held": data.get("daily_pay_held") or [],
+	        "total_gross": (data.get("totals") or {}).get("total_gross"),
+	        "total_net": (data.get("totals") or {}).get("total_net"),
+	        "ach_effective_date": data.get("ach_effective_date"),
+	        "next": "Submit it and make the bank file in the Desk (submit_payroll, generate_nacha_file)."}
+
+
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("start_bank_verification", mutating=True, limit=guard.WRITE_LIMIT)
 def start_bank_verification(user: str, account=None) -> dict:

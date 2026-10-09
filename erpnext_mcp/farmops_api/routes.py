@@ -530,6 +530,11 @@ ROUTES = (
 	Route("/mobile", mobile_api.get_hive_map),
 	Route("/mobile", mobile_api.update_hive_drops),
 	Route("/mobile", mobile_api.get_pollination_status),
+	# v0.290.0. Daily pay: your own opt-in, and today's pay for the people who run payroll (app 0.58.0).
+	Route("/mobile", mobile_api.get_my_daily_pay),
+	Route("/mobile", mobile_api.request_daily_pay),
+	Route("/mobile", mobile_api.get_todays_pay),
+	Route("/mobile", mobile_api.run_todays_pay),
 	# v0.195.0, SERVER_CHANGES §42. The caller's own bed, and nobody else's.
 	Route("/mobile", mobile_api.get_my_housing),
 	Route("/mobile", mobile_api.sign_training_supervisor_review),

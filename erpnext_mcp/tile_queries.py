@@ -247,6 +247,33 @@ def payroll_calendar(user, company, params):
 	return answer
 
 
+def todays_pay(user, company, params):
+	"""v0.290.0. Today's daily pay: one row per worker due (title) or waiting (subtitle says why)."""
+	from . import daily_pay
+
+	rows = []
+	for one in ([company] if company else _daily_pay_companies()):
+		today = daily_pay.today(one)
+		rows += [{"doctype": "Employee", "name": r["employee"], "title": r.get("employee_name") or r["employee"],
+		          "subtitle": f"due ${r.get('net') or 0:,.2f} net", "state": "due"} for r in today.get("pay") or []]
+		rows += [{"doctype": "Employee", "name": r["employee"], "title": r.get("employee_name") or r["employee"],
+		          "subtitle": "; ".join(r.get("reasons") or []), "state": "waiting"} for r in today.get("held") or []]
+	answer = _answer(rows)
+	answer["count"] = sum(1 for r in rows if r["state"] == "due")
+	return answer
+
+
+def _daily_pay_companies() -> list:
+	from . import daily_pay
+
+	return [c["name"] for c in frappe.db.get_all("Company", fields=["name"], limit=200) or []
+	        if daily_pay.enabled(c["name"])]
+
+
+def _daily_pay_on() -> bool:
+	return bool(_daily_pay_companies())
+
+
 def punch_reviews(user, company, params):
 	"""v0.227.0. Punch times received long after the tap, waiting for a manager."""
 	from . import punch_times
@@ -337,6 +364,8 @@ QUERIES = {
 	),
 	# v0.227.0. Punches to review (`punch_times`).
 	"punch_reviews": (punch_reviews, {}, ("Farm Manager", "HR Manager", "HR User", "System Manager")),
+	# v0.290.0. Today's daily pay (`daily_pay`). Off until `daily_pay_enabled`; see AVAILABLE.
+	"todays_pay": (todays_pay, {}, ("Farm Manager", "HR Manager", "HR User", "System Manager")),
 	# v0.270.0. Fall winterize / Spring start-up (seasonal.py).
 	"seasonal_open": (seasonal_open, {}, ("Foreman", "Farm Manager", "System Manager")),
 	# v0.258.0. Off until office@ drafting is on; see AVAILABLE.
@@ -361,7 +390,7 @@ def _office_mail_on() -> bool:
 	return office_mail.enabled()
 
 
-AVAILABLE = {"payroll_calendar": _payroll_calendar_on, "replies_to_review": _office_mail_on}
+AVAILABLE = {"payroll_calendar": _payroll_calendar_on, "replies_to_review": _office_mail_on, "todays_pay": _daily_pay_on}
 
 
 def available(query: str) -> bool:

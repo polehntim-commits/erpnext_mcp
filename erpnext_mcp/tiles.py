@@ -519,8 +519,31 @@ SHOP_TILES = {
 }
 
 
+#: v0.290.0 (docs/design/daily_pay.md §8). Who is due today's pay, who waits and why — for the people who run payroll.
+#: Hidden until `daily_pay_enabled` is on for a company (tile_queries.AVAILABLE). Opens the app's Today's pay screen
+#: (app 0.58.0), where the day's run is started.
+DAILY_PAY_TILES = {
+	"todays_pay": {
+		"surface": "today",
+		"title": {"en": "Today's pay", "es": "Pago de hoy"},
+		"subtitle": {"en": "Daily pay — who is due, who waits", "es": "Pago diario — a quién se le paga y quién espera"},
+		"icon": "banknote",
+		"order": 71,
+		"target": {"kind": "list_query", "query": "todays_pay", "params": {}},
+		"audience": {"roles": ["Farm Manager", "HR Manager", "HR User", "System Manager"]},
+		"badge": {"query": "todays_pay", "params": {}},
+		"show_if": {},
+		"min_app_version": "0.58.0",
+	},
+}
+
+
 def seed() -> list:
 	made = []
+	for key, body in DAILY_PAY_TILES.items():
+		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.290.0).")
+		if name:
+			made.append(name)
 	for key, body in PAYROLL_TILES.items():
 		name = phone_config.seed("Tile", key, body, "Built-in tile, seeded at install (v0.224.0).")
 		if name:

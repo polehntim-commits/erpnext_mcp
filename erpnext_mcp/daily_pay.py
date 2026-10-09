@@ -27,7 +27,9 @@ FIELDS = (
 	 "Paid each working day for that day, with the week's overtime, deductions and garnishments in a weekly "
 	 "settlement. Set from the worker's signed request; takes effect at a workweek boundary (Pay Policy)."),
 	("daily_pay_since", "Daily Pay Since", "Date", "daily_pay",
-	 "The first day of the workweek the opt-in (or opt-out) took effect."),
+	 "The first day of the workweek the opt-in took effect."),
+	("daily_pay_until", "Daily Pay Until", "Date", "daily_pay_since",
+	 "v0.290.0. The last day of the workweek an opt-out takes effect after; blank while daily pay continues."),
 )
 
 
@@ -74,7 +76,7 @@ def eligibility(employee: str, day, company: str = "") -> dict:
 	day = str(day)[:10]
 	policy = payroll_settings.pay_policy(day)
 	fields = compat.existing_fields(EMPLOYEE, ("name", "company", "employment_type", "daily_pay", "daily_pay_since",
-	                                          "status"))
+	                                          "daily_pay_until", "status"))
 	row = dict(frappe.db.get_value(EMPLOYEE, employee, fields, as_dict=True) or {})
 	reasons = []
 	if not row:
@@ -88,6 +90,8 @@ def eligibility(employee: str, day, company: str = "") -> dict:
 		reasons.append("the worker has not opted in")
 	elif row.get("daily_pay_since") and str(row["daily_pay_since"])[:10] > day:
 		reasons.append(f"daily pay starts {str(row['daily_pay_since'])[:10]} (the next workweek)")
+	elif row.get("daily_pay_until") and str(row["daily_pay_until"])[:10] < day:
+		reasons.append(f"daily pay ended {str(row['daily_pay_until'])[:10]} (the worker asked to stop)")
 	types = policy.get("eligible_employment_types") or []
 	if types and row.get("employment_type") not in types:
 		reasons.append(f"employment type {row.get('employment_type') or '(none)'} is not one the Pay Policy pays daily "
@@ -388,3 +392,163 @@ def settlement(company: str, start, end) -> tuple:
 		})
 		slips.append(slip)
 	return slips, held, notes
+
+
+# ── v0.290.0: the phone — the worker's signed request, and today's pay ───────
+class Refused(Exception):
+	pass
+
+
+#: The terms the worker reads before signing, in plain words (Spanish: informal tú).
+TERMS = {
+	"en": [
+		"You are paid each working day for that day's work, the next business day, to your direct deposit.",
+		"Overtime for the week, and any deductions or court orders, are paid in one weekly settlement after Saturday.",
+		"Only punches your supervisor has reviewed are paid; a punch still in review is paid on a later day.",
+		"A slow piece-rate day is topped up to minimum wage that same day.",
+		"Starting or stopping takes effect at the start of the next workweek (Sunday).",
+		"Your pay stubs show each day and the weekly settlement.",
+	],
+	"es": [
+		"Se te paga cada día trabajado por el trabajo de ese día, el siguiente día hábil, a tu depósito directo.",
+		"Las horas extra de la semana, y cualquier deducción u orden judicial, se pagan en una liquidación semanal "
+		"después del sábado.",
+		"Solo se pagan las marcas de tiempo que tu supervisor ya revisó; una marca en revisión se paga otro día.",
+		"Si en un día a destajo ganas menos del salario mínimo, se completa ese mismo día.",
+		"Empezar o dejar el pago diario toma efecto al inicio de la siguiente semana laboral (domingo).",
+		"Tus talones de pago muestran cada día y la liquidación semanal.",
+	],
+}
+
+
+def next_boundary(today=None) -> datetime.date:
+	"""The first day of the NEXT workweek — when a signed request takes effect (Pay Policy switch_effective)."""
+	today = today or datetime.date.fromisoformat(str(frappe.utils.today())[:10])
+	return workweek_start(today) + datetime.timedelta(days=7)
+
+
+def _device_keys_on() -> bool:
+	try:
+		from . import device_keys
+
+		return bool(device_keys.enabled())
+	except Exception:
+		return False
+
+
+def signed_message(employee: str, action: str, effective: str) -> str:
+	return f"farmops-daily-pay|{employee}|{action}|{effective}"
+
+
+def mine(user: str, lang: str = "en") -> dict:
+	from . import direct_deposit, payroll_settings
+
+	emp = direct_deposit.employee_of(user)
+	if not emp:
+		raise Refused("your account is not linked to an Employee, so there is no pay to show.")
+	today = str(frappe.utils.today())[:10]
+	fields = compat.existing_fields(EMPLOYEE, ("daily_pay", "daily_pay_since", "daily_pay_until"))
+	row = dict(frappe.db.get_value(EMPLOYEE, emp["name"], fields, as_dict=True) or {}) if fields else {}
+	policy = payroll_settings.pay_policy(today)
+	status = eligibility(emp["name"], today, emp.get("company") or "")
+	return {
+		"employee": emp["name"], "available": enabled(emp.get("company") or ""),
+		"on": bool(compat.checked(row.get("daily_pay"))),
+		"since": str(row.get("daily_pay_since") or "")[:10] or None,
+		"until": str(row.get("daily_pay_until") or "")[:10] or None,
+		"paid_daily_today": status["eligible"] and paid_daily(emp["name"], today, emp.get("company") or ""),
+		"reasons": status["reasons"], "direct_deposit": has_direct_deposit(emp["name"]),
+		"next_change_on": str(next_boundary()),
+		"device_keys": _device_keys_on(),
+		"terms": TERMS.get(lang if lang in TERMS else "en"),
+		"policy": {"cutoff": policy.get("daily_cutoff"), "workweek_start": policy.get("workweek_start"),
+		           "ach_timing": policy.get("ach_timing"), "no_direct_deposit": policy.get("no_direct_deposit")},
+	}
+
+
+def request(user: str, start: bool, signature: str = "", device: str = "", key_bound: bool = False,
+            ip: str = "") -> dict:
+	"""The worker's signed request to start or stop daily pay, effective at the next workweek boundary."""
+	import hashlib
+
+	from . import device_keys, direct_deposit, payroll_settings
+
+	emp = direct_deposit.employee_of(user)
+	if not emp:
+		raise Refused("your account is not linked to an Employee. Nothing was changed.")
+	company = emp.get("company") or ""
+	if not enabled(company):
+		raise Refused("daily pay is not offered on this farm yet. Nothing was changed.")
+	effective = next_boundary()
+	policy = payroll_settings.pay_policy(str(effective))
+	types = policy.get("eligible_employment_types") or []
+	if start and types and frappe.db.get_value(EMPLOYEE, emp["name"], "employment_type") not in types:
+		raise Refused("daily pay is offered to " + ", ".join(types) + " workers. Ask the office. Nothing was changed.")
+	current = dict(frappe.db.get_value(EMPLOYEE, emp["name"], compat.existing_fields(
+		EMPLOYEE, ("daily_pay", "daily_pay_since", "daily_pay_until")), as_dict=True) or {})
+	on = compat.checked(current.get("daily_pay"))
+	if start and on and not current.get("daily_pay_until"):
+		raise Refused(f"you are already on daily pay (since {str(current.get('daily_pay_since') or '')[:10]}). "
+		              "Nothing was changed.")
+	if not start and not on:
+		raise Refused("you are not on daily pay. Nothing was changed.")
+	action = "start" if start else "stop"
+	message = signed_message(emp["name"], action, str(effective))
+	if device_keys.enabled():
+		if not key_bound or not device:
+			raise Refused("this takes a phone signed in with Face ID. Nothing was changed.")
+		try:
+			device_keys._verify_approver(user, device, message, str(signature or ""))
+		except Exception as exc:
+			raise Refused(f"{exc}") from None
+		method = "Face ID (device key)"
+	else:
+		method = "App sign-in"
+	if start and on:  # changing your mind about stopping: daily pay simply continues
+		values = {"daily_pay_until": None}
+	elif start:
+		values = {"daily_pay": 1, "daily_pay_since": str(effective), "daily_pay_until": None}
+	else:
+		values = {"daily_pay_until": str(effective - datetime.timedelta(days=1))}
+	frappe.db.set_value(EMPLOYEE, emp["name"], values)
+	evidence = None
+	if compat.doctype_exists("Signing Evidence"):
+		doc = frappe.get_doc({"doctype": "Signing Evidence", "signer": emp["name"],
+		                      "signer_name": emp.get("employee_name"), "signer_user": user,
+		                      "verification_method": method, "signed_at": frappe.utils.now(), "status": "Recorded",
+		                      "company": company, "document_type": EMPLOYEE, "document_name": emp["name"],
+		                      "signature_role": "Employee",
+		                      "document_hash": hashlib.sha256(message.encode()).hexdigest(),
+		                      "hashed_fields": "employee, daily pay start/stop, effective date",
+		                      "device_id": str(device or "")[:140], "ip_address": str(ip or "")[:140]})
+		doc.flags.ignore_permissions = True
+		doc.insert(ignore_permissions=True)
+		evidence = doc.name
+	return {"employee": emp["name"], "action": action, "effective": str(effective), "signing_evidence": evidence,
+	        "note": (f"Daily pay starts {effective}." if start else
+	                 f"Daily pay stops after {effective - datetime.timedelta(days=1)}; you are paid weekly from {effective}.")}
+
+
+def today(company: str, day: str = "") -> dict:
+	"""The supervisor's view: who is due today, who waits and why, and the total (a preview — nothing written)."""
+	from .errors import ToolError
+	from .tools import payroll as runs
+
+	day = str(day or frappe.utils.today())[:10]
+	try:
+		plan = day_plan(company, day)
+	except DailyPayError as exc:
+		return {"company": company, "day": day, "ready": False, "message": str(exc), "pay": [], "held": []}
+	out = {"company": company, "day": day, "ready": bool(plan["pay"]), "held": plan["held"],
+	       "ach_effective_date": plan["ach_effective_date"], "pay": [], "total_gross": 0.0, "total_net": 0.0}
+	if plan["pay"]:
+		try:
+			_c, slips, totals = runs._period_run({"company": company, "pay_period_start": day, "pay_period_end": day,
+			                                      "run_kind": "Daily"}, creating=False)
+		except ToolError as exc:
+			return {**out, "ready": False, "message": str(exc)}
+		out["pay"] = [{"employee": sl.get("employee"), "employee_name": sl.get("employee_name"),
+		               "hours": sl.get("total_hours"), "gross": sl.get("gross_pay"), "net": sl.get("net_pay")}
+		              for sl in slips]
+		out["total_gross"], out["total_net"] = totals.get("total_gross"), totals.get("total_net")
+	return out
