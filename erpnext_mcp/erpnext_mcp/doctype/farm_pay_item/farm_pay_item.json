@@ -14,6 +14,7 @@
   "pay_on",
   "col_1",
   "treatment",
+  "work_state",
   "status",
   "payroll_entry",
   "reference",
@@ -82,6 +83,13 @@
    "description": "Wages: taxed and withheld with the period's pay. Not subject to withholding: e.g. a fishing-boat crew share under IRC 3121(b)(20) \u2014 no income tax or FICA is withheld, but it still counts as earnings for garnishment (15 U.S.C. 1672(a)). Have the CPA confirm the treatment for each kind."
   },
   {
+   "fieldname": "work_state",
+   "fieldtype": "Select",
+   "label": "Work State",
+   "options": "\nOR\nWA",
+   "description": "v0.293.0. Whose income tax is withheld when this item is paid on a slip with no hours. Blank: the state on the worker's most recent slip."
+  },
+  {
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
@@ -110,7 +118,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-09 22:00:00.000000",
+ "modified": "2026-10-09 23:30:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Pay Item",

@@ -784,6 +784,13 @@ def calculate_full_payroll(
 	pay_items_wages = round(sum(float(i["amount"]) for i in pay_items if i.get("treatment") != "Not subject to withholding"), 2)
 	pay_items_not_withheld = round(sum(float(i["amount"]) for i in pay_items if i.get("treatment") == "Not subject to withholding"), 2)
 	gross_pay = round(gross_pay + pay_items_wages, 2)
+	# v0.293.0. A slip carrying only pay items has no shift to name a state; the item's `work_state` (or the
+	# worker's last one, filled in by the caller) is whose income tax is withheld on it.
+	if not primary_state and pay_items:
+		fallback = next((str(i.get("work_state") or "").upper() for i in pay_items if i.get("work_state")), "")
+		if fallback:
+			primary_state = fallback
+			state_hours[fallback] = {"hours": 0.0, "overtime_hours": 0.0, "gross": 0.0}
 
 	# ── Pre-tax deductions ────────────────────────────────────────────
 	#

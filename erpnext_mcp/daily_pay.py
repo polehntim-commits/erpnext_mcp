@@ -303,17 +303,23 @@ def settlement(company: str, start, end) -> tuple:
 	from . import pay_items as items
 
 	by_employee = week_daily_slips(company, start, end)
-	deductions_by_employee, _sources = runs._load_deductions(company, end, list(by_employee))
 	# v0.292.0. The week's bonuses and profit-share payouts are paid with the settlement, and count for the caps.
-	items_by_employee = items.pending(company, start, end, list(by_employee))
+	# v0.293.0. Every daily-pay worker's items, not only those with a daily slip this week — a worker paid daily who
+	# did not work the week still gets a settlement for the bonus or profit share dated in it.
+	whole, switched = on_daily_pay(company, start, end)
+	items_by_employee = items.pending(company, start, end, sorted(set(by_employee) | set(whole) | set(switched)))
+	for employee in items_by_employee:
+		by_employee.setdefault(employee, [])
+	deductions_by_employee, _sources = runs._load_deductions(company, end, list(by_employee))
 	limits = payroll_settings.garnishment_limits(end)
 	policy = payroll_settings.garnishment_policy(end)
 	ytd_by_employee = runs._load_ytd(company, start, list(by_employee))
 	slips, held, notes = [], [], []
 	for employee, days in sorted(by_employee.items()):
+		first = days[0] if days else items.stand_in(employee, company)
 		done = settled_on(employee, company, start)
 		if done:
-			held.append({"employee": employee, "employee_name": days[0].get("employee_name"),
+			held.append({"employee": employee, "employee_name": first.get("employee_name"),
 			             "reasons": [f"this week is already settled on {done}"]})
 			continue
 		hours = round(sum(_num(d["total_hours"]) for d in days), 2)
@@ -322,7 +328,8 @@ def settlement(company: str, start, end) -> tuple:
 		by_state: dict = {}
 		for d in days:
 			by_state[d.get("work_state") or ""] = by_state.get(d.get("work_state") or "", 0.0) + _num(d["total_hours"])
-		state = max(by_state, key=by_state.get) if by_state else ""
+		state = (max(by_state, key=by_state.get) if by_state
+		         else items.work_state(items_by_employee.get(employee), employee, company))
 		rule = payroll_settings.overtime(end, state=state)
 		threshold, multiplier = float(rule["weekly_threshold_hours"]), float(rule["multiplier"])
 		overtime_hours = round(max(hours - threshold, 0.0), 2)
@@ -336,9 +343,9 @@ def settlement(company: str, start, end) -> tuple:
 		tax_config["ytd_gross"] = round(_num(ytd.get("ytd_gross")) + straight, 2)
 		tax_config["ytd_ss_withheld"] = round(_num(ytd.get("ytd_ss_withheld")) + sum(_num(d["social_security"])
 		                                                                               for d in days), 2)
-		who = {"employee": employee, "employee_name": days[0].get("employee_name") or employee}
+		who = {"employee": employee, "employee_name": first.get("employee_name") or employee}
 		where = [{"work_state": state, "hours": 0.0, "overtime_hours": 0.0, "piece_units": 0, "break_hours": 0.0}]
-		structure = days[0].get("salary_structure") or ""
+		structure = first.get("salary_structure") or ""
 		slip = payroll_calc.calculate_full_payroll(
 			who, where, {"pay_type": "Salary", "base_rate": premium, "name": structure}, tax_config, deductions=None)
 		# INCOME TAX BY THE AGGREGATE METHOD (IRS Pub 15 §7, supplemental wages paid separately): the tax on the
@@ -357,7 +364,7 @@ def settlement(company: str, start, end) -> tuple:
 		skipped = [r for r in rows if payroll_deductions.row_is_pre_tax(r)]
 		rows = [r for r in rows if not payroll_deductions.row_is_pre_tax(r)]
 		for row in skipped:
-			notes.append(f"{days[0].get('employee_name') or employee}: the pre-tax election "
+			notes.append(f"{first.get('employee_name') or employee}: the pre-tax election "
 			             f"{payroll_deductions.row_label(row)} is not taken for a daily-pay worker (it would have to "
 			             "change wages already paid) — keep this worker weekly, or make it after-tax")
 		statutory = _num(slip.get("statutory_deductions"))

@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.293.0 — 2026-10-09 — pay items are never stuck Pending
+
+**Migrate**: Farm Pay Item gains `work_state`. Deploy `docs/deploy/v0.293.0_pay_items.md`. Tools: **1,142 →
+1,142**.
+
+- **No salary structure and no hours:** the item is paid on its own slip (no base pay). The state that withholds on
+  it is the item's `work_state`, or the state on the worker's last slip. Someone who worked without a structure
+  waits with their hours, and the run lists the item and the fix under `pay_items_waiting`.
+- **Daily-pay worker with no daily slip that week:** the weekly settlement still pays the week's items.
+- **Cancelled run:** cancelling a run puts its items back to Pending (Farm Payroll Entry `on_update`). A run also
+  treats items from a cancelled or deleted run as payable, and marks them `released_from`.
+- Tests: `test_pay_items`.
+
 ## 0.292.0 — 2026-10-09 — garnishments: catch-up and carry-forward (the middle path), pay items
 
 **Migrate**: two new doctypes (Farm Pay Item, and the Farm Payroll Deduction Ledger child table), arrears fields on

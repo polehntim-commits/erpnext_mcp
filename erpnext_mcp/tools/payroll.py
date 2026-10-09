@@ -1448,8 +1448,27 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 
 	garnishment = {"limits": payroll_settings.garnishment_limits(str(end)),
 	               "policy": payroll_settings.garnishment_policy(str(end))}
-	items_by_employee = {} if daily is not None else items.pending(company, str(start), str(end))
-	items_by_employee = {e: rows for e, rows in items_by_employee.items() if e in structures}
+	found = {} if daily is not None else items.pending(company, str(start), str(end), employees)
+	items_by_employee, items_waiting = {}, []
+	settled_daily = set(left_out_daily) | {h["employee"] for h in held_daily}
+	for employee, rows in sorted(found.items()):
+		if employee in settled_daily:
+			continue  # paid with the daily-pay worker's weekly settlement
+		if employee not in structures:
+			if employee in worked:
+				# v0.293.0. Hours with no structure cannot be paid at all (employees_missing_structures); the item
+				# waits with them rather than being paid on a slip that would leave the hours out.
+				items_waiting += [{"employee": employee, "item": r.get("name"), "amount": r.get("amount"),
+				                   "reason": "worked in the period with no salary structure — create_salary_structure, "
+				                             "then re-run; the item is paid with the hours"} for r in rows]
+				continue
+			# v0.293.0. No hours and no structure — a bonus or profit share for somebody not on the payroll this
+			# period (between seasons, or the share is all they are paid). Paid on its own slip: no base pay.
+			structures[employee] = {"name": "", "employee": employee, "pay_type": "Salary", "base_rate": 0.0,
+			                        "employee_name": frappe.db.get_value(EMPLOYEE, employee, "employee_name") or "",
+			                        "min_wage_regions": {}, "pay_items_only": True}
+		state = items.work_state(rows, employee, company)
+		items_by_employee[employee] = [{**r, "work_state": r.get("work_state") or state} for r in rows]
 	known = sorted(set(known) | set(items_by_employee))
 
 	w4_map = _load_w4_map(known)
@@ -1498,8 +1517,11 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		                    "garnishment_policy": garnishment["policy"].get("version"),
 		                    "garnishment_limits": garnishment["limits"].get("version")},
 		# v0.292.0. Bonuses and profit shares paid with this run; each counts as earnings for the garnishment caps.
-		"pay_items": [{"employee": e, **{k: r.get(k) for k in ("name", "kind", "amount", "treatment", "pay_on")}}
+		"pay_items": [{"employee": e, **{k: r.get(k) for k in ("name", "kind", "amount", "treatment", "pay_on",
+		                                                         "work_state", "released_from")}}
 		              for e, rows in sorted(items_by_employee.items()) for r in rows],
+		# v0.293.0. Items dated in the period that this run cannot pay yet, and why.
+		"pay_items_waiting": items_waiting,
 		"pay_period_start": str(start),
 		"pay_period_end": str(end),
 		"pay_frequency": pay_frequency,
