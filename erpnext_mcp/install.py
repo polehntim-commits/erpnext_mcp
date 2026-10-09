@@ -1269,25 +1269,17 @@ def _federal_tax_table() -> None:
 	try:
 		if not frappe.db.exists("DocType", "Federal Tax Table"):
 			return
-		existing = frappe.db.count("Federal Tax Table", {"tax_year": withholding.SEED_TAX_YEAR})
-		if existing:
-			return
-		brackets = withholding.seed_brackets()
-		created = 0
-		for bracket in brackets:
-			doc = frappe.get_doc(
-				{
-					"doctype": "Federal Tax Table",
-					**bracket,
-				}
-			)
-			doc.flags.ignore_permissions = True
-			doc.insert()
-			created += 1
-		if created:
-			print(
-				f"erpnext_mcp: seeded {created} federal tax bracket(s) for tax year {withholding.SEED_TAX_YEAR}"
-			)
+		for year in sorted(withholding.SEEDED_YEARS):  # v0.286.1: every seeded year, each only if it has no rows
+			if frappe.db.count("Federal Tax Table", {"tax_year": year}):
+				continue
+			created = 0
+			for bracket in withholding.seed_brackets(year):
+				doc = frappe.get_doc({"doctype": "Federal Tax Table", **bracket})
+				doc.flags.ignore_permissions = True
+				doc.insert()
+				created += 1
+			if created:
+				print(f"erpnext_mcp: seeded {created} federal tax bracket(s) for tax year {year}")
 	except Exception as exc:  # pragma: no cover - a site mid-migrate
 		print(f"erpnext_mcp: the federal tax table was not seeded — {type(exc).__name__}: {exc}")
 

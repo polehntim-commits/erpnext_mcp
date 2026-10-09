@@ -876,11 +876,13 @@ def _load_tax_table(tax_year: int, filing_status: str, payroll_period: str) -> l
 		filters={
 			"tax_year": tax_year,
 			"filing_status": filing_status,
-			"payroll_period": payroll_period,
+			"payroll_period": ("in", ["Annual", payroll_period]),  # v0.286.1: the annual rows when the site has them
 		},
-		fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate"],
+		fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate", "payroll_period"],
 		order_by="bracket_floor asc",
 	)
+	if any(r.get("payroll_period") == "Annual" for r in rows):
+		rows = [r for r in rows if r.get("payroll_period") == "Annual"]
 	if not rows:
 		raise ToolError(
 			f"no Federal Tax Table brackets for {filing_status}, {payroll_period}, {tax_year}. "

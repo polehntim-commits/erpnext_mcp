@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.286.1 — 2026-10-09 — federal withholding fixes (found while building daily pay)
+
+**No migrate** — the install seeds the 2026 federal tables on the next migrate run anyway. Deploy
+`docs/deploy/v0.286.1_federal_withholding.md`. Tools: **1,142 → 1,142**.
+
+Three defects, each of which OVER-withheld federal income tax on every paycheck:
+
+- **Annualized income walked through per-period brackets.** The install seeds the tables divided per pay period
+  (Weekly, Biweekly, …), and the calculation annualizes gross first. $1,000 a week, single, withheld **$353.57**
+  where the table gives $101.69. Now the loaders use the Annual rows, and `annual_brackets()` scales any per-period
+  row back up.
+- **Worksheet 1A line 1(g) was missing.** Pub 15-T subtracts $8,600 ($12,900 married filing jointly) when the W-4
+  Step 2 box is not checked. With it, $1,000 a week, single, 2026 withholds **$78.08**.
+- **The tables followed the W-4's year (default 2025), not the pay date's.** Withholding now uses the year the
+  wages are paid (the period end), falling back to the latest earlier year that has rows. Same for Oregon.
+
+Also: the **2026 federal tables** (Pub 15-T 2026, annual standard schedules, page 12) are seeded, every row checked
+against the one before it. The table labelled 2025 holds the 2024 schedule, so a 2025 payroll would import the 2025
+tables with `import_federal_tax_table`. Not changed here: the W-4 Step 2 checkbox schedule (still the standard
+table, as the existing note on the slip says), and Oregon's tables in a company-wide run are always the Single
+table. Both are flagged for Tim.
+
+Neither server has run a payroll through this app (OML: no Farm Payroll Entry), so no paycheck was affected.
+
 ## 0.286.0 — 2026-10-09 — field pins (pattern P3)
 
 **Migrate** (one new doctype; five never-deployed columns removed). Deploy `docs/deploy/v0.286.0_field_pins.md`.

@@ -672,7 +672,8 @@ class EdgeCases(W4TestCase):
 			ANNUAL_BRACKETS["Single"],
 		)
 		expected = round(result["total_employee_tax"] / 5000 * 100, 4)
-		self.assertEqual(result["effective_rate"], expected)
+		# To 3 places: `total_employee_tax` is already rounded to the cent, the rate is not (v0.286.1).
+		self.assertAlmostEqual(result["effective_rate"], expected, places=3)
 
 	def test_empty_brackets(self):
 		"""Empty bracket table produces zero federal income tax."""

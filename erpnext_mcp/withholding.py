@@ -170,10 +170,14 @@ def _calc_federal_income_tax(
 	annual_gross = gross_pay * periods
 	detail["annual_gross"] = round(annual_gross, 2)
 
-	# Step 2: Subtract Step 4(b) deductions
+	# Step 2: Subtract Step 4(b) deductions — and, v0.286.1, Worksheet 1A line 1(g): $12,900 (married filing jointly)
+	# or $8,600 (otherwise) when the Step 2 box is NOT checked, 0 when it is. With the table's 0% band it makes up
+	# the standard deduction ($8,600 + $7,500 = $16,100 single in 2026); without it every paycheck over-withheld.
 	deductions = float(w4_data.get("deductions") or 0)
-	adjusted = max(annual_gross - deductions, 0)
+	line_1g = 0.0 if w4_data.get("multiple_jobs") else _line_1g(w4_data)
+	adjusted = max(annual_gross - deductions - line_1g, 0)
 	detail["step_4b_deductions"] = round(deductions, 2)
+	detail["worksheet_1a_line_1g"] = line_1g
 	detail["adjusted_annual_income"] = round(adjusted, 2)
 
 	# Step 2 multiple-jobs: add other-jobs income
@@ -190,8 +194,11 @@ def _calc_federal_income_tax(
 		detail["step_4a_other_income"] = round(other_income, 2)
 		detail["adjusted_with_other_income"] = round(adjusted, 2)
 
-	# Step 3: Look up tentative withholding from tax table
-	tentative, bracket_detail = _apply_tax_table(adjusted, tax_table)
+	# Step 3: Look up tentative withholding from tax table — ANNUAL brackets, because the income is annualized
+	# above. v0.286.1: a stored per-period row (the install seeds Weekly, Biweekly, … rows divided down from the
+	# annual table) is scaled back up; walking an annual income through per-period brackets withheld more than
+	# three times the tax ($353.57 for $1,000 a week, single, against $101.69).
+	tentative, bracket_detail = _apply_tax_table(adjusted, annual_brackets(tax_table))
 	detail["tentative_annual_tax"] = round(tentative, 2)
 	detail["bracket_applied"] = bracket_detail
 
@@ -214,6 +221,33 @@ def _calc_federal_income_tax(
 	detail["final_per_period"] = round(result, 2)
 
 	return result, detail
+
+
+#: Pub 15-T Worksheet 1A line 1(g), unchanged 2020–2026: subtracted when the W-4 Step 2 box is not checked.
+LINE_1G = {"Married Filing Jointly": 12900.0}
+LINE_1G_OTHERWISE = 8600.0
+
+
+def _line_1g(w4_data: dict) -> float:
+	status = FILING_STATUS_MAP.get(str(w4_data.get("filing_status") or ""), str(w4_data.get("filing_status") or ""))
+	return LINE_1G.get(status, LINE_1G_OTHERWISE)
+
+
+def annual_brackets(tax_table: list[dict]) -> list[dict]:
+	"""The brackets in annual dollars. A row that names a non-annual `payroll_period` is scaled by that period's
+	count; a row that names none is taken as annual (the shape every caller passed before v0.286.1)."""
+	out = []
+	for row in tax_table or []:
+		periods = PERIODS_PER_YEAR.get(str(row.get("payroll_period") or "Annual"), 1)
+		if periods == 1:
+			out.append(row)
+			continue
+		ceiling = row.get("bracket_ceiling")
+		out.append({**row, "payroll_period": "Annual",
+		            "bracket_floor": round(float(row.get("bracket_floor") or 0) * periods, 2),
+		            "bracket_ceiling": round(float(ceiling) * periods, 2) if ceiling else None,
+		            "base_tax": round(float(row.get("base_tax") or 0) * periods, 2)})
+	return out
 
 
 def _apply_tax_table(annual_income: float, brackets: list[dict]) -> tuple[float, dict]:
@@ -408,10 +442,40 @@ FILING_STATUS_MAP = {
 }
 
 
-def seed_brackets() -> list[dict]:
-	"""Return the full set of seed brackets for all periods, ready for insertion."""
+def _row(floor, ceiling, base, rate) -> dict:
+	return {"bracket_floor": floor, "bracket_ceiling": ceiling, "base_tax": base, "marginal_rate": rate}
+
+
+#: v0.286.1. IRS Publication 15-T (2026), "2026 Percentage Method Tables for Automated Payroll Systems", ANNUAL,
+#: STANDARD withholding rate schedules (W-4 Step 2 box NOT checked), page 12, transcribed as printed. Used with
+#: Worksheet 1A line 1(g) (LINE_1G). Each row's base is the previous row's base plus its rate times its width —
+#: `test_withholding_2026` checks every one.
+ANNUAL_BRACKETS_2026 = {
+	"Married Filing Jointly": [
+		_row(0, 19300, 0, 0), _row(19300, 44100, 0, 10), _row(44100, 120100, 2480.00, 12),
+		_row(120100, 230700, 11600.00, 22), _row(230700, 422850, 35932.00, 24), _row(422850, 531750, 82048.00, 32),
+		_row(531750, 788000, 116896.00, 35), _row(788000, None, 206583.50, 37),
+	],
+	"Single": [
+		_row(0, 7500, 0, 0), _row(7500, 19900, 0, 10), _row(19900, 57900, 1240.00, 12),
+		_row(57900, 113200, 5800.00, 22), _row(113200, 209275, 17966.00, 24), _row(209275, 263725, 41024.00, 32),
+		_row(263725, 648100, 58448.00, 35), _row(648100, None, 192979.25, 37),
+	],
+	"Head of Household": [
+		_row(0, 15550, 0, 0), _row(15550, 33250, 0, 10), _row(33250, 83000, 1770.00, 12),
+		_row(83000, 121250, 7740.00, 22), _row(121250, 217300, 16155.00, 24), _row(217300, 271750, 39207.00, 32),
+		_row(271750, 656150, 56631.00, 35), _row(656150, None, 191171.00, 37),
+	],
+}
+#: Every year this app seeds, newest last. The 2025-labelled table above is kept as shipped (v0.286.1 note: its
+#: figures are the 2024 Pub 15-T schedule; 2025 payroll should import the 2025 tables with import_federal_tax_table).
+SEEDED_YEARS = {2025: ANNUAL_BRACKETS, 2026: ANNUAL_BRACKETS_2026}
+
+
+def seed_brackets(tax_year: int = SEED_TAX_YEAR) -> list[dict]:
+	"""Return the full set of seed brackets for all periods of one tax year, ready for insertion."""
 	rows = []
-	for filing_status, annual in ANNUAL_BRACKETS.items():
+	for filing_status, annual in SEEDED_YEARS[tax_year].items():
 		for period_name, periods in PERIODS_PER_YEAR.items():
 			for bracket in annual:
 				floor = bracket["bracket_floor"] / periods
@@ -419,7 +483,7 @@ def seed_brackets() -> list[dict]:
 				base = bracket["base_tax"] / periods
 				rows.append(
 					{
-						"tax_year": SEED_TAX_YEAR,
+						"tax_year": tax_year,
 						"filing_status": filing_status,
 						"payroll_period": period_name,
 						"bracket_floor": round(floor, 2),

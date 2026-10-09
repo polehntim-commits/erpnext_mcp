@@ -455,7 +455,7 @@ def preview_payroll(args: dict) -> ToolResult:
 	shifts = _load_shifts(employee, pay_period_start, pay_period_end, company)
 
 	# Load tax config
-	tax_config = _build_tax_config(employee, pay_frequency, company)
+	tax_config = _build_tax_config(employee, pay_frequency, company, pay_period_end)
 
 	employee_name = (
 		ss.get("employee_name") or frappe.db.get_value(EMPLOYEE, employee, "employee_name") or employee
@@ -983,7 +983,7 @@ def calculate_payroll(args: dict) -> ToolResult:
 	for ss in structures:
 		employee = ss.employee
 		shifts = _load_shifts(employee, pay_period_start, pay_period_end, company)
-		tax_config = _build_tax_config(employee, pay_frequency, company)
+		tax_config = _build_tax_config(employee, pay_frequency, company, pay_period_end)
 
 		slip = calculate_full_payroll(
 			{"employee": employee, "employee_name": ss.employee_name},
@@ -1362,8 +1362,8 @@ def _period_run(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		start,
 		end,
 		company=company,
-		federal_tax_tables=_load_federal_tables(pay_frequency),
-		state_tax_tables=_load_state_tax_tables(),
+		federal_tax_tables=_load_federal_tables(pay_frequency, _pay_year(end)),
+		state_tax_tables=_load_state_tax_tables(_pay_year(end)),
 		min_wage_rates=min_wage_rates,
 		pay_frequency=pay_frequency,
 		ytd_by_employee=_load_ytd(company, start, known),
@@ -3024,6 +3024,21 @@ def _load_state_configs(company: str | None = None) -> dict:
 	return configs
 
 
+def table_year(doctype: str, pay_year: int, **filters) -> int:
+	"""v0.286.1. The tax year whose tables a payment in `pay_year` uses: that year, or — while its tables are not
+	loaded yet — the latest earlier year that has rows. Withholding follows the year the wages are PAID, never the
+	year on the employee's W-4."""
+	if frappe.db.exists(doctype, {"tax_year": pay_year, **filters}):
+		return int(pay_year)
+	years = frappe.db.get_all(doctype, filters={"tax_year": ("<=", pay_year), **filters}, pluck="tax_year",
+	                          order_by="tax_year desc", limit=1) or []
+	return int(years[0]) if years else int(pay_year)
+
+
+def _pay_year(pay_date) -> int:
+	return int(str(pay_date)[:4]) if pay_date else int(str(frappe.utils.today())[:4])
+
+
 def _load_state_tax_tables(tax_year: int = 2025, filing_status: str = "Single") -> dict:
 	"""State income tax brackets, for the states that have them.
 
@@ -3034,7 +3049,7 @@ def _load_state_tax_tables(tax_year: int = 2025, filing_status: str = "Single") 
 	for state in SUPPORTED_STATES:
 		if state != "OR":
 			continue
-		rows = _load_state_tax_table(state, tax_year, filing_status)
+		rows = _load_state_tax_table(state, table_year(STATE_TAX_TABLE, tax_year, state=state), filing_status)
 		if rows:
 			tables[state] = rows
 	return tables
@@ -3049,7 +3064,7 @@ def _load_federal_tables(pay_frequency: str, tax_year: int = 2025) -> dict:
 	"""
 	tables = {}
 	for status in sorted(set(FILING_STATUS_MAP.values())):
-		rows = _load_federal_tax_table(tax_year, status, pay_frequency)
+		rows = _load_federal_tax_table(table_year(FEDERAL_TAX_TABLE, tax_year), status, pay_frequency)
 		if rows:
 			tables[status] = rows
 	return tables
@@ -3099,12 +3114,12 @@ def _load_ytd(company: str, period_start: str, employees: list[str]) -> dict:
 	return {employee: {k: round(v, 2) for k, v in bucket.items()} for employee, bucket in ytd.items()}
 
 
-def _build_tax_config(employee: str, pay_frequency: str, company: str | None = None) -> dict:
-	"""Build the tax_config dict needed by calculate_full_payroll."""
+def _build_tax_config(employee: str, pay_frequency: str, company: str | None = None, pay_date=None) -> dict:
+	"""Build the tax_config dict needed by calculate_full_payroll. v0.286.1: the tables are the PAY DATE's year."""
 	w4_data = _load_w4_data(employee)
 	fica_config = _load_fica_config()
 	filing_status = w4_data.get("filing_status", "Single")
-	tax_year = w4_data.get("_tax_year", 2025)
+	tax_year = table_year(FEDERAL_TAX_TABLE, _pay_year(pay_date))
 	federal_tax_table = _load_federal_tax_table(
 		tax_year,
 		filing_status,
@@ -3129,7 +3144,8 @@ def _build_tax_config(employee: str, pay_frequency: str, company: str | None = N
 		if sc:
 			state_configs[state] = sc
 			if state == "OR":
-				st = _load_state_tax_table(state, w4_data.get("_tax_year", 2025), filing_status)
+				st = _load_state_tax_table(state, table_year(STATE_TAX_TABLE, _pay_year(pay_date), state=state),
+				                           filing_status)
 				if st:
 					state_tax_tables[state] = st
 
@@ -3244,11 +3260,13 @@ def _load_federal_tax_table(tax_year: int, filing_status: str, pay_frequency: st
 		filters={
 			"tax_year": tax_year,
 			"filing_status": filing_status,
-			"payroll_period": pay_frequency,
+			"payroll_period": ("in", ["Annual", pay_frequency]),  # v0.286.1: the annual rows when the site has them
 		},
-		fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate"],
+		fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate", "payroll_period"],
 		order_by="bracket_floor asc",
 	)
+	if any(r.get("payroll_period") == "Annual" for r in rows):
+		rows = [r for r in rows if r.get("payroll_period") == "Annual"]
 	return [dict(r) for r in rows]
 
 
