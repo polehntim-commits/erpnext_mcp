@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.287.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
+**Deploy: v0.252.0 → v0.288.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.287.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.288.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`5eef359`** (`__version__ = "0.287.0"`).
+- **Server**: erpnext_mcp main **`3d6bdb9`** (`__version__ = "0.288.0"`).
 - **App**: fafo_ios main **`25de4f5`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -50,6 +50,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.286.0 | Field pins (P3): Field Pin holds a job's entrance, delivery spot, loading area and a season's hive drops; one map layer reads them with the valve and hazard assets. Answers unchanged. Covered by the one migrate. |
 | v0.286.1 | Federal withholding fixes: per-period brackets no longer meet an annualized income, Worksheet 1A line 1(g) applied, tables by the pay date's year; 2026 tables seeded. Over-withholding gone ($1,000/week single: $353.57 → $78.08). No payroll had run on either server. Covered by the one migrate. |
 | v0.287.0 | Daily pay step 1: Pay Policy (Tim's eight decisions) and Wage Floor (OR $15.55 / $16.80 / $14.55 from 2026-07-01, WA $17.13, ag overtime thresholds, each sourced) as payroll settings; runs never pay below the floor; daily pay stays OFF. Covered by the one migrate. |
+| v0.288.0 | Daily pay step 2: run_payroll_for_period(run_kind=Daily) pays one day to daily-pay workers (straight time, makeup, taxes only, reviewed punches only); Regular runs leave them out. Still OFF per company. No migrate. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -69,17 +70,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.287.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.288.0`. Push fafo_ios main and archive
 FarmOps 0.57.0 (build 53).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.287.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.288.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.287.0; the asset map's build stamp 0.287.0.
+1. `get_server_status`: 0.288.0; the asset map's build stamp 0.288.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
