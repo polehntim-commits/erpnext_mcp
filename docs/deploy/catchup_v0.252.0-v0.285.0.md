@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.284.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
+**Deploy: v0.252.0 → v0.285.0 (OML today) — one build, one migrate; FarmOps 0.57.0 (build 53)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.284.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.285.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`f6e3e32`** (`__version__ = "0.284.0"`).
+- **Server**: erpnext_mcp main **`f9ed876`** (`__version__ = "0.285.0"`).
 - **App**: fafo_ios main **`25de4f5`** — FarmOps **0.57.0 (build 53)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -46,6 +46,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.282.0 | One share-link tool: `share_link(action, kind)` over job links (contractor, delivery, pickup, pollination), the packer portal, upload links and phone enrolment, each run by the kind's existing tool under its own switch. Tools 1,140 → 1,141; nothing removed. No migrate. |
 | v0.283.0 | Exposure and attribution: setting *Hide Tools A Generic Tool Covers* (off) leaves covered old tools out of the tool list while their generic tool is on (still callable by name); MCP Action Log gains Superseded By, Agent Client, Acting For. No new tools. Covered by the one migrate. |
 | v0.284.0 | The whole Action Log: `query_doctype` pages past 500 rows (`start` / `next_start`); new read tool `get_superseded_usage` lists old names still called and the covered names nobody called (the 30-day evidence). Tools 1,141 → 1,142; nothing removed. No migrate. |
+| v0.285.0 | One share-link engine (P2): Share Link + Share Link View replace the job-link and packer-credential tables (never deployed, nothing to move); every kind issues, finds, logs, extends and revokes the same way. Answers unchanged. Covered by the one migrate. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -65,17 +66,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.284.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.285.0`. Push fafo_ios main and archive
 FarmOps 0.57.0 (build 53).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.284.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.285.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.284.0; the asset map's build stamp 0.284.0.
+1. `get_server_status`: 0.285.0; the asset map's build stamp 0.285.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
