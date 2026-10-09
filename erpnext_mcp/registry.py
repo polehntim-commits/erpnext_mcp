@@ -15509,7 +15509,11 @@ TOOLS = {
 			"or_source": _field(_STRING, "v0.294.0. What Oregon withholding is based on: OR-W-4, 'Pre-2020 Oregon-only "
 			                             "W-4', 'Pre-2020 federal W-4' (its marital status and allowances in or_*), or "
 			                             "Refused (Single, 0 — OAR 150-316-0290)."),
-			"or_exemption_code": _field(_STRING, "v0.294.0. OR-W-4 line 4a exemption code."),
+			"or_exemption_code": _field(_STRING, "OR-W-4 line 4a exemption code — one letter from the 2026 chart: "
+			                                     "A B C D E F G H J K L M (L = no tax liability)."),
+			"or_federally_exempt": _field(_STRING, "v0.295.0. With or_exempt: Yes if the employee is also exempt "
+			                                       "federally, No for an Oregon-only exemption (withheld at 8% — "
+			                                       "Publication 150-211-602 — and sent to the DOR)."),
 			"or_redetermination": _field(_BOOLEAN, "v0.294.0. OR-W-4 Redetermination box."),
 			"or_expected_weekly_wages": _field(_NUMBER, "v0.294.0. For an exempt claim: expected wages a week (over "
 			                                            "$200 means a copy goes to the DOR). Default: 40 hours at the "
@@ -15546,7 +15550,8 @@ TOOLS = {
 		"whether the record's tax year matches the shipped template's edition; a "
 		"mismatch is not refused.",
 		{
-			"form": _field(_STRING, "v0.294.0. 'or_w4' is refused until the official Form OR-W-4 is bundled."),
+			"form": _field(_STRING, "v0.295.0. 'or_w4' fills the Oregon DOR's own Form OR-W-4 (150-101-402, shipped "
+			                        "unmodified) from the employee's OR-W-4 and attaches it to or_generated_pdf."),
 			"w4_form": _field(_STRING, "The W-4 Form docname, e.g. W4-2026-0001."),
 			"name": _field(_STRING, "A W-4 Form docname, or an employee."),
 			"employee": _field(_STRING, "Employee docname or employee_name, instead of the form."),

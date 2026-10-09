@@ -92,3 +92,32 @@ bottom-right corner of page 1, restated in `w4_pdf.EDITION` and
 that is here, and `render_w4_pdf` reports `template_tax_year_matches: false`. A
 prior year's election on this year's page is a readable record; no form at all is
 not.
+
+## Oregon: `or_w4_form.pdf` and its references (v0.295.0)
+
+Downloaded unmodified from the Oregon Department of Revenue on 2026-10-09, with Tim's approval (source:
+oregon.gov/dor only).
+
+| File | Official title | Source URL | Revision | Bytes | SHA-256 |
+|---|---|---|---|---|---|
+| `or_w4_form.pdf` | 2026 Form OR-W-4, Oregon Withholding Statement and Exemption Certificate, 150-101-402 | https://www.oregon.gov/dor/forms/FormsPubs/form-or-W-4_101-402_2026.pdf | Rev. 07-28-25, ver. 01 | 65,323 | `78108312be71f0d10eddc922fb9e478b40cda60d85bd01f16360e5557c031709` |
+| `or_w4_instructions.pdf` | 2026 Form OR-W-4 Instructions, 150-101-402-1 | https://www.oregon.gov/dor/forms/FormsPubs/form-or-W-4-instr_101-402-1_2026.pdf | Rev. 02-17-26 | 274,057 | `c80963c5358ab74b3dfbc2d4158dd081277300f3151e74994ff2bf13fc44d819` |
+| `or_w4_instructions_es.pdf` | 2026 Formulario OR-W-4 Instrucciones, 150-101-402-1-5 | https://www.oregon.gov/dor/forms/FormsPubs/form-or-W-4-instr_sp_101-402-1-5_2026.pdf | Rev. 02-17-26 | 282,862 | `329e9e6f4846f879c776317054a1050954cb84d7a16dc55594303836b2f269a2` |
+| `or_w4_employer_information.pdf` | W-4 Information for Employers, 150-211-602 | https://www.oregon.gov/dor/forms/FormsPubs/w-4-information_150-211-602.pdf | Rev. 02-18-22 | 70,695 | `e044bc37d5bacb13fed0540fc36d11cca43474f809947c1d6eabb9ee14826d73` |
+
+**The form is filled; the other three are reference copies.** `erpnext_mcp/or_w4_pdf.py` opens `or_w4_form.pdf`
+read-only, writes the employee's elections into its own AcroForm fields (`w4-p1-1` …, the line 1 radio
+`Check Box2` with `/Single` `/Married` `/3`, the Redetermination box `w4-p1-5`), and draws the employer block,
+which has no fields, and the signature into the copy. The SSN boxes are left for the employee, as on the federal
+W-4. The instructions, in English and Spanish, are what the phone shows a worker. The employer publication is the
+source of the 8% rules: an Oregon-only exemption, or an expired one.
+
+These are Oregon state publications, not U.S. Government works. They are published by the DOR for employers and
+employees to complete and keep, and they are redistributed here unmodified for that purpose. The checksums are
+asserted by `tests_standalone/test_or_w4_pdf.py`.
+
+### When the DOR revises them
+
+The OR-W-4 is reissued each year (the year is in the masthead). Download the new files from oregon.gov/dor over
+these, re-run `test_or_w4_pdf` (the checksum and field-name tests fail by design), then update
+`or_w4_pdf.EDITION`, `TEMPLATE_TAX_YEAR`, `TEMPLATE_SHA256` and this table.

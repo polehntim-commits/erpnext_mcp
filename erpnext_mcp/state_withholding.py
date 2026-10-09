@@ -159,6 +159,12 @@ OR_WITHHOLDING_2026 = {
 	#: of the employee's signature. Have the CPA confirm the reading.
 	"forwarding": {"max_allowances": 10, "exempt_weekly_wages": 200.0, "days": 20,
 	               "source": "OAR 150-316-0290(4)"},
+	#: v0.295.0. Whether the DOR has confirmed it accepts electronically signed OR-W-4s. Unconfirmed until Tim/the CPA
+	#: hears from the DOR; every OR-W-4 signed or rendered says so.
+	"esignature": {"confirmed": False, "note": ""},
+	#: v0.295.0. When the employer withholds a flat 8% instead of using the certificate (DOR Publication 150-211-602,
+	#: Rev. 02-18-22): an Oregon-only exemption, and an exemption that expired with no new OR-W-4.
+	"flat_rate_rules_source": "Oregon DOR Publication 150-211-602, W-4 Information for Employers (Rev. 02-18-22)",
 }
 
 #: OR-W-4 filing statuses (Form OR-W-4 line 1).
@@ -246,7 +252,16 @@ def calculate_oregon_withholding(
 		detail["income_tax"] = {"method": "flat", "rate": rate, "note": (
 			"No Form OR-W-4 on file for this employee, so Oregon requires a flat 8% (HB 2119, ORS 316.182). It "
 			"stops once the employee's OR-W-4 is entered.")}
-	elif w4.get("exempt") and _exemption_in_force(w4, pay_year):
+	elif w4.get("exempt") and (not w4.get("federally_exempt", True) or not _exemption_in_force(w4, pay_year)):
+		# v0.295.0. DOR Publication 150-211-602: an Oregon-only exemption, or one that expired with no new OR-W-4, is
+		# withheld at 8% rather than by the certificate.
+		rate = float(params.get("default_flat_rate", 8.0))
+		or_income_tax = round(gross_pay * rate / 100.0, 2)
+		why = ("the OR-W-4 claims an Oregon-only exemption" if not w4.get("federally_exempt", True)
+		       else "the OR-W-4 exemption expired (February 15) and no new OR-W-4 was filed")
+		detail["income_tax"] = {"method": "flat", "rate": rate, "based_on": w4.get("source") or "OR-W-4",
+		                        "note": f"{why} — withhold 8% ({params.get('flat_rate_rules_source')})."}
+	elif w4.get("exempt"):
 		detail["income_tax"] = {"method": "exempt", "note": "OR-W-4 exemption certificate in force."}
 	else:
 		annual = oregon_annual_withholding(gross_pay * periods, float(federal_income_tax or 0) * periods, w4, params)

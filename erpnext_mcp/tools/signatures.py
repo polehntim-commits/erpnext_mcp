@@ -383,8 +383,7 @@ SIGNATURE_BOXES = (
 		form_label="Form OR-W-4, Oregon Employee's Withholding Statement and Exemption Certificate (150-101-402)",
 		section_label="Signature",
 		attestation=(
-			"Under penalty of false swearing, I declare that the information on this certificate is true, "
-			"correct, and complete."
+			"Under penalty of false swearing, I declare the information provided is true, correct, and complete."
 		),
 	),
 	# v0.56.0. THE EMPLOYER'S OWN RETURNS, and one box covers four form types

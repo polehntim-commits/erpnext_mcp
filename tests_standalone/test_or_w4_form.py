@@ -7,6 +7,9 @@ certificate the DOR must see is flagged with a send-by date. `list_employees_mis
 the flat 8% and what is still to send.
 """
 
+import unittest
+
+from erpnext_mcp import or_w4_pdf
 from erpnext_mcp.tools import signatures, w4
 
 from .fixtures import MAIN
@@ -82,9 +85,19 @@ class OnItsOwn(OrW4Case):
 		self.assertEqual((box.signed_at_field, box.signer_role), ("or_signed_at", "employee"))
 		self.assertEqual(signatures._box({"doctype": "W-4 Form"}).field, "signature", "unnamed is still the federal box")
 
-	def test_the_official_pdf_is_not_faked(self):
-		with self.assertRaisesRegex(Exception, "not bundled"):
-			w4.render_w4_pdf({"form": "or_w4", "employee": WORKER})
+	@unittest.skipUnless(or_w4_pdf.HAVE_PYPDF, "pypdf is not installed on this bench")
+	def test_the_dors_own_form_is_rendered(self):
+		got = self.or_w4(or_filing_status="Single", or_allowances=2)
+		STORE.seed("File", [])
+		rendered = w4.render_w4_pdf({"form": "or_w4", "employee": WORKER}).data
+		self.assertEqual((rendered["form"], rendered["name"]), ("OR-W-4", got["name"]))
+		self.assertIn("150-101-402", rendered["edition"])
+		self.assertFalse(rendered["esignature"]["confirmed"])
+
+	def test_the_federal_lookup_never_lands_on_an_or_w4(self):
+		self.or_w4(or_filing_status="Single", or_allowances=2)
+		with self.assertRaisesRegex(Exception, "no active W-4 Form"):
+			w4._resolve_w4({"employee": WORKER})
 
 
 class FallbackOrder(OrW4Case):
@@ -133,3 +146,36 @@ class SendToTheDOR(OrW4Case):
 		STORE.commit()
 		self.assertEqual(self.tool_data("list_employees_missing_w4", {"company": MAIN, "form": "or_w4"})["send_to_dor"],
 		                 [])
+
+
+class TheEightPercentRules(OrW4Case):
+	"""DOR Publication 150-211-602 (Rev. 02-18-22): withhold 8% for an Oregon-only exemption, or an expired one."""
+
+	def test_an_oregon_only_exemption_is_eight_percent_and_sent(self):
+		got = self.or_w4(or_exempt=1, or_exemption_code="L", or_federally_exempt="No")
+		self.assertIn("Oregon-only", got["send_to_dor_reasons"])
+		_run, income = self.income()
+		self.assertEqual((income["method"], income["rate"]), ("flat", 8.0))
+
+	def test_exempt_both_ways_is_exempt(self):
+		self.or_w4(or_exempt=1, or_exemption_code="L", or_federally_exempt="Yes", or_expected_weekly_wages=150)
+		_run, income = self.income()
+		self.assertEqual(income["method"], "exempt")
+
+	def test_an_expired_exemption_is_eight_percent(self):
+		self.or_w4(or_exempt=1, or_exemption_code="L", or_federally_exempt="Yes", tax_year=2024)
+		_run, income = self.income()  # wages paid in 2025
+		self.assertEqual(income["method"], "flat")
+		self.assertIn("expired", income["note"])
+
+	def test_not_recorded_is_a_warning_not_eight_percent(self):
+		got = self.or_w4(or_exempt=1, or_exemption_code="L", or_expected_weekly_wages=150)
+		self.assertIn("not recorded", got["warnings"][0])
+		_run, income = self.income()
+		self.assertEqual(income["method"], "exempt")
+
+	def test_the_exemption_code_comes_off_the_chart(self):
+		message = self.tool_error("submit_w4", {"form": "or_w4", "employee": WORKER, "company": MAIN, "or_exempt": 1,
+		                                        "or_exemption_code": "Z"})
+		self.assertIn("exemption chart", message)
+		self.assertEqual(self.or_w4(or_exempt=1, or_exemption_code="l", or_federally_exempt="Yes")["or_exempt"], True)

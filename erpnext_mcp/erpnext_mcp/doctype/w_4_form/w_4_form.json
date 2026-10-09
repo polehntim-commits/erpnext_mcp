@@ -38,6 +38,7 @@
   "or_allowances",
   "or_additional_withholding",
   "or_exempt",
+  "or_federally_exempt",
   "or_exemption_code",
   "or_redetermination",
   "or_source",
@@ -45,6 +46,8 @@
   "or_signature",
   "or_signed_at",
   "or_signed_ip",
+  "or_generated_pdf",
+  "or_generated_pdf_on",
   "or_forward_section",
   "or_forward_required",
   "or_forward_reasons",
@@ -293,6 +296,14 @@
    "description": "Lapses February 15 of the next year; the employee files a new OR-W-4 each year to keep it."
   },
   {
+   "fieldname": "or_federally_exempt",
+   "fieldtype": "Select",
+   "label": "Also Exempt From Federal Withholding?",
+   "depends_on": "eval:doc.or_exempt",
+   "description": "v0.295.0. No = an Oregon-only exemption: withhold a flat 8% (DOR Publication 150-211-602) and send a copy to the DOR. Blank = not recorded (treated as before this release).",
+   "options": "\nYes\nNo"
+  },
+  {
    "fieldname": "or_exemption_code",
    "fieldtype": "Data",
    "label": "Exemption Code (line 4a)",
@@ -331,6 +342,18 @@
    "fieldname": "or_signed_ip",
    "fieldtype": "Data",
    "label": "OR-W-4 Signed From"
+  },
+  {
+   "fieldname": "or_generated_pdf",
+   "fieldtype": "Attach",
+   "label": "OR-W-4 PDF",
+   "read_only": 1
+  },
+  {
+   "fieldname": "or_generated_pdf_on",
+   "fieldtype": "Datetime",
+   "label": "OR-W-4 PDF Rendered On",
+   "read_only": 1
   },
   {
    "fieldname": "or_forward_section",
@@ -432,7 +455,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-10 00:30:00.000000",
+ "modified": "2026-10-10 02:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "W-4 Form",

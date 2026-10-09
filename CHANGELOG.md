@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.295.0 — 2026-10-09 — the official Form OR-W-4, filled and signed; Oregon's 8% rules
+
+**Migrate**: W-4 Form gains `or_federally_exempt` and `or_generated_pdf`/`_on`; the DOR's PDFs ship in
+`templates/`. Deploy `docs/deploy/v0.295.0_or_w4_official.md`. Tools: **1,142 → 1,142**. Pairs with FarmOps 0.60.0
+(56).
+
+- **Bundled and filled the real form:** the DOR's 150-101-402 is shipped unmodified, downloaded from oregon.gov/dor
+  with Tim's approval, with the instructions (English and Spanish) and Publication 150-211-602. The URLs, revisions
+  and checksums are in `templates/README.md`. `render_w4_pdf form=or_w4` fills the form's own fields (name, address,
+  the line 1 radio, lines 2, 3, 4a and 4b, Redetermination, date). The employer block (the page has no fields
+  there) and the employee's `or_signature` are drawn in, and the copy is flattened. The SSN stays for the employee.
+- **Oregon's 8% rules** (Publication 150-211-602): an Oregon-only exemption (`or_federally_exempt = No`) and an
+  expired exemption are withheld at 8%. Line 4a codes are checked against the 2026 chart.
+- **E-signature status** is a policy value (`oregon_withholding.esignature`), unconfirmed until the DOR answers. It
+  appears on every OR-W-4 submit, render and signature (MCP and the phone).
+- **Phone:** `submit_w4` and `generate_w4_pdf` take `form=or_w4` and the new OR-W-4 fields. The OR-W-4 is signed
+  through the existing evidence chain (`submit_form_signature` / `collect_signature` with field `or_signature`).
+- **Fix:** looking up a W-4 by employee (render, signature) never lands on an OR-W-4 filed on its own.
+- Tests: `test_or_w4_pdf` (checksums, field geometry, plan, render), `test_or_w4_form` (8% rules, codes, render).
+
 ## 0.294.0 — 2026-10-09 — Form OR-W-4 as its own form kind
 
 **Migrate**: W-4 Form gains `form_kind` and the OR-W-4 fields. Deploy `docs/deploy/v0.294.0_or_w4.md`. Tools:

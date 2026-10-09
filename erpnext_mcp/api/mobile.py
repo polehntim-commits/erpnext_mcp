@@ -3346,9 +3346,19 @@ def submit_w4(
 	or_allowances=None,
 	or_additional_withholding=None,
 	or_exempt=None,
+	form=None,
+	or_exemption_code=None,
+	or_federally_exempt=None,
+	or_redetermination=None,
+	or_source=None,
 ) -> dict:
 	"""Federal withholding, as the worker filled it in — and, v0.291.0, their Oregon OR-W-4 (Oregon withholds by it,
 	and at a flat 8% without one). Supersedes their last one.
+
+	v0.295.0. `form="or_w4"` files the OR-W-4 ON ITS OWN — its own record, its own signature (collect_signature
+	field="or_signature"), the federal W-4 untouched — with line 4a, the Redetermination box and whether an exempt
+	worker is also exempt federally. The answer carries `esignature`: the DOR's acceptance of e-signed OR-W-4s is
+	unconfirmed until Tim/the CPA hear from the DOR, and the app shows that.
 
 	THREE MORE RENAMES, and they run the same way as Section 2's.
 	`OnboardingW4.apiParams` sends `dependents_under_17`, `other_dependents` and
@@ -3383,6 +3393,11 @@ def submit_w4(
 		("or_allowances", or_allowances),
 		("or_additional_withholding", or_additional_withholding),
 		("or_exempt", or_exempt),
+		("form", form),
+		("or_exemption_code", or_exemption_code),
+		("or_federally_exempt", or_federally_exempt),
+		("or_redetermination", or_redetermination),
+		("or_source", or_source),
 	):
 		if value is not None:
 			inner[key] = value
@@ -4247,7 +4262,7 @@ def remove_authorized_signer(user: str, signer_user=None) -> dict:
 # ── 39. generate_w4_pdf ─────────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("generate_w4_pdf", mutating=True, limit=guard.WRITE_LIMIT)
-def generate_w4_pdf(user: str, employee=None, docname=None, tax_year=None, overwrite=None) -> dict:
+def generate_w4_pdf(user: str, employee=None, docname=None, tax_year=None, overwrite=None, form=None) -> dict:
 	"""Fill the federal W-4 from the record and hand the phone a URL for it.
 
 	THE OTHER HALF OF `generate_i9_pdf`, and the last artefact the onboarding
@@ -4287,6 +4302,9 @@ def generate_w4_pdf(user: str, employee=None, docname=None, tax_year=None, overw
 		inner["tax_year"] = tax_year
 	if overwrite is not None:
 		inner["overwrite"] = overwrite
+	if form is not None:
+		# v0.295.0. "or_w4": the Oregon DOR's own Form OR-W-4, filled from the worker's OR-W-4.
+		inner["form"] = form
 
 	result = w4.render_w4_pdf(inner)
 	data = result.data
@@ -4304,6 +4322,10 @@ def generate_w4_pdf(user: str, employee=None, docname=None, tax_year=None, overw
 		"incomplete": data.get("incomplete") or [],
 		"replaced": data.get("replaced"),
 		"note": data.get("note"),
+		# v0.295.0. On an OR-W-4: what the render could not do, and the e-signature status.
+		"form": data.get("form") or "W-4",
+		"notes": data.get("notes") or [],
+		"esignature": data.get("esignature"),
 	}
 
 
@@ -5283,7 +5305,11 @@ def collect_signature(
 			inner[key] = value
 
 	data = signatures.collect_form_signature(inner).data
+	if data.get("field") == "or_signature":
+		# v0.295.0. The DOR's acceptance of e-signed OR-W-4s is unconfirmed until Tim/the CPA hear from the DOR.
+		data["esignature"] = w4.esignature_status()
 	return {
+		"esignature": data.get("esignature"),
 		"doctype": data.get("doctype"),
 		"name": data.get("name"),
 		"field": data.get("field"),
@@ -5509,6 +5535,8 @@ def submit_form_signature(
 
 	closed = data.get("task") or {}
 	return {
+		# v0.295.0. On the OR-W-4 box: the DOR's acceptance of e-signed OR-W-4s is unconfirmed (Tim/CPA item).
+		"esignature": w4.esignature_status() if data.get("field") == "or_signature" else None,
 		"doctype": data.get("doctype"),
 		"docname": data.get("name"),
 		# `field` RATHER THAN `signature_field` ON THE WAY BACK, because that is

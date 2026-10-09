@@ -483,7 +483,8 @@ OR_STATUSES = ("Single", "Married", "Married, withhold at higher Single rate")
 #: v0.294.0. The fallback order in the 2026 OR-W-4 instructions (Rev. 02-17-26), then a refused certificate.
 OR_SOURCES = ("OR-W-4", "Pre-2020 Oregon-only W-4", "Pre-2020 federal W-4", "Refused")
 OR_KEYS = ("or_w4_on_file", "or_filing_status", "or_allowances", "or_additional_withholding", "or_exempt")
-OR_EXTRA_FIELDS = ("form_kind", "or_exemption_code", "or_redetermination", "or_source", "or_signed_at",
+OR_EXTRA_FIELDS = ("form_kind", "or_exemption_code", "or_redetermination", "or_source", "or_federally_exempt",
+                   "or_signed_at",
                    "or_signed_ip", "or_forward_required", "or_forward_reasons", "or_forward_due", "or_forwarded_on")
 
 
@@ -530,6 +531,8 @@ def oregon_for(employee: str) -> dict:
 	        "allowances": int(row.get("or_allowances") or 0),
 	        "additional_withholding": float(row.get("or_additional_withholding") or 0),
 	        "exempt": bool(int(row.get("or_exempt") or 0)), "tax_year": int(row.get("tax_year") or 0) or None,
+	        # v0.295.0. "No" is an Oregon-only exemption (8%, Pub 150-211-602); blank is not recorded.
+	        "federally_exempt": str(row.get("or_federally_exempt") or "") != "No",
 	        "form": row.get("name")}
 
 
@@ -559,15 +562,19 @@ def or_forwarding(values: dict, employee: str, args: dict, signed_on: str, param
 	if allowances > int(rule["max_allowances"]):
 		reasons.append(f"claims {allowances} allowances (more than {rule['max_allowances']})")
 	if int(values.get("or_exempt") or 0):
-		weekly = _expected_weekly_wages(employee, args)
-		if weekly is None:
-			reasons.append(f"claims exempt and expected wages are not known — send it if they are over "
-			               f"${float(rule['exempt_weekly_wages']):,.0f} a week (or_expected_weekly_wages)")
-		elif weekly > float(rule["exempt_weekly_wages"]):
-			reasons.append(f"claims exempt with expected wages of ${weekly:,.2f} a week (over "
-			               f"${float(rule['exempt_weekly_wages']):,.0f})")
-		if str(values.get("or_exemption_code") or "").strip():
-			reasons.append(f"claims a state-only exemption (line 4a code {values['or_exemption_code']})")
+		federal = str(values.get("or_federally_exempt") or "")
+		if federal == "No":
+			reasons.append("claims an Oregon-only exemption (not exempt federally) — withheld at 8% meanwhile "
+			               "(Publication 150-211-602)")
+		else:
+			weekly = _expected_weekly_wages(employee, args)
+			if weekly is None:
+				reasons.append(f"claims exempt and expected wages are not known — send it if they are over "
+				               f"${float(rule['exempt_weekly_wages']):,.0f} a week (or_expected_weekly_wages)")
+			elif weekly > float(rule["exempt_weekly_wages"]):
+				reasons.append(f"claims exempt with expected wages of ${weekly:,.2f} a week (over "
+				               f"${float(rule['exempt_weekly_wages']):,.0f})")
+
 	if not reasons:
 		return {"or_forward_required": 0, "or_forward_reasons": None, "or_forward_due": None}
 	due = datetime.date.fromisoformat(str(signed_on)[:10]) + datetime.timedelta(days=int(rule["days"]))
@@ -592,7 +599,7 @@ def _submit_or_w4(args: dict) -> ToolResult:
 		raise ToolError("this site has no OR-W-4 form kind yet — run `bench migrate` after upgrading. Nothing was saved.")
 	employee = _resolve_employee(args)
 	company = resolve_company(as_str(args, "company"), required=True)
-	keys = (*OR_KEYS, "or_exemption_code", "or_redetermination", "or_source")
+	keys = (*OR_KEYS, "or_exemption_code", "or_redetermination", "or_source", "or_federally_exempt")
 	if not any(key in args for key in keys):
 		raise ToolError("an OR-W-4 needs its elections: or_filing_status and or_allowances (or or_exempt, or "
 		                f"or_source — one of {', '.join(OR_SOURCES)}). Nothing was saved.")
@@ -616,6 +623,12 @@ def _submit_or_w4(args: dict) -> ToolResult:
 		data={"name": doc.name, "form": "OR-W-4", "employee": employee, "employee_name": emp_name,
 		      "or_source": oregon.get("or_source"), "or_filing_status": oregon.get("or_filing_status"),
 		      "or_allowances": oregon.get("or_allowances"), "or_exempt": bool(oregon.get("or_exempt")),
+		      "warnings": ([] if not oregon.get("or_exempt") or oregon.get("or_federally_exempt") else [
+		          "exempt, but whether the employee is also exempt federally is not recorded (or_federally_exempt) — "
+		          "an Oregon-only exemption is withheld at 8% (Publication 150-211-602)"]) + ([] if not oregon.get(
+		          "or_exempt") or oregon.get("or_exemption_code") else ["exempt without a line 4a exemption code — "
+		                                                                "the form is incomplete"]),
+		      "esignature": esignature_status(),
 		      "superseded": [r["name"] for r in existing], "send_to_dor": forward,
 		      "send_to_dor_reasons": oregon.get("or_forward_reasons"), "send_by": oregon.get("or_forward_due"),
 		      "signature": "collect it with collect_form_signature doctype='W-4 Form' field='or_signature'"},
@@ -631,7 +644,8 @@ def _oregon_w4(args: dict, employee: str) -> dict:
 	if not compat.has_field(W4_FORM, "or_w4_on_file"):
 		return {}
 	keys = OR_KEYS
-	extra = tuple(k for k in ("or_exemption_code", "or_redetermination", "or_source") if compat.has_field(W4_FORM, k))
+	extra = tuple(k for k in ("or_exemption_code", "or_redetermination", "or_source", "or_federally_exempt")
+	              if compat.has_field(W4_FORM, k))
 	if not any(key in args for key in keys + extra):
 		current = oregon_row(employee)
 		return {k: v for k, v in current.items() if k in keys + extra and v not in (None, "")}
@@ -649,10 +663,24 @@ def _oregon_w4(args: dict, employee: str) -> dict:
 	          "or_filing_status": status, "or_allowances": allowances,
 	          "or_additional_withholding": max(as_float(args, "or_additional_withholding", 0.0), 0.0),
 	          "or_exempt": 1 if args.get("or_exempt") else 0}
+	code = (as_str(args, "or_exemption_code") or "").strip().upper()
+	if code:
+		from .. import or_w4_pdf
+
+		if code not in or_w4_pdf.EXEMPTION_CODES:
+			raise ToolError(f"or_exemption_code is one letter from the OR-W-4 exemption chart: "
+			                f"{', '.join(f'{k} ({v})' for k, v in or_w4_pdf.EXEMPTION_CODES.items())}. Nothing was saved.")
+	federal = as_str(args, "or_federally_exempt") or ""
+	if federal and federal.lower() in ("1", "true", "yes"):
+		federal = "Yes"
+	elif federal and federal.lower() in ("0", "false", "no"):
+		federal = "No"
 	if extra:
-		values.update({"or_exemption_code": as_str(args, "or_exemption_code") or None,
+		values.update({"or_exemption_code": code or None,
 		               "or_redetermination": 1 if args.get("or_redetermination") else 0,
 		               "or_source": source or ("OR-W-4" if on_file else None)})
+		if "or_federally_exempt" in extra:
+			values["or_federally_exempt"] = federal or None
 	return values
 
 
@@ -681,7 +709,10 @@ def _resolve_w4(args: dict) -> str:
 	filters = {"employee": employee, "status": "Active"}
 	if tax_year:
 		filters["tax_year"] = tax_year
-	found = frappe.db.get_value(W4_FORM, filters, "name", order_by="tax_year desc, effective_date desc")
+	# v0.294.0. By employee, the FEDERAL W-4 — an OR-W-4 filed on its own is reached with form=or_w4.
+	rows = frappe.db.get_all(W4_FORM, filters=filters, fields=list(compat.existing_fields(W4_FORM, ("name", "form_kind"))),
+	                         order_by="tax_year desc, effective_date desc", limit=50) or []
+	found = next((r["name"] for r in rows if _kind(r) == "W-4"), None)
 	if not found:
 		raise ToolError(
 			f"no active W-4 Form for employee {employee!r}"
@@ -848,10 +879,7 @@ def render_w4_pdf(args: dict) -> ToolResult:
 	is not. `template_tax_year_matches` in the result is how a caller knows.
 	"""
 	if _is_or_w4(args):
-		raise ToolError(
-			"the official Form OR-W-4 (150-101-402) is not bundled with this app yet, so it cannot be filled the way "
-			"the IRS W-4 is. The record itself (get_w4) carries every election, the signature and its date. "
-			"Nothing was changed.")
+		return _render_or_w4(args)
 	w4_pdf.require()
 	name = _resolve_w4(args)
 	row = frappe.db.get_value(W4_FORM, name, _w4_fields(), as_dict=True)
@@ -921,6 +949,71 @@ def render_w4_pdf(args: dict) -> ToolResult:
 		)
 	if data["incomplete"]:
 		summary += f" — {len(data['incomplete'])} box(es) left blank for a pen"
+	return ToolResult(data=data, summary=summary)
+
+
+def _or_w4_name(args: dict) -> str:
+	"""The OR-W-4 row a render is about: a named W-4 Form, else the employee's current Oregon elections."""
+	explicit = as_str(args, "w4_form") or as_str(args, "name")
+	if explicit and frappe.db.exists(W4_FORM, explicit):
+		return explicit
+	employee = _resolve_employee(args)
+	row = oregon_row(employee)
+	if not row:
+		raise ToolError(f"{employee} has no OR-W-4 on file — record one with submit_w4 form=or_w4. Nothing was changed.")
+	return str(row["name"])
+
+
+def esignature_status(as_of: str = "") -> dict:
+	"""v0.295.0. Whether the Oregon DOR has confirmed it accepts e-signed OR-W-4s — a policy value Tim/the CPA sets
+	(payroll setting `oregon_withholding` → `esignature`), shown wherever an OR-W-4 is signed or rendered."""
+	from .. import payroll_settings
+
+	value = dict(payroll_settings.oregon_withholding(as_of).get("esignature") or {})
+	confirmed = bool(value.get("confirmed"))
+	return {"confirmed": confirmed, "note": value.get("note") or (
+		"Oregon DOR acceptance of electronically signed OR-W-4s is UNCONFIRMED. Keep a wet-signed copy until the "
+		"DOR confirms (CPA/DOR item for Tim)." if not confirmed else "Confirmed by the Oregon DOR.")}
+
+
+def _render_or_w4(args: dict) -> ToolResult:
+	"""v0.295.0. Fill the DOR's own Form OR-W-4 (150-101-402) from the record and attach it to `or_generated_pdf`."""
+	from .. import or_w4_pdf
+
+	or_w4_pdf.require()
+	name = _or_w4_name(args)
+	row = frappe.db.get_value(W4_FORM, name, _w4_fields(), as_dict=True)
+	existing = str(frappe.db.get_value(W4_FORM, name, "or_generated_pdf") or "").strip() if compat.has_field(
+		W4_FORM, "or_generated_pdf") else ""
+	if existing and not as_bool(args, "overwrite", False):
+		raise ToolError(f"{name} already has a rendered OR-W-4 at {existing} — likely the copy somebody printed and "
+		                "had signed. Pass overwrite=true to render a fresh page. Nothing was changed.")
+	employee = str(row.get("employee") or "")
+	record = {**dict(row), "name": name}
+	person = _employee_for(employee)
+	employer = _employer_for(str(row.get("company") or ""))
+	ink = _signature_capture({"signature": frappe.db.get_value(W4_FORM, name, "or_signature")}) if compat.has_field(
+		W4_FORM, "or_signature") else None
+	pdf, notes = or_w4_pdf.fill_or_w4_pdf(record, person, employer, signature=ink)
+	file_name = or_w4_pdf.file_name_for(record, person)
+	field = "or_generated_pdf" if compat.has_field(W4_FORM, "or_generated_pdf") else None
+	attachment = artifacts.attach_bytes(W4_FORM, name, file_name, pdf, field=field)
+	if compat.has_field(W4_FORM, "or_generated_pdf_on"):
+		frappe.db.set_value(W4_FORM, name, "or_generated_pdf_on", now(), update_modified=False)
+	tax_year = int(row.get("tax_year") or 0)
+	esign = esignature_status()
+	data = {"name": name, "form": "OR-W-4", "employee": employee, "employee_name": row.get("employee_name"),
+	        "edition": or_w4_pdf.EDITION, "source": or_w4_pdf.SOURCE_URL,
+	        "template_tax_year_matches": tax_year in (0, or_w4_pdf.TEMPLATE_TAX_YEAR),
+	        "file_name": file_name, "file_url": attachment.get("file_url"), "bytes": len(pdf),
+	        "replaced": existing or None, "signed": bool(ink), "notes": notes, "esignature": esign,
+	        "note": "The SSN boxes are left for the employee. The employer block is drawn from I-9 Settings / the "
+	                "Company. Rendering moved no status."}
+	summary = f"OR-W-4 {name} rendered onto the DOR's form as {file_name} ({len(pdf):,} bytes) and attached"
+	if ink and not esign["confirmed"]:
+		summary += " — e-signature acceptance by the Oregon DOR is unconfirmed; keep a wet-signed copy"
+	if notes:
+		summary += f" — {len(notes)} note(s)"
 	return ToolResult(data=data, summary=summary)
 
 
