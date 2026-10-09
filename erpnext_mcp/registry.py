@@ -16121,6 +16121,12 @@ TOOLS = {
 			),
 			"overtime_threshold": _field(_NUMBER, "Hours in a workweek before overtime. Default 40."),
 			"workweek_anchor": _field(_STRING, "First day of the declared workweek as YYYY-MM-DD."),
+			"run_kind": _field(
+				_STRING,
+				"v0.288.0. Regular (default) or Daily. Daily: ONE day (start = end) for the workers on daily pay — "
+				"straight time, piece and the day's minimum-wage makeup, taxes only, reviewed punches only; who waits "
+				"and why is on the answer. With daily pay on for the company, a Regular run leaves those workers out.",
+			),
 			"detail": _field(
 				_BOOLEAN,
 				"Include the per-shift timesheet, the state tax breakdown and the "
@@ -16155,6 +16161,12 @@ TOOLS = {
 			),
 			"overtime_threshold": _field(_NUMBER, "Hours in a workweek before overtime. Default 40."),
 			"workweek_anchor": _field(_STRING, "First day of the declared workweek as YYYY-MM-DD."),
+			"run_kind": _field(
+				_STRING,
+				"v0.288.0. Regular (default) or Daily. Daily: ONE day (start = end) for the workers on daily pay — "
+				"straight time, piece and the day's minimum-wage makeup, taxes only, reviewed punches only; who waits "
+				"and why is on the answer. With daily pay on for the company, a Regular run leaves those workers out.",
+			),
 		},
 		required=("pay_period_start", "pay_period_end"),
 		mutating=True,

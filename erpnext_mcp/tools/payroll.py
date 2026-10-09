@@ -1330,6 +1330,23 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	pay_frequency = as_str(args, "pay_frequency") or "Biweekly"
 	if pay_frequency not in PERIODS_PER_YEAR:
 		raise ToolError(f"pay_frequency must be one of: {', '.join(PERIODS_PER_YEAR)}.")
+	# v0.288.0. Daily pay (docs/design/daily_pay.md): a Daily run is one day for the workers on daily pay; a Regular
+	# run leaves those workers out while daily pay is on for the company.
+	from .. import daily_pay
+
+	run_kind = as_str(args, "run_kind") or "Regular"
+	if run_kind not in ("Regular", "Daily"):
+		raise ToolError("run_kind is Regular or Daily (the weekly Settlement run is not built yet). Nothing was "
+		                f"{'created' if creating else 'calculated'}.")
+	daily = None
+	if run_kind == "Daily":
+		if str(start) != str(end):
+			raise ToolError("a Daily run is one day: pay_period_start and pay_period_end are the same date.")
+		try:
+			daily = daily_pay.day_plan(company, str(start))
+		except daily_pay.DailyPayError as exc:
+			raise ToolError(f"{exc} Nothing was {'created' if creating else 'calculated'}.") from None
+		pay_frequency = "Daily"
 
 	# v0.235.0: the workweek threshold is the `overtime_rule` in force at the period's end
 	# (built-in 40 until a version is published); an explicit argument still wins.
@@ -1343,8 +1360,28 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 
 	only = as_str(args, "employee")
 	employees = [_resolve_employee({"employee": only})] if only else None
+	held_daily: list = []
+	left_out_daily: list = []
+	if daily is not None:
+		# Straight time only — the week's overtime premium is the settlement's (§4); taxes only — deductions and
+		# garnishments are the settlement's too (§5).
+		threshold = 1_000_000.0
+		employees = [e for e in daily["pay"] if not employees or e in employees]
+		held_daily = daily["held"]
+		if not employees:
+			raise ToolError(f"nobody is due daily pay for {start}: "
+			                + "; ".join(f"{h['employee_name']} — {', '.join(h['reasons'])}" for h in held_daily[:20])
+			                + (". " if held_daily else "no worker has opted in. ")
+			                + f"Nothing was {'created' if creating else 'calculated'}.")
+	else:
+		left_out_daily, switched = daily_pay.on_daily_pay(company, str(start), str(end))
+		held_daily = [{"employee": e, "employee_name": frappe.db.get_value(EMPLOYEE, e, "employee_name") or e,
+		               "reasons": ["switched to or from daily pay inside this period — pay the days on each side "
+		                           "with their own runs"]} for e in switched]
 
 	structures = _load_structures(company, employees)
+	for employee in left_out_daily + [h["employee"] for h in held_daily if daily is None]:
+		structures.pop(employee, None)
 	# Before the shifts, because a piece-rate structure with no rate of its own is
 	# not payable until the company table has answered — and the answer has to be
 	# on the structure before `run_integrated_payroll` reads it. Dated to the
@@ -1352,6 +1389,10 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	# it closed.
 	company_rates, missing_rates = _resolve_piece_rates(structures, company, str(end))
 	shifts, provenance = _load_period_shifts(company, start, end, employees=employees)
+	if daily is None and (left_out_daily or held_daily):
+		skip = set(left_out_daily) | {h["employee"] for h in held_daily}
+		for shift_row in shifts:
+			shift_row["crew"] = [m for m in shift_row.get("crew") or [] if m.get("employee") not in skip]
 
 	# v0.63.0. THE WAGE FLOOR, READ OFF THE SITE AND NAMED PER WORKER. Two things
 	# the engine has declared since v0.49.0 and nothing ever supplied: the rate
@@ -1379,6 +1420,10 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	# started mid-period is withheld from the period it started in, which is what
 	# an employer served part way through a fortnight is required to do.
 	deductions_by_employee, deduction_sources = _load_deductions(company, str(end), known)
+	if daily is not None:
+		deductions_by_employee = {}
+		deduction_sources = {"note": "a Daily run withholds taxes only; deductions and garnishments are taken in the "
+		                             "weekly settlement (docs/design/daily_pay.md §5)."}
 
 	slips = payroll_integration.run_integrated_payroll(
 		shifts,
@@ -1422,6 +1467,11 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		"pay_period_start": str(start),
 		"pay_period_end": str(end),
 		"pay_frequency": pay_frequency,
+		# v0.288.0. Daily pay: what kind of run, who waits and why, and when the money lands.
+		"run_kind": run_kind,
+		"daily_pay_held": held_daily,
+		"daily_pay_left_out": left_out_daily,
+		**({"ach_effective_date": daily["ach_effective_date"], "pay_policy": daily["policy_version"]} if daily else {}),
 		"overtime_threshold": threshold,
 		"workweek_anchor": str(anchor) if anchor else str(start),
 		"employees_missing_structures": missing,
@@ -1614,6 +1664,7 @@ def run_payroll_for_period(args: dict) -> ToolResult:
 			"pay_period_end": context["pay_period_end"],
 			"pay_frequency": context["pay_frequency"],
 			"status": "Draft",
+			**({"run_kind": context.get("run_kind") or "Regular"} if compat.has_field(PAYROLL_ENTRY, "run_kind") else {}),
 		}
 	)
 

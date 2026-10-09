@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.288.0 — 2026-10-09 — daily pay, step 2: the daily run
+
+**No migrate.** Deploy `docs/deploy/v0.288.0_daily_run.md`. Tools: **1,142 → 1,142** — the existing period tools take
+`run_kind`.
+
+- **`run_payroll_for_period(run_kind=Daily)`** (and its preview) pays ONE day to the workers on daily pay: straight
+  time and piece, the day's minimum-wage makeup, taxes only (deductions and garnishments wait for the weekly
+  settlement, §5), no overtime premium (the settlement's, §4). Stored as a Farm Payroll Entry with `run_kind` Daily
+  and `pay_frequency` Daily, through the same calculate → submit → GL → NACHA path.
+- **Who is paid and who waits, in words** (`daily_pay.day_plan`): opted in, eligible employment type, the opt-in in
+  force, every punch that day reviewed (Pay Policy), an active direct deposit (`weekly_only` keeps the others on the
+  weekly run), not already paid for that day. Today's run waits for the 18:00 cutoff.
+- **A Regular run leaves daily-pay workers out**, and holds anyone who switched inside the period (pay the days on
+  each side with their own runs). Nobody is paid twice, and nobody falls between the two runs.
+- **NACHA**: a Daily entry's file defaults to the next business day after the day (`ach_timing`). Nothing is sent
+  from here; a person uploads the file to the bank, as today.
+- Still OFF per company (`daily_pay_enabled`). Next: the weekly settlement run (v0.289.0).
+
 ## 0.287.0 — 2026-10-09 — daily pay, step 1: the Pay Policy and the Wage Floor
 
 **Migrate** (two Employee fields, a Farm Payroll Entry field and option; two payroll settings seeded). Deploy

@@ -285,6 +285,13 @@ def generate_nacha_file(args: dict) -> ToolResult:
 	originator = _load_originator(company)
 
 	effective = _effective_date(args, originator)
+	if entry.get("run_kind") == "Daily" and not as_str(args, "effective_entry_date"):
+		# v0.288.0. A day's pay lands when the Pay Policy says: next business day after the day (ach_timing).
+		from .. import daily_pay, payroll_settings
+
+		day = str(entry.get("pay_period_end") or "")[:10]
+		if payroll_settings.pay_policy(day).get("ach_timing") == "next_business_day":
+			effective = max(effective, daily_pay.next_business_day(day))
 	slips = entry.get("slips") or []
 	if not slips:
 		raise ToolError(f"payroll entry {entry['name']} has no slips, so there is nothing to deposit.")
