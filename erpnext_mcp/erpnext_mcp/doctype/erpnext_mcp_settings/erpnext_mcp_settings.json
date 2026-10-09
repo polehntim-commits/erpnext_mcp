@@ -1293,6 +1293,8 @@
   "allow_list_packer_access_log",
   "allow_template",
   "allow_config",
+  "allow_record",
+  "allow_document",
   "allow_list_work_notices",
   "allow_send_work_notice",
   "allow_search_references",
@@ -11046,6 +11048,20 @@
    "fieldname": "allow_config",
    "fieldtype": "Check",
    "label": "Config (every kind)"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.281.0. One tool for the registers (create, update, deactivate, delete, get, list). Each write still needs that type's own switch.",
+   "fieldname": "allow_record",
+   "fieldtype": "Check",
+   "label": "Record (every register)"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.281.0. One tool for documents' submit, cancel, approve, reject, close, reopen. Each change still needs that document's own switch.",
+   "fieldname": "allow_document",
+   "fieldtype": "Check",
+   "label": "Document (submit, cancel, approve …)"
   }
  ],
  "index_web_pages_for_search": 0,

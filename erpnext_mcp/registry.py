@@ -205,6 +205,7 @@ from .tools import pollination_tools
 from .tools import packer_portal_tools
 from .tools import template_tool
 from .tools import config_tool
+from .tools import record_tool
 from .tools import worknotices as work_notice_tools
 from .tools import upload_links as upload_link_tools
 from .tools import crew_tasks as crew_task_tools
@@ -18815,6 +18816,47 @@ TOOLS = {
 		required=("action",),
 		mutating=True,
 		title="Config (every kind)",
+	),
+	"record": _tool(
+		record_tool.record,
+		"MUTATING (default OFF). v0.281.0. ONE tool for the registers: create, update, deactivate, delete, get and list "
+		"any record type that has its own tools — supplier, customer, item, field, crop, warehouse, asset type, "
+		"compliance rule, housing unit, market, certification, … (about 140 types).\n\n"
+		"action: types (every type and what it can do — start here) | describe (one type's arguments per action) | "
+		"create | update | deactivate | delete | get | list.\n\n"
+		"name = the record (get, update, deactivate, delete); body = the fields (create, update), shaped as describe "
+		"shows; filters = list arguments. Each action runs that type's existing tool under its own switch, so the type "
+		"keeps its validation, company scoping and answer; a write needs allow_record AND that tool's switch. Money, "
+		"HR and security records (employees, I-9, payroll, bank, tax, journals, signing, tokens, roles) are not on "
+		"this tool. The per-type tools remain.",
+		{"action": _field(_STRING, "types, describe, create, update, deactivate, delete, get, list."),
+		 "type": _field(_STRING, "The record type, e.g. supplier, field, housing_unit (record action=types lists them)."),
+		 "name": _field(_STRING, "The record (get, update, deactivate, delete)."),
+		 "body": _field(_OBJECT, "create / update: the fields, as the type's own tool takes them."),
+		 "filters": _field(_OBJECT, "list: the type's list arguments (limit, company, …)."),
+		 "reason": _field(_STRING, "deactivate / delete: why, where the type asks.")},
+		required=("action",),
+		mutating=True,
+		title="Record (every register)",
+	),
+	"document": _tool(
+		record_tool.document,
+		"MUTATING (default OFF). v0.281.0. ONE tool for documents' state changes: submit, cancel, approve, reject, "
+		"close, reopen — purchase order, purchase receipt, purchase and sales invoice, stock entry, scale ticket, "
+		"settlement statement, expense receipt, leave request, inspection session, compliance rule, farm task, shift, ….\n\n"
+		"action: types (every document type and the changes it allows — start here) | describe | submit | cancel | "
+		"approve | reject | close | reopen. name = the document; reason where the change asks for one.\n\n"
+		"Each change runs that document's existing tool under its own switch and rules (who may approve, what must be "
+		"filled before submit). A change needs allow_document AND that tool's switch. Journal entries, payments, "
+		"payroll and I-9 keep their own tools. The per-document tools remain.",
+		{"action": _field(_STRING, "types, describe, submit, cancel, approve, reject, close, reopen."),
+		 "type": _field(_STRING, "The document type, e.g. purchase_order (document action=types lists them)."),
+		 "name": _field(_STRING, "The document."),
+		 "body": _field(_OBJECT, "Any other argument the document's own tool takes (describe shows them)."),
+		 "reason": _field(_STRING, "reject / cancel: why, where the document asks.")},
+		required=("action",),
+		mutating=True,
+		title="Document (submit, cancel, approve …)",
 	),
 	"list_seasonal_work": _tool(
 		seasonal_tools.list_seasonal_work,

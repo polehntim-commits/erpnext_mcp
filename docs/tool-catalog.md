@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1138 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1140 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -21190,6 +21190,15 @@ Off per company until `packer_portal_enabled`. Contract: `docs/contracts/packer_
 The per-kind template tools stay. Six config kinds (market_commodity, seasonal_program, job_template,
 supplier_connector, input_plan, pollination_plan) join the generic config tools (list / get / draft / stage /
 publish / rollback / diff / preview_config).
+
+## v0.281.0 — one record tool, one document tool (consolidation phase 3)
+
+| Tool | What it does |
+| --- | --- |
+| `record` | Every register with its own tools (134 types): types, describe, create, update, deactivate, delete, get, list. Each action runs that type's existing tool under its own switch. Write |
+| `document` | Every document's state changes (31 types): types, describe, submit, cancel, approve, reject, close, reopen. Each runs the document's existing tool under its own switch. Write |
+
+Money, HR and security records keep their own tools; every per-type tool stays.
 
 ## v0.280.0 — one config tool (consolidation phase 2)
 

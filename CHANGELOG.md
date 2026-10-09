@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.281.0 — 2026-10-08 — one record tool, one document tool (consolidation phase 3)
+
+**No migrate** (two new switches, off). Deploy `docs/deploy/v0.281.0_record_document.md`.
+Tools: **1,138 → 1,140** (two added; nothing removed or hidden).
+
+- **`record(action, type, …)`** — types, describe, create, update, deactivate, delete, get, list — for 134 register
+  types that have their own tools (supplier, customer, item, field, crop, warehouse, compliance rule, housing unit,
+  market, certification, …).
+- **`document(action, type, name)`** — types, describe, submit, cancel, approve, reject, close, reopen — for 31
+  document types (purchase order / receipt / invoice, sales invoice, stock entry, scale ticket, settlement statement,
+  expense receipt, leave request, inspection session, farm task, shift, …).
+- **The type tables are read from the registry** by the tools' own names (`create_supplier` → `supplier`), so a
+  register that gains tools joins with no code change. `describe` shows each action's tool and its arguments.
+- **Every action runs that type's existing tool under its own switch**, so validation, company scoping and the answer
+  are the type's own. A write needs `allow_record` / `allow_document` AND that tool's switch.
+- **Not on these tools:** employees and family, I-9, W-4, payroll, NACHA, bank, payments, tax, journals, ledgers,
+  accounting periods, loans and notes, cap table, signing and seals, tokens, OAuth clients, roles, feature flags.
+  They keep their own tools.
+- Every per-type tool stays, including the ones the scheduled runs call.
+
 ## 0.280.0 — 2026-10-08 — one config tool (consolidation phase 2)
 
 **No migrate** (one new switch, off). Deploy `docs/deploy/v0.280.0_config_tool.md`.
