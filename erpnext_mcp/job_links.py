@@ -214,17 +214,38 @@ def create_job(template_key: str, company: str, *, fields=(), supplier="", purch
 	doc.show_sop = 1 if body.get("show_sop") else 0
 	doc.actions = json.dumps(body.get("actions") or {})
 	doc.post_completion = json.dumps(body.get("post_completion") or [])
-	if entrance:
-		doc.entrance_lat, doc.entrance_lon = float(entrance[0]), float(entrance[1])
-	if delivery_spot:
-		doc.delivery_spot_lat, doc.delivery_spot_lon = float(delivery_spot[0]), float(delivery_spot[1])
-		doc.delivery_spot_label = delivery_spot_label or "Delivery spot"
 	for field in resolved:
 		doc.append("fields", {"field": field, "field_name": frappe.db.get_value("Field", field, "field_name") or field})
 	doc.insert(ignore_permissions=True)
+	# v0.286.0: the entrance and the delivery spot are Field Pins of the job (pins.py), not columns on it.
+	if entrance:
+		set_point(doc.name, "Entrance", entrance, company=company)
+	if delivery_spot:
+		set_point(doc.name, "Delivery Spot", delivery_spot, label=delivery_spot_label or "Delivery spot", company=company)
 	doc.prep_tasks = "\n".join(_raise_prep(doc, body))
 	doc.save(ignore_permissions=True)
 	return doc.name
+
+
+def set_point(job: str, kind: str, point, *, label: str = "", company: str = "") -> str:
+	"""A job's entrance, delivery spot or loading area — one Field Pin each."""
+	from . import pins
+
+	try:
+		return pins.put(JOB, job, kind, point[0], point[1], label=label or kind,
+		                company=company or frappe.db.get_value(JOB, job, "company"))
+	except pins.PinError as exc:
+		raise JobError(str(exc)) from None
+
+
+def _point_of(job: str, *kinds) -> dict | None:
+	from . import pins
+
+	for kind in kinds:
+		pin = pins.one(JOB, job, kind)
+		if pin:
+			return {"lat": pin["latitude"], "lon": pin["longitude"], "label": pin.get("label") or kind}
+	return None
 
 
 def _raise_prep(doc, body: dict) -> list:
@@ -399,23 +420,15 @@ def links_of(job: str = "", company: str = "", include_views: bool = True) -> li
 
 # ── what the page shows — ONLY this job ──────────────────────────────────────
 def _hazards(job_doc) -> list:
-	from . import field_card
+	"""The valves and hazard markers the template shows, from the one map layer (pins.layer, v0.286.0)."""
+	from . import pins
 
 	layers = {line.strip() for line in str(job_doc.hazard_layers or "").splitlines() if line.strip()}
 	if not layers:
 		return []
-	out, seen = [], set()
-	for row in job_doc.get("fields") or []:
-		for h in field_card.hazards(row.get("field")):
-			if h["name"] in seen:
-				continue
-			is_valve = h.get("asset_type") == "Irrigation Valve"
-			if (is_valve and "valves" not in layers) or (not is_valve and "hazards" not in layers):
-				continue
-			seen.add(h["name"])
-			out.append({"kind": "valve" if is_valve else "hazard", "lat": h["latitude"], "lon": h["longitude"],
-			            "label": "Valve — protect" if is_valve else (h.get("description") or "Hazard — avoid")[:80]})
-	return out
+	blocks = [row.get("field") for row in job_doc.get("fields") or []]
+	return [{k: item[k] for k in ("kind", "lat", "lon", "label")}
+	        for item in pins.layer(blocks=blocks, include=tuple(layers & {"valves", "hazards"}))]
 
 
 def _outlines(job_doc) -> list:
@@ -453,10 +466,9 @@ def page_data(job: str) -> dict:
 		"end_date": str(doc.end_date or "") or None,
 		"contact": {"name": doc.contact_name or None,
 		            "phone": doc.contact_phone if cint(doc.show_contact_phone) else None},
-		"entrance": {"lat": doc.entrance_lat, "lon": doc.entrance_lon} if doc.entrance_lat and doc.entrance_lon else None,
-		"delivery_spot": ({"lat": doc.delivery_spot_lat, "lon": doc.delivery_spot_lon,
-		                   "label": doc.delivery_spot_label or "Delivery spot"}
-		                  if doc.delivery_spot_lat and doc.delivery_spot_lon else None),
+		"entrance": ({k: v for k, v in entrance.items() if k != "label"} if (entrance := _point_of(doc.name, "Entrance"))
+		             else None),
+		"delivery_spot": _point_of(doc.name, "Delivery Spot", "Loading Area"),
 		"gate_notes": doc.gate_notes or None,
 		"sop_link": doc.sop_link if cint(doc.show_sop) and doc.sop_link else None,
 		"blocks": _outlines(doc),

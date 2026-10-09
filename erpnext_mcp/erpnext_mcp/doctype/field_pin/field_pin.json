@@ -1,0 +1,150 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-09 12:00:00.000000",
+ "description": "v0.286.0 (pattern P3). A point on the farm map that belongs to a piece of work: a job's entrance, delivery spot or loading area, a pollination season's hive drops. One table for every kind; valves and hazard markers stay assets and are read by the same map layer (erpnext_mcp/pins.py).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "pin_kind",
+  "label",
+  "latitude",
+  "longitude",
+  "field",
+  "company",
+  "col_1",
+  "source_doctype",
+  "source",
+  "pin_key",
+  "quantity",
+  "pallets",
+  "notes",
+  "moved_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "pin_kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Entrance\nDelivery Spot\nLoading Area\nHive Drop",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "reqd": 1,
+   "precision": "7"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "reqd": 1,
+   "precision": "7"
+  },
+  {
+   "fieldname": "field",
+   "fieldtype": "Link",
+   "label": "Block",
+   "options": "Field",
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "col_1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "For Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Dynamic Link",
+   "label": "For",
+   "options": "source_doctype",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "pin_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "description": "The pin's id within what it is for (a hive drop's id, e.g. BING-1)."
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Int",
+   "label": "Quantity",
+   "description": "What the pin holds — a hive drop's hives."
+  },
+  {
+   "fieldname": "pallets",
+   "fieldtype": "Int",
+   "label": "Pallets"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "moved_by",
+   "fieldtype": "Data",
+   "label": "Moved By",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-09 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Field Pin",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "label",
+ "track_changes": 1
+}

@@ -279,6 +279,37 @@ def _save_op(doc, op: dict) -> None:
 	doc.save(ignore_permissions=True)
 
 
+# v0.286.0 (P3): the season's drops and loading area are Field Pins of the job (pins.py), not JSON in `operation`.
+def _drops(doc) -> list:
+	from . import pins
+
+	out = []
+	for pin in pins.of(JOB, doc.name, "Hive Drop"):
+		drop = {"id": pin["pin_key"], "block": pin.get("field"), "block_name": pin.get("label") or pin.get("field"),
+		        "lat": pin["latitude"], "lon": pin["longitude"], "hives": int(pin.get("quantity") or 0),
+		        "pallets": int(pin.get("pallets") or 0)}
+		if pin.get("moved_by"):
+			drop["moved_by"] = pin["moved_by"]
+		out.append(drop)
+	return out
+
+
+def _put_drops(doc, drops: list) -> None:
+	from . import pins
+
+	for d in drops:
+		pins.put(JOB, doc.name, "Hive Drop", d["lat"], d["lon"], key=d["id"], label=d.get("block_name") or d["block"],
+		         field=d["block"], company=doc.company, quantity=int(d.get("hives") or 0),
+		         pallets=int(d.get("pallets") or 0), moved_by=d.get("moved_by") or "")
+
+
+def _loading_area(doc):
+	from . import pins
+
+	pin = pins.one(JOB, doc.name, "Loading Area")
+	return [pin["latitude"], pin["longitude"]] if pin else None
+
+
 def create_job(company: str, season, *, supplier: str = "", start_date: str = "", end_date: str = "",
                contact_name: str = "", contact_phone: str = "", actor: str = "") -> dict:
 	"""The season's Pollination job from the published plan, with the crew's trips raised (held until delivery)."""
@@ -296,16 +327,18 @@ def create_job(company: str, season, *, supplier: str = "", start_date: str = ""
 	area = body.get("loading_area")
 	name = job_links.create_job("pollination", company, fields=body.get("fields") or [], supplier=supplier,
 	                            title=f"Pollination {season}", start_date=start_date, end_date=end_date,
-	                            contact_name=contact_name, contact_phone=contact_phone,
-	                            delivery_spot=tuple(area) if area else None, delivery_spot_label="Loading area — set the pallets here",
-	                            actor=actor)
+	                            contact_name=contact_name, contact_phone=contact_phone, actor=actor)
+	if area:
+		job_links.set_point(name, "Loading Area", area, label="Loading area — set the pallets here", company=company)
 	doc = frappe.get_doc(JOB, name)
+	drops = body.get("drops") or []
+	_put_drops(doc, drops)
 	op = {"plan": plan_key(company, season), "plan_version": body.get("_version"), "season": str(season),
-	      "drops": body.get("drops") or [], "settings": {k: body.get(k) for k in DEFAULTS if k in body},
-	      "loading_area": area, "expected": sum(int(d.get("hives") or 0) for d in body.get("drops") or []),
+	      "settings": {k: body.get(k) for k in DEFAULTS if k in body},
+	      "expected": sum(int(d.get("hives") or 0) for d in drops),
 	      "distribute": [], "gather": [], "resolutions": {}, "invoice": None}
-	op["distribute"] = _raise_trips(doc, op, DISTRIBUTE, trips({**body, "drops": op["drops"]}), start_date)
-	op["gather"] = _raise_trips(doc, op, GATHER, trips({**body, "drops": op["drops"]}, reverse=True), end_date)
+	op["distribute"] = _raise_trips(doc, op, DISTRIBUTE, trips({**body, "drops": drops}), start_date)
+	op["gather"] = _raise_trips(doc, op, GATHER, trips({**body, "drops": drops}, reverse=True), end_date)
 	_save_op(doc, op)
 	return {"job": name, "expected": op["expected"], "distribute_tasks": [t["task"] for t in op["distribute"]],
 	        "gather_tasks": [t["task"] for t in op["gather"]]}
@@ -316,7 +349,7 @@ def _raise_trips(doc, op: dict, template: str, plan_trips: list, due: str) -> li
 
 	if not frappe.db.get_value("Farm Task Template", {"template_name": template}, "enabled"):
 		return []
-	drops = {d["id"]: d for d in op["drops"]}
+	drops = {d["id"]: d for d in _drops(doc)}
 	made = []
 	for trip in plan_trips:
 		lines = [f"• {drops[i]['block_name']} {i}: {drops[i]['hives']} hives ({drops[i]['pallets']} pallet) at "
@@ -347,7 +380,8 @@ def update_drops(job: str, moves: list, actor: str = "") -> dict:
 	started = [t for t in op["distribute"] if frappe.db.get_value(TASK, t["task"], "state") not in ("Draft", "Available")]
 	if started:
 		raise PollinationError("the crew has started distributing — drops cannot move now.")
-	by_id = {d["id"]: d for d in op["drops"]}
+	current = _drops(doc)
+	by_id = {d["id"]: d for d in current}
 	warnings = []
 	clearance = float(_settings(op.get("settings") or {})["clearance_ft"])
 	for move in moves or []:
@@ -365,15 +399,16 @@ def update_drops(job: str, moves: list, actor: str = "") -> dict:
 		drop.update({"lat": round(lat, 6), "lon": round(lon, 6), "block": block, "moved_by": actor or None})
 		if move.get("hives") is not None:
 			drop["hives"] = int(move["hives"])
-	op["expected"] = sum(int(d.get("hives") or 0) for d in op["drops"])
-	body = {"drops": op["drops"], "loading_area": op.get("loading_area"), **(op.get("settings") or {})}
+	_put_drops(doc, current)
+	op["expected"] = sum(int(d.get("hives") or 0) for d in current)
+	body = {"drops": current, "loading_area": _loading_area(doc), **(op.get("settings") or {})}
 	for name, template, reverse in (("distribute", DISTRIBUTE, False), ("gather", GATHER, True)):
 		for old in op[name]:
 			if old.get("task") and frappe.db.exists(TASK, old["task"]):
 				frappe.db.set_value(TASK, old["task"], "state", "Cancelled")
 		op[name] = _raise_trips(doc, op, template, trips(body, reverse=reverse), "")
 	_save_op(doc, op)
-	return {"job": job, "drops": op["drops"], "expected": op["expected"], "warnings": warnings,
+	return {"job": job, "drops": _drops(doc), "expected": op["expected"], "warnings": warnings,
 	        "trips": [{k: t[k] for k in ("trip", "hives", "minutes", "task")} for t in op["distribute"]]}
 
 
@@ -532,7 +567,7 @@ def hive_map(job: str) -> dict:
 		               "hazards": [{"name": h["name"], "lat": h["latitude"], "lon": h["longitude"],
 		                            "kind": "valve" if h.get("asset_type") == "Irrigation Valve" else "hazard"}
 		                           for h in field_card.hazards(row.get("field"))]})
-	return {"job": job, "loading_area": op.get("loading_area"), "drops": op["drops"], "blocks": blocks,
+	return {"job": job, "loading_area": _loading_area(doc), "drops": _drops(doc), "blocks": blocks,
 	        "distribute": op["distribute"], "gather": op["gather"]}
 
 
@@ -554,7 +589,7 @@ def status(job: str = "", field: str = "", company: str = "") -> dict:
 		op = _op(doc)
 		history.append({"job": row["name"], "season": op.get("season"), "status": row.get("status"),
 		                "counts": counts(row["name"]),
-		                "drops_here": [d for d in op.get("drops") or [] if not field or d.get("block") == field]})
+		                "drops_here": [d for d in _drops(doc) if not field or d.get("block") == field]})
 	return {"field": field or None, "seasons": sorted(history, key=lambda h: h["season"] or "", reverse=True)}
 
 

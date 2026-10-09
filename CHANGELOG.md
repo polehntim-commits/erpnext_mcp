@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.286.0 — 2026-10-09 — field pins (pattern P3)
+
+**Migrate** (one new doctype; five never-deployed columns removed). Deploy `docs/deploy/v0.286.0_field_pins.md`.
+Tools: **1,142 → 1,142**.
+
+- **Field Pin** — one table for the points on the map that belong to a piece of work: a job's **Entrance**,
+  **Delivery Spot** and **Loading Area**, and a pollination season's **Hive Drops** (block, hives, pallets, who moved
+  it). Kind, label, point, block, company, what it is for and a key within that. A new kind of pin is a Select
+  option, not a schema change.
+- Contractor Job loses `entrance_lat/lon` and `delivery_spot_label/lat/lon`; the pollination job's `operation` JSON no
+  longer carries `drops` or `loading_area`. Both are pins now; the counts, trips and resolutions stay on the job.
+- **`pins.layer()` is the one map layer**: a job's (or some blocks') pins together with the valves and hazard
+  markers inside those blocks. Valves and hazard markers stay assets and are read, not copied. The contractor page's
+  hazards come through it.
+- Every answer is unchanged — the contractor page, `get_hive_map`, `update_hive_drops`, `get_pollination_status`,
+  the phone routes. Neither server has run v0.271–v0.285, so nothing moves.
+
 ## 0.285.0 — 2026-10-09 — one share-link engine (pattern P2)
 
 **Migrate** (two new doctypes; four never-deployed ones removed). Deploy `docs/deploy/v0.285.0_share_link_engine.md`.

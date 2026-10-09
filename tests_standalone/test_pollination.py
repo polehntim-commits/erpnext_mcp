@@ -160,7 +160,9 @@ class TheSeason(PollinationCase):
 class MovingDrops(PollinationCase):
 	def test_inside_only_and_never_once_started(self):
 		job = self.season()
-		drop = self.op(job)["drops"][0]
+		drop = pollination.hive_map(job)["drops"][0]
+		self.assertNotIn("drops", self.op(job), "v0.286.0: drops are Field Pins of the job, not JSON on it")
+		self.assertEqual(frappe.db.get_value("Field Pin", {"source": job, "pin_key": drop["id"]}, "pin_kind"), "Hive Drop")
 		with self.assertRaisesRegex(pollination.PollinationError, "outside"):
 			pollination.update_drops(job, [{"id": drop["id"], "lat": 45.60, "lon": -121.20}])
 		out = pollination.update_drops(job, [{"id": drop["id"], "lat": drop["lat"] + 0.00005, "lon": drop["lon"]}], "tim")

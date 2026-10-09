@@ -1731,6 +1731,8 @@ APP_DOCTYPES = {
 	# v0.285.0. One share-link engine for every kind (`share_links`).
 	"Share Link": "share_link",
 	"Share Link View": "share_link_view",
+	# v0.286.0. Points on the map that belong to a piece of work (`pins`).
+	"Field Pin": "field_pin",
 	# v0.272.0. Chemical receiving (`receiving`).
 	"Supplier Delivery Intake": "supplier_delivery_intake",
 	"Supplier Delivery Intake Line": "supplier_delivery_intake_line",

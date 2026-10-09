@@ -5,7 +5,7 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-07 12:00:00.000000",
+ "modified": "2026-10-09 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Contractor Job",
@@ -32,12 +32,7 @@
   "fields",
   "hazard_layers",
   "access_section",
-  "entrance_lat",
-  "entrance_lon",
   "gate_notes",
-  "delivery_spot_label",
-  "delivery_spot_lat",
-  "delivery_spot_lon",
   "col2",
   "sop_link",
   "show_sop",
@@ -161,38 +156,9 @@
    "label": "Access"
   },
   {
-   "fieldname": "entrance_lat",
-   "fieldtype": "Float",
-   "label": "Entrance Latitude",
-   "precision": "7"
-  },
-  {
-   "fieldname": "entrance_lon",
-   "fieldtype": "Float",
-   "label": "Entrance Longitude",
-   "precision": "7"
-  },
-  {
    "fieldname": "gate_notes",
    "fieldtype": "Small Text",
    "label": "Gate / Access Notes"
-  },
-  {
-   "fieldname": "delivery_spot_label",
-   "fieldtype": "Data",
-   "label": "Delivery Spot"
-  },
-  {
-   "fieldname": "delivery_spot_lat",
-   "fieldtype": "Float",
-   "label": "Delivery Spot Latitude",
-   "precision": "7"
-  },
-  {
-   "fieldname": "delivery_spot_lon",
-   "fieldtype": "Float",
-   "label": "Delivery Spot Longitude",
-   "precision": "7"
   },
   {
    "fieldname": "col2",

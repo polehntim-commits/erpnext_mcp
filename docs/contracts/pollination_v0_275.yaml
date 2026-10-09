@@ -24,7 +24,7 @@ pollination_plan:   # Farm Config Version, kind "Pollination Plan" (slug pollina
 
 job:   # Contractor Job, kind Pollination, template "pollination"
   events: "Delivered {counts: {hives, pallets, frame_strength}} → In Progress, distribution trips released; Picked Up {counts} — refused until every gather-up trip is done"
-  operation: "{plan, plan_version, season, drops, loading_area, expected, distribute: [trip], gather: [trip], resolutions, invoice}"
+  operation: "{plan, plan_version, season, expected, distribute: [trip], gather: [trip], resolutions, invoice} — drops and loading_area are Field Pins of the job since v0.286.0"
   trip: "{trip, drops: [id], hives, pallets, feet, minutes, task} — nearest-first from the loading area, batched by pallets_per_trip; gather in reverse"
   tasks: "'Distribute hives — trip n of m (h hives)' and 'Gather hives — …', drafts until released; source_workorder pollination:<job>:<template>:<n>"
 

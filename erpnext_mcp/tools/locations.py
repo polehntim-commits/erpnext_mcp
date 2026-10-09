@@ -148,6 +148,8 @@ STATIC_REFERRERS = {
 		# v0.276.0. A block committed to a packer (a child table of Packer Share): deleting it would leave the
 		# packer's portal pointing at ground that is gone.
 		("Packer Share Block", "field"),
+		# v0.286.0. A job's entrance / delivery spot / loading area and a season's hive drops stand on a block.
+		("Field Pin", "field"),
 		# v0.118.0. The device sits in the block; the reading carries a COPY of
 		# where its device sat when it was taken, which is why both are here and
 		# neither is redundant — deleting a block has to reach the historical
@@ -228,6 +230,8 @@ DYNAMIC_REFERRERS = (
 	# v0.285.0. A share link points at its job or packer share — never at a block, but declared like every
 	# dynamic link this app ships.
 	("Share Link", "target", "target_doctype"),
+	# v0.286.0. A pin points at the job it belongs to.
+	("Field Pin", "source", "source_doctype"),
 )
 
 #: The one referring table that is a CHILD TABLE rather than a document. Its own
