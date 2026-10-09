@@ -19,7 +19,7 @@ contractor_job:   # doctype Contractor Job, CJ-YYYY-#####
   fields: "blocks by name or alias (release A lookup); a named group counts"
   sharing: "OFF per issuing company until the feature flag job_links_enabled is on for it — a job for a company that is not live (Constancy) stays a draft"
 
-link:   # doctype Contractor Job Link
+link:   # doctype Share Link, kind Job (v0.285.0; was Contractor Job Link)
   token: "32 random bytes (token_urlsafe), shown ONCE; only SHA-256 kept"
   url: "<farmops_public_url>/farmops/api/job/<token> — under the existing Funnel path; nothing in Funnel changes"
   life: "issue → the earlier of: job closed / cancelled, the job's end date 23:59, issue + link_days. Extend; revoke any time."

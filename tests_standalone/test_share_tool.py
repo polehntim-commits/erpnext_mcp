@@ -83,8 +83,7 @@ class Job(JobCase):
 		self.assertIn(link, json.dumps(listed))
 		self.tool_data("share_link", {"action": "extend", "kind": "job", "name": link, "days": 3})
 		self.tool_data("share_link", {"action": "revoke", "kind": "job", "name": link, "reason": "done"})
-		self.assertTrue(frappe.db.get_value("Contractor Job Link", link, "revoked")
-		                or frappe.db.get_value("Contractor Job Link", link, "status") == "Revoked")
+		self.assertEqual(frappe.db.get_value("Share Link", link, "status"), "Revoked")
 
 	def test_the_old_tools_are_untouched(self):
 		for name in (*JOB_WRITES, "list_job_links", *PACKER_WRITES, "request_upload_url", "issue_enrollment_link"):

@@ -5,7 +5,7 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-08 12:00:00.000000",
+ "modified": "2026-10-09 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Packer Share",
@@ -24,11 +24,7 @@
   "markets",
   "sections",
   "blocks_section",
-  "blocks",
-  "access_section",
-  "credentials",
-  "log_section",
-  "access_log"
+  "blocks"
  ],
  "fields": [
   {
@@ -101,28 +97,6 @@
    "fieldtype": "Table",
    "label": "Blocks",
    "options": "Packer Share Block"
-  },
-  {
-   "fieldname": "access_section",
-   "fieldtype": "Section Break",
-   "label": "Who Has Access"
-  },
-  {
-   "fieldname": "credentials",
-   "fieldtype": "Table",
-   "label": "Credentials",
-   "options": "Packer Share Credential"
-  },
-  {
-   "fieldname": "log_section",
-   "fieldtype": "Section Break",
-   "label": "Access Log"
-  },
-  {
-   "fieldname": "access_log",
-   "fieldtype": "Table",
-   "label": "Access Log",
-   "options": "Packer Share Access"
   }
  ],
  "track_changes": 1,

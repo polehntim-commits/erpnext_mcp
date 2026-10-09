@@ -272,7 +272,7 @@
   }
  ],
  "track_changes": 1,
- "description": "v0.271.0. A contractor work order or supplier delivery / pickup, shared by a time-limited link (Contractor Job Link). docs/contracts/job_links_v0_271.yaml.",
+ "description": "v0.271.0. A contractor work order or supplier delivery / pickup, shared by a time-limited link (Share Link, kind Job). docs/contracts/job_links_v0_271.yaml.",
  "permissions": [
   {
    "read": 1,

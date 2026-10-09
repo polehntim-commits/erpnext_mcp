@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.285.0 — 2026-10-09 — one share-link engine (pattern P2)
+
+**Migrate** (two new doctypes; four never-deployed ones removed). Deploy `docs/deploy/v0.285.0_share_link_engine.md`.
+Tools: **1,142 → 1,142**.
+
+- **One Share Link record for every outside link.** v0.271's Contractor Job Link (+ its view table) and v0.276's
+  Packer Share Credential (+ Packer Share Access) were two copies of one idea; they are now **Share Link** (kind Job or
+  Packer; target, company, contact, status, token hash, expiry, revocation, use count) and **Share Link View** (every
+  page view, data read, action, photo, download and feed pull, one row each). Four tables become two.
+- **`share_links.py`** is the one engine: issue (token shown once, SHA-256 kept, unique and indexed), find (one indexed
+  row — the packer lookup no longer scans every share), record a use, extend (capped by the kind's maximum life; a
+  revoked link stays revoked), revoke one link or every link to a target or contact, expire a closed job's links.
+- **A token of one kind never opens another kind's page**, and every failure still answers the same 404.
+- `job_links` and `packer_portal` keep their functions and answers; the public routes, phone routes and MCP tools
+  are unchanged. What a kind's page shows and which actions it allows stay with the kind.
+- Neither server has run v0.271–v0.284, so no link data moves: the old tables never existed there.
+
 ## 0.284.0 — 2026-10-08 — the whole Action Log, and the 30-day evidence (consolidation phase 6)
 
 **No migrate** (one new read switch, on). Deploy `docs/deploy/v0.284.0_action_log_paging.md`.

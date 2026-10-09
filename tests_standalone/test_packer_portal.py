@@ -116,9 +116,12 @@ class TheCredential(PortalCase):
 		with self.assertRaisesRegex(packer_portal.PortalError, "packer_portal_enabled"):
 			packer_portal.issue_credential(self.share, "Dana")
 		out = self.issue()
-		doc = frappe.get_doc(packer_portal.SHARE, self.share)
-		self.assertEqual(doc.credentials[0].get("token_hash"), hashlib.sha256(out["token"].encode()).hexdigest())
-		self.assertNotIn(out["token"], json.dumps(doc.as_dict(), default=str))
+		# v0.285.0: the credential is a Share Link of kind Packer; only the hash is kept, on it and nowhere else.
+		link = frappe.get_doc("Share Link", packer_portal.credentials(self.share)[0]["link"])
+		self.assertEqual(link.token_hash, hashlib.sha256(out["token"].encode()).hexdigest())
+		self.assertEqual((link.kind, link.target, link.contact_name), ("Packer", self.share, "Dana at OVF"))
+		for doc in (link, frappe.get_doc(packer_portal.SHARE, self.share)):
+			self.assertNotIn(out["token"], json.dumps(doc.as_dict(), default=str))
 		self.assertEqual(packer_portal.find(out["token"])["contact"], "Dana at OVF")
 		self.on(False)
 		self.assertIsNone(packer_portal.find(out["token"]), "the company's portal off")

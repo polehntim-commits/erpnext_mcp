@@ -25566,7 +25566,7 @@ def revoke_job_link(user: str, link=None, reason=None) -> dict:
 
 	_require_job_manager(user, "Revoking a job link")
 	allowed = guard.require_scope(user)
-	job = frappe.db.get_value(job_links.LINK, str(link or ""), "job")
+	job = frappe.db.get_value("Share Link", {"name": str(link or ""), "kind": "Job"}, "target")  # v0.285.0
 	_job_in_scope(user, job, allowed)
 	return job_links.revoke(str(link), user, str(reason or ""))
 

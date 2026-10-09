@@ -27,7 +27,6 @@ import datetime
 import hashlib
 import io
 import json
-import secrets
 
 import frappe
 
@@ -38,7 +37,6 @@ FLAG = "packer_portal_enabled"
 SECTIONS = ("sprays", "ipm", "projections", "clearance", "feed")
 DEFAULT_MARKETS = ("US", "Canada")
 CREDENTIAL_DAYS = 400
-LOG_CAP = 5000
 FORMATS = ("csv", "xlsx", "pdf", "json")
 #: What each section may carry, and nothing else.
 ALLOWED = {
@@ -115,6 +113,9 @@ def create_share(company: str, packer_name: str, fields, *, season: str = "", ma
 
 def issue_credential(share: str, contact_name: str, contact_email: str = "", days: int = CREDENTIAL_DAYS,
                      actor: str = "") -> dict:
+	"""A named credential — a Share Link of kind Packer (v0.285.0) — shown ONCE."""
+	from . import share_links
+
 	doc = frappe.get_doc(SHARE, share)
 	if not enabled(doc.company):
 		raise PortalError(f"the packer portal is off for {doc.company} — turn on `{FLAG}` for it when it goes live.")
@@ -122,21 +123,16 @@ def issue_credential(share: str, contact_name: str, contact_email: str = "", day
 		raise PortalError(f"{share} is {doc.status}.")
 	if not str(contact_name or "").strip():
 		raise PortalError("contact_name: the person this credential is for.")
-	token = secrets.token_urlsafe(32)
-	expires = _now() + datetime.timedelta(days=max(1, min(int(days or CREDENTIAL_DAYS), 800)))
-	doc.append("credentials", {"contact_name": contact_name.strip()[:80], "contact_email": contact_email or None,
-	                           "token_hash": hash_token(token), "issued_at": frappe.utils.now(),
-	                           "expires_at": str(expires)[:19], "revoked": 0, "uses": 0})
-	doc.save(ignore_permissions=True)
-	return {"share": share, "contact": contact_name, "token": token, "url": link_url(token),
-	        "feed": feed_url(), "expires_at": str(expires)[:19], "shown_once": True}
+	made = share_links.issue("Packer", share, company=doc.company, actor=actor, days=days or CREDENTIAL_DAYS,
+	                         contact_name=contact_name, contact_email=contact_email)
+	return {"share": share, "contact": contact_name.strip(), "token": made["token"], "url": made["url"],
+	        "feed": feed_url(), "expires_at": made["expires_at"], "shown_once": True}
 
 
 def link_url(token: str) -> str:
-	from . import settings
+	from . import share_links
 
-	base = settings.farmops_public_url() or str(frappe.utils.get_url() or "").rstrip("/")
-	return f"{base}/farmops/api/packer/{token}"
+	return share_links.url("Packer", token)
 
 
 def feed_url() -> str:
@@ -148,76 +144,58 @@ def feed_url() -> str:
 
 def revoke(share: str, contact_name: str = "", reason: str = "", actor: str = "") -> dict:
 	"""One contact's credential, or (no contact) the whole share."""
+	from . import share_links
+
 	doc = frappe.get_doc(SHARE, share)
-	hit = 0
-	for row in doc.get("credentials") or []:
-		if contact_name and row.get("contact_name") != contact_name:
-			continue
-		if not compat.checked(row.get("revoked")):
-			_set(row, "revoked", 1)
-			_set(row, "revoked_reason", (reason or "revoked")[:140])
-			hit += 1
+	hit = share_links.revoke_target("Packer", share, actor, reason or "revoked", contact_name=contact_name)
 	if not contact_name:
 		doc.status = "Revoked"
-	doc.save(ignore_permissions=True)
+		doc.save(ignore_permissions=True)
 	return {"share": share, "revoked": hit, "status": doc.status}
 
 
-def _set(row, key, value) -> None:
-	if isinstance(row, dict):
-		row[key] = value
-	else:
-		setattr(row, key, value)
+def credentials(share: str) -> list:
+	"""Every credential issued for a share — never the token."""
+	from . import share_links
+
+	return [{"link": r["name"], "contact": r.get("contact_name"), "email": r.get("contact_email"),
+	         "issued_at": r.get("issued_at") or "", "expires_at": r.get("expires_at") or "",
+	         "revoked": r.get("status") == "Revoked", "status": r.get("status"),
+	         "last_used": r.get("last_used_at") or None, "uses": int(r.get("use_count") or 0)}
+	        for r in share_links.links("Packer", target=share)]
 
 
 def find(token: str) -> dict | None:
-	"""{share, contact, index} for a live credential, else None — the same None for every reason."""
-	token = str(token or "")
-	if len(token) < 20 or len(token) > 200:
+	"""{name, share, company, contact} for a live credential, else None — the same None for every reason."""
+	from . import share_links
+
+	row = share_links.find(token, "Packer")
+	if row is None:
 		return None
-	wanted = hash_token(token)
-	now = str(_now())[:19]
-	for row in frappe.db.get_all(SHARE, filters={"status": "Active"}, fields=["name", "company"], limit=500) or []:
-		if not enabled(row["company"]):
-			continue
-		doc = frappe.get_doc(SHARE, row["name"])
-		for index, cred in enumerate(doc.get("credentials") or []):
-			if cred.get("token_hash") != wanted:
-				continue
-			if compat.checked(cred.get("revoked")) or (cred.get("expires_at") and str(cred.get("expires_at"))[:19] < now):
-				return None
-			return {"share": doc.name, "company": doc.company, "contact": cred.get("contact_name"), "index": index}
-	return None
+	share = frappe.db.get_value(SHARE, row["target"], ["status", "company"], as_dict=True) or {}
+	if share.get("status") != "Active" or not enabled(share.get("company")):
+		return None
+	return {**row, "share": row["target"], "company": share.get("company"), "contact": row.get("contact_name")}
 
 
 def log(found: dict, what: str, *, detail: str = "", ip: str = "", user_agent: str = "") -> None:
-	doc = frappe.get_doc(SHARE, found["share"])
-	cred = (doc.get("credentials") or [])[found["index"]]
-	_set(cred, "last_used", frappe.utils.now())
-	_set(cred, "uses", int(cred.get("uses") or 0) + 1)
-	rows = list(doc.get("access_log") or [])
-	doc.set("access_log", rows[-(LOG_CAP - 1):] if len(rows) >= LOG_CAP else rows)
-	doc.append("access_log", {"at": frappe.utils.now(), "contact_name": found["contact"], "what": what[:40],
-	                          "detail": (detail or "")[:140] or None, "ip": (ip or "")[:60] or None,
-	                          "user_agent": (user_agent or "")[:140] or None})
-	doc.save(ignore_permissions=True)
+	from . import share_links
+
+	share_links.record_use(found, what, detail=detail, ip=ip, user_agent=user_agent)
 
 
 def access_log(share: str = "", company: str = "", limit: int = 200) -> list:
-	filters = {}
-	if share:
-		filters["name"] = share
-	if company:
-		filters["company"] = company
+	from . import share_links
+
+	packers = {}
 	out = []
-	for row in frappe.db.get_all(SHARE, filters=filters, fields=["name"], limit=200) or []:
-		doc = frappe.get_doc(SHARE, row["name"])
-		for entry in doc.get("access_log") or []:
-			out.append({"share": doc.name, "packer": doc.packer_name, "at": str(entry.get("at") or ""),
-			            "contact": entry.get("contact_name"), "what": entry.get("what"), "detail": entry.get("detail"),
-			            "ip": entry.get("ip")})
-	out.sort(key=lambda r: r["at"], reverse=True)
-	return out[:max(1, min(int(limit or 200), 2000))]
+	for row in share_links.views("Packer", target=share, company=company, limit=max(1, min(int(limit or 200), 2000))):
+		if row["target"] not in packers:
+			packers[row["target"]] = frappe.db.get_value(SHARE, row["target"], "packer_name")
+		out.append({"share": row["target"], "packer": packers[row["target"]], "at": row["at"],
+		            "contact": row.get("contact_name"), "what": row.get("what"), "detail": row.get("detail"),
+		            "ip": row.get("ip")})
+	return out
 
 
 # ── what the packer sees ─────────────────────────────────────────────────────

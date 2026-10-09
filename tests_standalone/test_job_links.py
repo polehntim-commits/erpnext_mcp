@@ -77,7 +77,7 @@ class TheDraft(JobCase):
 class TheLink(JobCase):
 	def test_shown_once_hashed_and_found(self):
 		data, token = self.ready_and_link()
-		row = frappe.get_doc("Contractor Job Link", data["link"])
+		row = frappe.get_doc("Share Link", data["link"])
 		self.assertEqual(row.token_hash, hashlib.sha256(token.encode()).hexdigest())
 		self.assertNotIn(token, json.dumps(row.as_dict(), default=str))
 		self.assertEqual(job_links.find(token)["name"], data["link"])
@@ -92,9 +92,9 @@ class TheLink(JobCase):
 
 	def test_expiry_and_closing(self):
 		data, token = self.ready_and_link()
-		frappe.db.set_value("Contractor Job Link", data["link"], "expires_at", "2020-01-01 00:00:00")
+		frappe.db.set_value("Share Link", data["link"], "expires_at", "2020-01-01 00:00:00")
 		self.assertIsNone(job_links.find(token))
-		self.assertEqual(frappe.db.get_value("Contractor Job Link", data["link"], "status"), "Expired")
+		self.assertEqual(frappe.db.get_value("Share Link", data["link"], "status"), "Expired")
 		job_links.extend(data["link"], "tim", days=3)
 		self.assertIsNotNone(job_links.find(token))
 		job_links.close_job(self.job, "tim")
@@ -170,7 +170,7 @@ class OverHTTP(JobCase):
 		bad = [self.post(f"{PREFIX}/job/{t}", method="GET", credential=False) for t in ("nope", token + "x")]
 		self.assertEqual({(r.status_code, r.get_data(as_text=True)) for r in bad}, {(bad[0].status_code, bad[0].get_data(as_text=True))})
 		self.assertEqual(bad[0].status_code, 404)
-		views = frappe.get_doc("Contractor Job Link", _data["link"]).view_count
+		views = frappe.get_doc("Share Link", _data["link"]).use_count
 		self.assertEqual(views, 2)
 
 	def test_assets_are_a_fixed_list(self):

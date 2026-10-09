@@ -4,7 +4,7 @@
 ONE ENGINE, TEMPLATES AS DATA. A Job Template (Farm Config Version, kind "Job Template") says what kind of job it is —
 contractor work, supplier delivery, supplier pickup — its default scope, the prep tasks the crew does first, which
 hazard layers the page draws, which actions the contractor gets, how long a link lives, and what to prompt for when
-the job is done. A Contractor Job is the work order; a Contractor Job Link is one shareable, revocable link to it.
+the job is done. A Contractor Job is the work order; a Share Link of kind Job (v0.285.0) is one shareable, revocable link to it.
 
 THE LINK IS A CREDENTIAL AND IS TREATED AS ONE: 32 random bytes, only the SHA-256 stored; live from issue until the
 job closes or its end date (whichever first), extendable and revocable; every view logged; every token that will
@@ -20,17 +20,13 @@ live yet (Constancy) can be prepared as a draft and cannot be shared.
 from __future__ import annotations
 
 import datetime
-import hashlib
-import hmac
 import json
-import secrets
 
 import frappe
 
 from . import compat
 
 JOB = "Contractor Job"
-LINK = "Contractor Job Link"
 KIND = "Job Template"
 TASK = "Farm Task"
 FLAG = "job_links_enabled"
@@ -49,7 +45,6 @@ DONE_EVENTS = ("Done", "Delivered", "Picked Up")
 CLOSED = ("Closed", "Cancelled")
 MAX_PHOTO_BYTES = 8 * 1024 * 1024
 MAX_NOTE = 1000
-VIEW_LOG_CAP = 500
 PREP_TEMPLATES = ("Gather sprinklers before removal", "Mark valves before removal")
 
 
@@ -300,21 +295,23 @@ def close_job(job: str, actor: str, cancel: bool = False) -> dict:
 	doc = frappe.get_doc(JOB, job)
 	doc.status = "Cancelled" if cancel else "Closed"
 	doc.save(ignore_permissions=True)
-	for name in frappe.db.get_all(LINK, filters={"job": job, "status": "Active"}, pluck="name") or []:
-		frappe.db.set_value(LINK, name, "status", "Expired")
+	from . import share_links
+
+	share_links.expire_target("Job", job)
 	return {"job": job, "status": doc.status}
 
 
-# ── the link ─────────────────────────────────────────────────────────────────
+# ── the link — a Share Link of kind Job (v0.285.0, share_links.py) ─────────
 def hash_token(token: str) -> str:
-	return hashlib.sha256(str(token or "").encode()).hexdigest()
+	from . import share_links
+
+	return share_links.hash_token(token)
 
 
 def link_url(token: str) -> str:
-	from . import settings
+	from . import share_links
 
-	base = settings.farmops_public_url() or str(frappe.utils.get_url() or "").rstrip("/")
-	return f"{base}/farmops/api/job/{token}"
+	return share_links.url("Job", token)
 
 
 def _end_of(day) -> datetime.datetime:
@@ -323,6 +320,8 @@ def _end_of(day) -> datetime.datetime:
 
 def issue_link(job: str, actor: str, days: int | None = None) -> dict:
 	"""A new link — shown ONCE. Refused while sharing is off for the company or the job is not ready."""
+	from . import share_links
+
 	doc = frappe.get_doc(JOB, job)
 	if doc.status in CLOSED:
 		raise JobError(f"{job} is {doc.status}; it cannot be shared.")
@@ -336,91 +335,64 @@ def issue_link(job: str, actor: str, days: int | None = None) -> dict:
 		body_days = int(template(doc.template).get("link_days") or 30) if doc.template else 30
 	except JobError:
 		body_days = 30
-	expires = _now() + datetime.timedelta(days=int(days or body_days))
-	if doc.end_date:
-		expires = min(expires, _end_of(doc.end_date))
-	token = secrets.token_urlsafe(32)
-	link = frappe.new_doc(LINK)
-	link.job = job
-	link.company = doc.company
-	link.status = "Active"
-	link.token_hash = hash_token(token)
-	link.issued_by = actor
-	link.issued_at = frappe.utils.now()
-	link.expires_at = expires.strftime("%Y-%m-%d %H:%M:%S")
-	link.view_count = 0
-	link.insert(ignore_permissions=True)
+	made = share_links.issue("Job", job, company=doc.company, actor=actor, days=days if days else body_days,
+	                         not_after=_end_of(doc.end_date) if doc.end_date else None)
 	if doc.status == "Ready":
 		doc.status = "Shared"
 		doc.save(ignore_permissions=True)
-	return {"link": link.name, "url": link_url(token), "expires_at": link.expires_at, "job": job,
+	return {"link": made["link"], "url": made["url"], "expires_at": made["expires_at"], "job": job,
 	        "shown_once": "Copy or share it now — only its hash is kept."}
 
 
 def find(token: str) -> dict | None:
 	"""The live link and its job, or None — the same None for every kind of failure."""
-	if not token or len(token) > 200:
+	from . import share_links
+
+	row = share_links.find(token, "Job")
+	if row is None:
 		return None
-	digest = hash_token(token)
-	rows = frappe.db.get_all(LINK, filters={"token_hash": digest}, fields=["name", "job", "status", "expires_at",
-	                                                                        "token_hash"], limit=1) or []
-	if not rows or not hmac.compare_digest(str(rows[0].get("token_hash") or ""), digest):
-		return None
-	row = dict(rows[0])
-	if row.get("status") != "Active":
-		return None
-	job = frappe.db.get_value(JOB, row["job"], ["name", "status", "company"], as_dict=True) or {}
+	job = frappe.db.get_value(JOB, row["target"], ["name", "status", "company"], as_dict=True) or {}
 	if not job or job.get("status") in CLOSED or not sharing_enabled(job.get("company")):
 		return None
-	if row.get("expires_at") and frappe.utils.get_datetime(row["expires_at"]) < _now():
-		frappe.db.set_value(LINK, row["name"], "status", "Expired")
-		return None
-	return row
+	return {**row, "job": row["target"]}
 
 
 def record_view(link: str, what: str, ip: str, user_agent: str = "") -> None:
-	doc = frappe.get_doc(LINK, link)
-	doc.view_count = int(doc.view_count or 0) + 1
-	doc.last_viewed_at = frappe.utils.now()
-	if len(doc.get("views") or []) < VIEW_LOG_CAP:
-		doc.append("views", {"at": frappe.utils.now(), "ip": (ip or "")[:60], "what": what,
-		                     "user_agent": str(user_agent or "")[:140]})
-	doc.save(ignore_permissions=True)
+	from . import share_links
+
+	row = frappe.db.get_value(share_links.LINK, link, ["name", "kind", "target", "company", "contact_name"],
+	                          as_dict=True)
+	if row:
+		share_links.record_use(dict(row), what, ip=ip, user_agent=user_agent)
 
 
 def extend(link: str, actor: str, days: int = 0, until: str = "") -> dict:
-	doc = frappe.get_doc(LINK, link)
-	if doc.status == "Revoked":
-		raise JobError("a revoked link stays revoked — issue a new one.")
-	new = _end_of(until) if until else _now() + datetime.timedelta(days=int(days or 7))
-	doc.expires_at = new.strftime("%Y-%m-%d %H:%M:%S")
-	doc.status = "Active"
-	doc.save(ignore_permissions=True)
-	return {"link": link, "expires_at": doc.expires_at, "extended_by": actor}
+	from . import share_links
+
+	try:
+		return share_links.extend(link, actor, days=int(days or 7), until=_end_of(until) if until else None)
+	except share_links.ShareLinkError as exc:
+		raise JobError(str(exc)) from None
 
 
 def revoke(link: str, actor: str, reason: str = "") -> dict:
-	doc = frappe.get_doc(LINK, link)
-	doc.status = "Revoked"
-	doc.revoked_at = frappe.utils.now()
-	doc.revoked_by = actor
-	doc.revoked_reason = reason or None
-	doc.save(ignore_permissions=True)
-	return {"link": link, "status": "Revoked"}
+	from . import share_links
+
+	return share_links.revoke(link, actor, reason)
 
 
 def links_of(job: str = "", company: str = "", include_views: bool = True) -> list:
-	filters = {"job": job} if job else {}
-	if company:
-		filters["job"] = ("in", frappe.db.get_all(JOB, filters={"company": company}, pluck="name") or ["-"])
+	from . import share_links
+
 	out = []
-	for row in frappe.db.get_all(LINK, filters=filters, fields=["name", "job", "status", "issued_by", "issued_at",
-	                                                             "expires_at", "revoked_at", "revoked_by", "view_count",
-	                                                             "last_viewed_at"], order_by="creation desc", limit=500) or []:
-		entry = {k: (str(v) if isinstance(v, (datetime.date, datetime.datetime)) else v) for k, v in dict(row).items()}
+	for row in share_links.links("Job", target=job, company=company):
+		entry = {"name": row["name"], "job": row["target"], "status": row["status"], "issued_by": row["issued_by"],
+		         "issued_at": row["issued_at"], "expires_at": row["expires_at"], "revoked_at": row["revoked_at"],
+		         "revoked_by": row["revoked_by"], "view_count": int(row.get("use_count") or 0),
+		         "last_viewed_at": row["last_used_at"]}
 		if include_views:
-			entry["views"] = [{"at": str(v.get("at") or ""), "ip": v.get("ip"), "what": v.get("what")}
-			                  for v in (frappe.get_doc(LINK, row["name"]).get("views") or [])][-50:]
+			entry["views"] = [{"at": v["at"], "ip": v["ip"], "what": v["what"]}
+			                  for v in share_links.views("Job", link=row["name"], limit=50)]
 		out.append(entry)
 	return out
 

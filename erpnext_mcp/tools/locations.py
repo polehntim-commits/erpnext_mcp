@@ -225,6 +225,9 @@ DYNAMIC_REFERRERS = (
 	# v0.244.0. An upload link names the record its file went onto — the upload
 	# history, kept like the print history.
 	("Upload Link", "target_name", "target_doctype"),
+	# v0.285.0. A share link points at its job or packer share — never at a block, but declared like every
+	# dynamic link this app ships.
+	("Share Link", "target", "target_doctype"),
 )
 
 #: The one referring table that is a CHILD TABLE rather than a document. Its own
