@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.294.0 — 2026-10-09 — Form OR-W-4 as its own form kind
+
+**Migrate**: W-4 Form gains `form_kind` and the OR-W-4 fields. Deploy `docs/deploy/v0.294.0_or_w4.md`. Tools:
+**1,142 → 1,142**, all reused; `submit_w4`, `list_employees_missing_w4` and `render_w4_pdf` take `form=or_w4`.
+
+- **The OR-W-4 on its own:** `submit_w4 form=or_w4` records it without touching the federal W-4. It has line 4a,
+  the Redetermination box, and its own signature box (`or_signature`, with its own date and IP). A new OR-W-4
+  supersedes the old; a federal W-4 never supersedes an OR-W-4. Payroll reads the federal W-4 and the Oregon
+  elections separately.
+- **Fallback order** (2026 OR-W-4 instructions, Rev. 02-17-26), through `or_source`: OR-W-4, then a pre-2020
+  Oregon-only W-4, then a pre-2020 federal W-4, then 8% (ORS 316.182). A refused certificate is Single with
+  0 allowances (OAR 150-316-0290). The slip's Oregon detail shows `based_on`.
+- **Send to the DOR** (OAR 150-316-0290(4), thresholds in `oregon_withholding.forwarding`): more than 10
+  allowances, exempt with over $200 a week, or a state-only exemption. Each of these is flagged with the reason and
+  a send-by date 20 days from signature. `list_employees_missing_w4 form=or_w4` lists them, along with everyone
+  on the flat 8%.
+- **For review:** the DOR's position on e-signed OR-W-4s; the 20-day reading. The official 150-101-402 PDF is not
+  bundled yet, so `render_w4_pdf form=or_w4` refuses rather than producing a lookalike.
+- Tests: `test_or_w4_form`.
+
 ## 0.293.0 — 2026-10-09 — pay items are never stuck Pending
 
 **Migrate**: Farm Pay Item gains `work_state`. Deploy `docs/deploy/v0.293.0_pay_items.md`. Tools: **1,142 →

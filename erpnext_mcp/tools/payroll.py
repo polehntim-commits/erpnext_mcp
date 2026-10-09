@@ -3373,13 +3373,22 @@ def _floor(rates: dict, pay_date) -> dict:
 
 
 def _load_w4_data(employee: str) -> dict:
-	"""Load the active W-4 for an employee."""
-	name = frappe.db.get_value(
-		W4_FORM,
-		{"employee": employee, "status": "Active"},
-		"name",
-		order_by="tax_year desc, effective_date desc",
-	)
+	"""Load the active W-4 for an employee.
+
+	v0.294.0. The federal W-4 and the Oregon elections are resolved apart: an OR-W-4 filed on its own is never read
+	as a federal W-4, and Oregon follows the newest OR-W-4 (or the fallback order — `w4.oregon_for`)."""
+	from . import w4 as w4_tools
+
+	oregon = w4_tools.oregon_for(employee) if compat.has_field(W4_FORM, "form_kind") else None
+	if oregon is not None:
+		name = w4_tools.federal_row_name(employee)
+	else:
+		name = frappe.db.get_value(
+			W4_FORM,
+			{"employee": employee, "status": "Active"},
+			"name",
+			order_by="tax_year desc, effective_date desc",
+		)
 	if not name:
 		return {
 			"filing_status": "Single",
@@ -3392,7 +3401,7 @@ def _load_w4_data(employee: str) -> dict:
 			"deductions": 0,
 			"extra_withholding_per_period": 0,
 			"_tax_year": 2025,
-			"oregon": {"on_file": False},
+			"oregon": oregon or {"on_file": False},
 		}
 
 	fields = [
@@ -3425,11 +3434,12 @@ def _load_w4_data(employee: str) -> dict:
 		"extra_withholding_per_period": float(row.get("extra_withholding_per_period") or 0),
 		"_tax_year": int(row.get("tax_year") or 2025),
 		# v0.291.0. The employee's OR-W-4 — Oregon withholding follows it, not the federal W-4.
-		"oregon": {"on_file": bool(int(row.get("or_w4_on_file") or 0)),
-		           "filing_status": row.get("or_filing_status") or "Single",
-		           "allowances": int(row.get("or_allowances") or 0),
-		           "additional_withholding": float(row.get("or_additional_withholding") or 0),
-		           "exempt": bool(int(row.get("or_exempt") or 0)), "tax_year": int(row.get("tax_year") or 0) or None},
+		"oregon": oregon if oregon is not None else {
+			"on_file": bool(int(row.get("or_w4_on_file") or 0)),
+			"filing_status": row.get("or_filing_status") or "Single",
+			"allowances": int(row.get("or_allowances") or 0),
+			"additional_withholding": float(row.get("or_additional_withholding") or 0),
+			"exempt": bool(int(row.get("or_exempt") or 0)), "tax_year": int(row.get("tax_year") or 0) or None},
 	}
 
 

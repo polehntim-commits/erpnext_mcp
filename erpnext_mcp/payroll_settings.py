@@ -430,7 +430,7 @@ def _validate_oregon(body: dict, for_publish: bool) -> dict:
 
 	errors, warnings = [], []
 	for field in OR_WITHHOLDING_2026:
-		if field not in body:
+		if field not in body and field != "forwarding":  # v0.294.0: optional; the seed's rule applies when absent
 			errors.append(f"{field} is required (see the seed for its shape)")
 	if not str(body.get("source") or "").strip():
 		errors.append("source: the DOR publication and revision these figures come from")

@@ -103,6 +103,9 @@ def _w4_fields() -> list[str]:
 		# v0.291.0. The employee's Oregon OR-W-4, where this site has the columns.
 		*compat.existing_fields(W4_FORM, ("or_w4_on_file", "or_filing_status", "or_allowances",
 		                                   "or_additional_withholding", "or_exempt")),
+		# v0.294.0. The OR-W-4 as its own form kind: line 4a, the Redetermination box, what Oregon withholding is
+		# based on (the fallback order), its own signature date, and whether the DOR must be sent a copy.
+		*compat.existing_fields(W4_FORM, OR_EXTRA_FIELDS),
 	]
 
 
@@ -275,14 +278,38 @@ def list_employees_missing_w4(args: dict) -> ToolResult:
 		fields=["name", "employee_name", "company", "date_of_joining"],
 	)
 
+	if _is_or_w4(args):
+		return _missing_or_w4(employees)
+
 	missing = []
 	for emp in employees:
-		has_w4 = frappe.db.exists(W4_FORM, {"employee": emp["name"], "status": "Active"})
+		has_w4 = federal_row_name(emp["name"]) if compat.has_field(W4_FORM, "form_kind") else frappe.db.exists(
+			W4_FORM, {"employee": emp["name"], "status": "Active"})
 		if not has_w4:
 			missing.append(dict(emp))
 
 	data = {"employees": missing, "count": len(missing)}
 	return ToolResult(data=data, summary=f"{len(missing)} active employee(s) without a W-4")
+
+
+def _missing_or_w4(employees: list) -> ToolResult:
+	"""v0.294.0. `form=or_w4`: who Oregon withholds a flat 8% from (no OR-W-4 and nothing in the fallback order), and
+	which certificates must still be sent to the DOR."""
+	missing, to_send = [], []
+	for emp in employees:
+		row = oregon_row(emp["name"])
+		if not row:
+			missing.append({**dict(emp), "withheld_at": "flat 8% (ORS 316.182) until an OR-W-4 is entered"})
+		elif int(row.get("or_forward_required") or 0) and not row.get("or_forwarded_on"):
+			to_send.append({"employee": emp["name"], "employee_name": emp.get("employee_name"), "form": row["name"],
+			                "why": row.get("or_forward_reasons"), "send_by": str(row.get("or_forward_due") or "")[:10]})
+	to_send.sort(key=lambda r: r["send_by"])
+	return ToolResult(
+		data={"form": "OR-W-4", "employees": missing, "count": len(missing), "send_to_dor": to_send,
+		      "note": "Only workers paid Oregon wages need one; an employee who works only in Washington can be "
+		              "ignored here."},
+		summary=f"{len(missing)} active employee(s) without an OR-W-4; {len(to_send)} certificate(s) to send to "
+		        "the Oregon DOR")
 
 
 def calculate_payroll_taxes(args: dict) -> ToolResult:
@@ -349,6 +376,8 @@ def submit_w4(args: dict) -> ToolResult:
 	per-person roster and is unchanged by this release.
 	"""
 	employee_tool.require_hiring_role()
+	if _is_or_w4(args):
+		return _submit_or_w4(args)
 	employee = _resolve_employee(args)
 	company = resolve_company(as_str(args, "company"), required=True)
 	tax_year = as_int(args, "tax_year")
@@ -378,9 +407,15 @@ def submit_w4(args: dict) -> ToolResult:
 	existing = frappe.db.get_all(
 		W4_FORM,
 		filters={"employee": employee, "tax_year": tax_year, "status": "Active"},
-		fields=["name"],
+		fields=list(compat.existing_fields(W4_FORM, ("name", "form_kind"))),
 	)
+	# v0.294.0. A federal W-4 supersedes federal W-4s only — an OR-W-4 filed on its own stands.
+	existing = [row for row in existing if _kind(row) == "W-4"]
 	oregon = _oregon_w4(args, employee)
+	if oregon and compat.has_field(W4_FORM, "or_forward_required") and any(k in args for k in OR_KEYS):
+		oregon.update(or_forwarding(oregon, employee, args, frappe.utils.today()))
+	if compat.has_field(W4_FORM, "form_kind"):
+		oregon["form_kind"] = "W-4"
 
 	doc = frappe.get_doc(
 		{
@@ -445,6 +480,148 @@ def submit_w4(args: dict) -> ToolResult:
 
 
 OR_STATUSES = ("Single", "Married", "Married, withhold at higher Single rate")
+#: v0.294.0. The fallback order in the 2026 OR-W-4 instructions (Rev. 02-17-26), then a refused certificate.
+OR_SOURCES = ("OR-W-4", "Pre-2020 Oregon-only W-4", "Pre-2020 federal W-4", "Refused")
+OR_KEYS = ("or_w4_on_file", "or_filing_status", "or_allowances", "or_additional_withholding", "or_exempt")
+OR_EXTRA_FIELDS = ("form_kind", "or_exemption_code", "or_redetermination", "or_source", "or_signed_at",
+                   "or_signed_ip", "or_forward_required", "or_forward_reasons", "or_forward_due", "or_forwarded_on")
+
+
+def _kind(row: dict) -> str:
+	return str(row.get("form_kind") or "W-4")
+
+
+def _active_rows(employee: str, fields: list) -> list:
+	"""The employee's Active W-4 Form rows, newest first."""
+	return [dict(r) for r in frappe.db.get_all(
+		W4_FORM, filters={"employee": employee, "status": "Active"}, fields=list(compat.existing_fields(W4_FORM, fields)),
+		order_by="effective_date desc, creation desc", limit=50) or []]
+
+
+def federal_row_name(employee: str) -> str:
+	"""v0.294.0. The employee's active FEDERAL W-4 — never an OR-W-4 filed on its own."""
+	rows = _active_rows(employee, ["name", "form_kind", "tax_year", "effective_date"])
+	rows.sort(key=lambda r: (int(r.get("tax_year") or 0), str(r.get("effective_date") or "")), reverse=True)
+	return next((r["name"] for r in rows if _kind(r) == "W-4"), "")
+
+
+def oregon_row(employee: str) -> dict:
+	"""v0.294.0. The newest Active row carrying the employee's Oregon elections — an OR-W-4 filed on its own, or a W-4
+	that carries the Oregon fields — or {}."""
+	for row in _active_rows(employee, ["name", *OR_KEYS, *OR_EXTRA_FIELDS, "tax_year", "effective_date"]):
+		if _kind(row) == "OR-W-4" or int(row.get("or_w4_on_file") or 0) or row.get("or_source"):
+			return row
+	return {}
+
+
+def oregon_for(employee: str) -> dict:
+	"""What Oregon withholding follows for this employee (`state_withholding` reads it). The fallback order:
+	the OR-W-4; a pre-2020 Oregon-only W-4; a pre-2020 federal W-4; then the flat 8% (ORS 316.182). A REFUSED
+	certificate is Single with no allowances (OAR 150-316-0290)."""
+	row = oregon_row(employee)
+	source = str(row.get("or_source") or ("OR-W-4" if int(row.get("or_w4_on_file") or 0) else ""))
+	if not source:
+		return {"on_file": False, "source": ""}
+	if source == "Refused":
+		return {"on_file": True, "source": source, "filing_status": "Single", "allowances": 0,
+		        "additional_withholding": 0.0, "exempt": False, "tax_year": int(row.get("tax_year") or 0) or None,
+		        "form": row.get("name")}
+	return {"on_file": True, "source": source, "filing_status": row.get("or_filing_status") or "Single",
+	        "allowances": int(row.get("or_allowances") or 0),
+	        "additional_withholding": float(row.get("or_additional_withholding") or 0),
+	        "exempt": bool(int(row.get("or_exempt") or 0)), "tax_year": int(row.get("tax_year") or 0) or None,
+	        "form": row.get("name")}
+
+
+def _expected_weekly_wages(employee: str, args: dict) -> float | None:
+	"""For the exempt-over-$200-a-week test: what the caller says, else 40 hours at the hourly rate, else unknown."""
+	if args.get("or_expected_weekly_wages") not in (None, ""):
+		return as_float(args, "or_expected_weekly_wages", 0.0)
+	row = frappe.db.get_value("Farm Salary Structure", {"employee": employee, "is_active": 1},
+	                          ["pay_type", "base_rate"], as_dict=True) if compat.doctype_exists(
+		"Farm Salary Structure") else None
+	if row and str(row.get("pay_type") or "") == "Hourly" and float(row.get("base_rate") or 0) > 0:
+		return round(float(row["base_rate"]) * 40, 2)
+	return None
+
+
+def or_forwarding(values: dict, employee: str, args: dict, signed_on: str, params: dict | None = None) -> dict:
+	"""v0.294.0. Whether a copy goes to the Oregon DOR (OAR 150-316-0290(4)), why, and by when. The thresholds are
+	the payroll setting `oregon_withholding`'s `forwarding` — config, not code."""
+	import datetime
+
+	from .. import payroll_settings
+
+	rule = {**{"max_allowances": 10, "exempt_weekly_wages": 200.0, "days": 20, "source": "OAR 150-316-0290(4)"},
+	        **((params or payroll_settings.oregon_withholding(signed_on)).get("forwarding") or {})}
+	reasons = []
+	allowances = int(values.get("or_allowances") or 0)
+	if allowances > int(rule["max_allowances"]):
+		reasons.append(f"claims {allowances} allowances (more than {rule['max_allowances']})")
+	if int(values.get("or_exempt") or 0):
+		weekly = _expected_weekly_wages(employee, args)
+		if weekly is None:
+			reasons.append(f"claims exempt and expected wages are not known — send it if they are over "
+			               f"${float(rule['exempt_weekly_wages']):,.0f} a week (or_expected_weekly_wages)")
+		elif weekly > float(rule["exempt_weekly_wages"]):
+			reasons.append(f"claims exempt with expected wages of ${weekly:,.2f} a week (over "
+			               f"${float(rule['exempt_weekly_wages']):,.0f})")
+		if str(values.get("or_exemption_code") or "").strip():
+			reasons.append(f"claims a state-only exemption (line 4a code {values['or_exemption_code']})")
+	if not reasons:
+		return {"or_forward_required": 0, "or_forward_reasons": None, "or_forward_due": None}
+	due = datetime.date.fromisoformat(str(signed_on)[:10]) + datetime.timedelta(days=int(rule["days"]))
+	return {"or_forward_required": 1, "or_forward_reasons": "; ".join(reasons) + f" — {rule['source']}",
+	        "or_forward_due": due.isoformat()}
+
+
+def _is_or_w4(args: dict) -> bool:
+	return str(args.get("form") or "").strip().lower().replace("-", "_") in ("or_w4", "orw4", "oregon")
+
+
+def _request_ip() -> str:
+	return (frappe.local.request.remote_addr
+	        if hasattr(frappe, "local") and hasattr(frappe.local, "request") and frappe.local.request else "")
+
+
+def _submit_or_w4(args: dict) -> ToolResult:
+	"""v0.294.0. Form OR-W-4 on its own (`form=or_w4`): the employee's Oregon elections, line 4a, the Redetermination
+	box, what Oregon withholding is based on, its own signature date — and whether the DOR must be sent a copy, and
+	by when. Supersedes the employee's earlier OR-W-4; the federal W-4 is untouched."""
+	if not compat.has_field(W4_FORM, "form_kind"):
+		raise ToolError("this site has no OR-W-4 form kind yet — run `bench migrate` after upgrading. Nothing was saved.")
+	employee = _resolve_employee(args)
+	company = resolve_company(as_str(args, "company"), required=True)
+	keys = (*OR_KEYS, "or_exemption_code", "or_redetermination", "or_source")
+	if not any(key in args for key in keys):
+		raise ToolError("an OR-W-4 needs its elections: or_filing_status and or_allowances (or or_exempt, or "
+		                f"or_source — one of {', '.join(OR_SOURCES)}). Nothing was saved.")
+	oregon = _oregon_w4(args, employee)
+	today = frappe.utils.today()
+	oregon.update(or_forwarding(oregon, employee, args, today))
+	existing = [r for r in frappe.db.get_all(W4_FORM, filters={"employee": employee, "status": "Active"},
+	                                         fields=["name", "form_kind"]) or [] if _kind(r) == "OR-W-4"]
+	doc = frappe.get_doc({
+		"doctype": W4_FORM, "form_kind": "OR-W-4", "employee": employee, "company": company,
+		"tax_year": as_int(args, "tax_year", int(today[:4])), "status": "Active", "effective_date": today,
+		**oregon, "or_signed_at": now(), "or_signed_ip": _request_ip(),
+	})
+	doc.flags.ignore_permissions = True
+	doc.insert()
+	for old in existing:
+		frappe.db.set_value(W4_FORM, old["name"], {"status": "Superseded", "superseded_by": doc.name})
+	emp_name = frappe.db.get_value(EMPLOYEE, employee, "employee_name") or employee
+	forward = bool(oregon.get("or_forward_required"))
+	return ToolResult(
+		data={"name": doc.name, "form": "OR-W-4", "employee": employee, "employee_name": emp_name,
+		      "or_source": oregon.get("or_source"), "or_filing_status": oregon.get("or_filing_status"),
+		      "or_allowances": oregon.get("or_allowances"), "or_exempt": bool(oregon.get("or_exempt")),
+		      "superseded": [r["name"] for r in existing], "send_to_dor": forward,
+		      "send_to_dor_reasons": oregon.get("or_forward_reasons"), "send_by": oregon.get("or_forward_due"),
+		      "signature": "collect it with collect_form_signature doctype='W-4 Form' field='or_signature'"},
+		summary=f"OR-W-4 recorded for {emp_name}"
+		+ (f" — send a copy to the Oregon DOR by {oregon.get('or_forward_due')}" if forward else ""),
+	)
 
 
 def _oregon_w4(args: dict, employee: str) -> dict:
@@ -453,21 +630,30 @@ def _oregon_w4(args: dict, employee: str) -> dict:
 	drops it."""
 	if not compat.has_field(W4_FORM, "or_w4_on_file"):
 		return {}
-	keys = ("or_w4_on_file", "or_filing_status", "or_allowances", "or_additional_withholding", "or_exempt")
-	if not any(key in args for key in keys):
-		current = frappe.db.get_value(W4_FORM, {"employee": employee, "status": "Active"}, list(keys), as_dict=True,
-		                              order_by="tax_year desc, effective_date desc")
-		return {k: v for k, v in dict(current or {}).items() if v not in (None, "")}
+	keys = OR_KEYS
+	extra = tuple(k for k in ("or_exemption_code", "or_redetermination", "or_source") if compat.has_field(W4_FORM, k))
+	if not any(key in args for key in keys + extra):
+		current = oregon_row(employee)
+		return {k: v for k, v in current.items() if k in keys + extra and v not in (None, "")}
 	status = as_str(args, "or_filing_status") or "Single"
 	if status not in OR_STATUSES:
 		raise ToolError(f"or_filing_status is one of: {', '.join(OR_STATUSES)}. Nothing was saved.")
 	allowances = as_int(args, "or_allowances", 0)
 	if allowances < 0:
 		raise ToolError("or_allowances can't be negative. Nothing was saved.")
-	return {"or_w4_on_file": 1 if args.get("or_w4_on_file", True) not in (False, 0, "0", "false") else 0,
-	        "or_filing_status": status, "or_allowances": allowances,
-	        "or_additional_withholding": max(as_float(args, "or_additional_withholding", 0.0), 0.0),
-	        "or_exempt": 1 if args.get("or_exempt") else 0}
+	source = as_str(args, "or_source") or ""
+	if source and source not in OR_SOURCES:
+		raise ToolError(f"or_source is one of: {', '.join(OR_SOURCES)}. Nothing was saved.")
+	on_file = args.get("or_w4_on_file", source in ("", "OR-W-4")) not in (False, 0, "0", "false")
+	values = {"or_w4_on_file": 1 if on_file else 0,
+	          "or_filing_status": status, "or_allowances": allowances,
+	          "or_additional_withholding": max(as_float(args, "or_additional_withholding", 0.0), 0.0),
+	          "or_exempt": 1 if args.get("or_exempt") else 0}
+	if extra:
+		values.update({"or_exemption_code": as_str(args, "or_exemption_code") or None,
+		               "or_redetermination": 1 if args.get("or_redetermination") else 0,
+		               "or_source": source or ("OR-W-4" if on_file else None)})
+	return values
 
 
 def _resolve_w4(args: dict) -> str:
@@ -661,6 +847,11 @@ def render_w4_pdf(args: dict) -> ToolResult:
 	election rendered on the 2026 page is a readable record, and no form at all
 	is not. `template_tax_year_matches` in the result is how a caller knows.
 	"""
+	if _is_or_w4(args):
+		raise ToolError(
+			"the official Form OR-W-4 (150-101-402) is not bundled with this app yet, so it cannot be filled the way "
+			"the IRS W-4 is. The record itself (get_w4) carries every election, the signature and its date. "
+			"Nothing was changed.")
 	w4_pdf.require()
 	name = _resolve_w4(args)
 	row = frappe.db.get_value(W4_FORM, name, _w4_fields(), as_dict=True)

@@ -372,6 +372,21 @@ SIGNATURE_BOXES = (
 			"knowledge and belief, is true, correct, and complete."
 		),
 	),
+	# v0.294.0. Form OR-W-4 carries its own signature and date — the federal box above is a different form's.
+	SignatureBox(
+		doctype=W4_FORM,
+		field="or_signature",
+		label="OR-W-4 (employee signature)",
+		signed_at_field="or_signed_at",
+		signed_ip_field="or_signed_ip",
+		signer_role="employee",
+		form_label="Form OR-W-4, Oregon Employee's Withholding Statement and Exemption Certificate (150-101-402)",
+		section_label="Signature",
+		attestation=(
+			"Under penalty of false swearing, I declare that the information on this certificate is true, "
+			"correct, and complete."
+		),
+	),
 	# v0.56.0. THE EMPLOYER'S OWN RETURNS, and one box covers four form types
 	# rather than four boxes covering one each: a 941, an OR-WR, an OQ and a
 	# WA-ESD are one column on one doctype, and which of them a given record is
@@ -680,6 +695,9 @@ def _box(args: dict) -> SignatureBox:
 		candidates = [box for box in SIGNATURE_BOXES if box.doctype == resolved]
 		if len(candidates) == 1:
 			return candidates[0]
+		# v0.294.0. A W-4 Form row now has two boxes; unnamed still means the federal W-4's, as it always did.
+		if resolved == W4_FORM:
+			return next(box for box in candidates if box.field == "signature")
 		raise ToolError(
 			f"field is required — {resolved} has more than one signature box, and which one is "
 			f"being signed is the difference between an employee attesting and an employer "

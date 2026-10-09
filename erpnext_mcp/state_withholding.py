@@ -154,6 +154,11 @@ OR_WITHHOLDING_2026 = {
 	},
 	#: HB 2119 (2019): no OR-W-4 (withholding statement or exemption certificate) on file → a flat 8% of wages.
 	"default_flat_rate": 8.0,
+	#: v0.294.0. Certificates the employer sends to the DOR (OAR 150-316-0290(4)): more than 10 allowances, exempt
+	#: with expected wages over $200 a week, or a state-only exemption. "Within 20 days" — of receipt, read here as
+	#: of the employee's signature. Have the CPA confirm the reading.
+	"forwarding": {"max_allowances": 10, "exempt_weekly_wages": 200.0, "days": 20,
+	               "source": "OAR 150-316-0290(4)"},
 }
 
 #: OR-W-4 filing statuses (Form OR-W-4 line 1).
@@ -248,7 +253,10 @@ def calculate_oregon_withholding(
 		extra = float(w4.get("additional_withholding") or 0)
 		or_income_tax = round(annual["annual"] / periods + extra, 2)
 		detail["income_tax"] = {"method": "formula", "source": params.get("source"), **annual,
-		                        "additional_per_period": extra, "per_period": or_income_tax}
+		                        "additional_per_period": extra, "per_period": or_income_tax,
+		                        # v0.294.0. What the elections came from: the OR-W-4, a pre-2020 W-4 in the fallback
+		                        # order, or a refused certificate (Single, 0 — OAR 150-316-0290).
+		                        "based_on": w4.get("source") or "OR-W-4"}
 
 	# ── Statewide Transit Tax (0.1% of gross, no cap) ─────────────────
 	transit_rate = float(state_config.get("or_transit_tax_rate", 0.1)) / 100.0

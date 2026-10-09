@@ -15423,9 +15423,12 @@ TOOLS = {
 	"list_employees_missing_w4": _tool(
 		w4.list_employees_missing_w4,
 		"Active employees with no active W-4 on file. Use to find employees "
-		"who need a W-4 submitted before payroll can run. Read-only.",
+		"who need a W-4 submitted before payroll can run. Read-only. "
+		"v0.294.0: form=or_w4 lists who has no Oregon OR-W-4 (withheld at a flat 8%) and which certificates must "
+		"still be sent to the Oregon DOR, with the date.",
 		{
 			"company": _COMPANY,
+			"form": _field(_STRING, "v0.294.0. 'or_w4' for Oregon's OR-W-4. Default: the federal W-4."),
 		},
 		available=_needs_doctype("W-4 Form"),
 		requires="the W-4 Form doctype (run bench migrate after installing v0.28.0)",
@@ -15500,8 +15503,19 @@ TOOLS = {
 			"or_allowances": _field(_INTEGER, "OR-W-4 allowances."),
 			"or_additional_withholding": _field(_NUMBER, "OR-W-4 additional amount per pay period."),
 			"or_exempt": _field(_BOOLEAN, "OR-W-4 claims exemption (lapses February 15 of the next year)."),
+			"form": _field(_STRING, "v0.294.0. 'or_w4' records Form OR-W-4 on its own (no federal fields needed; the "
+			                        "federal W-4 is untouched). Default: the federal W-4, which needs tax_year and "
+			                        "filing_status."),
+			"or_source": _field(_STRING, "v0.294.0. What Oregon withholding is based on: OR-W-4, 'Pre-2020 Oregon-only "
+			                             "W-4', 'Pre-2020 federal W-4' (its marital status and allowances in or_*), or "
+			                             "Refused (Single, 0 — OAR 150-316-0290)."),
+			"or_exemption_code": _field(_STRING, "v0.294.0. OR-W-4 line 4a exemption code."),
+			"or_redetermination": _field(_BOOLEAN, "v0.294.0. OR-W-4 Redetermination box."),
+			"or_expected_weekly_wages": _field(_NUMBER, "v0.294.0. For an exempt claim: expected wages a week (over "
+			                                            "$200 means a copy goes to the DOR). Default: 40 hours at the "
+			                                            "hourly rate."),
 		},
-		required=("tax_year", "filing_status"),
+		required=(),
 		mutating=True,
 		title="Submit a W-4",
 		available=_needs_doctype("W-4 Form"),
@@ -15532,6 +15546,7 @@ TOOLS = {
 		"whether the record's tax year matches the shipped template's edition; a "
 		"mismatch is not refused.",
 		{
+			"form": _field(_STRING, "v0.294.0. 'or_w4' is refused until the official Form OR-W-4 is bundled."),
 			"w4_form": _field(_STRING, "The W-4 Form docname, e.g. W4-2026-0001."),
 			"name": _field(_STRING, "A W-4 Form docname, or an employee."),
 			"employee": _field(_STRING, "Employee docname or employee_name, instead of the form."),
