@@ -3342,8 +3342,13 @@ def submit_w4(
 	deductions=None,
 	extra_withholding=None,
 	additional_income_from_other_jobs=None,
+	or_filing_status=None,
+	or_allowances=None,
+	or_additional_withholding=None,
+	or_exempt=None,
 ) -> dict:
-	"""Federal withholding, as the worker filled it in. Supersedes their last one.
+	"""Federal withholding, as the worker filled it in — and, v0.291.0, their Oregon OR-W-4 (Oregon withholds by it,
+	and at a flat 8% without one). Supersedes their last one.
 
 	THREE MORE RENAMES, and they run the same way as Section 2's.
 	`OnboardingW4.apiParams` sends `dependents_under_17`, `other_dependents` and
@@ -3374,6 +3379,10 @@ def submit_w4(
 		("deductions", deductions),
 		("extra_withholding_per_period", extra_withholding),
 		("additional_income_from_other_jobs", additional_income_from_other_jobs),
+		("or_filing_status", or_filing_status),
+		("or_allowances", or_allowances),
+		("or_additional_withholding", or_additional_withholding),
+		("or_exempt", or_exempt),
 	):
 		if value is not None:
 			inner[key] = value
@@ -15027,6 +15036,12 @@ MY_W4_FIELDS = (
 	"deductions",
 	"extra_withholding_per_period",
 	"signed_at",
+	# v0.291.0. Your Oregon OR-W-4.
+	"or_w4_on_file",
+	"or_filing_status",
+	"or_allowances",
+	"or_additional_withholding",
+	"or_exempt",
 )
 
 #: What one stub row reports in `list_my_pay_stubs`. THE EMPLOYER'S OWN

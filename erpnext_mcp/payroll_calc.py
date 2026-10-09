@@ -812,6 +812,17 @@ def calculate_full_payroll(
 	state_configs = tax_config.get("state_configs", {})
 	state_tax_tables = tax_config.get("state_tax_tables", {})
 	filing_status = w4_data.get("filing_status", "Single")
+	# v0.291.0. Oregon withholds by its own formula on the employee's OR-W-4, subtracting the federal income tax
+	# withheld — this period's, shared out by each state's part of the wages on a cross-state slip.
+	oregon_params = tax_config.get("oregon_withholding") or None
+	pay_year = tax_config.get("pay_year") or (oregon_params or {}).get("pay_year")
+
+	def _oregon(state: str, wages: float) -> dict | None:
+		if state != "OR":
+			return None
+		share = wages / gross_pay if gross_pay > 0 else 0.0
+		return {"or_w4": w4_data.get("oregon"), "federal_income_tax": round(federal["federal_income_tax"] * share, 2),
+		        "params": oregon_params, "pay_year": pay_year}
 
 	state_results = {}
 	total_state_employee = 0.0
@@ -854,6 +865,7 @@ def calculate_full_payroll(
 				state_configs[primary_state],
 				state_tax_tables.get(primary_state),
 				ytd_gross,
+				oregon=_oregon(primary_state, gross_pay),
 			)
 			state_results[primary_state] = state_result
 			ee_key = f"total_{primary_state.lower()}_employee"
@@ -882,6 +894,7 @@ def calculate_full_payroll(
 					state_configs[ws],
 					state_tax_tables.get(ws),
 					ytd_gross,
+					oregon=_oregon(ws, state_gross),
 				)
 				state_results[ws] = state_result
 				ee_key = f"total_{ws.lower()}_employee"

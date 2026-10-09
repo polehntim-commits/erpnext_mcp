@@ -19,6 +19,7 @@ scope and keep their own tools.
 from __future__ import annotations
 
 import contextlib
+import itertools
 import contextvars
 import datetime
 
@@ -31,7 +32,9 @@ OVERTIME_KEY = "overtime_rule"
 #: publish and preview-a-real-pay-period.
 PAY_POLICY_KEY = "pay_policy"
 WAGE_FLOOR_KEY = "wage_floor"
-KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY)
+#: v0.291.0. Oregon's withholding formula (150-206-436) as a dated setting: a new year's figures are a new version.
+OREGON_KEY = "oregon_withholding"
+KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY, OREGON_KEY)
 WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 MIN_WAGE_REGIONS = ("standard", "portland_metro", "non_urban")
 
@@ -218,6 +221,15 @@ def pay_policy(as_of: str = "") -> dict:
 	return {**DEFAULT_PAY_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_PAY_POLICY}, "version": version}
 
 
+def oregon_withholding(as_of: str = "") -> dict:
+	"""Oregon's withholding formula in force on the day (the published version, else the 2026 seed)."""
+	from .state_withholding import OR_WITHHOLDING_2026
+
+	body, version = _body(OREGON_KEY, as_of)
+	merged = {**OR_WITHHOLDING_2026, **{k: v for k, v in body.items() if k in OR_WITHHOLDING_2026}}
+	return {**merged, "version": version}
+
+
 def ot_multiplier(as_of: str = "") -> float:
 	return overtime(as_of)["multiplier"]
 
@@ -236,6 +248,8 @@ def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
 		return _validate_policy(body, for_publish)
 	if key == WAGE_FLOOR_KEY:
 		return _validate_floor(body, for_publish)
+	if key == OREGON_KEY:
+		return _validate_oregon(body, for_publish)
 	errors, warnings = [], []
 	if key != OVERTIME_KEY:
 		errors.append(f"a payroll setting is one of: {', '.join(KEYS)}")
@@ -340,6 +354,36 @@ def _validate_policy(body: dict, for_publish: bool) -> dict:
 	return {"errors": errors, "warnings": warnings}
 
 
+def _validate_oregon(body: dict, for_publish: bool) -> dict:
+	"""Shape and continuity: every schedule row's constant follows from the one before (to a dollar, as printed)."""
+	from .state_withholding import OR_WITHHOLDING_2026, oregon_annual_withholding
+
+	errors, warnings = [], []
+	for field in OR_WITHHOLDING_2026:
+		if field not in body:
+			errors.append(f"{field} is required (see the seed for its shape)")
+	if not str(body.get("source") or "").strip():
+		errors.append("source: the DOR publication and revision these figures come from")
+	for name, rows in (body.get("schedules") or {}).items():
+		for before, row in itertools.pairwise(rows):
+			try:
+				expected = float(before[2]) + (float(row[1]) - float(before[1])) * float(before[3]) / 100
+				if abs(expected - float(row[2])) > 1.0:
+					errors.append(f"schedules.{name}: the row at {row[0]} should start near {expected:,.0f}, not {row[2]}")
+			except (TypeError, ValueError, IndexError):
+				errors.append(f"schedules.{name}: rows are [from, minus, constant, rate]")
+	if not errors:
+		try:
+			oregon_annual_withholding(25000, 1000, {"filing_status": "Single", "allowances": 0},
+			                          {**OR_WITHHOLDING_2026, **body})
+		except Exception as exc:  # the shape is wrong in a way the checks above missed
+			errors.append(f"the formula does not run on this body: {exc}")
+	effective = _effective(body, errors)
+	if for_publish and not errors:
+		_publish_guard(effective, errors)
+	return {"errors": errors, "warnings": warnings}
+
+
 def _validate_floor(body: dict, for_publish: bool) -> dict:
 	errors, warnings = [], []
 	rows = body.get("rows")
@@ -404,6 +448,10 @@ def seed_body(key: str = OVERTIME_KEY) -> dict:
 		        "basis": "Tim's eight decisions, 2026-10-08 (docs/design/daily_pay.md §9a)."}
 	if key == WAGE_FLOOR_KEY:
 		return {"schema_version": 1, "key": key, "effective_from": "2023-01-01", "rows": [dict(r) for r in SEED_FLOORS]}
+	if key == OREGON_KEY:
+		from .state_withholding import OR_WITHHOLDING_2026
+
+		return {"schema_version": 1, "key": key, **OR_WITHHOLDING_2026}
 	return {"schema_version": 1, "key": OVERTIME_KEY, **DEFAULT_OVERTIME, "effective_from": "2020-01-01",
 	        "basis": "OR HB 4002 and WA SB 5172, fully phased: 40 hours a workweek, 1.5× the regular rate."}
 

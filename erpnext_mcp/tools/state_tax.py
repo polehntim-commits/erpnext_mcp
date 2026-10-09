@@ -208,7 +208,8 @@ def preview_total_payroll_taxes(args: dict) -> ToolResult:
 
 	w4_data, tax_year = _load_w4_data(employee, as_int(args, "tax_year"))
 	fica = _load_fica_config()
-	fed_table = _load_federal_table(tax_year, w4_data["filing_status"], pay_frequency)
+	fed_table = _load_federal_table(tax_year, w4_data["filing_status"], pay_frequency,
+	                                checkbox=bool(w4_data.get("multiple_jobs")))
 
 	filing_status = w4_data["filing_status"]
 	state_config = _load_state_config(employee, work_state, tax_year)
@@ -754,19 +755,10 @@ def _load_fica_config() -> dict:
 	}
 
 
-def _load_federal_table(tax_year: int, filing_status: str, payroll_period: str) -> list[dict]:
-	rows = frappe.db.get_all(
-		FEDERAL_TAX_TABLE,
-		filters={
-			"tax_year": tax_year,
-			"filing_status": filing_status,
-			"payroll_period": ("in", ["Annual", payroll_period]),  # v0.286.1: the annual rows when the site has them
-		},
-		fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate", "payroll_period"],
-		order_by="bracket_floor asc",
-	)
-	if any(r.get("payroll_period") == "Annual" for r in rows):
-		rows = [r for r in rows if r.get("payroll_period") == "Annual"]
+def _load_federal_table(tax_year: int, filing_status: str, payroll_period: str, checkbox: bool = False) -> list[dict]:
+	from .payroll import _load_federal_tax_table  # v0.291.0: one loader (Annual rows, the W-4's schedule)
+
+	rows = _load_federal_tax_table(tax_year, filing_status, payroll_period, checkbox=checkbox)
 	if not rows:
 		raise ToolError(
 			f"no Federal Tax Table brackets for {filing_status}, {payroll_period}, {tax_year}. "

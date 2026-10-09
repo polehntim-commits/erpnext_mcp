@@ -759,7 +759,8 @@ def _payroll_settings_seed() -> None:
 		# the floor is the law, and the policy's overtime equals the rule above (40 h, 1.5×, never less generous
 		# than the state). Daily pay itself stays off until `daily_pay_enabled` is turned on for a company.
 		for key, note in ((payroll_settings.WAGE_FLOOR_KEY, "Oregon and Washington floors as of 2026-10-09, each sourced (v0.287.0)."),
-		                  (payroll_settings.PAY_POLICY_KEY, "Tim's eight daily-pay decisions, 2026-10-08 (v0.287.0).")):
+		                  (payroll_settings.PAY_POLICY_KEY, "Tim's eight daily-pay decisions, 2026-10-08 (v0.287.0)."),
+		                  (payroll_settings.OREGON_KEY, "Oregon's 2026 withholding formula, 150-206-436 (v0.291.0).")):
 			name = phone_config.seed(payroll_settings.KIND, key, payroll_settings.seed_body(key), note)
 			if name:
 				print(f"erpnext_mcp: payroll setting {name} seeded.")
@@ -1290,19 +1291,53 @@ def _federal_tax_table() -> None:
 	try:
 		if not frappe.db.exists("DocType", "Federal Tax Table"):
 			return
-		for year in sorted(withholding.SEEDED_YEARS):  # v0.286.1: every seeded year, each only if it has no rows
-			if frappe.db.count("Federal Tax Table", {"tax_year": year}):
-				continue
-			created = 0
-			for bracket in withholding.seed_brackets(year):
-				doc = frappe.get_doc({"doctype": "Federal Tax Table", **bracket})
-				doc.flags.ignore_permissions = True
-				doc.insert()
-				created += 1
-			if created:
-				print(f"erpnext_mcp: seeded {created} federal tax bracket(s) for tax year {year}")
+		from . import compat
+
+		has_schedule = compat.has_field("Federal Tax Table", "schedule")
+		# v0.291.0. The rows a site was seeded with as "2025" were the 2024 schedule. Where they are still exactly
+		# what the install wrote (nobody imported or edited them), they are replaced with the real 2025 table.
+		_replace_legacy_2025()
+		for year, schedules in sorted(withholding.SEEDED_YEARS.items()):  # every seeded year and schedule, if empty
+			for schedule in schedules:
+				if schedule != withholding.STANDARD and not has_schedule:
+					continue
+				filters = {"tax_year": year}
+				if has_schedule:
+					filters["schedule"] = (schedule if schedule != withholding.STANDARD
+					                       else ("in", [withholding.STANDARD, "", None]))
+				if frappe.db.count("Federal Tax Table", filters):
+					continue
+				created = 0
+				for bracket in withholding.seed_brackets(year, schedule):
+					if not has_schedule:
+						bracket.pop("schedule", None)
+					doc = frappe.get_doc({"doctype": "Federal Tax Table", **bracket})
+					doc.flags.ignore_permissions = True
+					doc.insert()
+					created += 1
+				if created:
+					print(f"erpnext_mcp: seeded {created} federal tax bracket(s) for tax year {year} ({schedule})")
 	except Exception as exc:  # pragma: no cover - a site mid-migrate
 		print(f"erpnext_mcp: the federal tax table was not seeded — {type(exc).__name__}: {exc}")
+
+
+def _replace_legacy_2025() -> None:
+	"""v0.291.0. Swap the pre-v0.291 "2025" seed (the 2024 Pub 15-T schedule) for the real 2025 table — only when
+	every 2025 Single row on the site is exactly what that seed wrote, so imported or edited brackets are never
+	touched."""
+	from . import withholding
+
+	rows = frappe.db.get_all("Federal Tax Table", filters={"tax_year": 2025, "filing_status": "Single"},
+	                         fields=["payroll_period", "bracket_floor"], limit=1000) or []
+	if not rows:
+		return
+	legacy = {(period, round(b["bracket_floor"] / n, 2)) for period, n in withholding.PERIODS_PER_YEAR.items()
+	          for b in withholding.LEGACY_2025_SEED["Single"]}
+	if {(r["payroll_period"], round(float(r["bracket_floor"] or 0), 2)) for r in rows} != legacy:
+		return
+	for name in frappe.db.get_all("Federal Tax Table", filters={"tax_year": 2025}, pluck="name") or []:
+		frappe.delete_doc("Federal Tax Table", name, ignore_permissions=True, force=True)
+	print("erpnext_mcp: replaced the 2025 federal tax table seeded before v0.291.0 (it held the 2024 schedule)")
 
 
 def _state_tax_table() -> None:

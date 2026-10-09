@@ -31,6 +31,12 @@
   "other_income",
   "deductions",
   "extra_withholding_per_period",
+  "oregon_section",
+  "or_w4_on_file",
+  "or_filing_status",
+  "or_allowances",
+  "or_additional_withholding",
+  "or_exempt",
   "signature_section",
   "signature",
   "signed_at",
@@ -221,6 +227,49 @@
    "label": "Extra Withholding Per Period"
   },
   {
+   "fieldname": "oregon_section",
+   "fieldtype": "Section Break",
+   "label": "Oregon (Form OR-W-4)",
+   "collapsible": 0,
+   "description": "v0.291.0. Oregon withholding follows the employee's own OR-W-4, not the federal W-4. With none on file Oregon requires a flat 8% of wages (HB 2119)."
+  },
+  {
+   "fieldname": "or_w4_on_file",
+   "fieldtype": "Check",
+   "label": "OR-W-4 on file",
+   "default": "0"
+  },
+  {
+   "fieldname": "or_filing_status",
+   "fieldtype": "Select",
+   "label": "OR-W-4 filing status",
+   "options": "Single\nMarried\nMarried, withhold at higher Single rate",
+   "default": "Single",
+   "depends_on": "eval:doc.or_w4_on_file"
+  },
+  {
+   "fieldname": "or_allowances",
+   "fieldtype": "Int",
+   "label": "OR-W-4 allowances",
+   "default": "0",
+   "depends_on": "eval:doc.or_w4_on_file"
+  },
+  {
+   "fieldname": "or_additional_withholding",
+   "fieldtype": "Currency",
+   "label": "OR-W-4 additional amount per pay period",
+   "default": "0",
+   "depends_on": "eval:doc.or_w4_on_file"
+  },
+  {
+   "fieldname": "or_exempt",
+   "fieldtype": "Check",
+   "label": "OR-W-4 claims exemption",
+   "default": "0",
+   "depends_on": "eval:doc.or_w4_on_file",
+   "description": "Lapses February 15 of the next year; the employee files a new OR-W-4 each year to keep it."
+  },
+  {
    "fieldname": "signature_section",
    "fieldtype": "Section Break",
    "label": "Signature"
@@ -292,7 +341,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-04 09:00:00.000000",
+ "modified": "2026-10-09 20:30:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "W-4 Form",

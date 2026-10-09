@@ -810,11 +810,14 @@ def _w4_for(w4_data, employee: str) -> dict:
 	return dict(DEFAULT_W4)
 
 
-def _federal_table_for(federal_tax_tables, filing_status: str) -> list:
-	"""Brackets for one filing status, from a per-status map or a flat list."""
+def _federal_table_for(federal_tax_tables, filing_status: str, checkbox: bool = False) -> list:
+	"""Brackets for one filing status, from a per-status map or a flat list. v0.291.0: a W-4 with Step 2 checked
+	takes the status's Step 2 checkbox schedule where the map carries one (key "<status>|Step 2 Checkbox")."""
 	if not federal_tax_tables:
 		return []
 	if isinstance(federal_tax_tables, dict):
+		if checkbox and federal_tax_tables.get(f"{filing_status}|Step 2 Checkbox"):
+			return list(federal_tax_tables[f"{filing_status}|Step 2 Checkbox"])
 		return list(federal_tax_tables.get(filing_status) or [])
 	return list(federal_tax_tables)
 
@@ -894,6 +897,7 @@ def build_payroll_inputs(
 	fica_config: dict,
 	federal_tax_tables=None,
 	state_tax_tables: dict | None = None,
+	oregon_withholding: dict | None = None,
 	min_wage_rates: dict | None = None,
 	pay_frequency: str = "Biweekly",
 	ytd_by_employee: dict | None = None,
@@ -967,12 +971,15 @@ def build_payroll_inputs(
 					"federal_tax_table": _federal_table_for(
 						federal_tax_tables,
 						w4.get("filing_status", "Single"),
+						checkbox=bool(w4.get("multiple_jobs")),
 					),
 					"pay_frequency": pay_frequency,
 					"ytd_gross": _as_float(ytd.get("ytd_gross")),
 					"ytd_ss_withheld": _as_float(ytd.get("ytd_ss_withheld")),
 					"state_configs": dict(state_configs or {}),
 					"state_tax_tables": dict(state_tax_tables or {}),
+					# v0.291.0. Oregon's formula for this run (payroll_settings.oregon_withholding) and the pay year.
+					"oregon_withholding": oregon_withholding,
 					# v0.63.0. The wage floor for this run, off the site's own
 					# State Tax Configurations. None means the engine falls back
 					# to `payroll_calc.MINIMUM_WAGE_RATES`, which is what every
@@ -1040,6 +1047,7 @@ def run_integrated_payroll(
 	company: str = "",
 	federal_tax_tables=None,
 	state_tax_tables: dict | None = None,
+	oregon_withholding: dict | None = None,
 	min_wage_rates: dict | None = None,
 	pay_frequency: str = "Biweekly",
 	ytd_by_employee: dict | None = None,
@@ -1088,6 +1096,7 @@ def run_integrated_payroll(
 		fica_config,
 		federal_tax_tables=federal_tax_tables,
 		state_tax_tables=state_tax_tables,
+		oregon_withholding=oregon_withholding,
 		min_wage_rates=min_wage_rates,
 		pay_frequency=pay_frequency,
 		ytd_by_employee=ytd_by_employee,

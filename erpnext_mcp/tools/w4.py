@@ -38,7 +38,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import now
 
-from .. import w4_pdf
+from .. import compat, w4_pdf
 from ..args import as_bool, as_int, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
@@ -100,6 +100,9 @@ def _w4_fields() -> list[str]:
 		"employer_signed_at",
 		"generated_pdf",
 		"generated_pdf_on",
+		# v0.291.0. The employee's Oregon OR-W-4, where this site has the columns.
+		*compat.existing_fields(W4_FORM, ("or_w4_on_file", "or_filing_status", "or_allowances",
+		                                   "or_additional_withholding", "or_exempt")),
 	]
 
 
@@ -232,7 +235,8 @@ def preview_federal_withholding(args: dict) -> ToolResult:
 
 	w4_data, tax_year = _load_w4_data(employee, as_int(args, "tax_year"))
 	fica = _load_fica_config()
-	tax_table = _load_tax_table(tax_year, w4_data["filing_status"], pay_frequency)
+	tax_table = _load_tax_table(tax_year, w4_data["filing_status"], pay_frequency,
+	                            checkbox=bool(w4_data.get("multiple_jobs")))
 
 	ytd_gross = as_float(args, "ytd_gross", 0.0)
 	ytd_ss = as_float(args, "ytd_ss_withheld", 0.0)
@@ -291,7 +295,8 @@ def calculate_payroll_taxes(args: dict) -> ToolResult:
 
 	w4_data, tax_year = _load_w4_data(employee, as_int(args, "tax_year"))
 	fica = _load_fica_config()
-	tax_table = _load_tax_table(tax_year, w4_data["filing_status"], pay_frequency)
+	tax_table = _load_tax_table(tax_year, w4_data["filing_status"], pay_frequency,
+	                            checkbox=bool(w4_data.get("multiple_jobs")))
 
 	ytd_gross = as_float(args, "ytd_gross", 0.0)
 	ytd_ss = as_float(args, "ytd_ss_withheld", 0.0)
@@ -375,6 +380,7 @@ def submit_w4(args: dict) -> ToolResult:
 		filters={"employee": employee, "tax_year": tax_year, "status": "Active"},
 		fields=["name"],
 	)
+	oregon = _oregon_w4(args, employee)
 
 	doc = frappe.get_doc(
 		{
@@ -392,6 +398,7 @@ def submit_w4(args: dict) -> ToolResult:
 			"other_income": other_income,
 			"deductions": deductions,
 			"extra_withholding_per_period": extra_withholding,
+			**oregon,
 			"employer_signer_name": signature["name"],
 			"employer_signer_title": signature["title"],
 			"employer_signed_at": now(),
@@ -435,6 +442,32 @@ def submit_w4(args: dict) -> ToolResult:
 		+ (f", processed by {signature['name']}" if signature["name"] else "")
 		+ (f", superseded {len(existing)} prior W-4(s)" if existing else ""),
 	)
+
+
+OR_STATUSES = ("Single", "Married", "Married, withhold at higher Single rate")
+
+
+def _oregon_w4(args: dict, employee: str) -> dict:
+	"""v0.291.0. The employee's Form OR-W-4 — Oregon withholds by it, and at a flat 8% without one (HB 2119). Given
+	when any or_* argument is passed; otherwise carried from the employee's current W-4 so a federal change never
+	drops it."""
+	if not compat.has_field(W4_FORM, "or_w4_on_file"):
+		return {}
+	keys = ("or_w4_on_file", "or_filing_status", "or_allowances", "or_additional_withholding", "or_exempt")
+	if not any(key in args for key in keys):
+		current = frappe.db.get_value(W4_FORM, {"employee": employee, "status": "Active"}, list(keys), as_dict=True,
+		                              order_by="tax_year desc, effective_date desc")
+		return {k: v for k, v in dict(current or {}).items() if v not in (None, "")}
+	status = as_str(args, "or_filing_status") or "Single"
+	if status not in OR_STATUSES:
+		raise ToolError(f"or_filing_status is one of: {', '.join(OR_STATUSES)}. Nothing was saved.")
+	allowances = as_int(args, "or_allowances", 0)
+	if allowances < 0:
+		raise ToolError("or_allowances can't be negative. Nothing was saved.")
+	return {"or_w4_on_file": 1 if args.get("or_w4_on_file", True) not in (False, 0, "0", "false") else 0,
+	        "or_filing_status": status, "or_allowances": allowances,
+	        "or_additional_withholding": max(as_float(args, "or_additional_withholding", 0.0), 0.0),
+	        "or_exempt": 1 if args.get("or_exempt") else 0}
 
 
 def _resolve_w4(args: dict) -> str:
@@ -869,20 +902,11 @@ def _load_fica_config() -> dict:
 	}
 
 
-def _load_tax_table(tax_year: int, filing_status: str, payroll_period: str) -> list[dict]:
+def _load_tax_table(tax_year: int, filing_status: str, payroll_period: str, checkbox: bool = False) -> list[dict]:
 	"""Load tax brackets from the database."""
-	rows = frappe.db.get_all(
-		FEDERAL_TAX_TABLE,
-		filters={
-			"tax_year": tax_year,
-			"filing_status": filing_status,
-			"payroll_period": ("in", ["Annual", payroll_period]),  # v0.286.1: the annual rows when the site has them
-		},
-		fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate", "payroll_period"],
-		order_by="bracket_floor asc",
-	)
-	if any(r.get("payroll_period") == "Annual" for r in rows):
-		rows = [r for r in rows if r.get("payroll_period") == "Annual"]
+	from .payroll import _load_federal_tax_table  # v0.291.0: one loader (Annual rows, the W-4's schedule)
+
+	rows = _load_federal_tax_table(tax_year, filing_status, payroll_period, checkbox=checkbox)
 	if not rows:
 		raise ToolError(
 			f"no Federal Tax Table brackets for {filing_status}, {payroll_period}, {tax_year}. "

@@ -10,6 +10,7 @@
   "tax_year",
   "filing_status",
   "payroll_period",
+  "schedule",
   "bracket_floor",
   "bracket_ceiling",
   "base_tax",
@@ -46,6 +47,16 @@
    "search_index": 1
   },
   {
+   "default": "Standard",
+   "description": "v0.291.0. Pub 15-T's two schedules: Standard (W-4 Step 2 box not checked) and Step 2 Checkbox (box checked).",
+   "fieldname": "schedule",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Schedule",
+   "options": "Standard\nStep 2 Checkbox"
+  },
+  {
    "fieldname": "bracket_floor",
    "fieldtype": "Currency",
    "in_list_view": 1,
@@ -78,7 +89,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-04 09:00:00.000000",
+ "modified": "2026-10-09 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Federal Tax Table",

@@ -157,14 +157,17 @@ def _calc_federal_income_tax(
 	# a two-income household, silently, unless a caller reads this flag: the
 	# checkbox exists on the form (w4_data["multiple_jobs"]), is stored
 	# (tools/w4.py), and is simply not read past this point.
-	if w4_data.get("multiple_jobs"):
+	# Step 2(c), v0.291.0: with the box checked the tables must be the Step 2 CHECKBOX schedules (Pub 15-T, right-hand
+	# columns), which the caller loads for this employee. A standard table here means none was loaded for the year:
+	# that under-withholds, and the slip says so.
+	checkbox = bool(w4_data.get("multiple_jobs"))
+	if checkbox and not any(row.get("schedule") == CHECKBOX for row in tax_table or []):
 		detail["step_2c_checkbox_not_applied"] = (
-			"Step 2(c) is checked on this employee's W-4. This app's percentage-method "
-			"tables do not yet implement the IRS Higher Withholding Rate Schedule Step 2(c) "
-			"calls for, so federal income tax below was computed on the standard table as if "
-			"the box were unchecked — which under-withholds. Have the employee use Step 4(c) "
-			"extra withholding until this is implemented."
-		)
+			"Step 2(c) is checked on this employee's W-4, but no Step 2 checkbox table is loaded for this tax year, so "
+			"federal income tax was computed on the standard table — which under-withholds. Load the year's checkbox "
+			"schedule (import_federal_tax_table, schedule Step 2 Checkbox).")
+	elif checkbox:
+		detail["schedule"] = CHECKBOX
 
 	# Step 1: Annualize gross pay
 	annual_gross = gross_pay * periods
@@ -392,47 +395,55 @@ def _calc_futa(
 	}
 
 
-# ── 2025 Federal Tax Brackets (IRS Publication 15-T, Percentage Method) ───
-# Annual brackets for the three filing statuses. These are the tentative
-# withholding amounts from Table 2 of Pub 15-T.
-#
-# NOTE: Using 2025 values. The IRS publishes updated tables annually.
-# When 2026 tables are published, add a second year to this seed.
+# ── Federal tax brackets (IRS Publication 15-T, Percentage Method, ANNUAL tables) ──
+# v0.291.0. Transcribed as printed from the year's Pub 15-T, "Percentage Method Tables for Automated Payroll
+# Systems", both schedules: STANDARD (W-4 Step 2 box NOT checked; used with Worksheet 1A line 1(g)) and STEP 2
+# CHECKBOX (box checked; line 1(g) is zero). `test_withholding_2026` checks every row follows from the one before.
+# Until v0.291.0 the table labelled 2025 held the 2024 schedule (6,000 / 17,600 / 53,150 …).
+def _rows(*spec) -> list:
+	return [{"bracket_floor": f, "bracket_ceiling": c, "base_tax": b, "marginal_rate": r} for f, c, b, r in spec]
 
-SEED_TAX_YEAR = 2025
 
+STANDARD = "Standard"
+CHECKBOX = "Step 2 Checkbox"
+
+#: Pub 15-T (2025), page 11.
 ANNUAL_BRACKETS = {
-	"Single": [
-		{"bracket_floor": 0, "bracket_ceiling": 6000, "base_tax": 0, "marginal_rate": 0},
-		{"bracket_floor": 6000, "bracket_ceiling": 17600, "base_tax": 0, "marginal_rate": 10},
-		{"bracket_floor": 17600, "bracket_ceiling": 53150, "base_tax": 1160, "marginal_rate": 12},
-		{"bracket_floor": 53150, "bracket_ceiling": 106525, "base_tax": 5426, "marginal_rate": 22},
-		{"bracket_floor": 106525, "bracket_ceiling": 197950, "base_tax": 17168.50, "marginal_rate": 24},
-		{"bracket_floor": 197950, "bracket_ceiling": 252500, "base_tax": 39110.50, "marginal_rate": 32},
-		{"bracket_floor": 252500, "bracket_ceiling": 631900, "base_tax": 56576.50, "marginal_rate": 35},
-		{"bracket_floor": 631900, "bracket_ceiling": None, "base_tax": 189365.50, "marginal_rate": 37},
-	],
-	"Married Filing Jointly": [
-		{"bracket_floor": 0, "bracket_ceiling": 16500, "base_tax": 0, "marginal_rate": 0},
-		{"bracket_floor": 16500, "bracket_ceiling": 39700, "base_tax": 0, "marginal_rate": 10},
-		{"bracket_floor": 39700, "bracket_ceiling": 110800, "base_tax": 2320, "marginal_rate": 12},
-		{"bracket_floor": 110800, "bracket_ceiling": 217550, "base_tax": 10852, "marginal_rate": 22},
-		{"bracket_floor": 217550, "bracket_ceiling": 400400, "base_tax": 34337, "marginal_rate": 24},
-		{"bracket_floor": 400400, "bracket_ceiling": 509500, "base_tax": 78221, "marginal_rate": 32},
-		{"bracket_floor": 509500, "bracket_ceiling": 768200, "base_tax": 113133, "marginal_rate": 35},
-		{"bracket_floor": 768200, "bracket_ceiling": None, "base_tax": 203678, "marginal_rate": 37},
-	],
-	"Head of Household": [
-		{"bracket_floor": 0, "bracket_ceiling": 13000, "base_tax": 0, "marginal_rate": 0},
-		{"bracket_floor": 13000, "bracket_ceiling": 26500, "base_tax": 0, "marginal_rate": 10},
-		{"bracket_floor": 26500, "bracket_ceiling": 68400, "base_tax": 1350, "marginal_rate": 12},
-		{"bracket_floor": 68400, "bracket_ceiling": 109500, "base_tax": 6378, "marginal_rate": 22},
-		{"bracket_floor": 109500, "bracket_ceiling": 200950, "base_tax": 15420, "marginal_rate": 24},
-		{"bracket_floor": 200950, "bracket_ceiling": 252500, "base_tax": 37388, "marginal_rate": 32},
-		{"bracket_floor": 252500, "bracket_ceiling": 631900, "base_tax": 53884, "marginal_rate": 35},
-		{"bracket_floor": 631900, "bracket_ceiling": None, "base_tax": 186674, "marginal_rate": 37},
-	],
+	"Married Filing Jointly": _rows((0, 17100, 0, 0), (17100, 40950, 0, 10), (40950, 114050, 2385.00, 12),
+	                                (114050, 223800, 11157.00, 22), (223800, 411700, 35302.00, 24),
+	                                (411700, 518150, 80398.00, 32), (518150, 768700, 114462.00, 35),
+	                                (768700, None, 202154.50, 37)),
+	"Single": _rows((0, 6400, 0, 0), (6400, 18325, 0, 10), (18325, 54875, 1192.50, 12), (54875, 109750, 5578.50, 22),
+	                (109750, 203700, 17651.00, 24), (203700, 256925, 40199.00, 32), (256925, 632750, 57231.00, 35),
+	                (632750, None, 188769.75, 37)),
+	"Head of Household": _rows((0, 13900, 0, 0), (13900, 30900, 0, 10), (30900, 78750, 1700.00, 12),
+	                           (78750, 117250, 7442.00, 22), (117250, 211200, 15912.00, 24),
+	                           (211200, 264400, 38460.00, 32), (264400, 640250, 55484.00, 35),
+	                           (640250, None, 187031.50, 37)),
 }
+ANNUAL_BRACKETS_2025_CHECKBOX = {
+	"Married Filing Jointly": _rows((0, 15000, 0, 0), (15000, 26925, 0, 10), (26925, 63475, 1192.50, 12),
+	                                (63475, 118350, 5578.50, 22), (118350, 212300, 17651.00, 24),
+	                                (212300, 265525, 40199.00, 32), (265525, 390800, 57231.00, 35),
+	                                (390800, None, 101077.25, 37)),
+	"Single": _rows((0, 7500, 0, 0), (7500, 13463, 0, 10), (13463, 31738, 596.25, 12), (31738, 59175, 2789.25, 22),
+	                (59175, 106150, 8825.50, 24), (106150, 132763, 20099.50, 32), (132763, 320675, 28615.50, 35),
+	                (320675, None, 94384.88, 37)),
+	"Head of Household": _rows((0, 11250, 0, 0), (11250, 19750, 0, 10), (19750, 43675, 850.00, 12),
+	                           (43675, 62925, 3721.00, 22), (62925, 109900, 7956.00, 24), (109900, 136500, 19230.00, 32),
+	                           (136500, 324425, 27742.00, 35), (324425, None, 93515.75, 37)),
+}
+
+#: What the install seeded as "2025" before v0.291.0 (the 2024 schedule). Kept only so a migrate can recognise those
+#: rows, untouched by any operator, and replace them with the real 2025 table.
+LEGACY_2025_SEED = {
+	"Single": _rows((0, 6000, 0, 0), (6000, 17600, 0, 10), (17600, 53150, 1160, 12), (53150, 106525, 5426, 22),
+	                (106525, 197950, 17168.50, 24), (197950, 252500, 39110.50, 32), (252500, 631900, 56576.50, 35),
+	                (631900, None, 189365.50, 37)),
+}
+
+SEED_TAX_YEAR = 2026
+
 
 # Mapping from W-4 filing status to tax table filing status
 FILING_STATUS_MAP = {
@@ -467,15 +478,35 @@ ANNUAL_BRACKETS_2026 = {
 		_row(271750, 656150, 56631.00, 35), _row(656150, None, 191171.00, 37),
 	],
 }
-#: Every year this app seeds, newest last. The 2025-labelled table above is kept as shipped (v0.286.1 note: its
-#: figures are the 2024 Pub 15-T schedule; 2025 payroll should import the 2025 tables with import_federal_tax_table).
-SEEDED_YEARS = {2025: ANNUAL_BRACKETS, 2026: ANNUAL_BRACKETS_2026}
+#: Pub 15-T (2026), page 12, the right-hand (Step 2 checkbox) schedules.
+ANNUAL_BRACKETS_2026_CHECKBOX = {
+	"Married Filing Jointly": [
+		_row(0, 16100, 0, 0), _row(16100, 28500, 0, 10), _row(28500, 66500, 1240.00, 12),
+		_row(66500, 121800, 5800.00, 22), _row(121800, 217875, 17966.00, 24), _row(217875, 272325, 41024.00, 32),
+		_row(272325, 400450, 58448.00, 35), _row(400450, None, 103291.75, 37),
+	],
+	"Single": [
+		_row(0, 8050, 0, 0), _row(8050, 14250, 0, 10), _row(14250, 33250, 620.00, 12),
+		_row(33250, 60900, 2900.00, 22), _row(60900, 108938, 8983.00, 24), _row(108938, 136163, 20512.00, 32),
+		_row(136163, 328350, 29224.00, 35), _row(328350, None, 96489.63, 37),
+	],
+	"Head of Household": [
+		_row(0, 12075, 0, 0), _row(12075, 20925, 0, 10), _row(20925, 45800, 885.00, 12),
+		_row(45800, 64925, 3870.00, 22), _row(64925, 112950, 8077.50, 24), _row(112950, 140175, 19603.50, 32),
+		_row(140175, 332375, 28315.50, 35), _row(332375, None, 95585.50, 37),
+	],
+}
+#: Every (year, schedule) this app seeds.
+SEEDED_YEARS = {
+	2025: {STANDARD: ANNUAL_BRACKETS, CHECKBOX: ANNUAL_BRACKETS_2025_CHECKBOX},
+	2026: {STANDARD: ANNUAL_BRACKETS_2026, CHECKBOX: ANNUAL_BRACKETS_2026_CHECKBOX},
+}
 
 
-def seed_brackets(tax_year: int = SEED_TAX_YEAR) -> list[dict]:
-	"""Return the full set of seed brackets for all periods of one tax year, ready for insertion."""
+def seed_brackets(tax_year: int = SEED_TAX_YEAR, schedule: str = STANDARD) -> list[dict]:
+	"""Return the full set of seed brackets for all periods of one tax year and schedule, ready for insertion."""
 	rows = []
-	for filing_status, annual in SEEDED_YEARS[tax_year].items():
+	for filing_status, annual in SEEDED_YEARS[tax_year][schedule].items():
 		for period_name, periods in PERIODS_PER_YEAR.items():
 			for bracket in annual:
 				floor = bracket["bracket_floor"] / periods
@@ -484,6 +515,7 @@ def seed_brackets(tax_year: int = SEED_TAX_YEAR) -> list[dict]:
 				rows.append(
 					{
 						"tax_year": tax_year,
+						"schedule": schedule,
 						"filing_status": filing_status,
 						"payroll_period": period_name,
 						"bracket_floor": round(floor, 2),

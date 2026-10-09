@@ -47,6 +47,9 @@ KINDS = {
 	# Wage Floor. Same Payroll Setting rules as the overtime rule.
 	"pay_policy": {"label": "Pay Policy", "store": "Farm Config Version (Payroll Setting)", "key": "pay_policy"},
 	"wage_floor": {"label": "Wage Floor", "store": "Farm Config Version (Payroll Setting)", "key": "wage_floor"},
+	# v0.291.0. Oregon's withholding formula, a version per year (150-206-436).
+	"oregon_withholding": {"label": "Oregon withholding formula", "store": "Farm Config Version (Payroll Setting)",
+	                       "key": "oregon_withholding"},
 	# v0.245.0. An SOP version (Compliance Policy). Stage = submit for review; approval (publish) is a
 	# person's, in the Desk or on the phone — never over MCP.
 	"sop": {"label": "SOP", "store": "Compliance Policy", "key": "policy docname"},
@@ -63,7 +66,7 @@ KINDS = {
 	"input_plan": {"label": "Input Plan", "store": "Farm Config Version", "key": "<company>_<year>"},
 	"pollination_plan": {"label": "Pollination Plan", "store": "Farm Config Version", "key": "<company>_<season>"},
 }
-PAYROLL_KINDS = ("overtime_rule", "pay_policy", "wage_floor")
+PAYROLL_KINDS = ("overtime_rule", "pay_policy", "wage_floor", "oregon_withholding")
 #: v0.264.0. The pest degree-day models and block offsets (Farm Config Version, IPM Setting). AI may draft;
 #: a person publishes in the Desk — calibration suggests, it never applies.
 IPM_KINDS = ("pest_dd_models", "pest_dd_offsets")
@@ -140,7 +143,8 @@ def _get(kind: str, key: str, version) -> dict:
 		except ToolError:
 			built_in = {"overtime_rule": payroll_settings.overtime, "pay_policy": payroll_settings.pay_policy,
 			            "wage_floor": lambda: {"rows": payroll_settings.floor_rows(),
-			                                   "minimum_wages": payroll_settings.minimum_wages()}}[kind]
+			                                   "minimum_wages": payroll_settings.minimum_wages()},
+			            "oregon_withholding": payroll_settings.oregon_withholding}[kind]
 			return {"built_in": True, "in_force": built_in()}
 	if kind in PHONE_KINDS + FCV_KINDS:
 		inner = {"kind": kind, "key": key}

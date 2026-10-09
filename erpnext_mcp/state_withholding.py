@@ -130,6 +130,67 @@ def calculate_suta(
 	}
 
 
+# ── Oregon withholding: the Department of Revenue's computer formula (v0.291.0) ──────────────────────────────────
+#: Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25), effective 2026-01-01, as printed. Each schedule row is
+#: (BASE from, BASE minus, constant, rate %): WH = constant + (BASE − minus) × rate − credit × allowances, annual.
+#: "low" applies to annual wages under $50,000 (its constants carry one exemption credit); "high" to $50,000 and up.
+#: Stored as data (payroll setting `oregon_withholding`); this is the seed and the pure-function default.
+OR_WITHHOLDING_2026 = {
+	"effective_from": "2026-01-01",
+	"source": "Oregon DOR, Withholding Tax Formulas 150-206-436 (Rev. 12-31-25), effective January 1, 2026",
+	"standard_deduction": {"single": 2910.0, "married": 5820.0},
+	"exemption_credit": 263.0,
+	"high_wage_threshold": 50000.0,
+	"allowances_zeroed_above": {"single": 100000.0, "married": 200000.0},
+	"federal_subtraction": {
+		"single": [[0, 8750], [125000, 7000], [130000, 5250], [135000, 3500], [140000, 1750], [145000, 0]],
+		"married": [[0, 8750], [250000, 7000], [260000, 5250], [270000, 3500], [280000, 1750], [290000, 0]],
+	},
+	"schedules": {
+		"single_low": [[0, 0, 263, 4.75], [4550, 4550, 479, 6.75], [11400, 11400, 941, 8.75]],
+		"single_high": [[0, 11400, 678, 8.75], [125000, 125000, 10618, 9.9]],
+		"married_low": [[0, 0, 263, 4.75], [9100, 9100, 695, 6.75], [22800, 22800, 1620, 8.75]],
+		"married_high": [[0, 22800, 1357, 8.75], [250000, 250000, 21237, 9.9]],
+	},
+	#: HB 2119 (2019): no OR-W-4 (withholding statement or exemption certificate) on file → a flat 8% of wages.
+	"default_flat_rate": 8.0,
+}
+
+#: OR-W-4 filing statuses (Form OR-W-4 line 1).
+OR_SINGLE, OR_MARRIED, OR_MARRIED_SINGLE_RATE = "Single", "Married", "Married, withhold at higher Single rate"
+
+
+def oregon_annual_withholding(annual_wages: float, annual_federal_tax: float, or_w4: dict, params: dict) -> dict:
+	"""The DOR formula on annual figures: {annual, base, group, federal_subtraction, allowances, …}. Pure."""
+	status = str(or_w4.get("filing_status") or OR_SINGLE)
+	allowances = max(int(or_w4.get("allowances") or 0), 0)
+	married_box = status == OR_MARRIED
+	# Which rate group: married, or single with three or more allowances, use the married schedule and deduction;
+	# "married, withhold at the higher single rate" and head of household are single.
+	group = "married" if (married_box or (status != OR_MARRIED_SINGLE_RATE and allowances >= 3)) else "single"
+	# The phase-out follows the BOX: only a married box uses the married phase-out (FAQ 4 and 7).
+	phase = "married" if married_box else "single"
+	limit_key = "married" if married_box else "single"
+	if annual_wages > float(params["allowances_zeroed_above"][limit_key]):
+		allowances = 0
+	cap = 0.0
+	for start, amount in params["federal_subtraction"][phase]:
+		if annual_wages >= float(start):
+			cap = float(amount)
+	subtraction = min(max(float(annual_federal_tax), 0.0), cap)
+	base = max(annual_wages - subtraction - float(params["standard_deduction"][group]), 0.0)
+	rows = params["schedules"][f"{group}_{'high' if annual_wages >= float(params['high_wage_threshold']) else 'low'}"]
+	applied = rows[0]
+	for row in rows:
+		if base >= float(row[0]):
+			applied = row
+	start, minus, constant, rate = (float(x) for x in applied)
+	tax = constant + (base - minus) * rate / 100.0 - float(params["exemption_credit"]) * allowances
+	return {"annual": round(max(tax, 0.0), 2), "base": round(base, 2), "group": group, "phase_out": phase,
+	        "federal_subtraction": round(subtraction, 2), "allowances": allowances,
+	        "row": {"from": start, "minus": minus, "constant": constant, "rate": rate}}
+
+
 def calculate_oregon_withholding(
 	gross_pay: float,
 	pay_frequency: str,
@@ -137,6 +198,11 @@ def calculate_oregon_withholding(
 	state_config: dict,
 	state_tax_table: list[dict],
 	ytd_gross: float = 0.0,
+	*,
+	or_w4: dict | None = None,
+	federal_income_tax: float = 0.0,
+	params: dict | None = None,
+	pay_year: int | None = None,
 ) -> dict:
 	"""Calculate all Oregon payroll taxes for one pay period.
 
@@ -159,17 +225,30 @@ def calculate_oregon_withholding(
 	detail = {"state": "OR", "pay_frequency": pay_frequency, "periods_per_year": periods}
 
 	# ── Oregon Income Tax ─────────────────────────────────────────────
+	# v0.291.0: the DOR's computer formula (150-206-436) on the employee's OR-W-4 — wages less the federal tax
+	# withheld (capped, phased out) less the standard deduction, the published rates, less the exemption credit per
+	# allowance — not the income-tax brackets applied to gross. No OR-W-4 on file: a flat 8% (HB 2119). An exemption
+	# certificate lapses on February 15 of the next year. `state_tax_table` is no longer read for income tax.
 	or_income_tax = 0.0
 	income_enabled = bool(int(state_config.get("or_income_tax_enabled", 1)))
-	if income_enabled and state_tax_table:
-		or_income_tax, bracket_detail = _calc_state_income_tax(
-			gross_pay,
-			periods,
-			state_tax_table,
-		)
-		detail["income_tax"] = bracket_detail
+	params = params or OR_WITHHOLDING_2026
+	w4 = dict(or_w4 or {})
+	if not income_enabled:
+		detail["income_tax"] = {"note": "disabled on this site's State Tax Configuration"}
+	elif not w4.get("on_file"):
+		rate = float(params.get("default_flat_rate", 8.0))
+		or_income_tax = round(gross_pay * rate / 100.0, 2)
+		detail["income_tax"] = {"method": "flat", "rate": rate, "note": (
+			"No Form OR-W-4 on file for this employee, so Oregon requires a flat 8% (HB 2119, ORS 316.182). It "
+			"stops once the employee's OR-W-4 is entered.")}
+	elif w4.get("exempt") and _exemption_in_force(w4, pay_year):
+		detail["income_tax"] = {"method": "exempt", "note": "OR-W-4 exemption certificate in force."}
 	else:
-		detail["income_tax"] = {"note": "disabled or no brackets"}
+		annual = oregon_annual_withholding(gross_pay * periods, float(federal_income_tax or 0) * periods, w4, params)
+		extra = float(w4.get("additional_withholding") or 0)
+		or_income_tax = round(annual["annual"] / periods + extra, 2)
+		detail["income_tax"] = {"method": "formula", "source": params.get("source"), **annual,
+		                        "additional_per_period": extra, "per_period": or_income_tax}
 
 	# ── Statewide Transit Tax (0.1% of gross, no cap) ─────────────────
 	transit_rate = float(state_config.get("or_transit_tax_rate", 0.1)) / 100.0
@@ -324,8 +403,10 @@ def calculate_state_withholding(
 	state_config: dict,
 	state_tax_table: list[dict] | None = None,
 	ytd_gross: float = 0.0,
+	oregon: dict | None = None,
 ) -> dict:
-	"""Route to the correct state engine. The dispatch function.
+	"""Route to the correct state engine. The dispatch function. `oregon` (v0.291.0): or_w4, federal_income_tax,
+	params, pay_year for the Oregon formula.
 
 	Args:
 	    gross_pay: Gross pay for this pay period.
@@ -347,6 +428,7 @@ def calculate_state_withholding(
 			state_config,
 			state_tax_table or [],
 			ytd_gross,
+			**(oregon or {}),
 		)
 	elif state == "WA":
 		return calculate_washington_withholding(gross_pay, state_config, ytd_gross)
@@ -420,6 +502,13 @@ def calculate_all_payroll_taxes(
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────
+
+
+def _exemption_in_force(w4: dict, pay_year: int | None) -> bool:
+	"""An OR-W-4 exemption covers the year it was claimed and lapses February 15 of the next (here: the pay year
+	must be the claim year; the caller re-collects the certificate each year, as the DOR requires)."""
+	claimed = w4.get("tax_year")
+	return pay_year is None or claimed is None or int(claimed) >= int(pay_year)
 
 
 def _calc_state_income_tax(

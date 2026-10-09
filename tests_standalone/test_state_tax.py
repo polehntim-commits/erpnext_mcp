@@ -353,20 +353,11 @@ class OregonCalcEngine(StateTaxTestCase):
 	def test_mfj_lower_tax(self):
 		"""Married Filing Jointly pays less Oregon income tax than Single."""
 		config = self._default_or_config()
-		single = calculate_oregon_withholding(
-			5000,
-			"Biweekly",
-			"Single",
-			config,
-			OR_ANNUAL_BRACKETS["Single"],
-		)
-		mfj = calculate_oregon_withholding(
-			5000,
-			"Biweekly",
-			"Married Filing Jointly",
-			config,
-			OR_ANNUAL_BRACKETS["Married Filing Jointly"],
-		)
+		# v0.291.0: the OR-W-4's status decides, not the federal one.
+		single = calculate_oregon_withholding(5000, "Biweekly", "Single", config, [],
+		                                      or_w4={"on_file": True, "filing_status": "Single"})
+		mfj = calculate_oregon_withholding(5000, "Biweekly", "Married Filing Jointly", config, [],
+		                                   or_w4={"on_file": True, "filing_status": "Married"})
 		self.assertGreater(single["or_income_tax"], mfj["or_income_tax"])
 
 
@@ -568,49 +559,39 @@ class CombinedFederalState(StateTaxTestCase):
 
 
 class OregonBrackets(StateTaxTestCase):
-	"""Oregon 2025 brackets produce the right tax at boundary values."""
+	"""v0.291.0. Oregon withholds by the DOR's computer formula (150-206-436, effective 2026-01-01) on the employee's
+	OR-W-4 — not by the income-tax brackets applied to gross. Worked from the publication, annual figures."""
 
-	def test_lowest_bracket_single(self):
-		"""Income entirely in the 4.75% bracket."""
-		config = self._default_or_config()
-		# $3,000 annual → entirely in first bracket (under $4,050)
-		result = calculate_oregon_withholding(
-			3000,
-			"Annual",
-			"Single",
-			config,
-			OR_ANNUAL_BRACKETS["Single"],
-		)
-		expected = round(3000 * 0.0475, 2)
-		self.assertEqual(result["or_income_tax"], expected)
+	SINGLE = {"on_file": True, "filing_status": "Single", "allowances": 0}
 
-	def test_second_bracket_single(self):
-		"""Income crossing into the 6.75% bracket."""
-		config = self._default_or_config()
-		# $8,000 annual → $4,050 at 4.75% + ($8,000-$4,050) at 6.75%
-		result = calculate_oregon_withholding(
-			8000,
-			"Annual",
-			"Single",
-			config,
-			OR_ANNUAL_BRACKETS["Single"],
-		)
-		expected = round(192.38 + (8000 - 4050) * 0.0675, 2)
-		self.assertEqual(result["or_income_tax"], expected)
+	def _annual(self, wages, federal, w4):
+		return calculate_oregon_withholding(wages, "Annual", "Single", self._default_or_config(), [],
+		                                    or_w4=w4, federal_income_tax=federal)["or_income_tax"]
 
-	def test_top_bracket_single(self):
-		"""Income in the 9.9% top bracket."""
-		config = self._default_or_config()
-		# $150,000 annual → into the top bracket
-		result = calculate_oregon_withholding(
-			150000,
-			"Annual",
-			"Single",
-			config,
-			OR_ANNUAL_BRACKETS["Single"],
-		)
-		expected = round(10657.50 + (150000 - 125000) * 0.099, 2)
-		self.assertEqual(result["or_income_tax"], expected)
+	def test_the_dor_example(self):
+		# 150-206-436 Example 1: $25,000, single, 0 allowances, $1,000 federal → BASE 21,090 → $1,789 a year.
+		self.assertEqual(round(self._annual(25000, 1000, self.SINGLE)), 1789)
+
+	def test_lowest_rows_carry_the_built_in_credit(self):
+		# BASE 3,000 − 2,910 = 90 → 263 + 90 × 4.75% = 267.275, less 263 for one allowance = 4.275.
+		self.assertAlmostEqual(self._annual(3000, 0, self.SINGLE), 267.275, delta=0.01)
+		self.assertAlmostEqual(self._annual(3000, 0, {**self.SINGLE, "allowances": 1}), 4.275, delta=0.01)
+
+	def test_high_wages_phase_out_the_federal_subtraction(self):
+		# $150,000 single: no federal subtraction (≥ $145,000), no allowances (> $100,000).
+		# BASE 150,000 − 2,910 = 147,090 → 10,618 + 22,090 × 9.9% = 12,804.91.
+		self.assertEqual(self._annual(150000, 30000, {**self.SINGLE, "allowances": 2}), 12804.91)
+
+	def test_married_and_three_allowances_use_the_married_schedule(self):
+		married = self._annual(40000, 2000, {"on_file": True, "filing_status": "Married", "allowances": 0})
+		# BASE 40,000 − 2,000 − 5,820 = 32,180 → 1,620 + 9,380 × 8.75% = 2,440.75.
+		self.assertEqual(married, 2440.75)
+		self.assertLess(self._annual(40000, 2000, {**self.SINGLE, "allowances": 3}), self._annual(40000, 2000, self.SINGLE))
+
+	def test_no_or_w4_is_a_flat_eight_percent(self):
+		result = calculate_oregon_withholding(1000, "Weekly", "Single", self._default_or_config(), [])
+		self.assertEqual(result["or_income_tax"], 80.0)
+		self.assertIn("HB 2119", result["computation_detail"]["income_tax"]["note"])
 
 
 # ── Claim 6: Small employer ────────────────────────────────────────────
@@ -670,16 +651,12 @@ class EdgeCases(StateTaxTestCase):
 		self.assertEqual(result["total_wa_employer"], 0)
 
 	def test_no_brackets_or(self):
-		"""Oregon with no brackets produces zero income tax."""
+		"""v0.291.0: the State Tax Table brackets are no longer read for Oregon income tax — the DOR formula is."""
 		config = self._default_or_config()
-		result = calculate_oregon_withholding(
-			3000,
-			"Biweekly",
-			"Single",
-			config,
-			[],
-		)
-		self.assertEqual(result["or_income_tax"], 0)
+		result = calculate_oregon_withholding(3000, "Biweekly", "Single", config, [],
+		                                      or_w4={"on_file": True, "filing_status": "Single"})
+		self.assertGreater(result["or_income_tax"], 0)
+		self.assertEqual(result["computation_detail"]["income_tax"]["method"], "formula")
 		self.assertGreater(result["or_transit_tax"], 0)
 
 	def test_income_tax_disabled(self):

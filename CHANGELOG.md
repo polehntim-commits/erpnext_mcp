@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.291.0 — 2026-10-09 — payroll tax corrections: Oregon's formula and OR-W-4, the W-4 Step 2 schedule, the real 2025 table
+
+**Migrate** (W-4 Form gains the OR-W-4 fields; Federal Tax Table gains `schedule`; tables and the Oregon formula
+seeded). Deploy `docs/deploy/v0.291.0_payroll_tax.md`. Tools: **1,142 → 1,142** (`submit_w4` takes the OR-W-4).
+No payroll has been run through this app on either server, so no paycheck needs correcting.
+
+- **Oregon withholding is the Department of Revenue's computer formula** (Withholding Tax Formulas 150-206-436,
+  effective 2026-01-01): annual wages less the federal income tax withheld (capped at $8,750, phased out above
+  $125,000 single / $250,000 married), less the standard deduction ($2,910 / $5,820), the published rate schedule
+  (single, or married / single with 3+ allowances; under and over $50,000 of wages), less $263 per allowance, plus
+  any additional amount. Until now it applied the income-tax brackets to gross pay with none of those — Oregon was
+  over-withheld. The DOR's worked example ($25,000 single, $1,000 federal → $1,789 a year) is a test.
+- **The employee's own Form OR-W-4** (W-4 Form: OR-W-4 on file, filing status — Single / Married / Married at the
+  higher Single rate —, allowances, additional amount, exemption): on `submit_w4` (MCP and the phone) and the Desk
+  form; carried forward when only the federal W-4 changes. **With no OR-W-4 on file Oregon requires a flat 8%**
+  (HB 2119); each run names who is on it (`oregon_flat_rate_no_or_w4`) so the forms get collected.
+- **Oregon's figures are data**: payroll setting `oregon_withholding` (dated, sourced, published by a person; the
+  validator checks every rate row follows from the one before). A new year is a new version, not a release.
+- **W-4 Step 2 checked → the Step 2 checkbox schedule** (Pub 15-T's right-hand tables), seeded for 2025 and 2026;
+  Federal Tax Table gains `schedule`. Until now a checked box was computed on the standard table and under-withheld.
+- **The 2025 federal table is the 2025 schedule.** The rows seeded as "2025" held 2024's; a migrate replaces them
+  where they are exactly what the old seed wrote (an imported or edited table is never touched).
+- Every seeded table, both years and both schedules, is checked row by row.
+
 ## 0.290.0 — 2026-10-09 — daily pay, step 4: the phone (server side; app 0.58.0)
 
 **Migrate** (one Employee field, `daily_pay_until`). Deploy `docs/deploy/v0.290.0_daily_pay_phone.md`. Tools:

@@ -82,6 +82,8 @@ EMPLOYEE = "Employee"
 W4_FORM = "W-4 Form"
 FICA_CONFIG = "FICA Configuration"
 FEDERAL_TAX_TABLE = "Federal Tax Table"
+#: v0.291.0. Pub 15-T's two schedules (Federal Tax Table.schedule).
+STANDARD_SCHEDULE, CHECKBOX_SCHEDULE = "Standard", "Step 2 Checkbox"
 STATE_TAX_CONFIG = "State Tax Configuration"
 STATE_TAX_TABLE = "State Tax Table"
 FARM_SHIFT = "Farm Shift"
@@ -1436,10 +1438,11 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		deduction_sources = {"note": "a Daily run withholds taxes only; deductions and garnishments are taken in the "
 		                             "weekly settlement (docs/design/daily_pay.md §5)."}
 
+	w4_map = _load_w4_map(known)
 	slips = payroll_integration.run_integrated_payroll(
 		shifts,
 		structures,
-		_load_w4_map(known),
+		w4_map,
 		state_configs,
 		_load_fica_config(),
 		start,
@@ -1447,6 +1450,7 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		company=company,
 		federal_tax_tables=_load_federal_tables(pay_frequency, _pay_year(end)),
 		state_tax_tables=_load_state_tax_tables(_pay_year(end)),
+		oregon_withholding={**_oregon_params(end), "pay_year": _pay_year(end)},
 		min_wage_rates=min_wage_rates,
 		pay_frequency=pay_frequency,
 		ytd_by_employee=_load_ytd(company, start, known),
@@ -1507,6 +1511,12 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		# a run where nobody has a garnishment — which is the difference between
 		# "nothing to withhold" and "the orders were never read".
 		"deductions": deduction_sources,
+		# v0.291.0. Oregon withholds a flat 8% from anyone with no Form OR-W-4 on file (HB 2119) — named so the
+		# forms get collected, which is what ends it.
+		"oregon_flat_rate_no_or_w4": sorted(
+			slip.get("employee_name") or slip.get("employee") for slip in slips
+			if "OR" in (slip.get("hours_by_state") or {}) and not ((w4_map.get(slip.get("employee")) or {})
+			                                                        .get("oregon") or {}).get("on_file")),
 		"minimum_wage_rates": min_wage_rates,
 		"minimum_wage_states_configured": sorted(
 			state
@@ -3156,10 +3166,16 @@ def _load_federal_tables(pay_frequency: str, tax_year: int = 2025) -> dict:
 	tables every time.
 	"""
 	tables = {}
+	year = table_year(FEDERAL_TAX_TABLE, tax_year)
 	for status in sorted(set(FILING_STATUS_MAP.values())):
-		rows = _load_federal_tax_table(table_year(FEDERAL_TAX_TABLE, tax_year), status, pay_frequency)
+		rows = _load_federal_tax_table(year, status, pay_frequency)
 		if rows:
 			tables[status] = rows
+		# v0.291.0: the Step 2 checkbox schedule too, under its own key (payroll_integration._federal_table_for).
+		checkbox = [r for r in _load_federal_tax_table(year, status, pay_frequency, checkbox=True)
+		            if r.get("schedule") == CHECKBOX_SCHEDULE]
+		if checkbox:
+			tables[f"{status}|{CHECKBOX_SCHEDULE}"] = checkbox
 	return tables
 
 
@@ -3217,6 +3233,7 @@ def _build_tax_config(employee: str, pay_frequency: str, company: str | None = N
 		tax_year,
 		filing_status,
 		pay_frequency,
+		checkbox=bool(w4_data.get("multiple_jobs")),
 	)
 	if not federal_tax_table:
 		# `calculate_federal_withholding` treats an empty table as "no brackets
@@ -3259,7 +3276,16 @@ def _build_tax_config(employee: str, pay_frequency: str, company: str | None = N
 		# a state charges and what it says an hour is worth cannot come from two
 		# different rows.
 		"min_wage_rates": _floor(state_min_wage_rates(state_configs), pay_date),
+		# v0.291.0. Oregon's withholding formula in force on the pay date, and the year it is paid in.
+		"oregon_withholding": _oregon_params(pay_date),
+		"pay_year": _pay_year(pay_date),
 	}
+
+
+def _oregon_params(pay_date) -> dict:
+	from .. import payroll_settings
+
+	return payroll_settings.oregon_withholding(str(pay_date or "")[:10])
 
 
 def _floor(rates: dict, pay_date) -> dict:
@@ -3289,6 +3315,7 @@ def _load_w4_data(employee: str) -> dict:
 			"deductions": 0,
 			"extra_withholding_per_period": 0,
 			"_tax_year": 2025,
+			"oregon": {"on_file": False},
 		}
 
 	fields = [
@@ -3302,6 +3329,8 @@ def _load_w4_data(employee: str) -> dict:
 		"other_income",
 		"deductions",
 		"extra_withholding_per_period",
+		*compat.existing_fields(W4_FORM, ("or_w4_on_file", "or_filing_status", "or_allowances",
+		                                   "or_additional_withholding", "or_exempt")),
 	]
 	row = frappe.db.get_value(W4_FORM, name, fields, as_dict=True)
 	raw_status = row.get("filing_status", "Single or Married Filing Separately")
@@ -3318,6 +3347,12 @@ def _load_w4_data(employee: str) -> dict:
 		"deductions": float(row.get("deductions") or 0),
 		"extra_withholding_per_period": float(row.get("extra_withholding_per_period") or 0),
 		"_tax_year": int(row.get("tax_year") or 2025),
+		# v0.291.0. The employee's OR-W-4 — Oregon withholding follows it, not the federal W-4.
+		"oregon": {"on_file": bool(int(row.get("or_w4_on_file") or 0)),
+		           "filing_status": row.get("or_filing_status") or "Single",
+		           "allowances": int(row.get("or_allowances") or 0),
+		           "additional_withholding": float(row.get("or_additional_withholding") or 0),
+		           "exempt": bool(int(row.get("or_exempt") or 0)), "tax_year": int(row.get("tax_year") or 0) or None},
 	}
 
 
@@ -3353,21 +3388,28 @@ def _load_fica_config() -> dict:
 	}
 
 
-def _load_federal_tax_table(tax_year: int, filing_status: str, pay_frequency: str) -> list[dict]:
-	"""Load federal tax brackets."""
-	rows = frappe.db.get_all(
-		FEDERAL_TAX_TABLE,
-		filters={
-			"tax_year": tax_year,
-			"filing_status": filing_status,
-			"payroll_period": ("in", ["Annual", pay_frequency]),  # v0.286.1: the annual rows when the site has them
-		},
-		fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate", "payroll_period"],
-		order_by="bracket_floor asc",
-	)
-	if any(r.get("payroll_period") == "Annual" for r in rows):
-		rows = [r for r in rows if r.get("payroll_period") == "Annual"]
-	return [dict(r) for r in rows]
+def _load_federal_tax_table(tax_year: int, filing_status: str, pay_frequency: str, checkbox: bool = False) -> list[dict]:
+	"""Federal brackets: the Annual rows when the site has them (v0.286.1), and — v0.291.0 — the Step 2 checkbox
+	schedule for a W-4 with the box checked, falling back to the standard one (the slip then says so)."""
+	has_schedule = compat.has_field(FEDERAL_TAX_TABLE, "schedule")
+	wanted = [CHECKBOX_SCHEDULE, STANDARD_SCHEDULE] if checkbox else [STANDARD_SCHEDULE]
+	for schedule in wanted:
+		filters = {"tax_year": tax_year, "filing_status": filing_status,
+		           "payroll_period": ("in", ["Annual", pay_frequency])}
+		if has_schedule:
+			filters["schedule"] = schedule if schedule == CHECKBOX_SCHEDULE else ("in", [STANDARD_SCHEDULE, "", None])
+		rows = frappe.db.get_all(
+			FEDERAL_TAX_TABLE,
+			filters=filters,
+			fields=["bracket_floor", "bracket_ceiling", "base_tax", "marginal_rate", "payroll_period",
+			        *(["schedule"] if has_schedule else [])],
+			order_by="bracket_floor asc",
+		)
+		if any(r.get("payroll_period") == "Annual" for r in rows):
+			rows = [r for r in rows if r.get("payroll_period") == "Annual"]
+		if rows or not has_schedule:
+			return [dict(r) for r in rows]
+	return []
 
 
 def _load_state_config(state: str, company: str | None = None) -> dict | None:
