@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
 """Non-discretionary bonuses in the overtime regular rate. v0.296.0 (Tim, 2026-10-09; 29 CFR 778.208-.210).
 
+v0.298.0 (Tim, 2026-10-10: follow BOLI): NOT for Oregon — OAR 839-020-0030(1) computes overtime without bonuses or
+profit sharing, and farm overtime there is Oregon's, not the FLSA's. Washington keeps the federal-style treatment.
+
 A bonus earned over several workweeks is allocated to them hour by hour; each week's regular rate rises by the same
 amount per hour, and every overtime hour in those weeks is owed the extra half-time — paid with the bonus,
 retroactively. Discretionary or not is a policy flag per kind (`pay_item_policy`), defaulting to non-discretionary.
@@ -50,12 +53,15 @@ class TheArithmetic(V12TestCase):
 
 
 class InARun(IntegrationTestCase):
-	"""Five nine-hour days in the week of 2025-06-01: 45 hours, 5 over 40."""
+	"""Five nine-hour days in WASHINGTON in the week of 2025-06-01: 45 hours, 5 over 40."""
+
+	state = "WA"
 
 	def setUp(self):
 		super().setUp()
 		self.structure(WORKER, rate=20.0)
-		self.seed_shifts(*[shift(f"B{i}", f"2025-06-0{2 + i}", crew=[member(WORKER)]) for i in range(5)])
+		self.seed_shifts(*[shift(f"B{i}", f"2025-06-0{2 + i}", state=self.state, crew=[member(WORKER)])
+		                   for i in range(5)])
 		STORE.commit()
 
 	def slip(self, start="2025-06-02", end="2025-06-15"):
@@ -100,11 +106,31 @@ class InARun(IntegrationTestCase):
 		self.assertEqual([i["amount"] for i in slip["pay_items"] if i.get("derived_from") == "FPI-R4"], [50.0])
 
 
+class InOregon(InARun):
+	"""The same week in Oregon: no bonus enters the regular rate (OAR 839-020-0030(1))."""
+
+	state = "OR"
+
+	def test_the_bonus_overtime_is_paid_with_it(self):
+		STORE.seed("Farm Pay Item", [item("FPI-O1", 450.0, earned_from="2025-06-01", earned_to="2025-06-07")])
+		STORE.commit()
+		_got, slip = self.slip()
+		self.assertFalse([i for i in slip["pay_items"] if i.get("derived_from")])
+		self.assertEqual(slip["pay_items_wages"], 450.0, "the bonus itself is paid in full")
+
+	test_retroactive_for_weeks_in_an_earlier_period = None
+	test_a_discretionary_kind_adds_nothing = None
+	test_a_crew_share_still_counts = None
+
+	def test_the_policy_says_why(self):
+		self.assertFalse(payroll_settings.bonuses_in_regular_rate("OR"))
+		self.assertIn("839-020-0030", payroll_settings.pay_item_policy()["states"]["OR"]["source"])
+
+
 class InTheSettlement(SettlementCase):
-	def test_a_daily_pay_workers_bonus_overtime_is_settled(self):
+	def test_an_oregon_daily_pay_workers_bonus_adds_no_overtime(self):
 		STORE.seed("Farm Pay Item", [item("FPI-S9", 450.0, pay_on="2025-06-05", earned_from="2025-06-01",
 		                                  earned_to="2025-06-07")])
 		STORE.commit()
 		slip = self.settle()["slips"][0]
-		derived = [i for i in slip["pay_items"] if i.get("derived_from") == "FPI-S9"]
-		self.assertEqual(derived[0]["amount"], 25.0, "45 h, 5 over: $10 an hour more, half of it on 5 hours")
+		self.assertFalse([i for i in slip["pay_items"] if i.get("derived_from") == "FPI-S9"])

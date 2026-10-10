@@ -43,7 +43,8 @@ KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY, OREGON_KEY, GARNISHMENT_PO
 WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 MIN_WAGE_REGIONS = ("standard", "portland_metro", "non_urban")
 
-#: Today's law, as the code had it: OR HB 4002 and WA SB 5172, fully phased.
+#: The legacy overtime rule's default (40 h, 1.5x). Not Oregon's farm threshold — ORS 653.272 is 48 h in 2025-26 and
+#: 40 from 2027; the Pay Policy's `state_floor` mode (v0.298.0) applies the dated state threshold.
 DEFAULT_OVERTIME = {"weekly_threshold_hours": 40.0, "multiplier": 1.5}
 
 #: Decision 10: flag an employee whose net pay moves by more than this percentage.
@@ -140,10 +141,15 @@ def overtime(as_of: str = "", state: str = "") -> dict:
 		ot = dict(policy["overtime"])
 		out = {"weekly_threshold_hours": float(ot.get("threshold_hours") or DEFAULT_OVERTIME["weekly_threshold_hours"]),
 		       "multiplier": float(ot.get("multiplier") or DEFAULT_OVERTIME["multiplier"])}
-		if ot.get("mode", "never_below_state_floor") == "never_below_state_floor" and state:
+		mode = ot.get("mode", "never_below_state_floor")
+		if mode in ("never_below_state_floor", "state_floor") and state:
 			floor = ag_overtime_threshold(state, as_of)
 			if floor is not None:
-				out["weekly_threshold_hours"] = min(out["weekly_threshold_hours"], floor)
+				# v0.298.0 (Tim, 2026-10-10): `state_floor` is the law's threshold itself — ORS 653.272 for Oregon
+				# (48 h in 2025-26, 40 from 2027), WA 40 — straight from the dated BOLI / L&I table.
+				out["weekly_threshold_hours"] = (floor if mode == "state_floor"
+				                                 else min(out["weekly_threshold_hours"], floor))
+		out["mode"] = mode
 		out["version"] = policy_version
 		return out
 	body, version = _body(OVERTIME_KEY, as_of)
@@ -187,7 +193,10 @@ def minimum_wages(as_of: str = "") -> dict:
 
 
 def ag_overtime_threshold(state: str, as_of: str = ""):
-	row = _in_force(floor_rows(as_of), _day(as_of)).get((str(state or "").upper(), "ag_overtime_threshold", ""))
+	# v0.298.0. The shipped, sourced thresholds (ORS 653.272 / BOLI; WA SB 5172) where no Wage Floor is published.
+	rows = [r for r in floor_rows(as_of) if r.get("kind") == "ag_overtime_threshold"] or [
+		r for r in SEED_FLOORS if r.get("kind") == "ag_overtime_threshold"]
+	row = _in_force(rows, _day(as_of)).get((str(state or "").upper(), "ag_overtime_threshold", ""))
 	return float(row["hours"]) if row else None
 
 
@@ -213,7 +222,8 @@ DEFAULT_PAY_POLICY = {
 	"daily_cutoff": "18:00",
 	"pay_reviewed_punches_only": True,
 	"ach_timing": "next_business_day",
-	"overtime": {"mode": "never_below_state_floor", "threshold_hours": 40, "multiplier": 1.5},
+	# v0.298.0 (Tim, 2026-10-10): the state's legal threshold (ORS 653.272 / BOLI) — 40 where no state is named.
+	"overtime": {"mode": "state_floor", "threshold_hours": 40, "multiplier": 1.5},
 	"no_direct_deposit": "weekly_only",
 	"accept_daily_min_wage_makeup": True,
 	"accept_ach_fees": True,
@@ -290,6 +300,14 @@ DEFAULT_PAY_ITEM_POLICY = {
 	          "Profit Share": {"discretionary": False}, "Commission": {"discretionary": False},
 	          "Other": {"discretionary": False}},
 	"default_discretionary": False,
+	#: v0.298.0 (Tim, 2026-10-10: follow BOLI). Oregon computes overtime "without benefits of commissions,
+	#: overrides, spiffs, bonuses, tips or similar benefits", profit sharing included (OAR 839-020-0030(1)), and
+	#: farm overtime is Oregon's, not the FLSA's (29 U.S.C. 213(b)(12)) — so no bonus enters an Oregon worker's
+	#: regular rate. Washington keeps the federal-style treatment (unverified for WA farm overtime — CPA).
+	"states": {"OR": {"bonuses_in_regular_rate": False,
+	                  "source": "OAR 839-020-0030(1); ORS 653.261(1); ORS 653.272"},
+	           "WA": {"bonuses_in_regular_rate": True,
+	                  "source": "29 CFR 778.208-.210 (applied to WA farm overtime per Tim, 2026-10-09; CPA to confirm)"}},
 	"allocation": "per_hour_worked",
 	"source": ("FLSA 29 CFR 778.208-.210 (bonuses in the regular rate; allocation over the workweeks earned), "
 	           "778.211 (discretionary bonuses excluded), 778.117 (commissions); applied the same under Oregon's "
@@ -301,6 +319,15 @@ def pay_item_policy(as_of: str = "") -> dict:
 	body, version = _body(PAY_ITEM_POLICY_KEY, as_of)
 	return {**DEFAULT_PAY_ITEM_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_PAY_ITEM_POLICY},
 	        "version": version}
+
+
+def bonuses_in_regular_rate(state: str, as_of: str = "", policy: dict | None = None) -> bool:
+	"""v0.298.0. Whether a non-discretionary bonus enters this state's overtime regular rate (Oregon: no)."""
+	policy = policy or pay_item_policy(as_of)
+	row = (policy.get("states") or {}).get(str(state or "").upper())
+	if isinstance(row, dict) and "bonuses_in_regular_rate" in row:
+		return bool(row["bonuses_in_regular_rate"])
+	return True
 
 
 def is_discretionary(kind: str, as_of: str = "", policy: dict | None = None) -> bool:
@@ -424,8 +451,9 @@ def _validate_policy(body: dict, for_publish: bool) -> dict:
 		errors.append("eligible_employment_types is a list of Employment Type names")
 	ot = body.get("overtime") or {}
 	mode = ot.get("mode", "never_below_state_floor")
-	if mode not in ("never_below_state_floor", "farm_threshold"):
-		errors.append("overtime.mode is never_below_state_floor or farm_threshold")
+	if mode not in ("never_below_state_floor", "farm_threshold", "state_floor"):
+		errors.append("overtime.mode is state_floor (the law's dated threshold), never_below_state_floor or "
+		              "farm_threshold")
 	try:
 		hours = float(ot.get("threshold_hours", 40))
 		if not 1 <= hours <= 80:
@@ -646,11 +674,13 @@ def seed_body(key: str = OVERTIME_KEY) -> dict:
 		return {"schema_version": 1, "key": key, "effective_from": "2009-07-24",
 		        "rows": [dict(r) for r in SEED_GARNISHMENT_LIMITS]}
 	return {"schema_version": 1, "key": OVERTIME_KEY, **DEFAULT_OVERTIME, "effective_from": "2020-01-01",
-	        "basis": "OR HB 4002 and WA SB 5172, fully phased: 40 hours a workweek, 1.5× the regular rate."}
+	        "basis": "The legacy rule's default (40 hours, 1.5x). Oregon's farm threshold is dated (ORS 653.272) and "
+	                 "comes through the Pay Policy's state_floor mode."}
 
 
 _BOLI = "Oregon BOLI minimum wage schedule, oregon.gov/boli/workers/pages/minimum-wage-schedule.aspx"
-_BOLI_AG = "Oregon HB 4002 (2022); BOLI, oregon.gov/boli/employers/Pages/minimum-wage-and-overtime-in-agriculture.aspx"
+_BOLI_AG = ("ORS 653.272 (Oregon HB 4002, 2022); BOLI, "
+            "oregon.gov/boli/employers/Pages/minimum-wage-and-overtime-in-agriculture.aspx")
 _LNI = "Washington L&I, lni.wa.gov (2026 rate announced 2025-09-30)"
 #: v0.287.0. The floors as of 2026-10-09, each with its source. A new legal rate is a new row (a new version of this
 #: setting, published by a person) — never a release.

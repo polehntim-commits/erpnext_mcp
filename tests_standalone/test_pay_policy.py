@@ -67,20 +67,31 @@ class ThePayPolicy(IntegrationTestCase):
 		for field, value in (("model", "daily_periods"), ("workweek_start", "Sunday"), ("daily_cutoff", "18:00"),
 		                     ("ach_timing", "next_business_day"), ("no_direct_deposit", "weekly_only")):
 			self.assertEqual(body[field], value)
-		self.assertEqual(body["overtime"], {"mode": "never_below_state_floor", "threshold_hours": 40, "multiplier": 1.5})
+		# v0.298.0 (Tim, 2026-10-10): overtime at the state's legal threshold (ORS 653.272 / BOLI).
+		self.assertEqual(body["overtime"], {"mode": "state_floor", "threshold_hours": 40, "multiplier": 1.5})
 
-	def test_its_overtime_is_the_old_rule_to_the_cent(self):
-		body = {**PS.seed_body(PS.PAY_POLICY_KEY), "effective_from": "2020-01-01"}
+	def test_the_old_farm_rule_is_still_the_old_rule_to_the_cent(self):
+		body = {**PS.seed_body(PS.PAY_POLICY_KEY), "effective_from": "2020-01-01",
+		        "overtime": {"mode": "never_below_state_floor", "threshold_hours": 40, "multiplier": 1.5}}
 		got = PS.preview(PS.PAY_POLICY_KEY, body, self.args)
 		self.assertTrue(got["employees"], "the period has someone to pay")
 		_c, slips, _t = payroll._period_run(dict(self.args), creating=False)
 		self.assertGreater(float(slips[0].get("overtime_hours") or 0), 0, "and overtime to pay")
 		self.assertTrue(got["identical"], got["employees"])
 
+	def test_the_legal_floor_moves_a_45_hour_oregon_week_off_overtime(self):
+		"""v0.298.0. The seed is `state_floor`: an Oregon 45-hour week in 2025 is under ORS 653.272's 48 hours, and
+		the preview says so per employee before anyone publishes it."""
+		body = {**PS.seed_body(PS.PAY_POLICY_KEY), "effective_from": "2020-01-01"}
+		got = PS.preview(PS.PAY_POLICY_KEY, body, self.args)
+		change = got["employees"][0]["changes"]["overtime_hours"]
+		self.assertEqual((change["live"], change["staged"]), (5.0, 0.0))
+
 	def test_never_less_generous_than_the_state(self):
 		seed(PS.PAY_POLICY_KEY)
 		STORE.commit()
-		self.assertEqual(PS.overtime("2026-10-09", state="OR")["weekly_threshold_hours"], 40.0)
+		# v0.298.0: the seed is the legal floor itself — 48 in Oregon through 2026.
+		self.assertEqual(PS.overtime("2026-10-09", state="OR")["weekly_threshold_hours"], 48.0)
 		with PS.overlay(PS.PAY_POLICY_KEY, {**PS.seed_body(PS.PAY_POLICY_KEY),
 		                                    "overtime": {"mode": "never_below_state_floor", "threshold_hours": 50,
 		                                                 "multiplier": 1.5}}):

@@ -548,8 +548,10 @@ class OvertimeUnderPieceRate(PieceworkTestCase):
 		self.assertEqual(slip["total_hours"], 50.0)
 		self.assertEqual(slip["overtime_hours"], 10.0)
 		self.assertEqual(slip["piece_units"], 400.0)
-		self.assertEqual(slip["earned_gross"], 660.00)
-		self.assertEqual(slip["minimum_wage_makeup"], 148.50)
+		# v0.298.0. The premium is on the week's regular rate RAISED TO the minimum wage (OAR 839-020-0030(2)(b)):
+		# $600 / 50 h = $12 is below $14.70, so 10 h x $14.70 x 0.5 = $73.50, not $60. The makeup fills the rest.
+		self.assertEqual(slip["earned_gross"], 673.50)
+		self.assertEqual(slip["minimum_wage_makeup"], 135.00)
 		self.assertEqual(slip["gross_pay"], 808.50)
 		self.assertEqual(slip["minimum_wage_by_state"]["OR"]["minimum_wage_floor"], 808.50)
 		self.assertEqual(slip["minimum_wage_by_state"]["OR"]["overtime_hours"], 10.0)
@@ -785,14 +787,19 @@ class MultiDayPayPeriod(PieceworkTestCase):
 		The floor is a PERIOD figure built from a WEEKLY split — the ten overtime
 		hours are week one's, and week two contributes none — which is the same
 		distinction the overtime count itself is made of.
+
+		v0.298.0. And the PREMIUM is on week one's own regular rate (OAR 839-020-0030(2)(a): each workweek stands
+		alone): 500 buckets x $1.50 / 50 h = $15, so 10 h x $15 x 0.5 = $75 — not the period's blended $17.81.
 		"""
 		slip = self.slip(self.shifts)
 		self.assertEqual(slip["total_hours"], 80.0)
 		self.assertEqual(slip["overtime_hours"], 10.0)
-		self.assertEqual(slip["gross_pay"], 1514.06)
+		self.assertEqual(slip["gross_pay"], 1500.00)
 		self.assertEqual(slip["minimum_wage_makeup"], 0.0)
 		self.assertEqual(slip["minimum_wage_by_state"]["OR"]["minimum_wage_floor"], 1249.50)
-		self.assertEqual(slip["effective_hourly_rate"], 18.93)
+		self.assertEqual(slip["effective_hourly_rate"], 18.75)
+		weeks = slip["regular_rate_by_week"]["weeks"]
+		self.assertEqual([w["regular_rate"] for w in weeks], [15.0, 22.5])
 
 	def test_a_day_outside_the_period_is_not_in_the_total(self):
 		"""The eleventh day is the next period's, units and all."""

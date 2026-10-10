@@ -8,14 +8,15 @@ engines (v0.29.0) into actual payroll: gross pay from hours and piece units,
 overtime at 1.5x, break pay at the average piece-rate hourly, minimum wage
 checks, and the full deduction stack.
 
-MINIMUM WAGE (2025):
-  Oregon: $14.70/hr standard, $13.70 non-urban, $15.95 Portland metro
-  Washington: $16.66/hr
+MINIMUM WAGE: the dated, sourced Wage Floor (payroll_settings, BOLI and L&I schedules) wins over the fallback
+table below. Oregon from 2026-07-01: $15.55 standard, $16.80 Portland metro, $14.55 non-urban (BOLI);
+Washington 2026: $17.13 (L&I).
 
-OVERTIME (both states, ag workers, fully phased):
-  Oregon HB 4002: 40 hrs/wk threshold
-  Washington SB 5172: 40 hrs/wk threshold
-  1.5x the regular rate
+OVERTIME (ag workers), per WORKWEEK, at 1.5x the regular rate:
+  Oregon ORS 653.272 (HB 4002): 55 h in 2023-24, 48 h in 2025-26, 40 h from 2027 (BOLI)
+  Washington SB 5172: 40 h, fully phased 2024
+  Regular rate (Oregon, OAR 839-020-0030): each workweek alone — straight-time pay excluding bonuses, profit
+  sharing and similar, over hours worked, never below minimum wage.
 
 ────────────────────────────────────────────────────────────────────────────
 v0.49.0 — THE HIGHER-OF RULE, AND THREE THINGS THAT FOLLOW FROM IT
@@ -75,6 +76,9 @@ from .withholding import calculate_federal_withholding
 #: every install until an operator noticed, and "the minimum wage was zero" is
 #: the one wrong answer in this module that nobody would see on a slip.
 MINIMUM_WAGE_RATES = {
+	# The 2024-25 rates this engine shipped with, kept as the LAST-RESORT fallback only (and as the figures its
+	# arithmetic tests are written in). Every pay run passes the dated, sourced Wage Floor (payroll_settings —
+	# BOLI from 2026-07-01: $15.55 / $16.80 Portland metro / $14.55 non-urban; WA $17.13), which wins.
 	"OR": {"standard": 14.70, "non_urban": 13.70, "portland_metro": 15.95},
 	"WA": {"standard": 16.66},
 }
@@ -200,8 +204,14 @@ def calculate_gross_pay(
 	overtime_hours: float,
 	piece_units: float,
 	break_hours: float = 0.0,
+	ot_regular_rate: float | None = None,
 ) -> dict:
 	"""Calculate gross pay from raw inputs.
+
+	v0.298.0. `ot_regular_rate`: the overtime-weighted average of each WORKWEEK's own regular rate (OAR
+	839-020-0030 — each workweek stands alone, never below minimum wage), from
+	`payroll_integration.weekly_regular_rates`. Where given, the piece-rate premium is paid at it rather than at the
+	period's average.
 
 	For piece rate workers: gross = (units * rate) + break_pay + OT_pay.
 	For hourly workers: gross = (regular_hours * rate) + (OT_hours * rate * 1.5).
@@ -222,10 +232,11 @@ def calculate_gross_pay(
 		# divide by zero on a day that was all break.
 		effective_rate = (piece_earnings / piece_hours) if piece_hours > 0 else 0.0
 		premium = _premium_multiplier()
+		ot_rate = float(ot_regular_rate) if ot_regular_rate else effective_rate
 		ot = calculate_overtime(
 			0,
 			overtime_hours,
-			effective_rate,
+			ot_rate,
 			multiplier=premium,
 		)
 		gross = piece_earnings + bp + ot
@@ -240,6 +251,7 @@ def calculate_gross_pay(
 			"piece_units": piece_units,
 			"piece_rate": base_rate,
 			"overtime_premium_multiplier": premium,
+			"overtime_regular_rate": round(ot_rate, 4),
 			"pay_type": "Piece Rate",
 		}
 
@@ -291,9 +303,8 @@ def calculate_overtime(
 ) -> float:
 	"""Overtime pay at `multiplier` times the effective rate.
 
-	Both OR (HB 4002) and WA (SB 5172) use a 40-hour threshold for ag
-	workers, fully phased. The caller is responsible for splitting hours
-	into regular and overtime at the 40-hour boundary.
+	The caller splits hours into regular and overtime at the weekly threshold in
+	force — WA 40 (SB 5172); OR 48 in 2025-26 and 40 from 2027 (ORS 653.272).
 
 	The multiplier is the caller's because it depends on what has already been
 	paid for those hours. An hourly worker whose regular pay covered only the
@@ -313,6 +324,7 @@ def calculate_overtime(
 def calculate_mixed_gross_pay(
 	segments: list[dict],
 	overtime_hours: float = 0.0,
+	ot_regular_rate: float | None = None,
 ) -> dict:
 	"""Gross pay for a period whose segments were not all paid the same way.
 
@@ -384,10 +396,12 @@ def calculate_mixed_gross_pay(
 	straight_time = piece_earnings + hourly_earnings + break_pay
 	regular_rate = (straight_time / total_hours) if total_hours > 0 else 0.0
 	overtime_hours = max(float(overtime_hours or 0.0), 0.0)
+	# v0.298.0. Each workweek's own regular rate where the caller has it (OAR 839-020-0030(2)).
+	ot_rate = float(ot_regular_rate) if ot_regular_rate else regular_rate
 	ot = calculate_overtime(
 		0,
 		overtime_hours,
-		regular_rate,
+		ot_rate,
 		multiplier=_premium_multiplier(),
 	)
 
@@ -408,6 +422,7 @@ def calculate_mixed_gross_pay(
 		"overtime_hours": round(overtime_hours, 2),
 		"piece_units": round(piece_units, 2),
 		"overtime_premium_multiplier": _premium_multiplier(),
+		"overtime_regular_rate": round(ot_rate, 4),
 		# "Mixed" only where it actually was. A day of segments that all turned out
 		# to be piece work is a piece-rate day, and calling it mixed on a slip
 		# somebody reads would be describing the code path rather than the work.
@@ -426,9 +441,8 @@ def minimum_wage_floor(
 	`regular × minimum + overtime × minimum × 1.5`, and NOT `total × minimum`.
 	The statutory floor for somebody who worked fifty hours is not fifty hours of
 	minimum wage: the ten past forty are owed at one and a half of it, whatever
-	pay method produced the earnings being tested against it. Oregon HB 4002 and
-	Washington SB 5172 both put the ag threshold at forty in a workweek; FLSA §7
-	is the same arithmetic federally.
+	pay method produced the earnings being tested against it — the hours past the
+	weekly threshold in force (OR ORS 653.272, dated; WA SB 5172) at one and a half.
 	"""
 	hours = max(float(hours or 0.0), 0.0)
 	overtime_hours = min(max(float(overtime_hours or 0.0), 0.0), hours)
@@ -665,8 +679,9 @@ def calculate_full_payroll(
 	#
 	# Salary is period pay: it has no per-hour or per-unit reading, so a segment
 	# claiming otherwise cannot be honoured and the structure wins.
+	ot_regular_rate = salary_structure.get("ot_regular_rate")
 	if mixed and pay_type != "Salary":
-		gross_result = calculate_mixed_gross_pay(segments, overtime_hours)
+		gross_result = calculate_mixed_gross_pay(segments, overtime_hours, ot_regular_rate)
 	else:
 		gross_result = calculate_gross_pay(
 			pay_type,
@@ -675,6 +690,7 @@ def calculate_full_payroll(
 			overtime_hours,
 			piece_units,
 			break_hours,
+			ot_regular_rate,
 		)
 	earned_gross = gross_result["gross_pay"]
 

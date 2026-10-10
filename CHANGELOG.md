@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.298.0 — 2026-10-10 — farm overtime as BOLI computes it
+
+**Migrate**: drafts Pay Policy v2 (`state_floor`) for a person to publish. Deploy
+`docs/deploy/v0.298.0_boli_overtime.md`. Tools: **1,142 → 1,142**.
+
+- **Threshold:** per workweek, per state and dated (ORS 653.272): Oregon 48 h in 2025–26 and 40 from 2027, Washington
+  40. A week in two states takes the lower. This is Tim's decision to use the legal floor, through Pay Policy mode
+  `state_floor`.
+- **Regular rate:** each workweek's own, never below the minimum wage (OAR 839-020-0030(2)), instead of the pay
+  period's blend.
+- **Workweek:** the employer's fixed workweek (ORS 653.271(4); Pay Policy `workweek_start`). A pay period that
+  starts mid-workweek is flagged.
+- **Bonuses:** Oregon leaves bonuses and profit sharing out of the regular rate (OAR 839-020-0030(1)), so they no
+  longer add Oregon overtime. Washington is unchanged. This reverses the Oregon part of v0.296.0, per Tim.
+- **Stale comments:** comments and seeds calling Oregon "40, fully phased" were corrected.
+- Tests: `test_boli_overtime`. `test_piecework_rules` and `test_bonus_regular_rate` were updated to the BOLI
+  arithmetic.
+
 ## 0.297.0 — 2026-10-09 — crop phenology bases per crop: sweet cherry 40.1 °F
 
 **Migrate**: IPM setting `crop_phenology` seeded. Deploy `docs/deploy/v0.297.0_crop_phenology.md`. Tools:

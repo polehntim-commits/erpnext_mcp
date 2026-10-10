@@ -51,8 +51,9 @@ are two fields and never one.
 OVERTIME IS A WEEKLY QUESTION ANSWERED CHRONOLOGICALLY
 ────────────────────────────────────────────────────────────────────────────
 
-Oregon HB 4002 and Washington SB 5172 both put agricultural overtime at 40 hours
-in a WORKWEEK, both fully phased in as of 2025, and both at 1.5x. A pay period is
+Washington SB 5172 puts agricultural overtime at 40 hours in a WORKWEEK (fully phased 2024); Oregon's
+ORS 653.272 (HB 4002) phases it in — 55 hours in 2023-24, 48 in 2025-26, 40 from 2027 — both at 1.5x. v0.298.0:
+the threshold is chosen PER WORKWEEK and PER STATE (a callable from the run, dated), never one number for all. A pay period is
 not a workweek: a biweekly period is two of them, and forty-five hours in week
 one and thirty-five in week two is five hours of overtime, not zero. Summing the
 period and comparing to eighty would find none of it.
@@ -122,13 +123,14 @@ from datetime import date, datetime, timedelta
 
 from . import bucket_bridge
 from .payroll_calc import (
+	_segment_rate,
 	applicable_minimum_wage,
 	calculate_full_payroll,
 	minimum_wage_floor,
 )
 
-#: Hours in a workweek before the ag overtime premium starts. Oregon HB 4002 and
-#: Washington SB 5172 both landed here, both fully phased as of 2025.
+#: The fallback weekly threshold when a caller names none. NOT Oregon's: ORS 653.272 is 48 hours in 2025-26 and
+#: 40 from 2027 — the run passes the dated, per-state threshold (`payroll_settings.overtime`) instead.
 OVERTIME_THRESHOLD_HOURS = 40.0
 
 #: Days in a workweek. FLSA's is any fixed, recurring 168-hour period; both state
@@ -517,8 +519,9 @@ def aggregate_shifts_for_period(
 			`bucket_logs` or `piece_logs`.
 		pay_period_start: First day of the period, inclusive.
 		pay_period_end: Last day of the period, inclusive.
-		overtime_threshold: Hours in a workweek before the premium. 40 in both
-			OR and WA; an argument so a stricter local rule can be expressed.
+		overtime_threshold: Hours in a workweek before the premium — a number, or (v0.298.0) a callable
+			`(week_start, states) -> hours` so each workweek gets the threshold in force for the states
+			worked in it (ORS 653.272's dated phase-in; a week in two states takes the lower).
 		workweek_anchor: First day of the employer's declared workweek. Defaults
 			to `pay_period_start`, which is right whenever the period is a whole
 			number of workweeks — and wrong, silently, when it is not, which is
@@ -574,9 +577,15 @@ def _aggregate_one(
 	segments: list[_Segment],
 	anchor: date | None,
 	period_start: date | None,
-	threshold: float,
+	threshold,
 ) -> dict:
 	"""One employee's totals, with overtime resolved week by week."""
+	def _threshold_for(index: int, members: list) -> float:
+		if not callable(threshold):
+			return float(threshold)
+		start = anchor + timedelta(days=index * WORKWEEK_DAYS) if anchor else None
+		return float(threshold(start, {seg.work_state or "" for seg in members}))
+
 	weeks: dict[int, list[_Segment]] = {}
 	for seg in segments:
 		when = _as_date(seg.start)
@@ -597,7 +606,8 @@ def _aggregate_one(
 	for index in sorted(weeks):
 		members = weeks[index]
 		week_hours = week_overtime = 0.0
-		for seg, regular, overtime in _split_overtime(members, threshold):
+		week_threshold = _threshold_for(index, members)
+		for seg, regular, overtime in _split_overtime(members, week_threshold):
 			state = seg.work_state or ""
 			total_hours += seg.hours
 			regular_hours += regular
@@ -654,6 +664,7 @@ def _aggregate_one(
 				"regular_hours": round(week_hours - week_overtime, 2),
 				"overtime_hours": round(week_overtime, 2),
 				"over_threshold": week_overtime > 0,
+				"threshold": week_threshold,
 			}
 		)
 
@@ -688,7 +699,7 @@ def _aggregate_one(
 		"shifts": detail,
 		"weeks": week_rows,
 		"open_shifts": sorted(set(open_shifts)),
-		"overtime_threshold": threshold,
+		"overtime_threshold": threshold if not callable(threshold) else sorted({w["threshold"] for w in week_rows}),
 		"shifts_outside_period": [],
 	}
 
@@ -822,6 +833,65 @@ def _federal_table_for(federal_tax_tables, filing_status: str, checkbox: bool = 
 	return list(federal_tax_tables)
 
 
+def weekly_regular_rates(aggregate: dict, structure: dict, min_wage_rates: dict | None = None,
+                         regions: dict | None = None) -> dict:
+	"""v0.298.0. The regular rate WORKWEEK BY WORKWEEK, and the rate the period's overtime hours are owed the premium at.
+
+	OAR 839-020-0030(2): "each work week stands alone" — the regular rate is the week's total straight-time pay
+	(bonuses, commissions and similar excluded — 0030(1)) over the hours actually worked that week, and it is never
+	below the minimum wage. 0030(3)(b): a piece-rate worker's is the week's piece earnings over the week's hours; a
+	worker paid two ways in a week gets the weighted average. Paid rest is pay and its time is hours worked.
+
+	The engine is handed the period's overtime hours as one figure; this returns `ot_regular_rate`, the
+	overtime-hours-weighted average of the weeks' regular rates, so hours x that rate x 0.5 is exactly the sum of
+	each week's own premium. None for a salaried structure (no hourly reading) or where there is no overtime.
+	"""
+	pay_type = str(structure.get("pay_type") or "Hourly")
+	if pay_type == "Salary":
+		return {"weeks": [], "ot_regular_rate": None}
+	base_rate = _as_float(structure.get("base_rate"))
+	hourly_rate = structure.get("hourly_rate")
+	weeks: dict[int, dict] = {}
+	for seg in aggregate.get("shifts") or []:
+		week = weeks.setdefault(int(seg.get("workweek") or 1), {"hours": 0.0, "overtime_hours": 0.0, "piece": 0.0,
+		                                                         "piece_hours": 0.0, "piece_breaks": 0.0,
+		                                                         "hourly": 0.0, "states": {}})
+		row_type = seg.get("pay_type") or pay_type
+		rate = _segment_rate(seg, row_type, pay_type, base_rate, hourly_rate)
+		hours = _as_float(seg.get("hours"))
+		week["hours"] += hours
+		week["overtime_hours"] += _as_float(seg.get("overtime_hours"))
+		state = seg.get("work_state") or ""
+		week["states"][state] = week["states"].get(state, 0.0) + hours
+		if row_type == "Piece Rate":
+			week["piece"] += _as_float(seg.get("piece_units")) * rate
+			week["piece_hours"] += hours
+			week["piece_breaks"] += min(_as_float(seg.get("break_hours")), hours)
+		else:
+			week["hourly"] += hours * rate
+	rows, weighted, ot_total = [], 0.0, 0.0
+	week_meta = {int(w.get("workweek") or 0): w for w in aggregate.get("weeks") or []}
+	for index in sorted(weeks):
+		week = weeks[index]
+		worked = week["piece_hours"] - week["piece_breaks"]
+		rest_pay = (week["piece"] / worked * week["piece_breaks"]) if worked > 0 else 0.0
+		straight = week["piece"] + rest_pay + week["hourly"]
+		earned_rate = straight / week["hours"] if week["hours"] > 0 else 0.0
+		state = max(week["states"], key=week["states"].get) if week["states"] else ""
+		floor = applicable_minimum_wage(state, (regions or {}).get(state, "standard"), min_wage_rates) if state else 0.0
+		rate = max(earned_rate, floor)
+		weighted += rate * week["overtime_hours"]
+		ot_total += week["overtime_hours"]
+		meta = week_meta.get(index) or {}
+		rows.append({"workweek": index, "week_start": meta.get("week_start"), "week_end": meta.get("week_end"),
+		             "hours": round(week["hours"], 2), "overtime_hours": round(week["overtime_hours"], 2),
+		             "threshold": meta.get("threshold"), "straight_time_pay": round(straight, 2),
+		             "regular_rate": round(rate, 4), "raised_to_minimum_wage": rate > earned_rate + 1e-9,
+		             "work_state": state})
+	return {"weeks": rows, "ot_regular_rate": round(weighted / ot_total, 4) if ot_total > 0 else None,
+	        "source": "OAR 839-020-0030(1)-(3): each workweek stands alone; bonuses excluded; never below minimum wage"}
+
+
 def engine_shift_rows(aggregate: dict) -> list[dict]:
 	"""The aggregate, restated as the per-state rows `payroll_calc` reads.
 
@@ -949,6 +1019,8 @@ def build_payroll_inputs(
 
 		w4 = _w4_for(w4_data, employee)
 		ytd = (ytd_by_employee or {}).get(employee) or {}
+		# v0.298.0. The regular rate week by week (OAR 839-020-0030), for the overtime premium.
+		by_week = weekly_regular_rates(aggregate, structure, min_wage_rates, structure.get("min_wage_regions") or {})
 
 		inputs.append(
 			{
@@ -970,7 +1042,9 @@ def build_payroll_inputs(
 					# than reporting a distance from it.
 					"hourly_rate": structure.get("hourly_rate"),
 					"min_wage_regions": structure.get("min_wage_regions") or {},
+					"ot_regular_rate": by_week["ot_regular_rate"],
 				},
+				"regular_rate_by_week": by_week,
 				"tax_config": {
 					"w4_data": w4,
 					"fica_config": dict(fica_config or {}),
@@ -1135,6 +1209,7 @@ def run_integrated_payroll(
 
 		wages_by_state = _state_wages(slip)
 		slip["state_wages"] = wages_by_state
+		slip["regular_rate_by_week"] = item.get("regular_rate_by_week")
 		# The independent check, run on the wages as PAID — makeup included. It
 		# should now find nothing, and the day it finds something is the day the
 		# engine and the floor disagree about a slip somebody is about to be paid.

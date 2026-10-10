@@ -173,6 +173,8 @@ def regular_rate_items(company: str, items_by_employee: dict, period_start: str,
 				aggregate = payroll_integration.aggregate_shifts_for_period(
 					shifts, first, last, overtime_threshold=float(rule["weekly_threshold_hours"]),
 					workweek_anchor=first).get(employee) or {}
+			if not payroll_settings.bonuses_in_regular_rate(state, policy=policy):
+				continue  # v0.298.0: Oregon leaves bonuses out of the regular rate (OAR 839-020-0030(1)).
 			result = regular_rate_premium(float(row["amount"]), aggregate.get("weeks") or [], float(rule["multiplier"]))
 			if result["premium"] <= 0:
 				continue

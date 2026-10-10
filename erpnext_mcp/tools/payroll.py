@@ -1234,13 +1234,10 @@ def get_employee_timesheet_summary(args: dict) -> ToolResult:
 	if company:
 		company = resolve_company(company)
 
-	# v0.235.0: the workweek threshold is the `overtime_rule` in force at the period's end
-	# (built-in 40 until a version is published); an explicit argument still wins.
-	from .. import payroll_settings
-
-	rule = payroll_settings.overtime(str(end))
-	threshold = _as_float(args, "overtime_threshold", rule["weekly_threshold_hours"])
-	anchor = as_date(args, "workweek_anchor")
+	# v0.298.0: each workweek's threshold is the Pay Policy's in force for the states worked in it (ORS 653.272's
+	# dated phase-in for Oregon), on the employer's fixed workweek; an explicit argument still wins.
+	threshold = _weekly_threshold(args)
+	anchor = _workweek_anchor(args, start)
 
 	shifts, provenance = _load_period_shifts(company, start, end, employees=[employee])
 	aggregates = payroll_integration.aggregate_shifts_for_period(
@@ -1318,6 +1315,36 @@ def _period_run(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		return _period_run_at(args, creating)
 
 
+def _weekly_threshold(args: dict):
+	"""v0.298.0. An explicit `overtime_threshold` wins; otherwise a callable giving each workweek the Pay Policy's
+	threshold in force at the week's end for the states worked in it (ORS 653.272's dated phase-in for Oregon;
+	a week in two states takes the lower)."""
+	import datetime
+
+	from .. import payroll_settings
+
+	if args.get("overtime_threshold") not in (None, ""):
+		return _as_float(args, "overtime_threshold", 40.0)
+
+	def threshold(week_start, states):
+		day = (week_start + datetime.timedelta(days=6)).isoformat() if week_start else ""
+		return min(float(payroll_settings.overtime(day, state=state)["weekly_threshold_hours"])
+		           for state in (states or {""}))
+
+	return threshold
+
+
+def _workweek_anchor(args: dict, start):
+	"""v0.298.0. The employer's fixed workweek (ORS 653.271(4); Pay Policy workweek_start) holding the period
+	start — not the period start itself. An explicit `workweek_anchor` wins."""
+	explicit = as_date(args, "workweek_anchor")
+	if explicit:
+		return explicit
+	from .. import daily_pay
+
+	return daily_pay.workweek_start(str(start)[:10])
+
+
 def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	"""Everything both period tools do before they diverge.
 
@@ -1370,8 +1397,8 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	from .. import payroll_settings
 
 	rule = payroll_settings.overtime(str(end))
-	threshold = _as_float(args, "overtime_threshold", rule["weekly_threshold_hours"])
-	anchor = as_date(args, "workweek_anchor")
+	threshold = _weekly_threshold(args)
+	anchor = _workweek_anchor(args, start)
 	include_unworked = args.get("include_unworked")
 	include_unworked = True if include_unworked is None else bool(int(include_unworked))
 
@@ -1535,8 +1562,15 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		"daily_pay_held": held_daily,
 		"daily_pay_left_out": left_out_daily,
 		**({"ach_effective_date": daily["ach_effective_date"], "pay_policy": daily["policy_version"]} if daily else {}),
-		"overtime_threshold": threshold,
+		"overtime_threshold": threshold if not callable(threshold) else (
+			"per workweek and state — the Pay Policy's threshold in force (Oregon ORS 653.272: 48 h in 2025-26, "
+			"40 from 2027; Washington 40); see each slip's regular_rate_by_week"),
 		"workweek_anchor": str(anchor) if anchor else str(start),
+		# v0.298.0. OAR 839-020-0030(2)(a): each workweek stands alone. A period that starts mid-workweek splits one.
+		"workweek_warning": (None if not anchor or str(anchor) == str(start) else
+		                     f"this pay period starts {start}, inside the workweek that began {anchor} (Pay Policy "
+		                     "workweek_start): that week's hours before the period are not counted toward its "
+		                     "overtime here — align pay periods to the workweek."),
 		"employees_missing_structures": missing,
 		# v0.61.0. Two lists rather than one number, because they are opposite
 		# facts. `piece_rates_from_company` is the fallback WORKING — these
@@ -1616,6 +1650,8 @@ def _slip_view(slip: dict, verbose: bool) -> dict:
 		"federal_taxable_gross": slip.get("federal_taxable_gross") or 0,
 		"fica_taxable_gross": slip.get("fica_taxable_gross") or 0,
 		"disposable_earnings": slip.get("disposable_earnings") or 0,
+		# v0.298.0. Each workweek's threshold and regular rate (OAR 839-020-0030; ORS 653.272).
+		"regular_rate_by_week": slip.get("regular_rate_by_week") or {},
 		# v0.292.0. Bonuses and profit shares paid with this slip.
 		"pay_items": slip.get("pay_items") or [],
 		"pay_items_wages": slip.get("pay_items_wages") or 0,

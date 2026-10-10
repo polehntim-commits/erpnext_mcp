@@ -226,6 +226,7 @@ def after_migrate() -> None:
 	_asset_tag_urls()
 	_business_card_fields()
 	_payroll_settings_seed()
+	_pay_policy_state_floor_draft()
 	_daily_pay_fields()
 	_task_due_rule()
 	_daily_check_templates()
@@ -738,6 +739,39 @@ def _reporting_templates() -> None:
 		print(
 			f"erpnext_mcp: {len(report['failed'])} reporting template(s) could not be seeded: {report['failed']}"
 		)
+
+
+def _pay_policy_state_floor_draft() -> None:
+	"""v0.298.0 (Tim, 2026-10-10: use the legal floor). Where the published Pay Policy still applies the farm's own
+	40 hours, leave a DRAFT next version in `state_floor` mode — Oregon's farm overtime after the ORS 653.272 /
+	BOLI threshold (48 h in 2025-26, 40 from 2027), Washington's 40 — dated from the next workweek. A person
+	publishes it in the Desk (payroll settings are never published by code). Never touches an open draft; never
+	raises."""
+	try:
+		import datetime
+
+		from . import daily_pay, payroll_settings, phone_config
+
+		key = payroll_settings.PAY_POLICY_KEY
+		existing = phone_config.rows(payroll_settings.KIND, key)
+		if not existing or any(r.get("status") == phone_config.DRAFT for r in existing):
+			return
+		body, _version = payroll_settings._published(key, payroll_settings._day(""))
+		if not body or (body.get("overtime") or {}).get("mode") == "state_floor":
+			return
+		start = daily_pay.workweek_start(frappe.utils.today()) + datetime.timedelta(days=7)
+		draft = {**{k: v for k, v in body.items() if k not in ("name", "version")},
+		         "overtime": {**(body.get("overtime") or {}), "mode": "state_floor"},
+		         "effective_from": start.isoformat(),
+		         "basis": "Tim 2026-10-10: Oregon farm overtime at the legal threshold (ORS 653.272, BOLI) — 48 h in "
+		                  "2025-26, 40 from 2027; Washington 40. Publish in the Desk to take effect."}
+		doc, _report = phone_config.save_draft(payroll_settings.KIND, key, draft,
+		                                       "v0.298.0: overtime at the state's legal threshold (BOLI). Publish "
+		                                       "in the Desk.")
+		print(f"erpnext_mcp: payroll setting {doc.name} drafted — publish it in the Desk to pay Oregon farm overtime "
+		      "after the BOLI threshold.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: the Pay Policy state-floor draft was not created — {type(exc).__name__}: {exc}")
 
 
 def _payroll_settings_seed() -> None:
