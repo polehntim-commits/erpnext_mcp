@@ -1583,6 +1583,8 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		"workweek_anchor": str(anchor) if anchor else str(start),
 		# v0.302.0. OAR 839-020-0013: bonuses whose posted terms are not on record.
 		"bonus_terms_not_posted": items.unposted_bonus_terms(items_by_employee),
+		# v0.309.0. The Pay Policy's compliance flags: the FLSA trap, Oregon piece-rate exemptions, Oregon bonuses out.
+		"compliance_warnings": payroll_settings.compliance_warnings(str(end)),
 		# v0.298.0. OAR 839-020-0030(2)(a): each workweek stands alone. A period that starts mid-workweek splits one.
 		"workweek_warning": (None if not anchor or str(anchor) == str(start) else
 		                     f"this pay period starts {start}, inside the workweek that began {anchor} (Pay Policy "

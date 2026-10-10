@@ -106,15 +106,24 @@ class InARun(IntegrationTestCase):
 		self.assertEqual([i["amount"] for i in slip["pay_items"] if i.get("derived_from") == "FPI-R4"], [50.0])
 
 
+#: v0.309.0. Oregon's bonuses OUT of the regular rate — the attorney-approved setting (OAR 839-020-0030(1)).
+OREGON_EXCLUDED = {**payroll_settings.DEFAULT_PAY_ITEM_POLICY,
+                   "states": {**payroll_settings.DEFAULT_PAY_ITEM_POLICY["states"],
+                              "OR": {**payroll_settings.DEFAULT_PAY_ITEM_POLICY["states"]["OR"],
+                                     "bonuses_in_regular_rate": False}}}
+
+
 class InOregon(InARun):
-	"""The same week in Oregon: no bonus enters the regular rate (OAR 839-020-0030(1))."""
+	"""The same week in Oregon. v0.309.0: bonuses are IN the regular rate by default (the conservative choice); an
+	attorney may turn that off, since OAR 839-020-0030(1)'s text excludes them."""
 
 	state = "OR"
 
 	def test_the_bonus_overtime_is_paid_with_it(self):
 		STORE.seed("Farm Pay Item", [item("FPI-O1", 450.0, earned_from="2025-06-01", earned_to="2025-06-07")])
 		STORE.commit()
-		_got, slip = self.slip()
+		with payroll_settings.overlay(payroll_settings.PAY_ITEM_POLICY_KEY, OREGON_EXCLUDED):
+			_got, slip = self.slip()
 		self.assertFalse([i for i in slip["pay_items"] if i.get("derived_from")])
 		self.assertEqual(slip["pay_items_wages"], 450.0, "the bonus itself is paid in full")
 
@@ -123,8 +132,11 @@ class InOregon(InARun):
 	test_a_crew_share_still_counts = None
 
 	def test_the_policy_says_why(self):
-		self.assertFalse(payroll_settings.bonuses_in_regular_rate("OR"))
-		self.assertIn("839-020-0030", payroll_settings.pay_item_policy()["states"]["OR"]["source"])
+		self.assertTrue(payroll_settings.bonuses_in_regular_rate("OR"), "included by default")
+		row = payroll_settings.pay_item_policy()["states"]["OR"]
+		self.assertIn("839-020-0030", row["source"])
+		self.assertIn("attorney", row["attorney_review"])
+		self.assertFalse(payroll_settings.bonuses_in_regular_rate("OR", policy=OREGON_EXCLUDED))
 
 
 class InTheSettlement(SettlementCase):
@@ -132,5 +144,6 @@ class InTheSettlement(SettlementCase):
 		STORE.seed("Farm Pay Item", [item("FPI-S9", 450.0, pay_on="2025-06-05", earned_from="2025-06-01",
 		                                  earned_to="2025-06-07")])
 		STORE.commit()
-		slip = self.settle()["slips"][0]
+		with payroll_settings.overlay(payroll_settings.PAY_ITEM_POLICY_KEY, OREGON_EXCLUDED):
+			slip = self.settle()["slips"][0]
 		self.assertFalse([i for i in slip["pay_items"] if i.get("derived_from") == "FPI-S9"])

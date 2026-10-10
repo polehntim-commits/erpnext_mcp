@@ -226,12 +226,24 @@ def price_sick_time(company: str, items_by_employee: dict, structures: dict, min
 def unposted_bonus_terms(items_by_employee: dict) -> list:
 	"""v0.302.0. OAR 839-020-0013: a grower offering a harvest bonus must post its terms — how and when it is earned
 	— where the crew can read them, in their language. Bonuses with no posting date recorded are listed."""
+	from . import payroll_settings
+
+	kinds = payroll_settings.pay_item_policy().get("kinds") or {}
 	out = []
 	for employee, rows in (items_by_employee or {}).items():
 		for row in rows:
-			if row.get("kind") in ("Bonus", "Production Bonus") and not row.get("derived_from") \
-					and not row.get("terms_posted_on"):
-				out.append({"employee": employee, "item": row.get("name"), "kind": row.get("kind"),
-				            "reason": "no record that the bonus terms were posted (OAR 839-020-0013) — conditions "
-				                      "that were not disclosed cannot be used to deny or reduce it"})
+			if row.get("kind") not in ("Bonus", "Production Bonus") or row.get("derived_from"):
+				continue
+			if row.get("terms_posted_on"):
+				continue
+			# v0.309.0. A disclosure record on the bonus KIND covers every item of it earned after it was posted.
+			disclosure = (kinds.get(row.get("kind")) or {}).get("disclosure") or {}
+			posted = str(disclosure.get("posted_on") or "")[:10]
+			earned = str(row.get("earned_from") or row.get("pay_on") or "")[:10]
+			if posted and (not earned or posted <= earned):
+				continue
+			out.append({"employee": employee, "item": row.get("name"), "kind": row.get("kind"),
+			            "reason": "no record that the bonus terms were posted or given before it was earned (OAR "
+			                      "839-020-0013) — conditions that were not disclosed cannot be used to deny or reduce "
+			                      "it. Record them on the item, or as the bonus kind's disclosure (pay_item_policy)."})
 	return out

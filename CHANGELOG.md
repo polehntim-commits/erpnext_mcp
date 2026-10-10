@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.309.0 — 2026-10-10 — bonuses in the regular rate, overtime thresholds and the federal trap
+
+**No migrate.** Deploy `docs/deploy/v0.309.0_regular_rate_compliance.md`. Tools: **1,142 → 1,142**.
+
+- **Washington:** bonuses are always in the regular rate (L&I ES.A.8.1 §§4.1, 5.3, 6.2); the validator refuses
+  turning that off. Farm overtime is after 40 hours since 2024 (RCW 49.46.130(6)(c)).
+- **Oregon:** bonuses are IN the regular rate by default — the conservative choice, reversing v0.298.0. An attorney
+  may set them out (OAR 839-020-0030(1)), with a warning. Farm overtime is 48 hours through 2026, then 40 (HB 4002).
+- **BOLI piece-rate exemptions:** data flags, default off, never applied.
+- **Federal trap:** Pay Policy `flsa.handles_other_farms_crop` means overtime after 40 hours with bonuses in, and a
+  run warning.
+- **Bonus disclosure:** a disclosure record per bonus kind (OAR 839-020-0013). Runs report `compliance_warnings`.
+- Tests: `test_regular_rate_compliance`. `test_bonus_regular_rate` covers Oregon's attorney-approved exclusion.
+
 ## 0.308.0 — 2026-10-10 — e-signed W-4 / OR-W-4 to the IRS standard, and Oregon's 8% rule
 
 **Migrate**: Signing Evidence gains `attestation`. Deploy `docs/deploy/v0.308.0_w4_esignature.md`. Tools: **1,142 →

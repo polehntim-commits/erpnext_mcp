@@ -152,6 +152,10 @@ def overtime(as_of: str = "", state: str = "") -> dict:
 				                                 else min(out["weekly_threshold_hours"], floor))
 		out["mode"] = mode
 		out["version"] = policy_version
+		if flsa_non_ag(as_of):  # v0.309.0: the FLSA's 40 hours, whatever the state's farm threshold is
+			flsa = pay_policy(as_of).get("flsa") or {}
+			out["weekly_threshold_hours"] = min(out["weekly_threshold_hours"], float(flsa.get("threshold_hours") or 40))
+			out["flsa_non_ag"] = True
 		return out
 	body, version = _body(OVERTIME_KEY, as_of)
 	out = dict(DEFAULT_OVERTIME)
@@ -226,6 +230,17 @@ DEFAULT_PAY_POLICY = {
 	# v0.298.0 (Tim, 2026-10-10): the state's legal threshold (ORS 653.272 / BOLI) — 40 where no state is named.
 	"overtime": {"mode": "state_floor", "threshold_hours": 40, "multiplier": 1.5},
 	"no_direct_deposit": "weekly_only",
+	# v0.309.0. THE FEDERAL TRAP: handling, packing or hauling crops grown by ANOTHER farm is not "agriculture" under
+	# the FLSA (29 U.S.C. 203(f); 29 CFR 780.141-.143), so the 213(b)(12) farm exemption is lost — federal overtime
+	# after 40 hours, with non-discretionary bonuses in the regular rate. On: every week is paid that way.
+	"flsa": {"handles_other_farms_crop": False, "threshold_hours": 40,
+	         "source": "29 U.S.C. 203(f), 207, 213(b)(12); 29 CFR 780.141-.143; 29 CFR 778.208-.210"},
+	# v0.309.0. Oregon's piece-rate exemptions (ORS 653.020(1); BOLI) as data, DEFAULT OFF: an employer with 500 or
+	# fewer piece-rate workdays a quarter in the prior year; local hand-harvest workers commuting daily; immediate
+	# family. Recorded for the attorney — this app NEVER applies one: minimum wage and overtime are always paid.
+	"boli_piece_rate_exemptions": {"small_employer_500_piece_rate_days": False, "local_hand_harvest_commuters": False,
+	                               "immediate_family": False, "applied_by_payroll": False,
+	                               "source": "ORS 653.020(1); BOLI agricultural worker guidance"},
 	"accept_daily_min_wage_makeup": True,
 	"accept_ach_fees": True,
 	"weekly_cost_report": True,
@@ -301,14 +316,17 @@ DEFAULT_PAY_ITEM_POLICY = {
 	          "Profit Share": {"discretionary": False}, "Commission": {"discretionary": False},
 	          "Other": {"discretionary": False}},
 	"default_discretionary": False,
-	#: v0.298.0 (Tim, 2026-10-10: follow BOLI). Oregon computes overtime "without benefits of commissions,
-	#: overrides, spiffs, bonuses, tips or similar benefits", profit sharing included (OAR 839-020-0030(1)), and
-	#: farm overtime is Oregon's, not the FLSA's (29 U.S.C. 213(b)(12)) — so no bonus enters an Oregon worker's
-	#: regular rate. Washington keeps the federal-style treatment (unverified for WA farm overtime — CPA).
-	"states": {"OR": {"bonuses_in_regular_rate": False,
+	#: v0.309.0 (Tim, 2026-10-10: "make sure we are in compliance"). Washington ALWAYS includes non-discretionary
+	#: and production bonuses in the regular rate (L&I Administrative Policy ES.A.8.1 §§4.1, 5.3, 6.2) — the
+	#: validator refuses turning it off. Oregon: OAR 839-020-0030(1)'s text leaves bonuses out of the regular rate,
+	#: but the policy DEFAULTS TO INCLUDE them — the conservative choice (it can only pay more) — until an attorney
+	#: confirms the exclusion; setting it false is allowed with a warning.
+	"states": {"OR": {"bonuses_in_regular_rate": True,
+	                  "attorney_review": "OAR 839-020-0030(1) excludes bonuses from the regular rate; included by "
+	                                     "default as the conservative choice — set false only on an attorney's advice",
 	                  "source": "OAR 839-020-0030(1); ORS 653.261(1); ORS 653.272"},
-	           "WA": {"bonuses_in_regular_rate": True,
-	                  "source": "29 CFR 778.208-.210 (applied to WA farm overtime per Tim, 2026-10-09; CPA to confirm)"}},
+	           "WA": {"bonuses_in_regular_rate": True, "required": True,
+	                  "source": "L&I Administrative Policy ES.A.8.1 §§4.1, 5.3, 6.2; RCW 49.46.130(6)(c)"}},
 	"allocation": "per_hour_worked",
 	"source": ("FLSA 29 CFR 778.208-.210 (bonuses in the regular rate; allocation over the workweeks earned), "
 	           "778.211 (discretionary bonuses excluded), 778.117 (commissions); applied the same under Oregon's "
@@ -438,7 +456,13 @@ def _validate_sick_time_policy(body: dict, for_publish: bool) -> dict:
 
 
 def bonuses_in_regular_rate(state: str, as_of: str = "", policy: dict | None = None) -> bool:
-	"""v0.298.0. Whether a non-discretionary bonus enters this state's overtime regular rate (Oregon: no)."""
+	"""v0.298.0. Whether a non-discretionary bonus enters this state's overtime regular rate. v0.309.0: always where
+	the work is not agriculture under the FLSA (Pay Policy `flsa.handles_other_farms_crop`), always in Washington,
+	and in Oregon by default."""
+	if flsa_non_ag(as_of):
+		return True
+	if str(state or "").upper() == "WA":
+		return True
 	policy = policy or pay_item_policy(as_of)
 	row = (policy.get("states") or {}).get(str(state or "").upper())
 	if isinstance(row, dict) and "bonuses_in_regular_rate" in row:
@@ -481,6 +505,30 @@ def ot_multiplier(as_of: str = "") -> float:
 def ot_premium_multiplier(as_of: str = "") -> float:
 	"""What is owed ON TOP where straight time was already paid (29 CFR 778.111 / .115)."""
 	return round(overtime(as_of)["multiplier"] - 1.0, 6)
+
+
+def flsa_non_ag(as_of: str = "") -> bool:
+	"""v0.309.0. Whether the Pay Policy says the farm handles another farm's crop (the FLSA farm exemption is lost)."""
+	return bool((pay_policy(as_of).get("flsa") or {}).get("handles_other_farms_crop"))
+
+
+def compliance_warnings(as_of: str = "") -> list:
+	"""v0.309.0. What a run should say about the Pay Policy's compliance flags."""
+	policy = pay_policy(as_of)
+	out = []
+	if (policy.get("flsa") or {}).get("handles_other_farms_crop"):
+		out.append("This farm handles another farm's crop: the FLSA farm exemption is lost (29 CFR 780.141-.143), so "
+		           "overtime is paid after 40 hours a week with non-discretionary bonuses in the regular rate.")
+	exemptions = [k for k, v in (policy.get("boli_piece_rate_exemptions") or {}).items()
+	              if v is True and k != "applied_by_payroll"]
+	if exemptions:
+		out.append(f"Oregon piece-rate exemption flag(s) on ({', '.join(exemptions)}) — recorded for the attorney; "
+		           "payroll still pays minimum wage and overtime (ORS 653.020(1)).")
+	items = pay_item_policy(as_of)
+	if ((items.get("states") or {}).get("OR") or {}).get("bonuses_in_regular_rate") is False:
+		out.append("Oregon bonuses are left out of the overtime regular rate (OAR 839-020-0030(1)) — keep only on an "
+		           "attorney's advice.")
+	return out
 
 
 def weekly_threshold(as_of: str = "") -> float:
@@ -604,6 +652,16 @@ def _validate_policy(body: dict, for_publish: bool) -> dict:
 				              f"({row.get('source')}). Use never_below_state_floor, or a lower threshold")
 	if for_publish and not errors:
 		_publish_guard(effective, errors)
+	# v0.309.0. The FLSA flag and the Oregon piece-rate exemption flags are true/false.
+	flsa = body.get("flsa", DEFAULT_PAY_POLICY["flsa"])
+	if not isinstance(flsa, dict) or not isinstance(flsa.get("handles_other_farms_crop", False), bool):
+		errors.append("flsa.handles_other_farms_crop is true or false")
+	exemptions = body.get("boli_piece_rate_exemptions", DEFAULT_PAY_POLICY["boli_piece_rate_exemptions"])
+	if not isinstance(exemptions, dict) or not all(isinstance(v, bool) for k, v in exemptions.items() if k != "source"):
+		errors.append("boli_piece_rate_exemptions: each flag is true or false")
+	elif exemptions.get("applied_by_payroll"):
+		errors.append("boli_piece_rate_exemptions.applied_by_payroll cannot be true — payroll never applies an "
+		              "exemption from minimum wage or overtime; the flags are recorded for the attorney")
 	return {"errors": errors, "warnings": warnings}
 
 
@@ -651,6 +709,26 @@ def _validate_pay_item_policy(body: dict, for_publish: bool) -> dict:
 				                "the fact and the amount are at the employer's sole discretion (29 CFR 778.211).")
 	if body.get("allocation", "per_hour_worked") != "per_hour_worked":
 		errors.append("allocation is per_hour_worked (29 CFR 778.209(b))")
+	# v0.309.0. Washington always includes them; Oregon's exclusion is an attorney call.
+	states = body.get("states", DEFAULT_PAY_ITEM_POLICY["states"]) or {}
+	if ((states.get("WA") or {}).get("bonuses_in_regular_rate")) is False:
+		errors.append("states.WA.bonuses_in_regular_rate cannot be false — Washington includes non-discretionary and "
+		              "production bonuses in the regular rate (L&I ES.A.8.1 §§4.1, 5.3, 6.2)")
+	if ((states.get("OR") or {}).get("bonuses_in_regular_rate")) is False:
+		warnings.append("states.OR.bonuses_in_regular_rate is false — OAR 839-020-0030(1) supports it, but it pays "
+		                "less than including them; keep only on an attorney's advice")
+	if isinstance(kinds, dict):
+		for kind, row in kinds.items():
+			disclosure = row.get("disclosure") if isinstance(row, dict) else None
+			if disclosure is None:
+				continue
+			if not isinstance(disclosure, dict) or not str(disclosure.get("terms") or "").strip():
+				errors.append(f"kinds.{kind}.disclosure needs the terms as disclosed (OAR 839-020-0013)")
+				continue
+			try:
+				datetime.date.fromisoformat(str(disclosure.get("posted_on") or "")[:10])
+			except ValueError:
+				errors.append(f"kinds.{kind}.disclosure.posted_on is the date the terms were posted or given (YYYY-MM-DD)")
 	if not str(body.get("source") or DEFAULT_PAY_ITEM_POLICY["source"]).strip():
 		errors.append("source: where the rule comes from")
 	effective = _effective(body, errors)
@@ -819,7 +897,7 @@ SEED_FLOORS = (
 	{"state": "WA", "kind": "minimum_wage", "region": "standard", "rate": 16.66, "effective_from": "2025-01-01", "source": _LNI},
 	{"state": "WA", "kind": "minimum_wage", "region": "standard", "rate": 17.13, "effective_from": "2026-01-01", "source": _LNI},
 	{"state": "WA", "kind": "ag_overtime_threshold", "hours": 40, "effective_from": "2024-01-01",
-	 "source": "Washington SB 5172 (2021), fully phased 2024-01-01"},
+	 "source": "RCW 49.46.130(6)(c) (SB 5172, 2021): 40 hours from 2024-01-01"},
 )
 
 
