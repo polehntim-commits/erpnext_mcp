@@ -132,6 +132,7 @@ def get_w4(args: dict) -> ToolResult:
 
 	row = frappe.db.get_value(W4_FORM, name, _w4_fields(), as_dict=True)
 	data = {k: (str(v) if v is not None else None) for k, v in row.items()}
+	log_access(name, "get_w4")
 	return ToolResult(
 		data=data, summary=f"W-4 for {employee}: {row.get('filing_status')}, tax year {row.get('tax_year')}"
 	)
@@ -499,6 +500,14 @@ def _active_rows(employee: str, fields: list) -> list:
 		order_by="effective_date desc, creation desc", limit=50) or []]
 
 
+def _federal_2020_plus(employee: str) -> dict:
+	"""v0.308.0. The employee's newest Active federal W-4 of tax year 2020 or later, or {}."""
+	rows = [r for r in _active_rows(employee, ["name", "form_kind", "tax_year", "effective_date"])
+	        if _kind(r) == "W-4" and int(r.get("tax_year") or 0) >= 2020]
+	rows.sort(key=lambda r: (int(r.get("tax_year") or 0), str(r.get("effective_date") or "")), reverse=True)
+	return rows[0] if rows else {}
+
+
 def federal_row_name(employee: str) -> str:
 	"""v0.294.0. The employee's active FEDERAL W-4 — never an OR-W-4 filed on its own."""
 	rows = _active_rows(employee, ["name", "form_kind", "tax_year", "effective_date"])
@@ -521,8 +530,17 @@ def oregon_for(employee: str) -> dict:
 	certificate is Single with no allowances (OAR 150-316-0290)."""
 	row = oregon_row(employee)
 	source = str(row.get("or_source") or ("OR-W-4" if int(row.get("or_w4_on_file") or 0) else ""))
+	federal = _federal_2020_plus(employee)
 	if not source:
-		return {"on_file": False, "source": ""}
+		return {"on_file": False, "source": "", "federal_2020_plus": bool(federal)}
+	# v0.308.0. A pre-2020 federal W-4 stands in for an OR-W-4 only until the worker files a 2020-or-later federal
+	# W-4; after that there is no Oregon election left on file and OAR 150-316-0234 makes it a flat 8%.
+	# (A 2020+ federal W-4 that carried the old Oregon fields forward is itself that newer form.)
+	if source == "Pre-2020 federal W-4" and federal and (
+			federal.get("name") == row.get("name")
+			or str(federal.get("effective_date") or "") > str(row.get("effective_date") or "")):
+		return {"on_file": False, "source": "", "federal_2020_plus": True,
+		        "reason": f"pre-2020 federal W-4 {row.get('name')} superseded by 2020+ federal W-4 {federal.get('name')}"}
 	if source == "Refused":
 		return {"on_file": True, "source": source, "filing_status": "Single", "allowances": 0,
 		        "additional_withholding": 0.0, "exempt": False, "tax_year": int(row.get("tax_year") or 0) or None,
@@ -949,6 +967,7 @@ def render_w4_pdf(args: dict) -> ToolResult:
 		)
 	if data["incomplete"]:
 		summary += f" — {len(data['incomplete'])} box(es) left blank for a pen"
+	log_access(name, "render_w4_pdf")
 	return ToolResult(data=data, summary=summary)
 
 
@@ -969,11 +988,51 @@ def esignature_status(as_of: str = "") -> dict:
 	(payroll setting `oregon_withholding` → `esignature`), shown wherever an OR-W-4 is signed or rendered."""
 	from .. import payroll_settings
 
-	value = dict(payroll_settings.oregon_withholding(as_of).get("esignature") or {})
+	value = esignature_rule(as_of)
 	confirmed = bool(value.get("confirmed"))
-	return {"confirmed": confirmed, "note": value.get("note") or (
-		"Oregon DOR acceptance of electronically signed OR-W-4s is UNCONFIRMED. Keep a wet-signed copy until the "
-		"DOR confirms (CPA/DOR item for Tim)." if not confirmed else "Confirmed by the Oregon DOR.")}
+	return {"confirmed": confirmed, "status": "confirmed by the Oregon DOR" if confirmed else (
+		value.get("status") or "awaiting DOR written confirmation"),
+		"standard": value.get("standard"), "state_law": value.get("state_law"),
+		"requirements": {"authenticated_signer": bool(value.get("require_verified_signer")),
+		                 "verified_methods": value.get("verified_methods"),
+		                 "perjury_statement_before_signature": True,
+		                 "signature_is_final_entry": bool(value.get("lock_after_signature")),
+		                 "access_log": bool(value.get("access_log")),
+		                 "hard_copy": value.get("hard_copy")},
+		"note": value.get("note") or (
+		"Oregon DOR acceptance of electronically signed OR-W-4s is awaiting the DOR's written confirmation. The "
+		"e-signature is built to the IRS standard (26 CFR 31.3402(f)(5)-1(c)); keep a wet-signed copy until the DOR "
+		"confirms (CPA/DOR item for Tim)." if not confirmed else "Confirmed by the Oregon DOR.")}
+
+
+def esignature_rule(as_of: str = "") -> dict:
+	"""v0.308.0. The e-signature policy for W-4 Forms (`oregon_withholding.esignature`), over the built-in defaults."""
+	from .. import payroll_settings
+	from ..state_withholding import OR_WITHHOLDING_2026
+
+	return {**OR_WITHHOLDING_2026["esignature"],
+	        **dict(payroll_settings.oregon_withholding(as_of).get("esignature") or {})}
+
+
+def log_access(name: str, method: str) -> None:
+	"""v0.308.0. A read or render of a SIGNED W-4 Form, in Frappe's own Access Log (26 CFR 31.3402(f)(5)-1(c)).
+	Best effort — never fatal."""
+	try:
+		if not esignature_rule().get("access_log") or not compat.doctype_exists("Access Log"):
+			return
+		signed = frappe.db.get_value(W4_FORM, name, list(compat.existing_fields(W4_FORM, ("signature", "or_signature"))),
+		                             as_dict=True) or {}
+		if not any(signed.values()):
+			return
+		from .. import security
+
+		doc = frappe.get_doc({"doctype": "Access Log", "export_from": W4_FORM, "reference_document": name,
+		                      "method": method, "user": security.caller_identity() or frappe.session.user,
+		                      "file_type": "PDF" if "render" in method else ""})
+		doc.flags.ignore_permissions = True
+		doc.insert(ignore_permissions=True)
+	except Exception:  # pragma: no cover - the log never takes the read down
+		pass
 
 
 def _render_or_w4(args: dict) -> ToolResult:
@@ -1014,6 +1073,7 @@ def _render_or_w4(args: dict) -> ToolResult:
 		summary += " — e-signature acceptance by the Oregon DOR is unconfirmed; keep a wet-signed copy"
 	if notes:
 		summary += f" — {len(notes)} note(s)"
+	log_access(name, "render_w4_pdf form=or_w4")
 	return ToolResult(data=data, summary=summary)
 
 

@@ -248,7 +248,7 @@ class TheRowIsWritten(EvidenceTestCase):
 		carries an evidence row for it, which is the whole reason it is a doctype
 		rather than six columns."""
 		name = self.a_w4()
-		self.sign(doctype="W-4 Form", name=name)
+		self.sign(doctype="W-4 Form", name=name, verification_method="Employee ID")
 		row = self.only_row()
 		self.assertEqual(row["document_type"], "W-4 Form")
 		self.assertEqual(row["document_name"], name)
@@ -709,7 +709,7 @@ class TheReads(EvidenceTestCase):
 		self.a_badge("ETC-0001")
 		self.sign_section_1(signer_badge="ETC-0001")
 		w4 = self.a_w4()
-		self.sign(doctype="W-4 Form", name=w4)
+		self.sign(doctype="W-4 Form", name=w4, verification_method="Employee ID")
 		return w4
 
 	def test_it_lists_every_signature_event(self):
@@ -758,6 +758,10 @@ class TheReads(EvidenceTestCase):
 		"""A register that only gave its total would hide the rows that cannot
 		answer the question it exists for."""
 		self.two_signatures()
+		# v0.308.0: an unverified W-4 can no longer be signed at all, so the unverified row is an older one.
+		STORE.seed(EVIDENCE, [{**self.rows()[0], "name": "SE-OLD-UNVERIFIED", "status": "Unverified",
+		                       "verification_method": "", "signer_badge": ""}])
+		STORE.commit()
 		data = self.tool_data("list_signing_evidence", {})
 		self.assertEqual(data["unverified_count"], 1)
 		self.assertIn("Unverified", data["note"])

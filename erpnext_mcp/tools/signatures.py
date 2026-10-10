@@ -1048,6 +1048,7 @@ def collect_form_signature(args: dict) -> ToolResult:
 	# the wrong person and a role the box contradicts are both refusals, and both
 	# have to land while there is still nothing of this caller's on the site.
 	identity = _identity(box, doc, role, args, target=target)
+	_require_w4_standard(box, doc, identity)
 
 	# THE FINGERPRINT, TAKEN NOW. `doc` has not been touched yet, so this is the
 	# record as the signer was shown it — which is the only moment at which the
@@ -1269,6 +1270,7 @@ def _record_evidence(
 		gps_latitude=context["latitude"],
 		gps_longitude=context["longitude"],
 		supersedes=(signing_evidence.supersede_target(box.doctype, doc.name, box.field) if replaced else ""),
+		attestation=box.attestation or "",
 	)
 
 
@@ -1500,6 +1502,36 @@ def _identity(box: SignatureBox, doc, role: str, args: dict, target=None) -> dic
 		}
 	)
 	return out
+
+
+def _require_w4_standard(box: SignatureBox, doc, identity: dict) -> None:
+	"""v0.308.0. An e-signed W-4 / OR-W-4 needs an AUTHENTICATED signer (26 CFR 31.3402(f)(5)-1(c)): a badge the
+	server resolved, or an in-person photo-ID check attested by a signed-in hiring/HR user ("Employee ID"). An
+	unverified or photograph-only signature is refused — the policy is `oregon_withholding.esignature`."""
+	if box.doctype != W4_FORM:
+		return
+	rule = w4.esignature_rule()
+	if box.field not in (rule.get("applies_to") or []) or not rule.get("require_verified_signer", True):
+		return
+	method = str(identity.get("method") or "")
+	allowed = list(rule.get("verified_methods") or [])
+	if method not in allowed:
+		raise ToolError(
+			f"{box.label} on {doc.name} is an electronic W-4 signature, and the IRS standard this app follows (26 CFR "
+			f"31.3402(f)(5)-1(c)) needs the signer authenticated — {', '.join(allowed)}. "
+			+ (f"{method!r} is not one of them. " if method else "No verification came with it. ")
+			+ "Scan the worker's badge, or — signed in as a hiring or HR user — check their photo ID in person and send "
+			"verification_method='Employee ID'. Nothing was changed.")
+	if method == "Employee ID":
+		from . import employee as personnel
+
+		try:
+			personnel.require_hiring_role()
+		except Exception:
+			raise ToolError(
+				"verification_method 'Employee ID' is an in-person photo-ID check, and it is only an authentication "
+				"when a signed-in hiring or HR user attests it. This account holds neither role. Nothing was "
+				"changed.") from None
 
 
 def _context(args: dict) -> dict:

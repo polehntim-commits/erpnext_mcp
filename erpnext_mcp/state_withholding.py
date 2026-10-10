@@ -161,7 +161,33 @@ OR_WITHHOLDING_2026 = {
 	               "source": "OAR 150-316-0290(4)"},
 	#: v0.295.0. Whether the DOR has confirmed it accepts electronically signed OR-W-4s. Unconfirmed until Tim/the CPA
 	#: hears from the DOR; every OR-W-4 signed or rendered says so.
-	"esignature": {"confirmed": False, "note": ""},
+	#: v0.308.0. E-signed W-4 / OR-W-4. Oregon has no explicit rule: ORS 84.019 (UETA) generally gives an electronic
+	#: signature legal effect, ORS 84.052 lets an agency opt out, and the DOR has done neither in writing — so the
+	#: flow is built to the IRS standard for electronic W-4s, 26 CFR 31.3402(f)(5)-1(c), and `confirmed` stays false
+	#: until the DOR confirms in writing.
+	"esignature": {
+		"confirmed": False,
+		"status": "awaiting DOR written confirmation",
+		"note": "",
+		"standard": "26 CFR 31.3402(f)(5)-1(c)",
+		"state_law": "ORS 84.019 (UETA); ORS 84.052 (agency opt-out) — the Oregon DOR has published neither an "
+		             "acceptance nor an opt-out for Form OR-W-4",
+		"applies_to": ["signature", "or_signature"],
+		#: (1) The signer is authenticated: a badge the server resolves, or an in-person photo-ID check attested by a
+		#: signed-in hiring/HR user ("Employee ID"). A photograph alone is client-attested and is not enough.
+		"require_verified_signer": True,
+		"verified_methods": ["Badge QR", "Employee ID"],
+		#: (2) The perjury statement immediately precedes the signature — the box's own words, recorded on the
+		#: evidence row. (3) The signature is the final entry: a signed form's elections are locked.
+		"lock_after_signature": True,
+		#: (4) Every read or render of a signed form is logged (Frappe's Access Log).
+		"access_log": True,
+		#: (5) A hard copy reproducible on the official form: render_w4_pdf (form=or_w4 for the DOR's 150-101-402).
+		"hard_copy": "render_w4_pdf",
+	},
+	#: v0.308.0. No OR-W-4 (and no pre-2020 W-4 in the fallback order) — including when a 2020-or-later federal W-4
+	#: is on file — Oregon withholding is a flat 8%, not Single with no allowances.
+	"no_or_w4_rule": "OAR 150-316-0234; ORS 316.182 (HB 2119)",
 	#: v0.295.0. When the employer withholds a flat 8% instead of using the certificate (DOR Publication 150-211-602,
 	#: Rev. 02-18-22): an Oregon-only exemption, and an exemption that expired with no new OR-W-4.
 	"flat_rate_rules_source": "Oregon DOR Publication 150-211-602, W-4 Information for Employers (Rev. 02-18-22)",
@@ -249,9 +275,15 @@ def calculate_oregon_withholding(
 	elif not w4.get("on_file"):
 		rate = float(params.get("default_flat_rate", 8.0))
 		or_income_tax = round(gross_pay * rate / 100.0, 2)
-		detail["income_tax"] = {"method": "flat", "rate": rate, "note": (
-			"No Form OR-W-4 on file for this employee, so Oregon requires a flat 8% (HB 2119, ORS 316.182). It "
-			"stops once the employee's OR-W-4 is entered.")}
+		rule = params.get("no_or_w4_rule") or "OAR 150-316-0234; ORS 316.182 (HB 2119)"
+		why = ("A 2020-or-later federal W-4 is on file but no Form OR-W-4 — the federal form carries no Oregon "
+		       "allowances, so Oregon withholding is a flat 8%, not Single with no allowances"
+		       if w4.get("federal_2020_plus") else "No Form OR-W-4 on file for this employee, so Oregon requires a "
+		       "flat 8%")
+		detail["income_tax"] = {"method": "flat", "rate": rate, "rule": rule,
+		                        "based_on": w4.get("reason") or ("2020+ federal W-4, no OR-W-4"
+		                                                         if w4.get("federal_2020_plus") else "no OR-W-4"),
+		                        "note": f"{why} ({rule}). It stops once the employee's OR-W-4 is entered."}
 	elif w4.get("exempt") and (not w4.get("federally_exempt", True) or not _exemption_in_force(w4, pay_year)):
 		# v0.295.0. DOR Publication 150-211-602: an Oregon-only exemption, or one that expired with no new OR-W-4, is
 		# withheld at 8% rather than by the certificate.

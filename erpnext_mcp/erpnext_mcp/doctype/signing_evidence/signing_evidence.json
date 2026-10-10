@@ -23,6 +23,7 @@
   "signature_role",
   "document_col",
   "signature_field",
+  "attestation",
   "supersedes",
   "signature_section",
   "signature_image",
@@ -172,6 +173,13 @@
    "read_only": 1
   },
   {
+   "fieldname": "attestation",
+   "fieldtype": "Small Text",
+   "label": "Attestation",
+   "read_only": 1,
+   "description": "v0.308.0. The statement shown immediately before the signature (the box's own words, e.g. the OR-W-4's 'Under penalty of false swearing…') — 26 CFR 31.3402(f)(5)-1(c)."
+  },
+  {
    "description": "The evidence row this signature replaced, where one was replaced. THE OLD ROW IS NOT EDITED and is not deleted: replacing an attestation somebody made under penalty of perjury is a deliberate act, and the record of the one that was there is the only thing that can show it happened.",
    "fieldname": "supersedes",
    "fieldtype": "Link",
@@ -279,7 +287,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-12 09:00:00.000000",
+ "modified": "2026-10-10 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Signing Evidence",

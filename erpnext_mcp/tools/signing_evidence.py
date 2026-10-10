@@ -474,6 +474,7 @@ def record(
 	gps_latitude=None,
 	gps_longitude=None,
 	supersedes: str = "",
+	attestation: str = "",
 ) -> dict:
 	"""Write one evidence row. NEVER RAISES — see the module docstring.
 
@@ -537,6 +538,11 @@ def record(
 		"gps_latitude": gps_latitude,
 		"gps_longitude": gps_longitude,
 	}
+	# v0.308.0. The statement the signer was shown immediately before signing.
+	from .. import compat
+
+	if attestation and compat.has_field(SIGNING_EVIDENCE, "attestation"):
+		payload["attestation"] = attestation
 	try:
 		doc = frappe.get_doc(payload)
 		doc.flags.ignore_permissions = True

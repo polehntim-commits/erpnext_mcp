@@ -437,7 +437,9 @@ class TheSignatureIsCollected(SignatureTestCase):
 		name = self.a_w4()
 		self.tool_data(
 			"collect_form_signature",
-			{"doctype": "W-4 Form", "name": name, "signature_base64": A_CAPTURE},
+			{"doctype": "W-4 Form", "name": name, "signature_base64": A_CAPTURE,
+			 # v0.308.0: an e-signed W-4 needs an authenticated signer (26 CFR 31.3402(f)(5)-1(c)).
+			 "verification_method": "Employee ID"},
 		)
 		self.assertTrue(frappe.db.get_value("W-4 Form", name, "signature"))
 

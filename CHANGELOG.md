@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.308.0 — 2026-10-10 — e-signed W-4 / OR-W-4 to the IRS standard, and Oregon's 8% rule
+
+**Migrate**: Signing Evidence gains `attestation`. Deploy `docs/deploy/v0.308.0_w4_esignature.md`. Tools: **1,142 →
+1,142**. Pairs with FarmOps 0.63.0 (59).
+
+- **E-signature to the IRS standard** (26 CFR 31.3402(f)(5)-1(c)) for the W-4 and OR-W-4 boxes:
+  - an authenticated signer: a badge, or an in-person photo-ID check by a signed-in hiring/HR user ("Employee ID");
+  - the perjury statement recorded on the evidence;
+  - the signed elections locked;
+  - reads and renders of signed forms logged in Frappe's Access Log;
+  - a hard copy on the official PDF.
+- **Policy:** `oregon_withholding.esignature`. The status stays "awaiting DOR written confirmation" (ORS 84.019 /
+  84.052).
+- **Corrected, OAR 150-316-0234:** no OR-W-4, including when a 2020+ federal W-4 is on file, means a flat 8%. A
+  pre-2020 federal W-4 fallback ends once a 2020+ federal W-4 is in force.
+- Tests: `test_w4_esignature`. The signing tests now authenticate their W-4 signers.
+
 ## 0.307.0 — 2026-10-10 — the Washington paid sick leave rate
 
 **Migrate**: Farm Pay Item gains `rate_evidence`. Deploy `docs/deploy/v0.307.0_wa_sick_rate.md`.
