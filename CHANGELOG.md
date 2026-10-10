@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.307.0 — 2026-10-10 — the Washington paid sick leave rate
+
+**Migrate**: Farm Pay Item gains `rate_evidence`. Deploy `docs/deploy/v0.307.0_wa_sick_rate.md`.
+Tools: **1,142 → 1,142**.
+
+- **Rate:** Washington sick pay is the greater of the Washington minimum wage and normal hourly compensation (WAC
+  296-128-670; L&I ES.B.2). The interim rate and the WAC 296-128-620 citation are replaced.
+- **Methods:** one per job class (`sick_time_policy.washington.rate_method`). Piece rate uses the most recent
+  identical or substantially similar workweek: earnings including paid rest and non-discretionary bonuses, excluding
+  the overtime premium and discretionary pay. Hourly uses the hourly rate.
+- **Fallback:** the most recent agricultural week or the minimum wage, flagged for attorney review.
+- **Evidence:** the week used and the arithmetic are stored on the pay item (`rate_evidence`).
+- Tests: `test_wa_sick_rate`.
+
 ## 0.306.0 — 2026-10-10 — sick time, deduction authorizations and separations on the phone
 
 **No migrate.** Deploy `docs/deploy/v0.306.0_phone_sick_time_separation.md`. Tools: **1,142 → 1,142**; one mobile

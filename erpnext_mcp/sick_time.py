@@ -174,6 +174,117 @@ def rate(structure: dict, minimum_wage: float) -> float:
 	return round(max(base, minimum_wage), 2)
 
 
+def wa_rate(company: str, employee: str, sick_day: str, structure: dict, minimum_wage: float, as_of: str = "") -> tuple:
+	"""v0.307.0. Washington paid sick leave's hourly rate and the evidence for it: the greater of the Washington minimum
+	wage and the worker's normal hourly compensation (WAC 296-128-670; L&I ES.B.2), by the ONE method the policy names
+	for the worker's job class (670(6)).
+
+	recent_similar_workweek: total earnings / total hours in the most recent COMPLETED workweek, before the leave, of
+	identical work (the same pay type and the same kind of shift as the worker's latest) or else substantially similar
+	work (the same pay type). Earnings are piece, hourly and paid-rest pay plus non-discretionary bonuses earned that
+	week; the overtime premium, tips, holiday pay, reimbursements and discretionary bonuses are not. With no such week
+	in `rate_lookback_weeks`: the greater of the most recent agricultural workweek's rate and the minimum wage, flagged
+	for attorney review."""
+	policy = _policy(as_of or sick_day, "WA")
+	job_class = str(structure.get("pay_type") or "Hourly")
+	method = (policy.get("rate_method") or {}).get(job_class) or "recent_similar_workweek"
+	evidence = {"job_class": job_class, "method": method, "minimum_wage": round(minimum_wage, 2),
+	            "source": policy.get("rate_source"), "policy": policy.get("version"), "attorney_review": False}
+	if method == "hourly_rate":
+		hourly = _num(structure.get("base_rate")) if job_class == "Hourly" else _num(structure.get("hourly_rate"))
+		rate = round(max(hourly, minimum_wage), 2)
+		return rate, {**evidence, "tier": "hourly_rate", "hourly_rate": round(hourly, 4), "rate": rate}
+	week = _similar_week(company, employee, str(sick_day)[:10], structure, int(policy.get("rate_lookback_weeks") or 12))
+	if not week:
+		rate = round(minimum_wage, 2)
+		return rate, {**evidence, "tier": "fallback_minimum_wage", "rate": rate, "attorney_review": True,
+		              "note": "no agricultural workweek on record before the leave; paid at the Washington minimum wage"}
+	normal = (week["straight_time_pay"] + week["bonus"]) / week["hours"] if week["hours"] > 0 else 0.0
+	rate = round(max(normal, minimum_wage), 2)
+	return rate, {**evidence, **{k: v for k, v in week.items() if k != "aggregate"},
+	              "normal_hourly_compensation": round(normal, 4), "rate": rate,
+	              "attorney_review": week["tier"] == "fallback_recent_ag_week"}
+
+
+def _similar_week(company: str, employee: str, sick_day: str, structure: dict, lookback: int) -> dict:
+	"""The workweek `wa_rate` reads, newest first: identical → substantially similar → the most recent ag week."""
+	from . import daily_pay, payroll_integration
+	from .tools import payroll as runs
+
+	this_week = daily_pay.workweek_start(sick_day)
+	first = (this_week - datetime.timedelta(days=7 * lookback)).isoformat()
+	last = (this_week - datetime.timedelta(days=1)).isoformat()
+	try:
+		shifts, _ = runs._load_period_shifts(company, first, last, employees=[employee])
+	except Exception:  # pragma: no cover - a half-migrated register reads as no history
+		shifts = []
+	job_class = str(structure.get("pay_type") or "Hourly")
+
+	def starts(shift):
+		return str(shift.get("start_datetime") or shift.get("start") or "")[:10]
+
+	def pay_type_of(shift):
+		mine = [r for r in shift.get("crew") or [] if r.get("employee") == employee]
+		return str((mine[0].get("pay_type") if mine else "") or shift.get("pay_type") or job_class)
+
+	def state_of(shift):
+		mine = [r for r in shift.get("crew") or [] if r.get("employee") == employee]
+		return str((mine[0].get("work_state") if mine else "") or shift.get("work_state") or "")
+
+	washington = sorted([s for s in shifts or [] if state_of(s) == "WA" and starts(s)], key=starts, reverse=True)
+	if not washington:
+		return {}
+	kind = str(washington[0].get("shift_type") or "")
+	weeks: dict = {}
+	for shift in washington:
+		weeks.setdefault(daily_pay.workweek_start(starts(shift)).isoformat(), []).append(shift)
+	ordered = sorted(weeks, reverse=True)
+	tiers = (("identical", lambda ws: any(pay_type_of(x) == job_class and str(x.get("shift_type") or "") == kind
+	                                      for x in ws)),
+	         ("substantially_similar", lambda ws: any(pay_type_of(x) == job_class for x in ws)),
+	         ("fallback_recent_ag_week", lambda ws: True))
+	for tier, matches in tiers:
+		for start in ordered:
+			if not matches(weeks[start]):
+				continue
+			end = (datetime.date.fromisoformat(start) + datetime.timedelta(days=6)).isoformat()
+			aggregate = payroll_integration.aggregate_shifts_for_period(
+				weeks[start], start, end, overtime_threshold=1e9, workweek_anchor=start).get(employee) or {}
+			row = (payroll_integration.weekly_regular_rates(aggregate, structure).get("weeks") or [{}])[0]
+			if _num(row.get("hours")) <= 0:
+				continue
+			bonuses = _bonuses_earned(employee, start, end)
+			return {"tier": tier, "week_start": start, "week_end": end, "shift_type": kind or None,
+			        "hours": round(_num(row.get("hours")), 2),
+			        "straight_time_pay": round(_num(row.get("straight_time_pay")), 2),
+			        "bonus": round(sum(b["allocated"] for b in bonuses), 2), "bonuses": bonuses}
+	return {}
+
+
+def _bonuses_earned(employee: str, start: str, end: str) -> list:
+	"""Non-discretionary pay items earned in the week, each pro-rated by the days of its earning window inside it."""
+	from . import pay_items, payroll_settings
+
+	if not pay_items.ready():
+		return []
+	fields = ["name", "kind", "amount", "earned_from", "earned_to", "pay_on", "status"]
+	out = []
+	for row in frappe.db.get_all("Farm Pay Item", filters={"employee": employee}, fields=fields, limit=2000) or []:
+		if row.get("status") == "Cancelled" or row.get("kind") == KIND or _num(row.get("amount")) <= 0:
+			continue
+		if payroll_settings.is_discretionary(row.get("kind"), end):
+			continue
+		lo = str(row.get("earned_from") or row.get("pay_on") or "")[:10]
+		hi = str(row.get("earned_to") or lo)[:10]
+		if not lo or hi < start or lo > end:
+			continue
+		days = (_date(hi) - _date(lo)).days + 1
+		inside = (_date(min(hi, end)) - _date(max(lo, start))).days + 1
+		out.append({"item": row["name"], "kind": row.get("kind"), "amount": _num(row["amount"]),
+		            "allocated": round(_num(row["amount"]) * inside / max(days, 1), 2)})
+	return out
+
+
 def price(company: str, employee: str, rows: list, structure: dict, minimum_wage: float, as_of: str,
           state: str = "OR") -> list:
 	"""Each Sick Time pay item priced and limited to what the worker may use; what cannot be paid now waits with a
@@ -199,8 +310,14 @@ def price(company: str, employee: str, rows: list, structure: dict, minimum_wage
 			                  else f"no sick time balance left (or the {use_cap:g}-hour annual use cap is reached)")
 			continue
 		available -= take
-		out.append({**row, "hours": take, "amount": round(take * hourly, 2) if is_paid else 0.0,
-		            "treatment": "Wages", "sick_time_rate": hourly if is_paid else 0.0,
+		# v0.307.0. Washington: normal hourly compensation per WAC 296-128-670, with the evidence kept on the item.
+		row_rate, evidence = hourly, {"rule": "OAR 839-007-0000(7)", "rate": hourly}
+		if state == "WA":
+			row_rate, evidence = wa_rate(company, employee, str(row.get("pay_on") or as_of), structure, minimum_wage,
+			                             as_of)
+		out.append({**row, "hours": take, "amount": round(take * row_rate, 2) if is_paid else 0.0,
+		            "treatment": "Wages", "sick_time_rate": row_rate if is_paid else 0.0,
+		            "sick_time_rate_evidence": evidence,
 		            "sick_time_paid": is_paid, "work_state": state,
 		            "sick_time_note": ("" if take == hours else f"{hours - take:g} h beyond the balance not paid")})
 	return out

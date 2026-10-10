@@ -25,7 +25,8 @@
   "terms_section",
   "terms",
   "terms_posted_on",
-  "terms_language"
+  "terms_language",
+  "rate_evidence"
  ],
  "fields": [
   {
@@ -105,7 +106,7 @@
    "options": "Wages\nNot subject to withholding",
    "default": "Wages",
    "reqd": 1,
-   "description": "Wages: taxed and withheld with the period's pay. Not subject to withholding: e.g. a fishing-boat crew share under IRC 3121(b)(20) \u2014 no income tax or FICA is withheld, but it still counts as earnings for garnishment (15 U.S.C. 1672(a)). Have the CPA confirm the treatment for each kind."
+   "description": "Wages: taxed and withheld with the period's pay. Not subject to withholding: e.g. a fishing-boat crew share under IRC 3121(b)(20) — no income tax or FICA is withheld, but it still counts as earnings for garnishment (15 U.S.C. 1672(a)). Have the CPA confirm the treatment for each kind."
   },
   {
    "fieldname": "work_state",
@@ -150,7 +151,7 @@
    "fieldname": "terms",
    "fieldtype": "Small Text",
    "label": "Bonus Terms",
-   "description": "v0.302.0. What the bonus is and how it is earned \u2014 including when it is earned. Conditions not disclosed cannot be used to deny or reduce it (OAR 839-020-0013)."
+   "description": "v0.302.0. What the bonus is and how it is earned — including when it is earned. Conditions not disclosed cannot be used to deny or reduce it (OAR 839-020-0013)."
   },
   {
    "fieldname": "terms_posted_on",
@@ -162,11 +163,19 @@
    "fieldname": "terms_language",
    "fieldtype": "Data",
    "label": "Posted In (languages)"
+  },
+  {
+   "fieldname": "rate_evidence",
+   "fieldtype": "Code",
+   "label": "Rate Evidence",
+   "options": "JSON",
+   "read_only": 1,
+   "description": "v0.307.0. How a Sick Time item's hourly rate was set — the workweek used and the calculation (WAC 296-128-670), or the Oregon rule. Written when a saved run pays it."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-10 03:00:00.000000",
+ "modified": "2026-10-10 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Pay Item",

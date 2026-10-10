@@ -351,9 +351,20 @@ DEFAULT_SICK_TIME_POLICY = {
 		"eligible_after_days": 90,
 		"rehire_restore_days": 365,
 		"paid": True,
-		"source": "RCW 49.46.210; WAC 296-128-600 to -770 (L&I). Rate: 'normal hourly compensation' (WAC 296-128-620) — "
-		          "for piece-rate work, have the CPA confirm the calculation; this pays at least the hourly rate and the "
-		          "Washington minimum wage.",
+		"source": "RCW 49.46.210; WAC 296-128-600 to -770 (L&I).",
+		# v0.307.0. The rate (WAC 296-128-670; L&I Administrative Policy ES.B.2): the greater of the Washington
+		# minimum wage and the worker's "normal hourly compensation", ONE method per job class (670(6)).
+		#   recent_similar_workweek — total earnings / total hours in the most recent workweek of identical or
+		#     substantially similar work (piece rate);  hourly_rate — the hourly rate.
+		"rate_method": {"Piece Rate": "recent_similar_workweek", "Hourly": "hourly_rate", "Salary": "hourly_rate"},
+		"rate_lookback_weeks": 12,
+		"rate_earnings_included": ["piece-rate earnings", "hourly earnings", "paid rest and downtime",
+		                           "production and other non-discretionary bonuses"],
+		"rate_earnings_excluded": ["overtime premium", "tips", "holiday pay", "reimbursements",
+		                           "discretionary bonuses", "sick pay"],
+		"rate_fallback": "no workweek of similar work: the greater of the most recent agricultural workweek's rate and "
+		                 "the minimum wage, flagged for attorney review",
+		"rate_source": "WAC 296-128-670; L&I Administrative Policy ES.B.2",
 	},
 }
 
@@ -404,6 +415,16 @@ def _validate_sick_time_policy(body: dict, for_publish: bool) -> dict:
 				continue
 			if (direction == "at most" and value > law) or (direction == "at least" and value < law):
 				errors.append(f"{prefix}{key} must be {direction} {law:g} — the law's floor ({cite})")
+	methods = wa.get("rate_method", DEFAULT_SICK_TIME_POLICY["washington"]["rate_method"])
+	if not isinstance(methods, dict):
+		errors.append("washington.rate_method maps each job class (pay type) to one method")
+	else:
+		for job_class, method in methods.items():
+			if method not in ("recent_similar_workweek", "hourly_rate"):
+				errors.append(f"washington.rate_method[{job_class}] is recent_similar_workweek or hourly_rate")
+			elif job_class == "Piece Rate" and method == "hourly_rate":
+				errors.append("washington.rate_method[Piece Rate] cannot be hourly_rate — piece work has no hourly rate; "
+				              "WAC 296-128-670 uses the most recent similar workweek")
 	if wa.get("paid", True) in (False, "false", "False"):
 		errors.append("washington.paid cannot be false — Washington paid sick leave is paid at every employer size "
 		              "(RCW 49.46.210)")

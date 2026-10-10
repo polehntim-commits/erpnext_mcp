@@ -102,7 +102,13 @@ def mark_paid(entry: str, slips: list) -> list:
 		for item in slip.get("pay_items") or []:
 			name = item.get("name")
 			if name and frappe.db.exists(PAY_ITEM, name):
-				frappe.db.set_value(PAY_ITEM, name, {"status": "Paid", "payroll_entry": entry})
+				values = {"status": "Paid", "payroll_entry": entry}
+				# v0.307.0. How a sick-time rate was set (WAC 296-128-670 workweek and arithmetic), kept on the item.
+				if item.get("sick_time_rate_evidence") and compat.has_field(PAY_ITEM, "rate_evidence"):
+					import json
+
+					values["rate_evidence"] = json.dumps(item["sick_time_rate_evidence"], sort_keys=True, default=str)
+				frappe.db.set_value(PAY_ITEM, name, values)
 				done.append(name)
 	return done
 
