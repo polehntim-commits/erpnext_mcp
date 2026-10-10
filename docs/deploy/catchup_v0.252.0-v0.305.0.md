@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.304.0 (OML today) — one build, one migrate; FarmOps 0.61.0 (build 57)**
+**Deploy: v0.252.0 → v0.305.0 (OML today) — one build, one migrate; FarmOps 0.61.0 (build 57)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.304.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.305.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`e04f6e3`** (`__version__ = "0.304.0"`).
+- **Server**: erpnext_mcp main **`47e1b8c`** (`__version__ = "0.305.0"`).
 - **App**: fafo_ios main **`7bdb8a6`** — FarmOps **0.61.0 (build 57)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -67,6 +67,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.302.0 | BOLI's rest/meal chart as a disabled draft Oregon break policy (approve in the Desk); minors' rests corrected to 15 min at the adult frequency (also app 0.61.0); harvest-bonus terms posting flagged (OAR 839-020-0013). Covered by the one migrate. |
 | v0.303.0 | The crop stage table as config: each crop's stages and biofix in crop_phenology (published by a person); Settings table as fallback; cherry uncalibrated until spring 2027. No migrate. |
 | v0.304.0 | The variety catalogue per crop: aliases (a field naming one is written back as the variety), pollinizer flag, target Brix kept on replace, update_crop seed_from_fields. Migrate (two Crop Variety columns). |
+| v0.305.0 | Washington paid sick leave (RCW 49.46.210): own balance for WA hours, 1 h per 40, filed as 'Washington Paid Sick Leave'; set_opening_balance kind=sick_time imports opening balances. Migrate (ledger work_state). CPA: WA piece-rate sick pay rate. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -90,17 +91,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.304.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.305.0`. Push fafo_ios main and archive
 FarmOps 0.61.0 (build 57).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.304.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.305.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.304.0; the asset map's build stamp 0.304.0.
+1. `get_server_status`: 0.305.0; the asset map's build stamp 0.305.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.

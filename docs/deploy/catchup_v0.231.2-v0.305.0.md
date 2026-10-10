@@ -1,11 +1,11 @@
-**Deploy: catch-up v0.231.2 → v0.304.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.59.0 (build 55)**
+**Deploy: catch-up v0.231.2 → v0.305.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.59.0 (build 55)**
 
-For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.304.0, and
+For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.305.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
 ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime rule into data with identical
 output, proven on the payroll suite).
 
-- **Server**: erpnext_mcp main **`e04f6e3`** (`__version__ = "0.304.0"`).
+- **Server**: erpnext_mcp main **`47e1b8c`** (`__version__ = "0.305.0"`).
 - **App**: fafo_ios main **`7bdb8a6`** — FarmOps **0.61.0 (build 57)**, scheme **FarmOps**. It needs v0.252.0's
   routes (v0.271.0's for Contractor jobs, v0.272.0's for Deliveries, v0.275.0's for the hive map), so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
@@ -93,6 +93,7 @@ output, proven on the payroll suite).
 | v0.302.0 | BOLI's rest/meal chart as a disabled draft Oregon break policy (approve in the Desk); minors' rests corrected to 15 min at the adult frequency (also app 0.61.0); harvest-bonus terms posting flagged (OAR 839-020-0013). Covered by the one migrate. |
 | v0.303.0 | The crop stage table as config: each crop's stages and biofix in crop_phenology (published by a person); Settings table as fallback; cherry uncalibrated until spring 2027. No migrate. |
 | v0.304.0 | The variety catalogue per crop: aliases (a field naming one is written back as the variety), pollinizer flag, target Brix kept on replace, update_crop seed_from_fields. Migrate (two Crop Variety columns). |
+| v0.305.0 | Washington paid sick leave (RCW 49.46.210): own balance for WA hours, 1 h per 40, filed as 'Washington Paid Sick Leave'; set_opening_balance kind=sick_time imports opening balances. Migrate (ledger work_state). CPA: WA piece-rate sick pay rate. |
 | app 0.38.8 | Due dates and overdue on task rows and a Due section on Today, computed on the phone (works offline). |
 | app 0.39.0 | Go / Hold chips and card, supervisor override, crop-stage picker (offline), Today: work notices, notices to decide, "Good to do today", SOPs to review; approved SOPs in "How this job is done". Spanish (tú). |
 | app 0.40.0 | The course player: course videos with how much was watched, the knowledge check, trainer sign-off. |
@@ -121,7 +122,7 @@ output, proven on the payroll suite).
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main (`e04f6e3`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.304.0`. Push fafo_ios main
+Push erpnext_mcp main (`47e1b8c`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.305.0`. Push fafo_ios main
 (`8ab5494`) and archive FarmOps 0.61.0 (build 57), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
@@ -141,11 +142,11 @@ Expect from the migrate (first run only):
 7. "rain archive check rule seeded OFF: weather_check_pruning_rain."
 8. "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded
    (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …"
-9. `__version__ = "0.304.0"`.
+9. `__version__ = "0.305.0"`.
 
 **3. Checks after the migrate**
 
-1. `get_server_status`: 0.304.0. Desk → any Asset Register form: the map's build stamp reads 0.304.0.
+1. `get_server_status`: 0.305.0. Desk → any Asset Register form: the map's build stamp reads 0.305.0.
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets and weather_check_pruning_rain, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
