@@ -54,6 +54,13 @@ DEFAULT_PHENOLOGY = {
 			            "1020_29).",
 			"alternates": [{"base_f": 41.0, "use": "to match the WSU / uspest.org cherry degree-day maps"}],
 			"calibrate": "against the block's own harvest windows (propose_harvest_calibration)",
+			#: v0.303.0. The stage table lives here now (config, published by a person), not in a Settings text box.
+			#: Empty until spring 2027 observations calibrate it (docs/design/cherry_dd_stage_table_proposal.md):
+			#: [[BBCH, °F·days from the biofix], …], rising.
+			"stages": [],
+			#: Month-day the count starts for this crop; blank = the site's Degree-Day Biofix setting. The proposal
+			#: recommends 03-01 for sweet cherry — Tim's call, so it is not set here.
+			"biofix": None,
 		},
 	},
 	"default": {"base_f": 50.0, "cutoff_f": 86.0,
@@ -203,6 +210,28 @@ def _validate_phenology(body: dict, errors: list, warnings: list) -> None:
 			              "(4.5 °C, ISHS 1020_29; 41 °F on the WSU maps).")
 		if not row.get("citation"):
 			warnings.append(f"{name}: no citation.")
+		last = -1.0
+		for stage in row.get("stages") or []:
+			try:
+				bbch, dd = (stage.get("bbch"), stage.get("dd")) if isinstance(stage, dict) else stage
+				dd = float(dd)
+			except (TypeError, ValueError):
+				errors.append(f"{name}: a stage is [BBCH, °F·days].")
+				continue
+			if not (str(bbch).isdigit() and len(str(bbch)) <= 2):
+				errors.append(f"{name}: stage BBCH {bbch!r} is a two-digit code.")
+			if dd <= last:
+				errors.append(f"{name}: stage °F·days must rise ({bbch} at {dd:g}).")
+			last = dd
+		biofix = row.get("biofix")
+		if biofix not in (None, ""):
+			try:
+				import datetime as _dt
+
+				month, day = (int(x) for x in str(biofix).split("-")[:2])
+				_dt.date(2001, month, day)
+			except ValueError:
+				errors.append(f"{name}: biofix is a month-day like 03-01.")
 
 
 def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:

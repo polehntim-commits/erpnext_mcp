@@ -78,3 +78,35 @@ class TheGuard(DegreeDayTestCase):
 		with mock.patch.object(degree_days, "_crop_of", return_value="Sweet Cherry"):
 			got = pest_dd.preview(pest_dd.PHENOLOGY_KEY, body, ["B8"])
 		self.assertEqual((got["blocks"][0]["base_now"], got["blocks"][0]["base_draft"]), (40.1, 41.0))
+
+
+class TheStageTableIsConfig(DegreeDayTestCase):
+	"""v0.303.0. The crop's stages and biofix live in crop_phenology; the Settings text table is the fallback."""
+
+	def body(self, **cherry):
+		row = {**pest_dd.DEFAULT_PHENOLOGY["crops"]["sweet cherry"], **cherry}
+		return {**pest_dd.DEFAULT_PHENOLOGY, "crops": {"sweet cherry": row}}
+
+	def test_config_stages_win(self):
+		with pest_dd.overlay(pest_dd.PHENOLOGY_KEY, self.body(stages=[[51, 80], [65, 300]])):
+			entry = degree_days.crop_entry("Sweet Cherry")
+		self.assertEqual(entry["stages"], [(80.0, "51"), (300.0, "65")])
+		self.assertIn("crop_phenology", entry["stages_source"])
+
+	def test_the_settings_table_is_the_fallback(self):
+		self.configure(degree_day_stage_table="Sweet Cherry: 51 = 100")
+		entry = degree_days.crop_entry("Sweet Cherry")
+		self.assertEqual(entry["stages"], [(100.0, "51")])
+		self.assertIn("Settings", entry["stages_source"])
+
+	def test_stages_must_rise_and_be_bbch(self):
+		errors = pest_dd.validate(self.body(stages=[[51, 300], [65, 100]]), pest_dd.PHENOLOGY_KEY)["errors"]
+		self.assertTrue(any("must rise" in e for e in errors))
+		errors = pest_dd.validate(self.body(stages=[["bloom", 100]]), pest_dd.PHENOLOGY_KEY)["errors"]
+		self.assertTrue(any("two-digit" in e for e in errors))
+
+	def test_a_crop_biofix(self):
+		with pest_dd.overlay(pest_dd.PHENOLOGY_KEY, self.body(biofix="03-01")):
+			self.assertEqual(degree_days.crop_entry("Sweet Cherry")["biofix"], "03-01")
+		self.assertEqual(str(degree_days.biofix(2026, "03-01")), "2026-03-01")
+		self.assertTrue(pest_dd.validate(self.body(biofix="13-40"), pest_dd.PHENOLOGY_KEY)["errors"])

@@ -34,8 +34,9 @@ def _today() -> datetime.date:
 	return datetime.date.fromisoformat(str(frappe.utils.today())[:10])
 
 
-def biofix(year: int) -> datetime.date:
-	raw = str(settings.get_settings().get("degree_day_biofix") or "01-01").strip()
+def biofix(year: int, crop_biofix: str | None = None) -> datetime.date:
+	"""The day the count starts: the crop's own (crop_phenology, v0.303.0), else the site's Degree-Day Biofix."""
+	raw = str(crop_biofix or settings.get_settings().get("degree_day_biofix") or "01-01").strip()
 	try:
 		month, day = (int(x) for x in raw.split("-")[:2])
 		return datetime.date(year, month, day)
@@ -107,6 +108,17 @@ def crop_entry(crop: str) -> dict:
 	if "cutoff" not in explicit and row.get("cutoff_f") not in (None, ""):
 		entry["cutoff"] = float(row["cutoff_f"])
 	entry["alternates"] = row.get("alternates") or []
+	# v0.303.0. The crop's stage table from crop_phenology wins over the Settings text table where it has rows.
+	stages = []
+	for stage in row.get("stages") or []:
+		bbch, dd = (stage.get("bbch"), stage.get("dd")) if isinstance(stage, dict) else stage
+		stages.append((float(dd), str(bbch).zfill(2)))
+	if stages:
+		entry["stages"] = sorted(stages)
+		entry["stages_source"] = f"crop_phenology {version}"
+	elif entry.get("stages"):
+		entry["stages_source"] = "Degree-Day Stage Table (ERPNext MCP Settings)"
+	entry["biofix"] = row.get("biofix") or None
 	return entry
 
 
@@ -190,7 +202,9 @@ def estimate(entry: dict, season: float, ahead: list) -> dict:
 	stages = entry.get("stages") or []
 	if not stages:
 		return {"estimated_bbch": None, "note": f"No degree-day stage table for {entry.get('crop') or 'this crop'} — "
-		                                        "add lines in ERPNext MCP Settings → Degree-Day Stage Table."}
+		                                        "add its stages to the crop_phenology config (config action=draft "
+		                                        "kind=crop_phenology), or lines in ERPNext MCP Settings → Degree-Day "
+		                                        "Stage Table."}
 	reached = [code for need, code in stages if season >= need]
 	current = reached[-1] if reached else None
 	upcoming = next(((need, code) for need, code in stages if season < need), None)
@@ -220,7 +234,7 @@ def for_block(block: str, crop: str = "", as_of: str = "") -> dict:
 	today = datetime.date.fromisoformat(str(as_of)[:10]) if as_of else _today()
 	crop = crop or _crop_of(block)
 	entry = crop_entry(crop)
-	start = biofix(today.year)
+	start = biofix(today.year, entry.get("biofix"))
 	temps = daily_temps(point[0], point[1], start, today + datetime.timedelta(days=16))
 	acc = accumulate(temps, start, today, entry["base"], entry["cutoff"])
 	return {
@@ -232,6 +246,7 @@ def for_block(block: str, crop: str = "", as_of: str = "") -> dict:
 		"base_source": entry.get("base_source"),
 		**({"base_note": entry["base_note"]} if entry.get("base_note") else {}),
 		"base_alternates": entry.get("alternates") or [],
+		"stages_source": entry.get("stages_source"),
 		"cutoff_f": entry["cutoff"],
 		"gdd_season": acc["season"],
 		"gdd_next_7": round(sum(d["gdd"] for d in acc["ahead"][:7]), 1),

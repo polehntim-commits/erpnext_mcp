@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.303.0 — 2026-10-10 — the crop stage table as config
+
+**No migrate.** Deploy `docs/deploy/v0.303.0_crop_stage_table.md`. Tools: **1,142 → 1,142**.
+
+- **Stages as config:** each crop's degree-day stages and optional biofix live in `crop_phenology` (pattern P5:
+  draft, preview, publish by a person). The Settings text table is the fallback. `get_degree_days` reports where
+  the stages came from.
+- **Cherry:** sweet cherry stays uncalibrated (no rows) until spring-2027 observations. The proposal is re-based to
+  40.1 °F, and the biofix is left for Tim.
+- Tests: `test_crop_phenology` (`TheStageTableIsConfig`).
+
 ## 0.302.0 — 2026-10-10 — rest and meal periods, and harvest-bonus notices, per BOLI
 
 **Migrate**: Farm Pay Item gains the bonus-terms fields; a disabled, unapproved Oregon break policy is added from

@@ -1,6 +1,13 @@
 # Cherry degree-day stage table — proposal (for Tim)
 
-Status: **PROPOSAL, not built.** Nothing in this file changes a setting. Written 2026-10-09.
+Status: **Base decided; table built as config (v0.303.0); stages to calibrate.** Written 2026-10-09; updated
+2026-10-10.
+
+**Decided (Tim, 2026-10-09):** sweet cherry phenology runs on **4.5 °C ≈ 40.1 °F** (Hochmaier, ISHS 1020), switchable to
+41 °F to match WSU / uspest maps. It is the `crop_phenology` IPM setting (v0.297.0); the stage rows and an optional
+per-crop biofix live in the same row since v0.303.0 (`stages: [[BBCH, °F·days], …]`, `biofix: "03-01"`), drafted,
+previewed and published by a person. Everything below that says "41 °F" now reads 40.1 °F. Still Tim's: the biofix
+(the site default, or March 1 as recommended below).
 
 ## What this is for
 
@@ -50,7 +57,7 @@ nothing yet to fit, so the proposal is a structure plus a calibration plan, not 
 
 Proposed rows (BBCH, the words the crew sees, and where the number will come from):
 
-| BBCH | Stage | Value (°F·days, base 41 °F, from Mar 1) | Source of the number |
+| BBCH | Stage | Value (°F·days, base 40.1 °F, from the biofix) | Source of the number |
 |---|---|---|---|
 | 51 | Bud swell | to calibrate | spring 2027 observations |
 | 53 | Bud burst / side green | to calibrate | " |
@@ -69,7 +76,7 @@ enough at harvest.
 
 ## Calibration plan
 
-1. **This winter:** publish the table with the base only (`Cherry: base = 41`, `cutoff = 86`) and no stage rows. The
+1. **This winter (done, v0.297–v0.303):** the base is published (40.1 °F, cutoff 86 °F) with no stage rows. The
    suggestion stays blank, but `get_degree_days` reports cherry heat on the right base from March 1.
 2. **Spring 2027:** the crew records stages on the phone (stage capture, v0.241; the Start/End-of-Day stage prompt)
    on a few reference blocks: one early (Chelan/Burlat-type), one Bing, one late (Sweetheart/Regina).
