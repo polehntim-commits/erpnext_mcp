@@ -190,7 +190,8 @@ def regular_rate_items(company: str, items_by_employee: dict, period_start: str,
 
 
 def price_sick_time(company: str, items_by_employee: dict, structures: dict, min_wage_rates: dict, as_of: str) -> list:
-	"""v0.301.0. Price each Sick Time item (sick_time.price) in place; returns what waits, with the reason."""
+	"""v0.301.0. Price each Sick Time item (sick_time.price) in place; returns what waits, with the reason. v0.305.0: per
+	state."""
 	from . import payroll_calc, sick_time
 
 	waiting = []
@@ -199,10 +200,15 @@ def price_sick_time(company: str, items_by_employee: dict, structures: dict, min
 		if not sick:
 			continue
 		structure = structures.get(employee) or {}
-		state = (sick[0].get("work_state") or "OR")
-		region = ((structure.get("min_wage_regions") or {}).get(state)) or "standard"
-		floor = payroll_calc.applicable_minimum_wage(state, region, min_wage_rates)
-		priced = sick_time.price(company, employee, sick, structure, floor, as_of)
+		# v0.305.0. Each state's items against that state's balance and minimum wage (Oregon / Washington).
+		priced = []
+		for state in sick_time.STATES:
+			group = [r for r in sick if ("WA" if str(r.get("work_state") or "") == "WA" else "OR") == state]
+			if not group:
+				continue
+			region = ((structure.get("min_wage_regions") or {}).get(state)) or "standard"
+			floor = payroll_calc.applicable_minimum_wage(state, region, min_wage_rates)
+			priced += sick_time.price(company, employee, group, structure, floor, as_of, state)
 		for row in sick:
 			if row.get("waiting"):
 				waiting.append({"employee": employee, "item": row.get("name"), "hours": row.get("hours"),

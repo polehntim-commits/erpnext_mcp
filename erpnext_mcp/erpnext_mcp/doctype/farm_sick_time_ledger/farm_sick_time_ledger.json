@@ -10,6 +10,7 @@
   "employee_name",
   "company",
   "posting_date",
+  "work_state",
   "kind",
   "hours",
   "hours_worked",
@@ -48,6 +49,15 @@
    "label": "Date",
    "reqd": 1,
    "in_list_view": 1
+  },
+  {
+   "fieldname": "work_state",
+   "fieldtype": "Select",
+   "label": "State",
+   "options": "\nOR\nWA",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "v0.305.0. Whose law the hours are under: Oregon sick time or Washington paid sick leave — separate balances. Blank is Oregon (rows written before v0.305.0)."
   },
   {
    "fieldname": "kind",
@@ -92,7 +102,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-10 05:00:00.000000",
+ "modified": "2026-10-10 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Sick Time Ledger",

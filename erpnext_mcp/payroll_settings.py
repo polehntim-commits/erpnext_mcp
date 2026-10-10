@@ -340,28 +340,73 @@ DEFAULT_SICK_TIME_POLICY = {
 	"paid": "auto",
 	"paid_min_employees": 10,
 	"source": "ORS 653.601-.661; OAR 839-007-0000(7), -0010 to -0060; BOLI agricultural FAQ (seasonal rehire within 180 days)",
+	# v0.305.0. Washington paid sick leave, its own balance for hours worked in Washington. No annual accrual, use or
+	# balance cap in the statute (None = none); paid at every employer size, seasonal and agricultural workers included.
+	"washington": {
+		"accrual_per_hours_worked": 40.0,
+		"annual_accrual_cap": None,
+		"carryover_cap": 40.0,
+		"balance_cap": None,
+		"annual_use_cap": None,
+		"eligible_after_days": 90,
+		"rehire_restore_days": 365,
+		"paid": True,
+		"source": "RCW 49.46.210; WAC 296-128-600 to -770 (L&I). Rate: 'normal hourly compensation' (WAC 296-128-620) — "
+		          "for piece-rate work, have the CPA confirm the calculation; this pays at least the hourly rate and the "
+		          "Washington minimum wage.",
+	},
+}
+
+#: v0.305.0. The law's floors per state: (direction, value). "at most" for a ratio of hours worked per hour earned and a
+#: waiting period; "at least" for caps a policy may raise but never lower.
+SICK_TIME_FLOORS = {
+	"OR": {"accrual_per_hours_worked": ("at most", 30.0), "annual_accrual_cap": ("at least", 40.0),
+	       "carryover_cap": ("at least", 40.0), "annual_use_cap": ("at least", 40.0),
+	       "eligible_after_days": ("at most", 90), "rehire_restore_days": ("at least", 180)},
+	"WA": {"accrual_per_hours_worked": ("at most", 40.0), "carryover_cap": ("at least", 40.0),
+	       "eligible_after_days": ("at most", 90), "rehire_restore_days": ("at least", 365)},
 }
 
 
 def sick_time_policy(as_of: str = "") -> dict:
 	body, version = _body(SICK_TIME_POLICY_KEY, as_of)
-	return {**DEFAULT_SICK_TIME_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_SICK_TIME_POLICY},
-	        "version": version}
+	out = {**DEFAULT_SICK_TIME_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_SICK_TIME_POLICY},
+	       "version": version}
+	# v0.305.0. A policy published before Washington existed reads the Washington defaults; one that sets some of
+	# them keeps the rest.
+	wa = body.get("washington") if isinstance(body.get("washington"), dict) else {}
+	out["washington"] = {**DEFAULT_SICK_TIME_POLICY["washington"],
+	                     **{k: v for k, v in wa.items() if k in DEFAULT_SICK_TIME_POLICY["washington"]}}
+	return out
 
 
 def _validate_sick_time_policy(body: dict, for_publish: bool) -> dict:
 	errors = []
-	floor = {"accrual_per_hours_worked": ("at most", 30.0), "annual_accrual_cap": ("at least", 40.0),
-	         "carryover_cap": ("at least", 40.0), "annual_use_cap": ("at least", 40.0),
-	         "eligible_after_days": ("at most", 90), "rehire_restore_days": ("at least", 180)}
-	for key, (direction, law) in floor.items():
-		try:
-			value = float(body.get(key, DEFAULT_SICK_TIME_POLICY[key]))
-		except (TypeError, ValueError):
-			errors.append(f"{key} is a number")
-			continue
-		if (direction == "at most" and value > law) or (direction == "at least" and value < law):
-			errors.append(f"{key} must be {direction} {law:g} — the law's floor (ORS 653.606 / OAR 839-007)")
+	wa = body.get("washington", {})
+	if not isinstance(wa, dict):
+		errors.append("washington is an object of the Washington paid sick leave settings")
+		wa = {}
+	for state, values, defaults, cite in (
+			("OR", body, DEFAULT_SICK_TIME_POLICY, "ORS 653.606 / OAR 839-007"),
+			("WA", wa, DEFAULT_SICK_TIME_POLICY["washington"], "RCW 49.46.210 / WAC 296-128")):
+		prefix = "" if state == "OR" else "washington."
+		for key, (direction, law) in SICK_TIME_FLOORS[state].items():
+			raw = values.get(key, defaults.get(key))
+			if raw is None:
+				if direction == "at least":
+					continue  # None is "no cap", which is never below the floor
+				errors.append(f"{prefix}{key} is a number")
+				continue
+			try:
+				value = float(raw)
+			except (TypeError, ValueError):
+				errors.append(f"{prefix}{key} is a number")
+				continue
+			if (direction == "at most" and value > law) or (direction == "at least" and value < law):
+				errors.append(f"{prefix}{key} must be {direction} {law:g} — the law's floor ({cite})")
+	if wa.get("paid", True) in (False, "false", "False"):
+		errors.append("washington.paid cannot be false — Washington paid sick leave is paid at every employer size "
+		              "(RCW 49.46.210)")
 	if str(body.get("paid", "auto")) not in ("auto", "True", "False", "true", "false") and not isinstance(
 			body.get("paid"), bool):
 		errors.append("paid is auto, true or false")
@@ -721,7 +766,8 @@ def seed_body(key: str = OVERTIME_KEY) -> dict:
 		        "basis": "Tim's decision 2026-10-09: the middle path, as a policy (not hard-coded)."}
 	if key == SICK_TIME_POLICY_KEY:
 		return {"schema_version": 1, "key": key, **DEFAULT_SICK_TIME_POLICY, "effective_from": "2026-01-01",
-		        "basis": "Oregon sick time law as BOLI applies it (Tim, 2026-10-10: align with BOLI)."}
+		        "basis": "Oregon sick time law as BOLI applies it (Tim, 2026-10-10: align with BOLI); Washington paid "
+		                 "sick leave as L&I applies it (v0.305.0)."}
 	if key == PAY_ITEM_POLICY_KEY:
 		return {"schema_version": 1, "key": key, **DEFAULT_PAY_ITEM_POLICY, "effective_from": "2026-01-01",
 		        "basis": "Tim's decision 2026-10-09: non-discretionary bonuses in the overtime regular rate."}

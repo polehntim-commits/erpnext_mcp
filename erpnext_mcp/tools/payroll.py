@@ -2487,6 +2487,10 @@ def render_pay_stub(args: dict) -> ToolResult:
 
 	if sick_time.ready():
 		stub["sick_time"] = sick_time.balance(employee, str(doc.pay_period_end))
+		# v0.305.0. Washington paid sick leave, on the statement when the worker has any (WAC 296-128-650).
+		wa = sick_time.balance(employee, str(doc.pay_period_end), "WA")
+		if wa["balance"] or wa["accrued_this_year"] or wa["used_this_year"]:
+			stub["sick_time_wa"] = wa
 
 	file_name = pay_stub_pdf.file_name_for(stub)
 	overwrite = bool(args.get("overwrite"))

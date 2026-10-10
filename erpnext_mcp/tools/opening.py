@@ -100,7 +100,10 @@ BALANCE_TOLERANCE = mutate.BALANCE_TOLERANCE
 
 # ── 66. set_opening_balance ─────────────────────────────────────────────────
 def set_opening_balance(args: dict) -> ToolResult:
-	"""Book one historical event as a DRAFT opening-balance Journal Entry."""
+	"""Book one historical event as a DRAFT opening-balance Journal Entry.
+
+	v0.305.0. `kind="sick_time"` instead books workers' sick-leave balances carried in from before the ledger
+	(Oregon sick time / Washington paid sick leave), as `balances` — hours, not money, so no Journal Entry."""
 	company = resolve_company(as_str(args, "company"), required=True)
 	posting_date = as_date(args, "posting_date", required=True)
 	user_remark = as_str(args, "user_remark", required=True)
@@ -110,6 +113,14 @@ def set_opening_balance(args: dict) -> ToolResult:
 			"'equipment transferred from PFI on dissolution', not 'opening'. It is the only "
 			"part of an opening balance nobody can reconstruct later. Nothing was created."
 		)
+	kind = (as_str(args, "kind") or "ledger").strip().lower()
+	if kind not in ("ledger", "sick_time"):
+		raise ToolError(f"kind is 'ledger' (the default: a Journal Entry) or 'sick_time', not {kind!r}. "
+		                "Nothing was created.")
+	if kind == "sick_time":
+		return _sick_time_opening(company, str(posting_date), args.get("balances"), user_remark)
+	if args.get("balances") not in (None, ""):
+		raise ToolError("balances is for kind='sick_time'; a ledger opening balance takes entries. Nothing was created.")
 
 	entries = _validated_entries(args.get("entries"), company)
 	equity_account, equity_source = _opening_equity_account(args, company)
@@ -757,3 +768,19 @@ def _opening_extras() -> dict:
 	if DEFAULT_OPENING_VOUCHER_TYPE in _voucher_type_options():
 		extras["voucher_type"] = DEFAULT_OPENING_VOUCHER_TYPE
 	return extras
+
+
+def _sick_time_opening(company: str, posting_date: str, balances, user_remark: str) -> ToolResult:
+	"""v0.305.0. One Adjustment row per worker and state on the sick time ledger — all checked before any is written."""
+	from .. import sick_time
+
+	written = sick_time.opening(company, posting_date, balances, user_remark)
+	total = sum(row["hours"] for row in written)
+	return ToolResult(
+		{"kind": "sick_time", "company": company, "posting_date": posting_date, "rows": written,
+		 "total_hours": round(total, 2),
+		 "note": "Counted in each worker's balance from this date. Not this year's accrual, so the annual accrual cap "
+		         "is untouched. Correct a wrong figure with an adjustment, not a second opening."},
+		f"opening sick-leave balances for {len(written)} worker-state(s), {total:g} h in all, as of {posting_date}",
+		docstatus_delta="none → ledger rows (Adjustment)",
+	)

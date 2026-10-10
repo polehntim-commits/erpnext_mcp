@@ -1734,9 +1734,30 @@ TOOLS = {
 		"every line validates.\n\n"
 		"Creates a DRAFT. It moves no balance until submit_journal_entry posts it, "
 		"and an opening balance is the entry most worth reading first — it is the "
-		"one nobody will ever re-derive.",
+		"one nobody will ever re-derive.\n\n"
+		"kind='sick_time' (v0.305.0): workers' sick-leave balances carried in from before "
+		"the ledger — Oregon sick time or Washington paid sick leave, in hours — as "
+		"`balances` instead of `entries`. One Adjustment row per worker and state, all "
+		"checked before any is written; a second opening for the same worker and state "
+		"is refused. Counts in the balance, not in the year's accrual.",
 		{
 			"company": _COMPANY,
+			"kind": _field(_STRING, "'ledger' (default: a draft Journal Entry from entries) or 'sick_time' (balances)."),
+			"balances": {
+				"type": "array",
+				"description": "kind='sick_time' only: one object per worker and state.",
+				"items": {
+					"type": "object",
+					"properties": {
+						"employee": _field(_STRING, "Employee docname, in this company."),
+						"hours": _field(_NUMBER, "Hours available on posting_date. Positive."),
+						"work_state": _field(_STRING, "OR (default) or WA."),
+						"note": _field(_STRING, "Optional, e.g. where the figure came from."),
+					},
+					"required": ["employee", "hours"],
+					"additionalProperties": False,
+				},
+			},
 			"posting_date": _field(
 				_STRING,
 				"YYYY-MM-DD. Usually the day before the first trading day, or the "
@@ -1747,7 +1768,8 @@ TOOLS = {
 				"minItems": 1,
 				"description": (
 					"The real side of the event, one object per account. The offsetting "
-					"line against opening equity is computed — do not include it."
+					"line against opening equity is computed — do not include it. "
+					"Required for kind='ledger'."
 				),
 				"items": {
 					"type": "object",
@@ -1784,7 +1806,7 @@ TOOLS = {
 				"The only part of an opening balance nobody can reconstruct later.",
 			),
 		},
-		required=("posting_date", "entries", "user_remark"),
+		required=("posting_date", "user_remark"),
 		mutating=True,
 		title="Set an opening balance",
 	),
@@ -3279,7 +3301,7 @@ TOOLS = {
 			),
 			"posting_date": _field(_STRING, "When it was filed. Defaults to today."),
 			"leave_approver": _field(_STRING, "User who should answer it."),
-			"hours": _field(_NUMBER, "v0.301.0. With leave_type 'Oregon Sick Time': the hours taken (sick time is in hours; to_date not needed). Paid by the run covering from_date within the worker's balance."),
+			"hours": _field(_NUMBER, "v0.301.0. With leave_type 'Oregon Sick Time' (or, v0.305.0, 'Washington Paid Sick Leave'): the hours taken (sick time is in hours; to_date not needed). Paid by the run covering from_date within the worker's balance for that state; get_leave_balance takes the same leave types."),
 			"work_state": _field(_STRING, "v0.301.0. Sick time: the state (default OR)."),
 		},
 		required=("employee", "from_date", "to_date"),

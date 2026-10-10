@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.305.0 — 2026-10-10 — Washington paid sick leave, and sick-time opening balances
+
+**Migrate**: Farm Sick Time Ledger gains `work_state`. Deploy `docs/deploy/v0.305.0_washington_sick_leave.md`.
+Tools: **1,142 → 1,142** (`set_opening_balance` gains `kind=sick_time`).
+
+- **Washington paid sick leave** (RCW 49.46.210) is a separate balance for Washington hours:
+  - 1 hour per 40, with no annual accrual or use cap;
+  - 40 hours carried over;
+  - usable from the 90th day, restored on rehire within 12 months;
+  - paid at every employer size.
+- **Policy:** `sick_time_policy.washington`, validated against the statute.
+- **Filing and stubs:** filed and read as `leave_type="Washington Paid Sick Leave"`; shown on pay statements.
+- **Opening balances:** `set_opening_balance kind=sick_time` imports balances in bulk, all-or-nothing. They count in
+  the balance, not in the year's accrual.
+- **CPA:** the Washington piece-rate sick pay rate is left for the CPA to confirm.
+- Tests: `test_washington_sick_leave`.
+
 ## 0.304.0 — 2026-10-10 — the variety catalogue per crop
 
 **Migrate**: Crop Variety gains `aliases` and `is_pollinizer`. Deploy `docs/deploy/v0.304.0_variety_catalogue.md`.
