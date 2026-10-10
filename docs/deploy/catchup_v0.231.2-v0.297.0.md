@@ -1,11 +1,11 @@
-**Deploy: catch-up v0.231.2 → v0.296.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.59.0 (build 55)**
+**Deploy: catch-up v0.231.2 → v0.297.0 — one build, ONE migrate; FarmOps 0.38.7 → 0.59.0 (build 55)**
 
-For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.296.0, and
+For both servers, which run v0.231.2 with FarmOps 0.38.7 (build 32). One image covers v0.231.3 through v0.297.0, and
 a single `bench migrate` runs everything those releases need, in order. Every step is idempotent; everything new
 ships **OFF** unless it is a read. Pay is unchanged (v0.235.0 moved the overtime rule into data with identical
 output, proven on the payroll suite).
 
-- **Server**: erpnext_mcp main **`4892bd2`** (`__version__ = "0.296.0"`).
+- **Server**: erpnext_mcp main **`a10817b`** (`__version__ = "0.297.0"`).
 - **App**: fafo_ios main **`ce9d4b3`** — FarmOps **0.60.0 (build 56)**, scheme **FarmOps**. It needs v0.252.0's
   routes (v0.271.0's for Contractor jobs, v0.272.0's for Deliveries, v0.275.0's for the hive map), so deploy the server first.
 - v0.232.0 was never released: it shipped as v0.244.0 (upload links).
@@ -85,6 +85,7 @@ output, proven on the payroll suite).
 | v0.294.0 | Form OR-W-4 as its own form kind: submit_w4 form=or_w4 (line 4a, Redetermination, its own signature), the 2026 fallback order and refused certificates (or_source), send-to-DOR flags with send-by dates, list_employees_missing_w4 form=or_w4. Covered by the one migrate. Official 150-101-402 PDF not bundled yet. |
 | v0.295.0 | The official Oregon Form OR-W-4 (150-101-402), filled by render_w4_pdf form=or_w4, and signed on the phone (app 0.60.0) through the signature evidence chain; Oregon-only and expired exemptions withheld at 8% (Pub 150-211-602). E-signature acceptance unconfirmed until the DOR answers. Covered by the one migrate. |
 | v0.296.0 | Non-discretionary bonuses (incl. production bonuses and the crab-boat profit share) in the overtime regular rate: allocated over the workweeks earned, the overtime premium paid with the bonus retroactively; discretionary per kind is a policy flag (pay_item_policy), default non-discretionary. Covered by the one migrate. |
+| v0.297.0 | Crop phenology bases per crop (IPM setting crop_phenology): sweet cherry 4.5 °C = 40.1 °F (ISHS 1020_29; 41 °F WSU alternate); 50 °F never for cherry; pest models unchanged. Covered by the one migrate. |
 | app 0.38.8 | Due dates and overdue on task rows and a Due section on Today, computed on the phone (works offline). |
 | app 0.39.0 | Go / Hold chips and card, supervisor override, crop-stage picker (offline), Today: work notices, notices to decide, "Good to do today", SOPs to review; approved SOPs in "How this job is done". Spanish (tú). |
 | app 0.40.0 | The course player: course videos with how much was watched, the knowledge check, trainer sign-off. |
@@ -112,7 +113,7 @@ output, proven on the payroll suite).
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main (`4892bd2`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.296.0`. Push fafo_ios main
+Push erpnext_mcp main (`a10817b`), build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.297.0`. Push fafo_ios main
 (`8ab5494`) and archive FarmOps 0.60.0 (build 56), scheme **FarmOps**.
 
 **2. Each server: pull, restart, ONE migrate** — umbrel.local first, then OML (orchardmeadow-umbrel) when Tim
@@ -132,11 +133,11 @@ Expect from the migrate (first run only):
 7. "rain archive check rule seeded OFF: weather_check_pruning_rain."
 8. "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded
    (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …"
-9. `__version__ = "0.296.0"`.
+9. `__version__ = "0.297.0"`.
 
 **3. Checks after the migrate**
 
-1. `get_server_status`: 0.296.0. Desk → any Asset Register form: the map's build stamp reads 0.296.0.
+1. `get_server_status`: 0.297.0. Desk → any Asset Register form: the map's build stamp reads 0.297.0.
 2. Payroll: `preview_payroll_for_period` on last week matches the posted run (identical pay).
 3. Desk → Compliance Rule: six Go / Hold presets and weather_check_pruning_rain, all disabled. ERPNext MCP Settings: every new write switch unticked;
    No-Work Notices, Knowledge Checks, Irrigation Schedule, Upload Links Enabled, Daily Equipment Checks, Personal Day Checks unticked.
