@@ -807,7 +807,8 @@ def _payroll_settings_seed() -> None:
 		                  (payroll_settings.OREGON_KEY, "Oregon's 2026 withholding formula, 150-206-436 (v0.291.0)."),
 		                  (payroll_settings.GARNISHMENT_POLICY_KEY, "Garnishment middle path, Tim 2026-10-09 (v0.292.0)."),
 		                  (payroll_settings.GARNISHMENT_LIMITS_KEY, "Federal, Oregon and Washington garnishment limits, sourced (v0.292.0)."),
-		                  (payroll_settings.PAY_ITEM_POLICY_KEY, "Bonuses in the overtime regular rate, Tim 2026-10-09 (v0.296.0).")):
+		                  (payroll_settings.PAY_ITEM_POLICY_KEY, "Bonuses in the overtime regular rate, Tim 2026-10-09 (v0.296.0)."),
+		                  (payroll_settings.SICK_TIME_POLICY_KEY, "Oregon sick time as BOLI applies it (v0.301.0).")):
 			name = phone_config.seed(payroll_settings.KIND, key, payroll_settings.seed_body(key), note)
 			if name:
 				print(f"erpnext_mcp: payroll setting {name} seeded.")

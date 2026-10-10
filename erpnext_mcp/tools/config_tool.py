@@ -56,7 +56,8 @@ def _example(kind: str):
 	slug = {"pest_dd_models": "ipm_setting", "pest_dd_offsets": "ipm_setting", "crop_phenology": "ipm_setting", "overtime_rule": "payroll_setting",
 	        "pay_policy": "payroll_setting", "wage_floor": "payroll_setting",
 	        "oregon_withholding": "payroll_setting", "garnishment_policy": "payroll_setting",
-	        "garnishment_limits": "payroll_setting", "pay_item_policy": "payroll_setting"}.get(kind, kind)
+	        "garnishment_limits": "payroll_setting", "pay_item_policy": "payroll_setting",
+	        "sick_time_policy": "payroll_setting"}.get(kind, kind)
 	try:
 		kind_label = phone_config.SLUG_KINDS.get(slug)
 	except Exception:

@@ -1509,6 +1509,8 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 			                        "min_wage_regions": {}, "pay_items_only": True}
 		state = items.work_state(rows, employee, company)
 		items_by_employee[employee] = [{**r, "work_state": r.get("work_state") or state} for r in rows]
+	# v0.301.0. Oregon sick time taken: priced at the OAR 839-007-0000(7) rate within the worker's balance.
+	items_waiting += items.price_sick_time(company, items_by_employee, structures, min_wage_rates, str(end))
 	# v0.296.0. A non-discretionary bonus raises the regular rate of the workweeks it was earned in; the overtime
 	# premium that adds is paid with it, as wages (29 CFR 778.209; pay_item_policy).
 	for employee, derived in items.regular_rate_items(company, items_by_employee, str(start), str(end)).items():
@@ -1814,6 +1816,10 @@ def run_payroll_for_period(args: dict) -> ToolResult:
 	ledger = garnishment_ledger.record(entry.name, slips, context.get("run_kind") or "Regular",
 	                                   context["pay_period_end"])
 	paid_items = pay_items.mark_paid(entry.name, slips)
+	# v0.301.0. Oregon sick time accrued on the hours worked, and used where a Sick Time item was paid.
+	from .. import sick_time
+
+	sick = sick_time.record(entry.name, slips, context["company"], context["pay_period_end"])
 
 	# See the sibling note in calculate_payroll: a bucket this run just paid
 	# must not still read as payable to the next one.
@@ -1829,6 +1835,7 @@ def run_payroll_for_period(args: dict) -> ToolResult:
 	data["totals"] = totals
 	data["garnishment_ledger"] = ledger
 	data["pay_items_paid"] = paid_items
+	data["sick_time"] = sick
 	data["slips"] = [_slip_view(slip, False) for slip in slips]
 
 	return ToolResult(
@@ -1886,7 +1893,7 @@ def _slip_row(slip: dict) -> dict:
 		                             "overtime_pay", "overtime_regular_rate", "overtime_premium_multiplier",
 		                             "effective_hourly_rate", "piece_rate", "piece_units", "regular_hours",
 		                             "overtime_hours", "segments") if gross.get(k) not in (None, "")},
-		"pay_items": [{k: i.get(k) for k in ("name", "kind", "amount", "treatment", "derived_from")}
+		"pay_items": [{k: i.get(k) for k in ("name", "kind", "amount", "treatment", "derived_from", "hours")}
 		              for i in slip.get("pay_items") or []],
 		"regular_rate_by_week": (slip.get("regular_rate_by_week") or {}).get("weeks") or [],
 	}
@@ -2473,6 +2480,11 @@ def render_pay_stub(args: dict) -> ToolResult:
 		"hourly_rate": _stub_hourly_rate(slip.get("salary_structure"), slip.get("pay_type")),
 	}
 	stub["ytd"] = _stub_ytd(doc.company, employee, str(doc.pay_period_end), doc.name)
+	# v0.301.0. The Oregon sick time balance, on the statement (ORS 653.606 / OAR 839-007).
+	from .. import sick_time
+
+	if sick_time.ready():
+		stub["sick_time"] = sick_time.balance(employee, str(doc.pay_period_end))
 
 	file_name = pay_stub_pdf.file_name_for(stub)
 	overwrite = bool(args.get("overwrite"))

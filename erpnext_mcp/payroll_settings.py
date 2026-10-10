@@ -37,9 +37,10 @@ OREGON_KEY = "oregon_withholding"
 #: v0.292.0. Garnishment: the catch-up policy (Tim's middle path) and the dated, sourced limits it never exceeds.
 GARNISHMENT_POLICY_KEY = "garnishment_policy"
 PAY_ITEM_POLICY_KEY = "pay_item_policy"
+SICK_TIME_POLICY_KEY = "sick_time_policy"
 GARNISHMENT_LIMITS_KEY = "garnishment_limits"
 KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY, OREGON_KEY, GARNISHMENT_POLICY_KEY, GARNISHMENT_LIMITS_KEY,
-        PAY_ITEM_POLICY_KEY)
+        PAY_ITEM_POLICY_KEY, SICK_TIME_POLICY_KEY)
 WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 MIN_WAGE_REGIONS = ("standard", "portland_metro", "non_urban")
 
@@ -321,6 +322,55 @@ def pay_item_policy(as_of: str = "") -> dict:
 	        "version": version}
 
 
+#: v0.301.0 (Tim, 2026-10-10: align with BOLI). Oregon sick time, ORS 653.601-.661 and OAR 839-007: at least one
+#: hour per 30 worked, from day one; usable from the 91st day; accrual capped at 40 a year; up to 40 carried over; the
+#: employer may cap the balance at 80 and use at 40 a year; restored on rehire within 180 days. PAID where the employer
+#: has 10 or more Oregon employees (6 in Portland) — `paid` is auto (by headcount), true or false. Paid at the
+#: employee's regular hourly rate; piece-rate-only workers at no less than minimum wage; bonuses, overtime and
+#: premiums excluded (OAR 839-007-0000(7)).
+DEFAULT_SICK_TIME_POLICY = {
+	"states": ["OR"],
+	"accrual_per_hours_worked": 30.0,
+	"annual_accrual_cap": 40.0,
+	"carryover_cap": 40.0,
+	"balance_cap": 80.0,
+	"annual_use_cap": 40.0,
+	"eligible_after_days": 90,
+	"rehire_restore_days": 180,
+	"paid": "auto",
+	"paid_min_employees": 10,
+	"source": "ORS 653.601-.661; OAR 839-007-0000(7), -0010 to -0060; BOLI agricultural FAQ (seasonal rehire within 180 days)",
+}
+
+
+def sick_time_policy(as_of: str = "") -> dict:
+	body, version = _body(SICK_TIME_POLICY_KEY, as_of)
+	return {**DEFAULT_SICK_TIME_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_SICK_TIME_POLICY},
+	        "version": version}
+
+
+def _validate_sick_time_policy(body: dict, for_publish: bool) -> dict:
+	errors = []
+	floor = {"accrual_per_hours_worked": ("at most", 30.0), "annual_accrual_cap": ("at least", 40.0),
+	         "carryover_cap": ("at least", 40.0), "annual_use_cap": ("at least", 40.0),
+	         "eligible_after_days": ("at most", 90), "rehire_restore_days": ("at least", 180)}
+	for key, (direction, law) in floor.items():
+		try:
+			value = float(body.get(key, DEFAULT_SICK_TIME_POLICY[key]))
+		except (TypeError, ValueError):
+			errors.append(f"{key} is a number")
+			continue
+		if (direction == "at most" and value > law) or (direction == "at least" and value < law):
+			errors.append(f"{key} must be {direction} {law:g} — the law's floor (ORS 653.606 / OAR 839-007)")
+	if str(body.get("paid", "auto")) not in ("auto", "True", "False", "true", "false") and not isinstance(
+			body.get("paid"), bool):
+		errors.append("paid is auto, true or false")
+	effective = _effective(body, errors)
+	if for_publish and not errors:
+		_publish_guard(effective, errors)
+	return {"errors": errors, "warnings": []}
+
+
 def bonuses_in_regular_rate(state: str, as_of: str = "", policy: dict | None = None) -> bool:
 	"""v0.298.0. Whether a non-discretionary bonus enters this state's overtime regular rate (Oregon: no)."""
 	policy = policy or pay_item_policy(as_of)
@@ -382,6 +432,8 @@ def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
 		return _validate_garnishment_policy(body, for_publish)
 	if key == PAY_ITEM_POLICY_KEY:
 		return _validate_pay_item_policy(body, for_publish)
+	if key == SICK_TIME_POLICY_KEY:
+		return _validate_sick_time_policy(body, for_publish)
 	if key == GARNISHMENT_LIMITS_KEY:
 		return _validate_garnishment_limits(body, for_publish)
 	errors, warnings = [], []
@@ -667,6 +719,9 @@ def seed_body(key: str = OVERTIME_KEY) -> dict:
 	if key == GARNISHMENT_POLICY_KEY:
 		return {"schema_version": 1, "key": key, **DEFAULT_GARNISHMENT_POLICY, "effective_from": "2026-10-09",
 		        "basis": "Tim's decision 2026-10-09: the middle path, as a policy (not hard-coded)."}
+	if key == SICK_TIME_POLICY_KEY:
+		return {"schema_version": 1, "key": key, **DEFAULT_SICK_TIME_POLICY, "effective_from": "2026-01-01",
+		        "basis": "Oregon sick time law as BOLI applies it (Tim, 2026-10-10: align with BOLI)."}
 	if key == PAY_ITEM_POLICY_KEY:
 		return {"schema_version": 1, "key": key, **DEFAULT_PAY_ITEM_POLICY, "effective_from": "2026-01-01",
 		        "basis": "Tim's decision 2026-10-09: non-discretionary bonuses in the overtime regular rate."}

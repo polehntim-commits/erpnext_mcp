@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.301.0 — 2026-10-10 — Oregon sick time
+
+**Migrate**: Farm Sick Time Ledger, Farm Pay Item `hours` and kind "Sick Time", and payroll setting
+`sick_time_policy`. Deploy `docs/deploy/v0.301.0_oregon_sick_time.md`. Tools: **1,142 → 1,142**.
+
+- **Accrual** (ORS 653.601–.661, OAR 839-007): 1 hour per 30 Oregon hours, by payroll, capped at 40 a year.
+  Carryover is up to 40 and the balance is capped at 80.
+- **Use:** from day 91, up to 40 hours a year. The balance is restored on rehire within 180 days.
+- **Pay:** at the BOLI rate (piece-only workers at least minimum wage) where the employer has 10 or more employees;
+  otherwise unpaid but counted. Sick pay is never in the overtime regular rate.
+- **Filing and balance:** filed through `create_leave_request leave_type="Oregon Sick Time" hours=…`; the balance is
+  on `get_leave_balance` and on every pay statement.
+- Tests: `test_oregon_sick_time`.
+
 ## 0.300.0 — 2026-10-10 — deductions, paydays and final pay, per Oregon law
 
 **Migrate**: Farm Payroll Deduction gains its authority and authorization fields; Employee gains separation and

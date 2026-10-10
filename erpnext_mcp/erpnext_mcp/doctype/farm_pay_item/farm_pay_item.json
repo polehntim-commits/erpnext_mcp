@@ -11,6 +11,7 @@
   "company",
   "kind",
   "amount",
+  "hours",
   "pay_on",
   "earned_from",
   "earned_to",
@@ -51,7 +52,7 @@
    "fieldname": "kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "Bonus\nProduction Bonus\nProfit Share\nCommission\nOther",
+   "options": "Bonus\nProduction Bonus\nProfit Share\nCommission\nSick Time\nOther",
    "reqd": 1,
    "in_list_view": 1
   },
@@ -59,8 +60,15 @@
    "fieldname": "amount",
    "fieldtype": "Currency",
    "label": "Amount",
-   "reqd": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "description": "For Sick Time, left at 0 and priced by the run (OAR 839-007-0000(7))."
+  },
+  {
+   "fieldname": "hours",
+   "fieldtype": "Float",
+   "label": "Hours",
+   "depends_on": "eval:doc.kind=='Sick Time'",
+   "description": "v0.301.0. Sick time hours taken (ORS 653.606)."
   },
   {
    "fieldname": "pay_on",

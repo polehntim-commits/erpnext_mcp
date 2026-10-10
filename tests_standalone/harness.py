@@ -1797,6 +1797,7 @@ APP_DOCTYPES = {
 	"Farm Payroll Deduction": "farm_payroll_deduction",
 	"Farm Payroll Deduction Ledger": "farm_payroll_deduction_ledger",
 	"Farm Pay Item": "farm_pay_item",
+	"Farm Sick Time Ledger": "farm_sick_time_ledger",
 	# The court order the deduction above exists under. Separate because a
 	# payroll run should not have to parse a court order, and because a case
 	# number, a balance and a date of service are what answers a court — none of

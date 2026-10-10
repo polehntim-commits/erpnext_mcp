@@ -796,7 +796,9 @@ def calculate_full_payroll(
 	# 3121(b)(20)) join gross AFTER the engines. Both are earnings for the
 	# garnishment caps — 15 U.S.C. 1672(a) counts bonuses and commissions. Added
 	# after the minimum-wage test so a bonus never pays for a floor makeup.
-	pay_items = [dict(item) for item in tax_config.get("pay_items") or [] if float(item.get("amount") or 0) > 0]
+	# v0.301.0: unpaid sick time (a small employer) carries hours and no amount, and still has to reach the ledger.
+	pay_items = [dict(item) for item in tax_config.get("pay_items") or []
+	             if float(item.get("amount") or 0) > 0 or (item.get("kind") == "Sick Time" and float(item.get("hours") or 0) > 0)]
 	pay_items_wages = round(sum(float(i["amount"]) for i in pay_items if i.get("treatment") != "Not subject to withholding"), 2)
 	pay_items_not_withheld = round(sum(float(i["amount"]) for i in pay_items if i.get("treatment") == "Not subject to withholding"), 2)
 	gross_pay = round(gross_pay + pay_items_wages, 2)

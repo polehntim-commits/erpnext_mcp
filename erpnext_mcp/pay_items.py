@@ -17,7 +17,7 @@ from . import compat
 
 PAY_ITEM = "Farm Pay Item"
 FIELDS = ("name", "employee", "kind", "amount", "pay_on", "treatment", "reference", "status", "payroll_entry",
-          "work_state", "earned_from", "earned_to")
+          "work_state", "earned_from", "earned_to", "hours")
 ENTRY = "Farm Payroll Entry"
 EMPLOYEE = "Employee"
 
@@ -152,8 +152,8 @@ def regular_rate_items(company: str, items_by_employee: dict, period_start: str,
 	out: dict = {}
 	for employee, rows in (items_by_employee or {}).items():
 		for row in rows:
-			if row.get("derived_from") or float(row.get("amount") or 0) <= 0:
-				continue
+			if row.get("derived_from") or float(row.get("amount") or 0) <= 0 or row.get("kind") == "Sick Time":
+				continue  # v0.301.0: sick pay is pay for time not worked — never in the regular rate
 			if payroll_settings.is_discretionary(row.get("kind"), policy=policy):
 				continue
 			start = str(row.get("earned_from") or period_start)[:10]
@@ -187,3 +187,25 @@ def regular_rate_items(company: str, items_by_employee: dict, period_start: str,
 				                 "multiplier": rule["multiplier"], "policy": policy.get("version"),
 				                 "source": policy.get("source")}})
 	return out
+
+
+def price_sick_time(company: str, items_by_employee: dict, structures: dict, min_wage_rates: dict, as_of: str) -> list:
+	"""v0.301.0. Price each Sick Time item (sick_time.price) in place; returns what waits, with the reason."""
+	from . import payroll_calc, sick_time
+
+	waiting = []
+	for employee, rows in list(items_by_employee.items()):
+		sick = [r for r in rows if r.get("kind") == sick_time.KIND]
+		if not sick:
+			continue
+		structure = structures.get(employee) or {}
+		state = (sick[0].get("work_state") or "OR")
+		region = ((structure.get("min_wage_regions") or {}).get(state)) or "standard"
+		floor = payroll_calc.applicable_minimum_wage(state, region, min_wage_rates)
+		priced = sick_time.price(company, employee, sick, structure, floor, as_of)
+		for row in sick:
+			if row.get("waiting"):
+				waiting.append({"employee": employee, "item": row.get("name"), "hours": row.get("hours"),
+				                "reason": row["waiting"]})
+		items_by_employee[employee] = [r for r in rows if r.get("kind") != sick_time.KIND] + priced
+	return waiting

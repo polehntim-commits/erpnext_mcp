@@ -308,6 +308,12 @@ def settlement(company: str, start, end) -> tuple:
 	# did not work the week still gets a settlement for the bonus or profit share dated in it.
 	whole, switched = on_daily_pay(company, start, end)
 	items_by_employee = items.pending(company, start, end, sorted(set(by_employee) | set(whole) | set(switched)))
+	# v0.301.0. Oregon sick time taken, priced within the worker's balance (OAR 839-007-0000(7)).
+	from .payroll_calc import state_min_wage_rates
+
+	sick_waiting = items.price_sick_time(
+		company, items_by_employee, runs._load_structures(company, list(items_by_employee) or None),
+		payroll_settings.apply_wage_floor(state_min_wage_rates(runs._load_state_configs(company)), end), end)
 	# v0.296.0. And the overtime a non-discretionary bonus adds to the regular rate of the weeks it was earned in.
 	for employee, derived in items.regular_rate_items(company, items_by_employee, start, end).items():
 		items_by_employee[employee] = items_by_employee[employee] + derived
@@ -317,7 +323,7 @@ def settlement(company: str, start, end) -> tuple:
 	limits = payroll_settings.garnishment_limits(end)
 	policy = payroll_settings.garnishment_policy(end)
 	ytd_by_employee = runs._load_ytd(company, start, list(by_employee))
-	slips, held, notes = [], [], []
+	slips, held, notes = [], [], [f"sick time waits for {w['employee']}: {w['reason']}" for w in sick_waiting]
 	for employee, days in sorted(by_employee.items()):
 		first = days[0] if days else items.stand_in(employee, company)
 		done = settled_on(employee, company, start)

@@ -201,6 +201,15 @@ def get_leave_balance(args: dict) -> ToolResult:
 	difficulty of the question, and a subtraction done here would be confidently
 	wrong on any site with a carry-forward policy.
 	"""
+	# v0.301.0. Oregon sick time is the payroll ledger's (sick_time), in hours.
+	if str(as_str(args, "leave_type") or "").strip().lower() == "oregon sick time":
+		from .. import sick_time
+
+		employee = _resolve_employee(as_str(args, "employee", required=True))
+		got = sick_time.balance(employee, as_date(args, "as_of") or "")
+		return ToolResult({"employee": employee, "leave_type": "Oregon Sick Time", "unit": "hours", **got},
+		                  f"{employee}: {got['balance']:g} h of Oregon sick time"
+		                  + ("" if got["usable"] else f" (usable from {got['eligible_from']})"))
 	compat.require_doctype("Leave Allocation", "It comes with the Frappe HR (hrms) app.")
 	employee = _resolve_employee(as_str(args, "employee", required=True))
 	leave_type = as_str(args, "leave_type")
@@ -574,6 +583,10 @@ def create_leave_request(args: dict) -> ToolResult:
 	caller who could name a different one would file a worker's absence against
 	an entity they do not work for.
 	"""
+	# v0.301.0. Oregon sick time is hours, accrued by payroll (sick_time) — not an HR allocation in days. Filed as a
+	# Sick Time pay item the next run prices and pays within the worker's balance.
+	if str(as_str(args, "leave_type") or "").strip().lower() == "oregon sick time":
+		return _file_sick_time(args)
 	_require_leave()
 	employee = _resolve_employee(as_str(args, "employee", required=True))
 	from_date = as_date(args, "from_date", required=True)
@@ -708,6 +721,35 @@ def create_leave_request(args: dict) -> ToolResult:
 
 
 # ── 30b. list_leave_requests ────────────────────────────────────────────────
+def _file_sick_time(args: dict) -> ToolResult:
+	"""v0.301.0. `create_leave_request leave_type="Oregon Sick Time" hours=… from_date=…` — the worker's sick hours
+	(ORS 653.606), as a Sick Time pay item the run pays at the OAR 839-007-0000(7) rate within the balance."""
+	from .. import sick_time
+
+	employee = _resolve_employee(as_str(args, "employee", required=True))
+	day = as_date(args, "from_date", required=True)
+	try:
+		hours = float(args.get("hours") or 0)
+	except (TypeError, ValueError):
+		hours = 0.0
+	if hours <= 0:
+		raise ToolError("hours is required for Oregon sick time (it accrues and is used in hours). Nothing was filed.")
+	company = str(frappe.db.get_value("Employee", employee, "company") or "")
+	now = sick_time.balance(employee, str(day))
+	doc = frappe.get_doc({"doctype": "Farm Pay Item", "employee": employee, "company": company, "kind": sick_time.KIND,
+	                      "hours": hours, "amount": 0, "pay_on": day, "status": "Pending", "treatment": "Wages",
+	                      "reference": as_str(args, "reason") or None, "work_state": as_str(args, "work_state") or "OR"})
+	doc.flags.ignore_permissions = True
+	doc.insert(ignore_permissions=True)
+	return ToolResult(
+		{"pay_item": doc.name, "employee": employee, "hours": hours, "date": str(day), "balance": now,
+		 "note": "Paid by the run covering this date, at the worker's regular rate (piece-only: at least minimum "
+		         "wage), within the balance; anything beyond waits with a reason. "
+		         + ("" if now["usable"] else f"Not usable until {now['eligible_from']} (day 91).")},
+		f"filed {hours:g} h of Oregon sick time for {employee} on {day} ({doc.name}); balance {now['balance']:g} h",
+	)
+
+
 def list_leave_requests(args: dict) -> ToolResult:
 	"""The leave register: who asked for what, and what was answered.
 

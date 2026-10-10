@@ -58,6 +58,9 @@ KINDS = {
 	# v0.296.0. Which pay-item kinds are discretionary (out of the overtime regular rate); default none.
 	"pay_item_policy": {"label": "Pay item policy", "store": "Farm Config Version (Payroll Setting)",
 	                    "key": "pay_item_policy"},
+	# v0.301.0. Oregon sick time (ORS 653.601-.661): accrual, caps, eligibility, paid or unpaid.
+	"sick_time_policy": {"label": "Sick time policy", "store": "Farm Config Version (Payroll Setting)",
+	                     "key": "sick_time_policy"},
 	# v0.245.0. An SOP version (Compliance Policy). Stage = submit for review; approval (publish) is a
 	# person's, in the Desk or on the phone — never over MCP.
 	"sop": {"label": "SOP", "store": "Compliance Policy", "key": "policy docname"},
@@ -78,7 +81,7 @@ KINDS = {
 	"pollination_plan": {"label": "Pollination Plan", "store": "Farm Config Version", "key": "<company>_<season>"},
 }
 PAYROLL_KINDS = ("overtime_rule", "pay_policy", "wage_floor", "oregon_withholding", "garnishment_policy",
-                 "garnishment_limits", "pay_item_policy")
+                 "garnishment_limits", "pay_item_policy", "sick_time_policy")
 #: v0.264.0. The pest degree-day models and block offsets (Farm Config Version, IPM Setting). AI may draft;
 #: a person publishes in the Desk — calibration suggests, it never applies.
 IPM_KINDS = ("pest_dd_models", "pest_dd_offsets", "crop_phenology")
@@ -159,7 +162,8 @@ def _get(kind: str, key: str, version) -> dict:
 			            "oregon_withholding": payroll_settings.oregon_withholding,
 			            "garnishment_policy": payroll_settings.garnishment_policy,
 			            "garnishment_limits": payroll_settings.garnishment_limits,
-			            "pay_item_policy": payroll_settings.pay_item_policy}[kind]
+			            "pay_item_policy": payroll_settings.pay_item_policy,
+			            "sick_time_policy": payroll_settings.sick_time_policy}[kind]
 			return {"built_in": True, "in_force": built_in()}
 	if kind in PHONE_KINDS + FCV_KINDS:
 		inner = {"kind": kind, "key": key}

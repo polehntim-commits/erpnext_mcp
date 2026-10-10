@@ -502,6 +502,8 @@ def pay_item_lines(stub: dict) -> list[dict]:
 		if not amount:
 			continue
 		label = _clean(item.get("kind") or "Pay item")
+		if item.get("kind") == "Sick Time" and _num(item.get("hours")):
+			label = f"Oregon sick time ({_num(item.get('hours')):g} h)"
 		if item.get("treatment") == "Not subject to withholding":
 			label += " (not subject to withholding)"
 		out.append({"label": label, "amount": amount})
@@ -533,6 +535,15 @@ def _earnings(sheet: _Sheet, stub: dict) -> None:
 		sheet.spacer(2)
 		sheet.paragraph(
 			f"Total hours worked this period: {_hours(total_hours)}",
+			size=SIZE_SMALL,
+		)
+	sick = stub.get("sick_time") or {}
+	if sick:
+		sheet.spacer(2)
+		sheet.paragraph(
+			f"Oregon sick time: {_num(sick.get('balance')):g} h available"
+			f" (accrued this year {_num(sick.get('accrued_this_year')):g} h, used {_num(sick.get('used_this_year')):g} h)"
+			+ ("" if sick.get("usable", True) else f"; usable from {sick.get('eligible_from')}"),
 			size=SIZE_SMALL,
 		)
 	if makeup:
