@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.304.0 — 2026-10-10 — the variety catalogue per crop
+
+**Migrate**: Crop Variety gains `aliases` and `is_pollinizer`. Deploy `docs/deploy/v0.304.0_variety_catalogue.md`.
+Tools: **1,142 → 1,142**.
+
+- **Aliases:** other spellings per catalogue variety. A field naming one is written back as the variety; the care
+  recipe is found by alias. An alias that is another variety's name, or is shared by two, is refused.
+- **Pollinizer flag** per variety.
+- **Fixed:** `update_crop varieties=[…]` dropped `target_brix`; it is kept now, along with aliases and the
+  pollinizer flag.
+- **`update_crop seed_from_fields=true`** appends the varieties the crop's fields name that the catalogue lacks;
+  it never merges spellings.
+- Tests: `test_variety_catalogue`.
+
 ## 0.303.0 — 2026-10-10 — the crop stage table as config
 
 **No migrate.** Deploy `docs/deploy/v0.303.0_crop_stage_table.md`. Tools: **1,142 → 1,142**.

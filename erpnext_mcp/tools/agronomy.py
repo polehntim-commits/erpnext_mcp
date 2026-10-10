@@ -604,7 +604,9 @@ def get_crop(args: dict) -> ToolResult:
 			CROP_VARIETY,
 			name,
 			"varieties",
-			("variety_name", "rootstock", "pollination_group", "expected_yield_per_acre", "maturity_years"),
+			tuple(compat.existing_fields(CROP_VARIETY, (
+				"variety_name", "aliases", "is_pollinizer", "rootstock", "pollination_group",
+				"expected_yield_per_acre", "maturity_years", "target_brix"))),
 		)
 		if compat.doctype_exists(CROP_VARIETY)
 		else []
@@ -795,7 +797,9 @@ def _variety_rows(raw) -> list[dict]:
 		return []
 	if not isinstance(raw, list):
 		raise ToolError("varieties must be a list of objects, each with at least a variety_name.")
-	allowed = {"variety_name", "rootstock", "pollination_group", "expected_yield_per_acre", "maturity_years"}
+	# v0.304.0: target_brix (a replace used to drop it), aliases and is_pollinizer.
+	allowed = {"variety_name", "rootstock", "pollination_group", "expected_yield_per_acre", "maturity_years",
+	           "target_brix", "aliases", "is_pollinizer"}
 	out = []
 	for index, entry in enumerate(raw, start=1):
 		if not isinstance(entry, dict):
@@ -817,9 +821,42 @@ def _variety_rows(raw) -> list[dict]:
 				"pollination_group": str(entry.get("pollination_group") or "").strip(),
 				"expected_yield_per_acre": float(entry.get("expected_yield_per_acre") or 0),
 				"maturity_years": int(entry.get("maturity_years") or 0),
+				"target_brix": float(entry.get("target_brix") or 0),
+				"aliases": ", ".join(_alias_list(entry.get("aliases"))),
+				"is_pollinizer": 1 if as_bool(entry, "is_pollinizer") else 0,
 			}
 		)
 	return out
+
+
+def _varieties_on_fields(doc) -> list:
+	"""v0.304.0. Varieties named on this crop's fields (the `variety` column and the Field Variety table) that the
+	catalogue does not yet know by name or alias, in first-seen order and first-seen spelling. Never guesses that
+	two spellings are one variety: "Bing" and "Bing Cherry" both come back, and an alias is how a person joins them."""
+	known = set()
+	for row in doc.varieties or []:
+		known.add(str(row.get("variety_name") or "").strip().casefold())
+		known.update(a.casefold() for a in _alias_list(row.get("aliases")))
+	fields = frappe.db.get_all("Field", filters={"crop": doc.name}, pluck="name", limit=5000) or []
+	names = [str(v or "").strip() for v in frappe.db.get_all(
+		"Field", filters={"crop": doc.name}, pluck="variety", limit=5000) or []]
+	if fields and compat.doctype_exists("Field Variety"):
+		names += [str(v or "").strip() for v in frappe.db.get_all(
+			"Field Variety", filters={"parent": ("in", fields), "parenttype": "Field"}, pluck="variety",
+			limit=20000) or []]
+	out, seen = [], set()
+	for name in names:
+		key = name.casefold()
+		if name and key not in known and key not in seen:
+			seen.add(key)
+			out.append(name)
+	return out
+
+
+def _alias_list(raw) -> list:
+	from ..erpnext_mcp.doctype.field.field import split_aliases
+
+	return split_aliases(raw)
 
 
 def _water_rows(raw) -> list[dict]:
@@ -896,6 +933,18 @@ def update_crop(args: dict) -> ToolResult:
 		doc.set("varieties", [])
 		for entry in wanted:
 			doc.append("varieties", entry)
+	seeded = []
+	if as_bool(args, "seed_from_fields"):
+		if "varieties" in args:
+			raise ToolError(
+				"pass varieties OR seed_from_fields, not both: one replaces the catalogue and the other appends "
+				"to it, and which ran second would decide the answer. Nothing was changed."
+			)
+		seeded = _varieties_on_fields(doc)
+		for name in seeded:
+			doc.append("varieties", {"variety_name": name})
+		if seeded:
+			changes["varieties"] = [f"{len(doc.varieties or []) - len(seeded)} row(s)", f"{len(doc.varieties or [])} row(s)"]
 	if "water_requirements" in args:
 		wanted = _water_rows(args.get("water_requirements"))
 		changes["water_requirements"] = [
@@ -907,10 +956,15 @@ def update_crop(args: dict) -> ToolResult:
 			doc.append("water_requirements", entry)
 
 	if not changes:
+		if as_bool(args, "seed_from_fields"):
+			raise ToolError(
+				f"nothing to change: every variety planted on {doc.name}'s fields is already in its catalogue "
+				"(by name or alias)."
+			)
 		raise ToolError(
 			"nothing to change. Pass at least one of: scientific_name, crop_type, growth_cycle, "
 			"days_to_harvest, harvest_window_start, harvest_window_end, default_phi_days, "
-			"is_organic_certified, pct_direct_marketed, varieties, water_requirements, notes."
+			"is_organic_certified, pct_direct_marketed, varieties, seed_from_fields, water_requirements, notes."
 		)
 
 	doc.save(ignore_permissions=True)
@@ -920,9 +974,11 @@ def update_crop(args: dict) -> ToolResult:
 			"varieties": _table(doc, "varieties"),
 			"water_requirements": _table(doc, "water_requirements"),
 			"changed": {key: [before, after] for key, (before, after) in changes.items()},
+			**({"seeded_from_fields": seeded} if seeded else {}),
 			"phi_caveat": PHI_CAVEAT,
 		},
-		summary=f"{doc.name}: {len(changes)} field(s) changed",
+		summary=f"{doc.name}: {len(changes)} field(s) changed"
+		+ (f" ({len(seeded)} variety(ies) added from its fields)" if seeded else ""),
 		docstatus_delta="0 → 0 (updated)",
 	)
 
@@ -955,7 +1011,9 @@ def get_variety_care_recipe(args: dict) -> ToolResult:
 			CROP_VARIETY,
 			crop,
 			"varieties",
-			("variety_name", "rootstock", "pollination_group", "expected_yield_per_acre", "maturity_years"),
+			tuple(compat.existing_fields(CROP_VARIETY, (
+				"variety_name", "aliases", "rootstock", "pollination_group", "expected_yield_per_acre",
+				"maturity_years"))),
 		)
 		if compat.doctype_exists(CROP_VARIETY)
 		else []
@@ -1050,6 +1108,10 @@ def _match_variety(varieties: list[dict], wanted: str, crop: str) -> dict:
 	target = str(wanted or "").strip().casefold()
 	for row in varieties:
 		if str(row.get("variety_name") or "").strip().casefold() == target:
+			return row
+	# v0.304.0. An alias reaches the variety it names.
+	for row in varieties:
+		if target in {a.casefold() for a in _alias_list(row.get("aliases"))}:
 			return row
 	if not varieties:
 		raise ToolError(

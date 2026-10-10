@@ -31915,9 +31915,21 @@ TOOLS = {
 		"CHILD TABLES ARE REPLACED WHOLESALE when passed, never merged — a merge "
 		"needs a stable row key and these rows have none a caller can see. Omitting "
 		"the argument leaves the table alone; passing an empty list is how a caller "
-		"genuinely clears it.",
+		"genuinely clears it.\n\n"
+		"THE VARIETY CATALOGUE (v0.304.0): each variety row takes variety_name, aliases "
+		"(other spellings, comma-separated — a field naming one is written back as the "
+		"variety), is_pollinizer, rootstock, pollination_group, expected_yield_per_acre, "
+		"maturity_years and target_brix. An alias that is another variety's name, or "
+		"that two varieties share, is refused. seed_from_fields=true APPENDS a row for "
+		"each variety planted on this crop's fields that the catalogue does not know by "
+		"name or alias — it never merges two spellings; an alias is how a person does.",
 		{
 			"crop": _field(_STRING, "The Crop docname. Matched case-insensitively."),
+			"seed_from_fields": _field(
+				_BOOLEAN,
+				"Append catalogue rows for varieties planted on this crop's fields but not yet listed. "
+				"Cannot be combined with varieties.",
+			),
 			"crop_type": _field(_STRING, "New type."),
 			"scientific_name": _field(_STRING, "New binomial. Empty string clears it."),
 			"growth_cycle": _field(_STRING, "New cycle."),

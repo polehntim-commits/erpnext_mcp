@@ -8,6 +8,8 @@
  "engine": "InnoDB",
  "field_order": [
   "variety_name",
+  "aliases",
+  "is_pollinizer",
   "rootstock",
   "pollination_group",
   "expected_yield_per_acre",
@@ -23,6 +25,18 @@
    "in_list_view": 1,
    "label": "Variety",
    "reqd": 1
+  },
+  {
+   "fieldname": "aliases",
+   "fieldtype": "Small Text",
+   "label": "Aliases",
+   "description": "v0.304.0. Other spellings that mean this variety, comma-separated (\"Bing Cherry, BING\"). A field naming one is written back as this variety."
+  },
+  {
+   "fieldname": "is_pollinizer",
+   "fieldtype": "Check",
+   "label": "Pollinizer",
+   "description": "v0.304.0. Planted mainly to pollinate the main variety (e.g. Van for Bing)."
   },
   {
    "columns": 2,
@@ -71,7 +85,7 @@
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-08-16 12:00:00.000000",
+ "modified": "2026-10-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Crop Variety",

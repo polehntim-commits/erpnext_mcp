@@ -91,6 +91,7 @@ class Crop(Document):
 		# index built over a list with two 'Bing' rows in it would quietly answer
 		# for whichever came last.
 		self._check_varieties()
+		self._check_aliases()
 		self._check_water_requirements()
 		self._check_variety_water_requirements()
 		self._check_variety_protocols()
@@ -174,6 +175,8 @@ class Crop(Document):
 			seen[key] = index
 
 			maturity = int(row.get("maturity_years") or 0)
+			if float(row.get("target_brix") or 0) < 0:
+				frappe.throw(_("Row {0}: target Brix cannot be negative.").format(index))
 			if float(row.get("expected_yield_per_acre") or 0) < 0:
 				frappe.throw(_("Row {0}: expected yield cannot be negative.").format(index))
 			if maturity < 0:
@@ -194,6 +197,46 @@ class Crop(Document):
 					),
 					title=_("Maturity Years on a Non-Perennial"),
 				)
+
+	def _check_aliases(self) -> None:
+		"""v0.304.0. An alias names exactly one variety, and is never another variety's own name — otherwise a field
+		that says "Van" could mean either, and which one it got written back as would depend on row order."""
+		from erpnext_mcp.erpnext_mcp.doctype.field.field import split_aliases
+
+		names = {
+			str(row.get("variety_name") or "").strip().casefold(): str(row.get("variety_name") or "").strip()
+			for row in self.varieties or []
+		}
+		claimed: dict = {}
+		for position, row in enumerate(self.varieties or [], start=1):
+			index = _row_index(row, position)
+			variety_name = str(row.get("variety_name") or "").strip()
+			aliases = split_aliases(row.get("aliases"))
+			for alias in aliases:
+				key = alias.casefold()
+				if key == variety_name.casefold():
+					continue
+				if key in names:
+					frappe.throw(
+						_("Row {0}: {1} lists {2!r} as an alias, but {3} is a variety of its own on this crop. "
+						  "A field naming it would be ambiguous — remove the alias.").format(
+							index, variety_name, alias, names[key]),
+						title=_("Alias Collides With a Variety"),
+					)
+				if key in claimed and claimed[key] != variety_name:
+					frappe.throw(
+						_("Rows {0} and {1} both list {2!r} as an alias ({3} and {4}). An alias names one variety.").format(
+							claimed[key + "#row"], index, alias, claimed[key], variety_name),
+						title=_("Alias Used Twice"),
+					)
+				claimed[key], claimed[key + "#row"] = variety_name, index
+			# Stored tidy: one comma-separated list, no duplicates, the variety's own name dropped.
+			tidy = list(dict.fromkeys(a for a in aliases if a.casefold() != variety_name.casefold()))
+			if row.get("aliases") is not None or tidy:
+				if isinstance(row, dict):
+					row["aliases"] = ", ".join(tidy)
+				else:
+					row.aliases = ", ".join(tidy)
 
 	def _check_water_requirements(self) -> None:
 		"""One row per growth stage, and a Kc inside the range a Kc can be."""
@@ -248,11 +291,19 @@ class Crop(Document):
 		override that missed on capitalisation would fall back to the crop
 		figure with nothing to show it had.
 		"""
-		return {
+		from erpnext_mcp.erpnext_mcp.doctype.field.field import split_aliases
+
+		index = {
 			str(row.get("variety_name") or "").strip().casefold(): str(row.get("variety_name") or "").strip()
 			for row in self.varieties or []
 			if str(row.get("variety_name") or "").strip()
 		}
+		# v0.304.0. Aliases resolve to the variety they name; a real variety's name always wins.
+		for row in self.varieties or []:
+			name = str(row.get("variety_name") or "").strip()
+			for alias in split_aliases(row.get("aliases")):
+				index.setdefault(alias.casefold(), name)
+		return index
 
 	def _resolve_variety(self, row, index: int, known: dict, table_label: str) -> str:
 		"""The catalogue spelling of the variety this row names, or a refusal."""
@@ -277,7 +328,7 @@ class Crop(Document):
 				"recorded are: {4}. An override naming a variety the catalogue does not have "
 				"never fires and the reader falls back to the crop default — so this would "
 				"look like a recorded decision and behave like an empty row."
-			).format(index, table_label, named, self.crop_name, ", ".join(sorted(known.values()))),
+			).format(index, table_label, named, self.crop_name, ", ".join(sorted(set(known.values())))),
 			title=_("No Such Variety"),
 		)
 

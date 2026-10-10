@@ -80,15 +80,41 @@ def _crop_variety_index(crop_name) -> dict:
 	crop_name = str(crop_name or "").strip()
 	if not crop_name or not frappe.db.exists("Crop", crop_name):
 		return {}
+	fields = ["variety_name"] + (["aliases"] if _has_aliases() else [])
 	rows = frappe.db.get_all(
 		"Crop Variety",
 		filters={"parent": crop_name, "parenttype": "Crop"},
-		pluck="variety_name",
+		fields=fields,
 		limit=_CROP_VARIETY_SCAN_CAP,
 	)
-	return {
-		str(value).strip().casefold(): str(value).strip() for value in rows or [] if str(value or "").strip()
-	}
+	index = {}
+	for row in rows or []:
+		name = str(row.get("variety_name") or "").strip()
+		if not name:
+			continue
+		index[name.casefold()] = name
+		# v0.304.0. An alias resolves to the catalogue's own spelling — never over a real variety's name.
+		for alias in split_aliases(row.get("aliases")):
+			index.setdefault(alias.casefold(), name)
+	return index
+
+
+def split_aliases(raw) -> list:
+	"""v0.304.0. "Bing Cherry, BING" → ["Bing Cherry", "BING"]."""
+	if isinstance(raw, (list, tuple)):
+		parts = raw
+	else:
+		parts = str(raw or "").replace(";", ",").replace("\n", ",").split(",")
+	return [str(p).strip() for p in parts if str(p).strip()]
+
+
+def _has_aliases() -> bool:
+	try:
+		from erpnext_mcp import compat
+
+		return compat.has_field("Crop Variety", "aliases")
+	except Exception:  # pragma: no cover
+		return False
 
 
 class Field(Document):
@@ -206,10 +232,10 @@ class Field(Document):
 		if found:
 			self.variety = found
 			return
-		guess = did_you_mean(variety, known.values())
+		guess = did_you_mean(variety, set(known.values()))
 		frappe.throw(
 			_("Variety {0!r} is not among {1}'s recorded varieties: {2}.{3}").format(
-				variety, self.crop, ", ".join(sorted(known.values())), f" Did you mean {guess!r}?" if guess else ""),
+				variety, self.crop, ", ".join(sorted(set(known.values()))), f" Did you mean {guess!r}?" if guess else ""),
 			title=_("No Such Variety"),
 		)
 
@@ -249,14 +275,14 @@ class Field(Document):
 			if known:
 				found = known.get(variety.casefold())
 				if not found:
-					guess = did_you_mean(variety, known.values())
+					guess = did_you_mean(variety, set(known.values()))
 					frappe.throw(
 						_(
 							"Row {0} of Varieties names {1!r}, which is not among {2}'s own "
 							"recorded varieties: {3}.{4} Add it to the Crop's Varieties table first, "
 							"or correct the spelling — a name the catalogue does not have is a "
 							"row that looks recorded and links to nothing."
-						).format(index, variety, self.crop, ", ".join(sorted(known.values())),
+						).format(index, variety, self.crop, ", ".join(sorted(set(known.values()))),
 						         f" Did you mean {guess!r}?" if guess else ""),
 						title=_("No Such Variety"),
 					)
