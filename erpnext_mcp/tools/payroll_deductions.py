@@ -65,6 +65,8 @@ _WRITABLE = (
 	"consumer_debt",
 	# v0.300.0. ORS 652.610(3): the authority for the deduction and the date the worker signed for it.
 	"legal_authority",
+	# v0.311.0. What a garnishment is for — required on every garnishment; it decides the limits.
+	"debt_type",
 	"authorized_on",
 	"effective_from",
 	"effective_to",
@@ -76,7 +78,7 @@ _WRITABLE = (
 #: The Selects, and the field each one is validated against. `as_choice` matches
 #: case-insensitively and hands back the site's own casing, so what is stored is
 #: what a list-view filter will look for.
-_SELECTS = ("deduction_type", "deduction_category", "status", "amount_type", "basis", "legal_authority")
+_SELECTS = ("deduction_type", "deduction_category", "status", "amount_type", "basis", "legal_authority", "debt_type")
 
 #: The Checks. Kept apart because a Check that was never passed has to stay
 #: unset rather than become 0 — the engine reads "unset" as "follow the
@@ -654,6 +656,24 @@ def _apply(doc, args: dict, creating: bool) -> list[str]:
 			and payroll_deductions.row_type({"deduction_type": doc.get("deduction_type"),
 			                                 "deduction_category": doc.get("deduction_category")}) == "garnishment":
 		doc.set("legal_authority", payroll_deductions.AUTHORITY_LAW)  # v0.300.0: a court order or levy
+
+	# v0.311.0. A garnishment names its debt type — the limits follow from it (most protective for the worker).
+	# Where the category settles it (support, a tax levy) it is filled in; where it does not (a student loan —
+	# federal or private? a creditor — consumer debt or another judgment?) the caller must say.
+	if creating and compat.has_field(PAYROLL_DEDUCTION, "debt_type") and not doc.get("debt_type") and \
+			payroll_deductions.row_type({"deduction_type": doc.get("deduction_type") or payroll_deductions.category_spec(
+				doc.get("deduction_category"))["deduction_type"],
+				"deduction_category": doc.get("deduction_category")}) == "garnishment":
+		limit = payroll_deductions._limit_of({"deduction_category": doc.get("deduction_category")})
+		settled = {"child_support": "Child support", "exempt_from_ccpa": "Tax levy"}.get(limit)
+		if not settled and limit == "ordinary" and as_bool(args, "consumer_debt"):
+			settled = "Consumer debt"
+		if not settled:
+			raise ToolError(
+				"debt_type is required on this garnishment — it decides which limits apply (15 U.S.C. 1673, ORS "
+				f"18.385, RCW 6.27.150): one of {', '.join(payroll_deductions.DEBT_TYPES)}. Nothing was filed.")
+		doc.set("debt_type", settled)
+		touched.append("debt_type")
 
 	if creating:
 		# The defaults that make a row valid without asking a caller to restate

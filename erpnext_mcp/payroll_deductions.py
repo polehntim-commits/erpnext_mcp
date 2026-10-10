@@ -859,6 +859,32 @@ def authorization_missing(row: dict) -> str:
 	        "signed form) and it is taken from the next run.")
 
 
+#: v0.311.0. What a garnishment is for — the limits follow from it. A row recorded before v0.311.0 has its type derived
+#: from its category (and flagged).
+DEBT_TYPES = ("Child support", "Spousal support", "Tax levy", "Federal student loan (AWG)", "Private student loan",
+              "Consumer debt", "Other judgment")
+_SUPPORT_TYPES = ("Child support", "Spousal support")
+
+
+def debt_type(row: dict) -> tuple:
+	"""(debt type, derived?) — the row's own `debt_type`, else what its category implies."""
+	own = str(row.get("debt_type") or "").strip()
+	if own in DEBT_TYPES:
+		return own, False
+	limit = _limit_of(row)
+	if limit == "child_support":
+		return "Child support", True
+	if limit == "exempt_from_ccpa":
+		return "Tax levy", True
+	if limit == "student_loan":
+		return "Federal student loan (AWG)", True
+	return ("Consumer debt" if _as_bool(row.get("consumer_debt")) else "Other judgment"), True
+
+
+def _period_factor(pay_frequency: str) -> float:
+	return {"Weekly": 1.0, "Biweekly": 2.0, "Semimonthly": 52 / 24, "Monthly": 52 / 12}.get(pay_frequency, 1.0)
+
+
 def apply_garnishments(
 	disposable: float,
 	rows: list[dict],
@@ -889,18 +915,34 @@ def apply_garnishments(
 	ordinary = _ordinary_ceiling(disposable, rule)
 
 	garnishments = [row for row in rows if row_type(row) == "garnishment"]
-	support_rows = [row for row in garnishments if _limit_of(row) == "child_support"]
-	levy_rows = [row for row in garnishments if _limit_of(row) == "exempt_from_ccpa"]
-	loan_rows = [row for row in garnishments if _limit_of(row) == "student_loan"]
-	other_rows = [row for row in garnishments
-	              if _limit_of(row) not in ("child_support", "exempt_from_ccpa", "student_loan")]
+	# v0.311.0. Sorted by DEBT TYPE (support first — ORS 25.378 / 42 U.S.C. 666(b)(7)).
+	types = {id(row): debt_type(row) for row in garnishments}
+	support_rows = [row for row in garnishments if types[id(row)][0] in _SUPPORT_TYPES]
+	levy_rows = [row for row in garnishments if types[id(row)][0] == "Tax levy"]
+	loan_rows = [row for row in garnishments if types[id(row)][0] in ("Federal student loan (AWG)",
+	                                                                  "Private student loan")]
+	other_rows = [row for row in garnishments if types[id(row)][0] in ("Consumer debt", "Other judgment")]
+	derived_types = [{"deduction": row.get("name"), "debt_type": types[id(row)][0]}
+	                 for row in garnishments if types[id(row)][1]]
 	lines, shortfalls = [], []
 
 	# ── 1. Child support: every order's current support, then arrears, under one ceiling ─────────────
 	rate, supports_others, arrears_flag = _support_rate(support_rows, rule["support_rates"])
-	support_ceiling = round(disposable * rate, 2)
+	# v0.311.0. EVERY applicable limit, and the most protective for the worker wins.
+	considered = [{"rule": "15 U.S.C. 1673(b)(2)", "cap": round(disposable * rate, 2), "rate": rate}]
+	state = rule["state"] or {}
+	support_floor = _as_float((state.get("support_floors") or {}).get(pay_frequency), 0.0)
+	if support_floor:
+		considered.append({"rule": state.get("support_source") or f"{state.get('state')} support exemption",
+		                   "cap": round(max(disposable - support_floor, 0.0), 2), "exempt_floor": support_floor})
+	spousal = state.get("spousal_maintenance") or {}
+	if spousal and any(debt_type(r)[0] == "Spousal support" for r in support_rows):
+		considered.append({"rule": spousal.get("source"), "cap": round(disposable * _as_float(spousal.get("rate")), 2),
+		                   "rate": _as_float(spousal.get("rate"))})
+	binding = min(considered, key=lambda c: c["cap"])
+	support_ceiling = binding["cap"]
 	support = {"ceiling": support_ceiling, "rate": rate, "supports_other_dependents": supports_others,
-	           "arrears_over_12_weeks": arrears_flag, "basis": "15 U.S.C. 1673(b)(2)"}
+	           "arrears_over_12_weeks": arrears_flag, "basis": binding["rule"], "limits_considered": considered}
 	support_taken = 0.0
 	if support_rows:
 		current = [scheduled_amount(row, disposable, disposable) for row in support_rows]
@@ -915,8 +957,10 @@ def apply_garnishments(
 		                                                 wanted_arrears, taken_arrears, strict=True):
 			line = _line(row, schedule, 0.0, pre_tax=False, fica_exempt=False)
 			line["prorated"] = bool(prorated)
-			reason = (f"child support ceiling of {rate:.0%} of disposable earnings (${support_ceiling:,.2f})"
-			          + (" shared pro rata across the orders on file" if prorated else ""))
+			line["debt_type"] = types[id(row)][0]
+			line["limits_considered"] = considered
+			reason = (f"support ceiling — the most protective of {len(considered)} limit(s): {binding['rule']} "
+			          f"(${support_ceiling:,.2f})" + (" shared pro rata across the orders on file" if prorated else ""))
 			lines.append(_finish(line, cur, arr, cur_t, arr_t, row, "child_support", support_ceiling, reason, shortfalls))
 			support_taken += cur_t + arr_t
 	support_taken = round(support_taken, 2)
@@ -934,6 +978,7 @@ def apply_garnishments(
 		levy_taken = round(levy_taken + cur_t + arr_t, 2)
 		line = _line(row, schedule, 0.0, pre_tax=False, fica_exempt=False)
 		line["exempt_amount"] = round(exempt, 2)
+		line["debt_type"] = "Tax levy"
 		reason = ("disposable earnings exhausted; a tax levy is not limited by the CCPA (29 CFR 870.11(b)(2)) but "
 		          "cannot exceed the pay" + (f", and ${exempt:,.2f} is exempt under IRC 6334(d)" if exempt else ""))
 		lines.append(_finish(line, cur, arr, cur_t, arr_t, row, "exempt_from_ccpa", room, reason, shortfalls))
@@ -947,12 +992,25 @@ def apply_garnishments(
 		is_loan = row in loan_rows
 		own = pool
 		rule_name, reason = "ordinary", f"ordinary garnishment ceiling: {ordinary['binding_rule']} (${ordinary['ceiling']:,.2f})"
+		kind = types[id(row)][0]
+		considered = [{"rule": f"Title III / state ordinary: {ordinary['binding_rule']}", "cap": pool}]
+		if is_loan and kind == "Federal student loan (AWG)":
+			considered.append({"rule": "31 CFR 285.11 / 20 U.S.C. 1095a (15%)",
+			                   "cap": round(disposable * rule["student_loan_rate"], 2)})
+		elif is_loan:
+			private = ((rule["state"] or {}).get("private_student_loan")) or {}
+			if private:
+				floor = round(_as_float(private.get("floor_multiple")) * _as_float(
+					private.get("highest_local_minimum_wage")) * _period_factor(pay_frequency), 2)
+				considered.append({"rule": private.get("source"), "exempt_floor": floor,
+				                   "cap": round(min(disposable * _as_float(private.get("rate"), 0.15),
+				                                    max(disposable - floor, 0.0)), 2)})
 		if is_loan:
-			own = round(min(disposable * rule["student_loan_rate"], pool), 2)
+			binding = min(considered, key=lambda c: c["cap"])
+			own = round(min(binding["cap"], pool), 2)
 			rule_name = "student_loan"
-			reason = (f"student loan garnishment is capped at {rule['student_loan_rate']:.0%} of disposable earnings "
-			          "and shares the CCPA pool")
-		elif _as_bool(row.get("consumer_debt")) and consumer:
+			reason = f"{kind}: the most protective of {len(considered)} limit(s) — {binding['rule']} (${own:,.2f})"
+		elif kind == "Consumer debt" and consumer:
 			c_floor = _as_float((consumer.get("floors") or {}).get(pay_frequency), 0.0)
 			c_cap = min(disposable * _as_float(consumer.get("rate"), rule["rate"]), max(disposable - c_floor, 0.0))
 			own = round(min(c_cap, pool), 2)
@@ -966,6 +1024,9 @@ def apply_garnishments(
 		arr_t = round(max(min(arr, own - cur_t), 0.0), 2)
 		pool = round(max(pool - cur_t - arr_t, 0.0), 2)
 		line = _line(row, schedule, 0.0, pre_tax=False, fica_exempt=False)
+		line["debt_type"] = kind
+		line["limits_considered"] = considered if is_loan else considered + (
+			[{"rule": rule_name, "cap": own}] if rule_name == "consumer_debt" else [])
 		lines.append(_finish(line, cur, arr, cur_t, arr_t, row, rule_name, own, reason, shortfalls))
 
 	total = round(sum(line["amount"] for line in lines), 2)
@@ -984,7 +1045,9 @@ def apply_garnishments(
 		"carried_forward": round(sum(line.get("carried_forward", 0) for line in lines), 2),
 		"policy": policy,
 		"limits_applied": {"rate": rule["rate"], "floor": rule["floor"], "floor_source": rule["floor_source"],
-		                   "state": (rule["state"] or {}).get("state")},
+		                   "state": (rule["state"] or {}).get("state"), "most_protective": True},
+		# v0.311.0. Garnishments with no debt type recorded — derived from the category; record it on the order.
+		"debt_type_derived": derived_types,
 	}
 
 

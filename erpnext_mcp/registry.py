@@ -33965,7 +33965,14 @@ TOOLS = {
 			"effective_to": _field(
 				_STRING, "YYYY-MM-DD. Blank for an open-ended election or an order with no stated end."
 			),
-			"status": _field(_STRING, "Active, Suspended or Completed. Default Active."),
+			"debt_type": _field(
+				_STRING,
+				"v0.311.0. What the garnishment is for — Child support, Spousal support, Tax levy, Federal student "
+				"loan (AWG), Private student loan, Consumer debt or Other judgment. It decides which limits apply "
+				"(15 U.S.C. 1673, ORS 18.385, RCW 6.27.150); the most protective for the worker is taken. Required on a "
+				"student-loan or creditor garnishment; filled in for support and tax levies.",
+			),
+						"status": _field(_STRING, "Active, Suspended or Completed. Default Active."),
 			"reference": _field(
 				_STRING,
 				"The court order number, IRS levy notice, state case id, plan id or policy "
@@ -34046,7 +34053,14 @@ TOOLS = {
 			"arrears_over_12_weeks": _field(_BOOLEAN, "Child support ceiling: adds 5 points."),
 			"arrears_opening": _field(_NUMBER, "v0.292.0. Garnishment arrears stated on the order (or owed when it was filed). Carry-forwards add to it, catch-ups take from it."),
 			"arrears_per_period": _field(_NUMBER, "v0.292.0. The order's own arrears payment per period, if it sets one — used instead of the default catch-up, still capped."),
-			"consumer_debt": _field(_BOOLEAN, "v0.292.0. A consumer-debt judgment — Washington's stricter RCW 6.27.150(4) exemption applies."),
+			"debt_type": _field(
+				_STRING,
+				"v0.311.0. What the garnishment is for — Child support, Spousal support, Tax levy, Federal student "
+				"loan (AWG), Private student loan, Consumer debt or Other judgment. It decides which limits apply "
+				"(15 U.S.C. 1673, ORS 18.385, RCW 6.27.150); the most protective for the worker is taken. Required on a "
+				"student-loan or creditor garnishment; filled in for support and tax levies.",
+			),
+						"consumer_debt": _field(_BOOLEAN, "v0.292.0. A consumer-debt judgment — Washington's stricter RCW 6.27.150(4) exemption applies."),
 			"exempt_amount": _field(_NUMBER, "Tax levy only. Publication 1494 exempt amount."),
 			"label": _field(_STRING, "Pay stub label."),
 			"notes": _field(_STRING, "Anything the fields cannot hold."),
@@ -34156,7 +34170,13 @@ TOOLS = {
 				"Child Support, Creditor, Tax Levy or Student Loan. Decides the federal "
 				"priority, the ceiling, and the deduction category payroll processes it under.",
 			),
-			"case_number": _field(
+			"debt_type": _field(
+				_STRING,
+				"v0.311.0. What the garnishment is for — Child support, Spousal support, Tax levy, Federal student "
+				"loan (AWG), Private student loan, Consumer debt or Other judgment. It decides which limits apply "
+				"(15 U.S.C. 1673, ORS 18.385, RCW 6.27.150); the most protective for the worker is taken. A creditor order with none is taken as consumer debt (the most protective).",
+			),
+						"case_number": _field(
 				_STRING,
 				"The case, docket or notice number printed on the order. WHAT MAKES THE "
 				"WITHHOLDING DEFENSIBLE — it ties every dollar taken to the paper that "

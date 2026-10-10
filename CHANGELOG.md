@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.311.0 — 2026-10-10 — garnishment: every limit, the most protective taken
+
+**Migrate**: Farm Payroll Deduction gains `debt_type`. Deploy `docs/deploy/v0.311.0_garnishment_most_protective.md`.
+Tools: **1,142 → 1,142**.
+
+- **Debt type:** every garnishment carries one. It's filled in for support and tax levies and required for student
+  loans and creditor orders; `create_garnishment` takes a creditor order without one as consumer debt. Older rows
+  are derived and flagged.
+- **Limits:** federal (15 U.S.C. 1673), Oregon (ORS 18.385, SB 1595: 2026-27 floors $400 / $832 / $912 / $1,792;
+  support writs $254) and Washington (RCW 6.27.150: $253.75 / 75%; consumer $599.55 / 80%; private student loans 50
+  × the highest local minimum / 85%; spousal maintenance 50%). Every applicable limit is computed and the lowest cap
+  wins; each line lists `limits_considered`. Support comes first.
+- Tests: `test_garnishment_most_protective`.
+
 ## 0.310.0 — 2026-10-10 — cherry phenology methods per variety and block
 
 **No migrate.** Deploy `docs/deploy/v0.310.0_cherry_phenology_methods.md`. Tools: **1,142 → 1,142**.

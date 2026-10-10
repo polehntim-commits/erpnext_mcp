@@ -274,7 +274,10 @@ SEED_GARNISHMENT_LIMITS = [
 	                   "not_supporting_arrears": 0.65},
 	 "student_loan_rate": 0.15},
 	*[{"scope": "state", "state": "OR", "effective_from": day, "source": _OR, "ordinary_rate": 0.25,
-	   "floors": {"Weekly": w, "Biweekly": b, "Semimonthly": h, "Monthly": m}}
+	   "floors": {"Weekly": w, "Biweekly": b, "Semimonthly": h, "Monthly": m},
+	   # v0.311.0. Support writs keep the older floor ($254 a week) — ORS 18.385 as applied to support.
+	   "support_floors": {"Weekly": 254, "Biweekly": 509, "Semimonthly": 545, "Monthly": 1090},
+	   "support_source": _OR + " — support writs"}
 	  for day, w, b, h, m in (("2000-01-01", 254, 509, 545, 1090), ("2025-01-01", 305, 611, 655, 1309),
 	                          ("2025-07-01", 338, 675, 737, 1458), ("2026-07-01", 400, 832, 912, 1792))],
 	{"scope": "state", "state": "WA", "effective_from": "2026-01-01", "source": _WA + " (1) and (4)",
@@ -283,7 +286,15 @@ SEED_GARNISHMENT_LIMITS = [
 	 "floors": {"Weekly": 253.75, "Biweekly": 507.50, "Semimonthly": 549.79, "Monthly": 1099.58},
 	 # (4) consumer debt: exempt the greater of 80% or 35 × the state minimum wage ($17.13 in 2026).
 	 "consumer": {"rate": 0.20, "floors": {"Weekly": 599.55, "Biweekly": 1199.10, "Semimonthly": 1298.93,
-	                                       "Monthly": 2597.85}, "source": _WA + "(4)"}},
+	                                       "Monthly": 2597.85}, "source": _WA + "(4)"},
+	 # v0.311.0. Spousal maintenance: 50% of disposable earnings exempt.
+	 "spousal_maintenance": {"rate": 0.50, "source": _WA + " (spousal maintenance)"},
+	 # v0.311.0. Private student loans: exempt the greater of 85% or 50 × the highest LOCAL minimum wage in the
+	 # state. The figure is dated data — VERIFY each January 1 (attorney/CPA item).
+	 "private_student_loan": {"rate": 0.15, "floor_multiple": 50, "highest_local_minimum_wage": 21.65,
+	                          "highest_local_minimum_wage_note": "the highest Washington city minimum wage for 2026 "
+	                                                             "(Tukwila) — verify each January 1",
+	                          "source": _WA + " (private student loans)"}},
 ]
 #: Tim's decision (2026-10-09): the middle path, as policy. Priority as the law orders it — sources below.
 DEFAULT_GARNISHMENT_POLICY = {

@@ -529,6 +529,11 @@ def _deduction_payload(doc, args: dict) -> dict:
 		"reference": doc.case_number,
 		"label": as_str(args, "pay_stub_label") or "",
 		"notes": f"Filed from Farm Garnishment {doc.name}.",
+		# v0.311.0. What the order is for. A creditor order with no type is taken as consumer debt — the most
+		# protective reading for the worker (RCW 6.27.150(4)); say otherwise with debt_type.
+		"debt_type": as_str(args, "debt_type") or {"Child Support": "Child support", "Tax Levy": "Tax levy",
+		                                            "Student Loan": "Federal student loan (AWG)"}.get(
+			kind, "Consumer debt"),
 	}
 	if percentage:
 		payload["basis"] = "Net After Tax"

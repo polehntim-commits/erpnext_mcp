@@ -188,7 +188,8 @@ class ThroughTheRuns(IntegrationTestCase):
 		self.seed_shifts(*[shift(f"G{i}", day, crew=[member(WORKER)]) for i, day in enumerate(days)])
 		order = self.tool_data("create_payroll_deduction", {
 			"employee": WORKER, "company": MAIN, "deduction_category": "Wage Garnishment", "amount": 300,
-			"effective_from": "2025-01-01", "reference": "CASE-9", "arrears_opening": 100})
+			"effective_from": "2025-01-01", "reference": "CASE-9", "arrears_opening": 100,
+			"debt_type": "Other judgment"})
 		self.order = order["deduction"]["name"]
 		STORE.commit()
 
