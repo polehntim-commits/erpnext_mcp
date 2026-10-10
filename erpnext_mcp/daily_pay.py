@@ -308,6 +308,9 @@ def settlement(company: str, start, end) -> tuple:
 	# did not work the week still gets a settlement for the bonus or profit share dated in it.
 	whole, switched = on_daily_pay(company, start, end)
 	items_by_employee = items.pending(company, start, end, sorted(set(by_employee) | set(whole) | set(switched)))
+	# v0.296.0. And the overtime a non-discretionary bonus adds to the regular rate of the weeks it was earned in.
+	for employee, derived in items.regular_rate_items(company, items_by_employee, start, end).items():
+		items_by_employee[employee] = items_by_employee[employee] + derived
 	for employee in items_by_employee:
 		by_employee.setdefault(employee, [])
 	deductions_by_employee, _sources = runs._load_deductions(company, end, list(by_employee))

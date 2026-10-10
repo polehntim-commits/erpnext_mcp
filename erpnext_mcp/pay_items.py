@@ -17,7 +17,7 @@ from . import compat
 
 PAY_ITEM = "Farm Pay Item"
 FIELDS = ("name", "employee", "kind", "amount", "pay_on", "treatment", "reference", "status", "payroll_entry",
-          "work_state")
+          "work_state", "earned_from", "earned_to")
 ENTRY = "Farm Payroll Entry"
 EMPLOYEE = "Employee"
 
@@ -105,3 +105,83 @@ def mark_paid(entry: str, slips: list) -> list:
 				frappe.db.set_value(PAY_ITEM, name, {"status": "Paid", "payroll_entry": entry})
 				done.append(name)
 	return done
+
+
+# ── v0.296.0: bonuses in the overtime regular rate (29 CFR 778.208-.210) ─────────────────────────────────────────
+def _workweeks(start: str, end: str) -> tuple:
+	"""The earning window snapped out to whole workweeks (Pay Policy workweek_start)."""
+	import datetime
+
+	from . import daily_pay
+
+	first = daily_pay.workweek_start(start)
+	last = daily_pay.workweek_start(end) + datetime.timedelta(days=6)
+	return first.isoformat(), last.isoformat()
+
+
+def regular_rate_premium(amount: float, weeks: list, multiplier: float) -> dict:
+	"""Pure. The overtime premium a bonus adds when allocated hour by hour over the workweeks it was earned in
+	(778.209(b)): each week's share is amount x week hours / all hours, raising that week's regular rate by
+	share / week hours — the same amount per hour in every week — and each overtime hour is owed (multiplier - 1)
+	times that increase."""
+	total_hours = sum(float(w.get("hours") or 0) for w in weeks)
+	if amount <= 0 or total_hours <= 0:
+		return {"premium": 0.0, "per_hour": 0.0, "weeks": [], "total_hours": round(total_hours, 2)}
+	per_hour = amount / total_hours
+	rows, premium = [], 0.0
+	for week in weeks:
+		hours = float(week.get("hours") or 0)
+		overtime = float(week.get("overtime_hours") or 0)
+		owed = per_hour * (multiplier - 1.0) * overtime
+		premium += owed
+		rows.append({"week_start": week.get("week_start"), "week_end": week.get("week_end"), "hours": round(hours, 2),
+		             "overtime_hours": round(overtime, 2), "bonus_share": round(per_hour * hours, 2),
+		             "regular_rate_increase": round(per_hour, 4), "overtime_premium": round(owed, 2)})
+	return {"premium": round(premium, 2), "per_hour": round(per_hour, 4), "weeks": rows,
+	        "total_hours": round(total_hours, 2)}
+
+
+def regular_rate_items(company: str, items_by_employee: dict, period_start: str, period_end: str) -> dict:
+	"""For each non-discretionary pay item, the overtime it adds to the regular rate, as a derived WAGES item paid
+	with it. Employee → [derived items]. The hours come off the shift register for the weeks the bonus was earned in,
+	with the overtime threshold in force (Pay Policy, never below the state's agricultural threshold)."""
+	from . import payroll_integration, payroll_settings
+	from .tools import payroll as runs
+
+	policy = payroll_settings.pay_item_policy(period_end)
+	out: dict = {}
+	for employee, rows in (items_by_employee or {}).items():
+		for row in rows:
+			if row.get("derived_from") or float(row.get("amount") or 0) <= 0:
+				continue
+			if payroll_settings.is_discretionary(row.get("kind"), policy=policy):
+				continue
+			start = str(row.get("earned_from") or period_start)[:10]
+			end = str(row.get("earned_to") or row.get("earned_from") or period_end)[:10]
+			if end < start:
+				start, end = end, start
+			first, last = _workweeks(start, end)
+			shifts, _provenance = runs._load_period_shifts(company, first, last, employees=[employee])
+			state = str(row.get("work_state") or "")
+			rule = payroll_settings.overtime(last, state=state)
+			aggregate = payroll_integration.aggregate_shifts_for_period(
+				shifts, first, last, overtime_threshold=float(rule["weekly_threshold_hours"]),
+				workweek_anchor=first).get(employee) or {}
+			if not state and aggregate.get("hours_by_state"):
+				state = max(aggregate["hours_by_state"], key=aggregate["hours_by_state"].get)
+				rule = payroll_settings.overtime(last, state=state)
+				aggregate = payroll_integration.aggregate_shifts_for_period(
+					shifts, first, last, overtime_threshold=float(rule["weekly_threshold_hours"]),
+					workweek_anchor=first).get(employee) or {}
+			result = regular_rate_premium(float(row["amount"]), aggregate.get("weeks") or [], float(rule["multiplier"]))
+			if result["premium"] <= 0:
+				continue
+			out.setdefault(employee, []).append({
+				"name": None, "derived_from": row.get("name"), "kind": "Overtime on bonus (regular rate)",
+				"amount": result["premium"], "treatment": "Wages", "work_state": row.get("work_state") or state,
+				"pay_on": row.get("pay_on"),
+				"regular_rate": {**result, "bonus": float(row["amount"]), "bonus_kind": row.get("kind"),
+				                 "earned": [first, last], "threshold_hours": rule["weekly_threshold_hours"],
+				                 "multiplier": rule["multiplier"], "policy": policy.get("version"),
+				                 "source": policy.get("source")}})
+	return out

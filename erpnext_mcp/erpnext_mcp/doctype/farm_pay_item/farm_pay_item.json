@@ -12,6 +12,8 @@
   "kind",
   "amount",
   "pay_on",
+  "earned_from",
+  "earned_to",
   "col_1",
   "treatment",
   "work_state",
@@ -49,7 +51,7 @@
    "fieldname": "kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "Bonus\nProfit Share\nCommission\nOther",
+   "options": "Bonus\nProduction Bonus\nProfit Share\nCommission\nOther",
    "reqd": 1,
    "in_list_view": 1
   },
@@ -67,6 +69,17 @@
    "reqd": 1,
    "in_list_view": 1,
    "description": "Paid by the payroll run whose period includes this date."
+  },
+  {
+   "fieldname": "earned_from",
+   "fieldtype": "Date",
+   "label": "Earned From",
+   "description": "v0.296.0. The first day of the work this bonus was earned on. A non-discretionary bonus is allocated over the workweeks it was earned in and the overtime premium on it is paid with it (29 CFR 778.209). Blank: the pay period it is paid in."
+  },
+  {
+   "fieldname": "earned_to",
+   "fieldtype": "Date",
+   "label": "Earned To"
   },
   {
    "fieldname": "col_1",
@@ -118,7 +131,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-09 23:30:00.000000",
+ "modified": "2026-10-10 03:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Pay Item",

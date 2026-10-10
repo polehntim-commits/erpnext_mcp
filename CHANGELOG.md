@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.296.0 — 2026-10-09 — non-discretionary bonuses in the overtime regular rate
+
+**Migrate**: Farm Pay Item gains `earned_from` and `earned_to`, and the kind "Production Bonus"; payroll setting
+`pay_item_policy` is seeded. Deploy `docs/deploy/v0.296.0_bonus_regular_rate.md`. Tools: **1,142 → 1,142**.
+
+- **The rule** (Tim's decision, FLSA 29 CFR 778.208–.210, applied the same under Oregon's agricultural overtime):
+  a non-discretionary bonus, including production bonuses and the crab-boat profit share, is allocated hour by hour
+  over the workweeks it was earned in.
+- **Retro overtime:** the overtime premium that adds is paid with the bonus, retroactively, as a derived wages line
+  that shows the week-by-week working. The threshold is the Pay Policy's, never below the state's agricultural
+  threshold. This applies to regular runs and to the daily-pay weekly settlement.
+- **Discretionary or not** is a policy flag per kind (`pay_item_policy`), defaulting to non-discretionary. A
+  discretionary kind gets a 778.211 warning in the validator.
+- Tests: `test_bonus_regular_rate`: the arithmetic, the per-kind flag, a run, retro pay for weeks in an earlier
+  period, the crew share, and the settlement.
+
 ## 0.295.0 — 2026-10-09 — the official Form OR-W-4, filled and signed; Oregon's 8% rules
 
 **Migrate**: W-4 Form gains `or_federally_exempt` and `or_generated_pdf`/`_on`; the DOR's PDFs ship in

@@ -36,8 +36,10 @@ WAGE_FLOOR_KEY = "wage_floor"
 OREGON_KEY = "oregon_withholding"
 #: v0.292.0. Garnishment: the catch-up policy (Tim's middle path) and the dated, sourced limits it never exceeds.
 GARNISHMENT_POLICY_KEY = "garnishment_policy"
+PAY_ITEM_POLICY_KEY = "pay_item_policy"
 GARNISHMENT_LIMITS_KEY = "garnishment_limits"
-KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY, OREGON_KEY, GARNISHMENT_POLICY_KEY, GARNISHMENT_LIMITS_KEY)
+KEYS = (OVERTIME_KEY, PAY_POLICY_KEY, WAGE_FLOOR_KEY, OREGON_KEY, GARNISHMENT_POLICY_KEY, GARNISHMENT_LIMITS_KEY,
+        PAY_ITEM_POLICY_KEY)
 WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 MIN_WAGE_REGIONS = ("standard", "portland_metro", "non_urban")
 
@@ -277,6 +279,39 @@ def garnishment_policy(as_of: str = "") -> dict:
 	        "version": version}
 
 
+#: v0.296.0, Tim's decision (2026-10-09): non-discretionary bonuses — production bonuses and the crab-boat profit share
+#: among them — are in the overtime REGULAR RATE (29 CFR 778.208-.210). A bonus earned over several workweeks is
+#: allocated to them, hour by hour (778.209(b)), and the extra half-time on each week's overtime hours is paid
+#: retroactively with the bonus. Applied the same way under Oregon's agricultural overtime. Discretionary or not is a
+#: flag PER KIND, defaulting to non-discretionary — a bonus is discretionary only when both the fact and the amount
+#: are at the employer's sole discretion and decided at or near the end of the period (778.211).
+DEFAULT_PAY_ITEM_POLICY = {
+	"kinds": {"Bonus": {"discretionary": False}, "Production Bonus": {"discretionary": False},
+	          "Profit Share": {"discretionary": False}, "Commission": {"discretionary": False},
+	          "Other": {"discretionary": False}},
+	"default_discretionary": False,
+	"allocation": "per_hour_worked",
+	"source": ("FLSA 29 CFR 778.208-.210 (bonuses in the regular rate; allocation over the workweeks earned), "
+	           "778.211 (discretionary bonuses excluded), 778.117 (commissions); applied the same under Oregon's "
+	           "agricultural overtime (ORS 653.272) per Tim, 2026-10-09 — CPA to confirm."),
+}
+
+
+def pay_item_policy(as_of: str = "") -> dict:
+	body, version = _body(PAY_ITEM_POLICY_KEY, as_of)
+	return {**DEFAULT_PAY_ITEM_POLICY, **{k: v for k, v in body.items() if k in DEFAULT_PAY_ITEM_POLICY},
+	        "version": version}
+
+
+def is_discretionary(kind: str, as_of: str = "", policy: dict | None = None) -> bool:
+	"""Whether a pay item of this kind stays OUT of the regular rate. Unknown kinds take `default_discretionary`."""
+	policy = policy or pay_item_policy(as_of)
+	row = (policy.get("kinds") or {}).get(str(kind or ""))
+	if isinstance(row, dict) and "discretionary" in row:
+		return bool(row["discretionary"])
+	return bool(policy.get("default_discretionary", False))
+
+
 def garnishment_limits(as_of: str = "", state: str = "") -> dict:
 	"""{federal: row, state: row or None} in force on the day — the newest row of each scope on or before it."""
 	body, version = _body(GARNISHMENT_LIMITS_KEY, as_of)
@@ -318,6 +353,8 @@ def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
 		return _validate_oregon(body, for_publish)
 	if key == GARNISHMENT_POLICY_KEY:
 		return _validate_garnishment_policy(body, for_publish)
+	if key == PAY_ITEM_POLICY_KEY:
+		return _validate_pay_item_policy(body, for_publish)
 	if key == GARNISHMENT_LIMITS_KEY:
 		return _validate_garnishment_limits(body, for_publish)
 	errors, warnings = [], []
@@ -454,6 +491,28 @@ def _validate_oregon(body: dict, for_publish: bool) -> dict:
 	return {"errors": errors, "warnings": warnings}
 
 
+def _validate_pay_item_policy(body: dict, for_publish: bool) -> dict:
+	errors, warnings = [], []
+	kinds = body.get("kinds", DEFAULT_PAY_ITEM_POLICY["kinds"])
+	if not isinstance(kinds, dict):
+		errors.append("kinds: {kind: {discretionary: true/false}}")
+	else:
+		for kind, row in kinds.items():
+			if not isinstance(row, dict) or not isinstance(row.get("discretionary"), bool):
+				errors.append(f"kinds.{kind}: discretionary is true or false")
+			elif row["discretionary"]:
+				warnings.append(f"{kind} is discretionary — left out of the regular rate. That holds only when both "
+				                "the fact and the amount are at the employer's sole discretion (29 CFR 778.211).")
+	if body.get("allocation", "per_hour_worked") != "per_hour_worked":
+		errors.append("allocation is per_hour_worked (29 CFR 778.209(b))")
+	if not str(body.get("source") or DEFAULT_PAY_ITEM_POLICY["source"]).strip():
+		errors.append("source: where the rule comes from")
+	effective = _effective(body, errors)
+	if for_publish and not errors:
+		_publish_guard(effective, errors)
+	return {"errors": errors, "warnings": warnings}
+
+
 def _validate_garnishment_policy(body: dict, for_publish: bool) -> dict:
 	errors = []
 	if body.get("catch_up", "middle_path") not in ("middle_path", "none"):
@@ -580,6 +639,9 @@ def seed_body(key: str = OVERTIME_KEY) -> dict:
 	if key == GARNISHMENT_POLICY_KEY:
 		return {"schema_version": 1, "key": key, **DEFAULT_GARNISHMENT_POLICY, "effective_from": "2026-10-09",
 		        "basis": "Tim's decision 2026-10-09: the middle path, as a policy (not hard-coded)."}
+	if key == PAY_ITEM_POLICY_KEY:
+		return {"schema_version": 1, "key": key, **DEFAULT_PAY_ITEM_POLICY, "effective_from": "2026-01-01",
+		        "basis": "Tim's decision 2026-10-09: non-discretionary bonuses in the overtime regular rate."}
 	if key == GARNISHMENT_LIMITS_KEY:
 		return {"schema_version": 1, "key": key, "effective_from": "2009-07-24",
 		        "rows": [dict(r) for r in SEED_GARNISHMENT_LIMITS]}

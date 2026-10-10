@@ -1469,6 +1469,10 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 			                        "min_wage_regions": {}, "pay_items_only": True}
 		state = items.work_state(rows, employee, company)
 		items_by_employee[employee] = [{**r, "work_state": r.get("work_state") or state} for r in rows]
+	# v0.296.0. A non-discretionary bonus raises the regular rate of the workweeks it was earned in; the overtime
+	# premium that adds is paid with it, as wages (29 CFR 778.209; pay_item_policy).
+	for employee, derived in items.regular_rate_items(company, items_by_employee, str(start), str(end)).items():
+		items_by_employee[employee] = items_by_employee[employee] + derived
 	known = sorted(set(known) | set(items_by_employee))
 
 	w4_map = _load_w4_map(known)
@@ -1518,7 +1522,8 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 		                    "garnishment_limits": garnishment["limits"].get("version")},
 		# v0.292.0. Bonuses and profit shares paid with this run; each counts as earnings for the garnishment caps.
 		"pay_items": [{"employee": e, **{k: r.get(k) for k in ("name", "kind", "amount", "treatment", "pay_on",
-		                                                         "work_state", "released_from")}}
+		                                                         "work_state", "released_from", "derived_from",
+		                                                         "regular_rate")}}
 		              for e, rows in sorted(items_by_employee.items()) for r in rows],
 		# v0.293.0. Items dated in the period that this run cannot pay yet, and why.
 		"pay_items_waiting": items_waiting,
