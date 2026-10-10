@@ -16183,6 +16183,7 @@ TOOLS = {
 		{
 			"company": _COMPANY,
 			"pay_period_start": _field(_STRING, "Start date as YYYY-MM-DD."),
+			"pay_date": _field(_STRING, "v0.299.0. The date the wages are paid (YYYY-MM-DD), printed on every pay statement (ORS 652.610). A daily run defaults to its ACH date."),
 			"pay_period_end": _field(_STRING, "End date as YYYY-MM-DD."),
 			"pay_frequency": _field(_STRING, "Weekly, Biweekly, Semimonthly, or Monthly. Default Biweekly."),
 			"employee": _field(_STRING, "Limit the run to one employee."),
@@ -27897,6 +27898,9 @@ TOOLS = {
 				"The employer address to print. ERPNext keeps no address on Company, and a "
 				"wage statement is expected to carry one. `employer_address` is an alias.",
 			),
+			"company_phone": _field(_STRING, "v0.299.0. The employer's phone for the statement (ORS 652.610(1)(b)); default the Company's phone_no."),
+			"pay_date": _field(_STRING, "v0.299.0. The date of payment, where the run did not record one."),
+			"explanation": _field(_BOOLEAN, "v0.299.0. Instead of a stub: the employee's written explanation of earnings and deductions (ORS 652.610(5)) — given at hire and updated each January — attached to the Employee. payroll_entry is not needed."),
 			"employer_address": _field(_STRING, "Alias for company_address."),
 			"overwrite": _field(
 				_BOOLEAN,
@@ -27904,7 +27908,7 @@ TOOLS = {
 				"The File that was there stays attached to the record.",
 			),
 		},
-		required=("payroll_entry", "employee"),
+		required=("employee",),
 		mutating=True,
 		title="Render pay stub",
 		available=_pdf_form_ready("Farm Payroll Entry"),

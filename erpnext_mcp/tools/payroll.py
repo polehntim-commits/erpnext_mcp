@@ -1776,6 +1776,10 @@ def run_payroll_for_period(args: dict) -> ToolResult:
 			"pay_frequency": context["pay_frequency"],
 			"status": "Draft",
 			**({"run_kind": context.get("run_kind") or "Regular"} if compat.has_field(PAYROLL_ENTRY, "run_kind") else {}),
+			# v0.299.0. The date of payment, for the statement (ORS 652.610(1)(b)): as given, else a daily run's
+			# ACH date.
+			**({"pay_date": as_date(args, "pay_date") or context.get("ach_effective_date")}
+			   if compat.has_field(PAYROLL_ENTRY, "pay_date") else {}),
 		}
 	)
 
@@ -1860,6 +1864,19 @@ def _slip_row(slip: dict) -> dict:
 		detail["_deduction_shortfalls"] = slip["deduction_shortfalls"]
 	if slip.get("settlement"):
 		detail["_settlement"] = slip["settlement"]  # v0.289.0: how the week's premium was reached
+	# v0.299.0. What gross was made of, for the itemised statement ORS 652.610(1)(b) / OAR 839-020-0012 require:
+	# each piece rate with its pieces and pay, hourly time, paid rest, the overtime hours, rate and pay, and the
+	# pay items — stored, so a stub printed years later itemises what was actually paid.
+	gross = slip.get("gross_detail") or {}
+	detail["_earnings"] = {
+		**{k: gross.get(k) for k in ("pay_type", "piece_earnings", "hourly_earnings", "regular_pay", "break_pay",
+		                             "overtime_pay", "overtime_regular_rate", "overtime_premium_multiplier",
+		                             "effective_hourly_rate", "piece_rate", "piece_units", "regular_hours",
+		                             "overtime_hours", "segments") if gross.get(k) not in (None, "")},
+		"pay_items": [{k: i.get(k) for k in ("name", "kind", "amount", "treatment", "derived_from")}
+		              for i in slip.get("pay_items") or []],
+		"regular_rate_by_week": (slip.get("regular_rate_by_week") or {}).get("weeks") or [],
+	}
 	minimum = slip.get("minimum_wage_detail") or {}
 	meets = minimum.get("meets_minimum_wage")
 	if meets is None:
@@ -2276,6 +2293,15 @@ def _stub_slip(doc, employee: str) -> tuple[dict, str]:
 	)
 	payload = {field: get(field) for field in fields}
 	payload["earned_gross"] = payload.get("earned_gross") or payload.get("gross_pay")
+	# v0.299.0. The itemisation stored with the slip (deduction lines since v0.86, earnings since v0.299.0).
+	try:
+		detail = json.loads(get("state_taxes_detail") or "{}")
+	except (TypeError, ValueError):
+		detail = {}
+	if detail.get("_deduction_lines"):
+		payload["deduction_lines"] = detail["_deduction_lines"]
+	if detail.get("_earnings"):
+		payload["earnings_detail"] = detail["_earnings"]
 	return payload, name
 
 
@@ -2403,6 +2429,8 @@ def render_pay_stub(args: dict) -> ToolResult:
 	statement that was made and deleting it would not unmake it.
 	"""
 	pay_stub_pdf.require()
+	if args.get("explanation") in (1, "1", True, "true", "True"):
+		return _render_earnings_explanation(args)
 
 	entry_name = as_str(args, "payroll_entry") or as_str(args, "name")
 	if not entry_name:
@@ -2425,6 +2453,8 @@ def render_pay_stub(args: dict) -> ToolResult:
 		"company": doc.company,
 		"pay_period_start": str(doc.pay_period_start),
 		"pay_period_end": str(doc.pay_period_end),
+		# v0.299.0. ORS 652.610(1)(b): the date of payment.
+		"pay_date": str(as_date(args, "pay_date") or doc.get("pay_date") or "") or None,
 		"pay_frequency": doc.pay_frequency,
 		"status": doc.status,
 		"hourly_rate": _stub_hourly_rate(slip.get("salary_structure"), slip.get("pay_type")),
@@ -2490,6 +2520,88 @@ def render_pay_stub(args: dict) -> ToolResult:
 #: Said on every stub result, because the page looks like a payroll record and
 #: the two things a reader most needs to know about it are that it changed
 #: nothing and that its year-to-date year is not this site's fiscal year.
+_FREQ_ES = {"Weekly": "semanal", "Biweekly": "cada dos semanas", "Semimonthly": "dos veces al mes",
+            "Monthly": "mensual", "Daily": "diario"}
+
+
+def _render_earnings_explanation(args: dict) -> ToolResult:
+	"""v0.299.0. ORS 652.610(5): the employee's written explanation of earnings and deductions — pay period, every
+	pay-rate type, every deduction and benefit contribution, every payroll code — at hire, updated each January.
+	Built from this worker's own structure and deductions and the overtime rule in force; attached to the Employee."""
+	from .. import payroll_settings
+
+	employee = _resolve_employee({"employee": as_str(args, "employee") or as_str(args, "employee_name")})
+	emp = frappe.db.get_value(EMPLOYEE, employee, ["employee_name", "company"], as_dict=True) or {}
+	company = str(emp.get("company") or "")
+	today = str(frappe.utils.today())[:10]
+	structure = frappe.db.get_value(SALARY_STRUCTURE, {"employee": employee, "is_active": 1},
+	                                ["pay_type", "base_rate", *compat.existing_fields(SALARY_STRUCTURE, ("hourly_rate",))],
+	                                as_dict=True) or {}
+	runs = frappe.db.get_all(PAYROLL_ENTRY, filters={"company": company}, fields=["pay_frequency"],
+	                         order_by="pay_period_end desc", limit=1) or []
+	frequency = as_str(args, "pay_frequency") or (runs[0]["pay_frequency"] if runs else "Weekly")
+	payday = as_str(args, "payday") or "as posted at the farm office"
+	pay_type = str(structure.get("pay_type") or "Hourly")
+	rate = _num(structure.get("base_rate"))
+	hourly = _num(structure.get("hourly_rate"))
+	if pay_type == "Piece Rate":
+		rates = (f"You are paid by the piece (${rate:,.2f} a unit unless a task posts another rate), and by the hour "
+		         f"for non-piece work (${hourly:,.2f}). Every pay period, your pay is at least minimum wage for every "
+		         "hour worked; any shortfall is added as a Minimum wage adjustment.")
+		rates_es = (f"Se te paga a destajo (${rate:,.2f} por unidad, salvo que una tarea publique otra tarifa) y por "
+		            f"hora en trabajo que no es a destajo (${hourly:,.2f}). Cada periodo tu pago es al menos el salario "
+		            "mínimo por cada hora trabajada; lo que falte se agrega como Ajuste al salario mínimo.")
+	elif pay_type == "Salary":
+		rates, rates_es = (f"You are paid a salary of ${rate:,.2f} a pay period.",
+		                   f"Se te paga un salario de ${rate:,.2f} por periodo de pago.")
+	else:
+		rates, rates_es = (f"You are paid by the hour, ${rate:,.2f} an hour.", f"Se te paga por hora, ${rate:,.2f} la hora.")
+	or_now = payroll_settings.ag_overtime_threshold("OR", today) or 40
+	or_2027 = payroll_settings.ag_overtime_threshold("OR", "2027-01-01") or 40
+	wa = payroll_settings.ag_overtime_threshold("WA", today) or 40
+	overtime = (f"Overtime is per workweek (Sunday to Saturday), at 1.5 times your regular rate: in Oregon after "
+	            f"{or_now:g} hours a week ({or_2027:g} from January 1, 2027 - ORS 653.272); in Washington after {wa:g}. "
+	            "Bonuses are not part of the Oregon overtime rate (OAR 839-020-0030).")
+	overtime_es = (f"Las horas extra se cuentan por semana laboral (domingo a sábado), a 1.5 veces tu tarifa regular: "
+	               f"en Oregón después de {or_now:g} horas por semana ({or_2027:g} desde el 1 de enero de 2027 - ORS "
+	               f"653.272); en Washington después de {wa:g}. Los bonos no forman parte de la tarifa de horas extra en "
+	               "Oregón (OAR 839-020-0030).")
+	deductions = ["Federal income tax, Social Security and Medicare (required by law).",
+	              "Oregon: state income tax (by your OR-W-4), statewide transit tax, Paid Leave Oregon. Washington: "
+	              "Paid Family and Medical Leave, WA Cares (required by law)."]
+	deductions_es = ["Impuesto federal, Seguro Social y Medicare (los exige la ley).",
+	                 "Oregón: impuesto estatal (según tu OR-W-4), impuesto de transporte, Paid Leave Oregon. Washington: "
+	                 "Paid Family and Medical Leave, WA Cares (los exige la ley)."]
+	if compat.doctype_exists(PAYROLL_DEDUCTION):
+		for row in frappe.db.get_all(PAYROLL_DEDUCTION, filters={"employee": employee, "status": "Active"},
+		                             fields=list(compat.existing_fields(PAYROLL_DEDUCTION, (
+		                                 "label", "deduction_category", "deduction_type", "reference"))),
+		                             limit=100) or []:
+			category = payroll_deductions._key(row.get("deduction_category"), payroll_deductions.CATEGORIES, "other")
+			purpose = pay_stub_pdf._purpose({**row, "deduction_category": category,
+			                                 "deduction_type": str(row.get("deduction_type") or "").lower()})
+			label = row.get("label") or str(row.get("deduction_category") or "Deduction")
+			deductions.append(f"{label}: {purpose or 'deduction'}.")
+			deductions_es.append(f"{label}: {purpose or 'descuento'}.")
+	info = {"employee": employee, "employee_name": emp.get("employee_name"), "employer": _stub_company_info(company, args),
+	        "pay_frequency": frequency, "pay_frequency_es": _FREQ_ES.get(frequency, frequency), "payday": payday,
+	        "payday_es": as_str(args, "payday_es") or ("según lo publicado en la oficina de la granja"
+	                                                    if payday == "as posted at the farm office" else payday),
+	        "rates": rates, "rates_es": rates_es, "overtime": overtime, "overtime_es": overtime_es,
+	        "deductions": deductions, "deductions_es": deductions_es, "issued": today,
+	        "updated_note": f"Issued {today}. Updated by January 1 each year, and whenever your pay or deductions change. "
+	                        f"/ Emitido {today}. Se actualiza cada 1 de enero y cuando cambie tu pago o tus descuentos."}
+	pdf = pay_stub_pdf.render_earnings_explanation(info)
+	file_name = f"Earnings-explanation-{employee}-{today}.pdf"
+	attachment = artifacts.attach_bytes(EMPLOYEE, employee, file_name, pdf)
+	return ToolResult(
+		data={"employee": employee, "employee_name": emp.get("employee_name"), "file_name": file_name,
+		      "file_url": attachment.get("file_url"), "bytes": len(pdf), "pay_frequency": frequency, "payday": payday,
+		      "source": "ORS 652.610(5) (2025 c.235): at hire, and updated by January 1 each year"},
+		summary=f"Earnings and deductions explanation for {emp.get('employee_name') or employee} rendered "
+		        f"({len(pdf):,} bytes, English and Spanish) and attached to the employee")
+
+
 _PAY_STUB_NOTE = (
 	"Rendering a stub recomputes nothing and moves no status: every figure is read off the "
 	"stored Farm Payroll Slip, and the run is still whatever it was. Year-to-date figures are "
@@ -2505,12 +2617,22 @@ def _stub_company_info(company: str, args: dict) -> dict:
 	takes one — ERPNext keeps no address on Company, and an employer's address is
 	something a wage statement is expected to carry.
 	"""
-	fields = compat.existing_fields("Company", ("name", "tax_id"))
+	fields = compat.existing_fields("Company", ("name", "tax_id", "phone_no"))
 	row = frappe.db.get_value("Company", company, fields, as_dict=True) or {}
+	# v0.299.0. ORS 652.610(1)(b): the employer's name, registry or identification number, address and PHONE
+	# number. The legal name and address come off I-9 Settings / the Company's address, as on the W-4 and I-9.
+	block = {}
+	try:
+		from . import i9 as i9_tools
+
+		block = i9_tools._employer_block(company) or {}
+	except Exception:  # a site without the I-9 doctype still prints a stub
+		block = {}
 	return {
-		"name": company,
-		"ein": str(row.get("tax_id") or "").strip(),
-		"address": as_str(args, "company_address") or as_str(args, "employer_address"),
+		"name": block.get("name") or company,
+		"ein": str(row.get("tax_id") or block.get("ein") or "").strip(),
+		"address": as_str(args, "company_address") or as_str(args, "employer_address") or block.get("address") or "",
+		"phone": as_str(args, "company_phone") or str(row.get("phone_no") or "").strip(),
 	}
 
 

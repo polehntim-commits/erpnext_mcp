@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.299.0 — 2026-10-10 — pay statements and the written pay explanation, per Oregon law
+
+**Migrate**: Farm Payroll Entry gains `pay_date`. Deploy `docs/deploy/v0.299.0_boli_pay_statements.md`. Tools:
+**1,142 → 1,142**; `run_payroll_for_period` and `render_pay_stub` gain arguments.
+
+- **Statements** (ORS 652.610(1)(b), OAR 839-020-0012). The stub now shows:
+  - the date of payment, and the employer's phone and ID;
+  - how the worker is paid;
+  - each piece rate with its pieces and pay, hourly time, and paid rest;
+  - the overtime hours, rate and pay (the week's regular rate);
+  - bonuses and profit shares on their own lines;
+  - every deduction's purpose, with the case number for court orders.
+
+  Each slip stores its earnings breakdown, so stubs printed later itemize the same way.
+- **Written explanation** (ORS 652.610(5), 2025 c.235): `render_pay_stub explanation=1`, in English and Spanish,
+  attached to the Employee.
+- Tests: `test_boli_pay_statements`.
+
 ## 0.298.0 — 2026-10-10 — farm overtime as BOLI computes it
 
 **Migrate**: drafts Pay Policy v2 (`state_floor`) for a person to publish. Deploy

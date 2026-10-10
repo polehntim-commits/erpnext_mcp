@@ -280,12 +280,18 @@ def _identity(sheet: _Sheet, stub: dict, company: dict) -> None:
 		left.append(f"Work state: {work_state}")
 	pay_type = _clean(stub.get("pay_type") or "")
 	if pay_type:
-		left.append(f"Paid: {pay_type}")
+		# v0.299.0. OAR 839-020-0012: whether paid by the hour, piece, day, salary …
+		basis = {"Piece Rate": "by the piece", "Hourly": "by the hour", "Salary": "salary", "Mixed":
+		         "by the piece and by the hour"}.get(pay_type, pay_type)
+		left.append(f"Paid: {basis}")
 
 	right = [employer_name, *address]
+	phone = _clean(company.get("phone") or "")
+	if phone:
+		right.append(f"Phone: {phone}")
 	ein = _clean(company.get("ein") or "")
 	if ein:
-		right.append(f"EIN: {ein}")
+		right.append(f"Employer ID (FEIN): {ein}")
 
 	# BOTH COLUMNS ARE DRAWN OFF THE SAME `top`, and the cursor is advanced ONCE
 	# at the end to whichever ran longer. Advancing per row would stagger the two
@@ -320,6 +326,8 @@ def _identity(sheet: _Sheet, stub: dict, company: dict) -> None:
 	frequency = _clean(stub.get("pay_frequency") or "")
 	if frequency:
 		period += f"   ({frequency})"
+	# v0.299.0. ORS 652.610(1)(b): the date of payment, with the dates of work it covers.
+	period += f"   Paid on: {_clean(stub.get('pay_date') or '') or 'not recorded on the run'}"
 	sheet.text(MARGIN, sheet.top + SIZE_SUBTITLE, period, FONT_LABEL_BOLD, SIZE_SUBTITLE)
 	reference = _clean(stub.get("payroll_entry") or "")
 	if reference:
@@ -360,6 +368,8 @@ def earnings_lines(stub: dict) -> list[dict]:
 	off a piece stub, where the premium is the §778.111 HALF-time one rather
 	than the 1.5x this module knows how to print.
 	"""
+	if stub.get("earnings_detail"):
+		return _itemised_earnings(stub)
 	regular_hours = _num(stub.get("regular_hours"))
 	overtime_hours = _num(stub.get("overtime_hours"))
 	total_hours = _num(stub.get("total_hours"), regular_hours + overtime_hours)
@@ -425,6 +435,79 @@ def earnings_lines(stub: dict) -> list[dict]:
 	return lines
 
 
+def _itemised_earnings(stub: dict) -> list[dict]:
+	"""v0.299.0. The stored breakdown, itemised as ORS 652.610(1)(b) and OAR 839-020-0012 require: each piece rate
+	with the pieces completed at it and the pay for it; hourly time at its rate; paid rest; the overtime hours, the
+	overtime rate and the overtime pay. A balancing line still carries anything the breakdown does not explain."""
+	detail = stub.get("earnings_detail") or {}
+	lines: list[dict] = []
+	pay_type = detail.get("pay_type") or stub.get("pay_type") or ""
+	overtime_hours = _num(detail.get("overtime_hours"), _num(stub.get("overtime_hours")))
+	segments = detail.get("segments") or []
+	if segments:
+		piece: dict = {}
+		hourly: dict = {}
+		for seg in segments:
+			rate = _num(seg.get("rate"))
+			if seg.get("pay_type") == "Piece Rate":
+				piece[rate] = piece.get(rate, 0.0) + _num(seg.get("piece_units"))
+			else:
+				hourly[rate] = hourly.get(rate, 0.0) + _num(seg.get("hours"))
+		for rate, units in sorted(piece.items()):
+			lines.append({"label": "Piece work", "quantity": _units(units), "rate": _rate(rate), "amount": units * rate})
+		for rate, hours in sorted(hourly.items()):
+			lines.append({"label": "Hourly work (all hours, straight time)", "quantity": _hours(hours),
+			              "rate": _rate(rate), "amount": hours * rate})
+	elif pay_type == "Piece Rate":
+		units = _num(detail.get("piece_units"), _num(stub.get("piece_units")))
+		rate = _num(detail.get("piece_rate"), _num(stub.get("piece_rate")))
+		if units:
+			lines.append({"label": "Piece work", "quantity": _units(units), "rate": _rate(rate),
+			              "amount": _num(detail.get("piece_earnings"), units * rate)})
+	elif pay_type == "Hourly":
+		hourly_rate = _num(stub.get("hourly_rate"), _num(detail.get("effective_hourly_rate")))
+		regular = _num(detail.get("regular_hours"), _num(stub.get("regular_hours")))
+		if regular:
+			lines.append({"label": "Regular hours", "quantity": _hours(regular), "rate": _rate(hourly_rate),
+			              "amount": _num(detail.get("regular_pay"), regular * hourly_rate)})
+		if overtime_hours:
+			lines.append({"label": f"Overtime hours at {OT_MULTIPLIER:g}x", "quantity": _hours(overtime_hours),
+			              "rate": _rate(hourly_rate * OT_MULTIPLIER), "amount": _num(detail.get("overtime_pay"))})
+	if _num(detail.get("break_pay")):
+		lines.append({"label": "Paid rest periods (at the average piece rate)", "quantity": "", "rate": "",
+		              "amount": _num(detail.get("break_pay"))})
+	if pay_type != "Hourly" and overtime_hours and _num(detail.get("overtime_pay")):
+		regular_rate = _num(detail.get("overtime_regular_rate"), _num(detail.get("effective_hourly_rate")))
+		lines.append({"label": f"Overtime premium (half the regular rate of {_rate(regular_rate)})",
+		              "quantity": _hours(overtime_hours), "rate": _rate(regular_rate * 0.5),
+		              "amount": _num(detail.get("overtime_pay"))})
+	total_hours = _num(stub.get("total_hours"))
+	if total_hours and pay_type != "Hourly":
+		lines.append({"label": f"Hours worked (overtime {_hours(overtime_hours) or '0'})", "quantity": _hours(total_hours),
+		              "rate": "", "amount": None})
+	earned_gross = _num(stub.get("earned_gross"), _num(stub.get("gross_pay")))
+	priced = [line for line in lines if line["amount"] is not None]
+	balance = earned_gross - sum(line["amount"] for line in priced)
+	if abs(balance) >= 0.005:
+		lines.append({"label": "Other earnings" if priced else "Earnings", "quantity": "", "rate": "",
+		              "amount": balance})
+	return lines
+
+
+def pay_item_lines(stub: dict) -> list[dict]:
+	"""v0.299.0. Bonuses, commissions and profit shares paid with this statement, each on its own line."""
+	out = []
+	for item in (stub.get("earnings_detail") or {}).get("pay_items") or []:
+		amount = _num(item.get("amount"))
+		if not amount:
+			continue
+		label = _clean(item.get("kind") or "Pay item")
+		if item.get("treatment") == "Not subject to withholding":
+			label += " (not subject to withholding)"
+		out.append({"label": label, "amount": amount})
+	return out
+
+
 def _earnings(sheet: _Sheet, stub: dict) -> None:
 	sheet.heading("Earnings")
 	_table_head(sheet, "Description", "Hours / units", "Rate")
@@ -433,9 +516,13 @@ def _earnings(sheet: _Sheet, stub: dict) -> None:
 		_row(sheet, line["label"], line["quantity"], line["rate"], line["amount"])
 
 	makeup = _num(stub.get("minimum_wage_makeup"))
-	if makeup:
+	items = pay_item_lines(stub)
+	if makeup or items:
 		_total_row(sheet, "Earned gross", _num(stub.get("earned_gross")))
+	if makeup:
 		_row(sheet, "Minimum wage adjustment", "", "", makeup)
+	for item in items:
+		_row(sheet, item["label"], "", "", item["amount"])
 	_total_row(sheet, "GROSS PAY", _num(stub.get("gross_pay")))
 
 	# Only where the table did not already carry the hours. On a piece-rate stub
@@ -479,12 +566,12 @@ def deduction_lines(stub: dict) -> list[dict]:
 		for row in supplied:
 			amount = _num((row or {}).get("amount"))
 			if amount:
-				lines.append(
-					{
-						"label": _clean((row or {}).get("label") or "Other deduction"),
-						"amount": amount,
-					}
-				)
+				# v0.299.0. ORS 652.610(1)(b): the amount AND PURPOSE of each deduction.
+				label = _clean((row or {}).get("label") or "Other deduction")
+				purpose = _purpose(row or {})
+				if purpose and purpose.lower() not in label.lower():
+					label = f"{label} — {purpose}"
+				lines.append({"label": label, "amount": amount})
 		return lines
 
 	total = _num(stub.get("total_deductions"))
@@ -492,6 +579,23 @@ def deduction_lines(stub: dict) -> list[dict]:
 	if abs(other) >= 0.005:
 		lines.append({"label": "Other deductions", "amount": other})
 	return lines
+
+
+_PURPOSES = {
+	"child_support": "court-ordered child support", "tax_levy": "tax levy", "student_loan": "student loan order",
+	"wage_garnishment": "court-ordered garnishment", "retirement_401k": "retirement plan (your election)",
+	"health_insurance": "health insurance (your election)", "dental_vision": "dental / vision (your election)",
+	"hsa": "health savings account (your election)", "fsa": "flexible spending account (your election)",
+	"life_insurance": "life insurance (your election)", "union_dues": "union dues", "other": "authorised deduction",
+}
+
+
+def _purpose(row: dict) -> str:
+	purpose = _PURPOSES.get(str(row.get("deduction_category") or ""), "")
+	reference = _clean(row.get("reference") or "")
+	if reference and row.get("deduction_type") == "garnishment":
+		purpose = f"{purpose}, case {reference}" if purpose else f"case {reference}"
+	return purpose
 
 
 def _deductions(sheet: _Sheet, stub: dict) -> None:
@@ -656,3 +760,79 @@ def file_name_for(stub: dict) -> str:
 	while "--" in safe:
 		safe = safe.replace("--", "-")
 	return f"{safe.strip('-')}.pdf"
+
+
+# ── v0.299.0: the written explanation of earnings and deductions (ORS 652.610(5)) ──────────────────────────────
+#: Each line a stub can carry, and what it means — English and Spanish (tú). The explanation lists them so the codes
+#: on a pay statement are defined in writing before the first payday.
+STUB_CODES = (
+	("Piece work", "Units (buckets, bins, trees …) completed at each piece rate, times that rate.",
+	 "Trabajo a destajo", "Las unidades (cubetas, bins, árboles …) que completaste a cada tarifa, por esa tarifa."),
+	("Hourly work / Regular hours", "Hours paid by the hour, at your hourly rate.",
+	 "Trabajo por hora / Horas regulares", "Las horas pagadas por hora, a tu tarifa por hora."),
+	("Paid rest periods", "Your paid 10-minute rest breaks. On piece work they are paid at your average piece-rate "
+	 "earnings per hour.", "Descansos pagados", "Tus descansos pagados de 10 minutos. En trabajo a destajo se pagan "
+	 "a tu promedio por hora a destajo."),
+	("Overtime", "Hours past the weekly overtime threshold. Hourly: 1.5 times your rate. Piece work: an added half "
+	 "of that week's regular rate (your week's pay divided by its hours, never less than minimum wage).",
+	 "Horas extra", "Las horas después del límite semanal de horas extra. Por hora: 1.5 veces tu tarifa. A destajo: "
+	 "se agrega la mitad de tu tarifa regular de esa semana (tu pago de la semana entre sus horas, nunca menos que "
+	 "el salario mínimo)."),
+	("Minimum wage adjustment", "Money ADDED so the pay period's earnings reach minimum wage for every hour worked.",
+	 "Ajuste al salario mínimo", "Dinero que se AGREGA para que tu pago del periodo llegue al salario mínimo por "
+	 "cada hora trabajada."),
+	("Bonus / Production Bonus / Profit Share / Commission", "Extra pay under the terms posted for it.",
+	 "Bono / Bono de producción / Reparto de ganancias / Comisión", "Pago adicional según los términos publicados."),
+	("Federal income tax / State income tax", "Income tax withheld for the IRS and the state (Oregon: by your "
+	 "OR-W-4).", "Impuesto federal / Impuesto estatal", "Impuesto sobre la renta retenido para el IRS y el estado "
+	 "(Oregón: según tu OR-W-4)."),
+	("Social Security / Medicare", "Federal payroll taxes (FICA).", "Seguro Social / Medicare",
+	 "Impuestos federales sobre la nómina (FICA)."),
+	("Oregon statewide transit tax / Paid Leave Oregon", "Oregon payroll taxes the law requires.",
+	 "Impuesto de transporte de Oregón / Paid Leave Oregon", "Impuestos de nómina de Oregón que exige la ley."),
+	("Court orders (child support, levy, garnishment)", "Taken because a court or agency orders it, up to the "
+	 "limits the law sets. Your record shows each order and any amount carried forward.",
+	 "Órdenes judiciales (manutención, embargo)", "Se descuentan porque un juez o agencia lo ordena, hasta los "
+	 "límites de la ley. Tu registro muestra cada orden y cualquier saldo pendiente."),
+	("Your elections (401(k), insurance, dues …)", "Taken only with your written, signed authorisation.",
+	 "Tus elecciones (401(k), seguro, cuotas …)", "Se descuentan solo con tu autorización firmada por escrito."),
+)
+
+
+def render_earnings_explanation(info: dict) -> bytes:
+	"""The written explanation of earnings and deductions an Oregon employer gives at hire and updates by January 1
+	each year (ORS 652.610(5), 2025 c.235): pay period and payday, every kind of pay rate, every deduction and
+	benefit contribution, and every payroll code with its meaning. English, then Spanish (tú)."""
+	require()
+	info = dict(info or {})
+	employer = dict(info.get("employer") or {})
+	name = _first(info.get("employee_name"), info.get("employee"), "employee")
+	sheet = _Sheet("Earnings Explanation", f"Explanation of earnings and deductions - {name}",
+	               "Explanation of earnings and deductions (ORS 652.610(5))",
+	               header_note="Explanation of earnings and deductions", page_label="Explanation", footer=FOOTER)
+	sheet.masthead("Explanation of Earnings and Deductions", _first(employer.get("name")), _clean(info.get("issued") or ""))
+	who = [f"Employee: {name}", f"Employer: {_first(employer.get('name'))}"]
+	for key, label in (("address", "Address"), ("phone", "Phone"), ("ein", "Employer ID (FEIN)")):
+		if _clean(employer.get(key) or ""):
+			who.append(f"{label}: {_clean(employer[key])}")
+	for line in who:
+		sheet.paragraph(line)
+	for lang in ("en", "es"):
+		es = lang == "es"
+		sheet.heading("Tu pago" if es else "Your pay")
+		sheet.paragraph((f"Periodo de pago: {info.get('pay_frequency_es') or info.get('pay_frequency')}. "
+		                 f"Día de pago: {info.get('payday_es') or info.get('payday')}.") if es else
+		                (f"Pay period: {info.get('pay_frequency')}. Payday: {info.get('payday')}."))
+		sheet.paragraph(info.get("rates_es" if es else "rates") or "")
+		sheet.paragraph(info.get("overtime_es" if es else "overtime") or "")
+		sheet.heading("Descuentos y contribuciones" if es else "Deductions and benefit contributions")
+		for line in info.get("deductions_es" if es else "deductions") or []:
+			sheet.paragraph(f"• {line}")
+		sheet.heading("Lo que significa cada línea de tu talón de pago" if es else "What each line on your pay statement means")
+		for en_label, en_text, es_label, es_text in STUB_CODES:
+			sheet.paragraph(f"{es_label}: {es_text}" if es else f"{en_label}: {en_text}")
+	sheet.paragraph(info.get("updated_note") or "")
+	payload = sheet.render()
+	if not payload.startswith(b"%PDF"):  # pragma: no cover - defensive
+		raise ValueError("drawing the explanation did not produce a PDF.")
+	return payload
