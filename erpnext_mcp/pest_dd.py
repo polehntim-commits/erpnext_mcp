@@ -49,18 +49,44 @@ DEFAULT_PHENOLOGY = {
 	"crops": {
 		"sweet cherry": {
 			"crop": "Sweet Cherry", "aliases": ["cherry", "cherries", "sweet cherries", "prunus avium"],
-			"base_f": 40.1, "base_c": 4.5, "cutoff_f": 86.0,
-			"citation": "Sweet cherry cultivar degree-day studies, lower threshold 4.5 °C (ISHS Acta Horticulturae "
-			            "1020_29).",
-			"alternates": [{"base_f": 41.0, "use": "to match the WSU / uspest.org cherry degree-day maps"}],
-			"calibrate": "against the block's own harvest windows (propose_harvest_calibration)",
-			#: v0.303.0. The stage table lives here now (config, published by a person), not in a Settings text box.
-			#: Empty until spring 2027 observations calibrate it (docs/design/cherry_dd_stage_table_proposal.md):
-			#: [[BBCH, °F·days from the biofix], …], rising.
+			#: v0.310.0 (Tim, 2026-10-10): the DEFAULT method is March 1 at 2 °C (OSU 2014). The row's own base and
+			#: biofix mirror it, so a reader that knows nothing of methods still counts the default.
+			"base_f": 35.6, "base_c": 2.0, "cutoff_f": 86.0, "biofix": "03-01",
+			"citation": "Kaiser, C., Coop, L. & Meland, M. (Oregon State University, 2014): sweet cherry phenology "
+			            "from March 1, base 2 °C; 'Van' full bloom at 254 °C·day.",
+			"calibrate": "against the block's own bloom and harvest dates (propose_harvest_calibration)",
+			#: [[BBCH, °F·days from the biofix], …], rising — for every variety on the default method. Empty: the
+			#: per-variety tables below carry what is published.
 			"stages": [],
-			#: Month-day the count starts for this crop; blank = the site's Degree-Day Biofix setting. The proposal
-			#: recommends 03-01 for sweet cherry — Tim's call, so it is not set here.
-			"biofix": None,
+			#: v0.310.0. How the count is set up, by name. A block's method is `by_block`, else its variety's
+			#: `by_variety`, else `default_method`; every answer says which it used.
+			"default_method": "mar1_2c",
+			"methods": {
+				"mar1_2c": {
+					"biofix": "03-01", "base_c": 2.0, "base_f": 35.6,
+					"citation": "Kaiser, Coop & Meland, OSU 2014 — March 1, base 2 °C; 'Van' full bloom at 254 GDD "
+					            "(°C·day).",
+					#: 'Van' full bloom: 254 °C·day = 457.2 °F·day (this app counts °F·day).
+					"stages_by_variety": {"Van": [["65", 457.2]]},
+				},
+				"jan1_4_4c": {
+					"biofix": "01-01", "base_c": 4.4, "base_f": 40.0,
+					"citation": "Alternate: January 1, base 4.4 °C / 40 °F (the common sweet cherry GDD base).",
+				},
+				"after_chill": {
+					"biofix": "chill", "base_c": 4.4, "base_f": 40.0, "chill_start": "11-01",
+					"chill_hours_required": 1000,
+					"chill_model": "chill hours between 32 and 45 °F, estimated from each day's high and low",
+					"citation": "Alternate: the count starts the day the variety's chill requirement is met. The "
+					            "requirement varies by variety (roughly 800–1,200 h) — set it per variety and "
+					            "calibrate.",
+				},
+			},
+			#: {variety: method} and {Field: method}, e.g. {"Van": "mar1_2c"}, {"Block 7 - MC": "after_chill"}.
+			"by_variety": {},
+			"by_block": {},
+			#: {variety: hours} for after_chill.
+			"chill_hours_by_variety": {},
 		},
 	},
 	"default": {"base_f": 50.0, "cutoff_f": 86.0,
@@ -224,14 +250,51 @@ def _validate_phenology(body: dict, errors: list, warnings: list) -> None:
 				errors.append(f"{name}: stage °F·days must rise ({bbch} at {dd:g}).")
 			last = dd
 		biofix = row.get("biofix")
-		if biofix not in (None, ""):
+		if biofix not in (None, "") and not _month_day(biofix):
+			errors.append(f"{name}: biofix is a month-day like 03-01.")
+		# v0.310.0. Named methods, and which blocks / varieties use which.
+		methods = row.get("methods") or {}
+		for method_name, method in methods.items():
+			where = f"{name}.methods.{method_name}"
+			if not isinstance(method, dict):
+				errors.append(f"{where}: a method is an object.")
+				continue
 			try:
-				import datetime as _dt
+				m_base = float(method.get("base_f"))
+			except (TypeError, ValueError):
+				errors.append(f"{where}: base_f (°F) is required.")
+				continue
+			if method.get("base_c") not in (None, "") and abs(float(method["base_c"]) * 1.8 + 32 - m_base) > 0.2:
+				errors.append(f"{where}: base_c {method['base_c']} °C is not base_f {m_base:g} °F.")
+			if "cherr" in label and m_base >= 45.0:
+				errors.append(f"{where}: {m_base:g} °F is an insect / generic base, not a cherry phenology base.")
+			fix = method.get("biofix")
+			if fix == "chill":
+				if float(method.get("chill_hours_required") or 0) <= 0:
+					errors.append(f"{where}: a chill biofix needs chill_hours_required.")
+				if not _month_day(method.get("chill_start") or "11-01"):
+					errors.append(f"{where}: chill_start is a month-day like 11-01.")
+			elif not _month_day(fix):
+				errors.append(f"{where}: biofix is a month-day like 03-01, or 'chill'.")
+			if not method.get("citation"):
+				warnings.append(f"{where}: no citation.")
+		if methods and row.get("default_method") not in methods:
+			errors.append(f"{name}: default_method must name one of its methods ({', '.join(methods)}).")
+		for mapping in ("by_variety", "by_block"):
+			for who, method_name in (row.get(mapping) or {}).items():
+				if method_name not in methods:
+					errors.append(f"{name}.{mapping}.{who}: {method_name!r} is not one of its methods.")
 
-				month, day = (int(x) for x in str(biofix).split("-")[:2])
-				_dt.date(2001, month, day)
-			except ValueError:
-				errors.append(f"{name}: biofix is a month-day like 03-01.")
+
+def _month_day(value) -> bool:
+	import datetime as _dt
+
+	try:
+		month, day = (int(x) for x in str(value).split("-")[:2])
+		_dt.date(2001, month, day)
+		return True
+	except ValueError:
+		return False
 
 
 def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:

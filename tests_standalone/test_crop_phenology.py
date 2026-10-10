@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: MIT
 """Crop phenology bases, per crop, as config. v0.297.0 (Tim, 2026-10-09).
 
-Sweet cherry phenology uses 4.5 °C ≈ 40.1 °F (ISHS Acta Horticulturae 1020_29), switchable to 41 °F (WSU / uspest
-maps); the 50 °F base is never applied to cherry phenology; pest models keep their own published bases.
+v0.310.0 (supersedes the 40.1 °F default): sweet cherry phenology defaults to March 1 at 2 °C (Kaiser, Coop & Meland,
+OSU 2014), with Jan 1 at 4.4 °C / 40 °F and after-chill as alternate methods per variety or block; the 50 °F base is
+never applied to cherry phenology; pest models keep their own published bases.
 """
 
 from unittest import mock
@@ -14,14 +15,14 @@ from .test_degree_days import DegreeDayTestCase
 
 
 class TheSeed(DegreeDayTestCase):
-	def test_sweet_cherry_is_four_point_five_celsius(self):
+	def test_sweet_cherry_is_march_first_at_two_celsius(self):
 		entry = degree_days.crop_entry("Sweet Cherry")
-		self.assertEqual(entry["base"], 40.1)
-		self.assertIn("1020_29", entry["base_source"])
-		self.assertEqual(entry["alternates"][0]["base_f"], 41.0)
+		self.assertEqual((entry["base"], entry["biofix"]), (35.6, "03-01"))
+		self.assertIn("Kaiser, Coop & Meland", entry["base_source"])
+		self.assertEqual((entry["method"]["name"], entry["method"]["chosen_by"]), ("mar1_2c", "default"))
 
 	def test_by_alias(self):
-		self.assertEqual(degree_days.crop_entry("cherries")["base"], 40.1)
+		self.assertEqual(degree_days.crop_entry("cherries")["base"], 35.6)
 
 	def test_other_crops_keep_the_default(self):
 		self.assertEqual(degree_days.crop_entry("Apple")["base"], 50.0)
@@ -29,7 +30,7 @@ class TheSeed(DegreeDayTestCase):
 	def test_a_fifty_degree_table_line_is_not_applied_to_cherry(self):
 		self.configure(degree_day_stage_table="Sweet Cherry: base = 50\nSweet Cherry: 51 = 100")
 		entry = degree_days.crop_entry("Sweet Cherry")
-		self.assertEqual(entry["base"], 40.1)
+		self.assertEqual(entry["base"], 35.6)
 		self.assertIn("not used", entry["base_note"])
 		self.assertEqual(entry["stages"], [(100.0, "51")], "the table still supplies the stages")
 
@@ -37,17 +38,19 @@ class TheSeed(DegreeDayTestCase):
 		self.configure(degree_day_stage_table="Pear: base = 43")
 		self.assertEqual(degree_days.crop_entry("Pear")["base"], 43.0)
 
-	def test_switching_to_the_wsu_map_threshold_is_config(self):
+	def test_switching_to_the_january_method_is_config(self):
 		body = {**pest_dd.DEFAULT_PHENOLOGY,
-		        "crops": {"sweet cherry": {**pest_dd.DEFAULT_PHENOLOGY["crops"]["sweet cherry"], "base_f": 41.0,
-		                                   "base_c": None}}}
+		        "crops": {"sweet cherry": {**pest_dd.DEFAULT_PHENOLOGY["crops"]["sweet cherry"],
+		                                   "default_method": "jan1_4_4c"}}}
 		with pest_dd.overlay(pest_dd.PHENOLOGY_KEY, body):
-			self.assertEqual(degree_days.crop_entry("Sweet Cherry")["base"], 41.0)
+			entry = degree_days.crop_entry("Sweet Cherry")
+		self.assertEqual((entry["base"], entry["biofix"]), (40.0, "01-01"))
 
 	def test_the_block_reports_its_base(self):
 		data = self.tool_data("get_degree_days", {"block": "B7", "crop": "Sweet Cherry"})
-		self.assertEqual(data["base_f"], 40.1)
-		self.assertAlmostEqual(degree_days.gdd(70, 40, 40.1, 86), 14.95)
+		self.assertEqual(data["base_f"], 35.6)
+		self.assertEqual(data["method"]["name"], "mar1_2c")
+		self.assertAlmostEqual(degree_days.gdd(70, 40, 35.6, 86), 19.4)
 
 
 class TheGuard(DegreeDayTestCase):
@@ -68,16 +71,16 @@ class TheGuard(DegreeDayTestCase):
 	def test_pest_models_keep_their_own_bases(self):
 		models, _version = pest_dd.models()
 		self.assertTrue(models)
-		self.assertNotIn(40.1, {float(m["base_f"]) for m in models.values()})
+		self.assertNotIn(35.6, {float(m["base_f"]) for m in models.values()})
 
 	def test_preview_shows_the_base_now_and_drafted(self):
 		STORE.seed("Field", [{"name": "B8", "field_name": "B8"}])
 		body = {**pest_dd.DEFAULT_PHENOLOGY,
-		        "crops": {"sweet cherry": {**pest_dd.DEFAULT_PHENOLOGY["crops"]["sweet cherry"], "base_f": 41.0,
-		                                   "base_c": None}}}
+		        "crops": {"sweet cherry": {**pest_dd.DEFAULT_PHENOLOGY["crops"]["sweet cherry"],
+		                                   "default_method": "jan1_4_4c"}}}
 		with mock.patch.object(degree_days, "_crop_of", return_value="Sweet Cherry"):
 			got = pest_dd.preview(pest_dd.PHENOLOGY_KEY, body, ["B8"])
-		self.assertEqual((got["blocks"][0]["base_now"], got["blocks"][0]["base_draft"]), (40.1, 41.0))
+		self.assertEqual((got["blocks"][0]["base_now"], got["blocks"][0]["base_draft"]), (35.6, 40.0))
 
 
 class TheStageTableIsConfig(DegreeDayTestCase):

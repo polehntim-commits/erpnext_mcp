@@ -87,7 +87,19 @@ def phenology_row(crop: str) -> tuple:
 	return dict(body.get("default") or {"base_f": DEFAULT_BASE_F, "cutoff_f": DEFAULT_CUTOFF_F}), version
 
 
-def crop_entry(crop: str) -> dict:
+def method_for(row: dict, variety: str = "", block: str = "") -> tuple:
+	"""v0.310.0. (name, method) for a block: `by_block`, else the variety's `by_variety`, else `default_method`.
+	({}, "") where the row has no methods."""
+	methods = row.get("methods") or {}
+	if not methods:
+		return "", {}
+	by_variety = {str(k).casefold(): v for k, v in (row.get("by_variety") or {}).items()}
+	name = ((row.get("by_block") or {}).get(block) or by_variety.get(str(variety or "").casefold())
+	        or row.get("default_method") or next(iter(methods)))
+	return name, dict(methods.get(name) or {})
+
+
+def crop_entry(crop: str, variety: str = "", block: str = "") -> dict:
 	"""The crop's base, cutoff and stage table. v0.297.0: the BASE comes from the `crop_phenology` setting (per crop,
 	config not code — sweet cherry 40.1 °F); the Degree-Day Stage Table supplies the stages, and its `base =` line
 	only for a crop the setting has no row for."""
@@ -119,7 +131,54 @@ def crop_entry(crop: str) -> dict:
 	elif entry.get("stages"):
 		entry["stages_source"] = "Degree-Day Stage Table (ERPNext MCP Settings)"
 	entry["biofix"] = row.get("biofix") or None
+	# v0.310.0. The method for this block / variety sets the base, the biofix and the stages, and is reported.
+	name, method = method_for(row, variety, block)
+	if method:
+		entry["base"] = float(method.get("base_f", entry["base"]))
+		entry["biofix"] = method.get("biofix") or entry["biofix"]
+		entry["base_source"] = f"crop_phenology {version}, method {name}: {method.get('citation') or ''}".strip()
+		by_variety = {str(k).casefold(): v for k, v in (method.get("stages_by_variety") or {}).items()}
+		own = by_variety.get(str(variety or "").casefold())
+		if own:
+			entry["stages"] = sorted((float(dd), str(bbch).zfill(2)) for bbch, dd in own)
+			entry["stages_source"] = f"crop_phenology {version}, method {name}, variety {variety}"
+		chill = None
+		if method.get("biofix") == "chill":
+			hours = (row.get("chill_hours_by_variety") or {}).get(variety) or method.get("chill_hours_required")
+			chill = {"start": method.get("chill_start") or "11-01", "hours_required": float(hours or 0),
+			         "model": method.get("chill_model")}
+		entry["method"] = {"name": name, "biofix": method.get("biofix"), "base_f": float(method.get("base_f")),
+		                   "base_c": method.get("base_c"), "citation": method.get("citation"),
+		                   "chosen_by": ("block" if (row.get("by_block") or {}).get(block) else
+		                                 "variety" if str(variety or "").casefold() in
+		                                 {str(k).casefold() for k in (row.get("by_variety") or {})} else "default"),
+		                   **({"chill": chill} if chill else {})}
 	return entry
+
+
+def chill_hours(high, low, lower: float = 32.0, upper: float = 45.0) -> float:
+	"""v0.310.0. Hours of one day between `lower` and `upper` °F, estimated from its high and low (a linear day)."""
+	if high is None or low is None:
+		return 0.0
+	high, low = float(high), float(low)
+	if high <= low:
+		return 24.0 if lower < high <= upper else 0.0
+	inside = max(0.0, min(high, upper) - max(low, lower))
+	return 24.0 * inside / (high - low)
+
+
+def chill_biofix(temps: dict, start: datetime.date, required: float) -> tuple:
+	"""v0.310.0. (the day the chill requirement was met, hours counted) — (None, hours) while it is not yet met."""
+	total = 0.0
+	for day in sorted(temps):
+		date = datetime.date.fromisoformat(day)
+		if date < start:
+			continue
+		high, low = temps[day]
+		total += chill_hours(high, low)
+		if total >= required:
+			return date + datetime.timedelta(days=1), round(total, 1)
+	return None, round(total, 1)
 
 
 def gdd(high, low, base: float, cutoff: float) -> float:
@@ -233,14 +292,35 @@ def for_block(block: str, crop: str = "", as_of: str = "") -> dict:
 		return {"block": block, "available": False, "note": "block forecasts are off (Weather Settings)."}
 	today = datetime.date.fromisoformat(str(as_of)[:10]) if as_of else _today()
 	crop = crop or _crop_of(block)
-	entry = crop_entry(crop)
-	start = biofix(today.year, entry.get("biofix"))
+	variety = _variety_of(block)
+	entry = crop_entry(crop, variety, block)
+	chill = (entry.get("method") or {}).get("chill")
+	if chill:
+		# v0.310.0. After chill satisfaction: count chill from the autumn before, then degree days from the day after.
+		season_year = today.year if today >= datetime.date(today.year, 9, 1) else today.year - 1
+		month, day = (int(x) for x in chill["start"].split("-")[:2])
+		chill_from = datetime.date(season_year if month >= 7 else season_year + 1, month, day)
+		chill_temps = daily_temps(point[0], point[1], chill_from, today)
+		met, counted = chill_biofix(chill_temps, chill_from, chill["hours_required"])
+		chill.update({"counted_from": chill_from.isoformat(), "hours_counted": counted,
+		              "met_on": met.isoformat() if met else None})
+		if not met:
+			return {"block": block, "available": True, "crop": crop or None, "variety": variety or None,
+			        "method": entry["method"], "biofix": None, "gdd_season": 0.0, "estimated_bbch": None,
+			        "note": f"chill requirement not yet met ({counted:g} of {chill['hours_required']:g} h) — the "
+			                "degree-day count has not started.", "series": []}
+		start = met
+	else:
+		start = biofix(today.year, entry.get("biofix"))
 	temps = daily_temps(point[0], point[1], start, today + datetime.timedelta(days=16))
 	acc = accumulate(temps, start, today, entry["base"], entry["cutoff"])
 	return {
 		"block": block,
 		"available": True,
 		"crop": crop or None,
+		"variety": variety or None,
+		# v0.310.0. The method each answer was computed with — biofix rule, base, citation, what chose it.
+		**({"method": entry["method"]} if entry.get("method") else {}),
 		"biofix": start.isoformat(),
 		"base_f": entry["base"],
 		"base_source": entry.get("base_source"),
@@ -254,6 +334,13 @@ def for_block(block: str, crop: str = "", as_of: str = "") -> dict:
 		**estimate(entry, acc["season"], acc["ahead"]),
 		"series": acc["series"],
 	}
+
+
+def _variety_of(block: str) -> str:
+	"""v0.310.0. The block's (primary) variety, for the per-variety phenology method."""
+	if compat.has_field("Field", "variety"):
+		return str(frappe.db.get_value("Field", block, "variety") or "")
+	return ""
 
 
 def _crop_of(block: str) -> str:

@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.310.0 — 2026-10-10 — cherry phenology methods per variety and block
+
+**No migrate.** Deploy `docs/deploy/v0.310.0_cherry_phenology_methods.md`. Tools: **1,142 → 1,142**.
+
+- **Default** (supersedes the 40 °F phenology default): sweet cherry counts from March 1 at 2 °C (35.6 °F) —
+  Kaiser, Coop & Meland, OSU 2014. 'Van' full bloom is at 254 °C·day.
+- **Alternates:** January 1 at 4.4 °C / 40 °F, and starting after the chill requirement is met (chill hours
+  estimated from daily highs and lows).
+- **Choosing:** the method is chosen per block (`by_block`) or variety (`by_variety`), and every answer carries it.
+  Pest models keep their own bases.
+- Tests: `test_cherry_phenology_methods`. `test_crop_phenology` is updated to the new default.
+
 ## 0.309.0 — 2026-10-10 — bonuses in the regular rate, overtime thresholds and the federal trap
 
 **No migrate.** Deploy `docs/deploy/v0.309.0_regular_rate_compliance.md`. Tools: **1,142 → 1,142**.
