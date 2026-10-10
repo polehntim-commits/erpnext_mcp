@@ -372,6 +372,21 @@ SIGNATURE_BOXES = (
 			"knowledge and belief, is true, correct, and complete."
 		),
 	),
+	# v0.300.0. ORS 652.610(3): the worker's written authorization for a voluntary deduction.
+	SignatureBox(
+		doctype="Farm Payroll Deduction",
+		field="authorization_signature",
+		label="Deduction authorization (employee signature)",
+		signed_at_field="authorization_signed_at",
+		signed_ip_field="authorization_signed_ip",
+		signer_role="employee",
+		form_label="Authorization to deduct from wages (ORS 652.610(3))",
+		section_label="Employee authorization",
+		attestation=(
+			"I authorize my employer to deduct the amount shown from my wages for the purpose shown. This deduction is "
+			"voluntary and for my benefit, and I may revoke it in writing."
+		),
+	),
 	# v0.294.0. Form OR-W-4 carries its own signature and date — the federal box above is a different form's.
 	SignatureBox(
 		doctype=W4_FORM,
@@ -612,7 +627,25 @@ UNSIGNED_REASONS = {
 #: take the aliases their own tools take and each already says the right thing
 #: when nothing resolves; a fourth reading of "which W-4" written here would be a
 #: fourth place for it to mean something slightly different.
+def _deduction_name(args: dict) -> str:
+	"""v0.300.0. A Farm Payroll Deduction by docname."""
+	name = as_str(args, "name") or as_str(args, "deduction")
+	if not name or not frappe.db.exists("Farm Payroll Deduction", name):
+		raise ToolError(f"no Farm Payroll Deduction called {name!r}. Nothing was changed.")
+	return name
+
+
+def _no_render(name: str):
+	raise ToolError("a deduction authorization has no generated PDF — the signature and its evidence are the record.")
+
+
 FORM_HANDLERS = {
+	"Farm Payroll Deduction": {
+		"resolve": _deduction_name,
+		"render": _no_render,
+		"pdf_field": "authorization_pdf",
+		"renderer": "(none)",
+	},
 	I9_FORM: {
 		"resolve": lambda args: i9._resolve_form(args),
 		"render": lambda name: i9.render_i9_pdf({"i9_form": name, "overwrite": True}),

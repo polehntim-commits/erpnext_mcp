@@ -227,6 +227,7 @@ def after_migrate() -> None:
 	_business_card_fields()
 	_payroll_settings_seed()
 	_pay_policy_state_floor_draft()
+	_final_pay_fields()
 	_daily_pay_fields()
 	_task_due_rule()
 	_daily_check_templates()
@@ -739,6 +740,15 @@ def _reporting_templates() -> None:
 		print(
 			f"erpnext_mcp: {len(report['failed'])} reporting template(s) could not be seeded: {report['failed']}"
 		)
+
+
+def _final_pay_fields() -> None:
+	"""v0.300.0. Employee.separation_reason / seasonal_farmworker / final_paid_on (ORS 652.140 / 652.145)."""
+	from . import final_pay
+
+	made = final_pay.install_fields()
+	if made:
+		print(f"erpnext_mcp: final-pay fields added: {', '.join(made)}.")
 
 
 def _pay_policy_state_floor_draft() -> None:

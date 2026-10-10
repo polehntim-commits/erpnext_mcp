@@ -362,6 +362,10 @@ WRITABLE = (
 	*COMPLIANCE_FIELDS,
 )
 
+#: v0.300.0. Written by `update_employee` only — never at hire: when they left, why, whether they were a seasonal
+#: farmworker, and when final wages were paid. Together they set the final-pay deadline (ORS 652.140 / 652.145).
+UPDATE_ONLY = ("relieving_date", "separation_reason", "seasonal_farmworker", "final_paid_on")
+
 #: Fields refused with their own sentence rather than the generic one. Not a
 #: security boundary — everything outside `WRITABLE` is refused either way — but
 #: the message is the difference between a caller who understands why and a caller
@@ -1159,7 +1163,7 @@ def update_employee(args: dict) -> ToolResult:
 	compat.require_doctype(EMPLOYEE, "It comes with the Frappe HR (hrms) app.")
 	_reject_unknown(
 		args,
-		WRITABLE,
+		(*WRITABLE, *UPDATE_ONLY),
 		reserved=("name", "employee", "allow_unenrolled_user", "replace_user", "allow_duplicate_name"),
 	)
 	return _apply_employee_update(args, require_hr_role())
@@ -1217,18 +1221,18 @@ def _apply_employee_update(args: dict, actor: str) -> ToolResult:
 		frappe.db.get_value(
 			EMPLOYEE,
 			name,
-			compat.existing_fields(EMPLOYEE, ["employee_name", "company", "user_id", *WRITABLE]),
+			compat.existing_fields(EMPLOYEE, ["employee_name", "company", "user_id", *WRITABLE, *UPDATE_ONLY]),
 			as_dict=True,
 		)
 		or {}
 	)
 	require_company_scope(actor, str(current.get("company") or ""))
 
-	wanted = {key: args[key] for key in WRITABLE if key in args}
+	wanted = {key: args[key] for key in (*WRITABLE, *UPDATE_ONLY) if key in args}
 	if not wanted:
 		raise ToolError(
 			"update_employee was given nothing to change. Pass at least one of: "
-			f"{', '.join(WRITABLE)}. Nothing was changed."
+			f"{', '.join((*WRITABLE, *UPDATE_ONLY))}. Nothing was changed."
 		)
 
 	if "company" in wanted:

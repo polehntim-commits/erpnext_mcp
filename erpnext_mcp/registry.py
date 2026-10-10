@@ -13792,6 +13792,10 @@ TOOLS = {
 			"allow_unenrolled_user": _field(
 				_BOOLEAN, "Accept a user_id with no Farm Ops role or grant yet. Default false."
 			),
+			"relieving_date": _field(_STRING, "v0.300.0. Last day worked (YYYY-MM-DD) — starts the final-pay deadline."),
+			"separation_reason": _field(_STRING, "v0.300.0. Discharged, Mutual agreement, Quit with 48+ hours notice, Quit without notice, or End of season (ORS 652.140)."),
+			"seasonal_farmworker": _field(_BOOLEAN, "v0.300.0. Seasonal farmworker: final pay due immediately (ORS 652.145)."),
+			"final_paid_on": _field(_STRING, "v0.300.0. Date final wages were paid; clears the payroll-calendar deadline."),
 		},
 		required=(),
 		mutating=True,
@@ -33953,6 +33957,8 @@ TOOLS = {
 				_STRING, "What this line is called on a pay stub. Blank uses the category's name."
 			),
 			"notes": _field(_STRING, "Anything the fields cannot hold."),
+			"legal_authority": _field(_STRING, "v0.300.0. Required by law, Employee written authorization, or Collective bargaining agreement (ORS 652.610(3)). Court orders default to Required by law; an election without written authorization is not taken."),
+			"authorized_on": _field(_STRING, "v0.300.0. Date the worker signed the written authorization."),
 		},
 		required=("employee", "deduction_category", "amount"),
 		mutating=True,
@@ -33997,6 +34003,8 @@ TOOLS = {
 			"exempt_amount": _field(_NUMBER, "Tax levy only. Publication 1494 exempt amount."),
 			"label": _field(_STRING, "Pay stub label."),
 			"notes": _field(_STRING, "Anything the fields cannot hold."),
+			"legal_authority": _field(_STRING, "v0.300.0. Required by law, Employee written authorization, or Collective bargaining agreement (ORS 652.610(3)). Court orders default to Required by law; an election without written authorization is not taken."),
+			"authorized_on": _field(_STRING, "v0.300.0. Date the worker signed the written authorization."),
 		},
 		required=("deduction",),
 		mutating=True,

@@ -81,6 +81,11 @@ _DEDUCTION_FIELDS = (
 	"arrears_opening",
 	"arrears_per_period",
 	"consumer_debt",
+	# v0.300.0. ORS 652.610(3): the authority for taking it, and the worker's written authorization.
+	"legal_authority",
+	"authorized_on",
+	"authorization_document",
+	"authorization_signature",
 )
 EMPLOYEE = "Employee"
 W4_FORM = "W-4 Form"
@@ -1363,6 +1368,14 @@ def _period_run_at(args: dict, creating: bool) -> tuple[dict, list[dict], dict]:
 	pay_frequency = as_str(args, "pay_frequency") or "Biweekly"
 	if pay_frequency not in PERIODS_PER_YEAR:
 		raise ToolError(f"pay_frequency must be one of: {', '.join(PERIODS_PER_YEAR)}.")
+	# v0.300.0. ORS 652.120: "Payday may not extend beyond a period of 35 days."
+	import datetime as _dt
+
+	span = (_dt.date.fromisoformat(str(end)[:10]) - _dt.date.fromisoformat(str(start)[:10])).days + 1
+	if span > 35:
+		raise ToolError(f"{start} to {end} is {span} days; Oregon requires a payday at least every "
+		                f"35 days (ORS 652.120). Split it into shorter periods. Nothing was "
+		                f"{'created' if creating else 'calculated'}.")
 	# v0.288.0. Daily pay (docs/design/daily_pay.md): a Daily run is one day for the workers on daily pay; a Regular
 	# run leaves those workers out while daily pay is on for the company.
 	from .. import daily_pay
@@ -3273,6 +3286,18 @@ def _load_deductions(
 		limit=10000,
 	)
 	live = [row for row in rows if payroll_deductions.is_active(row, on_date)]
+	# v0.300.0. ORS 652.610(3): a voluntary deduction without the worker's written authorization is not taken.
+	unauthorized = []
+	if compat.has_field(PAYROLL_DEDUCTION, "legal_authority"):
+		kept = []
+		for row in live:
+			why = payroll_deductions.authorization_missing(row)
+			if why:
+				unauthorized.append({"deduction": row.get("name"), "employee": row.get("employee"),
+				                     "label": payroll_deductions.row_label(row), "reason": why})
+			else:
+				kept.append(row)
+		live = kept
 
 	from .. import garnishment_ledger
 
@@ -3288,6 +3313,7 @@ def _load_deductions(
 		"employees": sorted(by_employee),
 		"garnishment_count": len([row for row in live if payroll_deductions.row_type(row) == "garnishment"]),
 		"voluntary_count": len([row for row in live if payroll_deductions.row_type(row) == "voluntary"]),
+		"not_taken_unauthorized": unauthorized,
 	}
 
 

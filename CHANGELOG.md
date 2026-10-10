@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.300.0 — 2026-10-10 — deductions, paydays and final pay, per Oregon law
+
+**Migrate**: Farm Payroll Deduction gains its authority and authorization fields; Employee gains separation and
+final-pay fields. Deploy `docs/deploy/v0.300.0_boli_deductions_final_pay.md`. Tools: **1,142 → 1,142**.
+
+- **ORS 652.610(3), deductions:** a voluntary deduction needs the worker's signed written authorization (a new
+  signature box, or a scanned form) or a collective bargaining agreement. Otherwise it isn't taken and the run says
+  why. Court orders default to "Required by law".
+- **ORS 652.120, paydays:** pay periods over 35 days are refused.
+- **ORS 652.140 / 652.145, final pay:** deadlines from the last day and the separation reason appear on the payroll
+  calendar until final pay is recorded. Seasonal farmworkers are paid immediately.
+- Tests: `test_boli_deductions_final_pay`.
+
 ## 0.299.0 — 2026-10-10 — pay statements and the written pay explanation, per Oregon law
 
 **Migrate**: Farm Payroll Entry gains `pay_date`. Deploy `docs/deploy/v0.299.0_boli_pay_statements.md`. Tools:

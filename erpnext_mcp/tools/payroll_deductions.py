@@ -63,6 +63,9 @@ _WRITABLE = (
 	"arrears_opening",
 	"arrears_per_period",
 	"consumer_debt",
+	# v0.300.0. ORS 652.610(3): the authority for the deduction and the date the worker signed for it.
+	"legal_authority",
+	"authorized_on",
 	"effective_from",
 	"effective_to",
 	"reference",
@@ -73,7 +76,7 @@ _WRITABLE = (
 #: The Selects, and the field each one is validated against. `as_choice` matches
 #: case-insensitively and hands back the site's own casing, so what is stored is
 #: what a list-view filter will look for.
-_SELECTS = ("deduction_type", "deduction_category", "status", "amount_type", "basis")
+_SELECTS = ("deduction_type", "deduction_category", "status", "amount_type", "basis", "legal_authority")
 
 #: The Checks. Kept apart because a Check that was never passed has to stay
 #: unset rather than become 0 — the engine reads "unset" as "follow the
@@ -102,6 +105,10 @@ _FIELDS = (
 	"arrears_per_period",
 	"consumer_debt",
 	"arrears_balance",
+	"legal_authority",
+	"authorized_on",
+	"authorization_document",
+	"authorization_signature",
 	"effective_from",
 	"effective_to",
 	"reference",
@@ -628,7 +635,7 @@ def _apply(doc, args: dict, creating: bool) -> list[str]:
 			if value is None:
 				continue
 			doc.set(field, 1 if value else 0)
-		elif field in ("effective_from", "effective_to"):
+		elif field in ("effective_from", "effective_to", "authorized_on"):
 			doc.set(field, as_date(args, field))
 		elif field in ("amount", "max_per_period", "exempt_amount", "arrears_opening", "arrears_per_period"):
 			doc.set(field, as_float(args.get(field), field))
@@ -637,6 +644,11 @@ def _apply(doc, args: dict, creating: bool) -> list[str]:
 		else:
 			doc.set(field, as_str(args, field))
 		touched.append(field)
+
+	if creating and "legal_authority" not in touched and compat.has_field(PAYROLL_DEDUCTION, "legal_authority") \
+			and payroll_deductions.row_type({"deduction_type": doc.get("deduction_type"),
+			                                 "deduction_category": doc.get("deduction_category")}) == "garnishment":
+		doc.set("legal_authority", payroll_deductions.AUTHORITY_LAW)  # v0.300.0: a court order or levy
 
 	if creating:
 		# The defaults that make a row valid without asking a caller to restate

@@ -147,7 +147,13 @@ def items(companies: list) -> list:
 		for year in sorted(
 			{today.year - 1, today.year, (today + datetime.timedelta(days=HORIZON_DAYS)).year}
 		):
-			for row in _deposits(company, year) + _filings(company, year):
+			# v0.300.0. Final-pay deadlines (ORS 652.140 / 652.145) beside the tax dates.
+			from . import final_pay
+
+			rows = _deposits(company, year) + _filings(company, year)
+			if year == today.year:
+				rows += final_pay.calendar_rows(company, low, high)
+			for row in rows:
 				due = row["due_date"]
 				if not due or not low <= due <= high:
 					continue

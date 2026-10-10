@@ -838,6 +838,27 @@ def take_less(line: dict, take: float, reason: str) -> dict:
 	return line
 
 
+#: v0.300.0. ORS 652.610(3): what may lawfully come out of wages.
+AUTHORITY_LAW, AUTHORITY_WRITTEN, AUTHORITY_CBA = ("Required by law", "Employee written authorization",
+                                                   "Collective bargaining agreement")
+
+
+def authorization_missing(row: dict) -> str:
+	"""Why a deduction may NOT be taken, or "" (ORS 652.610(3)). Garnishments are required by law; an election needs
+	the worker's signed written authorization or a collective bargaining agreement."""
+	if row_type(row) == "garnishment":
+		return ""
+	authority = str(row.get("legal_authority") or "")
+	if authority in (AUTHORITY_LAW, AUTHORITY_CBA):
+		return ""
+	if row.get("authorization_signature") or row.get("authorization_document") or row.get("authorized_on"):
+		return ""
+	return ("no signed written authorization on file — ORS 652.610(3) allows a voluntary deduction only with the "
+	        "employee's written authorization (or a collective bargaining agreement). Collect it "
+	        "(collect_form_signature doctype='Farm Payroll Deduction' field='authorization_signature', or attach the "
+	        "signed form) and it is taken from the next run.")
+
+
 def apply_garnishments(
 	disposable: float,
 	rows: list[dict],
