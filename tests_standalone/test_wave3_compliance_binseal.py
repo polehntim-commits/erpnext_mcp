@@ -375,12 +375,14 @@ class WhoIsUnderEighteen(Wave3TestCase):
 
 # ── 2. item 15 (b): the break schedule a minor counts from ──────────────────
 class TheMinorBreakSchedule(Wave3TestCase):
-	def test_a_minor_is_owed_more_rests_than_an_adult_for_the_same_hours(self):
+	def test_a_minor_is_counted_off_the_minor_rows(self):
+		"""v0.302.0: the minor rows are BOLI's — 15-minute rests at the adult frequency (OAR 839-021-0072 in the
+		manner of 839-020-0050), so eight hours owe a minor two rests, not four."""
 		policy = dict(frappe.get_doc("Labor Break Policy", self.a_policy()).as_dict())
 		adult = breaks_mod.entitlement(8.0, policy, is_minor=False)
 		minor = breaks_mod.entitlement(8.0, policy, is_minor=True)
 		self.assertEqual(adult["rest_periods"], 1)
-		self.assertEqual(minor["rest_periods"], 4)
+		self.assertEqual(minor["rest_periods"], 2)
 		self.assertEqual(adult["schedule"], "adult")
 		self.assertEqual(minor["schedule"], "minor")
 
@@ -444,7 +446,7 @@ class TheMinorBreakSchedule(Wave3TestCase):
 		result = breaks_mod.crew_reconciliation(shift, crew, [], policy)
 		short = {row["employee"]: row for row in result["workers_short"]}
 		self.assertEqual(short[WORKER]["rest_owed"], 1)
-		self.assertEqual(short[MINOR]["rest_owed"], 4)
+		self.assertEqual(short[MINOR]["rest_owed"], 2)  # v0.302.0: BOLI's minor rows
 		self.assertEqual(short[MINOR]["schedule"], "minor")
 		self.assertEqual(result["minors_on_crew"], 1)
 

@@ -2209,11 +2209,16 @@ def get_break_policy(args: dict) -> ToolResult:
 		limit_page_length=1,
 	)
 	if not policies:
+		# v0.302.0. Point at the BOLI-based draft where the migrate left one.
+		draft = frappe.db.get_value(BREAK_POLICY_DOCTYPE, {"work_state": work_state or "OR", "enabled": 0}, "name")
 		return ToolResult(
 			data={
 				"policy": None,
 				"company": company,
-				"note": "No enabled break policy found for this state.",
+				"note": "No enabled break policy found for this state."
+				+ (f" {draft} holds BOLI's chart (OAR 839-020-0050) — approve and enable it in the Desk." if draft
+				   else ""),
+				"draft_policy": draft or None,
 			},
 			summary="no break policy found",
 		)
@@ -2289,9 +2294,9 @@ def _break_schedule_for(row: dict, planned_hours=None, now: str = "", employee: 
 	state's default" cannot print the sentence `BreakSchedule` prints.
 
 	`employee` NAMES WHOSE SCHEDULE THIS IS, and it is optional because most of
-	the time it is the crew's. A worker under eighteen is owed a rest every two
-	hours and a meal every four (OAR 839-021-0072), so their countdown is a
-	different set of instants from the crew's — and `BreakSchedule.compute(...,
+	the time it is the crew's. A worker under eighteen is owed a 15-minute rest
+	instead of 10 (OAR 839-021-0072; v0.302.0, per BOLI), so their countdown is a
+	different set of minutes from the crew's — and `BreakSchedule.compute(...,
 	isMinor:)` on the handset has computed exactly that locally since before
 	this endpoint existed. Naming them switches the tables and puts `is_minor`
 	on the answer, which is what the purple badge reads. Named nobody, the
@@ -2528,8 +2533,9 @@ def _describe_break_policy(row: dict) -> dict:
 		"minor_max_hours_without_rest": row.get("minor_max_hours_without_rest") or None,
 		"has_minor_schedule": bool(row.get("minor_rest_schedule") or row.get("minor_meal_schedule")),
 		"minor_note": (
-			"OAR 839-021-0072 — a worker under eighteen is owed a rest period every two hours "
-			"and a meal every four. `is_minor` is derived from `date_of_birth` on the crew "
+			"OAR 839-021-0072 — a worker under eighteen is owed a 15-minute rest period (an adult's "
+			"is 10) and a 30-minute meal, at the adult frequency of OAR 839-020-0050 (BOLI). "
+			"`is_minor` is derived from `date_of_birth` on the crew "
 			"roster and is stored nowhere; it is three-valued, and null means no date of birth "
 			"is on file rather than that somebody is an adult."
 		),

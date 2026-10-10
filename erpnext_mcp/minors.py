@@ -316,20 +316,32 @@ PROHIBITED_TASK_TYPES = {
 #: marked as unapproved, so the gap is visible on the handset and the operator
 #: has the rows to paste rather than a citation to go and read.
 #:
-#: A REST EVERY TWO HOURS AND A MEAL EVERY FOUR. The bands are cumulative in the
-#: same way the adult tables are — `breaks._best_band` picks the highest band a
-#: span reaches — so a nine-hour day owes four rests and two meals.
-MINOR_REST_SCHEDULE = (
-	{"hours_from": 2.0, "hours_to": 4.0, "periods_owed": 1, "minutes_each": 15, "paid": 1},
-	{"hours_from": 4.0, "hours_to": 6.0, "periods_owed": 2, "minutes_each": 15, "paid": 1},
-	{"hours_from": 6.0, "hours_to": 8.0, "periods_owed": 3, "minutes_each": 15, "paid": 1},
-	{"hours_from": 8.0, "hours_to": 10.0, "periods_owed": 4, "minutes_each": 15, "paid": 1},
+#: v0.302.0 (Tim, 2026-10-10: align with BOLI). CORRECTED: OAR 839-021-0072 owes a minor a rest period of not less
+#: than FIFTEEN minutes and a 30-minute meal "in the manner prescribed by OAR 839-020-0050" — the ADULT frequency,
+#: not a rest every two hours (BOLI: "Rest breaks for all minors are 15 minutes rather than 10"). So the minor tables
+#: are the adult BOLI chart with 15-minute rests.
+#:
+#: BOLI's chart (oregon.gov/boli/workers/Pages/meals-and-breaks.aspx; OAR 839-020-0050): a paid rest for each
+#: segment of four hours or major part thereof, a 30-minute unpaid meal from six hours (a second at 14, a third at 22).
+#: Bands start just past a boundary (2.01 h) because "2 hrs or less" owes none and exactly 6, 14 and 22 hours keep the
+#: lower rest count.
+OR_REST_SCHEDULE = (
+	{"hours_from": 2.01, "hours_to": 6.0, "periods_owed": 1, "minutes_each": 10, "paid": 1},
+	{"hours_from": 6.01, "hours_to": 10.0, "periods_owed": 2, "minutes_each": 10, "paid": 1},
+	{"hours_from": 10.01, "hours_to": 14.0, "periods_owed": 3, "minutes_each": 10, "paid": 1},
+	{"hours_from": 14.01, "hours_to": 18.0, "periods_owed": 4, "minutes_each": 10, "paid": 1},
+	{"hours_from": 18.01, "hours_to": 22.0, "periods_owed": 5, "minutes_each": 10, "paid": 1},
+	{"hours_from": 22.01, "hours_to": 24.0, "periods_owed": 6, "minutes_each": 10, "paid": 1},
 )
+OR_MEAL_SCHEDULE = (
+	{"hours_from": 6.0, "hours_to": 13.99, "periods_owed": 1, "minutes_each": 30, "paid": 0},
+	{"hours_from": 14.0, "hours_to": 21.99, "periods_owed": 2, "minutes_each": 30, "paid": 0},
+	{"hours_from": 22.0, "hours_to": 24.0, "periods_owed": 3, "minutes_each": 30, "paid": 0},
+)
+OR_SCHEDULE_CITATION = "OAR 839-020-0050; BOLI meals and breaks chart"
 
-MINOR_MEAL_SCHEDULE = (
-	{"hours_from": 4.0, "hours_to": 8.0, "periods_owed": 1, "minutes_each": 30, "paid": 0},
-	{"hours_from": 8.0, "hours_to": 12.0, "periods_owed": 2, "minutes_each": 30, "paid": 0},
-)
+MINOR_REST_SCHEDULE = tuple({**row, "minutes_each": 15} for row in OR_REST_SCHEDULE)
+MINOR_MEAL_SCHEDULE = tuple(dict(row) for row in OR_MEAL_SCHEDULE)
 
 #: The citation the two tables above come from, quoted wherever they are.
 MINOR_SCHEDULE_CITATION = "OAR 839-021-0072"

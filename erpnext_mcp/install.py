@@ -228,6 +228,7 @@ def after_migrate() -> None:
 	_payroll_settings_seed()
 	_pay_policy_state_floor_draft()
 	_final_pay_fields()
+	_oregon_break_policy_draft()
 	_daily_pay_fields()
 	_task_due_rule()
 	_daily_check_templates()
@@ -740,6 +741,34 @@ def _reporting_templates() -> None:
 		print(
 			f"erpnext_mcp: {len(report['failed'])} reporting template(s) could not be seeded: {report['failed']}"
 		)
+
+
+def _oregon_break_policy_draft() -> None:
+	"""v0.302.0. Where there is no Oregon break policy at all, BOLI's rest and meal chart (OAR 839-020-0050) and the
+	minor rows (OAR 839-021-0072: 15-minute rests), as a DISABLED, UNAPPROVED Labor Break Policy — a person checks it,
+	approves it and enables it. Never touches an existing policy; never raises."""
+	try:
+		from . import compat, minors
+
+		doctype = "Labor Break Policy"
+		if not compat.doctype_exists(doctype) or frappe.db.exists(doctype, {"work_state": "OR"}):
+			return
+		doc = frappe.get_doc({
+			"doctype": doctype, "policy_id": "OR-BOLI-2026", "work_state": "OR", "effective_from": "2026-01-01",
+			"enabled": 0, "regulation_citations": f"{minors.OR_SCHEDULE_CITATION}; OAR 839-021-0072 (minors)",
+			"rest_schedule": [dict(r) for r in minors.OR_REST_SCHEDULE],
+			"meal_schedule": [dict(r) for r in minors.OR_MEAL_SCHEDULE],
+			"minor_rest_schedule": [dict(r) for r in minors.MINOR_REST_SCHEDULE],
+			"minor_meal_schedule": [dict(r) for r in minors.MINOR_MEAL_SCHEDULE],
+			"notes": "Seeded by erpnext_mcp v0.302.0 from BOLI's chart (oregon.gov/boli/workers/Pages/"
+			         "meals-and-breaks.aspx). Not approved and not enabled: check it, approve it, enable it.",
+		})
+		doc.flags.ignore_permissions = True
+		doc.insert(ignore_permissions=True)
+		print(f"erpnext_mcp: Oregon break policy {doc.name} drafted from BOLI's chart (disabled) — approve and "
+		      "enable it in the Desk.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: the Oregon break policy draft was not created — {type(exc).__name__}: {exc}")
 
 
 def _final_pay_fields() -> None:

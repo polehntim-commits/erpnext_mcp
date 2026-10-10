@@ -77,9 +77,9 @@ def _schedule_rows(policy: dict, key: str) -> list[dict]:
 #: fifteen-year-old as fully rested on a policy nobody had finished filling in.
 #:
 #: OAR 839-021-0072 is why the rows differ at all: a minor is owed a rest period
-#: every TWO hours and a meal every FOUR, against four and six for an adult under
-#: OAR 839-020-0050. `install.py` seeds both bands onto the OR and WA policies,
-#: so an operator editing one is editing the band they meant to.
+#: a 15-minute rest (10 for an adult) at the same frequency as an adult under OAR 839-020-0050 —
+#: corrected in v0.302.0 (BOLI). v0.302.0: `install.py` seeds a DISABLED, UNAPPROVED Oregon
+#: policy carrying both bands from BOLI's chart, for a person to check and approve.
 MINOR_SCHEDULE_KEYS = {
 	"rest_schedule": "minor_rest_schedule",
 	"meal_schedule": "minor_meal_schedule",
@@ -537,9 +537,9 @@ def schedule(
 	the right time for its second.
 
 	`is_minor` PICKS THE TABLE AND NOTHING ELSE ABOUT THIS FUNCTION CHANGES.
-	OAR 839-021-0072 owes a worker under eighteen a rest every two hours and a
-	meal every four, against four and six for an adult — so a minor's countdown
-	is the same arithmetic over different bands, and `_schedule_key` falls back
+	OAR 839-021-0072 owes a worker under eighteen a 15-minute rest (an adult's is
+	10) at the adult frequency — corrected in v0.302.0 per BOLI — so a minor's
+	countdown is the same arithmetic over the minor rows, and `_schedule_key` falls back
 	to the adult table where a policy carries no minor rows. `schedule_band` is
 	on every row for the same reason `policy_source` is: the handset prints
 	"Minor's schedule" beside the countdown, and a badge that claimed a band the

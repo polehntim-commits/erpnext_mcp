@@ -17,7 +17,7 @@ from . import compat
 
 PAY_ITEM = "Farm Pay Item"
 FIELDS = ("name", "employee", "kind", "amount", "pay_on", "treatment", "reference", "status", "payroll_entry",
-          "work_state", "earned_from", "earned_to", "hours")
+          "work_state", "earned_from", "earned_to", "hours", "terms_posted_on", "terms")
 ENTRY = "Farm Payroll Entry"
 EMPLOYEE = "Employee"
 
@@ -209,3 +209,17 @@ def price_sick_time(company: str, items_by_employee: dict, structures: dict, min
 				                "reason": row["waiting"]})
 		items_by_employee[employee] = [r for r in rows if r.get("kind") != sick_time.KIND] + priced
 	return waiting
+
+
+def unposted_bonus_terms(items_by_employee: dict) -> list:
+	"""v0.302.0. OAR 839-020-0013: a grower offering a harvest bonus must post its terms — how and when it is earned
+	— where the crew can read them, in their language. Bonuses with no posting date recorded are listed."""
+	out = []
+	for employee, rows in (items_by_employee or {}).items():
+		for row in rows:
+			if row.get("kind") in ("Bonus", "Production Bonus") and not row.get("derived_from") \
+					and not row.get("terms_posted_on"):
+				out.append({"employee": employee, "item": row.get("name"), "kind": row.get("kind"),
+				            "reason": "no record that the bonus terms were posted (OAR 839-020-0013) — conditions "
+				                      "that were not disclosed cannot be used to deny or reduce it"})
+	return out

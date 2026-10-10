@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.302.0 — 2026-10-10 — rest and meal periods, and harvest-bonus notices, per BOLI
+
+**Migrate**: Farm Pay Item gains the bonus-terms fields; a disabled, unapproved Oregon break policy is added from
+BOLI's chart where none exists. Deploy `docs/deploy/v0.302.0_boli_breaks_bonus_notice.md`. Tools: **1,142 → 1,142**.
+Pairs with FarmOps 0.61.0 (57).
+
+- **BOLI's rest and meal chart** (OAR 839-020-0050) as schedule rows, offered as a draft policy for a person to
+  approve.
+- **Corrected:** minors' rests are 15 minutes at the adult frequency (OAR 839-021-0072, as BOLI states it), not
+  every two hours. Fixed on the server and in the phone's offline schedule. Washington minors are unchanged.
+- **Harvest-bonus terms** (OAR 839-020-0013): recorded on the pay item; runs flag bonuses with no posting on record.
+- Tests: `test_boli_breaks_bonus_notice`. `test_wave3_compliance_binseal` was updated to the corrected minor rows.
+
 ## 0.301.0 — 2026-10-10 — Oregon sick time
 
 **Migrate**: Farm Sick Time Ledger, Farm Pay Item `hours` and kind "Sick Time", and payroll setting

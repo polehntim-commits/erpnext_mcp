@@ -21,7 +21,11 @@
   "status",
   "payroll_entry",
   "reference",
-  "notes"
+  "notes",
+  "terms_section",
+  "terms",
+  "terms_posted_on",
+  "terms_language"
  ],
  "fields": [
   {
@@ -135,6 +139,29 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "terms_section",
+   "fieldtype": "Section Break",
+   "label": "Bonus terms (OAR 839-020-0013)",
+   "depends_on": "eval:['Bonus','Production Bonus'].includes(doc.kind)"
+  },
+  {
+   "fieldname": "terms",
+   "fieldtype": "Small Text",
+   "label": "Bonus Terms",
+   "description": "v0.302.0. What the bonus is and how it is earned \u2014 including when it is earned. Conditions not disclosed cannot be used to deny or reduce it (OAR 839-020-0013)."
+  },
+  {
+   "fieldname": "terms_posted_on",
+   "fieldtype": "Date",
+   "label": "Terms Posted On",
+   "description": "When the terms were posted where the crew could read them, in a language they read."
+  },
+  {
+   "fieldname": "terms_language",
+   "fieldtype": "Data",
+   "label": "Posted In (languages)"
   }
  ],
  "index_web_pages_for_search": 0,
