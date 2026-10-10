@@ -6264,3 +6264,34 @@ for _name, _fn in vars(_DailyPayMirrors).items():
 
 TheContractIsComplete.COVERED.update({"get_my_daily_pay": "test_111", "request_daily_pay": "test_112",
                                       "get_todays_pay": "test_113", "run_todays_pay": "test_114"})
+
+
+# ── v0.306.0. Separations (app 0.62.0) ────────────────────────────────────────
+class SeparationRecordedModel(Codable):
+	SWIFT = "SickTime.swift"
+	STRICT = (("employee", str, 0), ("relieving_date", str, 0), ("final_pay", dict, 0))
+	NULLABLE = (("separation_reason", str, 0),)
+
+
+class _SeparationMirrors:
+	def test_115_record_separation(self):
+		from erpnext_mcp import final_pay
+
+		from .harness import set_roles
+		from .test_api_mobile import WORKER_EMPLOYEE
+
+		final_pay.install_fields()
+		self.configure(allow_update_employee=1)
+		set_roles(WORKER, ["Field Worker", "HR Manager"])
+		self.be()
+		got = SeparationRecordedModel.decode(
+			self.wire("record_separation", employee=WORKER_EMPLOYEE, relieving_date="2026-10-09",
+			          separation_reason="End of season", seasonal_farmworker="1"), "record_separation")
+		self.assertEqual(set(got["final_pay"]), {"due_date", "rule", "note"})
+
+
+for _name, _fn in vars(_SeparationMirrors).items():
+	if _name.startswith("test_"):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"record_separation": "test_115"})

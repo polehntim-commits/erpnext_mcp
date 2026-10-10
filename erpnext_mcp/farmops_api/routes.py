@@ -151,6 +151,8 @@ ROUTES = (
 	# done, and in tree fruit the returning picker is the common case.
 	Route("/mobile", mobile_api.get_employee),
 	Route("/mobile", mobile_api.reactivate_employee),
+	# v0.306.0. The other end of a season: last day, reason, seasonal farmworker — which sets the final-pay deadline.
+	Route("/mobile", mobile_api.record_separation),
 	# v0.45.0. Onboarding, in the order `OnboardingFlow` walks it: the I-9 is
 	# opened, the worker fills their half, the employer verifies the documents,
 	# the W-4 is signed, and the badge that will carry their piece-rate is mapped

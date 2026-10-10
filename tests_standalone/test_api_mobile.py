@@ -251,6 +251,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"request_daily_pay",
 		"get_todays_pay",
 		"run_todays_pay",
+		# v0.306.0. Recording a separation (app 0.62.0, SickTimeAPI.swift).
+		"record_separation",
 		# v0.255.0. A Library document on an asset (app 0.45.0, AssetAPI.swift).
 		"get_asset_reference",
 		# v0.252.0. Contacts from the phone (app 0.42.0, ContactsAPI.swift).

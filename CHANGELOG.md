@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.306.0 — 2026-10-10 — sick time, deduction authorizations and separations on the phone
+
+**No migrate.** Deploy `docs/deploy/v0.306.0_phone_sick_time_separation.md`. Tools: **1,142 → 1,142**; one mobile
+route (`record_separation`). Pairs with FarmOps 0.62.0 (58).
+
+- **Leave types:** `list_leave_types` lists Oregon Sick Time and Washington Paid Sick Leave, in hours, with the
+  balance and when it becomes usable.
+- **Filing from the phone:** the phone's `create_leave_request` passes `hours`.
+- **Deductions:** `list_employee_deductions awaiting_authorization` lists the deductions waiting for the worker's
+  signed authorization (ORS 652.610(3)), and every row carries `authorization_missing`. The phone signs them on the
+  existing pad.
+- **Separations:** `record_separation` records the last day, the reason and whether the worker is a seasonal
+  farmworker. It answers when final pay is due.
+- Tests: `test_phone_sick_separation`. The mobile surface lists gain `record_separation`; so do the iOS contract
+  mirror (`test_115`) and the data-access seed.
+
 ## 0.305.0 — 2026-10-10 — Washington paid sick leave, and sick-time opening balances
 
 **Migrate**: Farm Sick Time Ledger gains `work_state`. Deploy `docs/deploy/v0.305.0_washington_sick_leave.md`.

@@ -33877,6 +33877,11 @@ TOOLS = {
 				"true to include suspended and completed rows, and ones outside their date "
 				"window. Default false — the ordinary question is what comes out of this cheque.",
 			),
+			"awaiting_authorization": _field(
+				_BOOLEAN,
+				"v0.306.0. true for only the voluntary deductions a run would skip for want of the worker's "
+				"signed authorization (ORS 652.610(3)). Every row carries authorization_missing.",
+			),
 			"gross_pay": _field(_NUMBER, "The period's gross pay. Turns the list into a priced preview."),
 			"statutory_withholding": _field(
 				_NUMBER,

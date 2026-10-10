@@ -94,6 +94,7 @@ personnel rules to keep in step.
 from __future__ import annotations
 
 import base64
+import datetime
 import json
 
 import frappe
@@ -2965,6 +2966,42 @@ def reactivate_employee(user: str, employee=None, docname=None) -> dict:
 	# reach a department, a supervisor or a login through it.
 	result = personnel.reactivate_employee({"employee": person})
 	return {**_employee_identity(person), "changed": result.data.get("changed") or []}
+
+
+# ── 20a. record_separation ──────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("record_separation", mutating=True, limit=guard.WRITE_LIMIT)
+def record_separation(user: str, employee=None, relieving_date=None, separation_reason=None,
+                      seasonal_farmworker=None) -> dict:
+	"""v0.306.0. A worker's last day, why they left, and whether they are a seasonal farmworker — the three facts
+	that set when final pay is due (ORS 652.140 / 652.145) — and the answer: the due date and the rule.
+
+	HR roles (`require_hr_role`, Farm Manager included), through `update_employee` (its gate and its before → after
+	in the Action Log). Status is set to Left only
+	when the last day has passed; a future last day keeps the worker Active until then. Clearing a separation, or
+	marking final pay paid, is the Desk's."""
+	from .. import final_pay
+
+	allowed = guard.require_scope(user)
+	personnel.require_hr_role()
+	person = _employee_argument(employee, allowed)
+	day = str(relieving_date or "").strip()[:10]
+	try:
+		datetime.date.fromisoformat(day)
+	except ValueError:
+		frappe.throw("relieving_date (the last day worked, YYYY-MM-DD) is required.", frappe.ValidationError)
+	reason = str(separation_reason or "").strip()
+	if reason not in final_pay.REASONS:
+		frappe.throw(f"separation_reason is one of: {', '.join(final_pay.REASONS)}.", frappe.ValidationError)
+	seasonal = str(seasonal_farmworker or "0").strip().lower() in ("1", "true", "yes")
+	inner = {"employee": person, "relieving_date": day, "separation_reason": reason,
+	         "seasonal_farmworker": 1 if seasonal else 0}
+	if day <= frappe.utils.today():
+		inner["status"] = "Left"
+	result = personnel.update_employee(inner)
+	return {**_employee_identity(person), "employee": person, "relieving_date": day, "separation_reason": reason,
+	        "seasonal_farmworker": seasonal, "final_pay": final_pay.due(day, reason, seasonal),
+	        "changed": result.data.get("changed") or []}
 
 
 # ── 21. create_i9_form ──────────────────────────────────────────────────────
@@ -14423,8 +14460,13 @@ def list_employee_deductions(
 	gross_pay=None,
 	statutory_withholding=None,
 	pay_frequency=None,
+	awaiting_authorization=None,
 ) -> dict:
 	"""Everything standing against one worker's pay, in the order it comes out.
+
+	v0.306.0: `awaiting_authorization` "1" lists only the voluntary deductions still waiting for the worker's signed
+	authorization (ORS 652.610(3)); each row's `authorization_missing` says why. The pad signs
+	`doctype="Farm Payroll Deduction" field="authorization_signature"` through `submit_form_signature`.
 
 	THE CALL AN ONBOARDING OR A PAYROLL QUESTION ACTUALLY MAKES. Sorted the way
 	the run will process it — child support, tax levies, student loans, other
@@ -14464,6 +14506,7 @@ def list_employee_deductions(
 		("gross_pay", gross_pay),
 		("statutory_withholding", statutory_withholding),
 		("pay_frequency", pay_frequency),
+		("awaiting_authorization", awaiting_authorization),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -21857,8 +21900,12 @@ def create_leave_request(
 	reason=None,
 	half_day=None,
 	half_day_date=None,
+	hours=None,
 ) -> dict:
 	"""Ask for a day off. Files a DRAFT; answering it is a different route.
+
+	v0.306.0: `hours` with a sick time `leave_type` ("Oregon Sick Time", "Washington Paid Sick Leave") files sick
+	hours — a Sick Time pay item the run covering `from_date` pays within the worker's balance.
 
 	`employee` OMITTED IS THE CALLER, which is the ordinary call and needs no
 	role at all. Naming somebody else is the foreman's "Ana is off sick
@@ -21885,6 +21932,8 @@ def create_leave_request(
 			inner[key] = str(value).strip()
 	if half_day is not None:
 		inner["half_day"] = half_day
+	if hours not in (None, ""):
+		inner["hours"] = hours
 	return hr_tools.create_leave_request(inner).data
 
 

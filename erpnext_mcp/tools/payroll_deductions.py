@@ -182,6 +182,8 @@ def _describe(row: dict) -> dict:
 	# — but the fallback is SILENT, and the place it stops being silent is here.
 	# See `_notes` for what it costs when it is not caught.
 	described["deduction_category_recognised"] = _recognised(row)
+	# v0.306.0. Why a voluntary deduction may not be taken yet (ORS 652.610(3)), or "" — what the phone signs.
+	described["authorization_missing"] = payroll_deductions.authorization_missing(row)
 	return described
 
 
@@ -413,6 +415,7 @@ def list_employee_deductions(args: dict) -> ToolResult:
 	employee = _resolve_employee(as_str(args, "employee", required=True))
 	on_date = as_date(args, "in_force_on") or frappe.utils.today()
 	include_inactive = as_bool(args, "include_inactive", False)
+	awaiting = as_bool(args, "awaiting_authorization", False)
 
 	filters = {"employee": employee}
 	rows = frappe.db.get_all(
@@ -435,7 +438,9 @@ def list_employee_deductions(args: dict) -> ToolResult:
 		"employee": employee,
 		"employee_name": frappe.db.get_value(EMPLOYEE, employee, "employee_name") or employee,
 		"in_force_on": on_date,
-		"deductions": [_describe(dict(row)) for row in shown],
+		# v0.306.0. awaiting_authorization: only the ones a run would skip for want of the worker's signature.
+		"deductions": [d for d in (_describe(dict(row)) for row in shown)
+		               if not awaiting or d["authorization_missing"]],
 		"active_count": len(live),
 		"total_count": len(rows),
 	}

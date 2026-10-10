@@ -502,13 +502,19 @@ def list_leave_types(args: dict) -> ToolResult:
 	that has not set up Leave Allocations is the only kind of leave anybody can
 	file. Sorting on balance alone would put the one usable row last.
 	"""
-	compat.require_doctype("Leave Type", "It comes with the Frappe HR (hrms) app.")
+	from .. import sick_time
+
+	# v0.306.0. Sick time is the payroll ledger's, so a site without hrms still lists it.
+	if not sick_time.ready():
+		compat.require_doctype("Leave Type", "It comes with the Frappe HR (hrms) app.")
 	employee = as_str(args, "employee")
 	resolved = _resolve_employee(employee) if employee else ""
 	as_of = as_date(args, "as_of") or frappe.utils.today()
 
-	fields = compat.existing_fields("Leave Type", ("name", "is_lwp", "max_leaves_allowed"))
-	rows = frappe.db.get_all("Leave Type", fields=fields, order_by="name asc", limit=LEAVE_CAP) or []
+	rows = []
+	if compat.doctype_exists("Leave Type"):
+		fields = compat.existing_fields("Leave Type", ("name", "is_lwp", "max_leaves_allowed"))
+		rows = frappe.db.get_all("Leave Type", fields=fields, order_by="name asc", limit=LEAVE_CAP) or []
 
 	allocated = set(_allocated_leave_types(resolved, str(as_of))) if resolved else set()
 	balance_on = _leave_balance_api() if resolved else None
@@ -538,6 +544,7 @@ def list_leave_types(args: dict) -> ToolResult:
 				requestable=bool(lwp or (has_allocation and (balance or 0) > 0)),
 			)
 		types.append(entry)
+	types += _sick_time_types(resolved, str(as_of))
 
 	data = {
 		"leave_types": types,
@@ -557,6 +564,43 @@ def list_leave_types(args: dict) -> ToolResult:
 			else ""
 		),
 	)
+
+
+def _sick_time_types(employee: str, as_of: str) -> list:
+	"""v0.306.0. Oregon sick time and Washington paid sick leave as leave types, in hours. For a worker: the states
+	they have sick time in, or work in (the state their shifts are in this year); with no worker, both."""
+	from .. import sick_time
+
+	if not sick_time.ready():
+		return []
+	out = []
+	for state in sick_time.STATES:
+		entry = {"leave_type": sick_time.LEAVE_NAMES[state], "is_sick_time": True, "unit": "hours",
+		         "work_state": state, "is_lwp": False, "max_leaves_allowed": None}
+		if employee:
+			got = sick_time.balance(employee, as_of, state)
+			if not (got["balance"] or got["accrued_this_year"] or got["used_this_year"] or got["carried_in"]
+			        or _works_in(employee, state, as_of)):
+				continue
+			entry.update(balance=got["balance"], usable=got["usable"], eligible_from=got["eligible_from"],
+			             accrued_this_year=got["accrued_this_year"], used_this_year=got["used_this_year"],
+			             allocated=True, requestable=bool(got["usable"]))
+		out.append(entry)
+	return out
+
+
+def _works_in(employee: str, state: str, as_of: str) -> bool:
+	"""Whether the worker is on a shift in `state` this calendar year (Farm Shift crew → Farm Shift.work_state)."""
+	if not (compat.doctype_exists("Farm Shift") and compat.has_field("Farm Shift", "work_state")
+	        and compat.doctype_exists("Farm Shift Crew Member")):
+		return False
+	shifts = frappe.db.get_all("Farm Shift Crew Member", filters={"employee": employee, "parenttype": "Farm Shift"},
+	                           pluck="parent", limit=500) or []
+	if not shifts:
+		return False
+	return bool(frappe.db.get_all("Farm Shift", filters={"name": ("in", shifts), "work_state": state,
+	                                                     "start_datetime": (">=", as_of[:4] + "-01-01 00:00:00")},
+	                              pluck="name", limit=1))
 
 
 # ── 30a. create_leave_request ───────────────────────────────────────────────

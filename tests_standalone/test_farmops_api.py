@@ -574,6 +574,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/request_daily_pay",
 		"/mobile/get_todays_pay",
 		"/mobile/run_todays_pay",
+		"/mobile/record_separation",
 		"/mobile/get_expense_account_map",
 		"/mobile/normalize_merchant",
 		"/mobile/link_asset_warehouse",
@@ -3143,6 +3144,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	HR_GATED: ClassVar[set[str]] = {
+		# v0.306.0. Recording a separation (`require_hr_role`, as `update_employee`).
+		"record_separation",
 		# v0.158.0. Answering a leave request, both ways. Approving SUBMITS the
 		# application and hrms writes the Leave Ledger Entry on submit, so this is
 		# the call that spends somebody's entitlement — a Foreman may say who is
@@ -3450,7 +3453,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 243, "a method is named in two sets at once")
+		self.assertEqual(len(named), 244, "a method is named in two sets at once")
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")
