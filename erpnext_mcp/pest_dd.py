@@ -36,7 +36,30 @@ from . import compat
 KIND = "IPM Setting"
 MODELS_KEY = "pest_dd_models"
 OFFSETS_KEY = "pest_dd_offsets"
-KEYS = (MODELS_KEY, OFFSETS_KEY)
+#: v0.297.0. Crop phenology bases (the crop's own degree days, not a pest's) — per crop, config not code.
+PHENOLOGY_KEY = "crop_phenology"
+KEYS = (MODELS_KEY, OFFSETS_KEY, PHENOLOGY_KEY)
+
+#: Tim's decision (2026-10-09): sweet cherry phenology uses a 4.5 °C ≈ 40.1 °F lower threshold — the base of the
+#: sweet-cherry cultivar degree-day studies (ISHS Acta Horticulturae 1020_29) and close to WSU's 41 °F map threshold.
+#: Switchable to 41 °F to match WSU / uspest.org maps, and calibrated against the block's own harvest windows. The
+#: 50 °F base is a generic / insect base and is NOT applied to cherry phenology. Pest models keep their own bases.
+DEFAULT_PHENOLOGY = {
+	"schema_version": 1,
+	"crops": {
+		"sweet cherry": {
+			"crop": "Sweet Cherry", "aliases": ["cherry", "cherries", "sweet cherries", "prunus avium"],
+			"base_f": 40.1, "base_c": 4.5, "cutoff_f": 86.0,
+			"citation": "Sweet cherry cultivar degree-day studies, lower threshold 4.5 °C (ISHS Acta Horticulturae "
+			            "1020_29).",
+			"alternates": [{"base_f": 41.0, "use": "to match the WSU / uspest.org cherry degree-day maps"}],
+			"calibrate": "against the block's own harvest windows (propose_harvest_calibration)",
+		},
+	},
+	"default": {"base_f": 50.0, "cutoff_f": 86.0,
+	            "citation": "The generic 50 °F growing-degree-day base, for crops with no row here. Add a row for any "
+	                        "crop whose phenology uses another base."},
+}
 FORECAST_SOURCE = "Open-Meteo (archive to 6 days ago, then forecast) — Weather Settings"
 FORECAST_SPREAD_F = 1.5  # the ± a 1–16 day forecast is read with when dating an event
 EXTRAPOLATE_DAYS = 45    # past the forecast, at the recent daily rate; said as such, wider ±
@@ -138,14 +161,62 @@ def offsets() -> tuple[dict, str]:
 	return ({**DEFAULT_OFFSETS, **body} if body else dict(DEFAULT_OFFSETS)), version
 
 
+def phenology() -> tuple[dict, str]:
+	"""v0.297.0. The crop phenology bases in force (a staged preview wins), else the seed."""
+	staged = (_OVERLAY.get() or {}).get(PHENOLOGY_KEY)
+	body, version = (staged, "preview") if staged is not None else _published(PHENOLOGY_KEY)
+	return (body if body and body.get("crops") is not None else DEFAULT_PHENOLOGY), version
+
+
 def seed_body(key: str) -> dict:
+	if key == PHENOLOGY_KEY:
+		return dict(DEFAULT_PHENOLOGY)
 	return dict(DEFAULT_MODELS if key == MODELS_KEY else DEFAULT_OFFSETS)
+
+
+def _validate_phenology(body: dict, errors: list, warnings: list) -> None:
+	rows = dict(body.get("crops") or {})
+	default = body.get("default") or {}
+	for name, row in [*rows.items(), ("default", default)]:
+		if not isinstance(row, dict):
+			errors.append(f"{name}: a crop row is an object.")
+			continue
+		try:
+			base = float(row.get("base_f"))
+		except (TypeError, ValueError):
+			errors.append(f"{name}: base_f (°F) is required.")
+			continue
+		if not 32.0 <= base <= 65.0:
+			errors.append(f"{name}: base_f {base:g} is not a plausible °F base (32–65) — is it °C? "
+			              f"{base:g} °C is {base * 1.8 + 32:g} °F.")
+		if row.get("base_c") not in (None, ""):
+			if abs(float(row["base_c"]) * 1.8 + 32 - base) > 0.2:
+				errors.append(f"{name}: base_c {row['base_c']} °C is {float(row['base_c']) * 1.8 + 32:.1f} °F, not "
+				              f"base_f {base:g}.")
+		cutoff = row.get("cutoff_f")
+		if cutoff not in (None, "") and float(cutoff) <= base:
+			errors.append(f"{name}: cutoff_f must be above base_f.")
+		label = f"{name} {row.get('crop') or ''} {' '.join(row.get('aliases') or [])}".lower()
+		# Tim, 2026-10-09: the 50 °F base is not applied to cherry phenology.
+		if "cherr" in label and base >= 45.0:
+			errors.append(f"{name}: {base:g} °F is an insect / generic base — cherry phenology uses about 40–41 °F "
+			              "(4.5 °C, ISHS 1020_29; 41 °F on the WSU maps).")
+		if not row.get("citation"):
+			warnings.append(f"{name}: no citation.")
 
 
 def validate(body: dict, key: str = "", for_publish: bool = False) -> dict:
 	"""`{errors, warnings}` — never raises."""
-	errors, warnings = [], []
 	key = key or str(body.get("key") or "")
+	if key == PHENOLOGY_KEY:
+		errors, warnings = [], []
+		_validate_phenology(body, errors, warnings)
+		return {"errors": errors, "warnings": warnings}
+	return _validate_models_offsets(body, key, for_publish)
+
+
+def _validate_models_offsets(body: dict, key: str, for_publish: bool = False) -> dict:
+	errors, warnings = [], []
 	if key == MODELS_KEY:
 		for name, model in (body.get("models") or {}).items():
 			if not isinstance(model, dict):
@@ -497,6 +568,19 @@ def preview(key: str, body, blocks: list | None = None) -> dict:
 		raise ValueError(f"body is the whole {key} to try.")
 	report = validate(body, key, for_publish=True)
 	names = blocks or [r["name"] for r in frappe.db.get_all("Field", fields=["name"], order_by="name asc", limit=25)]
+	if key == PHENOLOGY_KEY:
+		# v0.297.0. Which base each block's crop would use now and under the draft — no weather is fetched.
+		from . import degree_days
+
+		rows = []
+		for block in names:
+			crop = degree_days._crop_of(block)
+			now = degree_days.crop_entry(crop)
+			with overlay(key, body):
+				then = degree_days.crop_entry(crop)
+			rows.append({"block": block, "crop": crop or None, "base_now": now["base"], "base_draft": then["base"],
+			             "source_now": now.get("base_source"), "source_draft": then.get("base_source")})
+		return {"validation": report, "blocks": rows, "written": False}
 	rows = []
 	for block in names:
 		now = statuses(block)

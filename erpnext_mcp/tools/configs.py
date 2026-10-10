@@ -64,6 +64,9 @@ KINDS = {
 	# v0.247.0. A course's knowledge check; key = the course name in lower_snake_case.
 	"quiz": {"label": "Quiz", "store": "Farm Config Version (Quiz)", "key": "course key, e.g. d_6c_dozer_operator"},
 	"pest_dd_models": {"label": "Pest DD models", "store": "Farm Config Version (IPM Setting)", "key": "pest_dd_models"},
+	# v0.297.0. Each crop's phenology degree-day base (sweet cherry 40.1 °F); pest models keep their own.
+	"crop_phenology": {"label": "Crop phenology bases", "store": "Farm Config Version (IPM Setting)",
+	                   "key": "crop_phenology"},
 	"pest_dd_offsets": {"label": "Pest DD block offsets", "store": "Farm Config Version (IPM Setting)", "key": "pest_dd_offsets"},
 	# v0.279.0. The config kinds added since v0.264 (they had no MCP draft / stage / publish path until now). Each is
 	# validated by its own module's validator through phone_config; AI drafts go live only in the Desk (decision 5).
@@ -78,7 +81,7 @@ PAYROLL_KINDS = ("overtime_rule", "pay_policy", "wage_floor", "oregon_withholdin
                  "garnishment_limits", "pay_item_policy")
 #: v0.264.0. The pest degree-day models and block offsets (Farm Config Version, IPM Setting). AI may draft;
 #: a person publishes in the Desk — calibration suggests, it never applies.
-IPM_KINDS = ("pest_dd_models", "pest_dd_offsets")
+IPM_KINDS = ("pest_dd_models", "pest_dd_offsets", "crop_phenology")
 PHONE_KINDS = ("wizard", "tile", "label_profile", "quiz")
 #: v0.279.0. Farm Config Version kinds with no special handling: read, stage, publish and roll back through the
 #: generic phone-config path; drafted with phone_config.save_draft; previewed by their own validator.

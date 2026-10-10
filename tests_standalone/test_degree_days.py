@@ -8,7 +8,7 @@ from erpnext_mcp import ccf_providers, degree_days, go_hold
 from .harness import STORE
 from .test_go_hold import ON, TODAY, GoHoldTestCase
 
-TABLE = "Sweet Cherry: base = 50\nSweet Cherry: 51 = 100\nSweet Cherry: 55 = 200\nSweet Cherry: 57 = 300"
+TABLE = "Pear: base = 50\nPear: 51 = 100\nPear: 55 = 200\nPear: 57 = 300"
 
 
 def temps(days_before=40, days_after=16, high=70, low=40):
@@ -47,14 +47,14 @@ class TheArithmetic(DegreeDayTestCase):
 		self.assertEqual(degree_days.gdd(45, 30, 50, 86), 0.0)
 
 	def test_the_table_parses_and_names_what_it_cannot_read(self):
-		table, problems = degree_days.parse_table(TABLE + "\nSweet Cherry: bloom = 150\nnonsense")
-		self.assertEqual(table["sweet cherry"]["stages"], [(100.0, "51"), (200.0, "55"), (300.0, "57")])
+		table, problems = degree_days.parse_table(TABLE + "\nPear: bloom = 150\nnonsense")
+		self.assertEqual(table["pear"]["stages"], [(100.0, "51"), (200.0, "55"), (300.0, "57")])
 		self.assertEqual(len(problems), 2)
 
 
 class ForABlock(DegreeDayTestCase):
 	def test_season_total_estimate_and_when_the_next_stage_is_expected(self):
-		data = self.tool_data("get_degree_days", {"block": "B7", "crop": "Sweet Cherry"})
+		data = self.tool_data("get_degree_days", {"block": "B7", "crop": "Pear"})
 		days = (datetime.date.fromisoformat(TODAY) - datetime.date.fromisoformat(data["biofix"])).days + 1
 		self.assertEqual(data["gdd_season"], 10.0 * days)
 		self.assertEqual(data["gdd_next_7"], 70.0)
@@ -73,7 +73,7 @@ class AnEstimateNeverPasses(DegreeDayTestCase):
 		self.a_rule(condition_tree={"id": "before_bud_burst", "path": "phenology.bbch", "op": "lt", "value": "51"})
 		task = self.pruning()
 		STORE.get_raw("Farm Task", task).update(location_doctype="Field", location="B7")
-		with mock.patch.object(degree_days, "_crop_of", return_value="Sweet Cherry"):
+		with mock.patch.object(degree_days, "_crop_of", return_value="Pear"):
 			verdict = go_hold.check(task)
 		self.assertEqual(verdict["status"], go_hold.VERIFY)
 		self.assertIn("Degree days", verdict["reasons"][0])

@@ -18829,7 +18829,7 @@ TOOLS = {
 		config_tool.config,
 		"MUTATING (default OFF). v0.280.0. ONE tool for every kind of configuration through its lifecycle: wizard, "
 		"tile, label_profile, extraction_config, inspection_template, task_template, compliance_rule, trigger_rule, "
-		"overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, pay_item_policy, sop, quiz, pest_dd_models, pest_dd_offsets, "
+		"overtime_rule, pay_policy, wage_floor, oregon_withholding, garnishment_policy, garnishment_limits, pay_item_policy, sop, quiz, pest_dd_models, pest_dd_offsets, crop_phenology, "
 		"market_commodity, seasonal_program, job_template, "
 		"supplier_connector, input_plan, pollination_plan.\n\n"
 		"action: kinds | describe (one kind's shape and rules — start here) | list | get | diff | preview | draft | "

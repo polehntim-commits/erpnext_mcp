@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.297.0 — 2026-10-09 — crop phenology bases per crop: sweet cherry 40.1 °F
+
+**Migrate**: IPM setting `crop_phenology` seeded. Deploy `docs/deploy/v0.297.0_crop_phenology.md`. Tools:
+**1,142 → 1,142** (`config` kind `crop_phenology`).
+
+- **Sweet cherry phenology** (Tim's decision): the lower threshold is 4.5 °C ≈ 40.1 °F (the ISHS 1020_29
+  cultivar studies, close to WSU's 41 °F map threshold).
+- **Per crop, as config:** each crop's base is set in the IPM setting `crop_phenology`, published by a person. It
+  can be switched to 41 °F to match WSU / uspest, and calibrated against harvest windows.
+- **No 50 °F for cherry:** the 50 °F base is never applied to cherry phenology. The validator refuses one, and a
+  `base = 50` line in the stage table is overridden, with a note saying so.
+- **Pest models** keep their own published bases and units.
+- `get_degree_days` reports `base_source` and the alternates.
+- Tests: `test_crop_phenology`. The old fixture in `test_degree_days` (a 50 °F table line for Sweet Cherry) now
+  uses Pear.
+
 ## 0.296.0 — 2026-10-09 — non-discretionary bonuses in the overtime regular rate
 
 **Migrate**: Farm Pay Item gains `earned_from` and `earned_to`, and the kind "Production Bonus"; payroll setting

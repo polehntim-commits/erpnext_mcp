@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: MIT
+"""Crop phenology bases, per crop, as config. v0.297.0 (Tim, 2026-10-09).
+
+Sweet cherry phenology uses 4.5 °C ≈ 40.1 °F (ISHS Acta Horticulturae 1020_29), switchable to 41 °F (WSU / uspest
+maps); the 50 °F base is never applied to cherry phenology; pest models keep their own published bases.
+"""
+
+from unittest import mock
+
+from erpnext_mcp import degree_days, pest_dd
+
+from .harness import STORE
+from .test_degree_days import DegreeDayTestCase
+
+
+class TheSeed(DegreeDayTestCase):
+	def test_sweet_cherry_is_four_point_five_celsius(self):
+		entry = degree_days.crop_entry("Sweet Cherry")
+		self.assertEqual(entry["base"], 40.1)
+		self.assertIn("1020_29", entry["base_source"])
+		self.assertEqual(entry["alternates"][0]["base_f"], 41.0)
+
+	def test_by_alias(self):
+		self.assertEqual(degree_days.crop_entry("cherries")["base"], 40.1)
+
+	def test_other_crops_keep_the_default(self):
+		self.assertEqual(degree_days.crop_entry("Apple")["base"], 50.0)
+
+	def test_a_fifty_degree_table_line_is_not_applied_to_cherry(self):
+		self.configure(degree_day_stage_table="Sweet Cherry: base = 50\nSweet Cherry: 51 = 100")
+		entry = degree_days.crop_entry("Sweet Cherry")
+		self.assertEqual(entry["base"], 40.1)
+		self.assertIn("not used", entry["base_note"])
+		self.assertEqual(entry["stages"], [(100.0, "51")], "the table still supplies the stages")
+
+	def test_a_table_base_still_works_for_a_crop_without_a_row(self):
+		self.configure(degree_day_stage_table="Pear: base = 43")
+		self.assertEqual(degree_days.crop_entry("Pear")["base"], 43.0)
+
+	def test_switching_to_the_wsu_map_threshold_is_config(self):
+		body = {**pest_dd.DEFAULT_PHENOLOGY,
+		        "crops": {"sweet cherry": {**pest_dd.DEFAULT_PHENOLOGY["crops"]["sweet cherry"], "base_f": 41.0,
+		                                   "base_c": None}}}
+		with pest_dd.overlay(pest_dd.PHENOLOGY_KEY, body):
+			self.assertEqual(degree_days.crop_entry("Sweet Cherry")["base"], 41.0)
+
+	def test_the_block_reports_its_base(self):
+		data = self.tool_data("get_degree_days", {"block": "B7", "crop": "Sweet Cherry"})
+		self.assertEqual(data["base_f"], 40.1)
+		self.assertAlmostEqual(degree_days.gdd(70, 40, 40.1, 86), 14.95)
+
+
+class TheGuard(DegreeDayTestCase):
+	def test_fifty_for_cherry_is_refused(self):
+		body = {"crops": {"sweet cherry": {"crop": "Sweet Cherry", "base_f": 50.0, "citation": "x"}},
+		        "default": {"base_f": 50.0, "citation": "x"}}
+		report = pest_dd.validate(body, pest_dd.PHENOLOGY_KEY)
+		self.assertTrue(any("insect" in e for e in report["errors"]))
+
+	def test_celsius_and_fahrenheit_must_agree(self):
+		body = {"crops": {"sweet cherry": {"crop": "Sweet Cherry", "base_f": 41.0, "base_c": 4.5, "citation": "x"}},
+		        "default": {"base_f": 50.0, "citation": "x"}}
+		self.assertTrue(pest_dd.validate(body, pest_dd.PHENOLOGY_KEY)["errors"])
+
+	def test_the_seed_is_valid(self):
+		self.assertEqual(pest_dd.validate(pest_dd.seed_body(pest_dd.PHENOLOGY_KEY), pest_dd.PHENOLOGY_KEY)["errors"], [])
+
+	def test_pest_models_keep_their_own_bases(self):
+		models, _version = pest_dd.models()
+		self.assertTrue(models)
+		self.assertNotIn(40.1, {float(m["base_f"]) for m in models.values()})
+
+	def test_preview_shows_the_base_now_and_drafted(self):
+		STORE.seed("Field", [{"name": "B8", "field_name": "B8"}])
+		body = {**pest_dd.DEFAULT_PHENOLOGY,
+		        "crops": {"sweet cherry": {**pest_dd.DEFAULT_PHENOLOGY["crops"]["sweet cherry"], "base_f": 41.0,
+		                                   "base_c": None}}}
+		with mock.patch.object(degree_days, "_crop_of", return_value="Sweet Cherry"):
+			got = pest_dd.preview(pest_dd.PHENOLOGY_KEY, body, ["B8"])
+		self.assertEqual((got["blocks"][0]["base_now"], got["blocks"][0]["base_draft"]), (40.1, 41.0))

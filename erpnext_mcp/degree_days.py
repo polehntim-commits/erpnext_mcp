@@ -5,8 +5,9 @@ decision 12 ("estimate the stage from calendar + degree days"); docs/design/ccf_
 * ACCUMULATION is weather, not judgement: daily highs and lows for the block's H3 cell (resolution 7) from
   the biofix (default 1 January, a setting) — Open-Meteo's archive up to a week ago, its forecast API for the
   last week and the next 16 days. Degree days per day = (min(high, cutoff) + max(low, base)) / 2 − base,
-  never below zero (the simple average with a horizontal upper cutoff; base 50 °F and cutoff 86 °F by
-  default, per crop in settings).
+  never below zero (the simple average with a horizontal upper cutoff). v0.297.0: the base is per crop in the
+  `crop_phenology` IPM setting — sweet cherry 40.1 °F (4.5 °C, ISHS 1020_29), 50 °F for crops with no row;
+  cutoff 86 °F.
 * THE STAGE ESTIMATE is only as good as the table behind it, so there is NO built-in table: ERPNext MCP
   Settings → Degree-Day Stage Table, one line per crop and stage ("Sweet Cherry: 51 = 120"), drafted from the
   Reference Library's OSU/WSU guides. Without a line for the crop, there is no estimate and it says so.
@@ -43,7 +44,7 @@ def biofix(year: int) -> datetime.date:
 
 
 def parse_table(raw: str) -> tuple[dict, list]:
-	"""{crop: {base, cutoff, stages: [(gdd, bbch)]}}, problems. Lines: 'Crop: 51 = 120', 'Crop: base = 50'."""
+	"""{crop: {base, cutoff, stages: [(gdd, bbch)], explicit}}, problems. Lines: 'Crop: 51 = 120', 'Crop: base = 50'."""
 	table: dict = {}
 	problems = []
 	for number, line in enumerate(str(raw or "").splitlines(), 1):
@@ -61,6 +62,7 @@ def parse_table(raw: str) -> tuple[dict, list]:
 		entry = table.setdefault(crop.lower(), {"crop": crop, "base": DEFAULT_BASE_F, "cutoff": DEFAULT_CUTOFF_F, "stages": []})
 		if left in ("base", "cutoff"):
 			entry[left] = value
+			entry.setdefault("explicit", set()).add(left)
 		elif left.isdigit() and len(left) <= 2:
 			entry["stages"].append((value, left.zfill(2)))
 		else:
@@ -70,9 +72,42 @@ def parse_table(raw: str) -> tuple[dict, list]:
 	return table, problems
 
 
+def phenology_row(crop: str) -> tuple:
+	"""v0.297.0. (row, version): the crop's phenology base from the `crop_phenology` IPM setting — matched by name or
+	alias — else its `default` row (50 °F)."""
+	from . import pest_dd
+
+	body, version = pest_dd.phenology()
+	wanted = str(crop or "").strip().lower()
+	for key, row in (body.get("crops") or {}).items():
+		names = {str(key).lower(), str(row.get("crop") or "").lower(), *[str(a).lower() for a in row.get("aliases") or []]}
+		if wanted and wanted in names:
+			return row, version
+	return dict(body.get("default") or {"base_f": DEFAULT_BASE_F, "cutoff_f": DEFAULT_CUTOFF_F}), version
+
+
 def crop_entry(crop: str) -> dict:
+	"""The crop's base, cutoff and stage table. v0.297.0: the BASE comes from the `crop_phenology` setting (per crop,
+	config not code — sweet cherry 40.1 °F); the Degree-Day Stage Table supplies the stages, and its `base =` line
+	only for a crop the setting has no row for."""
 	table, _ = parse_table(settings.get_settings().get("degree_day_stage_table") or "")
-	return table.get(str(crop or "").lower()) or {"crop": crop, "base": DEFAULT_BASE_F, "cutoff": DEFAULT_CUTOFF_F, "stages": []}
+	entry = dict(table.get(str(crop or "").lower()) or {"crop": crop, "base": DEFAULT_BASE_F, "cutoff": DEFAULT_CUTOFF_F,
+	                                                     "stages": []})
+	explicit = entry.pop("explicit", set())
+	row, version = phenology_row(crop)
+	has_row = row.get("crop") is not None
+	if has_row or "base" not in explicit:
+		entry["base"] = float(row.get("base_f", DEFAULT_BASE_F))
+		entry["base_source"] = f"crop_phenology {version}: {row.get('citation') or ''}".strip()
+		if has_row and "base" in explicit:
+			entry["base_note"] = (f"The Degree-Day Stage Table's base line for {entry.get('crop')} is not used — the "
+			                      "crop_phenology setting sets this crop's base.")
+	else:
+		entry["base_source"] = "Degree-Day Stage Table (ERPNext MCP Settings)"
+	if "cutoff" not in explicit and row.get("cutoff_f") not in (None, ""):
+		entry["cutoff"] = float(row["cutoff_f"])
+	entry["alternates"] = row.get("alternates") or []
+	return entry
 
 
 def gdd(high, low, base: float, cutoff: float) -> float:
@@ -194,6 +229,9 @@ def for_block(block: str, crop: str = "", as_of: str = "") -> dict:
 		"crop": crop or None,
 		"biofix": start.isoformat(),
 		"base_f": entry["base"],
+		"base_source": entry.get("base_source"),
+		**({"base_note": entry["base_note"]} if entry.get("base_note") else {}),
+		"base_alternates": entry.get("alternates") or [],
 		"cutoff_f": entry["cutoff"],
 		"gdd_season": acc["season"],
 		"gdd_next_7": round(sum(d["gdd"] for d in acc["ahead"][:7]), 1),
