@@ -66,6 +66,10 @@ CRITICAL_CODES = frozenset(
 
 
 # ── reading ─────────────────────────────────────────────────────────────────
+#: v0.318.0. The erp-backup-kit version this release expects (~/Desktop/erp-backup-kit.sh, 2026-10-07.8).
+KIT_EXPECTED = "2026-10-07.8"
+
+
 def status_dir() -> str:
 	"""`<sites>/erp_backup_status`. The one directory this module reads."""
 	sites = getattr(frappe.local, "sites_path", None)
@@ -511,6 +515,9 @@ def describe_box(body: dict, stale_hours: float, now=None) -> dict:
 		"box": body.get("box"),
 		"peer": body.get("peer") or None,
 		"kit_version": body.get("kit_version") or None,
+		# v0.318.0. The kit this release was written against; older means re-run the kit on that box.
+		"kit_expected": KIT_EXPECTED,
+		"kit_outdated": bool(body.get("kit_version")) and str(body.get("kit_version")) < KIT_EXPECTED,
 		"generated_at": body.get("generated_at") or None,
 		"status_file_age_hours": hours_since(body.get("generated_at"), now),
 		"last_backup": (

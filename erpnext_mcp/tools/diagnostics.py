@@ -102,7 +102,7 @@ import sys
 import frappe
 
 from .. import __version__, compat, funnel_readiness, mail_status, pdf_base
-from ..args import as_int, as_limit, as_str
+from ..args import as_bool, as_int, as_limit, as_str
 from ..errors import ToolError
 from ..farmops_api import app as sidecar_app
 from ..farmops_api import gates as sidecar_gates
@@ -853,4 +853,26 @@ def get_superseded_usage(args: dict) -> ToolResult:
 	           f"{data['unused_count']} covered tool(s) uncalled" + ("" if data["window_covered"] else
 	                                                                 " (log shorter than the window)"))
 	return ToolResult(data=data, summary=summary)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# v0.318.0. get_deploy_status / run_post_deploy_check
+# ════════════════════════════════════════════════════════════════════════════
+def get_deploy_status(args: dict) -> ToolResult:
+	"""Read-only. Version, commit, pending patches / migrate, worker and scheduler, and the public health probe."""
+	from .. import deploy_status
+
+	data = deploy_status.status(check_health=not as_bool(args, "skip_health", False))
+	return ToolResult(data=data, summary=(f"v{data['version']} at {(data.get('commit') or 'unknown commit')[:12]}; "
+	                                      + ("MIGRATE NEEDED" if data["migrate_needed"] else "migrated")
+	                                      + f"; health {'ok' if (data['health'] or {}).get('ok') else 'not ok'}"))
+
+
+def run_post_deploy_check(args: dict) -> ToolResult:
+	"""Read-only. The deploy file's post-deploy checklist as one call."""
+	from .. import deploy_status
+
+	data = deploy_status.post_deploy_check(as_str(args, "expected_version"), as_str(args, "expected_commit"))
+	bad = [c["check"] for c in data["checks"] if c["status"] != "pass"]
+	return ToolResult(data=data, summary=f"post-deploy: {data['overall']}" + (f" — {', '.join(bad)}" if bad else ""))
 

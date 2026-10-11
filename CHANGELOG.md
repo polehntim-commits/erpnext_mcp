@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.318.0 — 2026-10-11 — deploy verification as MCP reads
+
+**No migrate.** Deploy `docs/deploy/v0.318.0_deploy_status.md`. Tools: **1,148 → 1,150** (two reads, on by default).
+
+- **`get_deploy_status`:** reports, read-only and with no shell:
+  - the version and commit (from the image's build record, else `.git`);
+  - unapplied patches, and doctypes newer than the database (`migrate_needed`);
+  - worker start, the scheduler's last job, and the public `/farmops/api/health`.
+- **`run_post_deploy_check expected_version= expected_commit=`:** the deploy file's checklist as one call, each
+  check pass / warn / fail.
+- **`get_backup_status`:** each box says `kit_expected` (2026-10-07.8) and `kit_outdated`.
+- Tests: `test_deploy_status`; tool counts updated.
+
 ## 0.317.0 — 2026-10-11 — OAuth sign-in and the limited MCP user, migrated safely
 
 **Migrate** (MCP Action Log gains `auth_method`). Deploy `docs/deploy/v0.317.0_mcp_auth_migration.md`. Tools:

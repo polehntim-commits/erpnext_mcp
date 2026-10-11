@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1148 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1150 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 550 read tools are **on** by default and can be switched off individually. A
+All 552 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21245,3 +21245,11 @@ company; only the blocks committed to that customer, by ticker. Never costs, pri
 
 The v0.276.0 names (`create_packer_share`, `issue_packer_credential`, `revoke_packer_access`, `get_packer_share`,
 `get_packer_pack`, `list_packer_access_log`) stay callable and are logged as superseded by these.
+
+## Deploy verification (v0.318.0)
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `get_deploy_status` | read | Version, commit, pending patches / migrate needed, worker and scheduler, the public health probe — this site. |
+| `run_post_deploy_check` | read | The deploy file's checklist as one call — pass / warn / fail per check. |
+

@@ -31453,6 +31453,26 @@ TOOLS = {
 		},
 		title="MCP switches",
 	),
+	# v0.318.0. Did the deploy land? Read-only; no shell.
+	"get_deploy_status": _tool(
+		diagnostics.get_deploy_status,
+		"v0.318.0. What this deployment is running and whether the deploy landed, without SSH: erpnext_mcp version, the "
+		"git commit (the image's build record, else the app's .git), patches in patches.txt the Patch Log has not "
+		"applied, app doctypes whose JSON is newer than the database (migrate_needed), when this worker started, the "
+		"scheduler's last job, and the phones' public /farmops/api/health (Funnel → farmops-fwd → sidecar). This site "
+		"only — call it on each server. Read-only.",
+		{"skip_health": _field(_BOOLEAN, "Skip the public health probe. Default false.")},
+		title="Get deploy status",
+	),
+	"run_post_deploy_check": _tool(
+		diagnostics.run_post_deploy_check,
+		"v0.318.0. The deploy file's post-deploy checklist as one call: version (and commit) against what was deployed, "
+		"migrate, health, scheduler, pay settings in force, dangerous write switches on, PDF rendering, backups — each "
+		"pass / warn / fail with its detail. Phone checks (4e) stay on a device; run it on each server. Read-only.",
+		{"expected_version": _field(_STRING, "e.g. 0.318.0 — the version the deploy file says."),
+		 "expected_commit": _field(_STRING, "The server main commit the deploy file names.")},
+		title="Run post-deploy check",
+	),
 	"get_server_status": _tool(
 		diagnostics.get_server_status,
 		"What this deployment is running: the erpnext_mcp version, Python and "

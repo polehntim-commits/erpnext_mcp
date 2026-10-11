@@ -416,7 +416,8 @@ class ReadToolsDoNotWrite(SeededTestCase):
 		# v0.204.0 adds preview_farm_task_template, preview_inspection_template and
 		# list_pest_control_applications.
 		# v0.313.0 adds get_customer_portal, get_customer_portal_pack and list_portal_access_log.
-		self.assertEqual(len(registry.READ_TOOLS), 550)
+		# v0.318.0 adds get_deploy_status and run_post_deploy_check.
+		self.assertEqual(len(registry.READ_TOOLS), 552)
 		self.assertTrue(set(ACCOUNTING_READ_TOOLS) <= set(registry.READ_TOOLS))
 
 

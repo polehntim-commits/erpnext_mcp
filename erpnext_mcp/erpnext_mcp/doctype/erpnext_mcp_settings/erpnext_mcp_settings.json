@@ -1074,6 +1074,8 @@
   "allow_get_app_feedback",
   "allow_resolve_app_feedback",
   "diagnostics_section",
+  "allow_get_deploy_status",
+  "allow_run_post_deploy_check",
   "allow_get_server_status",
   "allow_list_error_logs",
   "diagnostics_col",
@@ -8564,6 +8566,20 @@
   },
   {
    "default": "1",
+   "description": "READ. v0.318.0. Get Deploy Status — read-only.",
+   "fieldname": "allow_get_deploy_status",
+   "fieldtype": "Check",
+   "label": "Get Deploy Status"
+  },
+  {
+   "default": "1",
+   "description": "READ. v0.318.0. Run Post-Deploy Check — read-only.",
+   "fieldname": "allow_run_post_deploy_check",
+   "fieldtype": "Check",
+   "label": "Run Post-Deploy Check"
+  },
+  {
+   "default": "1",
    "description": "READ. What this deployment is running: erpnext_mcp, Python and Frappe versions, every installed app, this worker's uptime, and when a migrate last had a patch to apply.",
    "fieldname": "allow_get_server_status",
    "fieldtype": "Check",
@@ -11139,7 +11155,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-10 18:00:00.000000",
+ "modified": "2026-10-11 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "ERPNext MCP Settings",

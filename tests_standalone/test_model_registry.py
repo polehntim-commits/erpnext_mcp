@@ -908,8 +908,9 @@ class ToolRegistration(unittest.TestCase):
 		# v0.206.0 adds five reads and six writes: extraction config, feature flags, triage.
 		# v0.207.0 adds eight reads and eleven writes: phone config, tiles, wizards, the loop, labels.
 		# v0.313.0 adds three reads and three writes: the customer portal's generic names (the packer names stay).
-		self.assertEqual(len(self.registry.TOOLS), 1148)
-		self.assertEqual(len(self.registry.READ_TOOLS), 550)
+		# v0.318.0 adds two reads: get_deploy_status, run_post_deploy_check.
+		self.assertEqual(len(self.registry.TOOLS), 1150)
+		self.assertEqual(len(self.registry.READ_TOOLS), 552)
 		self.assertEqual(len(self.registry.MUTATING_TOOLS), 598)
 
 
