@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.320.0 — 2026-10-11 — MCP parity, part 2: the phone's remaining reads
+
+**No migrate.** Deploy `docs/deploy/v0.320.0_mcp_parity_2.md`. Tools: **1,150 → 1,150** (no new tools).
+
+- **New optional arguments on the owning tools:**
+  - `list_compliance_calendar_for_me inbox=true`;
+  - `get_field include_card=true`;
+  - `get_ipm_organism count= block=` (threshold status);
+  - `save_contact contact= met_at= met_on=`;
+  - `get_task_with_evidence_contract include_sops=true`;
+  - `get_item include_label=true`.
+- **Kept on the worker's own phone** (audit §A): their bank details and verification, daily pay, SOP review,
+  training sign-off and check-in, and "label viewed".
+- Tests: `test_mcp_parity_v320`.
+
 ## 0.319.0 — 2026-10-11 — MCP parity, part 1: phone-only capabilities and create-only registers
 
 **No migrate.** Deploy `docs/deploy/v0.319.0_mcp_parity_1.md`. Tools: **1,150 → 1,150** (no new tools).

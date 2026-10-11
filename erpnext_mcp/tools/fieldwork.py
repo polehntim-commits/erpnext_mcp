@@ -103,7 +103,7 @@ from __future__ import annotations
 import frappe
 
 from .. import compat, roles
-from ..args import as_str, resolve_company
+from ..args import as_bool, as_str, resolve_company
 from ..errors import ToolError
 from ..result import ToolResult
 from . import calendar as compliance_calendar
@@ -366,9 +366,11 @@ def get_task_with_evidence_contract(args: dict) -> ToolResult:
 			}
 		)
 	outstanding = [item["requirement"] for item in checklist if not item["satisfied"]]
+	sops = _task_sops(task) if as_bool(args, "include_sops", False) else None
 
 	return ToolResult(
 		data={
+			**({"sops": sops} if sops is not None else {}),
 			"me": _me_block(me),
 			"task": task,
 			"is_mine": mine,
@@ -425,6 +427,18 @@ _CAPTURE_HINT = {
 	"findings_text": "text field",
 	"witness": "text field",
 }
+
+
+def _task_sops(task: dict) -> list:
+	"""v0.320.0: the phone's 'View SOP' — current SOPs covering this task's type, with their documents."""
+	from .. import sop
+
+	out = []
+	for row in sop.covering(str(task.get("task_type") or "")):
+		doc = frappe.db.get_value(sop.DOCTYPE, row["name"], ["policy_name", "version", "status", "attached_document"],
+		                          as_dict=True) or {}
+		out.append({"policy": row["name"], **doc, "approved": doc.get("status") in sop.LIVE})
+	return out
 
 
 def _filed_evidence(inner: dict) -> dict:
@@ -492,6 +506,12 @@ def list_compliance_calendar_for_me(args: dict) -> ToolResult:
 	only = as_str(args, "company")
 	if only:
 		entities = [_company_for(me, args)]
+	if as_bool(args, "inbox", False):
+		# v0.320.0: the phone's compliance inbox (what is mine to do, by entity) on MCP, for the acting user.
+		from .. import compliance_loop
+
+		data = compliance_loop.json_safe(compliance_loop.inbox(me["user"], entities[0] if only else ""))
+		return ToolResult(data=data, summary=f"compliance inbox for {me['user']}")
 
 	# CHECKED HERE, BEFORE THE LOOP, even though `get_compliance_calendar` checks
 	# it too. Inside the loop every exception becomes a named failure for one

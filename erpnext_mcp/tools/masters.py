@@ -632,6 +632,12 @@ def get_item(args: dict) -> ToolResult:
 	for legacy in ("re_order_level", "re_order_qty"):
 		if compat.has_field(ITEM, legacy):
 			data[legacy] = doc.get(legacy)
+	if as_bool(args, "include_label", False):
+		# v0.320.0: the phone's product label — the label's key fields and its files (read them with
+		# get_attachment_content).
+		from .. import product_labels
+
+		data["label"] = product_labels.item_label(doc.name)
 
 	return ToolResult(
 		data,

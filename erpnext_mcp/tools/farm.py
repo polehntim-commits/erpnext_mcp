@@ -851,9 +851,16 @@ def get_field(args: dict) -> ToolResult:
 			or {}
 		)
 
+	card = None
+	if as_bool(args, "include_card", False):
+		# v0.320.0: the phone's field card — core facts, open tasks, hazards, recent history.
+		from .. import field_card, history
+
+		card = field_card.card(row.get("name"), include_sensitive=history.may_see_sensitive(frappe.get_roles()))
 	return ToolResult(
 		data={
 			**described,
+			**({"card": card} if card is not None else {}),
 			"parcel_detail": {
 				"name": parcel_detail.get("name"),
 				"parcel_name": parcel_detail.get("parcel_name"),

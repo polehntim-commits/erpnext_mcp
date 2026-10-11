@@ -64,6 +64,12 @@ def list_ipm_organisms(args: dict) -> ToolResult:
 def get_ipm_organism(args: dict) -> ToolResult:
 	_installed()
 	name = _wrap(lambda: ipm_graph._node_ref(as_str(args, "organism", required=True)))
+	if any(args.get(k) not in (None, "") for k in ("count", "block")):
+		# v0.320.0: the phone's threshold status — where this pest stands against its threshold, lowest impact first.
+		data = _wrap(lambda: ipm_graph.threshold_status(
+			name, block=as_str(args, "block"), crop=as_str(args, "crop"), count=args.get("count"),
+			sample_unit=as_str(args, "sample_unit"), company=as_str(args, "company")))
+		return ToolResult(data=data, summary=f"{name}: {data.get('status') or data.get('verdict') or 'threshold status'}")
 	data = ipm_graph.organism(name, as_str(args, "company"))
 	return ToolResult(data=data, summary=f"{data['node']['name']}: {len(data['edges'])} relationship(s)")
 

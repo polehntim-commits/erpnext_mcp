@@ -23,6 +23,7 @@ Tim approved building items B1–B5 the same day. The release that closed each o
 | Installing and configuring the backup kit | Runs on the host | `get_backup_status` shows the kit version and whether it is out of date (v0.318.0) |
 | Weather Settings writes | Keys, by design | Read only |
 | Printing | "Don't print anything without asking" | Print jobs are queued for a person |
+| The worker's own direct deposit, bank verification, daily pay, SOP review, training sign-off and check-in | Their own device, signature or Face ID is the proof | HR reads: `list_direct_deposit_changes`, `list_work_notices`, `get_quiz_results` |
 
 ## B. Gaps and how each closed
 
@@ -33,7 +34,7 @@ Tim approved building items B1–B5 the same day. The release that closed each o
 | B3 | Deploy and migrate landing could only be checked over SSH | `get_deploy_status`, `run_post_deploy_check`; backup kit `kit_outdated` | v0.318.0 |
 | B4a | Phone-only calls with no MCP route: barcode find and add, rehire, title→asset, shift break schedule, open crew tasks, late training certificate | Arguments on the tools that own each register (no new tools) | v0.319.0 |
 | B4b | 42 registers had a create tool but no get, list or update | `record` falls back to `query_doctype` / `update_document` | v0.319.0 |
-| B4c | Phone self-service still without an MCP route: direct-deposit self-service, bank verification, daily-pay self-service, SOP review, work-notice answers, evidence listing, field card, IPM threshold status, compliance inbox, training check-in and sign-off, labels, contact "where met" | Same pattern: arguments on owning tools, or `record` / `template` kinds | v0.320.0 (planned) |
+| B4c | Phone self-service still without an MCP route: direct-deposit self-service, bank verification, daily-pay self-service, SOP review, work-notice answers, evidence listing, field card, IPM threshold status, compliance inbox, training check-in and sign-off, labels, contact "where met" | Reads as arguments on owning tools (inbox, field card, threshold status, where met, task SOPs, item label); the worker's own bank, pay, SOP-review, sign-off and check-in calls stay on the phone (§A) | v0.320.0 |
 | B5 | Bank Bridge rule company scoping | ERPNext's Bank Categorization Rule already has a required `company` and filters by it: **no ERPNext change**. Bank Bridge's own `create_rule` schema omits `applies_to_company`; that is for the Bank Bridge session | — |
 
 Already covered, so no gap:

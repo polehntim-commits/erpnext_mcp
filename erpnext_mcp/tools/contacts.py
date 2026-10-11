@@ -30,6 +30,11 @@ def save_contact(args: dict) -> ToolResult:
 	"""Create or update a Contact from a confirmed card. `dry_run` previews only."""
 	user = _caller()
 	card = args.get("card")
+	if card is None and as_str(args, "contact"):
+		# v0.320.0: the phone's "where met" correction on an existing contact.
+		data = business_cards.update_where_met(user, as_str(args, "contact"), as_str(args, "met_at"),
+		                                       as_str(args, "met_on"), allowed=None)
+		return ToolResult(data=data, summary=f"where met updated on {as_str(args, 'contact')}")
 	if not isinstance(card, dict):
 		raise ToolError("card is required — the confirmed fields (first_name, company, emails, phones …).")
 	if as_bool(args, "dry_run", False):
