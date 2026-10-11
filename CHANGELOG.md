@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.314.0 — 2026-10-10 — the customer portal's deliveries and lots (FSMA 204)
+
+**No migrate.** Deploy `docs/deploy/v0.314.0_portal_lots_deliveries.md`. Tools: **1,148 → 1,148**.
+
+- **Deliveries:** the scale tickets delivered to the customer — by the ticket's customer, or by its settlement
+  statement. Never a price.
+- **Lots:** the lots it received, from its tickets or a Shipping CTE naming it as receiver, each with its FSMA 204
+  critical tracking events (KDEs). Other customers' shipping events and every person are left out.
+- **Downloads:** `format=fsma204` gives the FSMA 204 sortable spreadsheet; the XLSX and PDF packs gain Deliveries
+  and FSMA 204 / Lots. Both sections can be toggled per portal.
+- Tests: `test_customer_portal_lots`.
+
 ## 0.313.0 — 2026-10-10 — the customer / first-handler portal
 
 **Migrate**: Packer Share → Customer Portal (and its block table), with `customer` required and a `customer_role`;

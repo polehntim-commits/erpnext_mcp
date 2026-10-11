@@ -18776,14 +18776,15 @@ TOOLS = {
 		"MUTATING (default OFF). v0.313.0. A read-only portal for one ERPNext Customer that buys, packs or first-handles "
 		"the fruit (Orchard View, Monson, PFI, a future buyer), issued by the grower company: the blocks committed to it "
 		"(by name, alias or ticker — the customer sees ticker codes), the season, the markets MRL status is shown for, "
-		"and sections on / off (sprays, ipm, projections, clearance, feed). A customer only ever sees its own blocks. "
-		"Never costs, prices, labour, people or HR.",
+		"and sections on / off (sprays, ipm, projections, clearance, deliveries, lots, feed). A customer only ever sees "
+		"its own blocks, the scale tickets delivered to it and the lots it received (with their FSMA 204 critical "
+		"tracking events). Never costs, prices, labour, people or HR.",
 		{"company": _field(_STRING, "The issuing company — the grower entity."),
 		 "customer": _field(_STRING, "The ERPNext Customer (buyer, packer or first handler)."),
 		 "role": _field(_STRING, "Packer (default), Buyer or First Handler."),
 		 "fields": _field(_STRING, "Committed blocks, comma-separated (name, alias or ticker)."),
 		 "season": _field(_STRING, "YYYY."), "markets": _field(_STRING, "Markets, comma-separated (default US, Canada)."),
-		 "sections": _field(_OBJECT, "{sprays: 1, ipm: 1, projections: 1, clearance: 1, feed: 1}"),
+		 "sections": _field(_OBJECT, "{sprays: 1, ipm: 1, projections: 1, clearance: 1, deliveries: 1, lots: 1, feed: 1}"),
 		 "display_name": _field(_STRING, "The name shown; default the Customer's name."),
 		 "title": _field(_STRING, "Default: customer — company season.")},
 		required=("company", "customer", "fields"),
@@ -18822,10 +18823,11 @@ TOOLS = {
 	"get_customer_portal_pack": _tool(
 		customer_portal_tools.get_customer_portal_pack,
 		"v0.313.0. The customer's pack for one block (ticker) or every committed block and a season: json (the data), "
-		"csv (the spray record), xlsx (sprays, IPM, projections, clear to harvest) or pdf (the spray record, MRL by "
-		"market, IPM, pre-harvest status — GlobalG.A.P. fields), as base64. Read-only.",
+		"csv (the spray record), xlsx (sprays, IPM, projections, clear to harvest, deliveries, FSMA 204), pdf (the "
+		"spray record, MRL by market, IPM, pre-harvest status, deliveries, lots — GlobalG.A.P. fields) or fsma204 "
+		"(v0.314.0: the FSMA 204 sortable spreadsheet, one row per critical tracking event), as base64. Read-only.",
 		{"portal": _field(_STRING, "The Customer Portal (CPT-…)."), "block": _field(_STRING, "A ticker; omit for all."),
-		 "season": _field(_STRING, "YYYY."), "format": _field(_STRING, "json (default), csv, xlsx or pdf.")},
+		 "season": _field(_STRING, "YYYY."), "format": _field(_STRING, "json (default), csv, xlsx, pdf or fsma204.")},
 		required=("portal",),
 		title="Get customer portal pack",
 	),

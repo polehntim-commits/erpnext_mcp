@@ -43,10 +43,10 @@ KIND = "Customer Portal"
 #: Share Link kinds read as this portal's credentials: the current one, and links issued before v0.313.0.
 KINDS = (KIND, "Packer")
 ROLES = ("Packer", "Buyer", "First Handler")
-SECTIONS = ("sprays", "ipm", "projections", "clearance", "feed")
+SECTIONS = ("sprays", "ipm", "projections", "clearance", "deliveries", "lots", "feed")
 DEFAULT_MARKETS = ("US", "Canada")
 CREDENTIAL_DAYS = 400
-FORMATS = ("csv", "xlsx", "pdf", "json")
+FORMATS = ("csv", "xlsx", "pdf", "json", "fsma204")
 #: What each section may carry, and nothing else.
 ALLOWED = {
 	"sprays": ("block", "variety", "date", "product", "epa_reg_number", "rate", "rate_uom", "rei_hours", "phi_days",
@@ -56,6 +56,11 @@ ALLOWED = {
 	"projections": ("block", "variety", "acres", "tons_per_acre", "projected_tons", "seasons_used", "window_start",
 	                "window_end", "notes"),
 	"clearance": ("block", "variety", "status", "phi_clears_on", "open_rei_until", "mrl_gaps", "reasons"),
+	# v0.314.0. What was delivered to THIS customer, and the lots it received with their FSMA 204 records.
+	"deliveries": ("date", "ticket", "block", "variety", "grade", "net_weight", "weight_uom", "destination", "lot"),
+	"lots": ("lot_code", "product", "variety", "block", "harvest_date", "quantity", "quantity_uom", "status", "ctes"),
+	"cte": ("event_type", "event_datetime", "location", "quantity", "quantity_uom", "source_location",
+	        "destination_location", "carrier", "receiver", "reference_type"),
 }
 
 
@@ -419,6 +424,132 @@ def clearance(share: str, as_of: str = "") -> list:
 	return out
 
 
+# ── v0.314.0: what was delivered to this customer, and the lots it received (FSMA 204) ─────────────────────────
+def _customer_names(doc) -> set:
+	"""How the customer can be written on a ticket or a CTE: its docname and its customer name, case-folded."""
+	names = {str(doc.customer or "").casefold(), str(doc.get("customer_name") or "").casefold()}
+	if doc.customer:
+		names.add(str(frappe.db.get_value("Customer", doc.customer, "customer_name") or "").casefold())
+	return {n for n in names if n}
+
+
+def _tickets(doc, season: str) -> list:
+	"""Scale Tickets to THIS customer: by the ticket's customer, or by its settlement belonging to the customer."""
+	if not compat.doctype_exists("Scale Ticket") or not doc.customer:
+		return []
+	fields = compat.existing_fields("Scale Ticket", ("name", "company", "customer", "settlement", "date", "field",
+	                                                 "block", "variety", "grade", "net_weight", "weight_uom",
+	                                                 "destination", "status"))
+	settlements = set()
+	if compat.doctype_exists("Settlement Statement"):
+		settlements = set(frappe.db.get_all("Settlement Statement", filters={"customer": doc.customer}, pluck="name",
+		                                    limit=5000) or [])
+	out = []
+	for row in frappe.db.get_all("Scale Ticket", filters={"company": doc.company}, fields=fields, limit=50000) or []:
+		mine = row.get("customer") == doc.customer or (row.get("settlement") and row["settlement"] in settlements)
+		if not mine or str(row.get("status") or "") == "Cancelled":
+			continue
+		if season and not str(row.get("date") or "").startswith(season):
+			continue
+		out.append(dict(row))
+	return out
+
+
+def _ticker(field: str) -> str:
+	if not field:
+		return ""
+	return str(frappe.db.get_value("Field", field, "block_ticker") or field) if frappe.db.exists("Field", field) else field
+
+
+def deliveries(share: str, season: str = "") -> list:
+	"""Scale tickets delivered to this customer — no price, ever."""
+	from .tools import lots as lot_tools
+
+	s = _share(share)
+	doc = s["doc"]
+	out = []
+	for row in _tickets(doc, _season(doc, season)):
+		day = str(row.get("date") or "")[:10]
+		lot = lot_tools._match_lot(row.get("field") or "", row.get("variety") or "", day, doc.company) \
+			if row.get("field") and compat.doctype_exists("Traceability Lot Code") else ""
+		out.append(_pick({"date": day, "ticket": row.get("name"), "block": _ticker(row.get("field") or ""),
+		                  "variety": row.get("variety"), "grade": row.get("grade"), "net_weight": row.get("net_weight"),
+		                  "weight_uom": row.get("weight_uom"), "destination": row.get("destination"),
+		                  "lot": lot or None}, "deliveries"))
+	out.sort(key=lambda r: (r["date"], r.get("ticket") or ""))
+	return out
+
+
+def lots(share: str, season: str = "") -> list:
+	"""The lots this customer received — from its tickets, or a Shipping CTE naming it as receiver — each with its
+	FSMA 204 critical tracking events (KDEs). A Shipping CTE to anybody else is left out; no person is ever named."""
+	s = _share(share)
+	doc = s["doc"]
+	if not compat.doctype_exists("Traceability Lot Code"):
+		return []
+	season = _season(doc, season)
+	names = _customer_names(doc)
+	codes = {r["lot"] for r in deliveries(share, season) if r.get("lot")}
+	cte_fields = compat.existing_fields("Critical Tracking Event", (
+		"lot_code", "event_type", "event_datetime", "location", "quantity", "quantity_uom", "source_location",
+		"destination_location", "carrier", "receiver", "reference_doctype", "company"))
+	have_ctes = compat.doctype_exists("Critical Tracking Event")
+	if have_ctes:
+		for row in frappe.db.get_all("Critical Tracking Event", filters={"company": doc.company, "event_type": "Shipping"},
+		                             fields=cte_fields, limit=50000) or []:
+			if str(row.get("receiver") or "").casefold() in names and str(row.get("event_datetime") or "").startswith(season):
+				codes.add(row["lot_code"])
+	out = []
+	for code in sorted(c for c in codes if c):
+		lot = frappe.db.get_value("Traceability Lot Code", code, compat.existing_fields(
+			"Traceability Lot Code", ("lot_code", "variety", "field", "harvest_date", "quantity", "quantity_uom",
+			                          "status", "company")), as_dict=True) or {}
+		if lot.get("company") and lot["company"] != doc.company:
+			continue
+		crop = frappe.db.get_value("Field", lot.get("field"), "crop") if lot.get("field") and \
+			frappe.db.exists("Field", lot.get("field")) else ""
+		ctes = []
+		if have_ctes:
+			for row in frappe.db.get_all("Critical Tracking Event", filters={"lot_code": code}, fields=cte_fields,
+			                             order_by="event_datetime asc", limit=500) or []:
+				receiver = str(row.get("receiver") or "")
+				if row.get("event_type") == "Shipping" and receiver and receiver.casefold() not in names:
+					continue  # shipped to another customer: not theirs to see
+				location = row.get("location") or ""
+				ctes.append(_pick({"event_type": row.get("event_type"),
+				                   "event_datetime": str(row.get("event_datetime") or "")[:19],
+				                   "location": _ticker(location) if frappe.db.exists("Field", location) else location,
+				                   "quantity": row.get("quantity"), "quantity_uom": row.get("quantity_uom"),
+				                   "source_location": row.get("source_location"),
+				                   "destination_location": row.get("destination_location"), "carrier": row.get("carrier"),
+				                   "receiver": receiver or None, "reference_type": row.get("reference_doctype")}, "cte"))
+		out.append(_pick({"lot_code": code, "product": " ".join(x for x in (crop, lot.get("variety")) if x) or None,
+		                  "variety": lot.get("variety"), "block": _ticker(lot.get("field") or ""),
+		                  "harvest_date": str(lot.get("harvest_date") or "")[:10] or None, "quantity": lot.get("quantity"),
+		                  "quantity_uom": lot.get("quantity_uom"), "status": lot.get("status"), "ctes": ctes}, "lots"))
+	return out
+
+
+#: v0.314.0. FSMA 204 (21 CFR 1 Subpart S) sortable spreadsheet — one row per critical tracking event, the KDEs a
+#: first receiver is asked for within 24 hours.
+FSMA_COLUMNS = ("Traceability Lot Code", "Product Description", "Quantity", "Unit of Measure", "Critical Tracking Event",
+                "Date / Time", "Location", "Ship-from Location", "Ship-to Location", "Receiver", "Carrier",
+                "Reference Document Type", "Traceability Lot Code Source (grower)", "Harvest Location (block)",
+                "Harvest Date")
+
+
+def fsma_rows(data: dict) -> list:
+	rows = []
+	for lot in data.get("lots") or []:
+		for cte in lot.get("ctes") or [{}]:
+			rows.append([lot.get("lot_code"), lot.get("product"), cte.get("quantity") or lot.get("quantity"),
+			             cte.get("quantity_uom") or lot.get("quantity_uom"), cte.get("event_type"),
+			             cte.get("event_datetime"), cte.get("location"), cte.get("source_location"),
+			             cte.get("destination_location"), cte.get("receiver"), cte.get("carrier"),
+			             cte.get("reference_type"), data.get("grower"), lot.get("block"), lot.get("harvest_date")])
+	return rows
+
+
 def page(share: str, season: str = "") -> dict:
 	s = _share(share)
 	doc = s["doc"]
@@ -430,6 +561,11 @@ def page(share: str, season: str = "") -> dict:
 			data[name] = fn(share, season)
 	if s["sections"]["clearance"]:
 		data["clearance"] = clearance(share)
+	# v0.314.0. What went to this customer.
+	if s["sections"]["deliveries"]:
+		data["deliveries"] = deliveries(share, season)
+	if s["sections"]["lots"]:
+		data["lots"] = lots(share, season)
 	return data
 
 
@@ -442,13 +578,22 @@ def pack(share: str, *, block: str = "", season: str = "", fmt: str = "csv") -> 
 	if block:
 		if block not in [b["block"] for b in data["blocks"]]:
 			raise PortalError(f"{block!r} is not one of this portal's blocks.")
-		for name in ("sprays", "ipm", "projections", "clearance"):
+		for name in ("sprays", "ipm", "projections", "clearance", "deliveries", "lots"):
 			if name in data:
 				data[name] = [r for r in data[name] if r.get("block") == block]
 		data["blocks"] = [b for b in data["blocks"] if b["block"] == block]
 	stem = f"{data['grower']}_{block or 'all-blocks'}_{data['season']}".replace(" ", "_").replace(",", "")
 	if fmt == "json":
 		return json.dumps(data, default=str, indent=1).encode(), "application/json", f"{stem}.json"
+	if fmt == "fsma204":
+		if "lots" not in data:
+			raise PortalError("the lots section is off for this portal, so there are no FSMA 204 records to give.")
+		buffer = io.StringIO()
+		writer = csv.writer(buffer)
+		writer.writerow(FSMA_COLUMNS)
+		for row in fsma_rows(data):
+			writer.writerow(row)
+		return buffer.getvalue().encode("utf-8"), "text/csv; charset=utf-8", f"{stem}_fsma204.csv"
 	if fmt == "csv":
 		buffer = io.StringIO()
 		writer = csv.writer(buffer)
@@ -481,6 +626,13 @@ def pack(share: str, *, block: str = "", season: str = "", fmt: str = "csv") -> 
 		book.add(Sheet("Clear to harvest", ["Block", "Variety", "Status", "PHI clears", "Re-entry until", "Why"],
 		               [[r.get("block"), r.get("variety"), r.get("status"), r.get("phi_clears_on"), r.get("open_rei_until"),
 		                 "; ".join(r.get("reasons") or [])] for r in data.get("clearance") or []]))
+		if "deliveries" in data:
+			book.add(Sheet("Deliveries", ["Date", "Ticket", "Block", "Variety", "Grade", "Net weight", "Unit",
+			                              "Destination", "Lot"],
+			               [[r.get(k) for k in ("date", "ticket", "block", "variety", "grade", "net_weight", "weight_uom",
+			                                    "destination", "lot")] for r in data["deliveries"]]))
+		if "lots" in data:
+			book.add(Sheet("FSMA 204", list(FSMA_COLUMNS), fsma_rows(data)))
 		return book.render(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", f"{stem}.xlsx"
 	from .render.pdf import PdfDocument
 
@@ -506,6 +658,17 @@ def pack(share: str, *, block: str = "", season: str = "", fmt: str = "csv") -> 
 		doc.table(["Product", *data["markets"]],
 		          [[p, *[next((r["mrl"].get(m) for r in data["sprays"] if r["product"] == p), "") for m in data["markets"]]]
 		           for p in sorted({r["product"] for r in data["sprays"]})] or [["—"] * (1 + len(data["markets"]))])
+	if data.get("deliveries") is not None:
+		doc.heading("Deliveries")
+		doc.table(["Date", "Ticket", "Block", "Variety", "Net weight", "Lot"],
+		          [[r.get("date"), r.get("ticket"), r.get("block"), r.get("variety") or "",
+		            f"{r.get('net_weight') or ''} {r.get('weight_uom') or ''}".strip(), r.get("lot") or ""]
+		           for r in data["deliveries"]] or [["—"] * 6])
+	if data.get("lots") is not None:
+		doc.heading("Lots received — FSMA 204 traceability")
+		doc.table(["Lot code", "Product", "Block", "Harvested", "Events"],
+		          [[r.get("lot_code"), r.get("product") or "", r.get("block") or "", r.get("harvest_date") or "",
+		            ", ".join(c.get("event_type") or "" for c in r.get("ctes") or [])] for r in data["lots"]] or [["—"] * 5])
 	if data.get("ipm") is not None:
 		doc.heading("IPM observations")
 		doc.table(["Date", "Block", "Type", "Threat", "Over threshold"],
