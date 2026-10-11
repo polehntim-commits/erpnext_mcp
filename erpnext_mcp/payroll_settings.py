@@ -289,12 +289,27 @@ SEED_GARNISHMENT_LIMITS = [
 	                                       "Monthly": 2597.85}, "source": _WA + "(4)"},
 	 # v0.311.0. Spousal maintenance: 50% of disposable earnings exempt.
 	 "spousal_maintenance": {"rate": 0.50, "source": _WA + " (spousal maintenance)"},
-	 # v0.311.0. Private student loans: exempt the greater of 85% or 50 × the highest LOCAL minimum wage in the
-	 # state. The figure is dated data — VERIFY each January 1 (attorney/CPA item).
-	 "private_student_loan": {"rate": 0.15, "floor_multiple": 50, "highest_local_minimum_wage": 21.65,
-	                          "highest_local_minimum_wage_note": "the highest Washington city minimum wage for 2026 "
-	                                                             "(Tukwila) — verify each January 1",
-	                          "source": _WA + " (private student loans)"}},
+	 # v0.311.0. Private student loans: exempt the greater of 85% or 50 × "the highest minimum wage law in the
+	 # state". v0.315.0 (Tim, 2026-10-11: "go with the most accurate"): Burien's 2026 large-employer rate.
+	 "private_student_loan": {
+		 "rate": 0.15, "floor_multiple": 50, "highest_local_minimum_wage": 21.78,
+		 "highest_local_minimum_wage_city": "Burien",
+		 "highest_local_minimum_wage_source": "https://burienwa.gov/city_hall/laws_regulations/minimum_wage",
+		 "highest_local_minimum_wage_note": (
+			 "City of Burien, 2026 large-employer minimum wage: $21.78 (formula result $21.7752; council "
+			 "clarification 2026-05-18). The highest current official figure in the state, and the most protective. "
+			 "L&I's February 2026 table lists Burien at $21.63 — it predates the council action; Tukwila is $21.65. "
+			 "Ballot-measure litigation over Burien's ordinance is pending — revisit if it changes the rate."),
+		 "lni_checked_on": "2026-10-11",
+		 "source": _WA + " (private student loans)"},
+	 # v0.315.0. When this row's figures are reviewed: cities publish next year's rates by October 15 (a new row dated
+	 # January 1 clears it); L&I publishes its table in January (recording lni_checked_on clears it).
+	 "reviews": [
+		 {"month_day": "10-15", "kind": "next_year", "what": "Washington's highest local minimum wage for next "
+		  "year (private student-loan garnishments, RCW 6.27.150) — cities publish by October 15; add a row dated "
+		  "January 1 (config kind=garnishment_limits)."},
+		 {"month_day": "01-31", "kind": "lni_check", "what": "Check the Washington highest local minimum wage "
+		  "against L&I's January table and record lni_checked_on (config kind=garnishment_limits)."}]},
 ]
 #: Tim's decision (2026-10-09): the middle path, as policy. Priority as the law orders it — sources below.
 DEFAULT_GARNISHMENT_POLICY = {
@@ -488,6 +503,42 @@ def is_discretionary(kind: str, as_of: str = "", policy: dict | None = None) -> 
 	if isinstance(row, dict) and "discretionary" in row:
 		return bool(row["discretionary"])
 	return bool(policy.get("default_discretionary", False))
+
+
+def limit_review_rows(year: int, low: str, high: str) -> list:
+	"""v0.315.0. The review reminders the garnishment-limit rows carry, as payroll-calendar rows for `year`.
+
+	`next_year` (e.g. October 15): done once a row for the same state is dated January 1 of the next year or later.
+	`lni_check` (e.g. January 31): done once the row in force records `lni_checked_on` in that year."""
+	body, _version = _body(GARNISHMENT_LIMITS_KEY, f"{year}-12-31")
+	rows = body.get("rows") or SEED_GARNISHMENT_LIMITS
+	out = []
+	for row in rows:
+		for review in row.get("reviews") or []:
+			due = f"{year}-{review.get('month_day')}"
+			if not low <= due <= high:
+				continue
+			state = row.get("state") or "federal"
+			in_force = _in_force_limit(rows, row.get("scope"), row.get("state"), due)
+			if in_force is not row:
+				continue  # a later row carries its own reviews
+			if review.get("kind") == "next_year":
+				done = any(r.get("scope") == row.get("scope") and r.get("state") == row.get("state")
+				           and str(r.get("effective_from") or "") >= f"{year + 1}-01-01" for r in rows)
+			else:
+				done = str(((row.get("private_student_loan") or {}).get("lni_checked_on")
+				            or row.get("lni_checked_on") or ""))[:4] == str(year)
+			out.append({"name": f"limit_review:{state}:{review.get('kind')}:{year}",
+			            "title": f"Review {state} garnishment limits ({'next year' if review.get('kind') == 'next_year' else 'L&I table'})",
+			            "subtitle": review.get("what") or "", "due_date": due, "done": done,
+			            "kind": "garnishment_limit_review"})
+	return out
+
+
+def _in_force_limit(rows: list, scope, state, day: str):
+	matching = [r for r in rows if r.get("scope") == scope and r.get("state") == state
+	            and str(r.get("effective_from") or "") <= day]
+	return max(matching, key=lambda r: str(r.get("effective_from") or ""), default=None)
 
 
 def garnishment_limits(as_of: str = "", state: str = "") -> dict:
@@ -854,6 +905,19 @@ def _validate_garnishment_limits(body: dict, for_publish: bool) -> dict:
 		loan = row.get("private_student_loan") or {}
 		if loan and (_not_money(loan.get("highest_local_minimum_wage")) or _not_money(loan.get("floor_multiple"))):
 			errors.append(f"{where}: private_student_loan needs floor_multiple and highest_local_minimum_wage")
+		# v0.315.0. Where the highest local minimum wage comes from is part of the figure.
+		if loan and not str(loan.get("highest_local_minimum_wage_source") or "").strip():
+			errors.append(f"{where}: private_student_loan.highest_local_minimum_wage_source — the city's own page or "
+			              "L&I's table the figure comes from")
+		for review in row.get("reviews") or []:
+			if not isinstance(review, dict) or review.get("kind") not in ("next_year", "lni_check"):
+				errors.append(f"{where}: reviews: {{month_day: MM-DD, kind: next_year | lni_check, what}}")
+				continue
+			try:
+				month, day = (int(x) for x in str(review.get("month_day") or "").split("-")[:2])
+				datetime.date(2001, month, day)
+			except ValueError:
+				errors.append(f"{where}: reviews.month_day is MM-DD")
 	effective = _effective(body, errors)
 	if for_publish and not errors:
 		_publish_guard(effective, errors)

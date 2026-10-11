@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.315.0 — 2026-10-11 — Washington's highest local minimum wage, and its yearly review
+
+**No migrate.** Deploy `docs/deploy/v0.315.0_wa_highest_local_minimum.md`. Tools: **1,148 → 1,148**.
+
+- **The 2026 figure:** private student-loan garnishments (RCW 6.27.150) use Burien's 2026 large-employer rate,
+  $21.78, from the city's own page. The row records the source, the L&I $21.63 discrepancy and the pending
+  litigation, and the validator requires the source.
+- **Yearly review:** payroll-calendar reminders on October 15 (next year's rates; cleared by a January 1 row) and
+  January 31 (L&I's table; cleared by `lni_checked_on`). The 2027 rates are due by 2026-10-15.
+- Tests: `test_wa_local_minimum_review`. `test_garnishment_most_protective` is updated to $21.78.
+
 ## 0.314.0 — 2026-10-10 — the customer portal's deliveries and lots (FSMA 204)
 
 **No migrate.** Deploy `docs/deploy/v0.314.0_portal_lots_deliveries.md`. Tools: **1,148 → 1,148**.

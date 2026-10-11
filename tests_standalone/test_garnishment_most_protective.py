@@ -61,7 +61,7 @@ class TheMostProtective(V12TestCase):
 
 	def test_washington_private_student_loan(self):
 		got = take(1200, [order("Student Loan", 400, "Private student loan")], "WA")
-		self.assertEqual(got["lines"][0]["amount"], 117.5, "1200 - 50 × 21.65 is less than 15% (180)")
+		self.assertEqual(got["lines"][0]["amount"], 111.0, "1200 - 50 × 21.78 (Burien, v0.315.0) is less than 15% (180)")
 		self.assertIn("private student loans", got["lines"][0]["limits_considered"][-1]["rule"])
 
 	def test_a_federal_student_loan_is_fifteen_percent(self):

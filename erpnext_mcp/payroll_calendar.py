@@ -150,9 +150,13 @@ def items(companies: list) -> list:
 			# v0.300.0. Final-pay deadlines (ORS 652.140 / 652.145) beside the tax dates.
 			from . import final_pay
 
+			from . import payroll_settings
+
 			rows = _deposits(company, year) + _filings(company, year)
 			if year == today.year:
 				rows += final_pay.calendar_rows(company, low, high)
+			# v0.315.0. The garnishment-limit reviews (e.g. WA's highest local minimum wage each October 15).
+			rows += payroll_settings.limit_review_rows(year, low, high)
 			for row in rows:
 				due = row["due_date"]
 				if not due or not low <= due <= high:
