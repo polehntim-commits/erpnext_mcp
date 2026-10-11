@@ -2174,6 +2174,8 @@ BREAK_POLICY_DOCTYPE = "Labor Break Policy"
 
 def get_break_policy(args: dict) -> ToolResult:
 	"""The break schedule the handset counts its break coach from."""
+	if as_str(args, "shift"):
+		return get_break_schedule(args)  # v0.319.0: the phone's per-shift schedule (each break's due time) on MCP
 	compat.require_doctype(
 		BREAK_POLICY_DOCTYPE,
 		"The Labor Break Policy DocType ships with erpnext_mcp v0.58.0 — run `bench migrate`.",

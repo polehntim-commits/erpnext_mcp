@@ -1529,6 +1529,15 @@ def _replayed(name: str) -> ToolResult:
 def update_registered_asset(args: dict) -> ToolResult:
 	"""Update asset fields. Cannot rename — the docname is the tag ID."""
 	_require()
+	if as_str(args, "title_receipt"):
+		# v0.319.0: the phone's link_title_to_asset on MCP — file a captured title / MCO / bill of sale on the asset.
+		linked = vehicle_titles.link_title_to_asset({"receipt": as_str(args, "title_receipt"),
+		                                             "asset": as_str(args, "asset_name", required=True)})
+		if not set(args) - {"title_receipt", "asset_name", "company"}:
+			return linked
+		rest = update_registered_asset({k: v for k, v in args.items() if k != "title_receipt"})
+		rest.data = {**(rest.data or {}), "title": linked.data}
+		return rest
 	company = _company(args)
 	name = as_str(args, "asset_name", required=True)
 	row = asset_row(name, company or "")

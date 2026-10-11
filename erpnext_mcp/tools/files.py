@@ -337,8 +337,34 @@ def attach_file_to_document(args: dict) -> ToolResult:
 	quietly growing its evidence file afterwards is how a record stops meaning
 	what it says. `allow_cancelled=true` says the caller knows and meant it, which
 	is a different thing from not having noticed.
+
+	v0.319.0: `as_certificate=true` on an Employee Training Record files the file AS the record's certificate
+	(`certificate_file`, which the audit packet reads) — the phone's attach_training_certificate, under its gate:
+	the roles that run training (`require_shift_role`), inside the record's company.
 	"""
+	if as_bool(args, "as_certificate", False):
+		return _attach_certificate(args)
 	return _attach(args, require_parent_write=True)
+
+
+def _attach_certificate(args: dict) -> ToolResult:
+	from . import employee, training
+
+	doctype = as_str(args, "doctype") or training.DOCTYPE
+	if doctype != training.DOCTYPE:
+		raise ToolError(f"as_certificate is for {training.DOCTYPE} only, not {doctype}. Nothing was changed.")
+	record = as_str(args, "name", required=True)
+	if not frappe.db.exists(doctype, record):
+		raise ToolError(f"no {doctype} called {record!r} on this site. Nothing was changed.")
+	actor = employee.require_shift_role()
+	company = frappe.db.get_value(doctype, record, "company") if compat.has_field(doctype, "company") else None
+	if company:
+		employee.require_company_scope(actor, str(company))
+	inner = {k: args[k] for k in ("file_url", "file_name", "file_content", "training_source", "provider")
+	         if args.get(k) not in (None, "")}
+	if as_str(args, "file"):
+		inner["file"] = as_str(args, "file")
+	return training.attach_training_certificate({"training_record": record, **inner})
 
 
 def attach_file_to_authorized_parent(args: dict) -> ToolResult:

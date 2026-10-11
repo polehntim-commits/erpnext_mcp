@@ -581,6 +581,8 @@ def list_items(args: dict) -> ToolResult:
 def get_item(args: dict) -> ToolResult:
 	"""One Item in full, including its per-company defaults and reorder rules."""
 	_require(ITEM)
+	if args.get("barcode") not in (None, "") and not any(args.get(k) for k in ("item_code", "name", "item")):
+		return find_item_by_barcode(args)  # v0.319.0: the phone's barcode lookup; found: false is an answer
 	code = _require_item(args)
 	doc = frappe.get_doc(ITEM, code)
 
@@ -1346,10 +1348,18 @@ def update_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 		or bool(stock_uom)
 		or rate_uom is not None
 	)
+	barcode = None
+	if args.get("barcode") not in (None, ""):
+		# v0.319.0: the phone's add_item_barcode, on update_item for MCP. Same rule: a code on another Item is refused.
+		linked = add_item_barcode({"item_code": code, "barcode": args.get("barcode")}, ignore_permissions=ignore_permissions)
+		if not touched:
+			return linked
+		barcode = linked.data
+		doc = frappe.get_doc(ITEM, code)
 	if not touched:
 		raise ToolError(
 			"nothing to change. Pass at least one of description, item_name, item_group, "
-			"disabled, default_warehouse, reorder_level, reorder_qty, stock_uom, "
+			"disabled, default_warehouse, reorder_level, reorder_qty, stock_uom, barcode, "
 			f"application_rate_uom, or a pesticide label field ({', '.join(PESTICIDE_FIELDS)})."
 		)
 
@@ -1424,7 +1434,8 @@ def update_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 
 	if not changes:
 		return ToolResult(
-			{"name": doc.name, "changed": {}, "note": "every value sent already matched the Item."},
+			{"name": doc.name, "changed": {}, "note": "every value sent already matched the Item.",
+			 **({"barcode": barcode} if barcode else {})},
 			f"Item {doc.name} already matched; nothing changed",
 		)
 
@@ -1435,6 +1446,8 @@ def update_item(args: dict, *, ignore_permissions: bool = False) -> ToolResult:
 		data["default_warehouse_stored_on"] = stored_on
 	if reorder:
 		data["reorder"] = reorder
+	if barcode:
+		data["barcode"] = barcode
 	return ToolResult(
 		data,
 		f"updated Item {doc.name}: {', '.join(sorted(changes))}",

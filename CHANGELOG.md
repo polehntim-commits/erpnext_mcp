@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.319.0 — 2026-10-11 — MCP parity, part 1: phone-only capabilities and create-only registers
+
+**No migrate.** Deploy `docs/deploy/v0.319.0_mcp_parity_1.md`. Tools: **1,150 → 1,150** (no new tools).
+
+- **`record` get / list / update for 42 registers that had only a create tool** (spray tank mix, crop observation,
+  IoT reading, housing assignment, farm task, scale ticket, warehouse, …).
+  - These run through `query_doctype` (permissions) and `update_document` (drafts only; Updatable Fields).
+  - `types` marks them `generic`.
+  - Neither generic tool is ever counted as superseded.
+- **Phone capabilities as arguments on the owning tools:**
+  - `get_item barcode=` and `update_item barcode=`;
+  - `update_employee reactivate=true` (hiring roles; status and today only);
+  - `update_registered_asset title_receipt=`;
+  - `get_break_policy shift=` (each break's due time);
+  - `list_dispatch_board crew_only=true`;
+  - `attach_file_to_document as_certificate=true` (sets a training record's `certificate_file`).
+- Tests: `test_mcp_parity_v319`.
+
 ## 0.318.0 — 2026-10-11 — deploy verification as MCP reads
 
 **No migrate.** Deploy `docs/deploy/v0.318.0_deploy_status.md`. Tools: **1,148 → 1,150** (two reads, on by default).

@@ -2848,6 +2848,10 @@ TOOLS = {
 				_BOOLEAN,
 				"Validate the parent and report the proposed attach without writing. Default false.",
 			),
+			"as_certificate": _field(_BOOLEAN, "v0.319.0. On an Employee Training Record: file it AS the record's certificate (certificate_file, read by the audit packet). Training roles, inside the record's company."),
+			"file": _field(_STRING, "as_certificate: a File docname from stage_file_chunk / commit_staged_file instead of file_content."),
+			"training_source": _field(_STRING, "as_certificate: who issued it — Internal, External, Contractor or Online-Course."),
+			"provider": _field(_STRING, "as_certificate: the issuer's name."),
 		},
 		required=("doctype", "name", "file_name"),
 		mutating=True,
@@ -4554,8 +4558,9 @@ TOOLS = {
 			"item_code": _field(_STRING, "The Item docname. An item_name is also accepted."),
 			"name": _field(_STRING, "Alias for item_code."),
 			"item": _field(_STRING, "Alias for item_code."),
+			"barcode": _field(_STRING, "v0.319.0. Instead of item_code: the Item a retail barcode (UPC/EAN) is on. found: false is an answer."),
 		},
-		required=("item_code",),
+		required=(),
 		title="Get item",
 		available=_app_installed("erpnext"),
 		requires="the ERPNext app",
@@ -4639,6 +4644,7 @@ TOOLS = {
 			"name": _field(_STRING, "Alias for item_code."),
 			"item": _field(_STRING, "Alias for item_code."),
 			"description": _field(_STRING, "New description. Pass an empty string to clear it."),
+			"barcode": _field(_STRING, "v0.319.0. A retail barcode (UPC/EAN) to add to the Item's barcodes. A code already on another Item is refused; on this Item it is a no-op."),
 			"item_name": _field(_STRING, "New display name."),
 			"item_group": _field(_STRING, "Move it to this existing Item Group."),
 			"disabled": _field(_BOOLEAN, "true to take it out of transactions, false to restore it."),
@@ -11103,6 +11109,7 @@ TOOLS = {
 				"Awaiting-Review, Completed, Rejected, Cancelled.",
 			),
 			"include_closed": _field(_BOOLEAN, "Include Completed, Rejected and Cancelled. Default false."),
+			"crew_only": _field(_BOOLEAN, "v0.319.0. Only crew tasks (with their crew counts) — the phone's open crew tasks list."),
 			"task_type": _field(_STRING, "Only this task type."),
 			"urgency": _field(_STRING, "Only this urgency."),
 			"assigned_to": _field(_STRING, "Only tasks with this Employee id on them."),
@@ -13820,6 +13827,7 @@ TOOLS = {
 			"separation_reason": _field(_STRING, "v0.300.0. Discharged, Mutual agreement, Quit with 48+ hours notice, Quit without notice, or End of season (ORS 652.140)."),
 			"seasonal_farmworker": _field(_BOOLEAN, "v0.300.0. Seasonal farmworker: final pay due immediately (ORS 652.145)."),
 			"final_paid_on": _field(_STRING, "v0.300.0. Date final wages were paid; clears the payroll-calendar deadline."),
+			"reactivate": _field(_BOOLEAN, "v0.319.0. Rehire a returning worker: status Active, joined today — nothing else. Takes only employee; the hiring roles may do it (not only HR)."),
 		},
 		required=(),
 		mutating=True,
@@ -18986,7 +18994,11 @@ TOOLS = {
 		"shows; filters = list arguments. Each action runs that type's existing tool under its own switch, so the type "
 		"keeps its validation, company scoping and answer; a write needs allow_record AND that tool's switch. Money, "
 		"HR and security records (employees, I-9, payroll, bank, tax, journals, signing, tokens, roles) are not on "
-		"this tool. The per-type tools remain.",
+		"this tool. The per-type tools remain.\n\n"
+		"v0.319.0: a register with a create tool but no get / list / update of its own (spray tank mix, crop "
+		"observation, IoT reading, housing assignment, farm task, scale ticket, warehouse, …) gets them here through "
+		"the two generic tools: get / list via query_doctype (this account's permissions), update via update_document "
+		"(drafts only; every field on Updatable Fields). types marks them `generic`.",
 		{"action": _field(_STRING, "types, describe, create, update, deactivate, delete, get, list."),
 		 "type": _field(_STRING, "The record type, e.g. supplier, field, housing_unit (record action=types lists them)."),
 		 "name": _field(_STRING, "The record (get, update, deactivate, delete)."),
@@ -20960,6 +20972,10 @@ TOOLS = {
 		{
 			"company": _field(_STRING, "Optional company filter."),
 			"work_state": _field(_STRING, "OR or WA. Returns the most recent enabled policy for this state."),
+			"shift": _field(_STRING, "v0.319.0. A Farm Shift: answer with that shift's breaks and the clock time each falls due, instead of the state policy."),
+			"employee": _field(_STRING, "shift: one worker on it (default the shift's own)."),
+			"now": _field(_STRING, "shift: count from this instant (default now)."),
+			"planned_hours": _field(_NUMBER, "shift: how long the shift is planned to run."),
 		},
 		title="Get the break policy",
 		available=_needs_doctype("Labor Break Policy"),
@@ -25247,6 +25263,7 @@ TOOLS = {
 				"a valve, a building) and that already has a position. Written to the asset's "
 				"history with where it was.",
 			),
+			"title_receipt": _field(_STRING, "v0.319.0. File a captured title, MCO or bill of sale (an Expense Receipt docname) on this Vehicle or Tractor; the VIN is copied where the asset has none."),
 		},
 		required=("asset_name",),
 		mutating=True,

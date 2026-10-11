@@ -1161,6 +1161,14 @@ def update_employee(args: dict) -> ToolResult:
 	exception, and it is narrow precisely so this gate can stay.
 	"""
 	compat.require_doctype(EMPLOYEE, "It comes with the Frappe HR (hrms) app.")
+	if as_bool(args, "reactivate"):
+		# v0.319.0: the phone's rehire door on MCP — reactivate_employee, under ITS gate (hiring roles), writing only
+		# status Active and today's joining date. Nothing else may ride along.
+		extra = sorted(k for k in args if k not in ("reactivate", "name", "employee"))
+		if extra:
+			raise ToolError(f"reactivate takes only employee — {', '.join(extra)} belong on a separate "
+			                "update_employee call. Nothing was changed.")
+		return reactivate_employee({k: args[k] for k in ("name", "employee") if k in args})
 	_reject_unknown(
 		args,
 		(*WRITABLE, *UPDATE_ONLY),

@@ -34,6 +34,34 @@ SPECIAL = re.compile(r"i9|w4|payroll|nacha|prenote|garnish|tax|941|futa|bank|pay
 #: Generic tools that are not a register of their own.
 NOT_TYPES = {"document", "record", "template", "config"}
 _CACHE: dict = {}
+#: v0.319.0. Registers that have a create tool but no get / list / update of their own: those actions run through
+#: the two generic tools already in the catalogue — get / list through query_doctype (this account's DocPerms; no
+#: Password field), update through update_document (draft or non-submittable only, every field on the operator's
+#: Updatable Fields list). Kept out of `tables()` so superseded.covering() never calls those two generic tools
+#: "covered". Money, HR, share links and security stay off, as on the rest of this tool.
+GENERIC: dict = {
+	"accident_report": "Accident Report", "accounting_dimension": "Accounting Dimension",
+	"activity_cost_pool": "Activity Cost Pool", "advisory_agreement": "Advisory Agreement",
+	"ag_uom_context": "Agricultural UOM Context", "asset": "Asset", "asset_category": "Asset Category",
+	"backup_record": "Backup Record", "branch": "Branch", "break_policy": "Labor Break Policy",
+	"breakeven_analysis": "Breakeven Analysis", "change_management_log": "Change Management Log",
+	"company": "Company", "contractor_job": "Contractor Job", "cost_center": "Cost Center",
+	"crop_observation": "Crop Observation", "department": "Department", "designation": "Designation",
+	"employment_type": "Employment Type", "farm_task": "Farm Task", "fiscal_year": "Fiscal Year",
+	"hazard_analysis": "Hazard Analysis", "heat_exposure_event": "Heat Exposure Event",
+	"housing_assignment": "Housing Assignment", "iot_reading": "IoT Reading", "ipm_relationship": "IPM Relationship",
+	"item_group": "Item Group", "monitoring_record": "Monitoring Record",
+	"normalization_adjustment": "Normalization Adjustment", "planting_season": "Planting Season",
+	"scale_ticket": "Scale Ticket", "shipment": "Trade Shipment", "soil_compaction_profile": "Soil Compaction Profile",
+	"spray_application": "Spray Application", "spray_nozzle_config": "Spray Nozzle Config",
+	"spray_tank_mix": "Spray Tank Mix", "todo": "ToDo", "traceability_lot": "Traceability Lot Code",
+	"trade_document_template": "Trade Document Template", "training_session": "Training Session",
+	"training_type": "Training Type", "warehouse": "Warehouse",
+}
+GENERIC_TOOL = {"get": "query_doctype", "list": "query_doctype", "update": "update_document"}
+_NOT_COLUMNS = {"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Fold", "Heading", "Table",
+                "Table MultiSelect", "Password", "Image"}
+_LIST_COLUMNS = ("company", "status", "docstatus", "posting_date", "date", "modified")
 
 
 def _singulars(noun: str):
@@ -91,17 +119,35 @@ def _with_name(tool: str, body: dict, name: str) -> dict:
 	return inner
 
 
+def _generic(table: dict, type_: str) -> dict:
+	"""{action: generic tool} this type gets from GENERIC — only the actions it has no tool of its own for."""
+	calls = table.get(type_) or {}
+	if type_ not in GENERIC or "create" not in calls:
+		return {}
+	return {a: t for a, t in GENERIC_TOOL.items() if a not in calls}
+
+
 def _types_answer(table: dict, kind: str) -> ToolResult:
-	rows = [{"type": t, "actions": sorted(actions)} for t, actions in sorted(table.items())]
+	rows = []
+	for t, actions in sorted(table.items()):
+		row = {"type": t, "actions": sorted(set(actions) | set(_generic(table, t)) if kind == "record" else actions)}
+		if kind == "record" and _generic(table, t):
+			row["generic"] = sorted(_generic(table, t))
+		rows.append(row)
 	return ToolResult(data={"types": rows, "count": len(rows)}, summary=f"{len(rows)} {kind} types")
 
 
 def _describe(table: dict, type_: str, kind: str) -> ToolResult:
 	if type_ not in table:
 		raise ToolError(f"no {kind} type {type_!r} ({kind} action=types lists them).")
-	calls = table[type_]
-	return ToolResult(data={"type": type_, "calls": calls, "arguments": {a: _schema(t) for a, t in calls.items()}},
-	                  summary=f"{type_}: {', '.join(sorted(calls))}")
+	calls = dict(table[type_])
+	if kind == "record":
+		calls.update(_generic(table, type_))
+	data = {"type": type_, "calls": calls, "arguments": {a: _schema(t) for a, t in calls.items()}}
+	if kind == "record" and _generic(table, type_):
+		data["generic"] = {"doctype": GENERIC[type_], "note": "get / list: name, filters (fieldname → value) and "
+		                   "limit; update: name and body (fieldname → value; each field must be on Updatable Fields)."}
+	return ToolResult(data=data, summary=f"{type_}: {', '.join(sorted(calls))}")
 
 
 def _run(table: dict, kind: str, actions: tuple, args: dict) -> ToolResult:
@@ -116,6 +162,8 @@ def _run(table: dict, kind: str, actions: tuple, args: dict) -> ToolResult:
 	if type_ not in table:
 		raise ToolError(f"no {kind} type {type_!r} ({kind} action=types lists them).")
 	tool = table[type_].get(action)
+	if not tool and kind == "record" and action in _generic(table, type_):
+		return _run_generic(type_, action, args)
 	if not tool:
 		raise ToolError(f"{type_} has no {action} (it has {', '.join(sorted(table[type_]))}).")
 	body = dict(args.get("body") or {})
@@ -125,6 +173,58 @@ def _run(table: dict, kind: str, actions: tuple, args: dict) -> ToolResult:
 		if args.get(extra) and extra in _schema(tool)["properties"]:
 			body.setdefault(extra, args[extra])
 	return call(tool, _with_name(tool, body, as_str(args, "name")))
+
+
+def _columns(doctype: str) -> list:
+	import frappe
+
+	fields = [f for f in (getattr(frappe.get_meta(doctype), "fields", None) or [])]
+	names = []
+	for field in fields:
+		get = field.get if hasattr(field, "get") else (lambda k, f=field: getattr(f, k, None))
+		if get("fieldname") and get("fieldtype") not in _NOT_COLUMNS:
+			names.append(get("fieldname"))
+	return ["name", *[n for n in names if n != "name"]]
+
+
+def _run_generic(type_: str, action: str, args: dict) -> ToolResult:
+	"""get / list / update for a GENERIC type, through query_doctype / update_document (their switches, their rules)."""
+	from .. import compat
+
+	doctype = GENERIC[type_]
+	if not compat.doctype_exists(doctype):
+		raise ToolError(f"{type_}: the {doctype} DocType is not on this site.")
+	name = as_str(args, "name")
+	if action == "update":
+		if not name:
+			raise ToolError("update needs name (the record).")
+		body = dict(args.get("body") or {})
+		if not body:
+			raise ToolError("update needs body: fieldname → value.")
+		result = call("update_document", {"doctype": doctype, "docname": name, "updates": body})
+		result.data = {"type": type_, "doctype": doctype, "via": "update_document", **(result.data or {})}
+		return result
+	if action == "get":
+		if not name:
+			raise ToolError("get needs name (the record).")
+		result = call("query_doctype", {"doctype": doctype, "filters": {"name": name}, "fields": _columns(doctype),
+		                                "limit": 1})
+		rows = (result.data or {}).get("records") or []
+		if not rows:
+			raise ToolError(f"no {doctype} {name!r} that this account can read.")
+		return ToolResult(data={"type": type_, "doctype": doctype, "via": "query_doctype", "record": rows[0]},
+		                  summary=f"{doctype} {name}")
+	filters = dict(args.get("filters") or args.get("body") or {})
+	limit = filters.pop("limit", None) or 50
+	columns = ["name", *[c for c in _LIST_COLUMNS if compat.has_field(doctype, c) or c in ("docstatus", "modified")]]
+	query = {"doctype": doctype, "filters": filters, "fields": columns, "limit": limit}
+	result = call("query_doctype", query)
+	rows = (result.data or {}).get("records") or []
+	data = result.data or {}
+	return ToolResult(data={"type": type_, "doctype": doctype, "via": "query_doctype", "rows": rows,
+	                        "count": len(rows), "truncated": data.get("truncated"), "acting_user": data.get("acting_user"),
+	                        "permissions_bounding": data.get("permissions_bounding")},
+	                  summary=f"{len(rows)} {doctype}")
 
 
 def record(args: dict) -> ToolResult:

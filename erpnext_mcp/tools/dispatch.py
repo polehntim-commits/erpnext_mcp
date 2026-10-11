@@ -3831,6 +3831,8 @@ def list_dispatch_board(args: dict) -> ToolResult:
 	filters = {}
 	if company:
 		filters["company"] = company
+	if as_bool(args, "crew_only", False) and compat.has_field(FARM_TASK, "is_crew_task"):
+		filters["is_crew_task"] = 1  # v0.319.0: the phone's open crew tasks list, on the board
 	state_filter = as_str(args, "state_filter") or as_str(args, "state")
 	if state_filter:
 		wanted = [part.strip() for part in state_filter.split(",") if part.strip()]
