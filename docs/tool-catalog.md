@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1142 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1148 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 547 read tools are **on** by default and can be switched off individually. A
+All 550 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -21228,3 +21228,20 @@ Money, HR and security records keep their own tools; every per-type tool stays.
 | `config` | Every config kind through its lifecycle: kinds, describe, list, get, diff, preview, draft, stage, publish, rollback. Each action runs the existing lifecycle tool under its own switch and the kind's rules. Write |
 
 The per-action config tools (list_configs … rollback_config) stay.
+
+## The customer / first-handler portal (v0.313.0)
+
+A read-only portal for any ERPNext Customer that buys, packs or first-handles the fruit, issued by the grower
+company; only the blocks committed to that customer, by ticker. Never costs, prices, labour, people or HR.
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `create_customer_portal` | write (off) | The portal: company (grower), customer, role (Packer / Buyer / First Handler), committed blocks, season, markets, sections. |
+| `issue_portal_credential` | write (off) | A named credential for one contact, shown once (hash kept); the page link and the Bearer feed. |
+| `revoke_portal_access` | write (off) | One contact, or the whole portal. |
+| `get_customer_portal` | read | The credentials (never a token) and exactly what the customer's page shows. |
+| `get_customer_portal_pack` | read | json / csv / xlsx / pdf for a block or every committed block and a season. |
+| `list_portal_access_log` | read | Every view, download and feed pull. |
+
+The v0.276.0 names (`create_packer_share`, `issue_packer_credential`, `revoke_packer_access`, `get_packer_share`,
+`get_packer_pack`, `list_packer_access_log`) stay callable and are logged as superseded by these.

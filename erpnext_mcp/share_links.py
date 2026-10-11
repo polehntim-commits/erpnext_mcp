@@ -4,7 +4,7 @@ docs/design/plan_patterns_consolidation_2026_10.md §1).
 
 v0.271's Contractor Job Link and v0.276's packer credential were two copies of one idea; they are now one Share Link
 record (and one Share Link View log) with a KIND. What a kind's page shows, which actions it allows and whether its
-target is still live stay with the kind (`job_links`, `packer_portal`); what every kind shares lives here:
+target is still live stay with the kind (`job_links`, `customer_portal`); what every kind shares lives here:
 
 - THE TOKEN IS A CREDENTIAL. 32 random bytes, shown ONCE; only its SHA-256 is kept, unique and indexed, so a lookup
   is one row whatever the number of shares. Every failure — unknown, revoked, expired, target closed, company's
@@ -30,7 +30,9 @@ VIEW = "Share Link View"
 #: kind → its target doctype, public path and life. The kind's own module decides what the page shows.
 KINDS = {
 	"Job": {"doctype": "Contractor Job", "path": "job", "default_days": 30, "max_days": 365},
-	"Packer": {"doctype": "Packer Share", "path": "packer", "default_days": 400, "max_days": 800},
+	# v0.313.0. The customer / first-handler portal (was Packer). "Packer" stays readable for links issued under it.
+	"Customer Portal": {"doctype": "Customer Portal", "path": "portal", "default_days": 400, "max_days": 800},
+	"Packer": {"doctype": "Customer Portal", "path": "packer", "default_days": 400, "max_days": 800},
 }
 LINK_FIELDS = ["name", "kind", "target_doctype", "target", "company", "contact_name", "contact_email", "status",
                "issued_by", "issued_at", "expires_at", "revoked_at", "revoked_by", "revoked_reason", "use_count",

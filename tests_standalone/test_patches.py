@@ -28,6 +28,8 @@ import unittest
 from erpnext_mcp import install, settings
 from erpnext_mcp.patches import (
 	add_bait_units_to_context,
+	customer_portal_followups,
+	rename_packer_share_to_customer_portal,
 	add_rodent_sections_to_inspection_templates,
 	backfill_alert_subject_employee,
 	backfill_completion_signatures,
@@ -124,6 +126,9 @@ PATCHES = (
 	# v0.223.0. Pinned in `test_employee_file.LoginCards`.
 	("erpnext_mcp.patches.purge_filed_login_cards", purge_filed_login_cards),
 	("erpnext_mcp.patches.asset_type_slope_defaults", asset_type_slope_defaults),
+	# v0.313.0. Pinned in `TheCustomerPortalRename` below and `test_customer_portal.TheSwitchesCarryAcross`.
+	("erpnext_mcp.patches.rename_packer_share_to_customer_portal", rename_packer_share_to_customer_portal),
+	("erpnext_mcp.patches.customer_portal_followups", customer_portal_followups),
 )
 
 
@@ -617,6 +622,21 @@ class AFamilyPostingActuallyWorks(MCPTestCase):
 
 		accepted = self.a_journal_entry("Family", "Marguerite Bramwell")
 		self.assertFalse(accepted.get("isError"), accepted["content"][0]["text"])
+
+
+class TheCustomerPortalRename(FreshSite):
+	"""v0.313.0. `Packer Share` → `Customer Portal`. Like the discipline rename, the harness has no `rename_doc`, so
+	these pin the property `bench migrate` depends on: no branch raises, and a second run is a no-op."""
+
+	def test_it_never_raises_and_is_idempotent(self):
+		rename_packer_share_to_customer_portal.execute()
+		rename_packer_share_to_customer_portal.execute()
+		customer_portal_followups.execute()
+		customer_portal_followups.execute()
+
+	def test_the_names_are_what_the_code_says(self):
+		self.assertEqual(dict(rename_packer_share_to_customer_portal.RENAMES),
+		                 {"Packer Share": "Customer Portal", "Packer Share Block": "Customer Portal Block"})
 
 
 class TheDisciplineRecordRename(FreshSite):

@@ -21,6 +21,10 @@ from __future__ import annotations
 from . import settings
 
 _CACHE: dict = {}
+#: v0.313.0. Tools renamed outright — the old name stays callable and is logged as superseded by the new one.
+RENAMED = {"create_packer_share": "create_customer_portal", "issue_packer_credential": "issue_portal_credential",
+           "revoke_packer_access": "revoke_portal_access", "get_packer_share": "get_customer_portal",
+           "get_packer_pack": "get_customer_portal_pack", "list_packer_access_log": "list_portal_access_log"}
 
 
 def covering() -> dict:
@@ -56,6 +60,9 @@ def covering() -> dict:
 		out = {}
 	generic = set(out.values())
 	out = {old: new for old, new in out.items() if old in registry.TOOLS and old not in generic}
+	for old, new in RENAMED.items():
+		if old in registry.TOOLS and new in registry.TOOLS:
+			out[old] = new
 	_CACHE.update(key=key, map=out)
 	return out
 

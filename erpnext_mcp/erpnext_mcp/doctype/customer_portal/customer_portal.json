@@ -5,10 +5,10 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-09 09:00:00.000000",
+ "modified": "2026-10-10 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
- "name": "Packer Share",
+ "name": "Customer Portal",
  "owner": "Administrator",
  "sort_field": "modified",
  "sort_order": "DESC",
@@ -16,8 +16,9 @@
  "field_order": [
   "share_title",
   "company",
-  "packer_name",
+  "customer_name",
   "customer",
+  "customer_role",
   "status",
   "col1",
   "season",
@@ -30,31 +31,45 @@
   {
    "fieldname": "share_title",
    "fieldtype": "Data",
-   "label": "Share",
+   "label": "Portal",
    "reqd": 1,
    "in_list_view": 1
   },
   {
    "fieldname": "company",
    "fieldtype": "Link",
-   "label": "Issuing Company",
+   "label": "Issuing Company (grower)",
    "options": "Company",
    "reqd": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "description": "The grower entity the portal is issued by (Constancy once live)."
   },
   {
-   "fieldname": "packer_name",
+   "fieldname": "customer_name",
    "fieldtype": "Data",
-   "label": "Packer",
+   "label": "Customer Name",
    "reqd": 1,
    "in_list_view": 1,
-   "description": "e.g. Orchard View Farms (OVF)."
+   "description": "The name the customer sees on the portal (from the Customer).",
+   "fetch_from": "customer.customer_name",
+   "read_only": 0
   },
   {
    "fieldname": "customer",
    "fieldtype": "Link",
    "label": "Customer",
-   "options": "Customer"
+   "options": "Customer",
+   "reqd": 1,
+   "description": "The ERPNext Customer this portal is for — a buyer, packer or first handler."
+  },
+  {
+   "fieldname": "customer_role",
+   "fieldtype": "Select",
+   "label": "Role",
+   "options": "Packer\nBuyer\nFirst Handler",
+   "default": "Packer",
+   "in_list_view": 1,
+   "description": "What the customer is to the fruit. A first handler / first receiver gets the FSMA 204 lot records."
   },
   {
    "fieldname": "status",
@@ -96,13 +111,13 @@
    "fieldname": "blocks",
    "fieldtype": "Table",
    "label": "Blocks",
-   "options": "Packer Share Block"
+   "options": "Customer Portal Block"
   }
  ],
  "track_changes": 1,
- "autoname": "format:PKS-{YYYY}-{#####}",
+ "autoname": "format:CPT-{YYYY}-{#####}",
  "title_field": "share_title",
- "description": "v0.276.0. A read-only share for a packer: the committed blocks' sprays, IPM, projections and clear-to-harvest, by named revocable credential, every view and download logged. docs/contracts/packer_portal_v0_276.yaml.",
+ "description": "v0.313.0. A read-only portal for one customer that buys, packs or first-handles the fruit (Orchard View, Monson, PFI, a future buyer): only the blocks committed to it and the lots and deliveries that went to it. Never costs, prices, labour, people or HR. Was Packer Share (v0.276.0).",
  "permissions": [
   {
    "read": 1,

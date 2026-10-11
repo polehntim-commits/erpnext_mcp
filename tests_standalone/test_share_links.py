@@ -18,11 +18,11 @@ from .test_packer_portal import PortalCase
 class OneTable(PortalCase):
 	def test_both_kinds_live_in_share_link_and_never_cross(self):
 		cred = self.issue()
-		self.assertIsNotNone(share_links.find(cred["token"], "Packer"))
+		self.assertIsNotNone(share_links.find(cred["token"], "Customer Portal"))
 		self.assertIsNone(share_links.find(cred["token"], "Job"), "a packer credential never opens a job page")
 		self.assertIsNone(job_links.find(cred["token"]))
 		row = frappe.db.get_value("Share Link", {"target": self.share}, ["kind", "target_doctype", "status"], as_dict=True)
-		self.assertEqual((row["kind"], row["target_doctype"], row["status"]), ("Packer", "Packer Share", "Active"))
+		self.assertEqual((row["kind"], row["target_doctype"], row["status"]), ("Customer Portal", "Customer Portal", "Active"))
 
 	def test_every_use_is_a_view_row_and_counted(self):
 		cred = self.issue()
@@ -30,10 +30,10 @@ class OneTable(PortalCase):
 		for what in ("page", "data", "download csv"):
 			packer_portal.log(found, what, ip="10.0.0.9", user_agent="Mozilla")
 		STORE.commit()
-		views = share_links.views("Packer", target=self.share)
+		views = share_links.views("Customer Portal", target=self.share)
 		self.assertEqual(sorted(v["what"] for v in views), ["data", "download csv", "page"])
 		self.assertEqual(frappe.db.get_value("Share Link", found["name"], "use_count"), 3)
-		self.assertEqual(packer_portal.access_log(self.share)[0]["packer"], "Orchard View Farms")
+		self.assertEqual(packer_portal.access_log(self.share)[0]["customer"], "Orchard View Farms")
 
 	def test_revoked_stays_revoked_and_extend_is_capped(self):
 		cred = self.issue()

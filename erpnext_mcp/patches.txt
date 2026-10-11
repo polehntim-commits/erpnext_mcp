@@ -1,5 +1,6 @@
 [pre_model_sync]
 # Patches that run before DocTypes are migrated.
+erpnext_mcp.patches.rename_packer_share_to_customer_portal
 
 [post_model_sync]
 # Patches that run after DocTypes are migrated.
@@ -43,3 +44,4 @@ erpnext_mcp.patches.zoho_accounts_send_as_account
 erpnext_mcp.patches.transactional_mail_without_unsubscribe
 erpnext_mcp.patches.purge_filed_login_cards
 erpnext_mcp.patches.asset_type_slope_defaults
+erpnext_mcp.patches.customer_portal_followups

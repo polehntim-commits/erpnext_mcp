@@ -202,7 +202,7 @@ from .tools import receiving_tools
 from .tools import shop_queue_tools
 from .tools import live_budget_tools
 from .tools import pollination_tools
-from .tools import packer_portal_tools
+from .tools import customer_portal_tools
 from .tools import template_tool
 from .tools import config_tool
 from .tools import record_tool
@@ -18769,8 +18769,77 @@ TOOLS = {
 		mutating=True,
 		title="Link pollination invoice",
 	),
+	# v0.313.0. The customer / first-handler portal (docs/design/customer_portal_plan.md) — generic names; the six
+	# packer names below stay callable.
+	"create_customer_portal": _tool(
+		customer_portal_tools.create_customer_portal,
+		"MUTATING (default OFF). v0.313.0. A read-only portal for one ERPNext Customer that buys, packs or first-handles "
+		"the fruit (Orchard View, Monson, PFI, a future buyer), issued by the grower company: the blocks committed to it "
+		"(by name, alias or ticker — the customer sees ticker codes), the season, the markets MRL status is shown for, "
+		"and sections on / off (sprays, ipm, projections, clearance, feed). A customer only ever sees its own blocks. "
+		"Never costs, prices, labour, people or HR.",
+		{"company": _field(_STRING, "The issuing company — the grower entity."),
+		 "customer": _field(_STRING, "The ERPNext Customer (buyer, packer or first handler)."),
+		 "role": _field(_STRING, "Packer (default), Buyer or First Handler."),
+		 "fields": _field(_STRING, "Committed blocks, comma-separated (name, alias or ticker)."),
+		 "season": _field(_STRING, "YYYY."), "markets": _field(_STRING, "Markets, comma-separated (default US, Canada)."),
+		 "sections": _field(_OBJECT, "{sprays: 1, ipm: 1, projections: 1, clearance: 1, feed: 1}"),
+		 "display_name": _field(_STRING, "The name shown; default the Customer's name."),
+		 "title": _field(_STRING, "Default: customer — company season.")},
+		required=("company", "customer", "fields"),
+		mutating=True,
+		title="Create customer portal",
+	),
+	"issue_portal_credential": _tool(
+		customer_portal_tools.issue_portal_credential,
+		"MUTATING (default OFF). v0.313.0. A named credential for one contact at the customer — shown ONCE (only its hash "
+		"is kept): the portal link, and the same credential as a Bearer token for the JSON feed. Live until revoked or "
+		"its expiry (400 days by default). Refused until customer_portal_enabled is on for the company.",
+		{"portal": _field(_STRING, "The Customer Portal (CPT-…)."), "contact_name": _field(_STRING, "The person."),
+		 "contact_email": _field(_STRING, "Their email (record only)."), "days": _field(_INTEGER, "Life in days (default 400).")},
+		required=("portal", "contact_name"),
+		mutating=True,
+		title="Issue portal credential",
+	),
+	"revoke_portal_access": _tool(
+		customer_portal_tools.revoke_portal_access,
+		"MUTATING (default OFF). v0.313.0. Revoke one contact's credential, or (no contact) the whole portal. It answers "
+		"'not found' from then on.",
+		{"portal": _field(_STRING, "The Customer Portal (CPT-…)."),
+		 "contact_name": _field(_STRING, "One contact; omit for the whole portal."), "reason": _field(_STRING, "Why.")},
+		required=("portal",),
+		mutating=True,
+		title="Revoke portal access",
+	),
+	"get_customer_portal": _tool(
+		customer_portal_tools.get_customer_portal,
+		"v0.313.0. One customer portal: its credentials (contact, issued, expiry, revoked, last used, uses — never the "
+		"token) and exactly what the customer's page shows. Read-only.",
+		{"portal": _field(_STRING, "The Customer Portal (CPT-…)."), "season": _field(_STRING, "YYYY; default the portal's.")},
+		required=("portal",),
+		title="Get customer portal",
+	),
+	"get_customer_portal_pack": _tool(
+		customer_portal_tools.get_customer_portal_pack,
+		"v0.313.0. The customer's pack for one block (ticker) or every committed block and a season: json (the data), "
+		"csv (the spray record), xlsx (sprays, IPM, projections, clear to harvest) or pdf (the spray record, MRL by "
+		"market, IPM, pre-harvest status — GlobalG.A.P. fields), as base64. Read-only.",
+		{"portal": _field(_STRING, "The Customer Portal (CPT-…)."), "block": _field(_STRING, "A ticker; omit for all."),
+		 "season": _field(_STRING, "YYYY."), "format": _field(_STRING, "json (default), csv, xlsx or pdf.")},
+		required=("portal",),
+		title="Get customer portal pack",
+	),
+	"list_portal_access_log": _tool(
+		customer_portal_tools.list_portal_access_log,
+		"v0.313.0. Every view, download and feed pull on customer portals: when, which contact, what, from where. "
+		"Read-only.",
+		{"portal": _field(_STRING, "The Customer Portal (CPT-…)."), "company": _field(_STRING, "All of a company's portals."),
+		 "limit": _field(_INTEGER, "Default 200.")},
+		title="List portal access log",
+	),
 	"create_packer_share": _tool(
-		packer_portal_tools.create_packer_share,
+		customer_portal_tools.create_packer_share,
+		"SUPERSEDED by create_customer_portal (v0.313.0: the customer / first-handler portal) — kept callable under this name. "
 		"MUTATING (default OFF). v0.276.0. A read-only share for the packer the fruit is committed to (e.g. OVF): the "
 		"committed blocks (by name, alias or ticker — the packer sees ticker codes), the season, the export markets "
 		"MRL status is shown for, and sections on / off (sprays, ipm, projections, clearance, feed). Never costs, "
@@ -18779,13 +18848,14 @@ TOOLS = {
 		 "fields": _field(_STRING, "Committed blocks, comma-separated."), "season": _field(_STRING, "YYYY."),
 		 "markets": _field(_STRING, "Export markets, comma-separated (default US, Canada)."),
 		 "sections": _field(_OBJECT, "{sprays: 1, ipm: 1, projections: 1, clearance: 1, feed: 1}"),
-		 "customer": _field(_STRING, "Optional Customer."), "title": _field(_STRING, "Default: packer — company season.")},
+		 "customer": _field(_STRING, "The Customer (found by packer_name when omitted)."), "title": _field(_STRING, "Default: packer — company season.")},
 		required=("company", "packer_name", "fields"),
 		mutating=True,
 		title="Create packer share",
 	),
 	"issue_packer_credential": _tool(
-		packer_portal_tools.issue_packer_credential,
+		customer_portal_tools.issue_packer_credential,
+		"SUPERSEDED by issue_portal_credential (v0.313.0: the customer / first-handler portal) — kept callable under this name. "
 		"MUTATING (default OFF). v0.276.0. A named credential for one contact at the packer — shown ONCE (only its hash "
 		"is kept): the portal link, and the same credential as a Bearer token for the JSON feed. Live until revoked or "
 		"its expiry (400 days by default). Refused until packer_portal_enabled is on for the company.",
@@ -18796,7 +18866,8 @@ TOOLS = {
 		title="Issue packer credential",
 	),
 	"revoke_packer_access": _tool(
-		packer_portal_tools.revoke_packer_access,
+		customer_portal_tools.revoke_packer_access,
+		"SUPERSEDED by revoke_portal_access (v0.313.0: the customer / first-handler portal) — kept callable under this name. "
 		"MUTATING (default OFF). v0.276.0. Revoke one contact's credential, or (no contact) the whole share. It answers "
 		"'not found' from then on.",
 		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "contact_name": _field(_STRING, "One contact; omit for the whole share."), "reason": _field(_STRING, "Why.")},
@@ -18805,7 +18876,8 @@ TOOLS = {
 		title="Revoke packer access",
 	),
 	"get_packer_share": _tool(
-		packer_portal_tools.get_packer_share,
+		customer_portal_tools.get_packer_share,
+		"SUPERSEDED by get_customer_portal (v0.313.0: the customer / first-handler portal) — kept callable under this name. "
 		"v0.276.0. One packer share: its credentials (contact, issued, expiry, revoked, last used, uses — never the "
 		"token) and exactly what the packer's page shows. Read-only.",
 		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "season": _field(_STRING, "YYYY; default the share's.")},
@@ -18813,7 +18885,8 @@ TOOLS = {
 		title="Get packer share",
 	),
 	"get_packer_pack": _tool(
-		packer_portal_tools.get_packer_pack,
+		customer_portal_tools.get_packer_pack,
+		"SUPERSEDED by get_customer_portal_pack (v0.313.0: the customer / first-handler portal) — kept callable under this name. "
 		"v0.276.0. The packer's pack for one block (ticker) or every committed block and a season: json (the data), "
 		"csv (the spray record), xlsx (sprays, IPM, projections, clear to harvest) or pdf (the spray record, MRL by "
 		"market, IPM, pre-harvest status — GlobalG.A.P. fields), as base64. Read-only.",
@@ -18823,7 +18896,8 @@ TOOLS = {
 		title="Get packer pack",
 	),
 	"list_packer_access_log": _tool(
-		packer_portal_tools.list_packer_access_log,
+		customer_portal_tools.list_packer_access_log,
+		"SUPERSEDED by list_portal_access_log (v0.313.0: the customer / first-handler portal) — kept callable under this name. "
 		"v0.276.0. Every view, download and feed pull: when, which contact, what, from where. Read-only.",
 		{"share": _field(_STRING, "The Packer Share (PKS-…)."), "company": _field(_STRING, "All of a company's shares."), "limit": _field(_INTEGER, "Default 200.")},
 		title="List packer access log",

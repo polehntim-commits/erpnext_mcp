@@ -231,6 +231,9 @@ JOB_BAD_TOKEN_ALERT = 25
 #: v0.276.0. The packer portal: the page, its data and downloads by credential in the path; the feed by Bearer.
 PACKER_PREFIX = f"{PREFIX}/packer/"
 PACKER_FEED = f"{PREFIX}/packer-feed"
+#: v0.313.0. The customer / first-handler portal's own paths; the /packer ones keep working.
+PORTAL_PREFIX = f"{PREFIX}/portal/"
+PORTAL_FEED = f"{PREFIX}/portal-feed"
 PACKER_LIMIT = 60
 
 BRAND_DESCRIBED_ROUTE = {
@@ -1316,7 +1319,7 @@ def _job(request: Request, path: str) -> Response:
 
 
 def _packer_found(request: Request, token: str):
-	from .. import packer_portal
+	from .. import customer_portal as packer_portal
 
 	ip = _peer(request)
 	found = packer_portal.find(token)
@@ -1329,16 +1332,17 @@ def _packer_found(request: Request, token: str):
 	return found
 
 
-def _packer(request: Request, path: str) -> Response:
-	"""`/packer/<token>` (the page), `…/data`, `…/download?format=&block=&season=`. v0.276.0.
+def _packer(request: Request, path: str, prefix: str = PACKER_PREFIX) -> Response:
+	"""`/portal/<token>` (v0.313.0) or `/packer/<token>` (v0.276.0) — the page, `…/data`,
+	`…/download?format=&block=&season=`.
 
 	The same rules as the job page (v0.271.0): the credential is proved first and every one that will not work gets
 	the same 404; metered per address; no-store, noindex, no-referrer and the page's CSP on every answer. ADDENDUM H7
 	EXCEPTION: the second HTML answer under /farmops — a fixed shell with no data; the data is JSON set by textContent.
 	"""
-	from .. import packer_portal
+	from .. import customer_portal as packer_portal
 
-	token, _, action = path[len(PACKER_PREFIX):].partition("/")
+	token, _, action = path[len(prefix):].partition("/")
 	ip = _peer(request)
 	if guard._count(f"packer:{ip or 'unknown'}", 60) > PACKER_LIMIT:
 		return _failure(429, TOO_MANY)
@@ -1378,7 +1382,7 @@ def _packer(request: Request, path: str) -> Response:
 
 def _packer_feed(request: Request) -> Response:
 	"""`GET /packer-feed` with `Authorization: Bearer <credential>` — the same data as JSON, for the packer's system."""
-	from .. import packer_portal
+	from .. import customer_portal as packer_portal
 
 	ip = _peer(request)
 	if guard._count(f"packer:{ip or 'unknown'}", 60) > PACKER_LIMIT:
@@ -1607,10 +1611,13 @@ def _dispatch(request: Request, path: str) -> Response:
 	if path.startswith(JOB_PREFIX):
 		return _job(request, path)
 
+	if path.startswith(PORTAL_PREFIX):
+		return _packer(request, path, PORTAL_PREFIX)
+
 	if path.startswith(PACKER_PREFIX):
 		return _packer(request, path)
 
-	if path == PACKER_FEED and request.method == "GET":
+	if path in (PORTAL_FEED, PACKER_FEED) and request.method == "GET":
 		return _packer_feed(request)
 
 	if path.startswith(SCAN_PREFIX) and request.method == "GET":

@@ -1287,11 +1287,17 @@
   "allow_resolve_pollination_flag",
   "allow_release_hive_gather",
   "allow_link_pollination_invoice",
+  "allow_create_customer_portal",
   "allow_create_packer_share",
+  "allow_issue_portal_credential",
   "allow_issue_packer_credential",
+  "allow_revoke_portal_access",
   "allow_revoke_packer_access",
+  "allow_get_customer_portal",
   "allow_get_packer_share",
+  "allow_get_customer_portal_pack",
   "allow_get_packer_pack",
+  "allow_list_portal_access_log",
   "allow_list_packer_access_log",
   "allow_template",
   "allow_config",
@@ -11012,10 +11018,24 @@
   },
   {
    "default": "0",
+   "description": "v0.313.0. WRITE. The customer / first-handler portal — create customer portal. Replaces create_packer_share (still callable).",
+   "fieldname": "allow_create_customer_portal",
+   "fieldtype": "Check",
+   "label": "Create Customer Portal"
+  },
+  {
+   "default": "0",
    "description": "WRITE. v0.276.0. A read-only share for a packer.",
    "fieldname": "allow_create_packer_share",
    "fieldtype": "Check",
    "label": "Create Packer Share"
+  },
+  {
+   "default": "0",
+   "description": "v0.313.0. WRITE. The customer / first-handler portal — issue portal credential. Replaces issue_packer_credential (still callable).",
+   "fieldname": "allow_issue_portal_credential",
+   "fieldtype": "Check",
+   "label": "Issue Portal Credential"
   },
   {
    "default": "0",
@@ -11026,10 +11046,24 @@
   },
   {
    "default": "0",
+   "description": "v0.313.0. WRITE. The customer / first-handler portal — revoke portal access. Replaces revoke_packer_access (still callable).",
+   "fieldname": "allow_revoke_portal_access",
+   "fieldtype": "Check",
+   "label": "Revoke Portal Access"
+  },
+  {
+   "default": "0",
    "description": "WRITE. v0.276.0. Revoke a contact or a share.",
    "fieldname": "allow_revoke_packer_access",
    "fieldtype": "Check",
    "label": "Revoke Packer Access"
+  },
+  {
+   "default": "1",
+   "description": "v0.313.0. READ. The customer / first-handler portal — get customer portal. Replaces get_packer_share (still callable).",
+   "fieldname": "allow_get_customer_portal",
+   "fieldtype": "Check",
+   "label": "Get Customer Portal"
   },
   {
    "default": "1",
@@ -11040,10 +11074,24 @@
   },
   {
    "default": "1",
+   "description": "v0.313.0. READ. The customer / first-handler portal — get customer portal pack. Replaces get_packer_pack (still callable).",
+   "fieldname": "allow_get_customer_portal_pack",
+   "fieldtype": "Check",
+   "label": "Get Customer Portal Pack"
+  },
+  {
+   "default": "1",
    "description": "READ. v0.276.0. The pack as json / csv / xlsx / pdf.",
    "fieldname": "allow_get_packer_pack",
    "fieldtype": "Check",
    "label": "Get Packer Pack"
+  },
+  {
+   "default": "1",
+   "description": "v0.313.0. READ. The customer / first-handler portal — list portal access log. Replaces list_packer_access_log (still callable).",
+   "fieldname": "allow_list_portal_access_log",
+   "fieldtype": "Check",
+   "label": "List Portal Access Log"
   },
   {
    "default": "1",
@@ -11091,7 +11139,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-10 12:00:00.000000",
+ "modified": "2026-10-10 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "ERPNext MCP Settings",

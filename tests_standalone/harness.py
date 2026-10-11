@@ -1736,9 +1736,9 @@ APP_DOCTYPES = {
 	# v0.272.0. Chemical receiving (`receiving`).
 	"Supplier Delivery Intake": "supplier_delivery_intake",
 	"Supplier Delivery Intake Line": "supplier_delivery_intake_line",
-	# v0.276.0. The packer portal (`packer_portal`).
-	"Packer Share": "packer_share",
-	"Packer Share Block": "packer_share_block",
+	# v0.276.0 / v0.313.0. The customer / first-handler portal (`customer_portal`; was Packer Share).
+	"Customer Portal": "customer_portal",
+	"Customer Portal Block": "customer_portal_block",
 	# v0.243.0. No-work notices and their recipients.
 	"Work Notice": "work_notice",
 	"Work Notice Recipient": "work_notice_recipient",
@@ -2690,7 +2690,7 @@ CHILD_TABLES = {
 	("Contractor Job", "fields"): "Contractor Job Field",
 	("Contractor Job", "events"): "Contractor Job Event",
 	("Supplier Delivery Intake", "lines"): "Supplier Delivery Intake Line",
-	("Packer Share", "blocks"): "Packer Share Block",
+	("Customer Portal", "blocks"): "Customer Portal Block",
 	("Farm Payroll Deduction", "ledger"): "Farm Payroll Deduction Ledger",
 	("Wizard Definition", "steps"): "Wizard Step",
 	("Wizard Step", "fields"): "Wizard Field",
@@ -5036,7 +5036,7 @@ CHILD_TABLE_SOURCES = {
 	# v0.271.0. `delete_farm_location` asks whether a contractor job names the block.
 	"Contractor Job Field": (("Contractor Job", "fields"),),
 	# v0.276.0. `delete_farm_location` asks whether a packer share names the block.
-	"Packer Share Block": (("Packer Share", "blocks"),),
+	"Customer Portal Block": (("Customer Portal", "blocks"),),
 	# v0.272.0. `receiving.trace_lot` finds a lot across every delivery by querying the lines directly.
 	"Supplier Delivery Intake Line": (("Supplier Delivery Intake", "lines"),),
 	# v0.68.0. `tools/fill_pipeline.py` reads this child doctype directly with a

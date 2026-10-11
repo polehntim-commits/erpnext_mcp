@@ -22,7 +22,7 @@
 		if (!r.ok) throw new Error("This link is not available.");
 		return r.json();
 	}).then(function (d) {
-		document.getElementById("title").textContent = d.grower + " — for " + d.packer;
+		document.getElementById("title").textContent = d.grower + " — for " + (d.customer || d.packer);
 		document.getElementById("dates").textContent = "Season " + d.season + " · " + d.blocks.map(function (b) { return b.block + (b.variety ? " (" + b.variety + ")" : ""); }).join(", ");
 		var dl = sec("Download");
 		download(dl, "Spray record (CSV)", "csv", "", d.season);

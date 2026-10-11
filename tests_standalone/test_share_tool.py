@@ -16,14 +16,15 @@ from .test_job_links import JobCase
 from .test_packer_portal import PortalCase
 
 JOB_WRITES = ("create_job_link", "extend_job_link", "revoke_job_link")
-PACKER_WRITES = ("issue_packer_credential", "revoke_packer_access")
+#: v0.313.0: the generic portal tools the "packer" (now customer_portal) kind runs.
+PACKER_WRITES = ("issue_portal_credential", "revoke_portal_access")
 
 
 class Discovery(PortalCase):
 	def test_kinds_aliases_and_what_name_means(self):
 		self.configure(enabled=1, allow_share_link=1)
 		got = self.tool_data("share_link", {"action": "kinds"})
-		self.assertEqual({k["kind"] for k in got["kinds"]}, {"job", "packer", "upload", "enrollment"})
+		self.assertEqual({k["kind"] for k in got["kinds"]}, {"job", "customer_portal", "upload", "enrollment"})
 		job = self.tool_data("share_link", {"action": "describe", "kind": "contractor"})
 		self.assertEqual(job["kind"], "job")
 		self.assertEqual(job["calls"]["create"], "create_job_link")
@@ -62,7 +63,7 @@ class Packer(PortalCase):
 		self.configure(enabled=1, allow_share_link=1)
 		message = self.tool_error("share_link", {"action": "create", "kind": "packer", "name": self.share,
 		                                         "contact_name": "Dana"})
-		self.assertIn("issue_packer_credential", message)
+		self.assertIn("issue_portal_credential", message)
 		self.configure(enabled=1, **{f"allow_{n}": 1 for n in PACKER_WRITES})
 		self.assertIn("share_link", self.tool_error("share_link", {"action": "kinds"}))
 

@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.313.0 — 2026-10-10 — the customer / first-handler portal
+
+**Migrate**: Packer Share → Customer Portal (and its block table), with `customer` required and a `customer_role`;
+the Share Link kind "Customer Portal"; six switches, carried over from the packer ones. Deploy
+`docs/deploy/v0.313.0_customer_portal.md`. Tools: **1,142 → 1,148**.
+
+- **Generic portal:** the packer portal is now a portal for any ERPNext Customer that buys, packs or first-handles
+  the fruit, issued by the grower; Orchard View is the first instance. It runs on the share-link engine. A customer
+  only ever sees its own blocks.
+- **Tools:** `create_customer_portal`, `issue_portal_credential`, `revoke_portal_access`, `get_customer_portal`,
+  `get_customer_portal_pack`, `list_portal_access_log`. The packer names stay callable, logged as superseded.
+- **Routes:** `/portal/<token>` and `/portal-feed`; the `/packer` paths and "Packer" links still work.
+- **Plan:** `docs/design/customer_portal_plan.md`.
+- Tests: `test_customer_portal`. The packer-portal tests are updated to the generic names.
+
 ## 0.312.0 — 2026-10-10 — three compliance values Tim changes without a release
 
 **No migrate.** Deploy `docs/deploy/v0.312.0_policy_editable.md`. Tools: **1,142 → 1,142**.

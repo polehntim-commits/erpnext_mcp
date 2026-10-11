@@ -30,12 +30,13 @@ KINDS = {
 		          "revoke": ("revoke_job_link", "link"), "list": ("list_job_links", "job"),
 		          "log": ("list_job_links", "job")},
 	},
-	"packer": {
-		"label": "Packer portal (a share, then one credential per contact)",
-		"name_is": "the Packer Share (PKS-…); setup takes the share's fields in body",
-		"calls": {"setup": ("create_packer_share", None), "create": ("issue_packer_credential", "share"),
-		          "revoke": ("revoke_packer_access", "share"), "get": ("get_packer_share", "share"),
-		          "list": ("list_packer_access_log", "share"), "log": ("list_packer_access_log", "share")},
+	# v0.313.0. The customer / first-handler portal (was "packer"; that name still works).
+	"customer_portal": {
+		"label": "Customer / first-handler portal (a portal per customer, then one credential per contact)",
+		"name_is": "the Customer Portal (CPT-…); setup takes the portal's fields in body (company, customer, fields)",
+		"calls": {"setup": ("create_customer_portal", None), "create": ("issue_portal_credential", "portal"),
+		          "revoke": ("revoke_portal_access", "portal"), "get": ("get_customer_portal", "portal"),
+		          "list": ("list_portal_access_log", "portal"), "log": ("list_portal_access_log", "portal")},
 	},
 	"upload": {
 		"label": "One-time upload link (a file too big to attach)",
@@ -51,7 +52,8 @@ KINDS = {
 	},
 }
 ALIASES = {"contractor": "job", "delivery": "job", "pickup": "job", "pollination": "job", "beekeeper": "job",
-           "supplier": "job", "packer_portal": "packer", "upload_link": "upload", "enrolment": "enrollment",
+           "supplier": "job", "packer_portal": "customer_portal", "packer": "customer_portal",
+           "portal": "customer_portal", "upload_link": "upload", "enrolment": "enrollment",
            "phone": "enrollment"}
 #: Top-level arguments passed through to the kind's tool when it takes them.
 PASSED = ("days", "until", "reason", "contact_name", "contact_email", "company", "limit", "minutes", "device_name",

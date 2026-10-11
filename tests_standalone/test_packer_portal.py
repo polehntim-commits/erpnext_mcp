@@ -46,6 +46,7 @@ class PortalCase(FarmOpsAPITestCase):
 		STORE.seed("Crop Observation", [{"name": "OBS-27", "block_doctype": "Field", "block": WIND,
 		                                 "observation_type": "Pest", "threat": "Western Cherry Fruit Fly",
 		                                 "observed_on": "2027-06-01", "count_observed": 3, "threshold_exceeded": 1}])
+		STORE.seed("Customer", [{"name": "Orchard View Farms", "customer_name": "Orchard View Farms"}])
 		STORE.commit()
 		self.share = packer_portal.create_share(MAIN, "Orchard View Farms", ["Bing Block"], season="2027",
 		                                        markets=["US", "Japan"])
@@ -113,13 +114,13 @@ class WhatTheyAndOnlyTheySee(PortalCase):
 
 class TheCredential(PortalCase):
 	def test_off_until_on_shown_once_hashed_and_revocable(self):
-		with self.assertRaisesRegex(packer_portal.PortalError, "packer_portal_enabled"):
+		with self.assertRaisesRegex(packer_portal.PortalError, "customer_portal_enabled"):
 			packer_portal.issue_credential(self.share, "Dana")
 		out = self.issue()
-		# v0.285.0: the credential is a Share Link of kind Packer; only the hash is kept, on it and nowhere else.
+		# v0.285.0: the credential is a Share Link (kind Customer Portal since v0.313.0); only the hash is kept.
 		link = frappe.get_doc("Share Link", packer_portal.credentials(self.share)[0]["link"])
 		self.assertEqual(link.token_hash, hashlib.sha256(out["token"].encode()).hexdigest())
-		self.assertEqual((link.kind, link.target, link.contact_name), ("Packer", self.share, "Dana at OVF"))
+		self.assertEqual((link.kind, link.target, link.contact_name), ("Customer Portal", self.share, "Dana at OVF"))
 		for doc in (link, frappe.get_doc(packer_portal.SHARE, self.share)):
 			self.assertNotIn(out["token"], json.dumps(doc.as_dict(), default=str))
 		self.assertEqual(packer_portal.find(out["token"])["contact"], "Dana at OVF")
@@ -143,7 +144,7 @@ class OverHTTP(PortalCase):
 		self.assertEqual(page.headers["Referrer-Policy"], "no-referrer")
 		self.assertNotIn("MCC", page.get_data(as_text=True), "the shell carries no data")
 		data = json.loads(self.get(f"{PREFIX}/packer/{token}/data").get_data(as_text=True))
-		self.assertEqual(data["packer"], "Orchard View Farms")
+		self.assertEqual(data["customer"], "Orchard View Farms")
 		for fmt, kind in (("csv", "text/csv"), ("xlsx", "application/vnd.openxmlformats"), ("pdf", "application/pdf")):
 			answer = self.get(f"{PREFIX}/packer/{token}/download?format={fmt}&block=MCC")
 			self.assertEqual(answer.status_code, 200, fmt)
