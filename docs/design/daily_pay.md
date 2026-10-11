@@ -119,9 +119,21 @@ floors are the dated, sourced **Wage Floor** table; a policy below the floor in 
 | 3 | Workweek | `workweek_start: Sunday 00:00` (ends Saturday 23:59) |
 | 4 | Cutoff | `daily_cutoff: "18:00"`, `pay_reviewed_punches_only: true` |
 | 5 | Money lands | `ach_timing: next_business_day` (`same_day` + bank cutoff is a later setting) |
-| 6 | Overtime | `overtime: {mode: never_below_state_floor, threshold_hours: 40, multiplier: 1.5}` — the higher of the floor and 40 h |
+| 6 | Overtime | ~~`overtime: {mode: never_below_state_floor, threshold_hours: 40, multiplier: 1.5}` — 40 h now~~ **Superseded 2026-10-10 — see below:** `overtime: {mode: state_floor, multiplier: 1.5}` — the law's dated threshold |
 | 7 | No direct deposit | `no_direct_deposit: weekly_only` |
 | 8 | Cost | `accept_daily_min_wage_makeup: true`, `accept_ach_fees: true`, `weekly_cost_report: true` |
+
+**Tim's decision, 2026-10-10 — overtime follows current law (supersedes decision 6's "40 h now").** The live Pay
+Policy stays in `overtime.mode: state_floor`: the agricultural threshold is the effective-dated state floor from the
+Wage Floor table, per workweek and per state —
+
+- **Oregon agriculture:** 48 hours a week through 2026-12-31, 40 hours from 2027-01-01 (ORS 653.272, HB 4002).
+- **Washington agriculture:** 40 hours a week (RCW 49.46.130(6)(c), since 2024-01-01).
+
+The multiplier is 1.5×. No policy change is needed: this is what has been live since v0.298.0. The only exception is
+the FLSA flag (`flsa.handles_other_farms_crop`, off), which would put every week at 40 hours. A farm threshold below
+the law (e.g. 40 h in Oregon in 2026) remains a Pay Policy choice Tim can publish later through the config lifecycle;
+it is not the policy.
 
 The existing `payroll_setting:overtime_rule` (40 h / 1.5×) folds into `overtime`. Build plan §10 is unchanged,
 with the Pay Policy and Wage Floor kinds as step 1.
