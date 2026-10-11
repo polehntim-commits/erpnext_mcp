@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.312.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
+**Deploy: v0.252.0 → v0.313.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.312.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.313.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`e1830c3`** (`__version__ = "0.312.0"`).
+- **Server**: erpnext_mcp main **`8617f7c`** (`__version__ = "0.313.0"`).
 - **App**: fafo_ios main **`6f932bb`** — FarmOps **0.63.0 (build 59)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -75,6 +75,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.310.0 | Cherry phenology methods: default March 1 at 2 °C (OSU 2014, 'Van' bloom 254 °C·day); alternates Jan 1 at 4.4 °C / 40 °F and after-chill; per variety / block; method reported with every answer. Supersedes 40 °F. No migrate (publish a new crop_phenology version where @1 exists). |
 | v0.311.0 | Garnishment: debt type on every order; every applicable federal / OR (ORS 18.385, 2026-27 floors, support writs $254) / WA (RCW 6.27.150, consumer, private student loan, spousal 50%) limit computed and the most protective taken; support first. Migrate (Farm Payroll Deduction.debt_type). Verify WA highest local minimum wage each Jan 1. |
 | v0.312.0 | Policy values Tim edits without a release (config lifecycle, person-only publish, versioned): OR-W-4 e-sign acceptance flag + forwarding days/basis; Oregon bonus-in-regular-rate flag; garnishment priority and dated debt-type limit tables. No migrate. |
+| v0.313.0 | The generic customer / first-handler portal (was the packer portal): any Customer (buyer, packer, first handler), issued by the grower; generic tools (create_customer_portal, issue_portal_credential, get_customer_portal_pack, list_portal_access_log …), packer names kept; /portal routes. Migrate (doctype rename + switch carry-over). Tools 1,148. |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -100,17 +101,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.312.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.313.0`. Push fafo_ios main and archive
 FarmOps 0.63.0 (build 59).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.312.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.313.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.312.0; the asset map's build stamp 0.312.0.
+1. `get_server_status`: 0.313.0; the asset map's build stamp 0.313.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
