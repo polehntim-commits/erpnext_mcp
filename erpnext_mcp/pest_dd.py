@@ -236,19 +236,7 @@ def _validate_phenology(body: dict, errors: list, warnings: list) -> None:
 			              "(4.5 °C, ISHS 1020_29; 41 °F on the WSU maps).")
 		if not row.get("citation"):
 			warnings.append(f"{name}: no citation.")
-		last = -1.0
-		for stage in row.get("stages") or []:
-			try:
-				bbch, dd = (stage.get("bbch"), stage.get("dd")) if isinstance(stage, dict) else stage
-				dd = float(dd)
-			except (TypeError, ValueError):
-				errors.append(f"{name}: a stage is [BBCH, °F·days].")
-				continue
-			if not (str(bbch).isdigit() and len(str(bbch)) <= 2):
-				errors.append(f"{name}: stage BBCH {bbch!r} is a two-digit code.")
-			if dd <= last:
-				errors.append(f"{name}: stage °F·days must rise ({bbch} at {dd:g}).")
-			last = dd
+		_check_stages(f"{name}", row.get("stages") or [], errors)
 		biofix = row.get("biofix")
 		if biofix not in (None, "") and not _month_day(biofix):
 			errors.append(f"{name}: biofix is a month-day like 03-01.")
@@ -278,12 +266,74 @@ def _validate_phenology(body: dict, errors: list, warnings: list) -> None:
 				errors.append(f"{where}: biofix is a month-day like 03-01, or 'chill'.")
 			if not method.get("citation"):
 				warnings.append(f"{where}: no citation.")
+			# v0.316.0. A method's own stage table, and per-variety tables.
+			_check_stages(f"{where}.stages", method.get("stages") or [], errors)
+			for variety, stages in (method.get("stages_by_variety") or {}).items():
+				_check_stages(f"{where}.stages_by_variety.{variety}", stages or [], errors)
 		if methods and row.get("default_method") not in methods:
 			errors.append(f"{name}: default_method must name one of its methods ({', '.join(methods)}).")
 		for mapping in ("by_variety", "by_block"):
 			for who, method_name in (row.get(mapping) or {}).items():
 				if method_name not in methods:
 					errors.append(f"{name}.{mapping}.{who}: {method_name!r} is not one of its methods.")
+
+
+def _check_stages(where: str, stages: list, errors: list) -> None:
+	"""v0.316.0. A stage is [BBCH, °F·days] or {bbch, dd, source} — or {bbch, dd: null, to_calibrate: true}, a stage
+	named but not yet measured (it estimates nothing until a number is published). The numbers must rise."""
+	last = -1.0
+	for stage in stages:
+		calibrate = isinstance(stage, dict) and stage.get("to_calibrate") and stage.get("dd") in (None, "")
+		try:
+			bbch, dd = (stage.get("bbch"), stage.get("dd")) if isinstance(stage, dict) else stage
+			dd = None if calibrate else float(dd)
+		except (TypeError, ValueError):
+			errors.append(f"{where}: a stage is [BBCH, °F·days], or {{bbch, dd: null, to_calibrate: true}}.")
+			continue
+		if not (str(bbch).isdigit() and len(str(bbch)) <= 2):
+			errors.append(f"{where}: stage BBCH {bbch!r} is a two-digit code.")
+		if dd is None:
+			continue
+		if dd <= last:
+			errors.append(f"{where}: stage °F·days must rise ({bbch} at {dd:g}).")
+		last = dd
+
+
+#: v0.316.0. The sweet-cherry stages a table is built from — BBCH codes for stone fruit (Meier, U. (ed.) 2001,
+#: Growth stages of mono- and dicotyledonous plants, BBCH Monograph). Only one threshold is published for these
+#: bases: 'Van' full bloom (BBCH 65) at 254 °C·day from March 1, base 2 °C (Kaiser, Coop & Meland, OSU 2014).
+#: Every other stage is named and left to calibrate from the farm's own observations.
+CHERRY_STAGES = (("51", "bud swell"), ("53", "bud burst"), ("55", "single flower buds visible"),
+                 ("57", "sepals open"), ("59", "first petals / balloon"), ("61", "beginning of bloom (10%)"),
+                 ("65", "full bloom (50%)"), ("69", "end of bloom"), ("71", "fruit set"), ("75", "fruit half size"),
+                 ("81", "beginning of colour"), ("85", "colour advanced"), ("87", "ripe for picking"))
+BBCH_SOURCE = "Meier (ed.) 2001, BBCH Monograph — stone fruit"
+OSU_VAN = "Kaiser, Coop & Meland, OSU 2014: 'Van' full bloom 254 °C·day from March 1, base 2 °C (= 457.2 °F·day)"
+
+
+def proposed_stage_table(body: dict | None = None) -> dict:
+	"""v0.316.0. A crop_phenology body with the proposed sweet-cherry stage tables: every BBCH stage on each method,
+	`to_calibrate` where no published threshold exists, and 'Van' full bloom at the OSU figure on the default method.
+	Built on the version in force (or the seed). A DRAFT for a person to publish — this never publishes."""
+	import copy
+
+	base = copy.deepcopy(body or phenology()[0])
+	cherry = base.setdefault("crops", {}).setdefault("sweet cherry", copy.deepcopy(DEFAULT_PHENOLOGY["crops"]["sweet cherry"]))
+	methods = cherry.setdefault("methods", copy.deepcopy(DEFAULT_PHENOLOGY["crops"]["sweet cherry"]["methods"]))
+	for name, method in methods.items():
+		method["stages"] = [{"bbch": code, "dd": None, "to_calibrate": True, "name": label,
+		                     "source": f"{BBCH_SOURCE}; threshold to calibrate on this farm ({name})"}
+		                    for code, label in CHERRY_STAGES]
+	mar1 = methods.get("mar1_2c")
+	if mar1 is not None:
+		mar1["stages_by_variety"] = {"Van": [
+			{"bbch": code, "dd": 457.2 if code == "65" else None, "to_calibrate": code != "65", "name": label,
+			 "source": OSU_VAN if code == "65" else f"{BBCH_SOURCE}; threshold to calibrate on this farm"}
+			for code, label in CHERRY_STAGES]}
+	cherry["stage_table_note"] = ("Proposed v0.316.0: every BBCH stage named; one published threshold ('Van' full "
+	                              "bloom, OSU 2014); the rest to calibrate from the farm's own observations "
+	                              "(record_growth_stage) — publish in the Desk once reviewed.")
+	return base
 
 
 def _month_day(value) -> bool:
@@ -667,11 +717,20 @@ def preview(key: str, body, blocks: list | None = None) -> dict:
 		rows = []
 		for block in names:
 			crop = degree_days._crop_of(block)
-			now = degree_days.crop_entry(crop)
+			variety = degree_days._variety_of(block)
+			now = degree_days.crop_entry(crop, variety, block)
 			with overlay(key, body):
-				then = degree_days.crop_entry(crop)
-			rows.append({"block": block, "crop": crop or None, "base_now": now["base"], "base_draft": then["base"],
-			             "source_now": now.get("base_source"), "source_draft": then.get("base_source")})
+				then = degree_days.crop_entry(crop, variety, block)
+			# v0.316.0. The method, the biofix and the stage table each block would use, now and under the draft.
+			rows.append({"block": block, "crop": crop or None, "variety": variety or None,
+			             "base_now": now["base"], "base_draft": then["base"],
+			             "source_now": now.get("base_source"), "source_draft": then.get("base_source"),
+			             "method_now": (now.get("method") or {}).get("name"),
+			             "method_draft": (then.get("method") or {}).get("name"),
+			             "biofix_now": now.get("biofix"), "biofix_draft": then.get("biofix"),
+			             "stages_now": [[code, dd] for dd, code in now.get("stages") or []],
+			             "stages_draft": [[code, dd] for dd, code in then.get("stages") or []],
+			             "to_calibrate_draft": then.get("stages_to_calibrate") or []})
 		return {"validation": report, "blocks": rows, "written": False}
 	rows = []
 	for block in names:

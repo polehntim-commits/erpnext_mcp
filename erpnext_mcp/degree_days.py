@@ -121,10 +121,9 @@ def crop_entry(crop: str, variety: str = "", block: str = "") -> dict:
 		entry["cutoff"] = float(row["cutoff_f"])
 	entry["alternates"] = row.get("alternates") or []
 	# v0.303.0. The crop's stage table from crop_phenology wins over the Settings text table where it has rows.
-	stages = []
-	for stage in row.get("stages") or []:
-		bbch, dd = (stage.get("bbch"), stage.get("dd")) if isinstance(stage, dict) else stage
-		stages.append((float(dd), str(bbch).zfill(2)))
+	stages, to_calibrate = _stages(row.get("stages") or [])
+	if to_calibrate:
+		entry["stages_to_calibrate"] = to_calibrate
 	if stages:
 		entry["stages"] = sorted(stages)
 		entry["stages_source"] = f"crop_phenology {version}"
@@ -139,9 +138,16 @@ def crop_entry(crop: str, variety: str = "", block: str = "") -> dict:
 		entry["base_source"] = f"crop_phenology {version}, method {name}: {method.get('citation') or ''}".strip()
 		by_variety = {str(k).casefold(): v for k, v in (method.get("stages_by_variety") or {}).items()}
 		own = by_variety.get(str(variety or "").casefold())
-		if own:
-			entry["stages"] = sorted((float(dd), str(bbch).zfill(2)) for bbch, dd in own)
-			entry["stages_source"] = f"crop_phenology {version}, method {name}, variety {variety}"
+		# v0.316.0. The variety's own table, else the method's; stages still to calibrate are named, not estimated.
+		for table, label in ((own, f"method {name}, variety {variety}"), (method.get("stages"), f"method {name}")):
+			if not table:
+				continue
+			measured, pending = _stages(table)
+			entry["stages_to_calibrate"] = pending
+			if measured:
+				entry["stages"] = measured
+				entry["stages_source"] = f"crop_phenology {version}, {label}"
+			break
 		chill = None
 		if method.get("biofix") == "chill":
 			hours = (row.get("chill_hours_by_variety") or {}).get(variety) or method.get("chill_hours_required")
@@ -154,6 +160,18 @@ def crop_entry(crop: str, variety: str = "", block: str = "") -> dict:
 		                                 {str(k).casefold() for k in (row.get("by_variety") or {})} else "default"),
 		                   **({"chill": chill} if chill else {})}
 	return entry
+
+
+def _stages(table: list) -> tuple:
+	"""v0.316.0. ([(°F·days, BBCH)] with a number, sorted; [BBCH still to calibrate])."""
+	measured, pending = [], []
+	for stage in table or []:
+		bbch, dd = (stage.get("bbch"), stage.get("dd")) if isinstance(stage, dict) else stage
+		if dd in (None, ""):
+			pending.append(str(bbch).zfill(2))
+			continue
+		measured.append((float(dd), str(bbch).zfill(2)))
+	return sorted(measured), pending
 
 
 def chill_hours(high, low, lower: float = 32.0, upper: float = 45.0) -> float:

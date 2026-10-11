@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.316.0 — 2026-10-11 — the cherry degree-day stage table, over MCP
+
+**No migrate** (an install step drafts the proposal). Deploy `docs/deploy/v0.316.0_stage_table_mcp.md`. Tools:
+**1,148 → 1,148**.
+
+- **Stage tables in `crop_phenology`:** each method carries `stages` (BBCH → °F·days from its biofix and base), and
+  `stages_by_variety` overrides them per variety. They are read, drafted and previewed through `config` over MCP;
+  publishing stays a person's job, in the Desk.
+- **To calibrate:** a stage may be `{bbch, dd: null, to_calibrate: true}`. It is never used for an estimate until
+  a number is published. `get_degree_days` lists `stages_to_calibrate`.
+- **Preview** shows each block's crop, variety, method, biofix and stage table, now versus the draft.
+- **The proposal (DRAFT, never published):** sweet-cherry BBCH 51–87 (Meier 2001). 'Van' full bloom is at
+  457.2 °F·day from March 1, base 2 °C (OSU 2014); the rest are to calibrate.
+- Tests: `test_stage_table_mcp`.
+
 ## 0.315.0 — 2026-10-11 — Washington's highest local minimum wage, and its yearly review
 
 **No migrate.** Deploy `docs/deploy/v0.315.0_wa_highest_local_minimum.md`. Tools: **1,148 → 1,148**.

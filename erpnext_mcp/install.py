@@ -238,6 +238,7 @@ def after_migrate() -> None:
 	_offline_claim_rule()
 	_ipm_graph_seed()
 	_pest_dd_seed()
+	_crop_phenology_stage_proposal()
 	_market_commodity_seed()
 	_seasonal_seed()
 	_job_template_seed()
@@ -975,6 +976,29 @@ def _pest_dd_seed() -> None:
 				print(f"erpnext_mcp: IPM setting {name} seeded.")
 	except Exception as exc:  # pragma: no cover
 		print(f"erpnext_mcp: pest DD settings were not seeded — {type(exc).__name__}: {exc}")
+
+
+def _crop_phenology_stage_proposal() -> None:
+	"""v0.316.0. The proposed sweet-cherry stage table as a DRAFT crop_phenology version for Tim to review and publish
+	in the Desk — once (never while another draft is open), never published here. Never raises."""
+	try:
+		from . import pest_dd, phone_config
+
+		if frappe.db.exists("Farm Config Version", {"config_kind": pest_dd.KIND, "config_key": pest_dd.PHENOLOGY_KEY,
+		                                            "status": "Draft"}):
+			print("erpnext_mcp: a crop_phenology draft is already open — the stage-table proposal was not added.")
+			return
+		if frappe.db.exists("Farm Config Version", {"config_kind": pest_dd.KIND, "config_key": pest_dd.PHENOLOGY_KEY,
+		                                            "notes": ("like", "%Proposed stage table v0.316.0%")}):
+			return
+		doc, _report = phone_config.save_draft(
+			pest_dd.KIND, pest_dd.PHENOLOGY_KEY, pest_dd.proposed_stage_table(),
+			"Proposed stage table v0.316.0 — sweet cherry BBCH stages by method; 'Van' full bloom from OSU 2014; the "
+			"rest to calibrate. Review with config action=preview kind=crop_phenology, publish in the Desk.",
+			"AI-proposed")
+		print(f"erpnext_mcp: crop_phenology stage-table proposal drafted as {doc.name} — publish it in the Desk.")
+	except Exception as exc:  # pragma: no cover
+		print(f"erpnext_mcp: the stage-table proposal was not drafted — {type(exc).__name__}: {exc}")
 
 
 def _job_template_seed() -> None:
