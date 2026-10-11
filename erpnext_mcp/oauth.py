@@ -1011,6 +1011,29 @@ def note_static_use() -> None:
 		_set_default(STATIC_LAST_USED_KEY, today)
 
 
+def static_token_callers(days: int = 30) -> list:
+	"""v0.317.0. Who still signs in with the static token: MCP Action Log rows with Auth Method "Static token" in the
+	last `days`, grouped by client program, address and model — calls, first and last seen, a few tools used."""
+	from . import compat
+
+	if not compat.has_field("MCP Action Log", "auth_method"):
+		return []
+	since = _stamp(-int(days) * 86400)
+	groups: dict = {}
+	for row in frappe.db.get_all("MCP Action Log", filters={"auth_method": "Static token", "timestamp": (">=", since)},
+	                             fields=["timestamp", "tool_name", "caller_ip", "agent_client", "agent_model",
+	                                     "acting_for"], order_by="timestamp asc", limit=20000) or []:
+		key = (row.get("agent_client") or "", row.get("caller_ip") or "", row.get("agent_model") or "")
+		entry = groups.setdefault(key, {"client": key[0] or None, "ip": key[1] or None, "model": key[2] or None,
+		                                "calls": 0, "first_seen": str(row["timestamp"]), "tools": [],
+		                                "acting_for": row.get("acting_for") or None})
+		entry["calls"] += 1
+		entry["last_seen"] = str(row["timestamp"])
+		if row.get("tool_name") and row["tool_name"] not in entry["tools"] and len(entry["tools"]) < 8:
+			entry["tools"].append(row["tool_name"])
+	return sorted(groups.values(), key=lambda g: g["last_seen"], reverse=True)
+
+
 def static_token_status() -> dict:
 	"""`ready_to_disable_static_mcp_token`: OAuth on, a client approved, 14 quiet days on record."""
 	from .device_keys import REQUEST_DOCTYPE

@@ -150,6 +150,50 @@ def dry_run(candidate: str, used: list, recommended: list) -> dict:
 	}
 
 
+def apply(user: str, actor: str) -> dict:
+	"""v0.317.0. The Desk's "Create MCP System User": steps 1–3 and the first half of 5, done for a System Manager.
+
+	Creates (or reuses) a System User with no password and no welcome email, a Role Profile "MCP System User" with
+	exactly the plan's recommended roles — never System Manager or Administrator — and names it in Settings as the MCP
+	System User. It does NOT tick Require User Context: until Tim does, every call still runs as before, so nothing
+	changes on the day this runs. Called from the Desk only (System Manager); no MCP tool reaches it."""
+	user = str(user or "").strip().lower()
+	if "@" not in user:
+		raise ValueError("user is an email address, e.g. mcp@yourfarm.com")
+	recommended = plan()["recommended_roles"]
+	roles = [r for r in recommended if r not in NEVER]
+	if not frappe.db.exists("User", user):
+		doc = frappe.get_doc({"doctype": "User", "email": user, "first_name": "MCP System", "user_type": "System User",
+		                      "send_welcome_email": 0, "enabled": 1})
+		doc.flags.ignore_permissions = True
+		doc.insert(ignore_permissions=True)
+	profile = "MCP System User"
+	if frappe.db.exists("Role Profile", profile):
+		rp = frappe.get_doc("Role Profile", profile)
+		rp.set("roles", [])
+	else:
+		rp = frappe.get_doc({"doctype": "Role Profile", "role_profile": profile})
+	for role in roles:
+		rp.append("roles", {"role": role})
+	rp.flags.ignore_permissions = True
+	rp.save(ignore_permissions=True) if not rp.is_new() else rp.insert(ignore_permissions=True)
+	doc = frappe.get_doc("User", user)
+	doc.role_profile_name = profile
+	doc.set("roles", [])
+	for role in roles:
+		doc.append("roles", {"role": role})
+	doc.flags.ignore_permissions = True
+	doc.save(ignore_permissions=True)
+	conf = frappe.get_doc(settings.SETTINGS_DOCTYPE)
+	conf.mcp_system_user = user
+	conf.flags.ignore_permissions = True
+	conf.save(ignore_permissions=True)
+	frappe.clear_document_cache(settings.SETTINGS_DOCTYPE, settings.SETTINGS_DOCTYPE) \
+		if hasattr(frappe, "clear_document_cache") else None
+	return {"user": user, "roles": roles, "role_profile": profile, "require_user_context": "unchanged — tick it in "
+	        "the Desk when plan_mcp_system_user says ready: true", "by": actor}
+
+
 def steps(user: str, roles: list) -> list:
 	role_list = ", ".join(roles) or "(none beyond the defaults — only this app's own tools are on)"
 	return [

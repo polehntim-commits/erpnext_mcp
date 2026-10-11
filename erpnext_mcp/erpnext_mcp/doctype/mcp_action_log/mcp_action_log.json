@@ -3,7 +3,7 @@
  "allow_rename": 0,
  "autoname": "hash",
  "creation": "2026-07-24 09:00:00.000000",
- "description": "Append-only record of every MCP call \u2014 reads included \u2014 with its arguments, outcome and any document-state change.",
+ "description": "Append-only record of every MCP call — reads included — with its arguments, outcome and any document-state change.",
  "doctype": "DocType",
  "editable_grid": 0,
  "engine": "InnoDB",
@@ -15,6 +15,7 @@
   "caller_ip",
   "agent_model",
   "agent_session",
+  "auth_method",
   "agent_client",
   "acting_for",
   "superseded_by",
@@ -62,7 +63,7 @@
    "label": ""
   },
   {
-   "description": "Nearest-hop client address. Behind a reverse proxy this is the rightmost X-Forwarded-For entry \u2014 the one a client cannot forge.",
+   "description": "Nearest-hop client address. Behind a reverse proxy this is the rightmost X-Forwarded-For entry — the one a client cannot forge.",
    "fieldname": "caller_ip",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -89,7 +90,16 @@
    "search_index": 1
   },
   {
-   "description": "v0.283.0. The client program, from its User-Agent header (e.g. claude-code/\u2026, python-httpx/\u2026). The client's claim; attribution only.",
+   "fieldname": "auth_method",
+   "fieldtype": "Select",
+   "label": "Auth Method",
+   "options": "\nStatic token\nOAuth",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "v0.317.0. How the call signed in: the shared static token (X-MCP-Token) or an OAuth client Tim approved. What list_access_inventory groups to show who still uses the static token."
+  },
+  {
+   "description": "v0.283.0. The client program, from its User-Agent header (e.g. claude-code/…, python-httpx/…). The client's claim; attribution only.",
    "fieldname": "agent_client",
    "fieldtype": "Data",
    "label": "Agent Client",
@@ -144,7 +154,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-08 22:00:00.000000",
+ "modified": "2026-10-11 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "MCP Action Log",

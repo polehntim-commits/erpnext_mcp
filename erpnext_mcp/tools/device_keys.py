@@ -50,11 +50,16 @@ def list_access_inventory(args: dict) -> ToolResult:
 	)
 	legacy = [row for row in rows if row["legacy_secret"]]
 	clients = oauth.clients(as_bool(args, "include_revoked", False))
+	# v0.317.0. Who still uses the shared static token — every caller must move to OAuth (and be verified) before
+	# Tim turns `legacy_static_mcp_token` off in the Desk.
+	static_callers = oauth.static_token_callers(int(args.get("days") or 30))
 	return ToolResult(
 		data={
 			"count": len(rows),
 			"devices": rows,
 			"clients": clients,
+			"static_token_callers": static_callers,
+			"static_token": oauth.static_token_status(),
 			"key_bound": sum(1 for row in rows if row["key_bound"]),
 			"legacy_secret": len(legacy),
 			"ready_to_disable_legacy_secrets": not legacy,

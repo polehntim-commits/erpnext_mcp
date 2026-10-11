@@ -186,6 +186,15 @@ def _caller_columns() -> dict:
 		value = _clean_agent(value)
 		if value:
 			out[key] = value
+	# v0.317.0. How the call signed in — the evidence for retiring the static token.
+	try:
+		from . import compat, oauth
+
+		method = "OAuth" if oauth.current() else str(getattr(frappe.flags, "mcp_auth_method", "") or "")
+		if method and compat.has_field(LOG_DOCTYPE, "auth_method"):
+			out["auth_method"] = method
+	except Exception:  # pragma: no cover
+		pass
 	return out
 
 

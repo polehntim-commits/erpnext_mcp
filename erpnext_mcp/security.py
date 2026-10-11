@@ -65,6 +65,7 @@ def authorize() -> str:
 	was evaluated against, so a log row and a gate decision can never disagree.
 	"""
 	ip = caller_ip()
+	frappe.flags.mcp_auth_method = None  # v0.317.0: set below once the static token has been checked
 
 	from . import oauth
 
@@ -92,6 +93,8 @@ def authorize() -> str:
 				log_reason="static X-MCP-Token presented, but legacy_static_mcp_token is off",
 			)
 		oauth.note_static_use()
+		# v0.317.0. The audit row records it (MCP Action Log → Auth Method).
+		frappe.flags.mcp_auth_method = "Static token"
 
 	if not _network_allowed(ip):
 		raise AuthError(

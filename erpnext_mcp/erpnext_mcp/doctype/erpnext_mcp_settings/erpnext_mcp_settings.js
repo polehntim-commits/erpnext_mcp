@@ -18,6 +18,9 @@ frappe.ui.form.on("ERPNext MCP Settings", {
 		if (frm.doc.phone_approval_enabled || frm.doc.mcp_oauth_enabled) {
 			frm.add_custom_button(__("Approve an access request"), () => approve_access(frm));
 		}
+		// v0.317.0. The least-privilege MCP System User, from plan_mcp_system_user's recommended roles. It never
+		// ticks Require User Context — that stays a separate, deliberate tick.
+		frm.add_custom_button(__("Create MCP System User (from plan)"), () => create_mcp_user(frm));
 		set_headline(frm);
 		render_connect_panel(frm);
 		render_tool_console(frm);
@@ -902,3 +905,28 @@ function open_window(frm) {
 		);
 	});
 }
+
+function create_mcp_user(frm) {
+	frappe.prompt(
+		[{ fieldname: "user", fieldtype: "Data", label: __("Email for the MCP System User"), reqd: 1,
+		   default: "mcp@" + (frappe.boot.sitename || "farm.local") }],
+		(values) => {
+			frappe.call({
+				method: "erpnext_mcp.api.access.create_mcp_system_user",
+				args: { user: values.user },
+				callback: (r) => {
+					const out = r.message || {};
+					frappe.msgprint({
+						title: __("MCP System User"),
+						message: __("{0} now has exactly: {1}. Require User Context is unchanged — run plan_mcp_system_user, and tick it when it says ready.",
+							[out.user, (out.roles || []).join(", ") || __("(defaults only)")]),
+					});
+					frm.reload_doc();
+				},
+			});
+		},
+		__("Create MCP System User"),
+		__("Create")
+	);
+}
+

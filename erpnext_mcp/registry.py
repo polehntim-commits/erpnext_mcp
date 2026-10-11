@@ -31167,10 +31167,14 @@ TOOLS = {
 		"where, and whether it is KEY-BOUND or still holds a legacy api_key/api_secret. "
 		"`ready_to_disable_legacy_secrets` is true when no live phone holds a legacy secret. "
 		"v0.220.0: `clients` lists every AI client approved through OAuth — name, scopes, who "
-		"approved it and when, last token. Read-only; never a key, secret or token.",
+		"approved it and when, last token. v0.317.0: `static_token_callers` — who still signs in with the shared "
+		"static token over the last `days` (client program, address, model, calls, first / last seen, tools), and "
+		"`static_token` (last used, ready_to_disable). Move each one to OAuth and verify before Tim turns the static "
+		"token off in the Desk. Read-only; never a key, secret or token.",
 		{
 			"user": _field(_STRING, "One account. Default every account."),
 			"include_revoked": _field(_BOOLEAN, "Include revoked devices. Default false."),
+			"days": _field(_INTEGER, "v0.317.0. How far back static_token_callers looks. Default 30."),
 		},
 		title="Access inventory",
 	),

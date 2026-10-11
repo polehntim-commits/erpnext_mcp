@@ -55,3 +55,20 @@ def revoke_client(client=None, reason=None) -> dict:
 		return oauth.revoke_client(str(client or ""), str(frappe.session.user or ""), str(reason or ""))
 	except device_enrollment.EnrollmentRefused as exc:
 		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_mcp_system_user(user: str) -> dict:
+	"""v0.317.0. The Desk's "Create MCP System User (from plan)" button — System Manager only.
+
+	Creates the least-privilege user the plan recommends and names it as the MCP System User; it does NOT tick Require
+	User Context (Tim does, once plan_mcp_system_user says ready). There is no MCP tool for this on purpose: who the
+	MCP runs as is a security setting, and a person decides it."""
+	frappe.only_for("System Manager")
+	from .. import mcp_user_plan
+
+	try:
+		return mcp_user_plan.apply(user, frappe.session.user)
+	except ValueError as exc:
+		frappe.throw(str(exc))
+

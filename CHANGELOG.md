@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.317.0 — 2026-10-11 — OAuth sign-in and the limited MCP user, migrated safely
+
+**Migrate** (MCP Action Log gains `auth_method`). Deploy `docs/deploy/v0.317.0_mcp_auth_migration.md`. Tools:
+**1,148 → 1,148**. Funnel is not touched.
+
+- **Sign-in method on every call:** the Action Log records Static token or OAuth for each call.
+- **Who still uses the static token:** `list_access_inventory` gains `static_token_callers` (client, address,
+  model, calls, first and last seen, tools) and `static_token` (`ready_to_disable_static_mcp_token`).
+- **Create MCP System User (from plan):** a Desk button for System Managers.
+  - It creates the user and a Role Profile with exactly the roles `plan_mcp_system_user` recommends (never System
+    Manager or Administrator).
+  - It does not tick Require User Context.
+- **The static token keeps working** until Tim unticks Legacy Static MCP Token, which happens only on his OK. The
+  deploy file has his steps.
+- Tests: `test_mcp_auth_migration`.
+
 ## 0.316.0 — 2026-10-11 — the cherry degree-day stage table, over MCP
 
 **No migrate** (an install step drafts the proposal). Deploy `docs/deploy/v0.316.0_stage_table_mcp.md`. Tools:
