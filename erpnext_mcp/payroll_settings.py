@@ -681,9 +681,40 @@ def _validate_oregon(body: dict, for_publish: bool) -> dict:
 	from .state_withholding import OR_WITHHOLDING_2026, oregon_annual_withholding
 
 	errors, warnings = [], []
+	# v0.294.0 / v0.312.0: these are optional — the seed's applies when a body leaves them out (a version drafted
+	# before they existed stays publishable).
+	optional = ("forwarding", "esignature", "no_or_w4_rule", "flat_rate_rules_source")
 	for field in OR_WITHHOLDING_2026:
-		if field not in body and field != "forwarding":  # v0.294.0: optional; the seed's rule applies when absent
+		if field not in body and field not in optional:
 			errors.append(f"{field} is required (see the seed for its shape)")
+	# v0.312.0. The two policy values Tim changes without a release: the DOR e-signature acceptance, and forwarding.
+	esign = body.get("esignature")
+	if esign is not None:
+		if not isinstance(esign, dict) or not isinstance(esign.get("confirmed", False), bool):
+			errors.append("esignature.confirmed is true or false (true only once the DOR confirms in writing)")
+		else:
+			methods = esign.get("verified_methods", ["Badge QR", "Employee ID"])
+			if not isinstance(methods, list) or not set(methods) <= {"Badge QR", "Employee ID"} or not methods:
+				errors.append("esignature.verified_methods is a non-empty list of: Badge QR, Employee ID — the "
+				              "methods the server can stand behind (26 CFR 31.3402(f)(5)-1(c))")
+			if esign.get("require_verified_signer") is False:
+				errors.append("esignature.require_verified_signer cannot be false — an e-signed W-4 needs an "
+				              "authenticated signer (26 CFR 31.3402(f)(5)-1(c))")
+			if esign.get("confirmed") and not str(esign.get("note") or "").strip():
+				errors.append("esignature.note: say how the DOR confirmed it (who, when, reference) before "
+				              "marking it confirmed")
+	forwarding = body.get("forwarding")
+	if forwarding is not None:
+		if not isinstance(forwarding, dict):
+			errors.append("forwarding is an object (max_allowances, exempt_weekly_wages, days, basis, source)")
+		else:
+			if forwarding.get("basis", "signature") not in ("signature", "received"):
+				errors.append("forwarding.basis is signature or received")
+			try:
+				if not 1 <= int(forwarding.get("days", 20)) <= 60:
+					errors.append("forwarding.days is 1–60")
+			except (TypeError, ValueError):
+				errors.append("forwarding.days is a whole number of days")
 	if not str(body.get("source") or "").strip():
 		errors.append("source: the DOR publication and revision these figures come from")
 	for name, rows in (body.get("schedules") or {}).items():
@@ -704,6 +735,13 @@ def _validate_oregon(body: dict, for_publish: bool) -> dict:
 	if for_publish and not errors:
 		_publish_guard(effective, errors)
 	return {"errors": errors, "warnings": warnings}
+
+
+def _not_money(value) -> bool:
+	try:
+		return float(value) < 0
+	except (TypeError, ValueError):
+		return True
 
 
 def _validate_pay_item_policy(body: dict, for_publish: bool) -> dict:
@@ -797,6 +835,25 @@ def _validate_garnishment_limits(body: dict, for_publish: bool) -> dict:
 				errors.append(f"{where}: federal_minimum_wage is a dollar amount, e.g. 7.25")
 		if row.get("scope") == "state" and len(str(row.get("state") or "")) != 2:
 			errors.append(f"{where}: state is a two-letter code")
+		# v0.312.0. The debt-type tables (v0.311.0) are dated data too — checked when present.
+		for table in ("floors", "support_floors"):
+			if table in row and (not isinstance(row[table], dict)
+			                     or any(_not_money(v) for v in (row[table] or {}).values())):
+				errors.append(f"{where}: {table} is {{Weekly, Biweekly, Semimonthly, Monthly: dollars}}")
+		for section in ("spousal_maintenance", "private_student_loan", "consumer"):
+			part = row.get(section)
+			if part is None:
+				continue
+			try:
+				if not 0 < float(part.get("rate")) <= 1:
+					errors.append(f"{where}: {section}.rate is a fraction of disposable earnings, e.g. 0.5")
+			except (TypeError, ValueError, AttributeError):
+				errors.append(f"{where}: {section}.rate is a fraction of disposable earnings")
+			if not str((part or {}).get("source") or row.get("source") or "").strip():
+				errors.append(f"{where}: {section}.source — where the limit comes from")
+		loan = row.get("private_student_loan") or {}
+		if loan and (_not_money(loan.get("highest_local_minimum_wage")) or _not_money(loan.get("floor_multiple"))):
+			errors.append(f"{where}: private_student_loan needs floor_multiple and highest_local_minimum_wage")
 	effective = _effective(body, errors)
 	if for_publish and not errors:
 		_publish_guard(effective, errors)

@@ -158,6 +158,9 @@ OR_WITHHOLDING_2026 = {
 	#: with expected wages over $200 a week, or a state-only exemption. "Within 20 days" — of receipt, read here as
 	#: of the employee's signature. Have the CPA confirm the reading.
 	"forwarding": {"max_allowances": 10, "exempt_weekly_wages": 200.0, "days": 20,
+	               #: v0.312.0. What the days count from: "signature" (the employee's signature date — Tim's
+	               #: conservative reading, 2026-10-09) or "received" (the day the employer received the form).
+	               "basis": "signature",
 	               "source": "OAR 150-316-0290(4)"},
 	#: v0.295.0. Whether the DOR has confirmed it accepts electronically signed OR-W-4s. Unconfirmed until Tim/the CPA
 	#: hears from the DOR; every OR-W-4 signed or rendered says so.

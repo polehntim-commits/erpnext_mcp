@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.312.0 — 2026-10-10 — three compliance values Tim changes without a release
+
+**No migrate.** Deploy `docs/deploy/v0.312.0_policy_editable.md`. Tools: **1,142 → 1,142**.
+
+- **(a)** The OR-W-4 e-signature acceptance flag and the forwarding days and basis (`oregon_withholding`). The
+  forwarding basis — signature or received — is new; it was hard-coded.
+- **(b)** The Oregon bonus-in-regular-rate flag (`pay_item_policy`).
+- **(c)** The garnishment priority and the dated debt-type limit tables (`garnishment_policy`,
+  `garnishment_limits`).
+- All of them are drafted, previewed, published only by a person in the Desk, and versioned. The validators check
+  the new shapes, and an older Oregon body without the new keys still validates.
+- Tests: `test_policy_editable`.
+
 ## 0.311.0 — 2026-10-10 — garnishment: every limit, the most protective taken
 
 **Migrate**: Farm Payroll Deduction gains `debt_type`. Deploy `docs/deploy/v0.311.0_garnishment_most_protective.md`.

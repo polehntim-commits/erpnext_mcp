@@ -595,8 +595,12 @@ def or_forwarding(values: dict, employee: str, args: dict, signed_on: str, param
 
 	if not reasons:
 		return {"or_forward_required": 0, "or_forward_reasons": None, "or_forward_due": None}
-	due = datetime.date.fromisoformat(str(signed_on)[:10]) + datetime.timedelta(days=int(rule["days"]))
-	return {"or_forward_required": 1, "or_forward_reasons": "; ".join(reasons) + f" — {rule['source']}",
+	# v0.312.0. The policy says what the days count from (forwarding.basis) — config, not code.
+	basis = str(rule.get("basis") or "signature")
+	start = signed_on if basis == "signature" else (as_str(args, "or_received_on") or frappe.utils.today())
+	due = datetime.date.fromisoformat(str(start)[:10]) + datetime.timedelta(days=int(rule["days"]))
+	return {"or_forward_required": 1, "or_forward_reasons": "; ".join(reasons) + f" — {rule['source']}"
+	        + f" ({int(rule['days'])} days from the {'signature' if basis == 'signature' else 'day received'})",
 	        "or_forward_due": due.isoformat()}
 
 
