@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.321.0 — 2026-10-11 — which lens took the photo (FarmOps 0.64.0)
+
+**Migrate** (Farm Task Evidence: `capture_lens`, `zoom_factor`). Deploy `docs/deploy/v0.321.0_capture_lens.md`.
+Tools: **1,150 → 1,150**.
+
+- FarmOps 0.64.0 zooms out to the ultra-wide (0.5×) so a cabin or block fits in frame. The phone sends each
+  photo's lens and zoom, and they are stored on the evidence row.
+- Odd values are dropped, never refused. An older phone sends neither key.
+- Tests: `test_capture_lens_v321`.
+
 ## 0.320.0 — 2026-10-11 — MCP parity, part 2: the phone's remaining reads
 
 **No migrate.** Deploy `docs/deploy/v0.320.0_mcp_parity_2.md`. Tools: **1,150 → 1,150** (no new tools).

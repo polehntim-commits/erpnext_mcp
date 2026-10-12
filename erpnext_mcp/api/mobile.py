@@ -462,7 +462,8 @@ def _evidence(raw) -> list:
 		# tool moves the stamp into the site's zone and drops a coordinate that
 		# will not parse. A build that sends neither keeps its phase from the
 		# file name — `inspections._phase_from_name`.
-		for key in ("captured_at", "latitude", "longitude"):
+		# v0.321.0 (FarmOps 0.64.0): which lens and zoom took it — Tim zooms out to 0.5× on a cabin.
+		for key in ("captured_at", "latitude", "longitude", "capture_lens", "zoom_factor"):
 			if entry.get(key) not in (None, ""):
 				row[key] = entry[key]
 		out.append(row)

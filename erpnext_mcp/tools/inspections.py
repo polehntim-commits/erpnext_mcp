@@ -54,6 +54,8 @@ DETECTOR_TEST = "Detector Test"
 WATER_TEST = "Water Test"
 FARM_TASK = "Farm Task"
 EVIDENCE_CHILD = "Farm Task Evidence"
+#: v0.321.0. The lenses the phone records (Farm Task Evidence.capture_lens).
+CAPTURE_LENSES = ("ultra_wide", "wide", "telephoto", "front")
 
 RECORD_CAP = 500
 
@@ -331,6 +333,13 @@ def normalise_evidence(raw, label: str = "evidence_files", *, enrich: bool = Fal
 				value = _coordinate(entry.get(key) if entry.get(key) is not None else entry.get(column))
 				if value is not None and compat.has_field(EVIDENCE_CHILD, column):
 					row[column] = value
+			# v0.321.0: the lens and zoom (FarmOps 0.64.0). Dropped, never refused, if odd — the photo matters more.
+			lens = str(entry.get("capture_lens") or "").strip().lower()
+			if lens in CAPTURE_LENSES and compat.has_field(EVIDENCE_CHILD, "capture_lens"):
+				row["capture_lens"] = lens
+			zoom = _coordinate(entry.get("zoom_factor"))
+			if zoom is not None and 0.1 <= zoom <= 100 and compat.has_field(EVIDENCE_CHILD, "zoom_factor"):
+				row["zoom_factor"] = round(zoom, 2)
 		out.append(row)
 	return out
 
