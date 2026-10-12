@@ -1733,6 +1733,8 @@ APP_DOCTYPES = {
 	"Share Link View": "share_link_view",
 	# v0.286.0. Points on the map that belong to a piece of work (`pins`).
 	"Field Pin": "field_pin",
+	# v0.323.0. The places a Farm Task covers (`task_locations`).
+	"Farm Task Location": "farm_task_location",
 	# v0.272.0. Chemical receiving (`receiving`).
 	"Supplier Delivery Intake": "supplier_delivery_intake",
 	"Supplier Delivery Intake Line": "supplier_delivery_intake_line",
@@ -2688,6 +2690,7 @@ CHILD_TABLES = {
 	("Asset Register", "references"): "Reference Citation",
 	("Accident Report", "witnesses"): "Accident Witness",
 	("Contractor Job", "fields"): "Contractor Job Field",
+	("Farm Task", "locations"): "Farm Task Location",
 	("Contractor Job", "events"): "Contractor Job Event",
 	("Supplier Delivery Intake", "lines"): "Supplier Delivery Intake Line",
 	("Customer Portal", "blocks"): "Customer Portal Block",
@@ -5035,6 +5038,7 @@ CHILD_TABLE_SOURCES = {
 	"Item Barcode": (("Item", "barcodes"),),
 	# v0.271.0. `delete_farm_location` asks whether a contractor job names the block.
 	"Contractor Job Field": (("Contractor Job", "fields"),),
+	"Farm Task Location": (("Farm Task", "locations"),),
 	# v0.276.0. `delete_farm_location` asks whether a packer share names the block.
 	"Customer Portal Block": (("Customer Portal", "blocks"),),
 	# v0.272.0. `receiving.trace_lot` finds a lot across every delivery by querying the lines directly.

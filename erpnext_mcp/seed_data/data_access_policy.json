@@ -1536,6 +1536,11 @@
     "dispatch"
    ]
   },
+  "move_task_pin": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "universal_scan": {
    "resources": [
     {

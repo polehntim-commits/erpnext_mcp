@@ -17,7 +17,7 @@ from __future__ import annotations
 import frappe
 
 PIN = "Field Pin"
-KINDS = ("Entrance", "Delivery Spot", "Loading Area", "Hive Drop")
+KINDS = ("Entrance", "Delivery Spot", "Loading Area", "Hive Drop", "Work Spot")  # Work Spot: a Farm Task's explicit pin (v0.323.0)
 FIELDS = ["name", "pin_kind", "label", "latitude", "longitude", "field", "company", "source_doctype", "source",
           "pin_key", "quantity", "pallets", "notes", "moved_by"]
 

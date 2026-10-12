@@ -646,6 +646,8 @@ doctype_js = {
 	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js"],
 	"Farm Shift": ["public/js/geo_map_widget.js", "public/js/farm_shift_map.js"],
 	"Farm Task": ["public/js/geo_map_widget.js", "public/js/farm_task_map.js"],
+	# v0.323.0. A Field Pin dragged to the right spot over its block.
+	"Field Pin": ["public/js/geo_map_widget.js", "public/js/field_pin_map.js"],
 	#: v0.174.0. The Lot Line Adjustment form DOES draw a map now — the two tax
 	#: lots, the access corridors already agreed, and any GPS fix written into
 	#: the notes — so the widget is loaded because this form renders through it,

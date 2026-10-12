@@ -11259,6 +11259,8 @@ TOOLS = {
 				{"type": "array", "items": {"type": ["object", "string"]}},
 				"A crew task's sections: [{label, from_row, to_row}] or plain labels. Optional.",
 			),
+			"locations": _field({"type": "array", "items": {}}, "v0.323.0. Several places this task covers: block names, tickers or aliases ('MC-CP', 'Bing Block' — a named group brings all its blocks), or {location_type: Field|Asset Register|Parcel, location}. The first is the primary location; the phone pins the task at their combined centroid and draws their outlines. Same company only."),
+			"work_spot": _field(_OBJECT, "v0.323.0. {latitude, longitude}: an explicit pin for the task (a Work Spot Field Pin), used instead of the centroid."),
 		},
 		required=("task_name", "task_type", "evidence_required"),
 		mutating=True,
@@ -12871,6 +12873,8 @@ TOOLS = {
 				{"type": "array", "items": {"type": ["object", "string"]}},
 				"A crew task's sections: [{label, from_row, to_row}] or plain labels. Optional.",
 			),
+			"locations": _field({"type": "array", "items": {}}, "v0.323.0. Several places this task covers: block names, tickers or aliases ('MC-CP', 'Bing Block' — a named group brings all its blocks), or {location_type: Field|Asset Register|Parcel, location}. The first is the primary location; the phone pins the task at their combined centroid and draws their outlines. Same company only."),
+			"work_spot": _field(_OBJECT, "v0.323.0. {latitude, longitude}: an explicit pin for the task (a Work Spot Field Pin), used instead of the centroid."),
 		},
 		required=("template",),
 		mutating=True,
@@ -19006,7 +19010,10 @@ TOOLS = {
 		"v0.319.0: a register with a create tool but no get / list / update of its own (spray tank mix, crop "
 		"observation, IoT reading, housing assignment, farm task, scale ticket, warehouse, …) gets them here through "
 		"the two generic tools: get / list via query_doctype (this account's permissions), update via update_document "
-		"(drafts only; every field on Updatable Fields). types marks them `generic`.",
+		"(drafts only; every field on Updatable Fields). types marks them `generic`.\n\n"
+		"v0.323.0: record update farm_task with body.locations (block names / tickers / aliases, or {location_type, "
+		"location}), body.work_spot {latitude, longitude} or body.clear_work_spot sets WHERE a task is — validated "
+		"(same company, not retired, not a closed task; needs allow_create_farm_task), not via Updatable Fields.",
 		{"action": _field(_STRING, "types, describe, create, update, deactivate, delete, get, list."),
 		 "type": _field(_STRING, "The record type, e.g. supplier, field, housing_unit (record action=types lists them)."),
 		 "name": _field(_STRING, "The record (get, update, deactivate, delete)."),

@@ -19,14 +19,15 @@
   "quantity",
   "pallets",
   "notes",
-  "moved_by"
+  "moved_by",
+  "moved_at"
  ],
  "fields": [
   {
    "fieldname": "pin_kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "Entrance\nDelivery Spot\nLoading Area\nHive Drop",
+   "options": "Entrance\nDelivery Spot\nLoading Area\nHive Drop\nWork Spot",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
@@ -113,11 +114,18 @@
    "fieldtype": "Data",
    "label": "Moved By",
    "read_only": 1
+  },
+  {
+   "description": "v0.323.0. When the pin was last moved by hand.",
+   "fieldname": "moved_at",
+   "fieldtype": "Datetime",
+   "label": "Moved At",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-09 12:00:00.000000",
+ "modified": "2026-10-11 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Field Pin",

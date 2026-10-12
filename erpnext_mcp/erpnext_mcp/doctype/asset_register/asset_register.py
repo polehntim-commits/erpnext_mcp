@@ -96,6 +96,10 @@ class AssetRegister(Document):
 				self.set(field, default)
 
 	def before_save(self):
+		# v0.323.0: who moved the pin, when, and from where (Desk map, phone, MCP, scan).
+		from erpnext_mcp import pin_moves
+
+		pin_moves.stamp_position(self)
 		if self.current_state and isinstance(self.current_state, str):
 			import json
 
@@ -103,6 +107,12 @@ class AssetRegister(Document):
 				json.loads(self.current_state)
 			except (json.JSONDecodeError, ValueError):
 				frappe.throw(_("Current State must be valid JSON."))
+
+	def on_update(self):
+		# v0.323.0: a cabin's tag moved by hand moves the cabin with it.
+		from erpnext_mcp import pin_moves
+
+		pin_moves.follow_housing_tag(self)
 
 
 def _build_qr_url(asset_name: str) -> str:

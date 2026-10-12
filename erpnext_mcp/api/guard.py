@@ -740,6 +740,8 @@ def endpoint(method: str, limit: int = READ_LIMIT, mutating: bool = False):
 			# and it also keeps a credential out of the audit row's arguments on
 			# any path that reaches these functions in process.
 			kwargs.pop(fallback_auth.BODY_KEY, None)
+			# v0.323.0. A pin this request moves was moved from the phone (`pin_moves.source`).
+			frappe.flags.pin_source = "Phone"
 
 			# v0.17.2. THE HEADER MAY NOT HAVE SURVIVED THE PROXY — see
 			# `fallback_auth`, which sets out what was proven and how. This runs

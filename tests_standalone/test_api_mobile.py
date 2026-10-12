@@ -1209,6 +1209,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"request_badge_photo",
 		"move_asset",
 		"undo_asset_move",
+		# v0.323.0 — a task's work-spot pin, long-pressed on the phone.
+		"move_task_pin",
 		# v0.195.0. fafo_ios names all four as path constants (6e9cfd0) and no
 		# Codable decodes their answers yet, so there is nothing to mirror; the
 		# payloads are asserted key by key in test_wave5_server_changes against

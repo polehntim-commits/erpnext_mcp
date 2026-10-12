@@ -66,7 +66,7 @@ const HAS_GPS = process.argv[4] === "1";
 const ZONE = process.argv[5] || "";
 
 const calls = {
-	set_value: [], sections: [], markers: [], dragend_wired: 0, read_only_renders: 0,
+	set_value: [], sections: [], markers: [], dragend_wired: 0, read_only_renders: 0, server_calls: [], prompts: 0,
 	// WHEN the section was added, relative to `refresh` returning. "sync" is
 	// while the handler is still on the stack; "microtask" is the promise gap
 	// Frappe's own dashboard work lands in; "later" is a real round trip.
@@ -122,6 +122,9 @@ const frm = {
 		show: function () {},
 	},
 	set_value: function (field, value) { calls.set_value.push([field, value]); frm.doc[field] = value; },
+	is_new: function () { return false; },
+	is_dirty: function () { return false; },
+	reload_doc: function () {},
 	$wrapper: { find: function () { return { first: function () { return { prepend: function () {} }; } }; } },
 };
 
@@ -135,6 +138,10 @@ const sandbox = {
 	frappe: {
 		ui: { form: { on: function (doctype, map) { handlers.doctype = doctype; Object.assign(handlers, map); } } },
 		utils: { escape_html: function (s) { return String(s); } },
+		// v0.323.0. A drag on a placed asset asks why, then calls Move asset.
+		prompt: function (field, callback) { calls.prompts += 1; callback({ reason: "test move" }); },
+		call: function (options) { calls.server_calls.push(options); return Promise.resolve({ message: {} }); },
+		show_alert: function () {},
 	},
 	erpnext_mcp: {
 		geo_map: {
@@ -183,6 +190,8 @@ setTimeout(function () {
 		markers: calls.markers,
 		dragend_wired: calls.dragend_wired,
 		set_value: calls.set_value,
+		server_calls: calls.server_calls,
+		prompts: calls.prompts,
 		sections: calls.sections,
 		build: sandbox.erpnext_mcp.geo_map.asset_map_build || null,
 		section_timing: calls.section_timing,
@@ -225,21 +234,28 @@ class ThePinIsDraggableOnEveryAsset(unittest.TestCase):
 					f"the pin on a {asset_type} form is not draggable",
 				)
 
-	def test_dragging_writes_both_coordinate_fields(self):
-		"""The half that makes the pin worth dragging. `dragend` is fired by the
-		harness and the values `set_value` was called with are read back."""
+	def test_dragging_moves_the_asset_through_move_asset(self):
+		"""v0.323.0. The half that makes the pin worth dragging — now through Move
+		asset, because a fixed asset refuses a plain save that moves it (v0.214.0)
+		and that is what had stopped the drag working. A placed asset asks why;
+		`dragend` is fired by the harness and the server call is read back."""
 		for asset_type in asset_types():
 			with self.subTest(asset_type=asset_type):
-				written = dict(drive(asset_type)["set_value"])
-				self.assertEqual(sorted(written), ["gps_latitude", "gps_longitude"], "both fields, not one")
-				self.assertAlmostEqual(written["gps_latitude"], 46.1234568, places=7)
-				self.assertAlmostEqual(written["gps_longitude"], -119.9876543, places=7)
+				result = drive(asset_type)
+				self.assertEqual(result["prompts"], 1, "a placed asset asks why it is moving")
+				call = result["server_calls"][0]
+				self.assertEqual(call["method"], "erpnext_mcp.pin_moves.move_asset_pin")
+				self.assertAlmostEqual(call["args"]["latitude"], 46.1234568, places=7)
+				self.assertAlmostEqual(call["args"]["longitude"], -119.9876543, places=7)
+				self.assertEqual(call["args"]["reason"], "test move")
+				self.assertEqual(result["set_value"], [], "the fields are not written behind Move asset's back")
 
 	def test_the_written_value_is_rounded_to_the_fields_own_precision(self):
 		"""`gps_latitude` and `gps_longitude` are Float with `precision: "7"` on
 		the doctype. Writing more than the column keeps means the pin and the
 		field disagree the moment the form is saved."""
-		written = dict(drive("Tractor")["set_value"])
+		args = drive("Tractor")["server_calls"][0]["args"]
+		written = {"gps_latitude": args["latitude"], "gps_longitude": args["longitude"]}
 		for field, value in written.items():
 			with self.subTest(field=field):
 				self.assertEqual(value, round(value, 7))

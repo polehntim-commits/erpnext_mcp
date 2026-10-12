@@ -25,6 +25,9 @@
   "gps_latitude",
   "position_col",
   "gps_longitude",
+  "position_set_by",
+  "position_set_at",
+  "position_source",
   "compliance_section",
   "fsma_worker_facility",
   "or_housing_law_compliant",
@@ -183,6 +186,27 @@
    "fieldtype": "Float",
    "label": "GPS Longitude",
    "precision": "7"
+  },
+  {
+   "description": "v0.323.0. Who last moved this pin (Desk map, phone or MCP). Stamped automatically when the coordinates change.",
+   "fieldname": "position_set_by",
+   "fieldtype": "Link",
+   "label": "Position Set By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "position_set_at",
+   "fieldtype": "Datetime",
+   "label": "Position Set At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "position_source",
+   "fieldtype": "Select",
+   "label": "Position Source",
+   "options": "\nDesk\nPhone\nMCP\nScan",
+   "read_only": 1
   },
   {
    "description": "The facts three different regimes ask about the same building. They are on the unit rather than in a compliance register because they are also the facts that decide whether anybody can be put in it tonight: an Uninhabitable unit with no smoke detector test is not a reporting problem, it is a unit that has to stay empty.",
@@ -385,7 +409,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-11 19:00:00.000000",
+ "modified": "2026-10-11 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Housing Unit",

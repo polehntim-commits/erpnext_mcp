@@ -227,6 +227,9 @@ _TASK_FIELDS = (
 	"is_crew_task",
 	"crew_piece_unit",
 	"crew_sections",
+	# v0.323.0. More than one place, and an explicit pin (task_locations).
+	"location_count",
+	"has_work_spot",
 	"creation",
 	"modified",
 	"owner",
@@ -867,6 +870,15 @@ def _shift_note(shift: str) -> str:
 	return ""
 
 
+def _more_places(row: dict) -> dict:
+	if int(row.get("location_count") or 0) <= 1 and not int(row.get("has_work_spot") or 0):
+		return {}
+	from .. import task_locations
+
+	described = task_locations.describe(str(row.get("name") or ""))
+	return {key: described[key] for key in ("locations", "location_count", "work_spot", "map_point")}
+
+
 def _describe_task(row: dict) -> dict:
 	contract = evidence_contract(row.get("evidence_required"))
 	out = {
@@ -879,6 +891,9 @@ def _describe_task(row: dict) -> dict:
 		"company": row.get("company") or None,
 		"location_doctype": row.get("location_doctype") or None,
 		"location": row.get("location") or None,
+		# v0.323.0. Present only on a task covering several places or carrying an explicit pin, so every
+		# one-place task's payload is what it always was. The phone pins it at `map_point`.
+		**_more_places(row),
 		"skill_required": row.get("skill_required") or None,
 		"dispatch_mode": row.get("dispatch_mode") or "Either",
 		"assigned_to": row.get("assigned_to") or None,
@@ -1324,6 +1339,21 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 	_require()
 	company = _company(args)
 
+	# v0.323.0. Several places (`locations`) and/or an explicit pin (`work_spot`), checked in full BEFORE the task
+	# exists, so a bad entry refuses the call rather than leaving a half-placed task. The first place becomes the
+	# primary `location` the rest of this function validates as before.
+	from .. import task_locations
+
+	places, spot = None, None
+	try:
+		if args.get("locations") not in (None, "", []):
+			places = task_locations.resolve_all(args.get("locations"), company or "")
+			if not as_str(args, "location"):
+				args = {**args, "location_doctype": places[0][0], "location": places[0][1]}
+		spot = task_locations.parse_pin(args.get("work_spot")) if args.get("work_spot") else None
+	except task_locations.LocationError as exc:
+		raise ToolError(f"{exc} Nothing was created.") from None
+
 	location_doctype = as_str(args, "location_doctype")
 	location = as_str(args, "location")
 	if location and not location_doctype:
@@ -1470,6 +1500,10 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 	except ValueError as exc:
 		raise ToolError(f"{exc} Nothing was created.") from None
 	doc.insert(ignore_permissions=True)
+	if (places and len(places) > 1) or spot:
+		task_locations.set_locations(doc.name, [{"location_type": d, "location": n} for d, n in places] if places
+		                             else None, pin=spot)
+		doc.reload()
 
 	assignment = None
 	if worker and not draft:
@@ -3928,6 +3962,11 @@ def get_farm_task(args: dict) -> ToolResult:
 	_require()
 	row = task_row(as_str(args, "task", required=True))
 	described = _describe_task(row)
+	# v0.323.0. One task in full carries every place it covers and their outlines, whatever the count.
+	from .. import task_locations
+
+	if task_locations.ready():
+		described.update(task_locations.describe(row["name"], with_outline=True))
 
 	history = [
 		_describe_assignment(dict(entry))

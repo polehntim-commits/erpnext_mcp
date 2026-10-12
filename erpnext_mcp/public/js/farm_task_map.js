@@ -1,71 +1,70 @@
 // SPDX-License-Identifier: MIT
 /**
- * Where the work is, resolved through whatever register names the place.
+ * Where the work is: every block (or tag, or parcel) the task covers, and a pin you can drag onto the work.
  *
- * v0.32.0. A Farm Task does not hold a coordinate of its own and should not: the
- * place already exists as a Parcel, a Field, an Irrigation Zone or a Housing
- * Unit, and copying its position onto the task would be a second copy to go
- * stale the first time a boundary is corrected. So this reads the position from
- * whichever record `location_doctype` names — a polygon for the three that carry
- * one, a marker for a cabin — and draws that.
+ * v0.32.0 drew the one place `location_doctype` named. v0.323.0: a task covers one or more places
+ * (`task_locations`), so the map draws the union of their outlines over the aerial, with the pin at their combined
+ * centre — or at the task's Work Spot when somebody has set one. Dragging the pin sets the Work Spot right away
+ * (it is a Field Pin, not a field on this form), records who moved it and when, and it then overrides the centre;
+ * "Clear work spot" puts the pin back on the blocks. Foreman, Farm Manager and System Manager may move it.
  *
- * A TASK WITH NO LOCATION GETS NO MAP AND THAT IS CORRECT. A certificate renewal
- * happens at a desk. Only a task that names a place has a place to show.
+ * A TASK WITH NO LOCATION GETS NO MAP AND THAT IS CORRECT. A certificate renewal happens at a desk.
  */
 
-// WRAPPED IN AN IIFE so nothing here declares a global. A `doctype_js` file is
-// evaluated by appending a <script> to the page, and a top-level `const` in a
-// classic script is a global lexical binding — a second evaluation of the same
-// file would be a SyntaxError that takes the whole form script down, and the
-// symptom is a form with no map and no explanation.
-
-(function () {
-
-	//: Which register answers "where" with a shape, and which with a point.
-	const POLYGON_LOCATIONS = ["Parcel", "Field", "Irrigation Zone"];
-	const POINT_LOCATIONS = { "Housing Unit": ["gps_latitude", "gps_longitude"] };
-
-	frappe.ui.form.on("Farm Task", {
-		refresh(frm) {
-			const doctype = frm.doc.location_doctype;
-			const name = frm.doc.location;
-			if (!doctype || !name) {
-				return;
-			}
-			if (POLYGON_LOCATIONS.indexOf(doctype) !== -1) {
-				erpnext_mcp.geo_map
-					.fetch_boundary(doctype, name, `${doctype} ${name}`, "#1f6feb")
-					.then((entry) => {
-						if (!entry) {
-							return;
-						}
-						entry.fill_opacity = 0.12;
-						erpnext_mcp.geo_map.render(frm, {
-							title: __("Where the Work Is"),
-							geometries: [entry],
-						});
-					});
-				return;
-			}
-			const fields = POINT_LOCATIONS[doctype];
-			if (!fields) {
-				return;
-			}
-			frappe.db
-				.get_value(doctype, name, fields)
-				.then((response) => {
-					const row = (response && response.message) || {};
-					const point = erpnext_mcp.geo_map.point_of(row[fields[0]], row[fields[1]]);
-					if (!point) {
-						return;
-					}
-					erpnext_mcp.geo_map.render(frm, {
-						title: __("Where the Work Is"),
-						point: point,
-						point_label: `${doctype} ${name}`,
-					});
-				})
-				.catch(() => {});
-		},
-	});
-})();
+frappe.ui.form.on("Farm Task", {
+	refresh(frm) {
+		if (frm.is_new()) {
+			return;
+		}
+		frappe
+			.call({ method: "erpnext_mcp.pin_moves.task_map", args: { task: frm.doc.name }, type: "GET" })
+			.then((response) => {
+				const data = (response && response.message) || {};
+				const point = data.map_point && data.map_point.latitude != null
+					? [data.map_point.latitude, data.map_point.longitude]
+					: null;
+				if (!point && !data.outline_geojson) {
+					return;
+				}
+				const names = (data.locations || []).map((row) => row.label || row.location).join(" + ");
+				let note = names ? __("Covers {0}.", [names]) : "";
+				if (data.work_spot && data.work_spot_moved && data.work_spot_moved.by) {
+					note += " " + __("Work spot set by {0}{1}.", [data.work_spot_moved.by,
+						data.work_spot_moved.at ? " " + frappe.datetime.str_to_user(data.work_spot_moved.at) : ""]);
+				} else if (point) {
+					note += " " + __("Pinned at the blocks' centre; drag to set the exact spot.");
+				}
+				erpnext_mcp.geo_map.pin_editor(frm, {
+					title: __("Where the Work Is"),
+					point: point,
+					geometries: data.outline_geojson
+						? [{ geometry: data.outline_geojson, label: names, colour: "#1f6feb", fill_opacity: 0.12 }]
+						: [],
+					may_move: !!data.may_move,
+					note: note,
+					on_move(lat, lon) {
+						frappe
+							.call({
+								method: "erpnext_mcp.pin_moves.set_task_work_spot",
+								args: { task: frm.doc.name, latitude: lat, longitude: lon },
+							})
+							.then(() => {
+								frappe.show_alert({ message: __("Work spot set."), indicator: "green" });
+								frm.reload_doc();
+							});
+					},
+				});
+				if (data.work_spot && data.may_move) {
+					frm.add_custom_button(__("Clear work spot"), () => {
+						frappe
+							.call({
+								method: "erpnext_mcp.pin_moves.set_task_work_spot",
+								args: { task: frm.doc.name, clear: 1 },
+							})
+							.then(() => frm.reload_doc());
+					}, __("Map"));
+				}
+			})
+			.catch(() => {});
+	},
+});

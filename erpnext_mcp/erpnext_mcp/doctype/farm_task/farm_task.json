@@ -20,6 +20,9 @@
   "company",
   "location_doctype",
   "location",
+  "locations",
+  "location_count",
+  "has_work_spot",
   "skill_required",
   "required_certification",
   "dispatch_section",
@@ -191,6 +194,29 @@
    "label": "Location",
    "options": "location_doctype",
    "search_index": 1
+  },
+  {
+   "description": "v0.323.0. Every place this task covers — one or more blocks, tags or parcels. The first is mirrored into Location above. Set over MCP with record update farm_task body.locations.",
+   "fieldname": "locations",
+   "fieldtype": "Table",
+   "label": "Locations",
+   "options": "Farm Task Location"
+  },
+  {
+   "default": "0",
+   "description": "v0.323.0. How many rows Locations has — lets a task list skip the child read for the common one-place task.",
+   "fieldname": "location_count",
+   "fieldtype": "Int",
+   "label": "Location Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "v0.323.0. Set when the task has an explicit Work Spot pin (a Field Pin on this task); the phone pins it there instead of at the locations' centroid.",
+   "fieldname": "has_work_spot",
+   "fieldtype": "Check",
+   "label": "Has Work Spot",
+   "read_only": 1
   },
   {
    "description": "What somebody has to be able to do: 'camp_maintenance', 'applicator_license', 'water_sampling', 'electrical_licensed'. Free text, because the skills an operation recognises are its own — the pool query matches on it, it is not validated against a list this app invented.",
@@ -814,7 +840,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-28 18:00:00.000000",
+ "modified": "2026-10-11 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task",

@@ -84,6 +84,11 @@ class HousingUnit(Document):
 		if not self.max_occupants_per_or_law:
 			self.max_occupants_per_or_law = lawful_occupancy(self.square_footage)
 
+		# v0.323.0: who moved the pin, when, and from where.
+		from erpnext_mcp import pin_moves
+
+		pin_moves.stamp_position(self)
+
 	def on_update(self):
 		# v0.322.0: every unit has its tag on the Asset Register, whichever door made it (Desk, MCP, phone) —
 		# the map and asset lists read that register. Runs after insert as well. Never blocks the save.

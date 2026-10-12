@@ -713,6 +713,20 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 		)
 
 	shape = task_templates.snapshot(name)
+	# v0.323.0. A multi-block template task: `locations` (and `work_spot`), checked before anything is created; the
+	# first place is the primary `location` validated below. See `task_locations`.
+	from .. import task_locations
+
+	places, spot = None, None
+	try:
+		if args.get("locations") not in (None, "", []):
+			places = task_locations.resolve_all(args.get("locations"), str(as_str(args, "company") or shape.get("company")
+			                                                                   or ""))
+			if not as_str(args, "location"):
+				args = {**args, "location_doctype": places[0][0], "location": places[0][1]}
+		spot = task_locations.parse_pin(args.get("work_spot")) if args.get("work_spot") else None
+	except task_locations.LocationError as exc:
+		raise ToolError(f"{exc} Nothing was created.") from None
 	location_doctype = as_str(args, "location_doctype")
 	location = as_str(args, "location")
 	if location and not location_doctype:
@@ -847,6 +861,10 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 	except ValueError as exc:
 		raise ToolError(f"{exc} Nothing was created.") from None
 	doc.insert(ignore_permissions=True)
+	if (places and len(places) > 1) or spot:
+		task_locations.set_locations(doc.name, [{"location_type": d, "location": n} for d, n in places] if places
+		                             else None, pin=spot)
+		doc.reload()
 
 	assignment = None
 	if worker and not draft:

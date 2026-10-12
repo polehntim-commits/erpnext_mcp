@@ -2515,6 +2515,26 @@ def undo_asset_move(user: str, asset_name=None, reason=None) -> dict:
 
 # ── 14. log_asset_state_change ────────────────────────────────────────────────
 @frappe.whitelist(methods=["POST"])
+@guard.endpoint("move_task_pin", mutating=True, limit=guard.WRITE_LIMIT)
+def move_task_pin(user: str, task=None, latitude=None, longitude=None, clear=None, client_request_id=None) -> dict:
+	"""Long-press a task's pin to where the work is (or clear it back to its blocks' centre). v0.323.0.
+
+	Sets the task's Work Spot (`pin_moves`), which overrides the combined centroid, and records who and when. The
+	same point twice is the same answer, so the offline queue may send it again. Foreman and Farm Manager, inside
+	the caller's entities — the same people who dispatch the task.
+	"""
+	guard.require_dispatch_role(user, "Moving a task's pin")
+	name = _task_in_scope(user, task)
+	from erpnext_mcp import pin_moves
+
+	try:
+		return pin_moves.move("task", name, latitude, longitude, user=user,
+		                      clear=str(clear or "").strip().lower() in ("1", "true", "yes"))
+	except (pin_moves.MoveError, ValueError) as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
 @guard.endpoint("log_asset_state_change", mutating=True, limit=guard.WRITE_LIMIT)
 def log_asset_state_change(
 	user: str,

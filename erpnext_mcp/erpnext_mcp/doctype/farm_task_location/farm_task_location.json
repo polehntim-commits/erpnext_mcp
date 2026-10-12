@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-11 20:00:00.000000",
+ "description": "v0.323.0. One place a Farm Task covers: a block (Field), a tag (Asset Register) or a Parcel. The first row is mirrored into the task's own Location; the phone pins the task at the rows' combined centroid and draws their outlines. Set with record update farm_task body.locations (validated: same company, not retired).",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "location_doctype",
+  "location",
+  "label"
+ ],
+ "fields": [
+  {
+   "fieldname": "location_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Location Type",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Location",
+   "options": "location_doctype",
+   "reqd": 1
+  },
+  {
+   "description": "The place's own name when it was set (field name, tag description, parcel name).",
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Label",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-11 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Farm Task Location",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

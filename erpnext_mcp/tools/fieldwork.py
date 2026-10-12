@@ -803,7 +803,10 @@ def list_tasks_by_location(args: dict) -> ToolResult:
 	tasks = list(combined.values())
 	if location:
 		wanted = location.strip().casefold()
-		tasks = [task for task in tasks if str(task.get("location") or "").strip().casefold() == wanted]
+		# v0.323.0: any of a multi-place task's places counts, not only its primary.
+		tasks = [task for task in tasks
+		         if wanted in {str(p).strip().casefold() for p in
+		                       [task.get("location"), *[r.get("location") for r in task.get("locations") or []]] if p}]
 
 	groups, unlocated = {}, []
 	for task in tasks:

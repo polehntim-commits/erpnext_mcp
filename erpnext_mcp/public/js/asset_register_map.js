@@ -74,7 +74,7 @@
 	//:
 	//: A test holds this string equal to `erpnext_mcp.__version__`, so it cannot
 	//: drift into being a stamp that lies.
-	const BUILD = "0.322.0";
+	const BUILD = "0.323.0";
 	if (window.erpnext_mcp && window.erpnext_mcp.geo_map) {
 		window.erpnext_mcp.geo_map.asset_map_build = BUILD;
 	}
@@ -106,6 +106,18 @@
 		return __(
 			"Drag the pin to correct the position. The latitude and longitude fields update automatically."
 		);
+	}
+
+	/** v0.323.0: who last moved the pin, when, and from where. */
+	function stamp_note(frm) {
+		if (!frm.doc.position_set_at) {
+			return "";
+		}
+		return " " + __("Last set by {0} on {1} ({2}).", [
+			frm.doc.position_set_by || "?",
+			frappe.datetime.str_to_user(frm.doc.position_set_at),
+			frm.doc.position_source || "Desk",
+		]);
 	}
 
 	/** The sentence under a map that has none. */
@@ -144,15 +156,66 @@
 		state.map.panTo(point);
 	}
 
-	/** Wire drag-end on a marker so it writes back to the form's fields. */
+	/** Wire drag-end on a marker so it moves the asset.
+	 *
+	 * v0.323.0: THROUGH MOVE ASSET, NOT THE FORM'S FIELDS. Since v0.214.0 a fixed
+	 * asset (a valve, a building, a cabin's tag) refuses a plain save that moves
+	 * it — which is what made this drag stop working for exactly the records it
+	 * was built for. So a drag now calls `pin_moves.move_asset_pin`, the same
+	 * Move asset the phone uses: it asks for a reason when the asset already has
+	 * a position, records who moved it, why and where it was, and the form
+	 * reloads with the new position and the stamp. Cancelling the reason puts the
+	 * pin back.
+	 */
 	function wire_drag(frm, state) {
 		state.marker.on("dragend", function () {
 			var latlng = state.marker.getLatLng();
 			// Seven decimal places matches the field's `precision: "7"` on the
 			// doctype, and is about a centimetre — well past what a GPS or a
 			// finger on a map can place anything to.
-			frm.set_value("gps_latitude", parseFloat(latlng.lat.toFixed(7)));
-			frm.set_value("gps_longitude", parseFloat(latlng.lng.toFixed(7)));
+			var lat = parseFloat(latlng.lat.toFixed(7));
+			var lon = parseFloat(latlng.lng.toFixed(7));
+			var had = erpnext_mcp.geo_map.point_of(frm.doc.gps_latitude, frm.doc.gps_longitude);
+			var send = function (reason) {
+				frappe
+					.call({
+						method: "erpnext_mcp.pin_moves.move_asset_pin",
+						args: { asset: frm.doc.name, latitude: lat, longitude: lon, reason: reason || "" },
+					})
+					.then(function () {
+						frappe.show_alert({ message: __("Moved."), indicator: "green" });
+						frm.reload_doc();
+					})
+					.catch(function () {
+						if (had) {
+							state.marker.setLatLng(had);
+						}
+					});
+			};
+			if (!had || (typeof frm.is_new === "function" && frm.is_new())) {
+				frm.set_value("gps_latitude", lat);
+				frm.set_value("gps_longitude", lon);
+				return;
+			}
+			frappe.prompt(
+				{ fieldname: "reason", fieldtype: "Data", label: __("Why is it moving?"), reqd: 1 },
+				function (values) {
+					send(values.reason);
+				},
+				__("Move {0}", [frm.doc.name]),
+				__("Move")
+			);
+			// A prompt closed without an answer leaves the pin where the record says it is.
+			setTimeout(function () {
+				var dialog = typeof cur_dialog !== "undefined" ? cur_dialog : null;
+				if (dialog && dialog.$wrapper) {
+					dialog.$wrapper.one("hidden.bs.modal", function () {
+						if (had && !(typeof frm.is_dirty === "function" && frm.is_dirty())) {
+							state.marker.setLatLng(had);
+						}
+					});
+				}
+			}, 0);
 		});
 	}
 
@@ -267,7 +330,7 @@
 					} else {
 						map.setView(point, PIN_ZOOM);
 					}
-					note.textContent = drag_hint();
+					note.textContent = drag_hint() + stamp_note(frm);
 				} else {
 					// No position recorded. Show a default view and let the
 					// operator click to place the pin.
@@ -304,7 +367,7 @@
 							"gps_longitude",
 							parseFloat(latlng.lng.toFixed(7))
 						);
-						note.textContent = drag_hint();
+						note.textContent = drag_hint() + stamp_note(frm);
 					});
 				}
 

@@ -328,6 +328,17 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 		(row.get("location_doctype"), row.get("location")),
 		lambda: coordinates(row.get("location_doctype"), row.get("location")),
 	)
+	# v0.323.0. A task over several blocks (or with an explicit work-spot pin) is pinned at their combined
+	# centroid or the pin — not at its first block — and carries every place, and on a single-task read the
+	# union of their outlines for the map. A one-place task is untouched.
+	point = row.get("map_point") or {}
+	if point.get("latitude") is not None and point.get("longitude") is not None:
+		latitude, longitude = point["latitude"], point["longitude"]
+	if row.get("locations") and len(row["locations"]) > 1 or row.get("work_spot"):
+		out["locations"] = row.get("locations") or []
+		out["work_spot"] = row.get("work_spot")
+	if row.get("outline_geojson"):
+		out["outline_geojson"] = row["outline_geojson"]
 	if latitude is not None and longitude is not None:
 		out["latitude"] = latitude
 		out["longitude"] = longitude

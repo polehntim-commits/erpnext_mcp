@@ -2112,6 +2112,106 @@ frappe.provide("erpnext_mcp.geo_map");
 		});
 	};
 
+	/**
+	 * A pin somebody can drag to the right spot, with outlines underneath. v0.323.0.
+	 *
+	 * Tim: "We used to have a way of moving a pin in the Desk." Asset Register kept
+	 * its own (asset_register_map.js, v0.154.0); this is the same control for the
+	 * forms that never had one — Housing Unit, Field Pin and Farm Task — so a pin
+	 * can be dropped precisely over the aerial with the blocks drawn beneath it.
+	 *
+	 *   spec.title        section heading
+	 *   spec.point        [lat, lon] or null (then one click places it)
+	 *   spec.geometries   [{ geometry, label, colour, fill_opacity }] drawn underneath
+	 *   spec.may_move     false draws the pin fixed
+	 *   spec.on_move      function (lat, lon) — the caller decides what a move writes
+	 *   spec.note         a line under the map (who moved it last, and when)
+	 */
+	erpnext_mcp.geo_map.pin_editor = function (frm, spec) {
+		spec = spec || {};
+		const body = section_for(frm, spec.title || "Location");
+		body.innerHTML = "";
+		const canvas = document.createElement("div");
+		canvas.style.height = "400px";
+		canvas.style.width = "100%";
+		canvas.style.borderRadius = "6px";
+		body.appendChild(canvas);
+		const note = document.createElement("div");
+		note.className = "text-muted";
+		note.style.padding = "6px 0";
+		body.appendChild(note);
+		const hint = spec.may_move === false
+			? ""
+			: spec.point
+				? __("Drag the pin to the right spot.")
+				: __("No position yet — click the map to place the pin.");
+		note.textContent = [hint, spec.note || ""].filter(Boolean).join(" ");
+
+		load_leaflet()
+			.then((L) => {
+				const map = L.map(canvas, { scrollWheelZoom: false });
+				add_base_layers(L, map);
+				let bounds = null;
+				(spec.geometries || []).forEach((entry) => {
+					if (!entry || !entry.geometry) {
+						return;
+					}
+					const layer = L.geoJSON(entry.geometry, {
+						style: {
+							color: entry.colour || "#1f6feb",
+							weight: 2,
+							fillOpacity: entry.fill_opacity == null ? 0.1 : entry.fill_opacity,
+						},
+					}).addTo(map);
+					if (entry.label) {
+						layer.bindTooltip(escape_html(entry.label));
+					}
+					try {
+						bounds = bounds ? bounds.extend(layer.getBounds()) : layer.getBounds();
+					} catch (error) {
+						// An empty geometry has no bounds; the others still frame the map.
+					}
+				});
+				let marker = null;
+				const place = (lat, lon) => {
+					const at = [parseFloat(lat.toFixed(7)), parseFloat(lon.toFixed(7))];
+					if (typeof spec.on_move === "function") {
+						spec.on_move(at[0], at[1]);
+					}
+				};
+				const put_marker = (point) => {
+					marker = L.marker(point, { draggable: spec.may_move !== false }).addTo(map);
+					marker.on("dragend", () => {
+						const latlng = marker.getLatLng();
+						place(latlng.lat, latlng.lng);
+					});
+				};
+				if (spec.point) {
+					put_marker(spec.point);
+					if (bounds) {
+						bounds.extend(spec.point);
+					}
+				}
+				if (bounds) {
+					map.fitBounds(bounds.pad(0.12), { maxZoom: MAX_FIT_ZOOM });
+				} else if (spec.point) {
+					map.setView(spec.point, 17);
+				} else {
+					map.setView([46.2, -119.2], 13);
+				}
+				if (!spec.point && spec.may_move !== false) {
+					map.once("click", (event) => {
+						put_marker([event.latlng.lat, event.latlng.lng]);
+						place(event.latlng.lat, event.latlng.lng);
+					});
+				}
+				setTimeout(() => map.invalidateSize(), 120);
+			})
+			.catch((error) => {
+				render_fallback(body, (error && error.message) || "unavailable", { point: spec.point });
+			});
+	};
+
 	erpnext_mcp.geo_map.parse_geometry = parse_geometry;
 	erpnext_mcp.geo_map.point_of = point_of;
 	erpnext_mcp.geo_map.parse_gps_string = parse_gps_string;

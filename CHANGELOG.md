@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.323.0 — 2026-10-11 — a Farm Task covers one or more blocks
+
+**Migrate.** Deploy `docs/deploy/v0.323.0_task_locations.md`. Tools: **1,150 → 1,150**. Pairs with FarmOps 0.65.0
+(61).
+
+- **Child list `locations`** (Field / Asset Register / Parcel), with the first place mirrored to Location. Scans and
+  `list_tasks_by_location` find a task from any of its places.
+- **Optional Work Spot pin** (a Field Pin on the task).
+- **The phone pin** sits at the area-weighted centre of the blocks, or at the work spot. `get_farm_task` returns
+  `outline_geojson`, the union of the outlines.
+- **Set through `record update farm_task body.locations / work_spot / clear_work_spot`**, validated (company,
+  existence, retired tags, closed tasks) and not through Updatable Fields. `create_farm_task` and
+  `create_task_from_template` take the same arguments.
+- **Pins dragged into place, Desk and phone** (Tim):
+  - the Asset Register drag goes through Move asset, with a reason (a fixed asset had refused the drag's save
+    since v0.214.0);
+  - draggable pins over the aerial and block outlines on Housing Unit, Field Pin and Farm Task (a task's Work Spot
+    overrides the centre);
+  - `/mobile/move_task_pin` for managers;
+  - who moved it, when, and from where is stamped on Asset Register, Housing Unit and Field Pin.
+- Tests: `test_task_locations_v323`, `test_pin_moves_v323`; `test_asset_map` follows the drag into Move asset.
+
 ## 0.322.0 — 2026-10-11 — every Housing Unit has its Asset Register tag
 
 **Migrate.** Deploy `docs/deploy/v0.322.0_housing_asset_tags.md`. Tools: **1,150 → 1,150**.

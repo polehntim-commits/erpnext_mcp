@@ -213,6 +213,9 @@ DYNAMIC_REFERRERS = (
 	("Farm Task", "location", "location_doctype"),
 	("Farm Task", "parent_task", "parent_doctype"),
 	("Farm Task", "subject_docname", "subject_doctype"),
+	# v0.323.0. Every place a task covers, beyond its primary Location — deleting MC-WM must not orphan the Bing
+	# removal tasks that name it second.
+	("Farm Task Location", "location", "location_doctype"),
 	("Inspection Session", "location", "location_doctype"),
 	# v0.221.0. A triaged office email names the record it belongs to.
 	("Office Mail", "linked_name", "linked_doctype"),
@@ -238,7 +241,7 @@ DYNAMIC_REFERRERS = (
 #: docname is a hash nobody can open, so an example from it names the Spray
 #: Application it is a row of — which is the record somebody would actually go
 #: and look at.
-CHILD_TABLE_PARENT = {"Spray Application Block": "Spray Application"}
+CHILD_TABLE_PARENT = {"Spray Application Block": "Spray Application", "Farm Task Location": "Farm Task"}  # v0.323.0
 
 
 @dataclass(frozen=True)

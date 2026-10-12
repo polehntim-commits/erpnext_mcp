@@ -788,6 +788,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/upload_bank_form",
 		"/mobile/move_asset",
 		"/mobile/undo_asset_move",
+		"/mobile/move_task_pin",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
 		"/mobile/get_my_housing",
 		"/mobile/record_spray_application",
@@ -3136,6 +3137,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		# fixed asset's position is a foreman's to change, with a reason.
 		"move_asset",
 		"undo_asset_move",
+		# v0.323.0. A task's work-spot pin.
+		"move_task_pin",
 		"get_worker_detail",
 		# v0.141.0. The write that ends a shift a whole crew is rostered on, and
 		# it is offered from the same drill-down as `end_stale_shift`. A picker
@@ -3453,7 +3456,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 244, "a method is named in two sets at once")
+		self.assertEqual(len(named), 245, "a method is named in two sets at once")  # v0.323.0: + move_task_pin
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

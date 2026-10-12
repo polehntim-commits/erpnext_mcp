@@ -404,6 +404,17 @@ def _tasks_linked_to(filter_sets: list) -> list:
 		)
 		for row in rows or []:
 			seen.setdefault(str(row.get("name")), dict(row))
+		# v0.323.0. A task covering several places is found from any of them, not only its primary.
+		if set(filters) == {"location_doctype", "location"}:
+			from .. import task_locations
+
+			extra = [n for n in task_locations.tasks_at(filters["location_doctype"], filters["location"])
+			         if n not in seen]
+			if extra:
+				for row in frappe.db.get_all(FARM_TASK, filters={"name": ("in", extra),
+				                                                 "state": ("in", list(LIVE_STATES))},
+				                             fields=fields, limit=LINKED_CAP) or []:
+					seen.setdefault(str(row.get("name")), dict(row))
 	return sorted(seen.values(), key=lambda row: str(row.get("creation") or ""), reverse=True)
 
 

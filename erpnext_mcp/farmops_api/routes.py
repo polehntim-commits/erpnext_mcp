@@ -134,6 +134,7 @@ ROUTES = (
 	Route("/mobile", mobile_api.deny_access_request),
 	Route("/mobile", mobile_api.move_asset),
 	Route("/mobile", mobile_api.undo_asset_move),
+	Route("/mobile", mobile_api.move_task_pin),
 	Route("/mobile", mobile_api.log_asset_state_change),
 	Route("/mobile", mobile_api.get_available_actions),
 	Route("/mobile", mobile_api.report_asset_issue),

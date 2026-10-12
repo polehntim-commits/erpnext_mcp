@@ -201,6 +201,8 @@ def _run_generic(type_: str, action: str, args: dict) -> ToolResult:
 		body = dict(args.get("body") or {})
 		if not body:
 			raise ToolError("update needs body: fieldname → value.")
+		if type_ == "farm_task" and any(key in body for key in PLACE_KEYS):
+			return _place_task(name, body)
 		result = call("update_document", {"doctype": doctype, "docname": name, "updates": body})
 		result.data = {"type": type_, "doctype": doctype, "via": "update_document", **(result.data or {})}
 		return result
@@ -225,6 +227,60 @@ def _run_generic(type_: str, action: str, args: dict) -> ToolResult:
 	                        "count": len(rows), "truncated": data.get("truncated"), "acting_user": data.get("acting_user"),
 	                        "permissions_bounding": data.get("permissions_bounding")},
 	                  summary=f"{len(rows)} {doctype}")
+
+
+#: v0.323.0. A Farm Task's places are set through `task_locations` — validated (each place exists, is a Field, tag or
+#: Parcel on the task's company, not retired; a closed task refused) — never through the Updatable Fields whitelist.
+PLACE_KEYS = ("locations", "work_spot", "clear_work_spot")
+
+
+def _place_task(name: str, body: dict) -> ToolResult:
+	"""record update farm_task with body.locations / work_spot / clear_work_spot (+ any other fields)."""
+	from .. import oauth, settings, task_locations
+
+	if not settings.tool_enabled("create_farm_task"):
+		raise ToolError("placing a task needs create_farm_task, which is switched off here — tick "
+		                "'allow_create_farm_task' in ERPNext MCP Settings. Nothing was changed.")
+	if not oauth.permits("create_farm_task"):
+		raise ToolError("placing a task is outside this client's OAuth scopes. Nothing was changed.")
+	if not frappe_exists(task_locations.TASK, name):
+		raise ToolError(f"no Farm Task called {name!r}. Nothing was changed.")
+	places = body.pop("locations", None)
+	pin = body.pop("work_spot", None)
+	clear = bool(body.pop("clear_work_spot", False))
+	try:
+		# Checked in full before anything is written, so a bad place changes nothing.
+		company = str(frappe_value(task_locations.TASK, name, "company") or "")
+		if places is not None:
+			task_locations.resolve_all(places, company)
+		task_locations.parse_pin(pin)
+	except task_locations.LocationError as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+	other = None
+	if body:
+		other = call("update_document", {"doctype": task_locations.TASK, "docname": name, "updates": body}).data
+	try:
+		placed = task_locations.set_locations(name, places, pin=pin, clear_pin=clear)
+	except task_locations.LocationError as exc:
+		raise ToolError(f"{exc} Nothing more was changed.") from None
+	data = {"type": "farm_task", "doctype": task_locations.TASK, "via": "task_locations", **placed}
+	if other:
+		data["updated"] = other
+	where = ", ".join(r["location"] for r in placed["locations"]) or "no place"
+	return ToolResult(data=data, summary=f"{name} covers {where}"
+	                  + (" (work spot pinned)" if placed.get("work_spot") else ""))
+
+
+def frappe_exists(doctype: str, name: str) -> bool:
+	import frappe
+
+	return bool(frappe.db.exists(doctype, name))
+
+
+def frappe_value(doctype: str, name: str, field: str):
+	import frappe
+
+	return frappe.db.get_value(doctype, name, field)
 
 
 def record(args: dict) -> ToolResult:
