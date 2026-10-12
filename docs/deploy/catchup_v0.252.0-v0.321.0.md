@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.320.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
+**Deploy: v0.252.0 → v0.321.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.320.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.321.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`f148e64`** (`__version__ = "0.320.0"`).
+- **Server**: erpnext_mcp main **`7e00464`** (`__version__ = "0.321.0"`).
 - **App**: fafo_ios main **`6f932bb`** — FarmOps **0.63.0 (build 59)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -83,6 +83,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.318.0 | get_deploy_status and run_post_deploy_check (no SSH); backup kit_outdated. Tools 1,148 → 1,150. No migrate. |
 | v0.319.0 | MCP parity 1: record get/list/update for 42 create-only registers; phone-only calls as arguments (barcode, rehire, title→asset, break schedule, crew board, certificate). No migrate. |
 | v0.320.0 | MCP parity 2: compliance inbox, field card, IPM threshold status, where-met, task SOPs, item label as arguments on owning tools; worker self-service stays on the phone. No migrate. |
+| v0.321.0 | Farm Task Evidence capture_lens + zoom_factor from FarmOps 0.64.0 (60), which zooms out to the ultra-wide (0.5×); every evidence JPEG also carries time/GPS/lens in EXIF. **Migrate.** |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -108,17 +109,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.320.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.321.0`. Push fafo_ios main and archive
 FarmOps 0.63.0 (build 59).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.320.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.321.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.320.0; the asset map's build stamp 0.320.0.
+1. `get_server_status`: 0.321.0; the asset map's build stamp 0.321.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
