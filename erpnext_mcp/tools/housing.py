@@ -86,6 +86,8 @@ _UNIT_FIELDS = (
 	"year_built",
 	"condition",
 	"related_asset",
+	# v0.322.0. The unit's tag on the Asset Register (QR, map pin, scan history).
+	"asset_tag",
 	"access_card_zone",
 	# v0.32.0. Where the building actually stands. Selected through
 	# `compat.existing_fields`, so a site that has not migrated yet reads a unit
@@ -210,6 +212,7 @@ def _describe_unit(row: dict, today: str = "") -> dict:
 		"year_built": int(row.get("year_built") or 0) or None,
 		"condition": row.get("condition") or None,
 		"related_asset": row.get("related_asset") or None,
+		"asset_tag": row.get("asset_tag") or None,
 		"access_card_zone": row.get("access_card_zone") or None,
 		# NEVER `{lat: 0, lon: 0}`. Null island is a real place and an unset
 		# coordinate looks exactly like it, so an unmapped cabin reports nothing

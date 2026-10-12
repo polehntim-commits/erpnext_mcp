@@ -615,14 +615,18 @@ class TheScanCarriesTheStateMachine(ScanTestCase):
 		data = self.scan(VALVE)
 		self.assertEqual(data["available_actions"], ["create_task", "log_state_change", "report_issue"])
 
-	def test_a_cabin_carries_no_actions_because_nothing_links_it_to_the_register(self):
-		"""A Housing Unit has states, but they live on an Asset Register row and
-		`related_asset` points at ERPNext's fixed-Asset doctype instead. Empty is
-		the honest answer; resolving a docname out of the wrong register is not."""
+	def test_a_cabin_carries_its_own_tags_actions(self):
+		"""v0.322.0. A Housing Unit's states live on an Asset Register row, and
+		until this release nothing linked the two (`related_asset` points at
+		ERPNext's fixed-Asset doctype). Every unit now has its tag in `asset_tag`,
+		so scanning the cabin carries that tag's state machine — and scanning the
+		tag answers with the cabin."""
 		unit = self.a_cabin()
 		data = self.scan(unit)
-		self.assertIsNone(data["state_asset"])
-		self.assertEqual(data["state_actions"], [])
+		self.assertEqual(data["entity_type"], "housing_unit")
+		self.assertEqual(data["state_asset"], frappe.db.get_value("Housing Unit", unit, "asset_tag"))
+		self.assertIn("mark_occupied", [entry["action"] for entry in data["state_actions"]])
+		self.assertFalse(data["scan_recorded"], "a cabin scan still writes nothing")
 
 	def test_the_cabins_own_asset_tag_is_what_carries_them(self):
 		self.an_asset(name="MC-Cabin-Asset", asset_type="Housing Unit")

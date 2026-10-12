@@ -1040,6 +1040,11 @@ def farm_overview(company=None, overlay=None) -> dict:
 	if not assets_readable:
 		refused.append(ASSET_REGISTER)
 	asset_rows = _rows(ASSET_REGISTER, entity) if assets_readable else []
+	# v0.322.0. A Housing Unit's own Asset Register tag is the same building this map already draws as a unit, so
+	# it is left off the asset layer rather than pinned twice.
+	paired = {str(unit.get("asset_tag")) for unit in units if unit.get("asset_tag")}
+	if paired:
+		asset_rows = [row for row in asset_rows if str(row.get("name")) not in paired]
 	assets = _asset_markers(asset_rows)
 	counts[ASSET_REGISTER] = len(asset_rows)
 	points.extend((marker["point"][0], marker["point"][1]) for marker in assets)

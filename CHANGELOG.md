@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.322.0 — 2026-10-11 — every Housing Unit has its Asset Register tag
+
+**Migrate.** Deploy `docs/deploy/v0.322.0_housing_asset_tags.md`. Tools: **1,150 → 1,150**.
+
+- **Fixes Tim's two Mill Creek cabins missing from the phone map.** `create_housing_unit` (phone, MCP or Desk)
+  wrote no Asset Register row, and the map and asset lists read only that register.
+- **The Housing Unit controller now pairs every unit with one tag**, created or adopted, and keeps it in step:
+  - type Housing Unit, the company and GPS, and the docname as the tag ID with its QR;
+  - Housing Unit `asset_tag` holds the link;
+  - deleting a unit retires its tag.
+- **Patch `housing_unit_asset_tags`** backfills existing units. It is idempotent.
+- Tests: `test_housing_asset_tags_v322`.
+
 ## 0.321.0 — 2026-10-11 — which lens took the photo (FarmOps 0.64.0)
 
 **Migrate** (Farm Task Evidence: `capture_lens`, `zoom_factor`). Deploy `docs/deploy/v0.321.0_capture_lens.md`.

@@ -674,6 +674,12 @@ def _asset_branch(candidate: str, args: dict) -> dict | None:
 	"""
 	if not compat.doctype_exists(ASSET_REGISTER) or not frappe.db.exists(ASSET_REGISTER, candidate):
 		return None
+	# v0.322.0. A CABIN'S TAG ANSWERS WITH THE CABIN. Every Housing Unit now has its own Asset Register row
+	# (`housing_assets`), and a worker scanning it wants the unit — who sleeps there, its inspections — with the
+	# tag's jobs and state actions folded in, not a bare register row.
+	unit = _unit_for_tag(candidate)
+	if unit:
+		return _housing_branch(unit, args)
 
 	company = as_str(args, "company")
 	if company:
@@ -731,6 +737,10 @@ def _housing_branch(candidate: str, args: dict) -> dict | None:
 	related = str(entity.get("related_asset") or "")
 	if related:
 		filters.append({"asset": related})
+	# v0.322.0: and the unit's own tag on the Asset Register, which is where its states and its jobs live.
+	tag = str(entity.get("asset_tag") or "")
+	if tag:
+		filters += [{"asset": tag}, {"location_doctype": ASSET_REGISTER, "location": tag}]
 
 	return {
 		"entity_type": HOUSING,
@@ -747,7 +757,18 @@ def _housing_branch(candidate: str, args: dict) -> dict | None:
 		# the three keys come back empty here rather than resolving a docname from
 		# the wrong register. Scanning the cabin's own asset tag is what carries
 		# the actions, and that is the asset branch above.
+		#
+		# v0.322.0: now something does link them — `Housing Unit.asset_tag` — so
+		# a unit with a tag carries that tag's state machine.
+		**({"state": _state_actions(tag)} if tag else {}),
 	}
+
+
+def _unit_for_tag(tag: str) -> str:
+	"""The Housing Unit whose Asset Register tag this is (v0.322.0), or ""."""
+	if not compat.doctype_exists(HOUSING_UNIT) or not compat.has_field(HOUSING_UNIT, "asset_tag"):
+		return ""
+	return str(frappe.db.get_value(HOUSING_UNIT, {"asset_tag": tag}, "name") or "")
 
 
 def _field_branch(candidate: str, args: dict) -> dict | None:

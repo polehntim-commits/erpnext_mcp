@@ -18,6 +18,7 @@
   "condition",
   "linkage_section",
   "related_asset",
+  "asset_tag",
   "linkage_col",
   "access_card_zone",
   "position_section",
@@ -137,6 +138,15 @@
    "fieldtype": "Link",
    "label": "Related Asset",
    "options": "Asset"
+  },
+  {
+   "description": "v0.322.0. This building's tag on the Asset Register — its QR, its place on the phone's map and asset lists, its scan history. Created or adopted automatically when the unit is saved.",
+   "fieldname": "asset_tag",
+   "fieldtype": "Link",
+   "label": "Asset Tag",
+   "options": "Asset Register",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "linkage_col",
@@ -375,7 +385,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-03 12:00:00.000000",
+ "modified": "2026-10-11 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Housing Unit",

@@ -84,6 +84,20 @@ class HousingUnit(Document):
 		if not self.max_occupants_per_or_law:
 			self.max_occupants_per_or_law = lawful_occupancy(self.square_footage)
 
+	def on_update(self):
+		# v0.322.0: every unit has its tag on the Asset Register, whichever door made it (Desk, MCP, phone) —
+		# the map and asset lists read that register. Runs after insert as well. Never blocks the save.
+		from erpnext_mcp import housing_assets
+
+		result = housing_assets.ensure(self.name)
+		if result.get("asset"):
+			self.set(housing_assets.LINK, result["asset"])
+
+	def on_trash(self):
+		from erpnext_mcp import housing_assets
+
+		housing_assets.retire(self.name, self.get(housing_assets.LINK))
+
 
 def lawful_occupancy(square_footage) -> int:
 	"""How many people the floor area allows, at 50 sq ft each.

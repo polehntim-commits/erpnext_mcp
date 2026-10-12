@@ -29,6 +29,7 @@ from erpnext_mcp import install, settings
 from erpnext_mcp.patches import (
 	add_bait_units_to_context,
 	customer_portal_followups,
+	housing_unit_asset_tags,
 	rename_packer_share_to_customer_portal,
 	add_rodent_sections_to_inspection_templates,
 	backfill_alert_subject_employee,
@@ -129,6 +130,8 @@ PATCHES = (
 	# v0.313.0. Pinned in `TheCustomerPortalRename` below and `test_customer_portal.TheSwitchesCarryAcross`.
 	("erpnext_mcp.patches.rename_packer_share_to_customer_portal", rename_packer_share_to_customer_portal),
 	("erpnext_mcp.patches.customer_portal_followups", customer_portal_followups),
+	# v0.322.0. Pinned in `test_housing_asset_tags_v322.TheBackfill` and `TheHousingTagBackfill` below.
+	("erpnext_mcp.patches.housing_unit_asset_tags", housing_unit_asset_tags),
 )
 
 
@@ -1282,3 +1285,11 @@ class PhoneStampsPatch(MCPTestCase):
 	def test_a_site_with_nothing_to_move_reports_nothing_moved(self):
 		report = normalize_phone_timestamps.normalize_phone_timestamps()
 		self.assertEqual((report["observed_at"], report["bucket_entries"], report["sessions"]), (0, 0, 0))
+
+
+class TheHousingTagBackfill(FreshSite):
+	"""v0.322.0. On a site with no Housing Units the backfill reports nothing and never raises; twice is a no-op."""
+
+	def test_it_never_raises_and_is_idempotent(self):
+		housing_unit_asset_tags.execute()
+		housing_unit_asset_tags.execute()
