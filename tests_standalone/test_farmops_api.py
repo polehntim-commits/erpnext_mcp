@@ -789,6 +789,9 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		"/mobile/move_asset",
 		"/mobile/undo_asset_move",
 		"/mobile/move_task_pin",
+		"/mobile/list_held_tasks",
+		"/mobile/hold_task",
+		"/mobile/release_task",
 		# v0.195.0. SERVER_CHANGES §42 and §43.
 		"/mobile/get_my_housing",
 		"/mobile/record_spray_application",
@@ -3139,6 +3142,9 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 		"undo_asset_move",
 		# v0.323.0. A task's work-spot pin.
 		"move_task_pin",
+		# v0.324.0. Putting work on hold and releasing it is a foreman's.
+		"hold_task",
+		"release_task",
 		"get_worker_detail",
 		# v0.141.0. The write that ends a shift a whole crew is rostered on, and
 		# it is offered from the same drill-down as `end_stale_shift`. A picker
@@ -3182,6 +3188,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.324.0. What is on hold, and why — everybody who sees the farm's work may read it.
+		"list_held_tasks",
 		# v0.262.0. The IPM graph: view it, log what you see, see the threshold and the options.
 		"get_ipm_graph",
 		"get_ipm_organism",
@@ -3456,7 +3464,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 245, "a method is named in two sets at once")  # v0.323.0: + move_task_pin
+		self.assertEqual(len(named), 248, "a method is named in two sets at once")  # v0.324.0: + hold/release/list_held_tasks
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

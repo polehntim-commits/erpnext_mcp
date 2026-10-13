@@ -322,6 +322,9 @@ DISPATCH_COLUMNS = (
 	# yard tells the two apart at a glance — "who is actually working" is the
 	# question this column exists to keep answerable.
 	("Paused", "yellow"),
+	# v0.324.0. On Hold: nobody should pick it up yet (task_holds). Grey, after Paused — it is waiting on
+	# something outside the crew, and the card says what.
+	("On Hold", "gray"),
 	("Awaiting-Review", "red"),
 	("Completed", "green"),
 	("Rejected", "red"),

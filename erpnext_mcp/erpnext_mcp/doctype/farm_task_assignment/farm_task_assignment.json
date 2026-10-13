@@ -101,7 +101,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "State",
-   "options": "Claimed\nIn-Progress\nPaused\nCompleted\nRejected\nMerged\nOn Crew\nOff Crew",
+   "options": "Claimed\nIn-Progress\nPaused\nCompleted\nRejected\nMerged\nOn Crew\nOff Crew\nHeld",
    "reqd": 1,
    "search_index": 1
   },
@@ -445,7 +445,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-06 12:00:00.000000",
+ "modified": "2026-10-12 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Assignment",

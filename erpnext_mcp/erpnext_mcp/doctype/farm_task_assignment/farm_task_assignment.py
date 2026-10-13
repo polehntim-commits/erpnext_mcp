@@ -61,7 +61,10 @@ MERGED = "Merged"
 ON_CREW = "On Crew"
 OFF_CREW = "Off Crew"
 
-STATES = (CLAIMED, IN_PROGRESS, PAUSED, COMPLETED, REJECTED, MERGED, ON_CREW, OFF_CREW)
+#: v0.324.0. Ended because its task was put on hold (`task_holds`): not a rejection, nobody failed.
+HELD = "Held"
+
+STATES = (CLAIMED, IN_PROGRESS, PAUSED, COMPLETED, REJECTED, MERGED, ON_CREW, OFF_CREW, HELD)
 
 #: The states in which this assignment is the one that owns the task.
 #:

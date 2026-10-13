@@ -56,6 +56,8 @@ AVAILABLE = "Available"
 CLAIMED = "Claimed"
 IN_PROGRESS = "In-Progress"
 PAUSED = "Paused"
+#: v0.324.0. Nobody should pick this up yet, and why (`task_holds`) — not a worker's pause.
+ON_HOLD = "On Hold"
 AWAITING_REVIEW = "Awaiting-Review"
 COMPLETED = "Completed"
 REJECTED = "Rejected"
@@ -68,6 +70,7 @@ STATES = (
 	CLAIMED,
 	IN_PROGRESS,
 	PAUSED,
+	ON_HOLD,
 	AWAITING_REVIEW,
 	COMPLETED,
 	REJECTED,

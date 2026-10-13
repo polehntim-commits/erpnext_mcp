@@ -11111,6 +11111,7 @@ TOOLS = {
 				"Awaiting-Review, Completed, Rejected, Cancelled.",
 			),
 			"include_closed": _field(_BOOLEAN, "Include Completed, Rejected and Cancelled. Default false."),
+			"on_hold": _field(_BOOLEAN, "v0.324.0. true: only held tasks; false: leave held tasks off. Default: they are their own On Hold column."),
 			"crew_only": _field(_BOOLEAN, "v0.319.0. Only crew tasks (with their crew counts) — the phone's open crew tasks list."),
 			"task_type": _field(_STRING, "Only this task type."),
 			"urgency": _field(_STRING, "Only this urgency."),
@@ -11261,6 +11262,7 @@ TOOLS = {
 			),
 			"locations": _field({"type": "array", "items": {}}, "v0.323.0. Several places this task covers: block names, tickers or aliases ('MC-CP', 'Bing Block' — a named group brings all its blocks), or {location_type: Field|Asset Register|Parcel, location}. The first is the primary location; the phone pins the task at their combined centroid and draws their outlines. Same company only."),
 			"work_spot": _field(_OBJECT, "v0.323.0. {latitude, longitude}: an explicit pin for the task (a Work Spot Field Pin), used instead of the centroid."),
+			"on_hold": _field(_OBJECT, "v0.324.0. Create it ON HOLD: {reason (required), until_event, until_date, auto_release}."),
 		},
 		required=("task_name", "task_type", "evidence_required"),
 		mutating=True,
@@ -12875,6 +12877,7 @@ TOOLS = {
 			),
 			"locations": _field({"type": "array", "items": {}}, "v0.323.0. Several places this task covers: block names, tickers or aliases ('MC-CP', 'Bing Block' — a named group brings all its blocks), or {location_type: Field|Asset Register|Parcel, location}. The first is the primary location; the phone pins the task at their combined centroid and draws their outlines. Same company only."),
 			"work_spot": _field(_OBJECT, "v0.323.0. {latitude, longitude}: an explicit pin for the task (a Work Spot Field Pin), used instead of the centroid."),
+			"on_hold": _field(_OBJECT, "v0.324.0. Create it ON HOLD: {reason (required), until_event, until_date, auto_release}."),
 		},
 		required=("template",),
 		mutating=True,
@@ -19034,7 +19037,8 @@ TOOLS = {
 		"Each change runs that document's existing tool under its own switch and rules (who may approve, what must be "
 		"filled before submit). A change needs allow_document AND that tool's switch. Journal entries, payments, "
 		"payroll and I-9 keep their own tools. The per-document tools remain.",
-		{"action": _field(_STRING, "types, describe, submit, cancel, approve, reject, close, reopen."),
+		{"action": _field(_STRING, "types, describe, submit, cancel, approve, reject, close, reopen, hold, release "
+		                           "(v0.324.0: a farm_task on hold — body.hold_reason, hold_until_event, cascade)."),
 		 "type": _field(_STRING, "The document type, e.g. purchase_order (document action=types lists them)."),
 		 "name": _field(_STRING, "The document."),
 		 "body": _field(_OBJECT, "Any other argument the document's own tool takes (describe shows them)."),
@@ -25910,6 +25914,41 @@ TOOLS = {
 		required=("task",),
 		mutating=True,
 		title="Pause a farm task",
+		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
+		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
+	),
+	# v0.324.0. On hold (task_holds): a task nobody should pick up yet, and why.
+	"hold_farm_task": _tool(
+		dispatch.hold_farm_task,
+		"MUTATING (default OFF). v0.324.0. Put a Farm Task ON HOLD: nobody should pick it up yet, and why. "
+		"hold_reason is required; hold_until_event says what it waits for ('Mill Creek land transfer closes', "
+		"'Constancy go-live'); hold_until_date optional, and auto_release=true releases it on that date and tells "
+		"whoever held it. Any live claim ends as 'Held' (minutes kept; evidence and history untouched). A held task "
+		"cannot be claimed, assigned or started — the refusal names the reason. cascade=true holds its step tasks "
+		"(parent_task = this task) too. Not Pause, which is a worker stopping the clock mid-job.",
+		{"task": _field(_STRING, "The Farm Task, e.g. FT-2026-10-00002."),
+		 "hold_reason": _field(_STRING, "Why it is on hold. Required."),
+		 "hold_until_event": _field(_STRING, "What it waits for."),
+		 "hold_until_date": _field(_STRING, "YYYY-MM-DD, optional."),
+		 "auto_release": _field(_BOOLEAN, "Release automatically on hold_until_date. Default false."),
+		 "cascade": _field(_BOOLEAN, "Also hold its step tasks. Default false.")},
+		required=("task", "hold_reason"),
+		mutating=True,
+		title="Hold a farm task",
+		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
+		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
+	),
+	"release_farm_task": _tool(
+		dispatch.release_farm_task,
+		"MUTATING (default OFF). v0.324.0. Take a held Farm Task off hold: a held Draft goes back to Draft, "
+		"anything else to the pool (Available). cascade=true releases its held step tasks too. The hold's reason "
+		"stays on the timeline.",
+		{"task": _field(_STRING, "The held Farm Task."),
+		 "cascade": _field(_BOOLEAN, "Also release its held step tasks. Default false."),
+		 "note": _field(_STRING, "Why it is released (on the timeline).")},
+		required=("task",),
+		mutating=True,
+		title="Release a farm task from hold",
 		available=_needs_doctype("Farm Task", "Farm Task Assignment"),
 		requires="the Farm Task and Farm Task Assignment DocTypes — run `bench migrate`",
 	),

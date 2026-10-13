@@ -727,6 +727,10 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 		spot = task_locations.parse_pin(args.get("work_spot")) if args.get("work_spot") else None
 	except task_locations.LocationError as exc:
 		raise ToolError(f"{exc} Nothing was created.") from None
+	# v0.324.0. Born on hold: {reason, until_event, until_date, auto_release}, checked before anything exists.
+	born_held = args.get("on_hold") if isinstance(args.get("on_hold"), dict) else None
+	if born_held is not None and not str(born_held.get("reason") or born_held.get("hold_reason") or "").strip():
+		raise ToolError("on_hold needs a reason — what the work is waiting for. Nothing was created.")
 	location_doctype = as_str(args, "location_doctype")
 	location = as_str(args, "location")
 	if location and not location_doctype:
@@ -864,6 +868,17 @@ def create_task_from_template(args: dict, *, origin: str = "", fields: dict | No
 	if (places and len(places) > 1) or spot:
 		task_locations.set_locations(doc.name, [{"location_type": d, "location": n} for d, n in places] if places
 		                             else None, pin=spot)
+		doc.reload()
+	if born_held is not None:
+		from .. import task_holds
+
+		try:
+			task_holds.hold(doc.name, born_held.get("reason") or born_held.get("hold_reason"),
+			                until_event=str(born_held.get("until_event") or born_held.get("hold_until_event") or ""),
+			                until_date=born_held.get("until_date") or born_held.get("hold_until_date") or None,
+			                auto_release=bool(born_held.get("auto_release")))
+		except task_holds.HoldError as exc:
+			raise ToolError(f"{exc} The task was created as {doc.name}; it is not on hold.") from None
 		doc.reload()
 
 	assignment = None

@@ -25,7 +25,9 @@ from ..result import ToolResult
 from .template_tool import call
 
 RECORD_ACTIONS = ("create", "update", "deactivate", "delete", "get", "list")
-DOCUMENT_ACTIONS = ("submit", "cancel", "approve", "reject", "close", "reopen")
+DOCUMENT_ACTIONS = ("submit", "cancel", "approve", "reject", "close", "reopen", "hold", "release")
+#: v0.324.0. hold / release are a Farm Task's (task_holds) — not every tool that starts with "release_".
+_ONLY_FOR = {"hold": {"farm_task"}, "release": {"farm_task"}}
 #: Not on the generic tools: money, HR, signing and security keep their own (the plan's special-purpose family).
 SPECIAL = re.compile(r"i9|w4|payroll|nacha|prenote|garnish|tax|941|futa|bank|payment|signature|sign_|seal|signing|"
                      r"journal|opening_balance|ledger|gl_|_gl|reconcil|statement|anchor|1099|fica|pay_stub|"
@@ -85,7 +87,7 @@ def tables() -> tuple:
 		verb, _, noun = name.partition("_")
 		if not noun or noun in NOT_TYPES:
 			continue
-		if verb in DOCUMENT_ACTIONS:
+		if verb in DOCUMENT_ACTIONS and noun in _ONLY_FOR.get(verb, {noun}):
 			documents.setdefault(noun, {})[verb] = name
 		if verb in ("create", "update", "delete", "deactivate", "get"):
 			records.setdefault(noun, {})[verb] = name

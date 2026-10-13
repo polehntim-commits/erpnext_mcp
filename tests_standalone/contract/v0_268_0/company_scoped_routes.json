@@ -99,6 +99,7 @@
  "list_field_boundaries",
  "list_food_safety_plans",
  "list_hazard_analyses",
+ "list_held_tasks",
  "list_housing_units",
  "list_iot_devices",
  "list_iot_readings",

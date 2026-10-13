@@ -913,6 +913,8 @@
   "v79_section",
   "allow_pause_farm_task",
   "allow_resume_farm_task",
+  "allow_hold_farm_task",
+  "allow_release_farm_task",
   "allow_link_farm_tasks",
   "allow_merge_farm_task",
   "allow_add_task_note",
@@ -7566,6 +7568,20 @@
   },
   {
    "default": "0",
+   "description": "WRITE. v0.324.0. Put a task on hold — why, until what event or date, optionally its step tasks. Ends any live claim (minutes kept); held work cannot be claimed or started.",
+   "fieldname": "allow_hold_farm_task",
+   "fieldtype": "Check",
+   "label": "Hold Farm Task"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. v0.324.0. Take a task off hold — back to Draft or the pool; optionally its step tasks.",
+   "fieldname": "allow_release_farm_task",
+   "fieldtype": "Check",
+   "label": "Release Farm Task"
+  },
+  {
+   "default": "0",
    "description": "WRITE. Pick a paused task back up. Auto-pauses whatever else that worker had running — nobody is in two places at once.",
    "fieldname": "allow_resume_farm_task",
    "fieldtype": "Check",
@@ -11155,7 +11171,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-11 10:00:00.000000",
+ "modified": "2026-10-12 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "ERPNext MCP Settings",

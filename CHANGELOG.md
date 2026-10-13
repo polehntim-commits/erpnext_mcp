@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.324.0 — 2026-10-12 — On Hold for Farm Tasks
+
+**Migrate.** Deploy `docs/deploy/v0.324.0_on_hold.md`. Tools: **1,150 → 1,152**. Pairs with FarmOps 0.66.0 (62).
+
+- **New state `On Hold`**, with `hold_reason` (required), `hold_until_event` and an optional `hold_until_date`, plus
+  who held it, when, and the state it came from (AFB-2026-00034: the Bing removal sat Claimed while its notes said
+  on hold).
+- **Holding:** a live claim ends as `Held` (minutes kept), a crew comes off the job, and `cascade` holds the step
+  tasks. Claim, assign and start refuse a held task with its reason.
+- **Release:** manual, or automatic on the date (daily job; it notifies whoever held it).
+- **MCP:** `hold_farm_task` / `release_farm_task` (also `document action=hold|release`); `list_dispatch_board`
+  gets an On Hold column and an `on_hold` filter; `create_farm_task` and `create_task_from_template` take
+  `on_hold={…}`.
+- **Phone:** `/mobile/list_held_tasks`, `hold_task`, `release_task`.
+- **Desk:** a Kanban "On Hold" column (patch `dispatch_board_on_hold_column`).
+- Tests: `test_task_holds_v324`; tool counts, route lists, Kanban columns and scheduled jobs updated.
+
 ## 0.323.0 — 2026-10-11 — a Farm Task covers one or more blocks
 
 **Migrate.** Deploy `docs/deploy/v0.323.0_task_locations.md`. Tools: **1,150 → 1,150**. Pairs with FarmOps 0.65.0

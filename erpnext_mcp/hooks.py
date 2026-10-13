@@ -296,6 +296,9 @@ scheduler_events = {
 		#: unless `irrigation_schedule_enabled`; idempotent per zone, set and day; never raises.
 		"15 0 * * *": [
 			"erpnext_mcp.irrigation_schedule.daily",
+			#: v0.324.0. Held tasks whose hold_until_date has come, and that asked to be, go back to the pool;
+			#: whoever held them is told. Never raises.
+			"erpnext_mcp.task_holds.auto_release_due",
 		],
 		"0 2 * * *": [
 			"erpnext_mcp.services.windowed_reports.recompute_kpi_history_incremental",

@@ -230,6 +230,14 @@ _TASK_FIELDS = (
 	# v0.323.0. More than one place, and an explicit pin (task_locations).
 	"location_count",
 	"has_work_spot",
+	# v0.324.0. On hold, and why (task_holds).
+	"hold_reason",
+	"hold_until_event",
+	"hold_until_date",
+	"held_by",
+	"held_at",
+	"held_from_state",
+	"hold_auto_release",
 	"creation",
 	"modified",
 	"owner",
@@ -870,6 +878,57 @@ def _shift_note(shift: str) -> str:
 	return ""
 
 
+def _hold_of(row: dict) -> dict | None:
+	from .. import task_holds
+
+	return task_holds.describe(row)
+
+
+def _refuse_if_held(row: dict) -> None:
+	"""v0.324.0. A held task is not claimed, assigned or started — the refusal says why and until what."""
+	from .. import task_holds
+
+	try:
+		task_holds.refuse_if_held(row)
+	except task_holds.HoldError as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+
+
+def hold_farm_task(args: dict) -> ToolResult:
+	"""v0.324.0. Put a task on hold — why (required), until what event or date, optionally its step tasks too."""
+	_require()
+	from .. import task_holds
+
+	row = task_row(as_str(args, "task", required=True))
+	try:
+		data = task_holds.hold(row["name"], as_str(args, "hold_reason") or as_str(args, "reason"),
+		                       until_event=as_str(args, "hold_until_event") or as_str(args, "until_event"),
+		                       until_date=as_str(args, "hold_until_date") or as_str(args, "until_date") or None,
+		                       auto_release=bool(as_bool(args, "auto_release", False)),
+		                       cascade=bool(as_bool(args, "cascade", False)))
+	except task_holds.HoldError as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+	data["task_detail"] = _describe_task(task_row(row["name"]))
+	return ToolResult(data=data, summary=f"{data['held_count']} task(s) on hold: {data['reason'][:80]}",
+	                  docstatus_delta=f"{row.get('state')} → On Hold")
+
+
+def release_farm_task(args: dict) -> ToolResult:
+	"""v0.324.0. Take a held task off hold — back to Draft, or to the pool; optionally its step tasks too."""
+	_require()
+	from .. import task_holds
+
+	row = task_row(as_str(args, "task", required=True))
+	try:
+		data = task_holds.release(row["name"], cascade=bool(as_bool(args, "cascade", False)),
+		                          note=as_str(args, "note") or as_str(args, "reason"))
+	except task_holds.HoldError as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+	data["task_detail"] = _describe_task(task_row(row["name"]))
+	return ToolResult(data=data, summary=f"{data['released_count']} task(s) released from hold",
+	                  docstatus_delta="On Hold → " + (data["tasks"][0].get("to") or "Available"))
+
+
 def _more_places(row: dict) -> dict:
 	if int(row.get("location_count") or 0) <= 1 and not int(row.get("has_work_spot") or 0):
 		return {}
@@ -894,6 +953,8 @@ def _describe_task(row: dict) -> dict:
 		# v0.323.0. Present only on a task covering several places or carrying an explicit pin, so every
 		# one-place task's payload is what it always was. The phone pins it at `map_point`.
 		**_more_places(row),
+		# v0.324.0. Only on a held task: why, and until what.
+		**({"hold": _hold_of(row)} if row.get("state") == "On Hold" else {}),
 		"skill_required": row.get("skill_required") or None,
 		"dispatch_mode": row.get("dispatch_mode") or "Either",
 		"assigned_to": row.get("assigned_to") or None,
@@ -1353,6 +1414,10 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 		spot = task_locations.parse_pin(args.get("work_spot")) if args.get("work_spot") else None
 	except task_locations.LocationError as exc:
 		raise ToolError(f"{exc} Nothing was created.") from None
+	# v0.324.0. Born on hold: {reason, until_event, until_date, auto_release}, checked before anything exists.
+	born_held = args.get("on_hold") if isinstance(args.get("on_hold"), dict) else None
+	if born_held is not None and not str(born_held.get("reason") or born_held.get("hold_reason") or "").strip():
+		raise ToolError("on_hold needs a reason — what the work is waiting for. Nothing was created.")
 
 	location_doctype = as_str(args, "location_doctype")
 	location = as_str(args, "location")
@@ -1503,6 +1568,17 @@ def create_farm_task(args: dict, *, origin: str = "") -> ToolResult:
 	if (places and len(places) > 1) or spot:
 		task_locations.set_locations(doc.name, [{"location_type": d, "location": n} for d, n in places] if places
 		                             else None, pin=spot)
+		doc.reload()
+	if born_held is not None:
+		from .. import task_holds
+
+		try:
+			task_holds.hold(doc.name, born_held.get("reason") or born_held.get("hold_reason"),
+			                until_event=str(born_held.get("until_event") or born_held.get("hold_until_event") or ""),
+			                until_date=born_held.get("until_date") or born_held.get("hold_until_date") or None,
+			                auto_release=bool(born_held.get("auto_release")))
+		except task_holds.HoldError as exc:
+			raise ToolError(f"{exc} The task was created as {doc.name}; it is not on hold.") from None
 		doc.reload()
 
 	assignment = None
@@ -1812,6 +1888,7 @@ def assign_farm_task(args: dict) -> ToolResult:
 	"""
 	_require()
 	row = task_row(as_str(args, "task", required=True))
+	_refuse_if_held(row)
 	if crew_tasks.is_crew(row) and crew_tasks.ready():
 		from . import crew_tasks as crew_tools
 
@@ -2241,6 +2318,7 @@ def claim_farm_task(args: dict) -> ToolResult:
 	# `lock_task`.
 	lock_task(row["name"])
 	row = task_row(row["name"])
+	_refuse_if_held(row)
 	worker = _worker(args)
 	worker_name = _worker_name(worker, as_str(args, "worker_name"))
 	# v0.261.0. A CLAIM MADE WITH NO SIGNAL. The first to reach the server wins; a claim
@@ -3879,6 +3957,14 @@ def list_dispatch_board(args: dict) -> ToolResult:
 		filters["state"] = ("in", wanted)
 	elif not as_bool(args, "include_closed", False):
 		filters["state"] = ("in", [state for state in STATES if state not in TERMINAL_STATES])
+	# v0.324.0. on_hold=true is only the held work (its own column already); false leaves it off the board.
+	on_hold = as_bool(args, "on_hold", None)
+	if on_hold is True:
+		filters["state"] = "On Hold"
+	elif on_hold is False:
+		current = filters.get("state")
+		keep = list(current[1]) if isinstance(current, tuple) else list(STATES)
+		filters["state"] = ("in", [state for state in keep if state != "On Hold"])
 	for key in ("task_type", "urgency", "assigned_to", "skill_required"):
 		value = as_str(args, key)
 		if value:

@@ -1541,6 +1541,17 @@
     "dispatch"
    ]
   },
+  "hold_task": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "release_task": {
+   "gates": [
+    "dispatch"
+   ]
+  },
+  "list_held_tasks": {},
   "universal_scan": {
    "resources": [
     {

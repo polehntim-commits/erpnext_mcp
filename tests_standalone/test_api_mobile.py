@@ -1211,6 +1211,10 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"undo_asset_move",
 		# v0.323.0 — a task's work-spot pin, long-pressed on the phone.
 		"move_task_pin",
+		# v0.324.0 — work on hold: the greyed section, and a foreman's hold / release.
+		"list_held_tasks",
+		"hold_task",
+		"release_task",
 		# v0.195.0. fafo_ios names all four as path constants (6e9cfd0) and no
 		# Codable decodes their answers yet, so there is nothing to mirror; the
 		# payloads are asserted key by key in test_wave5_server_changes against

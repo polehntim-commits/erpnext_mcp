@@ -2534,6 +2534,69 @@ def move_task_pin(user: str, task=None, latitude=None, longitude=None, clear=Non
 		frappe.throw(str(exc), frappe.ValidationError)
 
 
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_held_tasks", limit=guard.READ_LIMIT)
+def list_held_tasks(user: str, company=None, limit=None) -> dict:
+	"""Work on hold in the caller's entities — the greyed "On hold" section of Work and Today. v0.324.0.
+
+	Read-only and open to everybody who can see the farm's work: a picker should know the Bing removal is waiting
+	on the land transfer as much as the foreman does. Each row carries `hold` (reason, until event / date).
+	"""
+	allowed = guard.require_scope(user)
+	entity = guard.require_company(user, company, allowed) if company else ""
+	filters = {"state": "On Hold"}
+	if entity:
+		filters["company"] = entity
+	cap = _limit_argument(limit, 100, 300)
+	names = frappe.db.get_all("Farm Task", filters=filters, pluck="name", order_by="held_at desc", limit=cap) or []
+	from erpnext_mcp.tools import dispatch as dispatch_tools
+
+	rows = []
+	with shape.remembering_reads():
+		for name in names:
+			detail = dispatch_tools._describe_task(dispatch_tools.task_row(str(name)))
+			rows.append(shape.task(detail, {}))
+	rows = guard.scoped(rows, allowed)
+	return {"tasks": rows, "count": len(rows), "company": entity or None}
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("hold_task", mutating=True, limit=guard.WRITE_LIMIT)
+def hold_task(user: str, task=None, hold_reason=None, hold_until_event=None, hold_until_date=None,
+              auto_release=None, cascade=None, client_request_id=None) -> dict:
+	"""Put a task on hold from the phone (Foreman, Farm Manager). v0.324.0. Holding a held task changes nothing,
+	so the offline queue may send it twice."""
+	guard.require_dispatch_role(user, "Putting a task on hold")
+	name = _task_in_scope(user, task)
+	from erpnext_mcp import task_holds
+
+	try:
+		return task_holds.hold(name, hold_reason, until_event=str(hold_until_event or ""),
+		                       until_date=hold_until_date or None,
+		                       auto_release=str(auto_release or "").lower() in ("1", "true", "yes"),
+		                       cascade=str(cascade or "").lower() in ("1", "true", "yes"), actor=user)
+	except task_holds.HoldError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("release_task", mutating=True, limit=guard.WRITE_LIMIT)
+def release_task(user: str, task=None, cascade=None, note=None, client_request_id=None) -> dict:
+	"""Take a task off hold from the phone (Foreman, Farm Manager). v0.324.0. A task already off hold answers
+	`released_count: 0` rather than refusing, so a queued release replayed after someone else's is harmless."""
+	guard.require_dispatch_role(user, "Releasing a held task")
+	name = _task_in_scope(user, task)
+	from erpnext_mcp import task_holds
+
+	if frappe.db.get_value("Farm Task", name, "state") != task_holds.ON_HOLD:
+		return {"task": name, "tasks": [], "released_count": 0, "already": True}
+	try:
+		return task_holds.release(name, cascade=str(cascade or "").lower() in ("1", "true", "yes"),
+		                          note=str(note or ""), actor=user)
+	except task_holds.HoldError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
 @frappe.whitelist(methods=["POST"])
 @guard.endpoint("log_asset_state_change", mutating=True, limit=guard.WRITE_LIMIT)
 def log_asset_state_change(

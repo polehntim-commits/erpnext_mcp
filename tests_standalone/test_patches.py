@@ -29,6 +29,7 @@ from erpnext_mcp import install, settings
 from erpnext_mcp.patches import (
 	add_bait_units_to_context,
 	customer_portal_followups,
+	dispatch_board_on_hold_column,
 	housing_unit_asset_tags,
 	rename_packer_share_to_customer_portal,
 	add_rodent_sections_to_inspection_templates,
@@ -132,6 +133,8 @@ PATCHES = (
 	("erpnext_mcp.patches.customer_portal_followups", customer_portal_followups),
 	# v0.322.0. Pinned in `test_housing_asset_tags_v322.TheBackfill` and `TheHousingTagBackfill` below.
 	("erpnext_mcp.patches.housing_unit_asset_tags", housing_unit_asset_tags),
+	# v0.324.0. Pinned in `TheOnHoldColumn` below.
+	("erpnext_mcp.patches.dispatch_board_on_hold_column", dispatch_board_on_hold_column),
 )
 
 
@@ -1293,3 +1296,22 @@ class TheHousingTagBackfill(FreshSite):
 	def test_it_never_raises_and_is_idempotent(self):
 		housing_unit_asset_tags.execute()
 		housing_unit_asset_tags.execute()
+
+
+class TheOnHoldColumn(FreshSite):
+	"""v0.324.0. An existing dispatch board gains the On Hold column once; nothing else on it moves."""
+
+	def test_it_appends_once_and_never_raises(self):
+		from erpnext_mcp import dashboard
+
+		dispatch_board_on_hold_column.execute()  # no board yet: nothing to do
+		dashboard.install_dispatch_board()
+		board = STORE.get_raw("Kanban Board", dashboard.DISPATCH_BOARD_NAME)
+		if board is None:
+			return  # this harness has no Kanban Board doctype
+		board["columns"] = [c for c in board["columns"] if c["column_name"] != "On Hold"]
+		STORE.commit()
+		dispatch_board_on_hold_column.execute()
+		dispatch_board_on_hold_column.execute()
+		names = [c["column_name"] for c in STORE.get_raw("Kanban Board", dashboard.DISPATCH_BOARD_NAME)["columns"]]
+		self.assertEqual(names.count("On Hold"), 1)

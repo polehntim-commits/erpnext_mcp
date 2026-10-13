@@ -339,6 +339,9 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 		out["work_spot"] = row.get("work_spot")
 	if row.get("outline_geojson"):
 		out["outline_geojson"] = row["outline_geojson"]
+	# v0.324.0. Why a held task is held, and until what — the phone greys it out and says so.
+	if row.get("hold"):
+		out["hold"] = row["hold"]
 	if latitude is not None and longitude is not None:
 		out["latitude"] = latitude
 		out["longitude"] = longitude

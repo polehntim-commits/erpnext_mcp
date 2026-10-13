@@ -109,7 +109,16 @@
   "go_hold_override",
   "go_hold_log",
   "category",
-  "skill_level"
+  "skill_level",
+  "hold_section",
+  "hold_reason",
+  "hold_until_event",
+  "hold_until_date",
+  "hold_auto_release",
+  "hold_col",
+  "held_by",
+  "held_at",
+  "held_from_state"
  ],
  "fields": [
   {
@@ -149,7 +158,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "State",
-   "options": "Draft\nAvailable\nClaimed\nIn-Progress\nPaused\nAwaiting-Review\nCompleted\nRejected\nCancelled\nMerged",
+   "options": "Draft\nAvailable\nClaimed\nIn-Progress\nPaused\nOn Hold\nAwaiting-Review\nCompleted\nRejected\nCancelled\nMerged",
    "reqd": 1,
    "search_index": 1
   },
@@ -836,11 +845,69 @@
    "label": "Skill Level",
    "options": "\nAny\nLearner OK\nSupervised\nSkilled",
    "description": "v0.278.0. Copied from the template."
+  },
+  {
+   "depends_on": "eval:doc.state=='On Hold'",
+   "fieldname": "hold_section",
+   "fieldtype": "Section Break",
+   "label": "On Hold"
+  },
+  {
+   "description": "v0.324.0. Why nobody should pick this up yet. Required to put a task on hold.",
+   "fieldname": "hold_reason",
+   "fieldtype": "Small Text",
+   "label": "Hold Reason",
+   "read_only": 1
+  },
+  {
+   "description": "What it waits for, e.g. 'Mill Creek land transfer closes' or 'Constancy go-live'.",
+   "fieldname": "hold_until_event",
+   "fieldtype": "Data",
+   "label": "Hold Until (Event)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hold_until_date",
+   "fieldtype": "Date",
+   "label": "Hold Until (Date)",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Release automatically on Hold Until (Date) and tell whoever held it.",
+   "fieldname": "hold_auto_release",
+   "fieldtype": "Check",
+   "label": "Auto-Release on Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hold_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "held_by",
+   "fieldtype": "Link",
+   "label": "Held By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "held_at",
+   "fieldtype": "Datetime",
+   "label": "Held At",
+   "read_only": 1
+  },
+  {
+   "description": "The state it was in, so a release puts it back (Draft stays Draft; otherwise the pool).",
+   "fieldname": "held_from_state",
+   "fieldtype": "Data",
+   "label": "Held From State",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-11 20:00:00.000000",
+ "modified": "2026-10-12 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task",

@@ -1154,9 +1154,9 @@ class Catalogue(SeededTestCase):
 		# v0.207.0 adds eight reads and eleven writes: phone config, tiles, wizards, the loop, labels.
 		# v0.313.0 adds three reads and three writes: the customer portal's generic names (the packer names stay).
 		# v0.318.0 adds two reads: get_deploy_status, run_post_deploy_check.
-		self.assertEqual(len(registry.TOOLS), 1150)
+		self.assertEqual(len(registry.TOOLS), 1152)
 		self.assertEqual(len(registry.READ_TOOLS), 552)
-		self.assertEqual(len(registry.MUTATING_TOOLS), 598)
+		self.assertEqual(len(registry.MUTATING_TOOLS), 600)
 
 	def test_every_tool_declares_why_it_might_be_unavailable(self):
 		"""A predicate with no `requires` sentence produces a refusal that says
