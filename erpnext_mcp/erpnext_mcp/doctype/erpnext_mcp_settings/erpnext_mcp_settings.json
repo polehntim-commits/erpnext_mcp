@@ -22,6 +22,7 @@
   "farmops_public_url",
   "legacy_erpnext_paths",
   "upload_links_enabled",
+  "file_link_host",
   "upload_link_allow_public",
   "farm_ops_mobile_enabled",
   "mobile_grant_idle_days",
@@ -1326,6 +1327,7 @@
   "allow_get_upload_status",
   "allow_list_upload_links",
   "allow_revoke_upload_link",
+  "allow_get_attachment_download_link",
   "allow_download_card_pdf",
   "allow_request_card_back",
   "allow_mark_card_print_job",
@@ -1552,6 +1554,14 @@
    "fieldname": "upload_links_enabled",
    "fieldtype": "Check",
    "label": "Upload Links Enabled"
+  },
+  {
+   "default": "Desk",
+   "description": "v0.325.0. Where file links (uploads and downloads) point. Desk: the host the Desk is served from — on this farm, Tailscale only. Public (Funnel): the sidecar's /farmops/api routes, reachable from the internet. Choose Public only on purpose.",
+   "fieldname": "file_link_host",
+   "fieldtype": "Select",
+   "label": "File Links: Host",
+   "options": "Desk\nPublic (Funnel)"
   },
   {
    "default": "0",
@@ -9894,6 +9904,13 @@
   },
   {
    "default": "0",
+   "description": "WRITE. v0.325.0. Issue a single-use, ~10-minute download link to one File (read permission on its parent checked at issue). Large photos and PDFs leave as plain HTTP instead of base64.",
+   "fieldname": "allow_get_attachment_download_link",
+   "fieldtype": "Check",
+   "label": "Get Attachment Download Link"
+  },
+  {
+   "default": "0",
    "description": "WRITE. Render one card PDF to print by hand and record it as Downloaded. Card Print Requester.",
    "fieldname": "allow_download_card_pdf",
    "fieldtype": "Check",
@@ -11171,7 +11188,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-12 10:00:00.000000",
+ "modified": "2026-10-13 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "ERPNext MCP Settings",

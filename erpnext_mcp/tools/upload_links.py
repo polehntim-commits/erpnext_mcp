@@ -28,6 +28,9 @@ def request_upload_url(args: dict) -> ToolResult:
 		expires_minutes=args.get("expires_minutes"),
 		note=as_str(args, "note"),
 		base_url=mobile_tools._mobile_base_url({}),
+		file_name=as_str(args, "file_name"),
+		expected_size=args.get("expected_size"),
+		company=as_str(args, "company"),
 	)
 	data["how"] = (
 		"PUT the file's bytes to url (Content-Type of the file), or POST it as multipart/form-data with "
@@ -40,6 +43,24 @@ def request_upload_url(args: dict) -> ToolResult:
 		f"up to {data['max_bytes']} bytes, until {data['expires_at']}",
 		docstatus_delta="none → 0 (Upload Link created)",
 	)
+
+
+def get_attachment_download_link(args: dict) -> ToolResult:
+	"""v0.325.0. One single-use link to one File — large photos and PDFs leave as plain HTTP, not base64."""
+	data = upload_links.issue_download(
+		user=_user(),
+		file=as_str(args, "file", required=True),
+		expires_minutes=args.get("expires_minutes"),
+		note=as_str(args, "note"),
+		base_url=mobile_tools._mobile_base_url({}),
+	)
+	data["how"] = (
+		"GET url once before expires_at — e.g. `curl -fOJ '<url>'` (saves under the file's own name) or open it in "
+		"Chrome. It works once: a second GET is 404. The URL is the credential; it is not shown again."
+	)
+	return ToolResult(data=data, summary=f"download link {data['link_id']} for {data['file_name']} "
+	                  f"({data['file_size']} bytes), until {data['expires_at']}",
+	                  docstatus_delta="none → 0 (Upload Link created, direction Download)")
 
 
 def get_upload_status(args: dict) -> ToolResult:
@@ -58,6 +79,9 @@ def list_upload_links(args: dict) -> ToolResult:
 		filters["target_doctype"] = as_str(args, "doctype")
 	if as_str(args, "name"):
 		filters["target_name"] = as_str(args, "name")
+	direction = as_str(args, "direction")
+	if direction:  # v0.325.0: Upload or Download
+		filters["direction"] = direction.capitalize()
 	limit = max(1, min(as_int(args, "limit", 50), 200))
 	rows = frappe.db.get_all(
 		upload_links.DOCTYPE, filters=filters, fields=["*"], order_by="creation desc", limit=limit

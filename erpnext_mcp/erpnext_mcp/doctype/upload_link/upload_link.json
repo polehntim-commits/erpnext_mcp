@@ -8,6 +8,10 @@
  "field_order": [
   "upload_id",
   "status",
+  "direction",
+  "preset_file_name",
+  "expected_size",
+  "company_guard",
   "target_doctype",
   "target_name",
   "allowed_kinds",
@@ -38,7 +42,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-04 18:00:00.000000",
+ "modified": "2026-10-13 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Upload Link",
@@ -80,6 +84,37 @@
    "read_only": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "default": "Upload",
+   "description": "v0.325.0. Upload: one file comes in onto the target. Download: one File goes out, once.",
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Direction",
+   "options": "Upload\nDownload",
+   "read_only": 1
+  },
+  {
+   "description": "v0.325.0. Upload: the name the File gets, fixed when the link was issued (a duplicate on the target is refused).",
+   "fieldname": "preset_file_name",
+   "fieldtype": "Data",
+   "label": "Preset File Name",
+   "read_only": 1
+  },
+  {
+   "description": "v0.325.0. Upload: the exact size the file must be, when the issuer knew it.",
+   "fieldname": "expected_size",
+   "fieldtype": "Int",
+   "label": "Expected Size",
+   "read_only": 1
+  },
+  {
+   "description": "v0.325.0. Upload: the company the target must belong to (the attach_file_to_document guard). Data, not a Link, so the link table stays outside Frappe's company scoping as it always was.",
+   "fieldname": "company_guard",
+   "fieldtype": "Data",
+   "label": "Company Guard",
+   "read_only": 1
   },
   {
    "fieldname": "target_doctype",

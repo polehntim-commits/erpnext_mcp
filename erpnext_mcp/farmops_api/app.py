@@ -201,6 +201,10 @@ UPLOAD_PREFIX = f"{PREFIX}/upload/"
 #: Upload requests a minute from one address, good token or bad.
 UPLOAD_LIMIT = 30
 
+#: `GET /download/<token>` — one File, once. v0.325.0, and only when an operator sets File Links: Host to
+#: Public (Funnel); by default links point at the Desk's own host (`erpnext_mcp.file_links`).
+DOWNLOAD_PREFIX = f"{PREFIX}/download/"
+
 #: Unknown tokens an hour from one address that raise the alert (audited once).
 UPLOAD_BAD_TOKEN_ALERT = 10
 
@@ -1455,6 +1459,34 @@ def _declared_type_agrees(declared: str, filename: str) -> bool:
 	return declared in _DECLARED_TYPES.get(upload_links.extension(upload_links.safe_filename(filename)), ())
 
 
+def _download(request: Request, path: str) -> Response:
+	"""`GET /download/<token>` — one File, once. v0.325.0. Same 404 for every token that will not work; metered."""
+	from werkzeug.wsgi import wrap_file
+
+	from .. import file_links
+
+	token = path[len(DOWNLOAD_PREFIX) :]
+	ip = _peer(request)
+	if guard._count(f"download:{ip or 'unknown'}", 60) > UPLOAD_LIMIT:
+		return _failure(429, TOO_MANY)
+	with session.request_session(request=request, body={}):
+		if request.method != "GET" or not upload_links.enabled() or upload_links.link_host() != upload_links.HOST_PUBLIC:
+			return _failure(404, NOT_FOUND)
+		got = upload_links.open_download(token, ip, str(request.headers.get("User-Agent") or ""))
+		session.commit()
+		if not got:
+			return _failure(404, NOT_FOUND)
+	import mimetypes
+
+	response = Response(wrap_file(request.environ, open(got["path"], "rb")),  # noqa: SIM115 — closed by the server
+	                    mimetype=mimetypes.guess_type(got["file_name"])[0] or "application/octet-stream",
+	                    direct_passthrough=True)
+	response.headers["Content-Disposition"] = file_links.content_disposition(got["file_name"])
+	response.headers["Content-Length"] = str(got["size"])
+	response.headers["Cache-Control"] = "no-store"
+	return response
+
+
 def _upload(request: Request, path: str) -> Response:
 	"""`PUT|POST /upload/<token>` — one file onto one document, once. v0.244.0.
 
@@ -1471,7 +1503,9 @@ def _upload(request: Request, path: str) -> Response:
 	if guard._count(f"upload:{ip or 'unknown'}", 60) > UPLOAD_LIMIT:
 		return _failure(429, TOO_MANY)
 	with session.request_session(request=request, body={}):
-		if not upload_links.enabled():
+		# v0.325.0: the public route is a door only when an operator chose Public (Funnel); a Desk-host link's token
+		# does not open it.
+		if not upload_links.enabled() or upload_links.link_host() != upload_links.HOST_PUBLIC:
 			return _failure(404, NOT_FOUND)
 		if request.method not in ("PUT", "POST"):
 			# No GET, no HEAD, no listing: a link is not a page.
@@ -1573,6 +1607,10 @@ def dispatch(request: Request) -> Response:
 			return _job(request, path)
 		except RequestEntityTooLarge:
 			return _failure(413, TOO_LARGE)
+
+	# v0.325.0: a download link, streamed. No body to read, so it is decided here.
+	if path.startswith(DOWNLOAD_PREFIX):
+		return _download(request, path)
 
 	# v0.244.0: the one route with its own ceiling, set by its link once the token is
 	# proved. Everything else meets `_MAX_BODY` below, unchanged.

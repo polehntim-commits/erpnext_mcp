@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.325.0 — 2026-10-13 — file links both ways
+
+**Migrate.** Deploy `docs/deploy/v0.325.0_file_links.md`. Tools: **1,152 → 1,153**.
+
+- **`get_attachment_download_link`:** a single-use, ~10-minute link to one File (read permission checked at
+  issue), streamed at any size with Content-Disposition.
+- **`request_upload_url` gains** `file_name` (with a duplicate-name refusal), `expected_size` and the company
+  guard. Default TTL is 10 minutes.
+- **One Upload Link engine and table** (`direction`). Every issue, use, expiry and revoke is an MCP Action Log row.
+  `share_link kind=download`.
+- **Links point at the Desk's host** (Tailscale) by default; the sidecar's public routes answer only when File
+  Links: Host is Public (Funnel). Funnel itself is untouched.
+- Tests: `test_file_links_v325`. `test_upload_links` now selects the Public host explicitly.
+
 ## 0.324.0 — 2026-10-12 — On Hold for Farm Tasks
 
 **Migrate.** Deploy `docs/deploy/v0.324.0_on_hold.md`. Tools: **1,150 → 1,152**. Pairs with FarmOps 0.66.0 (62).

@@ -45,6 +45,13 @@ KINDS = {
 		          "revoke": ("revoke_upload_link", "upload_id"), "list": ("list_upload_links", None),
 		          "log": ("list_upload_links", None)},
 	},
+	"download": {
+		"label": "One-time download link (one File out, as plain HTTP) — v0.325.0",
+		"name_is": "create: the File docname; revoke: the DNL-… id",
+		"calls": {"create": ("get_attachment_download_link", "file"), "get": ("get_upload_status", "upload_id"),
+		          "revoke": ("revoke_upload_link", "upload_id"), "list": ("list_upload_links", None),
+		          "log": ("list_upload_links", None)},
+	},
 	"enrollment": {
 		"label": "New phone pickup link (single use, no credential in it)",
 		"name_is": "the account (login email) the phone is for",
@@ -53,7 +60,7 @@ KINDS = {
 }
 ALIASES = {"contractor": "job", "delivery": "job", "pickup": "job", "pollination": "job", "beekeeper": "job",
            "supplier": "job", "packer_portal": "customer_portal", "packer": "customer_portal",
-           "portal": "customer_portal", "upload_link": "upload", "enrolment": "enrollment",
+           "portal": "customer_portal", "upload_link": "upload", "download_link": "download", "enrolment": "enrollment",
            "phone": "enrollment"}
 #: Top-level arguments passed through to the kind's tool when it takes them.
 PASSED = ("days", "until", "reason", "contact_name", "contact_email", "company", "limit", "minutes", "device_name",

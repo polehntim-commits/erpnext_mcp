@@ -24,7 +24,7 @@ class Discovery(PortalCase):
 	def test_kinds_aliases_and_what_name_means(self):
 		self.configure(enabled=1, allow_share_link=1)
 		got = self.tool_data("share_link", {"action": "kinds"})
-		self.assertEqual({k["kind"] for k in got["kinds"]}, {"job", "customer_portal", "upload", "enrollment"})
+		self.assertEqual({k["kind"] for k in got["kinds"]}, {"job", "customer_portal", "upload", "download", "enrollment"})
 		job = self.tool_data("share_link", {"action": "describe", "kind": "contractor"})
 		self.assertEqual(job["kind"], "job")
 		self.assertEqual(job["calls"]["create"], "create_job_link")

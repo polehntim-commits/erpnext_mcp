@@ -37,6 +37,8 @@ class UploadLinkCase(MobileAPITestCase):
 			allow_request_upload_url=1,
 			allow_revoke_upload_link=1,
 			farmops_public_url="https://farm.example.ts.net",
+			# v0.325.0: these drive the sidecar's public route, which is a door only when Public is chosen.
+			file_link_host="Public (Funnel)",
 		)
 		self.client = Client(farmops_app.application, Response)
 		guard._LOCAL_COUNTS.clear() if hasattr(guard, "_LOCAL_COUNTS") else None
@@ -141,9 +143,10 @@ class UsingALink(UploadLinkCase):
 	def issue_raw(self):
 		# Issued while on, used while off.
 		self.configure(enabled=1, upload_links_enabled=1, allow_request_upload_url=1,
-		               farmops_public_url="https://farm.example.ts.net")
+		               farmops_public_url="https://farm.example.ts.net", file_link_host="Public (Funnel)")
 		issued = self.issue()
-		self.configure(enabled=1, upload_links_enabled=0, farmops_public_url="https://farm.example.ts.net")
+		self.configure(enabled=1, upload_links_enabled=0, farmops_public_url="https://farm.example.ts.net",
+		               file_link_host="Public (Funnel)")
 		return issued
 
 	def test_a_get_is_not_a_page(self):

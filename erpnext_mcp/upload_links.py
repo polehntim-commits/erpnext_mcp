@@ -26,6 +26,15 @@ SHA-256 must match what was counted while streaming.
 
 Off unless `upload_links_enabled` is ticked: the route answers 404 and the issuing
 tool refuses.
+
+v0.325.0 — FILE LINKS, BOTH WAYS (Tim, 2026-10-13). The same engine, the same table and the same token rules now
+also issue DOWNLOAD links (`direction` = Download): one File, single use, ~10 minutes, read permission on its parent
+checked at issue, streamed with Content-Disposition at any size. Uploads gain a preset `file_name` (the File is named
+that and a duplicate on the target is refused), `expected_size`, and the company guard `attach_file_to_document`
+has. WHERE THE URL POINTS is `file_link_host`: the Desk's own host by default (ERPNext's
+`/api/method/erpnext_mcp.file_links.*`, reachable wherever the Desk is — on this farm, Tailscale), or the sidecar's
+public `/farmops/api/…` routes only if an operator chooses. Issued, used, expired and revoked are each an MCP Action
+Log row as well as the link's own.
 """
 
 from __future__ import annotations
@@ -75,7 +84,12 @@ DEFAULT_MAX_BYTES = 25 * 1024 * 1024
 #: The ceiling for a photo or document link, whatever is asked for.
 DOCUMENT_CAP_BYTES = 100 * 1024 * 1024
 
-DEFAULT_EXPIRY_MINUTES = 15
+DEFAULT_EXPIRY_MINUTES = 10  # v0.325.0: was 15 (Tim: "~10 min TTL"); still configurable per link
+UPLOAD = "Upload"
+DOWNLOAD = "Download"
+#: `file_link_host` values. Desk (the default) keeps links on the host the Desk is served from.
+HOST_DESK = "Desk"
+HOST_PUBLIC = "Public (Funnel)"
 MAX_EXPIRY_MINUTES = 24 * 60
 
 #: A link left Receiving this long is a dead transfer: Failed by the sweep.
@@ -219,6 +233,9 @@ def issue(
 	expires_minutes=None,
 	note: str = "",
 	base_url: str = "",
+	file_name: str = "",
+	expected_size=None,
+	company: str = "",
 ) -> dict:
 	"""Make one link. Returns the URL — the only time the token exists — and the facts."""
 	from .tools import files
@@ -266,6 +283,24 @@ def issue(
 	digest = str(expected_sha256 or "").strip().lower()
 	if digest and not re.fullmatch(r"[0-9a-f]{64}", digest):
 		raise ToolError(f"sha256 must be 64 hex characters. {tail}")
+	# v0.325.0. A name fixed now is checked now — extension, duplicate on the target, company — so a refusal comes
+	# before anybody sends 90 MB, not after.
+	preset = safe_filename(file_name) if str(file_name or "").strip() else ""
+	if preset:
+		ext = extension(preset)
+		if ext in REFUSED_EXTENSIONS or ext not in allowed_extensions(kind_list):
+			raise ToolError(f"{preset} is not a {', '.join(sorted(allowed_extensions(kind_list)))} file. {tail}")
+		files.check_attachable(target_doctype, target_name, preset, company=company or "", tail=tail)
+	elif company:
+		files._check_company(target_doctype, target_name, parent, company, tail=tail)
+	expected_bytes = None
+	if expected_size not in (None, ""):
+		try:
+			expected_bytes = int(expected_size)
+		except (TypeError, ValueError):
+			raise ToolError(f"expected_size must be a whole number of bytes. {tail}") from None
+		if expected_bytes <= 0 or expected_bytes > size:
+			raise ToolError(f"expected_size must be 1 to max_bytes ({size}). {tail}")
 
 	token = secrets.token_urlsafe(32)
 	upload_id = "UPL-" + secrets.token_hex(6).upper()
@@ -288,13 +323,17 @@ def issue(
 			"issued_by": user,
 			"issued_at": _stamp(now),
 			"attempts": 0,
+			**_optional({"direction": UPLOAD, "preset_file_name": preset or None,
+			             "expected_size": expected_bytes, "company_guard": company or None}),
 		}
 	).insert(ignore_permissions=True)
-	base = str(base_url or "").rstrip("/")
+	_log("issued", doc.name, upload_id, {"direction": UPLOAD, "target": f"{target_doctype} {target_name}"})
 	return {
 		"upload_id": upload_id,
 		"link": doc.name,
-		"url": f"{base}/farmops/api/upload/{token}",
+		"url": link_url(UPLOAD, token, base_url),
+		"file_name": preset or None,
+		"expected_size": expected_bytes,
 		"expires_at": _stamp(expires),
 		"max_bytes": size,
 		"kinds": kind_list,
@@ -327,6 +366,7 @@ def find(token: str) -> dict | None:
 	expires = _parse(row.get("expires_at"))
 	if expires is None or expires <= _now():
 		frappe.db.set_value(DOCTYPE, row["name"], "status", EXPIRED, update_modified=False)
+		_log("expired", row["name"], str(frappe.db.get_value(DOCTYPE, row["name"], "upload_id") or ""), {})
 		return None
 	return frappe.get_doc(DOCTYPE, row["name"]).as_dict()
 
@@ -378,6 +418,9 @@ def receive(link: dict, stream, *, declared_length=None, filename: str = "") -> 
 	from .tools import files
 
 	cap = int(link.get("max_bytes") or 0)
+	# v0.325.0. A name fixed at issue wins over whatever the sender calls it.
+	if link.get("preset_file_name"):
+		filename = str(link["preset_file_name"])
 	if declared_length not in (None, ""):
 		try:
 			declared = int(declared_length)
@@ -419,6 +462,8 @@ def receive(link: dict, stream, *, declared_length=None, filename: str = "") -> 
 		if not _magic_matches(ext, head):
 			raise UploadRefused(415, f"The file's contents are not a .{ext} file.")
 		sha = digest.hexdigest()
+		if link.get("expected_size") and int(link["expected_size"]) != size:
+			raise UploadRefused(422, f"The file is {size} bytes; the link was issued for {int(link['expected_size'])}.")
 		expected = str(link.get("expected_sha256") or "")
 		if expected and not hmac.compare_digest(expected, sha):
 			raise UploadRefused(422, "The file's SHA-256 does not match the one the link was issued with.")
@@ -428,7 +473,8 @@ def receive(link: dict, stream, *, declared_length=None, filename: str = "") -> 
 		files.check_attachable(
 			link["target_doctype"],
 			link["target_name"],
-			final_name,
+			safe if link.get("preset_file_name") else final_name,
+			company=str(link.get("company_guard") or ""),
 			tail="Nothing was attached.",
 			require_parent_write=False,
 		)
@@ -453,7 +499,8 @@ def receive(link: dict, stream, *, declared_length=None, filename: str = "") -> 
 	attachment = frappe.get_doc(
 		{
 			"doctype": "File",
-			"file_name": final_name,
+			# v0.325.0: a preset name is the File's name (so a second one is a duplicate); the path keeps the id.
+			"file_name": safe if link.get("preset_file_name") else final_name,
 			"file_url": file_url,
 			"is_private": 1 if is_private else 0,
 			"file_size": size,
@@ -501,7 +548,7 @@ def describe(row: dict) -> dict:
 			"name", "upload_id", "status", "target_doctype", "target_name", "allowed_kinds", "max_bytes",
 			"is_private", "expires_at", "note", "issued_by", "issued_at", "revoked_by", "revoked_at",
 			"file", "file_name", "file_size", "file_sha256", "received_at", "attempts",
-			"last_attempt_at", "last_ip", "failure_reason",
+			"last_attempt_at", "last_ip", "failure_reason", "direction", "preset_file_name", "expected_size",
 		)
 	}
 
@@ -521,8 +568,9 @@ def get(name_or_id: str) -> dict:
 
 
 def revoke(name_or_id: str, user: str) -> dict:
-	require_issuer(user)
 	row = get(name_or_id)
+	if row.get("issued_by") != user:  # v0.325.0: whoever issued a link may close it; otherwise the office roles
+		require_issuer(user)
 	if row["status"] not in (OPEN,):
 		raise ToolError(f"{row['upload_id']} is {row['status']}; only an Open link can be revoked. Nothing changed.")
 	frappe.db.set_value(
@@ -531,6 +579,7 @@ def revoke(name_or_id: str, user: str) -> dict:
 		{"status": REVOKED, "revoked_by": user, "revoked_at": _stamp(_now())},
 		update_modified=False,
 	)
+	_log("revoked", row["name"], row["upload_id"], {"by": user})
 	return get(row["name"])
 
 
@@ -542,6 +591,7 @@ def sweep() -> dict:
 		moment = _parse(row.get("expires_at"))
 		if moment is None or moment <= now:
 			frappe.db.set_value(DOCTYPE, row["name"], "status", EXPIRED, update_modified=False)
+			_log("expired", row["name"], str(frappe.db.get_value(DOCTYPE, row["name"], "upload_id") or ""), {})
 			expired += 1
 	for row in frappe.db.get_all(DOCTYPE, filters={"status": RECEIVING}, fields=["name", "last_attempt_at"]):
 		moment = _parse(row.get("last_attempt_at"))
@@ -565,3 +615,121 @@ def sweep() -> dict:
 	if expired or failed or removed:
 		frappe.db.commit()
 	return {"expired": expired, "failed": failed, "parts_removed": removed}
+
+
+
+# ── v0.325.0: downloads, the link host, and the log ────────────────────────
+
+
+def _optional(values: dict) -> dict:
+	"""Only the columns this site has migrated (a pre-v0.325.0 table still issues uploads)."""
+	return {k: v for k, v in values.items() if compat.has_field(DOCTYPE, k)}
+
+
+def link_host() -> str:
+	value = str(settings._value("file_link_host") or HOST_DESK)
+	return HOST_PUBLIC if value == HOST_PUBLIC else HOST_DESK
+
+
+def link_url(direction: str, token: str, base_url: str = "") -> str:
+	"""Where the token is presented. Desk host by default; the sidecar's public route only if chosen."""
+	if link_host() == HOST_PUBLIC:
+		base = str(base_url or "").rstrip("/")
+		return f"{base}/farmops/api/{'download' if direction == DOWNLOAD else 'upload'}/{token}"
+	desk = str(frappe.utils.get_url() or "").rstrip("/")
+	method = "download" if direction == DOWNLOAD else "upload"
+	return f"{desk}/api/method/erpnext_mcp.file_links.{method}?token={token}"
+
+
+def _log(event: str, link: str, upload_id: str, detail: dict) -> None:
+	"""One MCP Action Log row per issued / used / expired / revoked. Never raises."""
+	try:
+		from . import audit
+
+		audit.record(f"file_link:{event}", {"link": link, "upload_id": upload_id, **detail}, audit.STATUS_SUCCESS,
+		             f"File link {upload_id} {event}", commit=False)
+	except Exception:  # noqa: BLE001 — the link's own row is the record; the log row is a second copy
+		pass
+
+
+def issue_download(*, user: str, file: str, expires_minutes=None, note: str = "", base_url: str = "") -> dict:
+	"""One single-use link to one File. Read permission on its parent (or the File itself) is checked now."""
+	if not enabled():
+		raise ToolError("file links are switched off on this site (ERPNext MCP Settings → Upload Links Enabled). "
+		                "Nothing was issued.")
+	tail = "Nothing was issued."
+	name = str(file or "").strip()
+	row = frappe.db.get_value("File", name, ["name", "file_name", "file_url", "file_size", "is_private",
+	                                         "attached_to_doctype", "attached_to_name", "is_folder"], as_dict=True) \
+		if name and frappe.db.exists("File", name) else None
+	if not row and name:
+		row = frappe.db.get_value("File", {"file_url": name}, ["name", "file_name", "file_url", "file_size",
+		                                                       "is_private", "attached_to_doctype",
+		                                                       "attached_to_name", "is_folder"], as_dict=True)
+	if not row or int(row.get("is_folder") or 0):
+		raise ToolError(f"no File called {name!r}. {tail}")
+	parent_dt, parent_name = row.get("attached_to_doctype"), row.get("attached_to_name")
+	if parent_dt and parent_name:
+		if not frappe.has_permission(parent_dt, "read", parent_name, user=user):
+			raise ToolError(f"{user} may not read {parent_dt} {parent_name}, which this file is attached to. {tail}")
+	elif not frappe.has_permission("File", "read", row["name"], user=user):
+		raise ToolError(f"{user} may not read File {row['name']}. {tail}")
+	path = _path_of(row)
+	if not path or not os.path.isfile(path):
+		raise ToolError(f"File {row['name']}'s bytes are not on disk ({row.get('file_url')}). {tail}")
+	try:
+		minutes = int(expires_minutes) if expires_minutes not in (None, "") else DEFAULT_EXPIRY_MINUTES
+	except (TypeError, ValueError):
+		raise ToolError(f"expires_minutes must be a whole number. {tail}") from None
+	if minutes <= 0 or minutes > MAX_EXPIRY_MINUTES:
+		raise ToolError(f"expires_minutes is 1 to {MAX_EXPIRY_MINUTES} (24 hours). {tail}")
+	token = secrets.token_urlsafe(32)
+	link_id = "DNL-" + secrets.token_hex(6).upper()
+	now = _now()
+	expires = now + datetime.timedelta(minutes=minutes)
+	doc = frappe.get_doc({
+		"doctype": DOCTYPE, "upload_id": link_id, "status": OPEN,
+		"target_doctype": parent_dt or "File", "target_name": parent_name or row["name"],
+		"allowed_kinds": "document", "max_bytes": int(row.get("file_size") or os.path.getsize(path) or 1),
+		"is_private": int(row.get("is_private") or 0), "expires_at": _stamp(expires), "note": str(note or "")[:500],
+		"token_hash": hash_token(token), "issued_by": user, "issued_at": _stamp(now), "attempts": 0,
+		"file": row["name"], "file_name": row.get("file_name"), "file_size": os.path.getsize(path),
+		**_optional({"direction": DOWNLOAD}),
+	}).insert(ignore_permissions=True)
+	_log("issued", doc.name, link_id, {"direction": DOWNLOAD, "file": row["name"]})
+	return {"link_id": link_id, "upload_id": link_id, "link": doc.name, "url": link_url(DOWNLOAD, token, base_url),
+	        "expires_at": _stamp(expires), "file": row["name"], "file_name": row.get("file_name"),
+	        "file_size": os.path.getsize(path)}
+
+
+def _path_of(row: dict) -> str:
+	url = str(row.get("file_url") or "")
+	if url.startswith("/private/files/"):
+		return frappe.get_site_path("private", "files", url[len("/private/files/"):])
+	if url.startswith("/files/"):
+		return frappe.get_site_path("public", "files", url[len("/files/"):])
+	return ""
+
+
+def open_download(token: str, ip: str = "", user_agent: str = "") -> dict | None:
+	"""The download this token opens — used up now (single use) — or None for every bad token alike."""
+	link = find(token)
+	if link is None or (compat.has_field(DOCTYPE, "direction") and link.get("direction") != DOWNLOAD):
+		return None
+	try:
+		status = frappe.db.get_value(DOCTYPE, link["name"], "status", for_update=True)
+	except TypeError:
+		status = frappe.db.get_value(DOCTYPE, link["name"], "status")
+	if status != OPEN:
+		return None
+	row = frappe.db.get_value("File", link.get("file"), ["name", "file_name", "file_url"], as_dict=True) or {}
+	path = _path_of(row)
+	if not path or not os.path.isfile(path):
+		fail(link["name"], "The file is no longer on disk.")
+		return None
+	frappe.db.set_value(DOCTYPE, link["name"], {"status": DONE, "received_at": _stamp(_now())}, update_modified=False)
+	note_attempt(link["name"], ip, user_agent)
+	_log("used", link["name"], link["upload_id"], {"direction": DOWNLOAD, "file": row.get("name"), "ip": ip})
+	frappe.db.commit()
+	return {"path": path, "file_name": row.get("file_name") or os.path.basename(path), "file": row.get("name"),
+	        "size": os.path.getsize(path), "link_id": link["upload_id"]}

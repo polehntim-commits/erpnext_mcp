@@ -19455,6 +19455,9 @@ TOOLS = {
 			"sha256": _field(_STRING, "Optional: the file's SHA-256; a different file is refused."),
 			"expires_minutes": _field(_INTEGER, "Default 15, at most 1440 (24 hours)."),
 			"note": _field(_STRING, "Why the link was issued; kept on the Upload Link."),
+			"file_name": _field(_STRING, "v0.325.0. The name the File gets, fixed now: its extension must suit the link and a file of that name already on the document is refused — checked now, before anybody sends it."),
+			"expected_size": _field(_INTEGER, "v0.325.0. The exact size in bytes, when you know it; anything else is refused."),
+			"company": _field(_STRING, "v0.325.0. The company the document must belong to (the attach_file_to_document guard)."),
 		},
 		mutating=True,
 		title="Request upload URL",
@@ -19474,8 +19477,25 @@ TOOLS = {
 			"doctype": _field(_STRING, "Only links onto this doctype."),
 			"name": _field(_STRING, "Only links onto this document."),
 			"limit": _field(_INTEGER, "At most this many (default 50, max 200)."),
+			"direction": _field(_STRING, "v0.325.0. Upload or Download."),
 		},
 		title="List upload links",
+	),
+	"get_attachment_download_link": _tool(
+		upload_link_tools.get_attachment_download_link,
+		"MUTATING (default OFF). v0.325.0. A single-use DOWNLOAD link to one File, so a large photo or PDF leaves "
+		"as plain HTTP (curl -fOJ, or Chrome) instead of base64 through get_attachment_content. The link works "
+		"ONCE, for expires_minutes (default 10), streams the file at any size with Content-Disposition, and is "
+		"then 404 like any bad token. Your read permission on the document the file is attached to is checked "
+		"now. It points at the Desk's own host (Tailscale) unless an operator set File Links: Host to Public "
+		"(Funnel). Logged when issued, used, expired or revoked; revoke with revoke_upload_link. Needs Upload "
+		"Links Enabled.",
+		{"file": _field(_STRING, "The File docname (or its file_url), e.g. from list_attachments."),
+		 "expires_minutes": _field(_INTEGER, "Minutes the link lives, 1–1440. Default 10."),
+		 "note": _field(_STRING, "Why — kept on the link.")},
+		required=("file",),
+		mutating=True,
+		title="Get attachment download link",
 	),
 	"revoke_upload_link": _tool(
 		upload_link_tools.revoke_upload_link,
