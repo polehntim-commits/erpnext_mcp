@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.323.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
+**Deploy: v0.252.0 → v0.324.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.323.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.324.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`cf297e0`** (`__version__ = "0.323.0"`).
+- **Server**: erpnext_mcp main **`650a1f0`** (`__version__ = "0.324.0"`).
 - **App**: fafo_ios main **`6f932bb`** — FarmOps **0.63.0 (build 59)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -86,6 +86,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.321.0 | Farm Task Evidence capture_lens + zoom_factor from FarmOps 0.64.0 (60), which zooms out to the ultra-wide (0.5×); every evidence JPEG also carries time/GPS/lens in EXIF. **Migrate.** |
 | v0.322.0 | Every Housing Unit gets its Asset Register tag (type Housing Unit, GPS, company, QR) on any create path; patch backfills existing units (OML: MC-CABIN-1&2, MC-CABIN-3&4); scanning the tag answers with the cabin. **Migrate.** |
 | v0.323.0 | Multi-block Farm Tasks (locations child list, Work Spot pin, combined centroid/outline; record update farm_task body.locations) + draggable pins on Desk (Asset Register via Move asset, Housing Unit, Field Pin, Farm Task) and phone (move_task_pin); who/when stamped. Pairs with FarmOps 0.65.0 (61). **Migrate + clear-cache.** |
+| v0.324.0 | On Hold for Farm Tasks (reason, until event/date, cascade; claims refused; auto-release on date); MCP hold_farm_task / release_farm_task; Kanban On Hold column; phone held section. Tools 1,150 → 1,152. Pairs with FarmOps 0.66.0 (62). **Migrate + clear-cache.** |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -111,17 +112,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.323.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.324.0`. Push fafo_ios main and archive
 FarmOps 0.63.0 (build 59).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.323.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.324.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.323.0; the asset map's build stamp 0.323.0.
+1. `get_server_status`: 0.324.0; the asset map's build stamp 0.324.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
