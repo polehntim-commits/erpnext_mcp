@@ -104,6 +104,12 @@ def _checklist_argument(raw, label: str = "checklist") -> list:
 		)
 	if not isinstance(raw, list):
 		raise ToolError(f"{label} must be a JSON list, got {type(raw).__name__}. Nothing was written.")
+	# v0.329.0. Each item's requirement is checked here, so a misspelt one is refused before anything is written.
+	for index, item in enumerate(raw):
+		try:
+			task_templates._checklist_row(item, index)
+		except ValueError as exc:
+			raise ToolError(f"{label}[{index}]: {exc} Nothing was written.") from None
 	return list(raw)
 
 

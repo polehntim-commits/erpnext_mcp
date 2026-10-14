@@ -10,7 +10,10 @@
   "item_name",
   "required",
   "evidence_type",
-  "sort_order"
+  "sort_order",
+  "requirement",
+  "example_hint",
+  "follow_up_on_skip"
  ],
  "fields": [
   {
@@ -48,12 +51,33 @@
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Order"
+  },
+  {
+   "description": "v0.329.0. How strict this step is. Required: it must be done. Skippable with reason: the worker may mark it \"Can't take this\" with a reason (blocked, unsafe, not on this asset, weather / light, equipment in the way, other), which counts as met. Optional: it may be left. Empty reads from Required.",
+   "fieldname": "requirement",
+   "fieldtype": "Select",
+   "label": "Requirement",
+   "options": "\nRequired\nSkippable with reason\nOptional",
+   "in_list_view": 1
+  },
+  {
+   "description": "v0.329.0. What a good answer looks like, shown on the phone on this step — e.g. \"Stand back far enough to get the whole wall and the roof line.\"",
+   "fieldname": "example_hint",
+   "fieldtype": "Small Text",
+   "label": "Example / Hint"
+  },
+  {
+   "default": "0",
+   "description": "v0.329.0. A skip of this step raises a follow-up task to do it later (e.g. re-shoot when accessible).",
+   "fieldname": "follow_up_on_skip",
+   "fieldtype": "Check",
+   "label": "Follow-up Task on Skip"
   }
  ],
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-08-06 12:00:00.000000",
+ "modified": "2026-10-14 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Template Checklist Item",

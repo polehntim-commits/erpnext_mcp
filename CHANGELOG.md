@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.329.0 — 2026-10-14 — "Can't take this": skippable checklist steps; template-driven task screen
+
+**Migrate.** Deploy `docs/deploy/v0.329.0_skips.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.69.0 (65).
+
+- **Template checklist steps:** `requirement` (Required / Skippable with reason / Optional), `example_hint` and
+  `follow_up_on_skip`, through the template tools, snapshotted onto tasks.
+- **Skips:** a skip with a reason (blocked, unsafe, not on this asset, weather / light, equipment in the way, other;
+  plus a note and an optional photo) meets a skippable step. A Required step refuses one. It works offline
+  (`save_task_progress kind=skip`) and through `complete_farm_task checklist=[{…, skipped:true, skip_reason}]`.
+- **Recorded:** on the checklist, in `get_farm_task` and on the timeline; `skipped_steps` on completion; one
+  "Re-do" follow-up task per skipped step where the template asks.
+- **Phone progress:** each step carries `requirement`, `evidence_type`, `example_hint`, `met` and the skip.
+- Tests: `test_skips_v329`.
+
 ## 0.328.0 — 2026-10-14 — task photos on the asset; asset → task history; gallery; EXIF kept; housing value
 
 **Migrate.** Deploy `docs/deploy/v0.328.0_asset_photos.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.68.0 (64).

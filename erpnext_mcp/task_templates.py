@@ -381,6 +381,8 @@ def snapshot(name: str) -> dict:
 					"sort_order": int(item.get("sort_order") or index + 1),
 					"done": False,
 					"note": "",
+					# v0.329.0. Snapshotted like the rest: how strict, an example, a follow-up on skip.
+					**{k: item[k] for k in ("requirement", "example_hint", "follow_up_on_skip") if item.get(k)},
 				}
 				for index, item in enumerate(checklist)
 			]
@@ -529,12 +531,29 @@ def _checklist_row(item, index: int) -> dict:
 	if not isinstance(item, dict):
 		item = {"item_name": str(item or "")}
 	order = item.get("sort_order")
-	return {
+	row = {
 		"item_name": str(item.get("item_name") or "").strip(),
 		"required": 1 if item.get("required", True) else 0,
 		"evidence_type": str(item.get("evidence_type") or "None").strip() or "None",
 		"sort_order": int(order) if order not in (None, "") else index + 1,
 	}
+	# v0.329.0. requirement (Required / Skippable with reason / Optional) wins over `required` and sets it, so an
+	# older reader that knows only `required` still treats a skippable step as one to do.
+	from .erpnext_mcp.doctype.farm_task.farm_task import OPTIONAL, REQUIREMENTS
+
+	requirement = str(item.get("requirement") or "").strip()
+	if requirement:
+		wanted = requirement.casefold().replace("_", " ")
+		match = next((r for r in REQUIREMENTS if r.casefold() == wanted or r.split()[0].casefold() == wanted), None)
+		if not match:
+			raise ValueError(f"requirement is one of: {', '.join(REQUIREMENTS)} — got {requirement!r}.")
+		row["requirement"] = match
+		row["required"] = 0 if match == OPTIONAL else 1
+	if str(item.get("example_hint") or "").strip():
+		row["example_hint"] = str(item["example_hint"]).strip()[:500]
+	if item.get("follow_up_on_skip"):
+		row["follow_up_on_skip"] = 1
+	return row
 
 
 # ── the five this app ships ─────────────────────────────────────────────────

@@ -39,7 +39,7 @@ TASK = "Farm Task"
 EVIDENCE = "Farm Task Evidence"
 #: Where progress may be saved. Held is included: a task put on hold mid-job keeps what was done before the hold.
 OPEN_STATES = ("Claimed", "In-Progress", "Paused", "Held")
-KINDS = ("photo", "evidence", "tick", "gps", "findings", "answers")
+KINDS = ("photo", "evidence", "tick", "gps", "findings", "answers", "skip")
 MAX_ITEMS = 60
 #: How many received item ids an assignment remembers (enough for any one job's retries).
 SEEN_CAP = 600
@@ -198,6 +198,21 @@ def save(task_name: str, assignment_name: str, items, *, worker: str = "") -> di
 					entry["note"] = str(item["note"]).strip()
 				out["ticked"] = _tick(task_name, [entry])
 				out["status"] = "saved"
+			elif kind == "skip":
+				# v0.329.0. "Can't take this": the step, why, a note, and optionally a photo of what was in the way.
+				name = str(item.get("item_name") or item.get("checklist_item") or "").strip()
+				if not name:
+					raise ProgressError("a skip names its item_name.")
+				entry = {"item_name": name, "skipped": True, "skip_reason": item.get("skip_reason") or item.get("reason"),
+				         "skip_note": item.get("skip_note") or item.get("note")}
+				photo = item.get("photo") if isinstance(item.get("photo"), dict) else None
+				if photo:
+					added = add_evidence(doc, task, [{**photo, "checklist_item": name,
+					                                  "caption": f"Can't take: {entry['skip_reason']}"}])
+					if added and added[0].get("file"):
+						entry["skip_photo"] = added[0]["file"]
+				out["ticked"] = _tick(task_name, [entry])
+				out["status"] = "saved"
 			elif kind == "gps":
 				lat, lon = item.get("latitude"), item.get("longitude")
 				if lat in (None, "") or lon in (None, ""):
@@ -287,7 +302,7 @@ def draft_for_completion(assignment: dict) -> dict:
 
 def describe(assignment_name: str) -> dict:
 	"""The partial progress on one assignment — what get_farm_task and the phone show."""
-	from .erpnext_mcp.doctype.farm_task.farm_task import checklist_items
+	from .erpnext_mcp.doctype.farm_task.farm_task import checklist_items, is_met, requirement_of
 
 	cols = compat.existing_fields(ASSIGNMENT, ("name", "task", "state", "findings_text", "farm_location_gps",
 	                                           "progress_state", "progress_saved_at"))
@@ -306,9 +321,16 @@ def describe(assignment_name: str) -> dict:
 		"evidence_count": len(evidence),
 		"evidence": [dict(e) for e in evidence],
 		"checklist": [{"item_name": i.get("item_name"), "done": bool(i.get("done")),
-		               "required": bool(i.get("required", True)), **({"note": i["note"]} if i.get("note") else {})}
+		               "required": bool(i.get("required", True)),
+		               # v0.329.0. How strict, what kind of evidence, an example, and a skip with its reason.
+		               "requirement": requirement_of(i), "evidence_type": i.get("evidence_type") or "None",
+		               "met": is_met(i),
+		               **{k: i[k] for k in ("note", "example_hint", "skip_reason", "skip_note", "skip_photo")
+		                  if i.get(k)},
+		               **({"skipped": True} if i.get("skipped") else {})}
 		              for i in items],
 		"checklist_done": sum(1 for i in items if i.get("done")),
+		"checklist_met": sum(1 for i in items if is_met(i)),
 		"checklist_total": len(items),
 		"findings_draft": row.get("findings_text") if state.get("findings_draft") else None,
 		"gps": row.get("farm_location_gps") or None,

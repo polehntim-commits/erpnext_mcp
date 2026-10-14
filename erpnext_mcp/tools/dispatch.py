@@ -2775,6 +2775,41 @@ def complete_farm_task(args: dict) -> ToolResult:
 		raise
 
 
+def _skip_follow_ups(task: dict, skipped: list) -> list:
+	"""v0.329.0. A follow-up task for each skipped step whose template says so — once per step. Never raises."""
+	out = []
+	for item in skipped:
+		if not item.get("follow_up_on_skip"):
+			continue
+		marker = f"Follow-up of {task['name']}: {item['item_name']}"
+		try:
+			existing = frappe.db.get_value(FARM_TASK, {"notes": ("like", f"%{marker}%")}, "name")
+			if existing:
+				out.append({"task": existing, "step": item["item_name"], "existing": True})
+				continue
+			doc = frappe.new_doc(FARM_TASK)
+			doc.task_name = f"Re-do: {item['item_name']} — {task.get('task_name') or task['name']}"[:140]
+			doc.task_type = task.get("task_type") or "Inspection"
+			doc.evidence_required = json.dumps({"photos": True} if item.get("evidence_type") == "Photo"
+			                                   else {"findings_text": True})
+			for field in ("location_doctype", "location", "asset", "company", "skill_required", "template"):
+				if task.get(field) and compat.has_field(FARM_TASK, field):
+					doc.set(field, task[field])
+			doc.checklist_status = json.dumps({"items": [{
+				"item_name": item["item_name"], "required": True, "requirement": "Required",
+				"evidence_type": item.get("evidence_type") or "None", "sort_order": 1, "done": False, "note": "",
+				**({"example_hint": item["example_hint"]} if item.get("example_hint") else {})}]})
+			reason = item.get("skip_reason") or ""
+			doc.notes = f"{marker} (skipped: {reason}{' — ' + item['skip_note'] if item.get('skip_note') else ''})."
+			if compat.has_field(FARM_TASK, "state"):
+				doc.state = "Available"
+			doc.insert(ignore_permissions=True)
+			out.append({"task": doc.name, "step": item["item_name"]})
+		except Exception as exc:  # noqa: BLE001 — a follow-up that cannot be raised is said, never fatal
+			out.append({"task": None, "step": item["item_name"], "error": str(exc)[:200]})
+	return out
+
+
 def _saved_evidence_rows(assignment: str) -> list:
 	"""The evidence rows already on an assignment (saved as progress), shaped like `normalise_evidence` rows."""
 	if not compat.doctype_exists(inspections.EVIDENCE_CHILD):
@@ -3258,7 +3293,24 @@ def _complete_validated(args, assignment, task, worker, saved_evidence, draft, w
 		except Exception:  # noqa: BLE001 — the step notes carry the same fact
 			pass
 
+	# v0.329.0. Steps the worker could not do, said on the timeline; a follow-up task where the template asks.
+	skipped = [i for i in checklist_items(checklist_state) if i.get("skipped")]
+	follow_ups = _skip_follow_ups(task, skipped) if skipped and final_state == COMPLETED else []
+	if skipped:
+		from ..erpnext_mcp.doctype.farm_task.farm_task import SKIP_REASONS
+
+		try:
+			frappe.get_doc(FARM_TASK, assignment["task"]).add_comment(
+				"Info", "Could not be done: " + "; ".join(
+					f"{i['item_name']} — {SKIP_REASONS.get(i.get('skip_reason'), i.get('skip_reason'))}"
+					+ (f" ({i['skip_note']})" if i.get("skip_note") else "") for i in skipped)
+				+ (f". Follow-up: {', '.join(f['task'] for f in follow_ups)}" if follow_ups else ""))
+		except Exception:  # noqa: BLE001 — the checklist itself carries the skips
+			pass
+
 	data = {
+		"skipped_steps": skipped,
+		"follow_up_tasks": follow_ups,
 		"asset_photo_links": [r for r in asset_links if r.get("outcome") == "linked"],
 		"photo_matches": args.get("_photo_matches") or [],
 		"task": _describe_task(task_row(assignment["task"])),
@@ -3706,10 +3758,15 @@ def _marked_checklist(task: dict, args: dict) -> dict:
 
 	by_name = {str(item.get("item_name") or "").casefold(): item for item in items}
 	for index, entry in enumerate(raw):
+		skip = None
 		if isinstance(entry, dict):
 			name = str(entry.get("item_name") or "").strip()
 			done = bool(entry.get("done", True))
 			note = str(entry.get("note") or "").strip()
+			# v0.329.0. "Can't take this": a skip with a reason, met only where the step allows it.
+			if entry.get("skipped"):
+				skip = entry
+				done = False
 		else:
 			name, done, note = str(entry or "").strip(), True, ""
 		if not name:
@@ -3722,12 +3779,45 @@ def _marked_checklist(task: dict, args: dict) -> dict:
 				+ ". A name that marks nothing looks exactly like a tick right up until the "
 				"completion is refused for an item you believe you ticked. Nothing was changed."
 			)
+		if skip is not None:
+			_skip_item(item, skip, task.get("name"))
+			continue
 		# Cumulative: an explicit done=false may un-tick, but omitting an item
 		# never clears a tick an earlier call made.
 		item["done"] = done
+		if done:
+			for key in ("skipped", "skip_reason", "skip_note", "skip_photo"):
+				item.pop(key, None)
 		if note:
 			item["note"] = note
 	return {"items": items}
+
+
+def _skip_item(item: dict, entry: dict, task_name) -> None:
+	"""v0.329.0. Mark one step "Can't take this", with why. Refused where the template makes the step Required."""
+	from ..erpnext_mcp.doctype.farm_task.farm_task import REQUIRED, SKIP_REASONS, requirement_of
+
+	name = str(item.get("item_name") or "")
+	if requirement_of(item) == REQUIRED:
+		raise ToolError(
+			f"{name!r} on {task_name} is Required and cannot be skipped. If it really cannot be done, a supervisor "
+			"can make the step 'Skippable with reason' on the template, or hand the task back with the reason. "
+			"Nothing was changed."
+		)
+	raw = str(entry.get("skip_reason") or entry.get("reason") or "").strip()
+	key = next((k for k, label in SKIP_REASONS.items() if raw.casefold() in (k, label.casefold())), "")
+	if not key:
+		raise ToolError(
+			f"a skip of {name!r} says why: skip_reason is one of {', '.join(SKIP_REASONS)}. Nothing was changed."
+		)
+	note = str(entry.get("skip_note") or entry.get("note") or "").strip()
+	if key == "other" and not note:
+		raise ToolError(f"a skip of {name!r} for 'other' needs a note saying what. Nothing was changed.")
+	item.update({"done": False, "skipped": True, "skip_reason": key})
+	if note:
+		item["skip_note"] = note[:500]
+	if entry.get("skip_photo"):
+		item["skip_photo"] = str(entry["skip_photo"])[:140]
 
 
 def _user_of(employee: str) -> str:

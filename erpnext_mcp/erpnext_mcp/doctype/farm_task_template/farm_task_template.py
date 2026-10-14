@@ -72,6 +72,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from erpnext_mcp import compat
+
 from ..farm_task.farm_task import parse_evidence_required, parse_json_object
 
 #: The evidence a checklist item asks the worker to capture beside the tick.
@@ -169,6 +171,9 @@ class FarmTaskTemplate(Document):
 				)
 			if row.sort_order in (None, "", 0):
 				row.sort_order = index + 1
+			# v0.329.0. The requirement and `required` agree: Optional is the only one that is not required.
+			if row.get("requirement"):
+				row.required = 0 if row.requirement == "Optional" else 1
 
 
 def checklist_rows(name: str) -> list:
@@ -182,7 +187,9 @@ def checklist_rows(name: str) -> list:
 	rows = frappe.db.get_all(
 		"Farm Task Template Checklist Item",
 		filters={"parent": name, "parenttype": "Farm Task Template"},
-		fields=["item_name", "required", "evidence_type", "sort_order", "idx"],
+		fields=["item_name", "required", "evidence_type", "sort_order", "idx",
+		        *compat.existing_fields("Farm Task Template Checklist Item",
+		                                ("requirement", "example_hint", "follow_up_on_skip"))],
 		limit=500,
 	)
 	ordered = sorted(
@@ -195,6 +202,10 @@ def checklist_rows(name: str) -> list:
 			"required": bool(row.get("required")),
 			"evidence_type": str(row.get("evidence_type") or "None"),
 			"sort_order": int(row.get("sort_order") or 0),
+			# v0.329.0.
+			**({"requirement": row["requirement"]} if row.get("requirement") else {}),
+			**({"example_hint": row["example_hint"]} if row.get("example_hint") else {}),
+			**({"follow_up_on_skip": True} if row.get("follow_up_on_skip") else {}),
 		}
 		for row in ordered
 	]

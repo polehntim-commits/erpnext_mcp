@@ -172,7 +172,40 @@ ORIGINS = (
 #: copied off the Farm Task Template at creation and never change afterwards —
 #: that snapshot is what makes editing a template safe — and the last two are
 #: the worker's own answer, written by `complete_farm_task`.
-CHECKLIST_ITEM_KEYS = ("item_name", "required", "evidence_type", "sort_order", "done", "note")
+CHECKLIST_ITEM_KEYS = ("item_name", "required", "evidence_type", "sort_order", "done", "note",
+                       # v0.329.0. Copied off the template: how strict the step is, an example, and whether a skip
+                       # raises a follow-up. The worker's: a skip, why, a note, the photo of what was in the way.
+                       "requirement", "example_hint", "follow_up_on_skip", "skipped", "skip_reason", "skip_note",
+                       "skip_photo")
+
+#: v0.329.0. How strict one checklist step is. "Skippable with reason" is met by a skip that says why.
+REQUIRED, SKIPPABLE, OPTIONAL = "Required", "Skippable with reason", "Optional"
+REQUIREMENTS = (REQUIRED, SKIPPABLE, OPTIONAL)
+#: Why a step could not be done — the phone's picker, in this order.
+SKIP_REASONS = {
+	"blocked": "Blocked / no access",
+	"unsafe": "Unsafe",
+	"not_on_asset": "Doesn't exist on this asset",
+	"weather_light": "Weather / light",
+	"equipment_in_way": "Equipment in the way",
+	"other": "Other",
+}
+
+
+def requirement_of(item: dict) -> str:
+	"""A step's requirement; older snapshots carry only `required`."""
+	value = str(item.get("requirement") or "").strip()
+	if value in REQUIREMENTS:
+		return value
+	return REQUIRED if item.get("required", True) else OPTIONAL
+
+
+def is_met(item: dict) -> bool:
+	"""Done; or skipped with a reason where the step allows it; or optional."""
+	requirement = requirement_of(item)
+	if requirement == OPTIONAL or item.get("done"):
+		return True
+	return requirement == SKIPPABLE and bool(item.get("skipped")) and bool(item.get("skip_reason"))
 
 
 class FarmTask(Document):
@@ -390,16 +423,22 @@ def parse_checklist_status(raw) -> dict:
 				title=_("Duplicate checklist item"),
 			)
 		seen[key] = index + 1
-		items.append(
-			{
-				"item_name": name,
-				"required": bool(entry.get("required", True)),
-				"evidence_type": str(entry.get("evidence_type") or "None").strip() or "None",
-				"sort_order": int(entry.get("sort_order") or index + 1),
-				"done": bool(entry.get("done")),
-				"note": str(entry.get("note") or "").strip(),
-			}
-		)
+		item = {
+			"item_name": name,
+			"required": bool(entry.get("required", True)),
+			"evidence_type": str(entry.get("evidence_type") or "None").strip() or "None",
+			"sort_order": int(entry.get("sort_order") or index + 1),
+			"done": bool(entry.get("done")),
+			"note": str(entry.get("note") or "").strip(),
+		}
+		# v0.329.0. Kept only where present, so an older snapshot reads exactly as it did.
+		for key in ("requirement", "example_hint", "skip_reason", "skip_note", "skip_photo"):
+			if entry.get(key) not in (None, ""):
+				item[key] = str(entry[key]).strip()
+		for key in ("follow_up_on_skip", "skipped"):
+			if entry.get(key):
+				item[key] = True
+		items.append(item)
 	return {"items": items}
 
 
@@ -430,11 +469,8 @@ def unmet_checklist(raw) -> list:
 	covers more than today needs stays usable precisely because the propane check
 	on a cabin with no propane can be left rather than falsely ticked.
 	"""
-	return [
-		str(item.get("item_name") or "")
-		for item in checklist_items(raw)
-		if item.get("required", True) and not item.get("done")
-	]
+	# v0.329.0: a "skippable with reason" step skipped with its reason is met; see `is_met`.
+	return [str(item.get("item_name") or "") for item in checklist_items(raw) if not is_met(item)]
 
 
 def parse_json_object(raw, label: str) -> dict:

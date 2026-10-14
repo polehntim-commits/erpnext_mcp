@@ -11903,7 +11903,10 @@ TOOLS = {
 				'The items a worker ticks, in order. Either a list of sentences — ["Press the '
 				'smoke alarm", "Press the CO alarm"], which means required with no evidence — or '
 				"a list of objects with `item_name`, `required` and `evidence_type` (None, Photo, "
-				"Text or Measurement). OPTIONAL, and usually right to omit.",
+				"Text or Measurement). OPTIONAL, and usually right to omit. v0.329.0: each item may also carry "
+				"`requirement` (Required | Skippable with reason | Optional — a skippable step is met by the "
+				"worker's \"Can't take this\" with a reason), `example_hint` (shown on the phone) and "
+				"`follow_up_on_skip` (a skip raises a follow-up task).",
 			),
 			"company": _field(
 				_STRING,
@@ -12009,7 +12012,8 @@ TOOLS = {
 			"instructions": _field(_STRING, "Replace what the worker reads."),
 			"checklist": _field(
 				{"type": "array", "items": {"type": ["string", "object"]}},
-				"Replace the checklist whole. Pass [] to remove it.",
+				"Replace the checklist whole. Pass [] to remove it. v0.329.0: items may carry `requirement` "
+				"(Required | Skippable with reason | Optional), `example_hint` and `follow_up_on_skip`.",
 			),
 			"company": _field(_STRING, "Scope it to one entity, or pass empty to widen to all."),
 			"enabled": _field(
