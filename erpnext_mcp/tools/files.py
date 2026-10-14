@@ -686,7 +686,13 @@ def insert_attachment(
 		payload["content"] = content
 	else:
 		payload["file_url"] = file_url
-	return frappe.get_doc(payload).insert()
+	# v0.328.0. A photo of work or of a building keeps what the camera wrote — GPS, capture time, lens. Frappe's
+	# "Strip EXIF tags from uploaded images" re-encoded every JPEG after the phone had hashed it; people's records
+	# (employee, I-9, W-4, injury) are still stripped. `asset_photos.keeps_exif`.
+	from .. import asset_photos
+
+	with asset_photos.exif_kept(asset_photos.keeps_exif(doctype, file_name)):
+		return frappe.get_doc(payload).insert()
 
 
 def decode_base64_content(file_content: str, tail: str = "Nothing was created.") -> bytes:

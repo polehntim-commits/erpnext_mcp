@@ -465,7 +465,7 @@ def _evidence(raw) -> list:
 		# v0.321.0 (FarmOps 0.64.0): which lens and zoom took it — Tim zooms out to 0.5× on a cabin.
 		# v0.326.0: the phone's id for the photo (retries file it once) and the checklist step it proves.
 		for key in ("captured_at", "latitude", "longitude", "capture_lens", "zoom_factor", "client_item_id",
-		            "checklist_item"):
+		            "checklist_item", "for_asset", "asset"):
 			if entry.get(key) not in (None, ""):
 				row[key] = entry[key]
 		out.append(row)
@@ -1367,6 +1367,13 @@ def get_task(user: str, task=None, timezone=None) -> dict:
 		out["progress"] = task_progress.describe(str(mine)) if mine else None
 	except Exception:  # pragma: no cover - an older site mid-migrate
 		out["progress"] = None
+	# v0.328.0. The task's photos, every assignment, for the gallery on the task screen.
+	try:
+		from .. import asset_photos
+
+		out["evidence_gallery"] = asset_photos.gallery(name)
+	except Exception:  # pragma: no cover
+		out["evidence_gallery"] = None
 	return out
 
 
@@ -9316,6 +9323,9 @@ def _create_one_location(user: str, register: str, arguments: dict) -> dict:
 		for key in (
 			"occupied",
 			"people_work_here",
+			"purchase_value",
+			"replacement_value",
+			"acquired_on",
 			"gps_latitude",
 			"gps_longitude",
 			*offline_create.ARGUMENTS,
@@ -9610,8 +9620,15 @@ def create_housing_unit(
 	review_note=None,
 	confirm_new=None,
 	link_to_existing=None,
+	purchase_value=None,
+	replacement_value=None,
+	acquired_on=None,
 ) -> dict:
 	"""Register one building on a camp.
+
+	v0.328.0: `purchase_value`, `replacement_value` and `acquired_on` — the form showed them and this route dropped
+	them (Tim's 25 cabins, 10/11–12). They are filed on the cabin's Asset Register tag, the one record the insurance
+	schedule reads.
 
 	v0.226.0. A house or cabin with its beds (`capacity`) can be made on a phone
 	with no signal, with the same `tag_uuid` / `request_id` rules as
@@ -9641,6 +9658,9 @@ def create_housing_unit(
 			# v0.203.0. The rodent bait program's occupancy flags.
 			"occupied": occupied,
 			"people_work_here": people_work_here,
+			"purchase_value": purchase_value,
+			"replacement_value": replacement_value,
+			"acquired_on": acquired_on,
 			"gps_latitude": gps_latitude,
 			"gps_longitude": gps_longitude,
 			"tag_uuid": tag_uuid,

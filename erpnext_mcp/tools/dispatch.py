@@ -3047,13 +3047,14 @@ def _complete_validated(args, assignment, task, worker, saved_evidence, draft, w
 	for row in evidence:
 		row = dict(row)
 		source = tags.get(str(row.get("file") or "")) or tags.get(str(row.get("file_url") or "")) or {}
-		for key in ("client_item_id", "checklist_item"):
+		for key in ("client_item_id", "checklist_item", "asset"):
 			if source.get(key) and compat.has_field(inspections.EVIDENCE_CHILD, key):
 				row[key] = str(source[key])[:140]
+		if compat.checked(source.get("for_asset")) and compat.has_field(inspections.EVIDENCE_CHILD, "for_asset"):
+			row["for_asset"] = 1
 		doc.append("evidence_files", row)
 		if row.get("file"):
 			task_progress.attach_to_assignment(str(row["file"]), doc.name)
-			task_progress.file_on_asset(str(row["file"]), str(task.get("asset") or ""))
 
 	# v0.20.1. THE VISIT AND THE SIGNATURE, both written here and nowhere else.
 	#
@@ -3100,6 +3101,11 @@ def _complete_validated(args, assignment, task, worker, saved_evidence, draft, w
 	if produced:
 		doc.produced_record = produced
 	doc.save(ignore_permissions=True)
+	# v0.328.0. The side photos (and any marked for the asset) are linked to the asset they show — saved progress
+	# photos included, now that the steps are settled. One set of bytes, shown on both; never signatures or befores.
+	from .. import asset_photos
+
+	asset_links = asset_photos.link_assignment(doc.name)
 
 	# v0.198.0. THE READING IS FILED AFTER THE COMPLETION, on the rule every
 	# consequence below follows: the completion is the record, and a reading
@@ -3253,6 +3259,7 @@ def _complete_validated(args, assignment, task, worker, saved_evidence, draft, w
 			pass
 
 	data = {
+		"asset_photo_links": [r for r in asset_links if r.get("outcome") == "linked"],
 		"photo_matches": args.get("_photo_matches") or [],
 		"task": _describe_task(task_row(assignment["task"])),
 		"assignment": _describe_assignment(dict(doc.as_dict())),
@@ -4278,6 +4285,10 @@ def get_farm_task(args: dict) -> ToolResult:
 
 	described["assignments"] = history
 	described["assignment_count"] = len(history)
+	# v0.328.0. Every assignment's photos in one gallery, labeled by step, phase, time and place.
+	from .. import asset_photos
+
+	described["gallery"] = asset_photos.gallery(row["name"])
 	described["rejections"] = [entry for entry in history if entry["state"] == REJECTED]
 	described["live_assignment"] = next(
 		(entry for entry in history if entry["state"] in (CLAIMED, IN_PROGRESS)), None

@@ -11,7 +11,7 @@ WHAT IT IS. Each piece the worker captures is saved on its own, onto the live as
 a connection — never checked against the evidence contract, which is the Complete step's job:
 
 - `photo` (any evidence file): a Farm Task Evidence row on the assignment, tagged with its `checklist_item` when the
-  worker took it on that step (which ticks the item), and filed on the task's asset as well;
+  worker took it on that step (which ticks the item); a side photo is linked to its asset (`asset_photos`, v0.328.0);
 - `tick`: one checklist item done (or explicitly not), with a note;
 - `gps`: where the work is being done;
 - `findings`: the findings draft (latest wins, by the time it was written on the phone);
@@ -78,26 +78,6 @@ def _tick(task_name: str, entries: list) -> list:
 	return [i for i in marked["items"] if str(i.get("item_name") or "").casefold() in wanted]
 
 
-def file_on_asset(file_name: str, asset: str) -> bool:
-	"""Make a photo of an asset readable from the asset too: a second File row with the same URL. Never raises."""
-	if not file_name or not asset or not compat.doctype_exists("Asset Register"):
-		return False
-	try:
-		url = frappe.db.get_value("File", file_name, "file_url")
-		if not url or frappe.db.exists("File", {"file_url": url, "attached_to_doctype": "Asset Register",
-		                                         "attached_to_name": asset}):
-			return False
-		src = frappe.get_doc("File", file_name)
-		copy = frappe.get_doc({"doctype": "File", "file_url": url, "file_name": src.file_name,
-		                       "is_private": src.is_private, "attached_to_doctype": "Asset Register",
-		                       "attached_to_name": asset})
-		copy.flags.ignore_permissions = True
-		copy.insert(ignore_permissions=True)
-		return True
-	except Exception:  # noqa: BLE001 — the asset's copy is a courtesy; the assignment's row is the record
-		return False
-
-
 def attach_to_assignment(file_name: str, assignment: str) -> None:
 	"""An unattached upload now belongs to the assignment, so anyone who can read the task can open it."""
 	try:
@@ -133,13 +113,23 @@ def add_evidence(doc, task: dict, entries: list, checklist_items=None) -> list:
 			row["client_item_id"] = cid[:140]
 		if item and compat.has_field(EVIDENCE, "checklist_item"):
 			row["checklist_item"] = item[:140]
+		# v0.328.0: "attach to asset" on the phone, and which of a multi-place task's assets the photo shows.
+		if isinstance(entry, dict):
+			if compat.checked(entry.get("for_asset")) and compat.has_field(EVIDENCE, "for_asset"):
+				row["for_asset"] = 1
+			if entry.get("asset") and compat.has_field(EVIDENCE, "asset"):
+				row["asset"] = str(entry["asset"])[:140]
 		doc.append("evidence_files", row)
 		ids.add(cid)
 		files.add(key)
 		added.append(row)
 		if row.get("file"):
 			attach_to_assignment(row["file"], doc.name)
-			file_on_asset(row["file"], str(task.get("asset") or ""))
+			# v0.328.0: linked to its asset only if it is a side photo (or marked for the asset) of a building /
+			# equipment task — never signatures, befores or extras (`asset_photos.link_row`).
+			from . import asset_photos
+
+			asset_photos.link_row(row, task)
 	return added
 
 
@@ -371,10 +361,10 @@ def keep_stale_evidence(task: dict, assignment: dict, worker: str, args: dict) -
 			# A closed assignment's rules are about its state, which this does not touch: it only gains photos.
 			doc.flags.ignore_validate = True
 			doc.save(ignore_permissions=True)
-	for entry in entries:
-		token = str((entry.get("file") or entry.get("file_token")) if isinstance(entry, dict) else entry or "")
-		if token and frappe.db.exists("File", token):
-			file_on_asset(token, str(task.get("asset") or ""))
+	if target and added:
+		from . import asset_photos
+
+		asset_photos.link_assignment(target)
 	note = (f"Late evidence from the phone kept: {added} photo(s) onto {target or 'no assignment of theirs'}; "
 	        f"the job was not completed because {mismatch}.")
 	try:

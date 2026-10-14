@@ -269,3 +269,49 @@ def sync_occupancy(units: list | None, source: str, *, dry_run: bool = True, com
 			if row["asset"]:
 				frappe.db.set_value(ASSET_REGISTER, row["asset"], "occupied", int(want), update_modified=False)
 	return {"source": source, "dry_run": dry_run, "changes": changes, "changed": len(changes)}
+
+
+# ── v0.328.0: the building's value lives on its tag ───────────────────────
+VALUE_FIELDS = ("purchase_value", "replacement_value", "acquired_on")
+
+
+def set_values(unit: str, values: dict) -> dict:
+	"""Write purchase / replacement value and acquired date onto the unit's Asset Register tag. Returns what was set.
+
+	One record holds a building's value — its tag, which the insurance schedule already reads — so a cabin is valued
+	once, wherever the value was typed (the phone, MCP, the Desk). Raises ValueError for a value that is not a number.
+	"""
+	wanted = {}
+	for key in VALUE_FIELDS:
+		if key not in values or values[key] in (None, ""):
+			continue
+		if key == "acquired_on":
+			wanted[key] = str(frappe.utils.getdate(values[key]))
+			continue
+		try:
+			amount = float(values[key])
+		except (TypeError, ValueError):
+			raise ValueError(f"{key} must be a number, got {values[key]!r}.") from None
+		if amount < 0:
+			raise ValueError(f"{key} cannot be negative.")
+		wanted[key] = amount
+	if not wanted:
+		return {}
+	asset = str(frappe.db.get_value(HOUSING_UNIT, unit, LINK) or "") if ready() else ""
+	if not asset:
+		asset = str(ensure(unit).get("asset") or "")
+	if not asset:
+		raise ValueError(f"{unit} has no asset tag to hold its value.")
+	writable = {k: v for k, v in wanted.items() if compat.has_field(ASSET_REGISTER, k)}
+	if writable:
+		frappe.db.set_value(ASSET_REGISTER, asset, writable)
+	return {"asset": asset, **writable}
+
+
+def values_of(unit: str) -> dict:
+	asset = str(frappe.db.get_value(HOUSING_UNIT, unit, LINK) or "") if ready() else ""
+	if not asset:
+		return {}
+	cols = compat.existing_fields(ASSET_REGISTER, VALUE_FIELDS)
+	row = frappe.db.get_value(ASSET_REGISTER, asset, cols, as_dict=True) if cols else None
+	return {k: (str(v) if k == "acquired_on" and v else v) for k, v in dict(row or {}).items()}

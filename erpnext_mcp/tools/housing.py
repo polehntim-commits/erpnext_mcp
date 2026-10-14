@@ -476,6 +476,8 @@ def get_housing_unit(args: dict) -> ToolResult:
 	return ToolResult(
 		data={
 			**described,
+			# v0.328.0. What it is worth, as its tag records it.
+			"value": _value_of(described["name"]),
 			"currently_assigned": len(current),
 			"open_beds": max(0, (described["capacity"] or 0) - len(current)),
 			"assignment_count": len(history),
@@ -523,6 +525,33 @@ def _unit_notes(unit: dict) -> list:
 
 
 # ── 113. create_housing_unit ────────────────────────────────────────────────
+def _value_of(unit: str) -> dict:
+	from .. import housing_assets
+
+	try:
+		return housing_assets.values_of(unit)
+	except Exception:  # noqa: BLE001 — a read never fails over its value
+		return {}
+
+
+def _values_argument(args: dict) -> dict:
+	"""v0.328.0. purchase_value / replacement_value / acquired_on, checked before anything is written."""
+	from .. import housing_assets
+
+	values = {k: args.get(k) for k in housing_assets.VALUE_FIELDS if args.get(k) not in (None, "")}
+	for key in ("purchase_value", "replacement_value"):
+		if key in values:
+			try:
+				if float(values[key]) < 0:
+					raise ValueError
+			except (TypeError, ValueError):
+				raise ToolError(f"{key} must be a number of dollars, zero or more — got {values[key]!r}. Nothing was "
+				                "changed.") from None
+	if "acquired_on" in values:
+		values["acquired_on"] = as_date(args, "acquired_on")
+	return values
+
+
 def create_housing_unit(args: dict) -> ToolResult:
 	"""Register one building on a camp."""
 	_require(HOUSING_UNIT)
@@ -573,6 +602,7 @@ def create_housing_unit(args: dict) -> ToolResult:
 			"error.asset.name_taken" if offline["active"] else "",
 		)
 
+	values = _values_argument(args)
 	doc = frappe.new_doc(HOUSING_UNIT)
 	doc.unit_name = unit_name
 	doc.parcel = parcel
@@ -622,6 +652,11 @@ def create_housing_unit(args: dict) -> ToolResult:
 	doc.insert(ignore_permissions=True)
 	offline_create.record(HOUSING_UNIT, doc.name, offline)
 	described = _describe_unit(dict(doc.as_dict()), frappe.utils.today())
+	# v0.328.0. Its value, on its tag (the insurance schedule's record).
+	if values:
+		from .. import housing_assets
+
+		described["value"] = housing_assets.set_values(doc.name, values)
 
 	warnings = list(_unit_notes(described))
 	if (
@@ -776,6 +811,16 @@ def update_housing_unit(args: dict) -> ToolResult:
 			asset = _check_asset(asset, row.get("owning_entity") or company or "", row["parcel"])
 		_stage(changes, doc, "related_asset", asset)
 
+	# v0.328.0. A value goes to the unit's tag (the insurance schedule's record), checked before anything is written.
+	values = _values_argument(args)
+	if values and not changes:
+		from .. import housing_assets
+
+		written = housing_assets.set_values(row["name"], values)
+		return ToolResult(data={"unit": row["name"], "value": written},
+		                  summary=f"{row['name']}: value recorded on {written.get('asset')}",
+		                  docstatus_delta="0 → 0 (updated)")
+
 	if not changes:
 		raise ToolError(
 			"nothing to change. Pass at least one of: unit_type, square_footage, capacity, "
@@ -797,6 +842,10 @@ def update_housing_unit(args: dict) -> ToolResult:
 
 	doc.save(ignore_permissions=True)
 	described = _describe_unit(dict(doc.as_dict()), frappe.utils.today())
+	if values:
+		from .. import housing_assets
+
+		described["value"] = housing_assets.set_values(doc.name, values)
 	if "max_occupants_per_or_law" in changes:
 		changes["max_occupants_per_or_law"][1] = described["max_occupants_per_or_law"]
 

@@ -916,6 +916,7 @@
   "allow_resume_farm_task",
   "allow_hold_farm_task",
   "allow_release_farm_task",
+  "asset_photo_task_types",
   "allow_link_farm_tasks",
   "allow_merge_farm_task",
   "allow_add_task_note",
@@ -7591,6 +7592,13 @@
    "label": "Release Farm Task"
   },
   {
+   "default": "Inspection\nMaintenance\nRepair",
+   "description": "v0.328.0. Task types whose side photos (and photos marked \"attach to asset\") are linked to the asset the task is about — buildings and equipment. One per line. Never signatures, before photos or tasks about people.",
+   "fieldname": "asset_photo_task_types",
+   "fieldtype": "Small Text",
+   "label": "Task types whose photos go on the asset"
+  },
+  {
    "default": "0",
    "description": "WRITE. Pick a paused task back up. Auto-pauses whatever else that worker had running — nobody is in two places at once.",
    "fieldname": "allow_resume_farm_task",
@@ -11188,7 +11196,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-13 10:00:00.000000",
+ "modified": "2026-10-14 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "ERPNext MCP Settings",

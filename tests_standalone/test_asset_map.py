@@ -348,9 +348,10 @@ class TheScriptsWereMerged(unittest.TestCase):
 	def test_asset_register_has_one_map_script_again(self):
 		from erpnext_mcp import hooks
 
+		# v0.328.0: task_photos.js is the "Tasks & photos" section, not a map — still one map script.
 		self.assertEqual(
 			hooks.doctype_js["Asset Register"],
-			["public/js/geo_map_widget.js", "public/js/asset_register_map.js"],
+			["public/js/geo_map_widget.js", "public/js/asset_register_map.js", "public/js/task_photos.js"],
 		)
 
 	def test_asset_type_decides_the_title_and_nothing_else(self):

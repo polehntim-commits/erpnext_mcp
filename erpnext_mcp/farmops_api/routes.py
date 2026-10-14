@@ -1614,6 +1614,38 @@ def bind(route, body: dict) -> dict:
 	came in), so it arrives here on every single call.
 	"""
 	accepted = accepted_arguments(route.handler)
+	# v0.328.0. A FIELD THE PHONE SENT AND THIS ROUTE DOES NOT TAKE IS SAID, NOT SWALLOWED. Tim's 25 cabin values were
+	# typed into a form, sent, and dropped right here without a word. Dropping stays (an undeclared key never reaches
+	# a tool), but each one is now an Error Log row an operator finds with list_error_logs — once an hour per route
+	# and field set.
+	dropped = sorted(k for k in (body or {}) if k not in accepted and k not in _ENVELOPE)
+	if dropped:
+		_warn_unmapped(route.path, dropped)
 	return {
 		key: value for key, value in (body or {}).items() if key in accepted and key != fallback_auth.BODY_KEY
 	}
+
+
+#: Keys every request may carry that no route declares: the auth envelope and transport bookkeeping.
+_ENVELOPE = {fallback_auth.BODY_KEY, "cmd", "client_request_id", "language", "client_capabilities", "feature_flags",
+             "timezone", "app_version", "device_id"}
+_WARNED: dict = {}
+
+
+def _warn_unmapped(path: str, keys: list) -> None:
+	import time
+
+	import frappe
+
+	key = f"{path}:{','.join(keys)}"
+	now = time.time()
+	if now - _WARNED.get(key, 0) < 3600:
+		return
+	_WARNED[key] = now
+	try:
+		frappe.log_error(title=f"FarmOps sent fields the farm does not keep — {path}",
+		                 message=f"route: {path}\nfields dropped: {', '.join(keys)}\nuser: {frappe.session.user}\n\n"
+		                         "The phone sent these and this route does not declare them, so they were not saved. "
+		                         "Either the route should take them or the phone should stop sending them.")
+	except Exception:  # noqa: BLE001 — a warning never fails the request
+		pass

@@ -646,9 +646,9 @@ doctype_js = {
 	"Field": ["public/js/geo_map_widget.js", "public/js/field_map.js", "public/js/field_history.js"],
 	"Irrigation Zone": ["public/js/geo_map_widget.js", "public/js/irrigation_zone_map.js"],
 	"Housing Unit": ["public/js/geo_map_widget.js", "public/js/housing_unit_map.js"],
-	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js"],
+	"Asset Register": ["public/js/geo_map_widget.js", "public/js/asset_register_map.js", "public/js/task_photos.js"],
 	"Farm Shift": ["public/js/geo_map_widget.js", "public/js/farm_shift_map.js"],
-	"Farm Task": ["public/js/geo_map_widget.js", "public/js/farm_task_map.js"],
+	"Farm Task": ["public/js/geo_map_widget.js", "public/js/farm_task_map.js", "public/js/task_photos.js"],
 	# v0.323.0. A Field Pin dragged to the right spot over its block.
 	"Field Pin": ["public/js/geo_map_widget.js", "public/js/field_pin_map.js"],
 	#: v0.174.0. The Lot Line Adjustment form DOES draw a map now — the two tax

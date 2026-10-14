@@ -942,6 +942,9 @@ def get_asset_detail(args: dict) -> ToolResult:
 			"erpnext_asset": asset_mirror.mirror_of(row["name"]) or None,
 			"open_tasks": open_tasks,
 			"open_task_count": len(open_tasks),
+			# v0.328.0. Every task about this asset, done or not — by asset, location, places or its cabin — with
+			# a photo strip (MC-SHOWER-TOILET-1 showed none, though FT-2026-10-00013 photographed it).
+			"task_history": _task_history(row["name"]),
 			# v0.204.0. Templates bound to this asset type (applies_to_asset_types).
 			"available_templates": available_templates(described.get("asset_type") or ""),
 			"children": child_list,
@@ -981,6 +984,45 @@ def get_asset_history(args: dict) -> ToolResult:
 
 
 # ── scan_asset ─────────────────────────────────────────────────────────────
+def _link_task_photos(args: dict) -> ToolResult:
+	"""v0.328.0. `asset_photos.backfill` for one asset's tasks, or (asset_name='*') for the tasks named."""
+	from .. import asset_photos
+
+	name = as_str(args, "asset_name", required=True).strip()
+	raw = args.get("tasks")
+	tasks = [str(t) for t in (raw if isinstance(raw, list) else str(raw or "").replace(",", "\n").splitlines())
+	         if str(t).strip()]
+	if name not in ("*", "all"):
+		row = asset_row(name, _company(args) or "")
+		mine = asset_photos.task_names_for_asset(row["name"])
+		tasks = [t for t in tasks if t in mine] if tasks else mine
+	elif not tasks and not as_str(args, "since"):
+		raise ToolError("link_task_photos with asset_name='*' needs tasks (a list) or since (a date). Nothing was "
+		                "changed.")
+	dry_run = as_bool(args, "dry_run", True)
+	result = asset_photos.backfill(tasks or None, since=as_str(args, "since"), dry_run=dry_run,
+	                               replace_manual=as_bool(args, "replace_manual", False),
+	                               note=as_str(args, "reason"))
+	verb = "would link" if dry_run else "linked"
+	removed = sum(1 for r in result["manual_replaced"] if r.get("outcome") == "removed")
+	return ToolResult(
+		data=result,
+		summary=(f"{verb} {len(result['links'])} photo(s) across {result['tasks']} task(s); "
+		         f"{len(result['manual_copies'])} hand-attached copy(ies) found" + (f", {removed} replaced" if removed else "")),
+		docstatus_delta="" if dry_run else "0 → 0 (photos linked)",
+	)
+
+
+def _task_history(asset: str) -> list:
+	"""v0.328.0. `asset_photos.tasks_for_asset`, never failing the read it rides on."""
+	from .. import asset_photos
+
+	try:
+		return asset_photos.tasks_for_asset(asset)
+	except Exception:  # noqa: BLE001 — a history that cannot be read is an empty one, not a failed scan
+		return []
+
+
 def scan_asset(args: dict) -> ToolResult:
 	"""Record a scan event, return asset detail + open tasks + due compliance items.
 
@@ -1129,6 +1171,7 @@ def scan_asset(args: dict) -> ToolResult:
 			"scan_location": fix,
 			"last_move": asset_moves.last_move(doc.name),
 			"open_tasks": open_tasks,
+			"task_history": _task_history(doc.name),  # v0.328.0: every task about it, with photos
 			"open_task_count": len(open_tasks),
 			"due_compliance": due_compliance,
 			"due_compliance_count": len(due_compliance),
@@ -1529,6 +1572,9 @@ def _replayed(name: str) -> ToolResult:
 def update_registered_asset(args: dict) -> ToolResult:
 	"""Update asset fields. Cannot rename — the docname is the tag ID."""
 	_require()
+	# v0.328.0. Link completed tasks' side photos to their assets — dry run first, every link logged.
+	if as_bool(args, "link_task_photos", False):
+		return _link_task_photos(args)
 	if as_str(args, "title_receipt"):
 		# v0.319.0: the phone's link_title_to_asset on MCP — file a captured title / MCO / bill of sale on the asset.
 		linked = vehicle_titles.link_title_to_asset({"receipt": as_str(args, "title_receipt"),

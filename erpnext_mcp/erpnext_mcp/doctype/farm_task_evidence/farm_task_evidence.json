@@ -19,6 +19,8 @@
   "zoom_factor",
   "checklist_item",
   "client_item_id",
+  "for_asset",
+  "asset",
   "detail_section",
   "caption"
  ],
@@ -109,6 +111,20 @@
    "read_only": 1
   },
   {
+   "default": "0",
+   "description": "v0.328.0. Marked on the phone \"attach to asset\": this photo is of the asset itself (a task with no side checklist). Such photos, and side photos, are linked to the asset.",
+   "fieldname": "for_asset",
+   "fieldtype": "Check",
+   "label": "For the Asset"
+  },
+  {
+   "description": "v0.328.0. Which asset this photo shows, on a task that covers several. Empty: the task's own asset.",
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "label": "Asset",
+   "options": "Asset Register"
+  },
+  {
    "fieldname": "detail_section",
    "fieldtype": "Section Break",
    "label": ""
@@ -123,7 +139,7 @@
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-10-13 10:00:00.000000",
+ "modified": "2026-10-14 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Evidence",

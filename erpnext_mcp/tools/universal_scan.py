@@ -822,6 +822,21 @@ _CASCADE = (_employee_branch, _asset_branch, _housing_branch, _field_branch)
 
 
 # ── universal_scan ──────────────────────────────────────────────────────────
+def _asset_history(entity_type: str, docname: str) -> list:
+	"""v0.328.0. The tasks about an asset (a cabin through its tag); [] for anything else. Never fails the scan."""
+	try:
+		from .. import asset_photos
+
+		asset = ""
+		if entity_type == ASSET:
+			asset = docname
+		elif entity_type == HOUSING and compat.has_field("Housing Unit", "asset_tag"):
+			asset = str(frappe.db.get_value("Housing Unit", docname, "asset_tag") or "")
+		return asset_photos.tasks_for_asset(asset) if asset else []
+	except Exception:  # noqa: BLE001
+		return []
+
+
 def universal_scan(args: dict) -> ToolResult:
 	"""Resolve any scanned string to whatever it identifies, with what is due on it."""
 	raw = _content(args)
@@ -865,6 +880,8 @@ def universal_scan(args: dict) -> ToolResult:
 		"content": raw,
 		"resolved_from": candidate,
 		"renamed_from": renamed_from,
+		# v0.328.0. Every task about a scanned asset or cabin, done or not, with photos (`asset_photos`).
+		"asset_history": _asset_history(entity_type, docname),
 		"entity_type": entity_type,
 		"entity": resolved["entity"],
 		"entity_name": docname or None,
@@ -926,6 +943,7 @@ def _unresolved(raw: str, candidate: str, args: dict) -> ToolResult:
 			"content": raw,
 			"resolved_from": candidate,
 			"renamed_from": None,
+			"asset_history": [],
 			"entity_type": UNKNOWN,
 			"entity": None,
 			"entity_name": None,

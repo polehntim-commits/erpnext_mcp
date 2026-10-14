@@ -8929,7 +8929,7 @@ TOOLS = {
 		"Building — a twenty-person cabin is barracks by another name, and some "
 		"really are. Also warns about missing square footage, missing detector tests "
 		"and a missing habitability inspection.",
-		{
+		{"purchase_value": _field(_NUMBER, "v0.328.0. What the building cost, in dollars — recorded on its Asset Register tag."), "replacement_value": _field(_NUMBER, "v0.328.0. What it would cost to replace (the insured value) — recorded on its tag, which the insurance schedule reads."), "acquired_on": _field(_STRING, "v0.328.0. YYYY-MM-DD it was bought or built."), 
 			"parcel": _field(_STRING, "The Parcel the building stands on. Docname or parcel name."),
 			"unit_name": _field(_STRING, "What is painted on the door: 'MC-Cabin-01'."),
 			"owning_entity": _field(_STRING, "Narrow a bare parcel name to one company."),
@@ -9004,7 +9004,7 @@ TOOLS = {
 		"CHANGING THE SQUARE FOOTAGE RECOMPUTES THE LAWFUL OCCUPANCY, but only when "
 		"the stored limit was the computed one. A figure somebody typed themselves is "
 		"kept.",
-		{"sync_occupancy_from": _field(_STRING, "v0.327.0. unit | asset | assignments: make units and their tags agree on occupied, taking this as the truth. With units (a list), or unit='*' for every unit. Dry run unless dry_run=false."), "units": _field({"type": "array", "items": {"type": "string"}}, "v0.327.0. sync_occupancy_from: these units."), "dry_run": _field(_BOOLEAN, "v0.327.0. sync_occupancy_from: default true."), "door_label": _field(_STRING, "v0.327.0. What is painted on the door ('16&16')."), "room_labels": _field(_STRING, "v0.327.0. A duplex's rooms, comma-separated ('16a, 16b')."), 
+		{"purchase_value": _field(_NUMBER, "v0.328.0. What the building cost, in dollars — recorded on its Asset Register tag."), "replacement_value": _field(_NUMBER, "v0.328.0. What it would cost to replace (the insured value) — recorded on its tag, which the insurance schedule reads."), "acquired_on": _field(_STRING, "v0.328.0. YYYY-MM-DD it was bought or built."), "sync_occupancy_from": _field(_STRING, "v0.327.0. unit | asset | assignments: make units and their tags agree on occupied, taking this as the truth. With units (a list), or unit='*' for every unit. Dry run unless dry_run=false."), "units": _field({"type": "array", "items": {"type": "string"}}, "v0.327.0. sync_occupancy_from: these units."), "dry_run": _field(_BOOLEAN, "v0.327.0. sync_occupancy_from: default true."), "door_label": _field(_STRING, "v0.327.0. What is painted on the door ('16&16')."), "room_labels": _field(_STRING, "v0.327.0. A duplex's rooms, comma-separated ('16a, 16b')."), 
 			"unit": _field(_STRING, "The Housing Unit docname, or its unit name."),
 			"owning_entity": _field(_STRING, "Narrow a bare unit name to one company."),
 			"company": _field(_STRING, "Alias for owning_entity."),
@@ -25251,13 +25251,20 @@ TOOLS = {
 	),
 	"update_registered_asset": _tool(
 		asset_tags.update_registered_asset,
-		"MUTATING (default OFF). Update an asset's fields. Cannot rename — the "
-		"docname IS the tag ID and changing it would orphan every printed label."
+		"MUTATING (default OFF). Update an asset's fields. Not a rename — record action=rename (v0.327.0) "
+		"renames an asset with its links and keeps the old name scannable.\n\n"
+		"v0.328.0: link_task_photos=true links completed tasks' SIDE photos (checklist-tagged, or marked 'attach "
+		"to asset') to the asset they show — one file shown on both, never a copy; never signatures, befores or "
+		"untagged extras; only task types in asset_photo_task_types. asset_name = one asset (its tasks, found by "
+		"asset, location, places or its cabin), or '*' with tasks=[…] / since. DRY RUN BY DEFAULT: the links it "
+		"would make, what it skips and why, and hand-attached <ASSET>_<SIDE>_<date> copies whose bytes are not a "
+		"task's (re-encoded). replace_manual=true (with dry_run=false) deletes such a copy where the asset now has "
+		"the linked original for that side.\n\n"
 		+ MIRROR_NOTE
 		+ " On an asset ALREADY on the books this refreshes its identity and never "
 		"its money: `gross_purchase_amount` is a figure the ledger has been "
 		"reconciled against and is changed in the Desk.",
-		{
+		{"link_task_photos": _field(_BOOLEAN, "v0.328.0. Link completed tasks' side photos to their assets (see above)."), "tasks": _field({"type": "array", "items": {"type": "string"}}, "v0.328.0. link_task_photos: these tasks."), "since": _field(_STRING, "v0.328.0. link_task_photos with asset_name='*': tasks completed on or after this date."), "dry_run": _field(_BOOLEAN, "v0.328.0. link_task_photos: default true."), "replace_manual": _field(_BOOLEAN, "v0.328.0. link_task_photos: delete the re-encoded hand-attached copies the links replace (needs dry_run=false)."), "reason": _field(_STRING, "v0.328.0. link_task_photos: a note logged with the run."), 
 			"asset_name": _field(_STRING, "The Asset Register docname."),
 			"company": _field(_STRING, "Narrow to one company."),
 			"asset_type": _field(_STRING, "New asset type."),

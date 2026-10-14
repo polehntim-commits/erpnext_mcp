@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.328.0 — 2026-10-14 — task photos on the asset; asset → task history; gallery; EXIF kept; housing value
+
+**Migrate.** Deploy `docs/deploy/v0.328.0_asset_photos.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.68.0 (64).
+
+- **Asset → task history:** `task_history` / `asset_history` on asset detail, scan, the phone and the Desk form. It
+  finds every task about the asset, open or done, by asset, location, places or cabin, with a photo strip. Location
+  is now indexed.
+- **Photo gallery:** on the Farm Task Desk form, in `get_farm_task.gallery` and in the phone's
+  `get_task.evidence_gallery`.
+- **EXIF kept:** task and asset evidence is no longer re-encoded by Frappe's "Strip EXIF" (people's records still
+  are).
+- **Side photos linked to the asset:** checklist-tagged or "for the asset" photos only, never signatures or befores,
+  and only for `asset_photo_task_types`. A link is a second File row with the same bytes. Replaces v0.326's
+  every-file filing.
+- **Reviewed backfill:** `update_registered_asset link_task_photos` (dry run by default; reports the re-encoded
+  hand-attached copies; `replace_manual`).
+- **Housing value:** `purchase_value` / `replacement_value` / `acquired_on` on create / update / get housing unit,
+  filed on the cabin's tag.
+- **Unmapped phone fields** are now Error Log rows.
+- Tests: `test_asset_photos_v328`.
+
 ## 0.327.0 — 2026-10-13 — rename records through MCP; occupied kept in step; duplex rooms
 
 **Migrate.** Deploy `docs/deploy/v0.327.0_record_rename.md`. Tools: **1,153** (unchanged).
