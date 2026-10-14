@@ -826,6 +826,12 @@ def endpoint(method: str, limit: int = READ_LIMIT, mutating: bool = False):
 				# client's error handling worse to make one client's better.
 				_record(method, kwargs, audit.STATUS_ERROR, "error", user, ip, exc)
 				_stamp_error(exc, getattr(exc, "translation_key", "") or "error.validation.failed")
+				# v0.326.0. A phone's write the farm refused is an Error Log row too (once an hour per queued
+				# item, by its id), so a queue that keeps bouncing is visible through `list_error_logs`.
+				if mutating:
+					from .. import task_progress
+
+					task_progress.log_sync_refusal(method, str(kwargs.get("client_request_id") or ""), str(exc))
 				frappe.throw(str(exc), frappe.ValidationError)
 			except frappe.PermissionError as exc:
 				_record(method, kwargs, audit.STATUS_UNAUTHORIZED, "permission_error", user, ip, exc)
@@ -959,6 +965,10 @@ def _stamp_error(exc, fallback_key: str) -> None:
 		response["error_key"] = key
 		response["error_language"] = language
 		response["error_message"] = localised
+		# v0.326.0. A completion refusal says, as data, what is still missing and what it kept (`task_progress`).
+		detail = getattr(exc, "detail", None)
+		if isinstance(detail, dict):
+			response["error_detail"] = detail
 	except Exception:  # pragma: no cover - an error path may not raise
 		pass
 

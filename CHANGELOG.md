@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.326.0 — 2026-10-13 — partial task progress saves on its own
+
+**Migrate.** Deploy `docs/deploy/v0.326.0_task_progress.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.67.0 (63).
+
+- **AFB-2026-00035.** Five insurance-photo tasks were done offline and every photo uploaded, but the server held none
+  of them:
+  - four completions were refused as Paused (the next task's start auto-paused a finished job);
+  - one was refused for unticked checklist items;
+  - the completion was the only carrier of the evidence.
+- **Hotfix, no app update needed:**
+  - a Paused job can be completed;
+  - outstanding Photo checklist steps are met by untagged photos in the order taken (noted on each step and on
+    the timeline);
+  - a phone's completion for an ended assignment keeps its photos (idempotent) instead of being refused;
+  - refused phone writes are Error Log rows ("FarmOps sync refused", with the entry id);
+  - patch `link_orphan_task_photos` attaches unattached `FT-…_` photos to their task.
+
+- **`/mobile/save_task_progress`** saves a job a piece at a time: a photo tagged with its checklist step (which ticks
+  the step), a tick, a fix, the findings draft, draft answers. Each piece is idempotent by `client_item_id` and
+  saved or refused on its own. It works on Claimed, In-Progress, Paused and Held jobs. Photos are attached to the
+  assignment and filed on the task's asset too.
+- **Complete:**
+  - accepts a Paused job, and trims the clock to `completed_at` when the pause came after the finish;
+  - merges saved progress (photos count toward the contract and are not filed twice; draft findings and answers fill
+    in);
+  - on a refusal, keeps what it carried and returns `error_detail.missing`.
+- **`get_farm_task`** and the phone's `get_task` show `progress` on open jobs. Evidence rows carry `checklist_item`
+  and `client_item_id`.
+- Tests: `test_task_progress_v326`.
+
 ## 0.325.0 — 2026-10-13 — file links both ways
 
 **Migrate.** Deploy `docs/deploy/v0.325.0_file_links.md`. Tools: **1,152 → 1,153**.

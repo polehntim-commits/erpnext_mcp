@@ -1215,6 +1215,8 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"list_held_tasks",
 		"hold_task",
 		"release_task",
+		# v0.326.0 — a job saved a piece at a time (FarmOps 0.67.0).
+		"save_task_progress",
 		# v0.195.0. fafo_ios names all four as path constants (6e9cfd0) and no
 		# Codable decodes their answers yet, so there is nothing to mirror; the
 		# payloads are asserted key by key in test_wave5_server_changes against

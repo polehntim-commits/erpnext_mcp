@@ -31,6 +31,7 @@ from erpnext_mcp.patches import (
 	customer_portal_followups,
 	dispatch_board_on_hold_column,
 	housing_unit_asset_tags,
+	link_orphan_task_photos,
 	rename_packer_share_to_customer_portal,
 	add_rodent_sections_to_inspection_templates,
 	backfill_alert_subject_employee,
@@ -135,6 +136,8 @@ PATCHES = (
 	("erpnext_mcp.patches.housing_unit_asset_tags", housing_unit_asset_tags),
 	# v0.324.0. Pinned in `TheOnHoldColumn` below.
 	("erpnext_mcp.patches.dispatch_board_on_hold_column", dispatch_board_on_hold_column),
+	# v0.326.0. Pinned in `test_task_progress_v326.TheOrphansAreRelinked`.
+	("erpnext_mcp.patches.link_orphan_task_photos", link_orphan_task_photos),
 )
 
 

@@ -100,6 +100,7 @@ ROUTES = (
 	Route("/mobile", mobile_api.claim_task),
 	Route("/mobile", mobile_api.start_task),
 	Route("/mobile", mobile_api.complete_task_via_mobile),
+	Route("/mobile", mobile_api.save_task_progress),
 	Route("/mobile", mobile_api.reject_task),
 	Route("/mobile", mobile_api.report_field_task),
 	Route("/mobile", mobile_api.list_compliance_alerts),

@@ -463,7 +463,9 @@ def _evidence(raw) -> list:
 		# will not parse. A build that sends neither keeps its phase from the
 		# file name — `inspections._phase_from_name`.
 		# v0.321.0 (FarmOps 0.64.0): which lens and zoom took it — Tim zooms out to 0.5× on a cabin.
-		for key in ("captured_at", "latitude", "longitude", "capture_lens", "zoom_factor"):
+		# v0.326.0: the phone's id for the photo (retries file it once) and the checklist step it proves.
+		for key in ("captured_at", "latitude", "longitude", "capture_lens", "zoom_factor", "client_item_id",
+		            "checklist_item"):
 			if entry.get(key) not in (None, ""):
 				row[key] = entry[key]
 		out.append(row)
@@ -1351,6 +1353,20 @@ def get_task(user: str, task=None, timezone=None) -> dict:
 		out.update(task_forms.phone_block(task_row(name)))
 	except Exception:  # pragma: no cover - an older site mid-migrate
 		frappe.log_error(title="erpnext_mcp: task form block", message=compat.traceback_text())
+	# v0.326.0. What the caller has already saved on their open job (photos by step, ticks, draft findings), so a
+	# phone that lost its copy — or a second device — picks up where the work is. Never fails the read.
+	try:
+		from .. import task_progress
+
+		mine = task_progress.ready() and frappe.db.get_value(
+			FARM_TASK_ASSIGNMENT,
+			{"task": name, "assigned_to": fieldwork._employee_for(user) or "-",
+			 "state": ("in", list(task_progress.OPEN_STATES))},
+			"name",
+		)
+		out["progress"] = task_progress.describe(str(mine)) if mine else None
+	except Exception:  # pragma: no cover - an older site mid-migrate
+		out["progress"] = None
 	return out
 
 
@@ -1612,6 +1628,43 @@ def complete_task_via_mobile(
 
 	result = fieldwork.complete_task_via_mobile(inner)
 	return shape.completion(result.data)
+
+
+@frappe.whitelist(methods=["POST"])
+@guard.endpoint("save_task_progress", limit=guard.COMPLETE_LIMIT, mutating=True)
+def save_task_progress(user: str, task=None, task_assignment=None, items=None, client_request_id=None) -> dict:
+	"""Save partial progress on the caller's own job, one piece at a time. v0.326.0 (`erpnext_mcp.task_progress`).
+
+	`items` is a list of {client_item_id, kind, at, …}: kind `photo` (an evidence file as the completion takes it,
+	plus `checklist_item`), `tick` (item_name, done, note), `gps` (latitude, longitude), `findings` (text) or
+	`answers` (an object of draft form answers). Each item is saved or refused on its own and reported by its
+	`client_item_id`; one already received answers `duplicate`, so the offline queue may send it any number of
+	times. The evidence contract is NOT checked here — that is Complete's job.
+	"""
+	allowed = guard.require_scope(user)
+	name = guard.require_scoped_doc(FARM_TASK, task, "task", allowed)
+	assignment = _assignment(name, task_assignment, allowed)
+	worker = _employee(user)
+	if not assignment:
+		assignment = str(
+			frappe.db.get_value(
+				FARM_TASK_ASSIGNMENT,
+				{"task": name, "assigned_to": worker, "state": ("in", ["Claimed", "In-Progress", "Paused", "Held"])},
+				"name",
+			)
+			or ""
+		)
+	if not assignment:
+		frappe.throw(f"{name} has no open assignment of yours to save progress on.", frappe.ValidationError)
+	parsed = _json_argument(items, "items") if isinstance(items, str) else items
+	from erpnext_mcp import task_progress
+
+	# A photo item is the completion's evidence object as the phone already sends it (`file_token`, `phase`,
+	# `captured_at`, lens…): `inspections.normalise_evidence` reads those spellings, so nothing is renamed here.
+	try:
+		return task_progress.save(name, assignment, parsed, worker=worker)
+	except task_progress.ProgressError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 
 
 # ── 8. reject_task ──────────────────────────────────────────────────────────

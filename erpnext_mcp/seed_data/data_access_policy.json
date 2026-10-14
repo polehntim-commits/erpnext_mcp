@@ -741,6 +741,7 @@
   },
   "collect_signature": {},
   "complete_task_via_mobile": {},
+  "save_task_progress": {},
   "complete_training_session": {},
   "confirm_shipment_movement": {},
   "create_accident_report": {},

@@ -17,6 +17,8 @@
   "gps_longitude",
   "capture_lens",
   "zoom_factor",
+  "checklist_item",
+  "client_item_id",
   "detail_section",
   "caption"
  ],
@@ -93,6 +95,20 @@
    "read_only": 1
   },
   {
+   "description": "v0.326.0. The checklist item this photo is the proof of (\"FRONT photo taken\"). Set when the worker took it on that step; a photo saved with one ticks the item.",
+   "fieldname": "checklist_item",
+   "fieldtype": "Data",
+   "label": "Checklist Item",
+   "in_list_view": 1
+  },
+  {
+   "description": "v0.326.0. The phone's own id for this piece of evidence. A retry carrying the same id is the same photo, so it is never filed twice.",
+   "fieldname": "client_item_id",
+   "fieldtype": "Data",
+   "label": "Client Item ID",
+   "read_only": 1
+  },
+  {
    "fieldname": "detail_section",
    "fieldtype": "Section Break",
    "label": ""
@@ -107,7 +123,7 @@
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-10-11 18:00:00.000000",
+ "modified": "2026-10-13 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Evidence",

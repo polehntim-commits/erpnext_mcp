@@ -58,6 +58,8 @@
   "completion_signature",
   "form_answers",
   "feature_flags",
+  "progress_saved_at",
+  "progress_state",
   "offline_claim_section",
   "claimed_offline",
   "device_claimed_at",
@@ -387,6 +389,22 @@
    "description": "v0.206.0. The feature flags the phone read for this completion."
   },
   {
+   "description": "v0.326.0. When the phone last saved partial progress on this assignment (a photo, a tick, a fix, a findings draft) — before it was completed.",
+   "fieldname": "progress_saved_at",
+   "fieldtype": "Datetime",
+   "label": "Progress Saved At",
+   "read_only": 1
+  },
+  {
+   "description": "v0.326.0. The partial progress that has no column of its own: the draft form answers, which progress items have been received (so a retry is not filed twice) and when the findings / fix were taken. Read by the completion, which folds it in.",
+   "fieldname": "progress_state",
+   "fieldtype": "Code",
+   "label": "Progress State",
+   "options": "JSON",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
    "fieldname": "offline_claim_section",
    "fieldtype": "Section Break",
    "label": "Offline Claim",
@@ -445,7 +463,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-12 10:00:00.000000",
+ "modified": "2026-10-13 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Assignment",

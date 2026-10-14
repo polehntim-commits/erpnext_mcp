@@ -2695,6 +2695,23 @@ def complete_farm_task(args: dict) -> ToolResult:
 		assignment = _assignment_for({"task": task["name"]})
 		task = task_row(task["name"])
 
+	# v0.326.0. EVIDENCE FROM A PHONE IS NEVER REFUSED FOR BEING LATE. A completion queued offline can arrive after
+	# its assignment was rejected, reassigned or held. The job is not completed on it, but its photos are kept on the
+	# worker's own assignment and on the asset, and the mismatch is logged — the phone is answered so its queue
+	# drains (`task_progress.keep_stale_evidence`).
+	if args.get("accept_stale_evidence") and (
+		assignment.get("state") in STALE_ASSIGNMENT_STATES
+		or (assignment.get("assigned_to") != worker and assignment.get("state") != COMPLETED)
+	):
+		from .. import task_progress
+
+		kept = task_progress.keep_stale_evidence(task, assignment, worker, args)
+		return ToolResult(
+			data={"task": task["name"], "settled": "evidence_only", **kept},
+			summary=f"kept {kept['evidence_kept']} late photo(s) for {task['name']} — {kept['mismatch']}",
+			docstatus_delta="(task unchanged)",
+		)
+
 	if assignment.get("assigned_to") != worker:
 		raise ToolError(
 			f"{assignment['task']} is held by "
@@ -2710,11 +2727,146 @@ def complete_farm_task(args: dict) -> ToolResult:
 		replay = _replayed(assignment, task, worker, args)
 		if replay is not None:
 			return replay
-	if assignment.get("state") not in (CLAIMED, IN_PROGRESS):
+	# v0.326.0. A PAUSED JOB CAN BE FINISHED. AFB-2026-00035: a worker finishes a task offline and starts the
+	# next one; the start reaches the server first and auto-pauses the job that is in fact done, and the completion
+	# that follows was refused as "Paused" — five tasks' photos stranded on a phone. The completion is the
+	# worker's statement of what happened; the clock is closed at `completed_at` (see `_trim_last_segment`).
+	if assignment.get("state") not in (CLAIMED, IN_PROGRESS, PAUSED):
 		raise ToolError(
 			f"{assignment['name']} is {assignment.get('state')} and cannot be completed. Nothing was changed."
 		)
+	was_paused = assignment.get("state") == PAUSED
 
+	# v0.326.0. WHAT WAS ALREADY SAVED AS PROGRESS COUNTS (`task_progress`): photos saved a piece at a time are
+	# evidence toward the contract, and the findings draft and draft answers stand in for ones this call omits.
+	from .. import task_progress
+
+	progress_ready = task_progress.ready()
+	saved_evidence = _saved_evidence_rows(assignment["name"]) if progress_ready else []
+	draft = (
+		task_progress.draft_for_completion(
+			frappe.db.get_value(
+				FARM_TASK_ASSIGNMENT, assignment["name"], ["progress_state", "findings_text"], as_dict=True
+			)
+			or {}
+		)
+		if progress_ready
+		else {"answers": {}, "findings": None}
+	)
+	if draft["answers"] and (args.get("form_answers") in (None, "", {}) or isinstance(args.get("form_answers"), dict)):
+		args["form_answers"] = {**draft["answers"], **(args.get("form_answers") or {})}
+	tagged = [
+		{"item_name": str(entry.get("checklist_item")).strip(), "done": True, "note": "photo"}
+		for entry in (args.get("evidence_files") if isinstance(args.get("evidence_files"), list) else [])
+		if isinstance(entry, dict) and str(entry.get("checklist_item") or "").strip()
+	]
+	if tagged:
+		args["checklist"] = [*(args.get("checklist") if isinstance(args.get("checklist"), list) else []), *tagged]
+
+	try:
+		return _complete_validated(args, assignment, task, worker, saved_evidence, draft, was_paused)
+	except ToolError as exc:
+		# v0.326.0. A REFUSED COMPLETE KEEPS WHAT IT CARRIED. The photos, findings, fix and answers go onto the
+		# assignment as progress (committed on their own) and the refusal says what is still missing — the worker
+		# fixes that one thing, not the whole job.
+		if progress_ready and getattr(exc, "detail", None) is not None:
+			exc.detail["kept"] = task_progress.keep_from_refused_completion(assignment["name"], task, args)
+			exc.detail["progress"] = task_progress.describe(assignment["name"])
+		raise
+
+
+def _saved_evidence_rows(assignment: str) -> list:
+	"""The evidence rows already on an assignment (saved as progress), shaped like `normalise_evidence` rows."""
+	if not compat.doctype_exists(inspections.EVIDENCE_CHILD):
+		return []
+	cols = compat.existing_fields(
+		inspections.EVIDENCE_CHILD,
+		("name", "evidence_type", "file", "file_url", "caption", "captured_on", "phase", "gps_latitude",
+		 "gps_longitude", "checklist_item"),
+	)
+	return [
+		dict(row)
+		for row in frappe.db.get_all(
+			inspections.EVIDENCE_CHILD,
+			filters={"parent": assignment, "parenttype": FARM_TASK_ASSIGNMENT},
+			fields=cols,
+			order_by="idx asc",
+		)
+		or []
+	]
+
+
+#: v0.326.0. Assignments that ended without a completion: late evidence for them is kept, never refused.
+STALE_ASSIGNMENT_STATES = ("Rejected", "Held", "Merged", "Off Crew", "Cancelled")
+
+
+def _match_untagged_photos(checklist_state: dict, outstanding: list, saved: list, new: list) -> list:
+	"""Tick outstanding Photo steps with untagged photos, in the order taken. All of them or none. v0.326.0.
+
+	Applies only when no Photo step is ticked yet (what FarmOps 0.66 sends) and every outstanding required step is
+	a Photo step with an untagged, non-"before" photo for it.
+	"""
+	items = {str(i.get("item_name") or ""): i for i in checklist_state.get("items") or []}
+	steps = [name for name in outstanding if str(items.get(name, {}).get("evidence_type") or "") == "Photo"]
+	if not steps or len(steps) != len(outstanding):
+		return []
+	# Only the shape a step-less build produces: NO photo step ticked at all. A worker who ticked some photo steps
+	# and left others has said something about the others, and a generic photo does not overrule it.
+	if any(i.get("done") for i in items.values() if str(i.get("evidence_type") or "") == "Photo"):
+		return []
+	used = {str(r.get("checklist_item") or "") for r in [*saved, *new] if r.get("checklist_item")}
+	saved_files = {str(r.get("file") or r.get("file_url") or "") for r in saved}
+	pool = [
+		row
+		for row in [*saved, *[r for r in new if str(r.get("file") or r.get("file_url") or "") not in saved_files]]
+		if str(row.get("evidence_type") or "Photo") == "Photo"
+		and str(row.get("phase") or "") != "before"
+		and not row.get("checklist_item")
+	]
+	if len(pool) < len(steps) or used & set(steps):
+		return []
+	pool.sort(key=lambda r: str(r.get("captured_on") or "~"))
+	matches = []
+	for step, row in zip(steps, pool):
+		label = str(row.get("file") or row.get("file_url") or "")
+		items[step]["done"] = True
+		items[step]["note"] = (items[step].get("note") or "") + (
+			f"{' · ' if items[step].get('note') else ''}matched to {label} (taken without a step)"
+		)
+		row["checklist_item"] = step
+		if row.get("name"):
+			try:
+				frappe.db.set_value(inspections.EVIDENCE_CHILD, row["name"], "checklist_item", step,
+				                    update_modified=False)
+			except Exception:  # noqa: BLE001 — the tick stands; the row's tag is a convenience
+				pass
+		matches.append({"step": step, "file": label})
+	return matches
+
+
+def _trim_last_segment(doc, when: str) -> None:
+	"""A job auto-paused AFTER it was finished stops its clock at the finish, not at the pause. v0.326.0."""
+	rows = [row for row in _segment_rows(doc) if row.get("ended_at")]
+	if not rows or not when:
+		return
+	last = rows[-1]
+	try:
+		if frappe.utils.get_datetime(when) < frappe.utils.get_datetime(last.get("ended_at")):
+			ended = when if frappe.utils.get_datetime(when) > frappe.utils.get_datetime(last.get("started_at")) else (
+				last.get("started_at"))
+			_row_set(last, ended_at=ended, minutes=float(_elapsed(last.get("started_at"), ended)))
+	except Exception:  # noqa: BLE001 — an unreadable stamp leaves the clock as the pause left it
+		pass
+
+
+def _missing(exc_message: str, missing: list, key: str = "") -> ToolError:
+	"""A completion refusal that also carries, as data, the list of what is missing (`error_detail` on the phone)."""
+	exc = ToolError(exc_message, key) if key else ToolError(exc_message)
+	exc.detail = {"missing": [str(m) for m in missing]}
+	return exc
+
+
+def _complete_validated(args, assignment, task, worker, saved_evidence, draft, was_paused) -> ToolResult:
 	contract = evidence_contract(task.get("evidence_required"))
 	# v0.69.0. THE MATERIALS ARGUMENT IS CHECKED HERE, WITH THE EVIDENCE, AND
 	# NOT LATER. It is the only stock refusal in the whole completion path (see
@@ -2734,6 +2886,9 @@ def complete_farm_task(args: dict) -> ToolResult:
 	witness = as_str(args, "witness")
 	findings_given = "findings_text" in args
 	findings = as_str(args, "findings_text")
+	# v0.326.0. The findings draft saved as progress, where this call carried none.
+	if not findings_given and draft.get("findings") is not None:
+		findings_given, findings = True, str(draft["findings"])
 
 	clean_pass = clean_pass_flag(args)
 	if clean_pass is True:
@@ -2774,8 +2929,17 @@ def complete_farm_task(args: dict) -> ToolResult:
 	args["_form_answers"] = form_answers
 	checklist_state = _marked_checklist(task, args)
 	outstanding = unmet_checklist(checklist_state)
+	# v0.326.0. A PHOTO STEP CAN BE MET BY A PHOTO TAKEN WITHOUT A STEP. FarmOps 0.66 and older shot the insurance
+	# sides as generic "after" photos and never ticked FRONT / BACK / LEFT / RIGHT (AFB-2026-00035). Where every
+	# outstanding step is a Photo step and there are at least that many untagged photos, they are matched in the
+	# order taken, each step's note says so, and the task's timeline records it for a reviewer to check.
 	if outstanding:
-		raise ToolError(
+		matched = _match_untagged_photos(checklist_state, outstanding, saved_evidence, evidence)
+		if matched:
+			args["_photo_matches"] = matched
+			outstanding = unmet_checklist(checklist_state)
+	if outstanding:
+		raise _missing(
 			f"{assignment['task']} cannot be completed: "
 			f"{len(outstanding)} required checklist item(s) are not marked done.\n"
 			+ "\n".join(f"  - {item}" for item in outstanding)
@@ -2785,7 +2949,8 @@ def complete_farm_task(args: dict) -> ToolResult:
 			'[{"item_name": "…", "done": true, "note": "…"}] where you want to record what was '
 			"found. An item that genuinely does not apply should be OPTIONAL on the template "
 			"rather than falsely ticked here. Nothing was changed and no compliance record was "
-			"written."
+			"written.",
+			outstanding,
 		)
 
 	# v0.115.0. THE FIX ON THE SUBMISSION, OR THE ONE ALREADY ON THE ASSIGNMENT.
@@ -2797,7 +2962,11 @@ def complete_farm_task(args: dict) -> ToolResult:
 		or str(assignment.get("farm_location_gps") or "")
 		or _photo_location(evidence)
 	)
-	unmet = _unmet_evidence(contract, evidence, signature, findings_given, witness, location_gps)
+	# v0.326.0. Saved progress photos count toward the contract alongside this call's.
+	saved_files = {str(row.get("file") or row.get("file_url") or "") for row in saved_evidence}
+	evidence = [row for row in evidence if str(row.get("file") or row.get("file_url") or "") not in saved_files]
+	all_evidence = [{k: v for k, v in row.items() if k != "name"} for row in saved_evidence] + evidence
+	unmet = _unmet_evidence(contract, all_evidence, signature, findings_given, witness, location_gps)
 	# v0.198.0. `hours` asks for a reading only where there is a meter to read:
 	# a contract copied onto a task about a shed must not refuse its completion.
 	task_hours = _asset_hours(task.get("asset"))
@@ -2808,13 +2977,14 @@ def complete_farm_task(args: dict) -> ToolResult:
 			"number on the meter, e.g. 1240.5."
 		)
 	if unmet:
-		raise ToolError(
+		raise _missing(
 			f"{assignment['task']} cannot be completed: its evidence contract is not met.\n"
 			+ "\n".join(f"  - {line}" for line in unmet)
 			+ "\n\nThis is the refusal the whole doctype exists for. The contract was stated when "
 			"the task was raised, precisely so that closing it could not be a tick in a box. "
 			"Nothing was changed and no compliance record was written — fix the submission and "
-			"call again."
+			"call again.",
+			unmet,
 		)
 
 	now = frappe.utils.now()
@@ -2860,10 +3030,30 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# `actual_duration_minutes` still wins: a foreman correcting a figure is
 	# making a claim about the past that this app does not get to overrule.
 	_close_segment(doc, str(doc.completed_at), SEGMENT_COMPLETION)
+	if was_paused:
+		_trim_last_segment(doc, str(doc.completed_at))
 	doc.paused_at = None
 	doc.actual_duration_minutes = as_int(args, "actual_duration_minutes") or active_minutes(doc)
+	# v0.326.0. Tagged with the phone's id and step, and never a second copy of a photo saved as progress.
+	from .. import task_progress
+
+	raw_evidence = args.get("evidence_files") if isinstance(args.get("evidence_files"), list) else []
+	tags = {}
+	for entry in raw_evidence:
+		if isinstance(entry, dict):
+			key = str(entry.get("file") or entry.get("file_token") or entry.get("file_url") or "")
+			if key:
+				tags[key] = entry
 	for row in evidence:
-		doc.append("evidence_files", dict(row))
+		row = dict(row)
+		source = tags.get(str(row.get("file") or "")) or tags.get(str(row.get("file_url") or "")) or {}
+		for key in ("client_item_id", "checklist_item"):
+			if source.get(key) and compat.has_field(inspections.EVIDENCE_CHILD, key):
+				row[key] = str(source[key])[:140]
+		doc.append("evidence_files", row)
+		if row.get("file"):
+			task_progress.attach_to_assignment(str(row["file"]), doc.name)
+			task_progress.file_on_asset(str(row["file"]), str(task.get("asset") or ""))
 
 	# v0.20.1. THE VISIT AND THE SIGNATURE, both written here and nowhere else.
 	#
@@ -2905,7 +3095,7 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# either way — that is the evidence, and it is not this function's to edit.
 	record_findings = "" if clean_pass is True else findings
 	produced, record_note, record_state, deferred_payload = _produce_record(
-		task, doc, evidence, signature, record_findings, args
+		task, doc, all_evidence, signature, record_findings, args
 	)
 	if produced:
 		doc.produced_record = produced
@@ -3051,7 +3241,19 @@ def complete_farm_task(args: dict) -> ToolResult:
 	# appear within the hour" is how a crew learns to look somewhere else.
 	spray_window_eval = _evaluate_spray_windows(spray_window, str(task.get("company") or ""))
 
+	# v0.326.0. Photo steps met by untagged photos are said on the timeline, for a reviewer to look at.
+	if args.get("_photo_matches"):
+		try:
+			frappe.get_doc(FARM_TASK, assignment["task"]).add_comment(
+				"Info",
+				"Photo steps matched to photos taken without a step (check each shows its side): "
+				+ "; ".join(f"{m['step']} ← {m['file']}" for m in args["_photo_matches"]),
+			)
+		except Exception:  # noqa: BLE001 — the step notes carry the same fact
+			pass
+
 	data = {
+		"photo_matches": args.get("_photo_matches") or [],
 		"task": _describe_task(task_row(assignment["task"])),
 		"assignment": _describe_assignment(dict(doc.as_dict())),
 		"evidence_filed": len(evidence),
@@ -4065,8 +4267,14 @@ def get_farm_task(args: dict) -> ToolResult:
 		)
 		or []
 	]
+	from .. import task_progress
+
+	progress_ready = task_progress.ready()
 	for entry in history:
 		entry["evidence"] = _assignment_evidence(entry["name"])
+		# v0.326.0. An open job shows what has been saved so far — photos by step, ticks, the findings draft.
+		if progress_ready and entry["state"] in task_progress.OPEN_STATES:
+			entry["progress"] = task_progress.describe(entry["name"])
 
 	described["assignments"] = history
 	described["assignment_count"] = len(history)
@@ -4111,7 +4319,7 @@ def _assignment_evidence(assignment: str) -> list:
 			# v0.96.0. Read explicitly, like every other column here: the row is
 			# no use to a reader who has to guess which frame is the before one
 			# off a filename, which is the whole reason the column was added.
-			*compat.existing_fields(inspections.EVIDENCE_CHILD, ("phase",)),
+			*compat.existing_fields(inspections.EVIDENCE_CHILD, ("phase", "checklist_item", "client_item_id")),
 			"idx",
 		],
 		order_by="idx asc",
@@ -4128,6 +4336,9 @@ def _assignment_evidence(assignment: str) -> list:
 			# gets the same keys on every one of them and an untagged photograph
 			# is visibly untagged rather than missing a field.
 			"phase": row.get("phase") or None,
+			# v0.326.0. The checklist step this photo proves, and the phone's id for it.
+			"checklist_item": row.get("checklist_item") or None,
+			"client_item_id": row.get("client_item_id") or None,
 		}
 		for row in rows or []
 	]

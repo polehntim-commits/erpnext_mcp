@@ -280,8 +280,12 @@ class ARoundWalkedFromThePhoneReachesTheRegister(PhoneScoutingTestCase):
 			for item in json.loads(frappe.db.get_value("Farm Task", task, "checklist_status"))["items"]
 			if item.get("required")
 		]
-		data = self.walk(
-			task=task, growth_stage_code="87", brix_reading=18.0, brix_method="Refractometer", checklist=names
+		# v0.326.0: the refused Complete kept the round's photo as progress and left the job with its scout,
+		# claimed and started (those were the phone's own earlier requests) — so the retry is just the Complete.
+		data = mobile_api.complete_task_via_mobile(
+			task=task, findings_text="east row a week behind the rest", farm_location_gps=A_FIX,
+			evidence_files=list(A_PHOTO), growth_stage_code="87", brix_reading=18.0, brix_method="Refractometer",
+			checklist=names,
 		)
 		self.assertTrue(data)
 

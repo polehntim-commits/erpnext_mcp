@@ -657,7 +657,9 @@ def complete_task_via_mobile(args: dict) -> ToolResult:
 	me = _me(args)
 	worker = _require_employee(me)
 
-	inner = {"worker_id": worker}
+	# v0.326.0. From a phone, a completion that arrives after its assignment ended keeps its photos rather than
+	# being refused (`dispatch.complete_farm_task`, `task_progress.keep_stale_evidence`).
+	inner = {"worker_id": worker, "accept_stale_evidence": True}
 	assignment = as_str(args, "assignment_name") or as_str(args, "assignment")
 	if assignment:
 		inner["assignment"] = assignment
