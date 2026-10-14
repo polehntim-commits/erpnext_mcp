@@ -59,6 +59,12 @@ class HousingAssignment(Document):
 			frappe.throw(_("Assigned Date is required — an assignment with no start is not a record."))
 
 		self.parcel = frappe.db.get_value("Housing Unit", self.unit, "parcel") or self.parcel
+		# v0.327.0. A room, where given, is one of the unit's rooms (a duplex: 16a / 16b).
+		if self.get("room"):
+			rooms = [r.strip() for r in str(frappe.db.get_value("Housing Unit", self.unit, "room_labels") or "").split(",")
+			         if r.strip()]
+			if rooms and self.room.strip() not in rooms:
+				frappe.throw(_("{0} has rooms {1}; {2} is not one of them.").format(self.unit, ", ".join(rooms), self.room))
 		self.employee = str(self.employee or "").strip()
 		self.employee_name = str(self.employee_name or "").strip() or self.employee
 

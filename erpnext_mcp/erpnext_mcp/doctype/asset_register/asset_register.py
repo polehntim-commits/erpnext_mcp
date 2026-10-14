@@ -113,6 +113,10 @@ class AssetRegister(Document):
 		from erpnext_mcp import pin_moves
 
 		pin_moves.follow_housing_tag(self)
+		# v0.327.0: and its occupied answer moves the cabin's too.
+		from erpnext_mcp import housing_assets
+
+		housing_assets.follow_asset(self)
 
 
 def _build_qr_url(asset_name: str) -> str:

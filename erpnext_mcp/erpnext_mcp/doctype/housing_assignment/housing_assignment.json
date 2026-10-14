@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "unit",
+  "room",
   "employee",
   "employee_name",
   "parcel",
@@ -34,6 +35,12 @@
    "options": "Housing Unit",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "description": "v0.327.0. Which room of the unit, where it has rooms (a duplex: 16a / 16b). Must be one of the unit's Room Labels.",
+   "fieldname": "room",
+   "fieldtype": "Data",
+   "label": "Room"
   },
   {
    "description": "The Employee, where Frappe HR is installed. Where it is not, the tools record the name in Employee Name and leave this blank — a camp roster that cannot be written until an HR module is installed is a camp roster nobody keeps.",
@@ -132,7 +139,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-07-30 12:00:00.000000",
+ "modified": "2026-10-13 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Housing Assignment",

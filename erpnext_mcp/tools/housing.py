@@ -107,6 +107,10 @@ _UNIT_FIELDS = (
 	"rodent_bait_state_since",
 	"rodent_bait_last_placement",
 	"notes",
+	# v0.327.0. The painted door label, a duplex's rooms, and the names it had before a rename.
+	"door_label",
+	"room_labels",
+	"old_names",
 	"creation",
 	"owner",
 )
@@ -247,6 +251,9 @@ def _describe_unit(row: dict, today: str = "") -> dict:
 		# v0.203.0. The manual occupancy flags, and what rodent bait is doing here.
 		"occupied": compat.checked(row.get("occupied")),
 		"people_work_here": compat.checked(row.get("people_work_here")),
+		"door_label": row.get("door_label") or None,
+		"room_labels": [r.strip() for r in str(row.get("room_labels") or "").split(",") if r.strip()],
+		"old_names": [r.strip() for r in str(row.get("old_names") or "").splitlines() if r.strip()],
 		"rodent_bait_state": row.get("rodent_bait_state") or None,
 		"rodent_bait_state_since": str(row.get("rodent_bait_state_since") or "") or None,
 		"notes": row.get("notes") or None,
@@ -393,6 +400,17 @@ def list_housing_units(args: dict) -> ToolResult:
 	)
 	units = [_describe_unit(dict(row), today) for row in rows]
 	occupied = _current_assignments([unit["name"] for unit in units])
+	# v0.327.0. Occupied as the unit says, as its tag says, and whether they disagree.
+	from .. import housing_assets
+
+	if housing_assets.ready():
+		pairing = {r["unit"]: r for r in housing_assets.occupancy([u["name"] for u in units])}
+		for unit in units:
+			match = pairing.get(unit["name"]) or {}
+			unit["asset_occupied"] = match.get("asset_occupied")
+			unit["occupancy_mismatch"] = bool(match.get("mismatch"))
+		if as_bool(args, "mismatches_only", False):
+			units = [u for u in units if u.get("occupancy_mismatch")]
 
 	for unit in units:
 		unit["currently_assigned"] = len(occupied.get(unit["name"], []))
@@ -674,16 +692,37 @@ def _check_asset(asset: str, company: str, parcel: str) -> str:
 
 
 # ── 114. update_housing_unit ────────────────────────────────────────────────
+def _sync_occupancy(args: dict, company: str) -> ToolResult:
+	from .. import housing_assets
+
+	raw = args.get("units") or args.get("unit")
+	if raw in ("*", "all"):
+		raw = None  # every unit (in the caller's company, when one is given)
+	names = [unit_row(str(u), company)["name"] for u in (raw if isinstance(raw, list) else [raw] if raw else [])]
+	try:
+		result = housing_assets.sync_occupancy(names or None, as_str(args, "sync_occupancy_from").strip().lower(),
+		                                       dry_run=as_bool(args, "dry_run", True), company=company)
+	except ValueError as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+	verb = "would change" if result["dry_run"] else "changed"
+	return ToolResult(data=result, summary=f"occupied from {result['source']}: {verb} {result['changed']} unit(s)",
+	                  docstatus_delta="" if result["dry_run"] else "0 → 0 (updated)")
+
+
 def update_housing_unit(args: dict) -> ToolResult:
 	"""Change a registered unit. Cannot re-key it and cannot move it to another parcel."""
 	_require(HOUSING_UNIT)
 	company = _entity(args)
+	# v0.327.0. Occupied made consistent between units and their tags, from a chosen source of truth.
+	if as_str(args, "sync_occupancy_from"):
+		return _sync_occupancy(args, company or "")
 	row = unit_row(as_str(args, "unit", required=True), company or "")
 
 	if as_str(args, "unit_name"):
 		raise ToolError(
-			"unit_name cannot be changed: the docname is built from it and every assignment "
-			"points at that docname. Nothing was changed."
+			"unit_name cannot be changed here: the docname is built from it and every assignment "
+			"points at that docname. Rename it with record action=rename type=housing_unit (its tag "
+			"follows, the old name keeps resolving). Nothing was changed."
 		)
 	if as_str(args, "parcel"):
 		raise ToolError(
@@ -695,8 +734,8 @@ def update_housing_unit(args: dict) -> ToolResult:
 	doc = frappe.get_doc(HOUSING_UNIT, row["name"])
 	changes = {}
 
-	for key in ("access_card_zone", "notes"):
-		if key in args:
+	for key in ("access_card_zone", "notes", "door_label", "room_labels"):
+		if key in args and compat.has_field(HOUSING_UNIT, key):
 			_stage(changes, doc, key, as_str(args, key))
 	if "square_footage" in args:
 		_stage(changes, doc, "square_footage", as_float(args.get("square_footage"), "square_footage"))
@@ -951,6 +990,9 @@ def create_housing_assignment(args: dict) -> ToolResult:
 	deposit_paid = as_float(args.get("deposit_paid"), "deposit_paid")
 	doc = frappe.new_doc(HOUSING_ASSIGNMENT)
 	doc.unit = unit["name"]
+	# v0.327.0. Which room of a duplex (validated against the unit's room labels).
+	if as_str(args, "room") and compat.has_field("Housing Assignment", "room"):
+		doc.room = as_str(args, "room")
 	doc.employee = employee
 	doc.employee_name = employee_name or employee
 	doc.assigned_date = assigned_date

@@ -51,6 +51,9 @@
   "offline_section",
   "tag_uuid",
   "tag_aliases",
+  "old_names",
+  "door_label",
+  "room_labels",
   "request_id",
   "offline_col",
   "created_offline",
@@ -357,6 +360,25 @@
    "read_only": 1
   },
   {
+   "description": "v0.327.0. Names this record had before a rename (one per line). A scan or search for one of them lands here.",
+   "fieldname": "old_names",
+   "fieldtype": "Small Text",
+   "label": "Old Names",
+   "read_only": 1
+  },
+  {
+   "description": "v0.327.0. What is painted on the door, when it is not the unique name — a duplex whose doors both say 16 is '16&16'. Shown on the phone, tags and lists in place of the name.",
+   "fieldname": "door_label",
+   "fieldtype": "Data",
+   "label": "Door Label"
+  },
+  {
+   "description": "v0.327.0. The rooms inside this unit, comma-separated (16a, 16b) — for a duplex whose doors carry the same number. A housing assignment names its room.",
+   "fieldname": "room_labels",
+   "fieldtype": "Small Text",
+   "label": "Room Labels"
+  },
+  {
    "description": "The phone's request ID. A resend of the same request answers with this record.",
    "fieldname": "request_id",
    "fieldtype": "Data",
@@ -409,7 +431,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-11 21:00:00.000000",
+ "modified": "2026-10-13 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Housing Unit",

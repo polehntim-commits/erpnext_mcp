@@ -8877,7 +8877,7 @@ TOOLS = {
 		"CAPACITY AND LAWFUL OCCUPANCY ARE DIFFERENT QUESTIONS and both are reported. "
 		"One is how the operation uses the unit; the other is what 50 square feet per "
 		"occupant allows. A gap between them is the finding.",
-		{
+		{"mismatches_only": _field(_BOOLEAN, "v0.327.0. Only units whose occupied disagrees with their asset tag's (each row has asset_occupied and occupancy_mismatch)."), 
 			"owning_entity": _field(_STRING, "The company whose camp to read. `company` is an alias."),
 			"company": _field(_STRING, "Alias for owning_entity."),
 			"parcel": _field(_STRING, "Only units on this parcel."),
@@ -9004,7 +9004,7 @@ TOOLS = {
 		"CHANGING THE SQUARE FOOTAGE RECOMPUTES THE LAWFUL OCCUPANCY, but only when "
 		"the stored limit was the computed one. A figure somebody typed themselves is "
 		"kept.",
-		{
+		{"sync_occupancy_from": _field(_STRING, "v0.327.0. unit | asset | assignments: make units and their tags agree on occupied, taking this as the truth. With units (a list), or unit='*' for every unit. Dry run unless dry_run=false."), "units": _field({"type": "array", "items": {"type": "string"}}, "v0.327.0. sync_occupancy_from: these units."), "dry_run": _field(_BOOLEAN, "v0.327.0. sync_occupancy_from: default true."), "door_label": _field(_STRING, "v0.327.0. What is painted on the door ('16&16')."), "room_labels": _field(_STRING, "v0.327.0. A duplex's rooms, comma-separated ('16a, 16b')."), 
 			"unit": _field(_STRING, "The Housing Unit docname, or its unit name."),
 			"owning_entity": _field(_STRING, "Narrow a bare unit name to one company."),
 			"company": _field(_STRING, "Alias for owning_entity."),
@@ -9092,7 +9092,7 @@ TOOLS = {
 		"WHERE NO HR APP IS INSTALLED the employee is stored as text and the tool "
 		"says so, because a camp roster that cannot be written until an HR module "
 		"exists is a camp roster nobody keeps.",
-		{
+		{"room": _field(_STRING, "v0.327.0. Which room of the unit (one of its room labels, e.g. 16a)."), 
 			"unit": _field(_STRING, "The Housing Unit docname, or its unit name."),
 			"employee": _field(
 				_STRING,
@@ -19016,13 +19016,29 @@ TOOLS = {
 		"(drafts only; every field on Updatable Fields). types marks them `generic`.\n\n"
 		"v0.323.0: record update farm_task with body.locations (block names / tickers / aliases, or {location_type, "
 		"location}), body.work_spot {latitude, longitude} or body.clear_work_spot sets WHERE a task is — validated "
-		"(same company, not retired, not a closed task; needs allow_create_farm_task), not via Updatable Fields.",
-		{"action": _field(_STRING, "types, describe, create, update, deactivate, delete, get, list."),
+		"(same company, not retired, not a closed task; needs allow_create_farm_task), not via Updatable Fields.\n\n"
+		"v0.327.0: action=rename renames a record through Frappe's rename_doc — every Link, attachment, photo, print "
+		"job and timeline entry follows. DRY RUN BY DEFAULT: it lists each link that would move, the paired record, "
+		"printed tags and the order; dry_run=false does it (needs that type's update switch, e.g. allow_update_housing_unit, or allow_update_document). A Housing Unit and its Asset "
+		"Register tag are renamed TOGETHER (either one names both; unit_name follows; the pair is kept). The old name "
+		"is kept in old_names and still resolves when scanned. Refuses a name already taken (never merges), a "
+		"submitted document, and money / HR / security records. renames=[{name, new_name}, …] is one ordered batch "
+		"(16&17 → 16&16 before 15&16 → 16&17; a cycle goes through a temporary name), checked whole before anything "
+		"changes. door_label / room_labels set a duplex's painted label and its rooms (16a, 16b). queue_reprint=true "
+		"queues a new tag for a record whose tag was printed.",
+		{"action": _field(_STRING, "types, describe, create, update, deactivate, delete, get, list, rename."),
 		 "type": _field(_STRING, "The record type, e.g. supplier, field, housing_unit (record action=types lists them)."),
 		 "name": _field(_STRING, "The record (get, update, deactivate, delete)."),
 		 "body": _field(_OBJECT, "create / update: the fields, as the type's own tool takes them."),
 		 "filters": _field(_OBJECT, "list: the type's list arguments (limit, company, …)."),
-		 "reason": _field(_STRING, "deactivate / delete: why, where the type asks.")},
+		 "reason": _field(_STRING, "deactivate / delete: why, where the type asks; rename: on each timeline."),
+		 "new_name": _field(_STRING, "rename: the new name (for a housing unit, the unit name or the full docname)."),
+		 "renames": _field({"type": "array", "items": {"type": "object"}},
+		                   "rename: a batch, [{name, new_name, door_label?, room_labels?}, …]."),
+		 "dry_run": _field(_BOOLEAN, "rename: default true — show what would move; false renames."),
+		 "queue_reprint": _field(_BOOLEAN, "rename: queue a new tag where one was printed. Default false."),
+		 "door_label": _field(_STRING, "rename (housing): what is painted on the door, e.g. '16&16'."),
+		 "room_labels": _field(_STRING, "rename (housing): the rooms of a duplex, e.g. '16a, 16b'.")},
 		required=("action",),
 		mutating=True,
 		title="Record (every register)",

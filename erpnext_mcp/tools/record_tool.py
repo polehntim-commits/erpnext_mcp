@@ -286,8 +286,59 @@ def frappe_value(doctype: str, name: str, field: str):
 
 
 def record(args: dict) -> ToolResult:
+	if as_str(args, "action").strip().lower() == "rename":
+		return _rename(args)
 	records, _ = tables()
 	return _run(records, "record", RECORD_ACTIONS, args)
+
+
+def _rename_gate(type_: str, doctype: str) -> str:
+	"""The switch a real rename of this register needs: its own update tool, else update_document."""
+	records, _ = tables()
+	key = str(type_ or "").strip().lower().replace(" ", "_")
+	for candidate in (key, doctype.lower().replace(" ", "_")):
+		tool = (records.get(candidate) or {}).get("update")
+		if tool:
+			return tool
+	return "update_document"
+
+
+def _rename(args: dict) -> ToolResult:
+	"""v0.327.0. record action=rename — see `erpnext_mcp.renames`. Dry run unless dry_run=false."""
+	from .. import renames, settings
+	from ..args import as_bool
+
+	dry_run = as_bool(args, "dry_run", True)
+	batch = args.get("renames")
+	if not batch:
+		batch = [{"name": as_str(args, "name"), "new_name": as_str(args, "new_name"),
+		          **{k: args[k] for k in ("door_label", "room_labels") if k in args}}]
+	try:
+		planned = renames.plan(as_str(args, "type", required=True), batch)
+	except renames.RenameError as exc:
+		raise ToolError(f"{exc} Nothing was changed.") from None
+	lines = [f"{s['name']} → {s['new_name']}" + (f" (+ {s['partner']['doctype']} {s['partner']['name']} → "
+	         f"{s['partner']['new_name']})" if s.get("partner") else "") for s in planned["steps"]
+	         if not s.get("is_temporary")]
+	# A rename is an update of that register: it needs the type's own update switch (allow_update_housing_unit, …),
+	# or update_document's for a register without one — the rule every record write follows. A dry run needs none.
+	gate = _rename_gate(as_str(args, "type"), planned["doctype"])
+	if not dry_run and not settings.tool_enabled(gate):
+		raise ToolError(f"renaming a {planned['doctype']} needs 'allow_{gate}' ticked in ERPNext MCP Settings (a dry "
+		                "run does not). Nothing was changed.")
+	if dry_run:
+		return ToolResult(data={"dry_run": True, "write_switch": f"allow_{gate}", **planned,
+		                        "note": "Nothing was changed. Call again with dry_run=false to rename."},
+		                  summary="dry run: " + "; ".join(lines))
+	try:
+		done = renames.apply(planned, queue_reprint=as_bool(args, "queue_reprint", False),
+		                     reason=as_str(args, "reason"))
+	except Exception as exc:  # noqa: BLE001 — Frappe's own refusal, said plainly
+		raise ToolError(f"the rename stopped: {exc}. Renames already done in this call stand (see the Action Log "
+		                "and each record's timeline).") from None
+	return ToolResult(data={"dry_run": False, "renamed": done, "needs_new_tag": planned["needs_new_tag"],
+	                        "doctype": planned["doctype"]},
+	                  summary="renamed: " + "; ".join(lines), docstatus_delta="0 → 0 (renamed)")
 
 
 def document(args: dict) -> ToolResult:

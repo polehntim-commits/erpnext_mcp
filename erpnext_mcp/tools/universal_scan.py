@@ -836,6 +836,19 @@ def universal_scan(args: dict) -> ToolResult:
 		if resolved is not None:
 			break
 
+	# v0.327.0. A name a record had before a rename (MC-CABIN-6&6 - MC → 5&6) still lands on it.
+	renamed_from = None
+	if resolved is None:
+		from .. import renames
+
+		_doctype, current = renames.current_name(candidate)
+		if current:
+			for probe in _CASCADE:
+				resolved = probe(current, args)
+				if resolved is not None:
+					renamed_from = candidate
+					break
+
 	if resolved is None:
 		return _unresolved(raw, candidate, args)
 
@@ -851,6 +864,7 @@ def universal_scan(args: dict) -> ToolResult:
 	data = {
 		"content": raw,
 		"resolved_from": candidate,
+		"renamed_from": renamed_from,
 		"entity_type": entity_type,
 		"entity": resolved["entity"],
 		"entity_name": docname or None,
@@ -911,6 +925,7 @@ def _unresolved(raw: str, candidate: str, args: dict) -> ToolResult:
 		data={
 			"content": raw,
 			"resolved_from": candidate,
+			"renamed_from": None,
 			"entity_type": UNKNOWN,
 			"entity": None,
 			"entity_name": None,

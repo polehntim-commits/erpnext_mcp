@@ -3576,6 +3576,10 @@ RENAME_LINK_FIELDS = {
 	# Real Frappe repoints it; without this entry the double would not, and the
 	# test would report a broken rename as a working one.
 	"Farm Asset Type": (("Asset Register", "asset_type"),),
+	# v0.327.0. `record action=rename` on a cabin: its assignments follow the unit, and the pairing link follows
+	# the tag (real Frappe repoints both; `renames.apply` re-pairs explicitly as well).
+	"Housing Unit": (("Housing Assignment", "unit"),),
+	"Asset Register": (("Housing Unit", "asset_tag"),),
 	# v0.68.1. The five org masters `tools/org.py` renames. Every entry here is a
 	# Link a real bench would repoint, and the Employee columns are the point:
 	# correcting "Mill Creak" to "Mill Creek" has to carry the forty people

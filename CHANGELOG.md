@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.327.0 — 2026-10-13 — rename records through MCP; occupied kept in step; duplex rooms
+
+**Migrate.** Deploy `docs/deploy/v0.327.0_record_rename.md`. Tools: **1,153** (unchanged).
+
+- **`record action=rename`** goes through Frappe's `rename_doc`, so links, files, print jobs and the timeline follow.
+  - A dry run is the default. A real rename needs the type's own update switch.
+  - A Housing Unit and its Asset Register tag are renamed together and stay paired.
+  - Old names are kept in `old_names` and still scan.
+  - A taken name, a submitted document, and money / HR / security records are refused.
+  - Batches are ordered to avoid collisions (swaps go through a temporary name).
+  - Printed tags are flagged; `queue_reprint` queues a new one.
+- **Occupied:** a new cabin tag takes the unit's answer (it used to take "has beds"), and either side's save moves
+  the other. `list_housing_units mismatches_only` reports disagreements and `update_housing_unit
+  sync_occupancy_from=unit|asset|assignments` fixes them.
+- **Duplex rooms:** `door_label` and `room_labels` on the unit and its tag; Housing Assignment `room`.
+- Tests: `test_record_rename_v327`.
+
 ## 0.326.0 — 2026-10-13 — partial task progress saves on its own
 
 **Migrate.** Deploy `docs/deploy/v0.326.0_task_progress.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.67.0 (63).

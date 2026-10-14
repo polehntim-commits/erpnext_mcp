@@ -71,7 +71,8 @@ def _ensure(unit_name: str) -> dict:
 	if not ready():
 		return {"unit": unit_name, "asset": None, "outcome": "skipped", "reason": "not migrated yet"}
 	fields = compat.existing_fields(HOUSING_UNIT, ("name", "unit_type", "parcel", "owning_entity", "capacity",
-	                                               "gps_latitude", "gps_longitude", LINK))
+	                                               "gps_latitude", "gps_longitude", LINK, "occupied", "door_label",
+	                                               "room_labels"))
 	unit = dict(frappe.db.get_value(HOUSING_UNIT, unit_name, fields, as_dict=True) or {})
 	if not unit:
 		return {"unit": unit_name, "asset": None, "outcome": "skipped", "reason": "no such unit"}
@@ -106,7 +107,9 @@ def _adopt_or_create(unit: dict) -> tuple:
 	if latitude and longitude:
 		doc.gps_latitude, doc.gps_longitude = latitude, longitude
 	if compat.has_field(ASSET_REGISTER, "occupied"):
-		doc.occupied = 1 if int(unit.get("capacity") or 0) else 0
+		# v0.327.0: the unit's own answer. This used to be "has beds", which is how MC-CABIN-6&6 and 1&2 came to be
+		# Occupied on the asset and not on the unit.
+		doc.occupied = 1 if int(unit.get("occupied") or 0) else 0
 	doc.insert(ignore_permissions=True)
 	return doc.name, "created"
 
@@ -131,9 +134,20 @@ def _asset_type() -> str:
 
 
 def _keep_in_step(asset: str, unit: dict) -> bool:
-	row = dict(frappe.db.get_value(ASSET_REGISTER, asset, ["company", "gps_latitude", "gps_longitude", "description",
-	                                                      "retired_at"], as_dict=True) or {})
+	row = dict(frappe.db.get_value(ASSET_REGISTER, asset, compat.existing_fields(
+		ASSET_REGISTER, ("company", "gps_latitude", "gps_longitude", "description", "retired_at", "occupied",
+		                 "door_label", "room_labels")), as_dict=True) or {})
 	updates: dict = {}
+	# v0.327.0. A unit saved is the unit's answer: occupied, the door label and the rooms follow to its tag.
+	for field in ("occupied", "door_label", "room_labels"):
+		if field in unit and compat.has_field(ASSET_REGISTER, field):
+			mine, theirs = unit.get(field), row.get(field)
+			if field == "occupied":
+				mine, theirs = int(mine or 0), int(theirs or 0)
+			else:
+				mine, theirs = mine or None, theirs or None
+			if mine != theirs:
+				updates[field] = mine
 	if unit.get("owning_entity") and row.get("company") != unit.get("owning_entity"):
 		updates["company"] = unit["owning_entity"]
 	latitude, longitude = float(unit.get("gps_latitude") or 0), float(unit.get("gps_longitude") or 0)
@@ -178,3 +192,80 @@ def backfill() -> dict:
 		elif result["outcome"] == "skipped":
 			report["skipped"].append({"unit": result["unit"], "reason": result.get("reason")})
 	return report
+
+
+# ── v0.327.0: occupied, kept in step and checked ───────────────────────────
+def follow_asset(asset_doc) -> None:
+	"""Asset Register on_update: a cabin's tag marked occupied (or not) marks its unit the same. Never raises."""
+	try:
+		if not ready() or not compat.has_field(ASSET_REGISTER, "occupied"):
+			return
+		unit = frappe.db.get_value(HOUSING_UNIT, {LINK: asset_doc.name}, ["name", "occupied"], as_dict=True)
+		if unit and int(unit.get("occupied") or 0) != int(asset_doc.get("occupied") or 0):
+			frappe.db.set_value(HOUSING_UNIT, unit["name"], "occupied", int(asset_doc.get("occupied") or 0),
+			                    update_modified=False)
+	except Exception:  # noqa: BLE001
+		frappe.log_error(title=f"Asset {asset_doc.name}: occupied → housing unit", message=frappe.get_traceback())
+
+
+def _assigned(units: list) -> dict:
+	if not units or not compat.doctype_exists("Housing Assignment"):
+		return {}
+	out: dict = {}
+	for row in frappe.db.get_all("Housing Assignment", filters={"unit": ("in", units), "status": "Current"},
+	                             fields=["unit"], limit=100000) or []:
+		out[row["unit"]] = out.get(row["unit"], 0) + 1
+	return out
+
+
+def occupancy(units: list | None = None, company: str = "") -> list:
+	"""Each unit's occupied, its tag's occupied and its active assignments, with whether they disagree."""
+	filters: dict = {}
+	if units:
+		filters["name"] = ("in", list(units))
+	if company:
+		filters["owning_entity"] = company
+	rows = frappe.db.get_all(HOUSING_UNIT, filters=filters, fields=["name", "unit_name", "occupied", LINK],
+	                         order_by="unit_name asc", limit=100000) or []
+	tags = {r[LINK] for r in rows if r.get(LINK)}
+	asset_occupied = {a["name"]: int(a.get("occupied") or 0) for a in frappe.db.get_all(
+		ASSET_REGISTER, filters={"name": ("in", list(tags))}, fields=["name", "occupied"], limit=100000) or []} \
+		if tags and compat.has_field(ASSET_REGISTER, "occupied") else {}
+	assigned = _assigned([r["name"] for r in rows])
+	out = []
+	for r in rows:
+		unit_occ = int(r.get("occupied") or 0)
+		tag_occ = asset_occupied.get(r.get(LINK)) if r.get(LINK) else None
+		people = assigned.get(r["name"], 0)
+		out.append({"unit": r["name"], "unit_name": r.get("unit_name"), "asset": r.get(LINK) or None,
+		            "unit_occupied": bool(unit_occ), "asset_occupied": None if tag_occ is None else bool(tag_occ),
+		            "active_assignments": people,
+		            "mismatch": (tag_occ is not None and tag_occ != unit_occ)})
+	return out
+
+
+SOURCES = ("unit", "asset", "assignments")
+
+
+def sync_occupancy(units: list | None, source: str, *, dry_run: bool = True, company: str = "") -> dict:
+	"""Make each unit and its tag agree, taking `source` as the truth. Returns before / after per unit."""
+	if source not in SOURCES:
+		raise ValueError(f"sync_occupancy_from is one of: {', '.join(SOURCES)}.")
+	changes = []
+	for row in occupancy(units, company):
+		if source == "unit":
+			want = row["unit_occupied"]
+		elif source == "asset":
+			want = row["asset_occupied"] if row["asset_occupied"] is not None else row["unit_occupied"]
+		else:
+			want = row["active_assignments"] > 0
+		before = {"unit": row["unit_occupied"], "asset": row["asset_occupied"]}
+		if before["unit"] == want and before["asset"] in (want, None):
+			continue
+		changes.append({"unit": row["unit"], "asset": row["asset"], "before": before, "after": want,
+		                "active_assignments": row["active_assignments"]})
+		if not dry_run:
+			frappe.db.set_value(HOUSING_UNIT, row["unit"], "occupied", int(want), update_modified=False)
+			if row["asset"]:
+				frappe.db.set_value(ASSET_REGISTER, row["asset"], "occupied", int(want), update_modified=False)
+	return {"source": source, "dry_run": dry_run, "changes": changes, "changed": len(changes)}
