@@ -1,9 +1,9 @@
-**Deploy: v0.252.0 → v0.327.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
+**Deploy: v0.252.0 → v0.328.0 (OML today) — one build, one migrate; FarmOps 0.63.0 (build 59)**
 
-For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.327.0.md` and
+For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v0.328.0.md` and
 `~/Desktop/deploy-catchup-latest.txt`; only the expectations differ.
 
-- **Server**: erpnext_mcp main **`1c528a5`** (`__version__ = "0.327.0"`).
+- **Server**: erpnext_mcp main **`8043796`** (`__version__ = "0.328.0"`).
 - **App**: fafo_ios main **`6f932bb`** — FarmOps **0.63.0 (build 59)**, scheme **FarmOps**.
 
 **What is new since v0.252.0**
@@ -90,6 +90,7 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 | v0.325.0 | File links both ways: get_attachment_download_link (single-use ~10 min, streamed) + request_upload_url file_name / expected_size / company guard; Desk-host links by default (Tailscale), Public only by setting. Tools 1,152 → 1,153. **Migrate.** |
 | v0.326.0 | **URGENT** — unsticks Tim's five insurance-photo completions with no app update (Paused jobs completable; untagged photos meet Photo checklist steps; late evidence kept; refused phone writes in Error Log; patch link_orphan_task_photos). Partial progress saves on its own (/mobile/save_task_progress, Farm Task Evidence checklist_item/client_item_id). Tools 1,153. **Migrate.** Pairs with FarmOps 0.67.0 (63). |
 | v0.327.0 | Rename records through MCP (`record action=rename`: a Housing Unit and its Asset Register tag together, old names still scan, dry run by default, ordered batches, printed tags flagged); occupied kept in step between unit and tag (+ mismatch report / sync); duplex door_label / room_labels. Tools 1,153. **Migrate.** |
+| v0.328.0 | Task photos on the asset (side photos linked, not copied; never signatures/befores); asset → task history (open or done, by location too) + photo strip; task photo gallery (Desk, MCP, phone); EXIF/GPS kept on task and asset evidence; reviewed backfill (update_registered_asset link_task_photos, dry run); housing purchase/replacement value on the cabin's tag; unmapped phone fields logged. Tools 1,153. **Migrate.** Pairs with FarmOps 0.68.0 (64). |
 | app 0.43.0 | Spanish sweep: 133 longer explanations read in Spanish. |
 | app 0.44.0 | A refusal from the farm shows the server's Spanish on a Spanish phone. |
 | app 0.45.0 | Library documents on the asset screen and on a tag scan, kept on the phone. |
@@ -115,17 +116,17 @@ For a server already on v0.252.0. Same image and commands as `catchup_v0.231.2-v
 
 **1. Build (Tim)**
 
-Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.327.0`. Push fafo_ios main and archive
+Push erpnext_mcp main, build the fafo-erpnext image with `ERPNEXT_MCP_VERSION=0.328.0`. Push fafo_ios main and archive
 FarmOps 0.63.0 (build 59).
 
 **2. Pull, restart, ONE migrate** (commands in `~/Desktop/deploy-catchup-latest.txt`, section 3 for OML)
 
 Expect from the migrate: "rain archive check rule seeded OFF: weather_check_pruning_rain.", "Go / Hold presets brought to
-today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.327.0`.
+today's defaults (untouched, still OFF): go_hold_pruning_canker." the market commodity lines "Market Commodity sweet_cherries seeded.", "Market Commodity cantaloupe seeded." and "Market Commodity drafts seeded (unpublished): apples, pears, peaches, nectarines, apricots, plums, grapes, blueberries, watermelon, honeydew." and "contacts given a farm entity: N; left to their capturer only (several entities): M." and "seasonal programs seeded as drafts (publish in the Desk): fall_winterize, spring_startup" and "job templates seeded: orchard_removal, supplier_delivery, supplier_pickup", "supplier connectors seeded as drafts …", and `0.328.0`.
 
 **3. Checks**
 
-1. `get_server_status`: 0.327.0; the asset map's build stamp 0.327.0.
+1. `get_server_status`: 0.328.0; the asset map's build stamp 0.328.0.
 2. Desk → Compliance Rule: `weather_check_pruning_rain` present and disabled; `go_hold_pruning_canker` now reads the
    new defaults (chance_over 0.05 in, dry 48 h) — unless somebody had edited or enabled it, in which case it is as they
    left it.
