@@ -132,6 +132,29 @@ class TheBackfillIsReviewedFirst(PhotoCase):
 		self.assertEqual([f["file_url"] for f in self.links_on("MC-BARN")], ["/private/files/B_0.jpg"])
 
 
+class OMLsMcBarnIsRepaired(PhotoCase):
+	"""v0.329.1. On OML 2026-10-14 the first apply made "links" that Frappe re-encoded onto the hand copy's file. The
+	corrected backfill treats those rows as copies too: a real link to the task's file, then both copies removed."""
+
+	def test_a_bad_link_and_the_hand_copy_are_replaced_by_one_real_link(self):
+		task = self.barn_task()
+		self.tool_data("complete_farm_task", {"task": task, "worker_id": "EMP-001", "checklist": FOUR,
+		                                      "evidence_files": [{"file": "B0", "checklist_item": FOUR[0]}]})
+		for f in self.links_on("MC-BARN"):
+			STORE.tables["File"].pop(f["name"])
+		copy = {"file_name": "MC-BARN_FRONT_2026-10-13.jpg", "attached_to_doctype": "Asset Register",
+		        "attached_to_name": "MC-BARN", "file_url": "/private/files/MC-BARN_FRONT_2026-10-13.jpg",
+		        "content_hash": "re-encoded"}
+		STORE.seed("File", [{"name": "HAND", **copy}, {"name": "BADLINK", **copy}])
+		STORE.commit()
+		dry = asset_photos.backfill([task])
+		self.assertEqual(sorted(m["file"] for m in dry["manual_copies"]), ["BADLINK", "HAND"])
+		done = asset_photos.backfill([task], dry_run=False, replace_manual=True)
+		self.assertEqual(sorted(r["file"] for r in done["manual_replaced"] if r["outcome"] == "removed"),
+		                 ["BADLINK", "HAND"])
+		self.assertEqual([f["file_url"] for f in self.links_on("MC-BARN")], ["/private/files/B_0.jpg"])
+
+
 class ExifIsKeptForWorkNotPeople(PhotoCase):
 	def test_which_records_keep_it(self):
 		self.assertTrue(asset_photos.keeps_exif("Farm Task Assignment"))

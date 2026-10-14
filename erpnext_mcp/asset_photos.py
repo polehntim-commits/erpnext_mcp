@@ -284,8 +284,14 @@ def link_file(file_name: str, asset: str, name_as: str, *, dry_run: bool = False
 	                      "is_private": src.get("is_private") or 0, "content_hash": src.get("content_hash"),
 	                      "file_size": src.get("file_size"), "attached_to_doctype": ASSET, "attached_to_name": asset})
 	doc.flags.ignore_permissions = True
+	# v0.329.1. A REFERENCE, NOT A NEW UPLOAD. Without this flag Frappe's File.before_insert reads the bytes back and
+	# saves them again — stripping EXIF, re-encoding, and then (finding a same-content file on the asset) pointing the
+	# row at THAT file. On OML 2026-10-14 that made MC-BARN's four "links" re-encoded copies of the hand copies.
+	doc.flags.copy_from_existing_file = True
 	doc.insert(ignore_permissions=True)
-	if src.get("content_hash") and not frappe.db.get_value("File", doc.name, "content_hash"):
+	if frappe.db.get_value("File", doc.name, "file_url") != src["file_url"]:
+		frappe.db.set_value("File", doc.name, "file_url", src["file_url"], update_modified=False)
+	if src.get("content_hash") and frappe.db.get_value("File", doc.name, "content_hash") != src["content_hash"]:
 		frappe.db.set_value("File", doc.name, "content_hash", src["content_hash"], update_modified=False)
 	return {"asset": asset, "file": file_name, "outcome": "linked", "link": doc.name}
 
@@ -336,9 +342,11 @@ def manual_copies(assets: list) -> list:
 			m = MANUAL_NAME.match(str(f.get("file_name") or ""))
 			if not m:
 				continue
-			shared = frappe.db.count("File", {"file_url": f["file_url"], "name": ("!=", f["name"])})
-			if shared:
-				continue  # a link, not a copy
+			# v0.329.1: a LINK is a row whose file_url is a task evidence file's. Anything else under this name —
+			# a hand-attached re-encoded copy, or a row that re-encoded on insert before v0.329.1 — is a copy.
+			if frappe.db.exists("File", {"file_url": f["file_url"], "name": ("!=", f["name"]),
+			                             "attached_to_doctype": ASSIGNMENT}):
+				continue
 			out.append({"asset": asset, "file": f["name"], "file_name": f["file_name"], "side": m.group("side"),
 			            "date": m.group("date"), "size": f.get("file_size")})
 	return out

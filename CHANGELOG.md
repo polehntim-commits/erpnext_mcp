@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.329.1 — 2026-10-14 — task photo links reference the original file (fix)
+
+No migrate. Deploy `docs/deploy/v0.329.1_asset_links_fix.md`.
+
+- **The fix:** `asset_photos.link_file` now inserts with Frappe's `copy_from_existing_file`. Before, Frappe re-read,
+  stripped and re-encoded the original and pointed the "link" at a same-content hand copy (MC-BARN on OML,
+  2026-10-14).
+- **Hand copies:** an asset file is a copy unless its file_url is a task evidence file's. This catches the
+  hand-attached copies and those four bad rows, so `replace_manual` cleans both.
+- Tests: `test_asset_photos_v328.OMLsMcBarnIsRepaired`.
+
 ## 0.329.0 — 2026-10-14 — "Can't take this": skippable checklist steps; template-driven task screen
 
 **Migrate.** Deploy `docs/deploy/v0.329.0_skips.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.69.0 (65).
