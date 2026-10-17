@@ -74,7 +74,7 @@
 	//:
 	//: A test holds this string equal to `erpnext_mcp.__version__`, so it cannot
 	//: drift into being a stamp that lies.
-	const BUILD = "0.329.1";
+	const BUILD = "0.330.0";
 	if (window.erpnext_mcp && window.erpnext_mcp.geo_map) {
 		window.erpnext_mcp.geo_map.asset_map_build = BUILD;
 	}
@@ -284,7 +284,11 @@
 		erpnext_mcp.geo_map.load_leaflet()
 			.then(function (L) {
 				var map = L.map(canvas, { scrollWheelZoom: false });
-				erpnext_mcp.geo_map.add_base_layers(L, map);
+				// v0.330.0. The Layers button; an asset has no outline of its own, so nothing is clipped.
+				erpnext_mcp.geo_map.add_base_layers(L, map, null, {
+					context: "Asset Register",
+					overlay_context: "Asset Register:" + frm.docname,
+				});
 
 				// Draw the zone boundary as faint context underneath.
 				if (zone && zone.geometry) {

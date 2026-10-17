@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.330.0 — 2026-10-17 — one Layers button on every map: base map, slope / aspect overlay, opacity, legend
+
+**Migrate.** Deploy `docs/deploy/v0.330.0_map_layers.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.71.0 (67).
+
+- **Layers button on every Desk map** (`public/js/map_layers.js`, loaded by `geo_map_widget.js`): Farm Task, Field,
+  Parcel, Irrigation Zone, Asset Register, Housing Unit, Field Pin, Farm Shift and Lot Line forms, `/app/land-map`
+  and `/app/farm-overview`. Base: Satellite / Street / Hybrid. Overlay: None / Slope / Aspect. Opacity, legend on/off.
+  Remembered per kind of map, and the overlay per record (`localStorage`).
+- **Clipped to the record's outline** (task blocks, field, parcel, zone) on a canvas tile; the farm overview and the
+  land map paint the whole build. Grade legend marks Steep / Very steep "Dozer: sign-off"; aspect legend is a wheel.
+- **Same layer data as the phone:** `farm_overview.terrain_layers` (new GET) answers the two descriptors with the
+  session-authenticated `terrain_tile` URL. The overview keeps its old overlay entries only as the fallback when the
+  switcher cannot load.
+- **Share links:** `/farmops/api/job/<token>/terrain` and `…/tiles/<layer>/{z}/{x}/{y}.png`, token-gated, served only
+  over the job's own blocks (+200 m; elsewhere the transparent tile), metered on the tile rate, no company in the
+  descriptor. The job page has the same Layers button (Satellite / Street / Hybrid via USGS).
+- **`Farm Task Template.default_map_overlay`** (None / Slope / Aspect): what a task's map opens on, phone and Desk,
+  until somebody picks. Set with `update_farm_task_template default_map_overlay=Slope`; reaches the phone as
+  `default_map_overlay` on the task and the Desk through `pin_moves.task_map`. Nothing is seeded — the farm sets it.
+- Tests: `test_map_layers_v330` (node harness for the switcher, the template field, the share-link gates).
+
 ## 0.329.1 — 2026-10-14 — task photo links reference the original file (fix)
 
 No migrate. Deploy `docs/deploy/v0.329.1_asset_links_fix.md`.

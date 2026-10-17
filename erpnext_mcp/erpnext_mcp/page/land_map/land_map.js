@@ -260,7 +260,7 @@ function erpnext_mcp_land_map(page) {
 
 		drawn_layer = L.featureGroup().addTo(map);
 		easement_layer = L.featureGroup().addTo(map);
-		erpnext_mcp.geo_map.add_base_layers(L, map, overlays);
+		erpnext_mcp.geo_map.add_base_layers(L, map, overlays, { context: "land_map" });
 
 		const bounds = answer.bounds;
 		if (bounds) {

@@ -26,7 +26,25 @@
 			{ maxZoom: 19, attribution: "Imagery: USGS The National Map" });
 		var street = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 			{ maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" });
-		sat.addTo(map); L.control.layers({ "Satellite": sat, "Streets": street }).addTo(map);
+		var hybrid = L.tileLayer("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}",
+			{ maxZoom: 19, attribution: "Imagery and labels: USGS The National Map" });
+		// v0.330.0. The same Layers button as the farm's own maps: base map, None / Slope / Aspect painted inside this
+		// job's blocks, opacity and legend. Without the switcher file, the plain base-layer control it replaced.
+		if (window.FarmMapLayers) {
+			window.FarmMapLayers.install(L, map, {
+				bases: [{ key: "satellite", label: "Satellite", layer: sat }, { key: "street", label: "Street", layer: street },
+					{ key: "hybrid", label: "Hybrid", layer: hybrid }],
+				terrain: function () {
+					return fetch(base + "/terrain", { credentials: "omit" })
+						.then(function (r) { return r.ok ? r.json() : { layers: [] }; })
+						.then(function (j) { return j.layers || []; });
+				},
+				clip: (d.blocks || []).map(function (b) { return b.geojson; }),
+				context: "job_page", overlay_context: "job_page", credentials: "omit",
+			});
+		} else {
+			sat.addTo(map); L.control.layers({ "Satellite": sat, "Streets": street }).addTo(map);
+		}
 		var group = L.featureGroup().addTo(map);
 		(d.blocks || []).forEach(function (b) { L.geoJSON(b.geojson, { style: { color: "#ffd400", weight: 3, fillOpacity: 0.08 } }).bindTooltip(b.label).addTo(group); });
 		(d.hazards || []).forEach(function (h) {

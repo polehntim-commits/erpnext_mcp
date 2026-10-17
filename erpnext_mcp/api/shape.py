@@ -255,6 +255,13 @@ def task(row: dict, assignment: dict | None = None, clock=None) -> dict:
 	# the rows that came off a template.
 	if row.get("template"):
 		out["template"] = row["template"]
+		# v0.330.0. The overlay the phone's task map opens on (None / Slope / Aspect), from the template — present
+		# only where the farm set one.
+		overlay = row.get("default_map_overlay") or _remembered(
+			"map_overlay", row["template"], lambda: task_templates.default_map_overlay(row["template"]) or ""
+		)
+		if overlay:
+			out["default_map_overlay"] = overlay
 		# v0.98.0. THE PROCEDURE ITSELF, NOT ONLY THE NAME OF THE RECORD THAT
 		# HOLDS IT. v0.96.0 put the template's docname in the answer, which told
 		# the app which record to ask for and left it a second round trip away

@@ -127,6 +127,18 @@ frappe.provide("erpnext_mcp.geo_map");
 	const SATELLITE_ATTRIBUTION =
 		"Imagery &copy; Esri — Esri, Maxar, Earthstar Geographics, and the GIS User Community";
 
+	//: v0.330.0. Hybrid: the same imagery with Esri's place names and roads over it (both free, same credit).
+	const HYBRID_PLACES_URL =
+		"https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
+	const HYBRID_ROADS_URL =
+		"https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}";
+
+	//: v0.330.0. The one Layers button every map in this app carries — base map, overlay (None / Slope / Aspect),
+	//: opacity and legend. Framework-free so the share-link page uses the same file; see `map_layers.js`.
+	const MAP_LAYERS_JS = "/assets/erpnext_mcp/js/map_layers.js?v=0.330.0";
+	//: The Desk's slope descriptors, tile URLs pointing at `farm_overview.terrain_tile` (session-authenticated).
+	const TERRAIN_METHOD = "erpnext_mcp.farm_overview.terrain_layers";
+
 	const STREET_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 	const STREET_ATTRIBUTION =
 		'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -236,8 +248,38 @@ frappe.provide("erpnext_mcp.geo_map");
 						: reject(new Error("loaded but empty")),
 				reject
 			);
-		});
+		}).then((L) => load_layer_switcher().then(() => L));
 		return loading;
+	}
+
+	/** v0.330.0. The Layers button. A switcher that will not load leaves the old Leaflet control in its place. */
+	let loading_switcher = null;
+	function load_layer_switcher() {
+		if (window.FarmMapLayers) {
+			return Promise.resolve(window.FarmMapLayers);
+		}
+		if (!loading_switcher) {
+			loading_switcher = load_script(MAP_LAYERS_JS).then(
+				() => window.FarmMapLayers || null,
+				() => null
+			);
+		}
+		return loading_switcher;
+	}
+
+	/** The slope descriptors, read once per page and only when somebody picks an overlay. */
+	let terrain_promise = null;
+	function desk_terrain() {
+		if (!terrain_promise) {
+			terrain_promise = frappe
+				.call({ method: TERRAIN_METHOD, type: "GET" })
+				.then((r) => (r && r.message) || [])
+				.catch(() => {
+					terrain_promise = null; // ask again on the next pick
+					return [];
+				});
+		}
+		return terrain_promise;
 	}
 
 	/** Leaflet.draw on top of Leaflet, loaded once per page. Resolves with `L`.
@@ -481,14 +523,50 @@ frappe.provide("erpnext_mcp.geo_map");
 	 * The seven form callers pass nothing and get exactly the control they always
 	 * had: `{}` is what the third argument was hard-coded to before this release.
 	 */
-	function add_base_layers(L, map, overlays) {
+	/*
+	 * v0.330.0. THE BASE LAYERS AND THE SLOPE OVERLAYS MOVE INTO ONE LAYERS BUTTON (`map_layers.js`): Satellite /
+	 * Street / Hybrid, None / Slope / Aspect, opacity and a legend — the same model the phone's layers sheet uses.
+	 * `options` (all optional): `context` (what the choice is remembered under), `overlay_context` (the record, so a
+	 * template's default still reaches a task nobody has touched), `clip` (the outline the colours are painted
+	 * inside), `default_overlay`, and `terrain` (descriptors, or a function returning a Promise of them — the Desk's
+	 * own by default). The operational groups a caller hands stay in Leaflet's control, now holding only those.
+	 * If the switcher cannot be fetched, the control is exactly what it was before this release.
+	 */
+	function add_base_layers(L, map, overlays, options) {
 		const satellite = L.tileLayer(SATELLITE_URL, {
 			attribution: SATELLITE_ATTRIBUTION,
 			maxZoom: 19,
 		});
 		const streets = L.tileLayer(STREET_URL, { attribution: STREET_ATTRIBUTION, maxZoom: 19 });
-		satellite.addTo(map);
 		const groups = overlays || {};
+		const switcher_lib = window.FarmMapLayers;
+		if (switcher_lib && switcher_lib.install && L.GridLayer) {
+			options = options || {};
+			const hybrid = L.layerGroup([
+				L.tileLayer(SATELLITE_URL, { attribution: SATELLITE_ATTRIBUTION, maxZoom: 19 }),
+				L.tileLayer(HYBRID_PLACES_URL, { maxZoom: 19 }),
+				L.tileLayer(HYBRID_ROADS_URL, { maxZoom: 19 }),
+			]);
+			const control = Object.keys(groups).length
+				? L.control.layers({}, groups, { position: "topright", collapsed: false }).addTo(map)
+				: null;
+			const switcher = switcher_lib.install(L, map, {
+				bases: [
+					{ key: "satellite", label: "Satellite", layer: satellite },
+					{ key: "street", label: "Street", layer: streets },
+					{ key: "hybrid", label: "Hybrid", layer: hybrid },
+				],
+				terrain: options.terrain || desk_terrain,
+				clip: options.clip || null,
+				context: options.context || "desk",
+				overlay_context: options.overlay_context || null,
+				default_overlay: options.default_overlay || null,
+				credentials: "same-origin",
+				t: __,
+			});
+			return { satellite: satellite, streets: streets, hybrid: hybrid, control: control, switcher: switcher };
+		}
+		satellite.addTo(map);
 		const control = L.control
 			.layers(
 				{ [__("Satellite")]: satellite, [__("Streets")]: streets },
@@ -504,6 +582,23 @@ frappe.provide("erpnext_mcp.geo_map");
 			)
 			.addTo(map);
 		return { satellite: satellite, streets: streets, control: control };
+	}
+
+	/** v0.330.0. What a form's Layers button is remembered under and painted inside: the record's own outline. */
+	function layer_options(frm, spec) {
+		const doctype = (frm && frm.doctype) || "desk";
+		const geometries = (spec.geometries || [])
+			.map((entry) => entry && entry.geometry)
+			.filter(Boolean);
+		if (spec.editable && spec.editable.geometry) {
+			geometries.push(spec.editable.geometry);
+		}
+		return {
+			context: doctype,
+			overlay_context: frm && frm.docname ? `${doctype}:${frm.docname}` : doctype,
+			clip: geometries.length ? geometries : null,
+			default_overlay: spec.default_overlay || null,
+		};
 	}
 
 	/**
@@ -549,7 +644,7 @@ frappe.provide("erpnext_mcp.geo_map");
 		(editable ? load_draw() : load_leaflet())
 			.then((L) => {
 				const map = L.map(canvas, { scrollWheelZoom: false });
-				add_base_layers(L, map);
+				add_base_layers(L, map, null, layer_options(frm, spec));
 				const bounds = [];
 
 				(spec.geometries || []).forEach((entry) => {
@@ -2150,7 +2245,7 @@ frappe.provide("erpnext_mcp.geo_map");
 		load_leaflet()
 			.then((L) => {
 				const map = L.map(canvas, { scrollWheelZoom: false });
-				add_base_layers(L, map);
+				add_base_layers(L, map, null, layer_options(frm, spec));
 				let bounds = null;
 				(spec.geometries || []).forEach((entry) => {
 					if (!entry || !entry.geometry) {
@@ -2248,6 +2343,7 @@ frappe.provide("erpnext_mcp.geo_map");
 	//: Exporting the loader is what stops a second copy of `DRAW_JS` existing.
 	erpnext_mcp.geo_map.load_draw = load_draw;
 	erpnext_mcp.geo_map.add_base_layers = add_base_layers;
+	erpnext_mcp.geo_map.load_layer_switcher = load_layer_switcher;
 	erpnext_mcp.geo_map.MAX_FIT_ZOOM = MAX_FIT_ZOOM;
 	erpnext_mcp.geo_map.POINT_ZOOM = POINT_ZOOM;
 	erpnext_mcp.geo_map.HOME_VIEW = HOME_VIEW;

@@ -12003,6 +12003,7 @@ TOOLS = {
 			"estimated_duration_minutes": _field(_INTEGER, "New estimate, in minutes."),
 			"dispatch_mode": _field(_STRING, "Either, Dispatched or Self-pick."),
 			"default_urgency": _field(_STRING, "Low, Normal, High or Critical."),
+			"default_map_overlay": _field(_STRING, "v0.330.0. What its tasks' maps open on, phone and Desk, until somebody picks a layer: None, Slope or Aspect (empty clears it). E.g. Slope for burn, dozer and tree-removal templates."),
 			"default_start_after_days": _field(_INTEGER, "v0.236.0. A task raised from this template starts this many days later."),
 			"daily_check": _field(_STRING, "v0.237.0. 'Start of Day' or 'End of Day' makes this a daily check: with no applies_to_asset_types the BASE check, with them an ADD-ON for those asset types."),
 			"default_due_after_days": _field(_INTEGER, "v0.236.0. …and is due this many days after it is raised."),

@@ -28,6 +28,7 @@
   "estimated_duration_minutes",
   "work_col",
   "dispatch_mode",
+  "default_map_overlay",
   "evidence_section",
   "evidence_required",
   "record_section",
@@ -188,6 +189,13 @@
    "in_standard_filter": 1,
    "label": "Dispatch Mode",
    "options": "Either\nDispatched\nSelf-pick"
+  },
+  {
+   "fieldname": "default_map_overlay",
+   "fieldtype": "Select",
+   "label": "Default Map Overlay",
+   "options": "\nNone\nSlope\nAspect",
+   "description": "What the task's map opens on, on the phone and the Desk, until somebody picks a layer. Slope for a burn, dozer or tree-removal job; blank is None."
   },
   {
    "fieldname": "evidence_section",
@@ -533,7 +541,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-28 18:00:00.000000",
+ "modified": "2026-10-17 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext MCP",
  "name": "Farm Task Template",

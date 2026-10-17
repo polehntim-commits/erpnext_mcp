@@ -507,14 +507,17 @@ class ItWritesNothing(OverviewTestCase):
 		v0.185.0 added `terrain_tile`: the Desk's door to the slope rasters, since
 		the phone's (the farmops sidecar) authenticates a device a browser does
 		not hold. It reads a cached PNG and writes nothing — see
-		test_farm_overview_terrain.py."""
+		test_farm_overview_terrain.py.
+
+		v0.330.0 adds `terrain_layers`: the same two descriptors, for the Layers
+		button on every other Desk map. A GET that reads one JSON file."""
 		published = {
 			name
 			for name in dir(farm_overview)
 			if not name.startswith("_")
 			and getattr(getattr(farm_overview, name), "__wrapped_whitelisted__", False)
 		}
-		self.assertEqual(published, {"farm_overview", "terrain_tile"})
+		self.assertEqual(published, {"farm_overview", "terrain_layers", "terrain_tile"})
 
 
 # ── 6 ─────────────────────────────────────────────────────────────────────────

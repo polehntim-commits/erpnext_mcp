@@ -167,6 +167,10 @@ def task_map(task: str) -> dict:
 	described["work_spot_moved"] = {"by": spot.get("moved_by"), "at": str(spot.get("moved_at") or "") or None} \
 		if spot else None
 	described["may_move"] = may_move() and frappe.has_permission(TASK, "write", task)
+	# v0.330.0. What the form map's Layers button opens on until somebody picks one.
+	from . import task_templates
+
+	described["default_map_overlay"] = task_templates.default_map_overlay(frappe.db.get_value(TASK, task, "template"))
 	return described
 
 

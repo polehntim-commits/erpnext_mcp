@@ -443,6 +443,82 @@ def _outlines(job_doc) -> list:
 	return out
 
 
+#: v0.330.0. How far past the job's blocks a share link may read slope tiles — enough to see the ground run on past
+#: the outline, not so much that a contractor's link is a key to the whole farm's terrain.
+TERRAIN_BUFFER_METRES = 200.0
+TERRAIN_LAYER_KEYS = ("slope_aspect", "slope_grade")
+
+
+def terrain_extent(job: str) -> tuple | None:
+	"""The job's blocks as a mercator box `(xmin, ymin, xmax, ymax)` padded by `TERRAIN_BUFFER_METRES`, or None."""
+	from . import slope_aspect
+
+	points = []
+
+	def walk(coords):
+		if isinstance(coords, (list, tuple)) and len(coords) >= 2 and all(isinstance(c, (int, float)) for c in coords[:2]):
+			points.append(slope_aspect.to_mercator(coords[0], coords[1]))
+			return
+		for part in coords or []:
+			walk(part)
+
+	doc = frappe.get_doc(JOB, job)
+	for outline in _outlines(doc):
+		shape = outline["geojson"]
+		geometry = shape.get("geometry", shape) if isinstance(shape, dict) else None
+		if isinstance(geometry, dict):
+			walk(geometry.get("coordinates"))
+	if not points:
+		return None
+	xs, ys = [p[0] for p in points], [p[1] for p in points]
+	pad = TERRAIN_BUFFER_METRES
+	return (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad)
+
+
+def terrain_descriptors(job: str, token: str) -> list:
+	"""The two slope descriptors for a share link's Layers button, tiles under the link itself. v0.330.0.
+
+	Same `describe()` the phone and the Desk read; the tile URL points at `/farmops/api/job/<token>/tiles/<layer>/…`
+	and the bounds are narrowed to the job's own blocks. A job with no traced block gets `[]` — nothing to clip to,
+	and nothing a contractor needs the farm's terrain for.
+	"""
+	from . import slope_aspect, slope_grade
+
+	extent = terrain_extent(job)
+	if extent is None:
+		return []
+	west, south = slope_aspect.to_lonlat(extent[0], extent[1])
+	east, north = slope_aspect.to_lonlat(extent[2], extent[3])
+	out = []
+	for key, describe in (("slope_grade", slope_grade.describe), ("slope_aspect", slope_aspect.describe)):
+		spec = describe()
+		for private in ("company", "products", "equipment", "equipment_defaults", "elevation_metres"):
+			spec.pop(private, None)
+		spec["key"] = key
+		spec["tile_url_template"] = f"/farmops/api/job/{token}/tiles/{key}/{{z}}/{{x}}/{{y}}.png"
+		if spec.get("available"):
+			spec["bounds"] = {"west": west, "south": south, "east": east, "north": north}
+		out.append(spec)
+	return out
+
+
+def terrain_tile(job: str, layer: str, z: int, x: int, y: int) -> bytes | None:
+	"""One slope tile for a share link, or the transparent tile outside the job's blocks. None: never built."""
+	from . import slope_aspect, slope_grade
+
+	if layer not in TERRAIN_LAYER_KEYS:
+		raise JobError("Not a slope layer.")
+	extent = terrain_extent(job)
+	if extent is None:
+		return slope_aspect.TRANSPARENT_TILE
+	tx0, ty0, tx1, ty1 = slope_aspect.tile_bounds(z, x, y)
+	if tx1 <= extent[0] or tx0 >= extent[2] or ty1 <= extent[1] or ty0 >= extent[3]:
+		return slope_aspect.TRANSPARENT_TILE
+	if layer == "slope_aspect":
+		return slope_aspect.tile_png(z, x, y)
+	return slope_grade.tile_png(z, x, y)
+
+
 def _expected_lines(job_doc) -> list:
 	if not job_doc.purchase_order or not compat.doctype_exists("Purchase Order Item"):
 		return []

@@ -274,6 +274,45 @@ def record_data_of(row: dict) -> dict:
 	return dict(value) if isinstance(value, dict) else {}
 
 
+#: v0.330.0. The overlay a task's map opens on — phone and Desk — until somebody picks one. A template field, so the
+#: farm sets it per kind of work (`update_farm_task_template default_map_overlay=Slope`) rather than code deciding
+#: that a burn means slope.
+MAP_OVERLAY_FIELD = "default_map_overlay"
+MAP_OVERLAYS = ("None", "Slope", "Aspect")
+_MAP_OVERLAY_ALIASES = {
+	"": "",
+	"none": "None",
+	"off": "None",
+	"slope": "Slope",
+	"grade": "Slope",
+	"slope_grade": "Slope",
+	"steepness": "Slope",
+	"aspect": "Aspect",
+	"slope_aspect": "Aspect",
+}
+
+
+def map_overlay_value(raw) -> str:
+	"""'slope', 'Slope', 'slope_grade' → 'Slope'; '' stays ''. Raises ValueError on anything else."""
+	key = str(raw or "").strip().lower()
+	if key not in _MAP_OVERLAY_ALIASES:
+		raise ValueError(f"default_map_overlay is one of {', '.join(MAP_OVERLAYS)} (or empty), got {raw!r}")
+	return _MAP_OVERLAY_ALIASES[key]
+
+
+def default_map_overlay(template) -> str | None:
+	"""The template's default overlay, or None. One indexed read; a task LIST goes through `shape._remembered`."""
+	name = str(template or "").strip()
+	if not name or not compat.has_field(TEMPLATE_DOCTYPE, MAP_OVERLAY_FIELD):
+		return None
+	try:
+		value = frappe.db.get_value(TEMPLATE_DOCTYPE, name, MAP_OVERLAY_FIELD)
+	except Exception:
+		return None
+	value = str(value or "").strip()
+	return value if value in MAP_OVERLAYS else None
+
+
 def describe(name: str, with_checklist: bool = False) -> dict:
 	"""One template as the tools report it."""
 	row = template_row(name)
@@ -325,6 +364,9 @@ def describe(name: str, with_checklist: bool = False) -> dict:
 	for key in (*PLAN_FIELDS, "shop_work", "shop_skill", "tools_parts", "safety_note"):
 		if row.get(key) not in (None, "", 0):
 			described[key] = row.get(key)
+	overlay = default_map_overlay(described["name"])
+	if overlay:
+		described[MAP_OVERLAY_FIELD] = overlay
 	if with_checklist:
 		described["checklist"] = checklist
 	return described

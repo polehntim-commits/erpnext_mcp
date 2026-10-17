@@ -996,6 +996,12 @@ def _describe_task(row: dict) -> dict:
 		out["training"] = training
 	if row.get("template"):
 		out["template"] = row["template"]
+		# v0.330.0. The template's default map overlay, where the farm set one.
+		from .. import task_templates as _task_templates
+
+		overlay = _task_templates.default_map_overlay(row["template"])
+		if overlay:
+			out["default_map_overlay"] = overlay
 	# v0.203.0. Rodent bait: the tier it was raised in, the side, the product and
 	# what a check found. Present only on bait tasks.
 	for key in (

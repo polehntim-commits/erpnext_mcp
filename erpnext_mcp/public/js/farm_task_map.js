@@ -42,6 +42,8 @@ frappe.ui.form.on("Farm Task", {
 						: [],
 					may_move: !!data.may_move,
 					note: note,
+					// v0.330.0. The template's default overlay (Slope for a burn, say) until somebody picks one.
+					default_overlay: data.default_map_overlay || null,
 					on_move(lat, lon) {
 						frappe
 							.call({

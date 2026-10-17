@@ -1211,6 +1211,17 @@ def _terrain_layers() -> list:
 	return out
 
 
+@frappe.whitelist(methods=["GET"])
+def terrain_layers() -> list:
+	"""The two slope descriptors for any Desk map's Layers button (forms, Land Map). v0.330.0.
+
+	The same list `/app/farm-overview` carries in its answer — `slope_aspect.describe` and `slope_grade.describe`
+	with the tile URL pointed at `terrain_tile` — for a map that does not read the overview. Same gate: a login that
+	may read neither Parcel nor Field gets `[]`, and its Layers button offers no overlay.
+	"""
+	return _terrain_layers()
+
+
 @frappe.whitelist()
 def terrain_tile(layer=None, z=None, x=None, y=None) -> None:
 	"""One slope tile for the Desk map, as `image/png`. v0.185.0.
@@ -1265,5 +1276,6 @@ __all__ = [
 	"parse_geometry",
 	"points_of",
 	"readable_companies",
+	"terrain_layers",
 	"terrain_tile",
 ]

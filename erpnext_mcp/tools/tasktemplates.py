@@ -328,6 +328,16 @@ def update_farm_task_template(args: dict) -> ToolResult:
 			changes["crew_sections"] = {"to": [s["label"] for s in sections]}
 			doc.crew_sections = json.dumps(sections)
 
+	# v0.330.0. The overlay its tasks' maps open on (None / Slope / Aspect; empty clears it).
+	if task_templates.MAP_OVERLAY_FIELD in args and compat.has_field(TEMPLATE, task_templates.MAP_OVERLAY_FIELD):
+		try:
+			value = task_templates.map_overlay_value(args.get(task_templates.MAP_OVERLAY_FIELD))
+		except ValueError as exc:
+			raise ToolError(f"{exc}. Nothing was changed.") from None
+		if str(doc.get(task_templates.MAP_OVERLAY_FIELD) or "") != value:
+			changes[task_templates.MAP_OVERLAY_FIELD] = {"from": doc.get(task_templates.MAP_OVERLAY_FIELD) or "", "to": value}
+		doc.set(task_templates.MAP_OVERLAY_FIELD, value or None)
+
 	# v0.237.0. Whether this is a daily check (blank: an ordinary template).
 	if "daily_check" in args and compat.has_field(TEMPLATE, "daily_check"):
 		value = as_str(args, "daily_check")

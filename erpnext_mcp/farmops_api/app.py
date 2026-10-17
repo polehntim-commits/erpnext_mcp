@@ -1195,6 +1195,7 @@ _JOB_SHELL = """<!doctype html>
 <header><h1 id="title">Loading…</h1><p id="dates"></p></header>
 <div id="map"></div><main id="body"></main>
 <script src="/farmops/api/job-assets/leaflet.js"></script>
+<script src="/farmops/api/job-assets/map_layers.js"></script>
 <script src="/farmops/api/job-assets/job.js"></script>
 </body></html>
 """
@@ -1216,6 +1217,8 @@ _JOB_ASSETS = {
 	"images/layers.png": ("vendor/leaflet/images/layers.png", "image/png"),
 	"images/layers-2x.png": ("vendor/leaflet/images/layers-2x.png", "image/png"),
 	"job.js": ("job_page/job.js", "application/javascript"),
+	# v0.330.0. The one Layers button every map in this app carries (`public/js/map_layers.js`).
+	"map_layers.js": ("js/map_layers.js", "application/javascript"),
 	"job.css": ("job_page/job.css", "text/css"),
 	# v0.276.0. The packer portal's page.
 	"packer.js": ("job_page/packer.js", "application/javascript"),
@@ -1278,7 +1281,13 @@ def _job(request: Request, path: str) -> Response:
 	rest = path[len(JOB_PREFIX):]
 	token, _, action = rest.partition("/")
 	ip = _peer(request)
-	if guard._count(f"job:{ip or 'unknown'}", 60) > JOB_LIMIT:
+	# v0.330.0. A map pan asks for dozens of slope tiles at once, so tiles are metered on their own counter at the
+	# sidecar's tile rate; every other action keeps the page's.
+	is_tile = action.startswith("tiles/")
+	if is_tile:
+		if guard._count(f"job-tile:{ip or 'unknown'}", 60) > TILE_LIMIT:
+			return _failure(429, TOO_MANY)
+	elif guard._count(f"job:{ip or 'unknown'}", 60) > JOB_LIMIT:
 		return _failure(429, TOO_MANY)
 	with session.request_session(request=request, body={}):
 		link = job_links.find(token)
@@ -1295,6 +1304,30 @@ def _job(request: Request, path: str) -> Response:
 				job_links.record_view(link["name"], "page", ip, agent)
 				session.commit()
 				return _job_headers(Response(_JOB_SHELL, status=200, content_type="text/html; charset=utf-8"))
+			# v0.330.0. The Layers button's slope overlays, clipped on the page to the job's blocks. No view row:
+			# a descriptor and its tiles are public terrain, and a pan is dozens of requests.
+			if action == "terrain" and request.method == "GET":
+				answer = job_links.terrain_descriptors(link["job"], token)
+				session.commit()
+				return _job_headers(_json({"layers": answer}))
+			if is_tile and request.method in ("GET", "HEAD"):
+				parts = action[len("tiles/"):].split("/", 1)
+				match = _TILE_TAIL.match(parts[1]) if len(parts) == 2 else None
+				if not match or not slope_aspect.valid_tile(*match.groups()):
+					return _job_headers(_failure(404, NOT_FOUND))
+				z, x, y = (int(part) for part in match.groups())
+				try:
+					png = job_links.terrain_tile(link["job"], parts[0], z, x, y)
+				except ToolError:
+					session.rollback()
+					return _job_headers(_failure(503, "The slope map can't be drawn on this server."))
+				session.commit()
+				if png is None:
+					return _job_headers(_failure(404, NOT_FOUND))
+				response = _png(png, "private, max-age=86400")
+				response.headers["Referrer-Policy"] = "no-referrer"
+				response.headers["X-Robots-Tag"] = "noindex, nofollow"
+				return response
 			if action == "data" and request.method == "GET":
 				job_links.record_view(link["name"], "data", ip, agent)
 				data = job_links.page_data(link["job"])

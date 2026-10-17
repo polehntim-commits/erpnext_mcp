@@ -931,8 +931,15 @@ function erpnext_mcp_farm_overview(page) {
 				// A LAYER WITH NOTHING IN IT IS NOT OFFERED. An entry that
 				// toggles an empty group is a control that does nothing, and
 				// three of them is a control nobody trusts.
-				const base = widget.add_base_layers(L, map, toggles);
-				add_terrain(L, base && base.control);
+				// v0.330.0. The Layers button carries the slope overlays (the whole farm, nothing clipped) when it
+				// loads; the old overlay entries are the fallback for a page where it could not be fetched.
+				const base = widget.add_base_layers(L, map, toggles, {
+					context: "farm_overview",
+					terrain: answer.terrain_layers || [],
+				});
+				if (!(base && base.switcher)) {
+					add_terrain(L, base && base.control);
+				}
 
 				// THE VIEW IS SET BEFORE A SINGLE SHAPE IS ADDED, AND THE ORDER IS
 				// LOAD-BEARING RATHER THAN TIDY. A Leaflet map has no pixel origin
