@@ -1,0 +1,212 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-18 09:00:00.000000",
+ "description": "One row per discarded draft purged for good: what it was, why it was discarded, who purged it and when — written before the delete. Bank Bridge reads it so a purged duplicate is not drafted again (tick Allow Recreate to let it).",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "document_type",
+  "document_name",
+  "company",
+  "posting_date",
+  "amount",
+  "col_1",
+  "discard_reason",
+  "duplicate_of",
+  "discarded_by",
+  "discarded_at",
+  "purge_section",
+  "purged_by",
+  "purged_at",
+  "purge_trigger",
+  "col_2",
+  "allow_recreate",
+  "bank_transactions",
+  "user_remark",
+  "cleared_links",
+  "snapshot_section",
+  "document_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "document_type",
+   "label": "Document Type",
+   "fieldtype": "Link",
+   "options": "DocType",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_name",
+   "label": "Document",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "The purged draft's docname. It no longer exists; this row is the record of it."
+  },
+  {
+   "fieldname": "company",
+   "label": "Company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "label": "Posting Date",
+   "fieldtype": "Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "label": "Amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "discard_reason",
+   "label": "Discard Reason",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "duplicate_of",
+   "label": "Duplicate Of",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discarded_by",
+   "label": "Discarded By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discarded_at",
+   "label": "Discarded At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purge_section",
+   "fieldtype": "Section Break",
+   "label": "Purge"
+  },
+  {
+   "fieldname": "purged_by",
+   "label": "Purged By",
+   "fieldtype": "Link",
+   "options": "User",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "purged_at",
+   "label": "Purged At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purge_trigger",
+   "label": "Purge Trigger",
+   "fieldtype": "Select",
+   "options": "Manual\nAuto",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allow_recreate",
+   "label": "Allow Recreate",
+   "fieldtype": "Check",
+   "default": "0",
+   "description": "Off: Bank Bridge treats this purged draft as still occupying its bank transaction / marker and will not draft it again. Tick to let it draft a fresh one."
+  },
+  {
+   "fieldname": "bank_transactions",
+   "label": "Bank Transactions",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "description": "The Bank Transactions the draft's lines referenced — Bank Bridge's identity key."
+  },
+  {
+   "fieldname": "user_remark",
+   "label": "User Remark",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "description": "The draft's remark, including any Bank Bridge [BB:…] marker."
+  },
+  {
+   "fieldname": "cleared_links",
+   "label": "Cleared Links",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "snapshot_section",
+   "fieldtype": "Section Break",
+   "label": "Snapshot",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "document_json",
+   "label": "Document JSON",
+   "fieldtype": "Long Text",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-10-18 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Discarded Draft Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "role": "Auditor"
+  }
+ ],
+ "search_fields": "document_name,company",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "document_name",
+ "track_changes": 1
+}

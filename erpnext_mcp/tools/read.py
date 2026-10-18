@@ -21,6 +21,7 @@ import frappe
 from .. import compat
 from ..args import (
 	MAX_LIMIT,
+	as_bool,
 	as_date,
 	as_docstatus,
 	as_int,
@@ -215,12 +216,18 @@ def get_journal_entries(args: dict) -> ToolResult:
 	account = as_str(args, "account")
 	docstatus = as_docstatus(args)
 	limit = as_limit(args)
+	# v0.334.0. A discarded draft is set aside, not a draft waiting to be posted.
+	from . import discard
+
+	include_discarded = bool(as_bool(args, "include_discarded", False))
 
 	filters = {"posting_date": ("between", [from_date, to_date])}
 	if company:
 		filters["company"] = company
 	if docstatus is not None:
 		filters["docstatus"] = docstatus
+	if not include_discarded:
+		filters.update(discard.not_discarded_filter())
 	if account:
 		resolved = resolve_account(account, company or "")
 		names = frappe.db.get_all(
@@ -258,6 +265,7 @@ def get_journal_entries(args: dict) -> ToolResult:
 			"docstatus",
 			"owner",
 			"creation",
+			discard.FLAG,
 		],
 	)
 	rows = frappe.db.get_all(
@@ -269,6 +277,8 @@ def get_journal_entries(args: dict) -> ToolResult:
 	)
 	for row in rows:
 		row["docstatus_label"] = _docstatus_label(row.get("docstatus"))
+		if row.get(discard.FLAG):
+			row["docstatus_label"] = "draft (discarded)"
 
 	data = {
 		"journal_entries": rows,
@@ -281,6 +291,7 @@ def get_journal_entries(args: dict) -> ToolResult:
 			"company": company,
 			"account": account or None,
 			"docstatus": docstatus,
+			"include_discarded": include_discarded,
 		},
 	}
 	return ToolResult(data, f"{len(rows)} Journal Entry row(s) {from_date}..{to_date}")

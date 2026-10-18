@@ -70,7 +70,8 @@
    "label": "Draft Journal Entries",
    "document_type": "Journal Entry",
    "filters": {
-    "docstatus": 0
+    "docstatus": 0,
+    "discarded": 0
    },
    "color": "#7575ff"
   }

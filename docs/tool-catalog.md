@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1156 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1159 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 553 read tools are **on** by default and can be switched off individually. A
+All 554 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -4762,6 +4762,26 @@ the only line this tool adds is the balancing one.
 ---
 
 # Attaching evidence
+
+### `discard_draft_journal_entries` — MUTATING, default off
+
+**Arguments:** `names` (or `name`), `reason` (required), `duplicate_of`.
+
+v0.334.0. The recoverable alternative to the delete above: the draft stays (docstatus 0) and gains
+`discarded`, `discard_reason`, `discarded_by`, `discarded_at`, `duplicate_of`. Left out of
+`bulk_submit_journal_entries` (skipped: discarded), refused by `submit_journal_entry`, hidden from
+`get_journal_entries` (`include_discarded` shows them) and the default Desk list, and not counted by Bank
+Bridge's draft health. Refused per name: not a draft, matched to a Bank Transaction, or referenced by a
+submitted document. Purging — deleting for good, each logged first to the Discarded Draft Log — is a Desk
+button for System Manager / Accounts Manager, or daily after `discard_auto_purge_days` (0 = off).
+
+### `restore_discarded_draft` — MUTATING, default off
+
+**Arguments:** `name` (required), `doctype`. Clears the marker; a comment records what it said.
+
+### `list_discarded_drafts`
+
+Read-only. **Arguments:** `company`, `doctype`, `include_purged`, `limit`.
 
 ## 77. `attach_file_to_document`
 

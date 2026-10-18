@@ -1886,6 +1886,7 @@ APP_DOCTYPES = {
 	# for why "SIATAPING" is a mapping no string algorithm can ever compute.
 	"Merchant Alias": "merchant_alias",
 	"Bank Card Alias": "bank_card_alias",
+	"Discarded Draft Log": "discarded_draft_log",
 	# v0.80.0. Trade documentation across three tiers: the shape of a kind of
 	# paper, the rule saying which destination asks for it, one shipment, its
 	# checklist, and the documents themselves. See `tools/shipments.py` for why
@@ -4958,6 +4959,8 @@ CHILD_TABLE_SOURCES = {
 	"Wizard Step": (("Wizard Definition", "steps"),),
 	"Parcel Conveyance Event": (("Parcel", "conveyance_events"),),
 	"Bank Transaction Payments": (("Bank Transaction", "payment_entries"),),
+	# v0.334.0. `discard.blocking_links` asks which Payment Entry references a draft.
+	"Payment Entry Reference": (("Payment Entry", "references"),),
 	"Statement Anchor Line": (("Statement Anchor", "statement_lines"),),
 	"Fiscal Year Company": (("Fiscal Year", "companies"),),
 	"Workflow Document State": (("Workflow", "states"),),

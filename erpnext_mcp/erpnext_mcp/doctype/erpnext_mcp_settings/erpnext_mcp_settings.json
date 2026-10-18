@@ -100,6 +100,10 @@
   "allow_post_opening_balance_journal_entry",
   "allow_bulk_submit_journal_entries",
   "allow_delete_draft_journal_entry",
+  "allow_discard_draft_journal_entries",
+  "allow_restore_discarded_draft",
+  "allow_list_discarded_drafts",
+  "discard_auto_purge_days",
   "chart_tools_section",
   "allow_create_account",
   "allow_update_account",
@@ -2196,6 +2200,34 @@
    "fieldname": "allow_delete_draft_journal_entry",
    "fieldtype": "Check",
    "label": "Delete Draft Journal Entry"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Set draft Journal Entries aside (Discarded): kept, recoverable, left out of bulk submit, draft counts and the default Desk list. Refuses anything not a draft, or tied to a submitted document or a bank match.",
+   "fieldname": "allow_discard_draft_journal_entries",
+   "fieldtype": "Check",
+   "label": "Discard Draft Journal Entries"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Put one discarded draft back exactly as it was.",
+   "fieldname": "allow_restore_discarded_draft",
+   "fieldtype": "Check",
+   "label": "Restore Discarded Draft"
+  },
+  {
+   "default": "1",
+   "description": "READ. Discarded drafts with reason, who, when and amount; optionally what was purged (Discarded Draft Log).",
+   "fieldname": "allow_list_discarded_drafts",
+   "fieldtype": "Check",
+   "label": "List Discarded Drafts"
+  },
+  {
+   "default": "0",
+   "description": "Purge discarded drafts automatically once they have been discarded this many days (each logged first). 0 = off, the default. Purging by hand is the Desk's Purge discarded button.",
+   "fieldname": "discard_auto_purge_days",
+   "fieldtype": "Int",
+   "label": "Auto-purge Discarded Drafts After (Days)"
   },
   {
    "description": "Structural changes to the chart itself, as opposed to postings into it. A bad journal entry is one wrong number a reversing entry fixes; a bad reparent silently changes what every balance-sheet subtotal has meant, retroactively, for every period already reported. Enable the narrowest set that does the job.<br><br>The read-only planner that produces a chart to review, <b>Propose Clean Chart</b>, is in the Accounting Read Tools section above. <b>Import Chart Of Accounts</b> defaults to a dry run even when it is switched on.",

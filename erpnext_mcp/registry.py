@@ -74,6 +74,7 @@ from .tools import (
 	cropprotect,
 	diagnostics,
 	dimensions,
+	discard,
 	discipline,
 	disclosure,
 	dispatch,
@@ -1238,6 +1239,9 @@ TOOLS = {
 				_STRING,
 				"0/'draft', 1/'submitted' or 2/'cancelled'. Omit for all.",
 			),
+			"include_discarded": _field(
+				_BOOLEAN, "v0.334.0. Also list discarded drafts (left out by default)."
+			),
 			"limit": _LIMIT,
 		},
 		required=("from_date", "to_date"),
@@ -1975,6 +1979,62 @@ TOOLS = {
 		mutating=True,
 		destructive=True,
 		title="Delete a draft journal entry",
+	),
+	# ── v0.334.0: discard a draft — set aside, recoverable, not deleted ──
+	"discard_draft_journal_entries": _tool(
+		discard.discard_draft_journal_entries,
+		"MUTATING (default OFF). Set draft Journal Entries ASIDE — the recoverable "
+		"alternative to delete_draft_journal_entry. Each stays a draft (docstatus 0, "
+		"nothing deleted) and is marked Discarded with the reason, who, when and, "
+		"for a duplicate, `duplicate_of`. A discarded draft is left out of "
+		"bulk_submit_journal_entries (reported skipped: discarded), refused by "
+		"submit_journal_entry, hidden from get_journal_entries and the default Desk "
+		"list, and not counted by Bank Bridge's draft health — while Bank Bridge's "
+		"dedupe still sees it, so the same duplicate is not drafted again.\n\n"
+		"REFUSED, per name with the reason: anything not a draft; a draft matched to "
+		"a Bank Transaction; a draft a submitted document references. One result per "
+		"name; the rest go through. restore_discarded_draft undoes it; Purge (Desk, "
+		"System Manager / Accounts Manager) deletes discarded drafts for good, each "
+		"written to the Discarded Draft Log first.",
+		{
+			"names": _field(_STRING_ARRAY, "Draft Journal Entry docnames (up to 500)."),
+			"name": _field(_STRING, "One docname, instead of names."),
+			"reason": _field(_STRING, "REQUIRED. Why, e.g. 'duplicate settlement leg from the 7/29 sync'."),
+			"duplicate_of": _field(
+				_STRING, "The Journal Entry these duplicate (same company, not cancelled or discarded)."
+			),
+		},
+		required=("reason",),
+		mutating=True,
+		idempotent=True,
+		title="Discard draft journal entries",
+	),
+	"restore_discarded_draft": _tool(
+		discard.restore_discarded_draft,
+		"MUTATING (default OFF). Put one discarded draft back exactly as it was: the "
+		"marker is cleared and a comment records who restored it and what it said. "
+		"A purged draft cannot be restored — the Discarded Draft Log has its snapshot.",
+		{
+			"name": _field(_STRING, "REQUIRED. The discarded draft's docname."),
+			"doctype": _field(_STRING, "Journal Entry (the default; the only one so far)."),
+		},
+		required=("name",),
+		mutating=True,
+		title="Restore a discarded draft",
+	),
+	"list_discarded_drafts": _tool(
+		discard.list_discarded_drafts,
+		"Discarded drafts: name, company, date, amount, reason, who, when and "
+		"duplicate_of, oldest first, with the count and total. include_purged adds "
+		"the Discarded Draft Log — drafts purged for good, who purged them, and "
+		"whether Bank Bridge may draft them again (allow_recreate). Read-only.",
+		{
+			"company": _COMPANY,
+			"doctype": _field(_STRING, "Journal Entry (the default)."),
+			"include_purged": _field(_BOOLEAN, "Also list what was purged. Default false."),
+			"limit": _LIMIT,
+		},
+		title="List discarded drafts",
 	),
 	"create_bank_account": _tool(
 		banking.create_bank_account,

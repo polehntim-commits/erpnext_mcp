@@ -339,11 +339,21 @@ def _document_counts(company: str, start: str, end: str) -> dict:
 		"sales_invoices": count("Sales Invoice", {"docstatus": 1}),
 		"purchase_invoices": count("Purchase Invoice", {"docstatus": 1}),
 		"journal_entries_submitted": count("Journal Entry", {"docstatus": 1}),
-		"journal_entries_draft": count("Journal Entry", {"docstatus": 0}),
+		# v0.334.0. A discarded draft is set aside, not waiting to be posted; counted apart.
+		"journal_entries_draft": count("Journal Entry", {"docstatus": 0, "discarded": 0}),
+		"journal_entries_discarded": (
+			count("Journal Entry", {"docstatus": 0, "discarded": 1}) if _discard_installed() else 0
+		),
 		"journal_entries_cancelled": count("Journal Entry", {"docstatus": 2}),
 		"bank_transactions": count("Bank Transaction", {}, date_field="date"),
 		"note": "null means the DocType is not installed on this site.",
 	}
+
+
+def _discard_installed() -> bool:
+	from ..tools import discard
+
+	return discard.installed()
 
 
 # ── anomaly detection ───────────────────────────────────────────────────────

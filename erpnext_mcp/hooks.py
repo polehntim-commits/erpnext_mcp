@@ -474,6 +474,8 @@ scheduler_events = {
 		"erpnext_mcp.pollination.daily",
 		# v0.278.0. Templates that raise their own tasks (date, repeat, stage, degree days); off unless enabled.
 		"erpnext_mcp.template_schedule.daily",
+		# v0.334.0. Discarded drafts older than discard_auto_purge_days, each logged first; OFF at 0 (the default).
+		"erpnext_mcp.tools.discard.auto_purge",
 	],
 	"weekly": [
 		"erpnext_mcp.drift.scan",

@@ -115,6 +115,7 @@ from . import (
 	i9_documents,
 	i9_print_format,
 	irrigation_workspace,
+	journal_entry_discard_action,
 	onboard_worker,
 	onboard_worker_action,
 	roles,
@@ -154,6 +155,7 @@ def after_install() -> None:
 	_mou_print_format()
 	_badge_list_action()
 	_badge_form_action()
+	_journal_entry_discard_action()
 	_onboard_worker_action()
 	_asset_tag_list_action()
 	_asset_tag_form_action()
@@ -161,6 +163,7 @@ def after_install() -> None:
 	_farm_asset_types()
 	_onboard_worker()
 	_irrigation_workspace()
+	_discard_fields()
 	_farm_workspaces()
 	_sidebar()
 	_settlement_invoice_link()
@@ -208,6 +211,7 @@ def after_migrate() -> None:
 	_mou_print_format()
 	_badge_list_action()
 	_badge_form_action()
+	_journal_entry_discard_action()
 	_onboard_worker_action()
 	_asset_tag_list_action()
 	_asset_tag_form_action()
@@ -215,6 +219,7 @@ def after_migrate() -> None:
 	_farm_asset_types()
 	_onboard_worker()
 	_irrigation_workspace()
+	_discard_fields()
 	_farm_workspaces()
 	_sidebar()
 	_settlement_invoice_link()
@@ -1241,6 +1246,33 @@ def _bank_categorization_fields() -> None:
 		)
 
 
+def _discard_fields() -> None:
+	"""v0.334.0. The five discard columns on Journal Entry, before the workspace cards that filter on them.
+
+	And the Financial workspace's "Draft Journal Entries" card stops counting discarded
+	drafts — but only when its filter is still the one this app wrote; an operator's own
+	filter is left alone. Never raises.
+	"""
+	try:
+		from .dashboard import card_filters
+		from .tools import discard
+
+		if not frappe.db.exists("DocType", "Journal Entry") or not discard.ensure_fields("Journal Entry"):
+			return
+		card = "Draft Journal Entries"
+		if frappe.db.exists("Number Card", card):
+			old = card_filters("Journal Entry", {"docstatus": 0})
+			if (frappe.db.get_value("Number Card", card, "filters_json") or "") == old:
+				frappe.db.set_value(
+					"Number Card",
+					card,
+					"filters_json",
+					card_filters("Journal Entry", {"docstatus": 0, discard.FLAG: 0}),
+				)
+	except Exception as exc:  # pragma: no cover - a site mid-migrate
+		print(f"erpnext_mcp: the Journal Entry discard fields were not installed — {type(exc).__name__}: {exc}")
+
+
 def _bank_pairing_fields() -> None:
 	"""Give Bank Account the seven columns a pairing and a Plaid identity need.
 
@@ -1595,6 +1627,19 @@ def _mou_print_format() -> None:
 		)
 	elif report.get("reason") not in ("already present", ""):
 		print(f"erpnext_mcp: the MOU Print Format was not seeded — {report['reason']}")
+
+
+def _journal_entry_discard_action() -> None:
+	"""v0.334.0. Discard / Restore / Purge on the Journal Entry list and form — two Client Script rows.
+
+	Records, not hooks, for the reason `badge_list_action.py` gives: Journal Entry is
+	ERPNext's. Untick or delete a row and this app will not put it back.
+	"""
+	for report in journal_entry_discard_action.seed():
+		if report.get("created"):
+			print(f"erpnext_mcp: seeded the {report['name']!r} Client Script (Discard on Journal Entry).")
+		elif report.get("updated") or str(report.get("reason", "")).startswith("left alone"):
+			print(f"erpnext_mcp: {report['name']!r}: {report['reason']}")
 
 
 def _badge_form_action() -> None:
@@ -2530,6 +2575,8 @@ def before_uninstall() -> None:
 	"""
 	_remove_badge_list_action()
 	_remove_badge_form_action()
+	# v0.334.0. Discard / Purge on the Journal Entry list and form.
+	journal_entry_discard_action.remove()
 	# v0.223.0. The "Employee file" button.
 	from . import employee_file
 

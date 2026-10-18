@@ -640,6 +640,8 @@ class TheScheduledJobs(unittest.TestCase):
 					"erpnext_mcp.pollination.daily",
 					# v0.278.0. Scheduled templates; off unless enabled.
 					"erpnext_mcp.template_schedule.daily",
+					# v0.334.0. Auto-purge of discarded drafts; off at 0 days (the default).
+					"erpnext_mcp.tools.discard.auto_purge",
 				],
 				"weekly": ["erpnext_mcp.drift.scan"],
 			},

@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.334.0 — 2026-10-18 — Discard for draft Journal Entries: set aside, recoverable, purged only on purpose
+
+**Migrate.** Deploy `docs/deploy/v0.334.0_discard_drafts.md`. Tools: **1,156 → 1,159** (1 read, 2 mutating, off).
+Pairs with Bank Bridge 1.0.11.
+
+- **Discard** (Tim: "so its less confusing"): a draft Journal Entry is marked Discarded — five Custom Fields
+  (`discarded`, `discard_reason`, `discarded_by`, `discarded_at`, `duplicate_of`); docstatus stays 0, nothing is
+  deleted. Refused, per name with the reason: not a draft, matched to a Bank Transaction, or referenced by a
+  submitted document. `DISCARDABLE` in `tools/discard.py` is the register Purchase Invoice and Payment Entry drafts
+  opt into later.
+- **Left out of:** `bulk_submit_journal_entries` (skipped: discarded), `submit_journal_entry` (refused),
+  `get_journal_entries` (unless `include_discarded`), the fiscal-year audit's draft count (counted apart), the
+  Financial workspace's Draft Journal Entries card (only where its filter is still this app's), the default Desk
+  list, and Bank Bridge's draft health (1.0.11).
+- **MCP:** `discard_draft_journal_entries(names, reason, duplicate_of)`, `restore_discarded_draft(name)`,
+  `list_discarded_drafts(include_purged)`.
+- **Desk:** two Client Script records on Journal Entry (list + form; records, not hooks, as `badge_list_action`
+  argues — untick to remove): discarded drafts hidden by default with a Show / hide toggle, a grey Discarded
+  indicator, Discard in the Actions menu and on the form, Restore, and for System Manager / Accounts Manager
+  **Purge discarded** (count and total, then a confirm) and a per-row Purge. Submitting a discarded draft is
+  refused on the form.
+- **Purge** deletes only discarded drafts, each re-checked just before, each written to the new **Discarded Draft
+  Log** (name, amount, reason, duplicate_of, who and when discarded and purged, the Bank Transactions and remark,
+  a JSON snapshot) before its delete, each in its own transaction. It clears an Expense Receipt's
+  `linked_document` and Bank Transaction payment rows only where they point at that draft. Frappe's own link check
+  still runs. The log is Bank Bridge's tombstone: a purged duplicate is not drafted again unless **Allow Recreate**
+  is ticked on its row.
+- **Auto-purge** (ERPNext MCP Settings → `discard_auto_purge_days`): daily, discarded drafts older than N days.
+  0 = off, the default.
+- Tests: `test_discard` (incl. the list script under node) and the switch / count / hook registers.
+
 ## 0.333.0 — 2026-10-17 — Trailing 12 Months on the financial statements
 
 **Migrate.** Deploy `docs/deploy/v0.333.0_ttm_statements.md`. Tools: **1,156** (unchanged). No phone change.

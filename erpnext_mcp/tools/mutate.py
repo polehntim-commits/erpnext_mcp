@@ -519,6 +519,13 @@ def submit_journal_entry(args: dict) -> ToolResult:
 	"""
 	name = as_str(args, "name", required=True)
 	doc = _journal_entry(name)
+	from . import discard
+
+	if int(doc.docstatus or 0) == 0 and discard.is_discarded("Journal Entry", name):
+		raise ToolError(
+			f"Journal Entry {name} is discarded ({doc.get(discard.REASON)}). restore_discarded_draft puts it "
+			"back if it should be posted after all. Nothing was submitted."
+		)
 	if int(doc.docstatus or 0) == 1:
 		raise ToolError(f"Journal Entry {name} is already submitted")
 	if int(doc.docstatus or 0) == 2:
@@ -590,6 +597,7 @@ def bulk_submit_journal_entries(args: dict) -> ToolResult:
 
 	submitted = [row for row in results if row["ok"] and not row["skipped"]]
 	skipped = [row for row in results if row["skipped"]]
+	discarded = [row for row in results if row["skipped"] == "discarded"]
 	failed = [row for row in results if not row["ok"]]
 	data = {
 		"total": len(results),
@@ -597,6 +605,7 @@ def bulk_submit_journal_entries(args: dict) -> ToolResult:
 		"skipped": len(skipped),
 		"failed": len(failed),
 		"results": results,
+		"discarded_skipped": len(discarded),
 		"submitted_names": [row["name"] for row in submitted],
 		"failed_names": [row["name"] for row in failed],
 		"note": (
@@ -658,6 +667,12 @@ def _submit_one(name: str) -> dict:
 			return row
 		if docstatus == 2:
 			row.update(docstatus=2, error=f"Journal Entry {name} is cancelled and cannot be submitted")
+			return row
+		# v0.334.0. Set aside on purpose; a batch never posts it.
+		from . import discard
+
+		if discard.is_discarded("Journal Entry", name):
+			row.update(ok=True, skipped="discarded", docstatus=0)
 			return row
 
 		doc.submit()
