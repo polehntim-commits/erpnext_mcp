@@ -1,0 +1,142 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-17 09:00:00.000000",
+ "description": "Which card a receipt's last four digits stand for, per bank account. A receipt from an Apple Pay purchase prints the phone's device account number, not the card's, so the bank line (CARD 0845) and the slip (••7637) never agree on their own. One row per number a receipt can print: the card itself, and each phone or watch that carries it. auto_match_receipts reads this register to treat a device number as the card it stands for.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "bank_account",
+  "company",
+  "card_last_four",
+  "header_col",
+  "number",
+  "kind",
+  "label",
+  "active",
+  "notes"
+ ],
+ "fields": [
+  {
+   "description": "The bank account this card draws on. The matcher reads it to tell whether a receipt's card belongs to the statement line it is being scored against.",
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Bank Account",
+   "options": "Bank Account",
+   "reqd": 1
+  },
+  {
+   "description": "Copied from the bank account when the row is written, so a list can be scoped to one company without a join.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "description": "The last four of the PHYSICAL card — the digits the bank prints on the statement line (CARD 0845). For the card's own row this equals Number.",
+   "fieldname": "card_last_four",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Card Last Four",
+   "length": 4,
+   "reqd": 1
+  },
+  {
+   "fieldname": "header_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The four digits a RECEIPT prints for this card. An Apple Pay or Google Pay purchase prints the phone's device account number (••7637), not the card's; this row is how the matcher knows 7637 is card 0845.",
+   "fieldname": "number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Number On Receipt",
+   "length": 4,
+   "reqd": 1
+  },
+  {
+   "default": "Card",
+   "description": "Card is the physical card itself; the others are a device account number standing in for it.",
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Kind",
+   "options": "Card\nApple Pay\nGoogle Pay\nSamsung Pay\nOther Device",
+   "reqd": 1
+  },
+  {
+   "description": "What a person calls it — 'Apple Pay – Tim's iPhone', 'Shop truck fuel card'.",
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label"
+  },
+  {
+   "default": "1",
+   "description": "Cleared by remove_bank_card_alias. The row is kept so receipts already tagged with it still say which card paid.",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-10-17 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Bank Card Alias",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Farm Manager"
+  }
+ ],
+ "search_fields": "number,card_last_four,label",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "label",
+ "track_changes": 1
+}

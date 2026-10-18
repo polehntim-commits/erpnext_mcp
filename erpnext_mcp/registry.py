@@ -60,6 +60,7 @@ from .tools import (
 	blocklifecycle,
 	breakeven,
 	bucket_log,
+	card_aliases,
 	budget,
 	calendar,
 	collab,
@@ -28544,6 +28545,83 @@ TOOLS = {
 		title="Create bank categorization rule",
 		available=_needs_doctype("Bank Categorization Rule"),
 		requires=_CATEGORIZATION_REQUIRES,
+	),
+	# ── v0.331.0: which card a receipt's last four stand for (Apple Pay) ──
+	"list_bank_card_aliases": _tool(
+		card_aliases.list_bank_card_aliases,
+		"The cards registered against each Bank Account, and every number a "
+		"RECEIPT can print for each one — the card's own last four and each "
+		"phone or watch that carries it. An Apple Pay / Google Pay slip prints "
+		"the device account number (••7637), not the card's (CARD 0845 on the "
+		"bank line); auto_match_receipts and match_receipt_to_bank_transaction "
+		"read this register to treat a device number as the card it stands for. "
+		"Active rows only unless include_inactive. Read-only.",
+		{
+			"bank_account": _field(_STRING, "Only this Bank Account (docname or account name)."),
+			"company": _field(_STRING, "Only this company's cards."),
+			"include_inactive": _field(_BOOLEAN, "Also list removed rows. Default false."),
+			"limit": _LIMIT,
+		},
+		title="List bank card aliases",
+		available=_needs_doctype("Bank Card Alias"),
+		requires="the Bank Card Alias doctype (run bench migrate after installing v0.331.0)",
+	),
+	"add_bank_card_alias": _tool(
+		card_aliases.add_bank_card_alias,
+		"MUTATING (default OFF). Register a card on a Bank Account, or a device "
+		"number that stands for one. card_last_four is the PHYSICAL card's last "
+		"four — what the bank prints on the statement line; number is what a "
+		"receipt prints. Omit number to register the card itself; give one (kind "
+		"Apple Pay, Google Pay, Samsung Pay or Other Device) for a phone or "
+		"watch.\n\n"
+		"The matcher then treats a receipt printing the number as that card: a "
+		"bank line naming the card within a day is a card fingerprint (boost), "
+		"and a receipt whose card is registered only on OTHER bank accounts gets "
+		"a mild penalty against this one. Untagged receipts already carrying the "
+		"number are tagged with the card (tag_existing, default true). Re-adding "
+		"a removed row reactivates it. Last four digits only — a full card "
+		"number is refused.",
+		{
+			"bank_account": _field(_STRING, "REQUIRED. The Bank Account the card draws on."),
+			"card_last_four": _field(_STRING, "REQUIRED. Last four of the physical card, e.g. '0845'."),
+			"number": _field(
+				_STRING,
+				"The four digits a receipt prints, e.g. the Apple Pay device number '7637'. "
+				"Defaults to card_last_four (the card's own row).",
+			),
+			"kind": _field(
+				_STRING,
+				"Card, Apple Pay, Google Pay, Samsung Pay or Other Device. Defaults to Card "
+				"when number equals card_last_four, otherwise Apple Pay.",
+			),
+			"label": _field(_STRING, "What people call it, e.g. \"Apple Pay – Tim's iPhone\"."),
+			"tag_existing": _field(
+				_BOOLEAN, "Tag untagged receipts that already carry this number. Default true."
+			),
+		},
+		required=("bank_account", "card_last_four"),
+		mutating=True,
+		title="Add a bank card alias",
+		available=_needs_doctype("Bank Card Alias"),
+		requires="the Bank Card Alias doctype (run bench migrate after installing v0.331.0)",
+	),
+	"remove_bank_card_alias": _tool(
+		card_aliases.remove_bank_card_alias,
+		"MUTATING (default OFF). Deactivate one card or device number — a "
+		"replaced phone, a cancelled card. The row is KEPT: receipts tagged with "
+		"it still name the card that paid, and the matcher stops using the "
+		"number. add_bank_card_alias with the same numbers brings it back. Name "
+		"the row, or give bank_account and number.",
+		{
+			"name": _field(_STRING, "The Bank Card Alias docname (from list_bank_card_aliases)."),
+			"bank_account": _field(_STRING, "With number, instead of name."),
+			"number": _field(_STRING, "With bank_account, instead of name."),
+		},
+		mutating=True,
+		idempotent=True,
+		title="Remove a bank card alias",
+		available=_needs_doctype("Bank Card Alias"),
+		requires="the Bank Card Alias doctype (run bench migrate after installing v0.331.0)",
 	),
 	"list_bank_categorization_rules": _tool(
 		banking_bridge.list_bank_categorization_rules,

@@ -55,6 +55,7 @@
   "bank_col",
   "bank_match_confidence",
   "bank_matched_on",
+  "card_alias",
   "corrections_section",
   "original_amount",
   "amount_correction_reason",
@@ -412,6 +413,14 @@
    "fieldname": "bank_matched_on",
    "fieldtype": "Date",
    "label": "Matched On",
+   "read_only": 1
+  },
+  {
+   "description": "Which registered card paid, resolved from Card Last Four through the Bank Card Alias register — an Apple Pay receipt's device number (7637) lands here as the card it stands for. Set at capture and when an alias is added; blank when the digits are unknown or belong to more than one card.",
+   "fieldname": "card_alias",
+   "fieldtype": "Link",
+   "label": "Card",
+   "options": "Bank Card Alias",
    "read_only": 1
   },
   {

@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1153 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1156 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 552 read tools are **on** by default and can be switched off individually. A
+All 553 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -13875,6 +13875,35 @@ In **evaluation order** — priority ascending — because reading the list top 
 bottom is how somebody works out why a transaction got the category it did.
 `never_fired` names the rules that have matched nothing, which usually means an
 earlier rule is swallowing their transactions.
+
+### `list_bank_card_aliases`
+
+Read-only. **Arguments:** `bank_account`, `company`, `include_inactive`, `limit`.
+
+v0.331.0. The cards on each Bank Account and every number a receipt can print for
+each: the card's own last four and each phone or watch carrying it. An Apple Pay /
+Google Pay slip prints the device account number (••7637) where the bank line says
+CARD 0845; the receipt matcher reads this register to treat the device number as
+its card.
+
+### `add_bank_card_alias` — MUTATING, default off
+
+**Arguments:** `bank_account` (required), `card_last_four` (required), `number`,
+`kind`, `label`, `tag_existing`.
+
+`card_last_four` is the physical card (what the bank prints); `number` is what the
+receipt prints, defaulting to the card itself. A registered device number is
+scored as a card fingerprint when the bank line names its card within a day; a
+receipt whose card is registered only on other bank accounts loses
+`CARD_ACCOUNT_MISMATCH_PENALTY` (0.05) against this one — never a blocker. Untagged
+receipts already carrying the number get `card_alias` set, unless the number is
+registered on another account too. Re-adding a removed row reactivates it.
+
+### `remove_bank_card_alias` — MUTATING, default off
+
+**Arguments:** `name`, or `bank_account` + `number`.
+
+Deactivates; the row and the receipts tagged with it are kept.
 
 ### `apply_categorization_rules` — MUTATING, default off
 

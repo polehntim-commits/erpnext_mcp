@@ -1885,6 +1885,7 @@ APP_DOCTYPES = {
 	# bookkeeper links a receipt to a Supplier by hand — see `tools/receipts.py`
 	# for why "SIATAPING" is a mapping no string algorithm can ever compute.
 	"Merchant Alias": "merchant_alias",
+	"Bank Card Alias": "bank_card_alias",
 	# v0.80.0. Trade documentation across three tiers: the shape of a kind of
 	# paper, the rule saying which destination asks for it, one shipment, its
 	# checklist, and the documents themselves. See `tools/shipments.py` for why

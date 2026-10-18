@@ -88,7 +88,7 @@ from ..args import (
 )
 from ..errors import ToolError
 from ..result import ToolResult
-from . import expenses, read, receipts
+from . import card_aliases, expenses, read, receipts
 
 BANK_TRANSACTION = "Bank Transaction"
 BANK_ACCOUNT = "Bank Account"
@@ -189,6 +189,14 @@ CARD_FINGERPRINT_DAY_WINDOW = 1
 #: which is the case this exists for, because a bank memo that carries a card
 #: number usually carries a terminal ID instead of a vendor name.
 CARD_FINGERPRINT_BONUS = 0.15
+
+#: v0.331.0. What a receipt loses when its card is registered (Bank Card Alias)
+#: ONLY on other bank accounts than the statement line's. Mild on purpose and
+#: never a blocker: four digits can collide, and a person naming both documents
+#: still outranks the register. Enough to rank the right account's line first;
+#: small enough that an exact amount a day out still clears the default
+#: threshold with an unreadable memo line.
+CARD_ACCOUNT_MISMATCH_PENALTY = 0.05
 
 #: The last four of a card in a bank description, and ONLY where the line says
 #: that is what it is: after a mask (`XXXX1234`, `****1234`), or after a word
@@ -620,7 +628,9 @@ def expected_direction(receipt: dict) -> str:
 	return "Deposit" if receipt.get("is_return") else "Withdrawal"
 
 
-def score_match(receipt: dict, transaction: dict, *, tolerance: float, window: int) -> dict:
+def score_match(
+	receipt: dict, transaction: dict, *, tolerance: float, window: int, cards: dict | None = None
+) -> dict:
 	"""Three signals and one number, with every part of it shown.
 
 	Returns the breakdown as well as the total, always. A confidence with no
@@ -643,6 +653,13 @@ def score_match(receipt: dict, transaction: dict, *, tolerance: float, window: i
 	the memo line confirms is lifted to near the ceiling. It is reported as its
 	own boolean rather than only inside the number, because "the bank says it was
 	card 4417 and so does the slip" is a sentence a bookkeeper can check.
+
+	v0.331.0. `cards` is `card_aliases.load_index()`. An Apple Pay slip prints the
+	phone's device number (7637), the bank line the card's (CARD 0845); when the
+	register says 7637 is card 0845, a bank line naming any number of that card
+	is a fingerprint (`card_alias_hit`). Digits registered only on OTHER bank
+	accounts than the line's cost CARD_ACCOUNT_MISMATCH_PENALTY. No `cards`, or
+	unregistered digits, scores exactly as before.
 	"""
 	receipt_amount = _money(receipt.get("amount"))
 	gross = _money(transaction.get("gross_amount"))
@@ -695,10 +712,30 @@ def score_match(receipt: dict, transaction: dict, *, tolerance: float, window: i
 
 	card = str(receipt.get("card_last_four") or "").strip()
 	fingerprint = card_fingerprint(card, transaction.get("description"), day_gap)
+	entries = card_aliases.resolve(card, cards or {}, str(receipt.get("company") or ""))
+	alias_hit = None
+	if not fingerprint:
+		for entry in entries:
+			if any(
+				card_fingerprint(number, transaction.get("description"), day_gap)
+				for number in entry["numbers"]
+				if number != card
+			):
+				fingerprint, alias_hit = True, entry
+				break
 	if fingerprint:
 		base += CARD_FINGERPRINT_BONUS
 
-	confidence = round(min(CONFIDENCE_CEILING, base), 4)
+	owners = {entry["bank_account"] for entry in entries}
+	account = transaction.get("bank_account")
+	account_mismatch = bool(owners and account and account not in owners and not fingerprint)
+	if account_mismatch:
+		base -= CARD_ACCOUNT_MISMATCH_PENALTY
+	resolved = alias_hit or next((entry for entry in entries if entry["bank_account"] == account), None)
+	if resolved is None and len({(entry["bank_account"], entry["card_last_four"]) for entry in entries}) == 1:
+		resolved = entries[0]
+
+	confidence = round(max(0.0, min(CONFIDENCE_CEILING, base)), 4)
 
 	return {
 		"bank_transaction": transaction.get("name"),
@@ -720,6 +757,10 @@ def score_match(receipt: dict, transaction: dict, *, tolerance: float, window: i
 			"card_last_four": card or None,
 			"card_fingerprint": fingerprint,
 			"card_fingerprint_bonus": CARD_FINGERPRINT_BONUS if fingerprint else 0.0,
+			"card_alias_hit": bool(alias_hit),
+			"card": card_aliases.describe(resolved),
+			"card_account_mismatch": account_mismatch,
+			"card_account_mismatch_penalty": CARD_ACCOUNT_MISMATCH_PENALTY if account_mismatch else 0.0,
 			"is_return": bool(receipt.get("is_return")),
 			"expected_direction": wanted,
 			"transaction_direction": transaction.get("direction"),
@@ -905,7 +946,13 @@ def match_receipt_to_bank_transaction(args: dict) -> ToolResult:
 			"receipt or the wrong line. Unmatch the other one first. Nothing was written."
 		)
 
-	score = score_match(receipt, transaction, tolerance=tolerance, window=window)
+	score = score_match(
+		receipt,
+		transaction,
+		tolerance=tolerance,
+		window=window,
+		cards=card_aliases.load_index(str(receipt.get("company") or "")),
+	)
 
 	# Filtered through `has_field` because the four columns arrived together in
 	# v0.71.0 and a half-migrated bench would otherwise take a write against a
@@ -1027,10 +1074,11 @@ def _rank_candidates(receipt: dict, args: dict, *, tolerance: float, window: int
 
 	rows = _transaction_rows(filters)
 	taken = _receipts_by_transaction([row["name"] for row in rows])
+	cards = card_aliases.load_index(str(receipt.get("company") or ""))
 	scored = []
 	for row in rows:
 		others = [entry["name"] for entry in taken.get(row["name"], []) if entry["name"] != receipt["name"]]
-		score = score_match(receipt, row, tolerance=tolerance, window=window)
+		score = score_match(receipt, row, tolerance=tolerance, window=window, cards=cards)
 		if others:
 			score["eligible"] = False
 			score["confidence"] = 0.0
@@ -1145,10 +1193,11 @@ def auto_match_receipts(args: dict) -> ToolResult:
 
 	proposals, contested = [], []
 	best_by_transaction = {}
+	cards = card_aliases.load_index()
 	for receipt in receipt_rows:
 		best = None
 		for transaction in sides.get(expected_direction(receipt), []):
-			score = score_match(receipt, transaction, tolerance=tolerance, window=window)
+			score = score_match(receipt, transaction, tolerance=tolerance, window=window, cards=cards)
 			if not score["eligible"] or score["confidence"] < threshold:
 				continue
 			if best is None or score["confidence"] > best["confidence"]:
@@ -1198,6 +1247,8 @@ def auto_match_receipts(args: dict) -> ToolResult:
 			"date_window_days": window,
 			"card_fingerprint_day_window": CARD_FINGERPRINT_DAY_WINDOW,
 			"card_fingerprint_bonus": CARD_FINGERPRINT_BONUS,
+			"card_account_mismatch_penalty": CARD_ACCOUNT_MISMATCH_PENALTY,
+			"card_aliases_registered": sum(len(entries) for entries in cards.values()),
 			"card_last_four_available": compat.has_field(EXPENSE_RECEIPT, "card_last_four"),
 			"is_return_available": compat.has_field(EXPENSE_RECEIPT, "is_return"),
 		},

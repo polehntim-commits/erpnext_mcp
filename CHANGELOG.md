@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.331.0 — 2026-10-17 — Apple Pay device numbers matched as their card: the Bank Card Alias register
+
+**Migrate.** Deploy `docs/deploy/v0.331.0_card_aliases.md`. Tools: **1,153 → 1,156** (1 read, 2 mutating, off).
+
+- **`Bank Card Alias`** (new doctype): per Bank Account, the physical card's last four and every number a receipt
+  can print for it — the card itself and each Apple Pay / Google Pay / Samsung Pay device account number, with a
+  label ("Apple Pay – Tim's iPhone"). Tools `list_bank_card_aliases`, `add_bank_card_alias`,
+  `remove_bank_card_alias` (deactivates; the row and its receipt tags are kept; re-adding reactivates).
+- **Matcher** (`banking_bridge.score_match`, used by `auto_match_receipts` and `match_receipt_to_bank_transaction`):
+  a receipt's digits that resolve to a card count as a card fingerprint when the bank line names any number of
+  that card within a day (`signals.card_alias_hit`, same +0.15 and the same contest tie-break). Digits registered
+  only on OTHER bank accounts than the line's cost `CARD_ACCOUNT_MISMATCH_PENALTY` (0.05) — never a blocker.
+  `signals.card` names the resolved card. Unregistered digits score exactly as before.
+- **Receipts tagged:** `Expense Receipt.card_alias` (new, read-only) is set at capture (`submit_expense_receipt`,
+  phone included) when the digits resolve to one card, and `add_bank_card_alias` tags receipts scanned before it
+  (`tag_existing`, default true). A number registered on two accounts tags nothing.
+- Tests: `test_card_aliases`.
+
 ## 0.330.0 — 2026-10-17 — one Layers button on every map: base map, slope / aspect overlay, opacity, legend
 
 **Migrate.** Deploy `docs/deploy/v0.330.0_map_layers.md`. Tools: **1,153** (unchanged). Pairs with FarmOps 0.71.0 (67).

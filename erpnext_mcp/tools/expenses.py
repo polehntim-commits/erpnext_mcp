@@ -598,7 +598,7 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	# module for the Expense Receipt name and its statuses, so a module-level
 	# import here would be a cycle. Same shape and same reason as `read.py`'s
 	# local import of `mutate`.
-	from . import receipts
+	from . import card_aliases, receipts
 
 	ocr_raw_text = as_str(args, "ocr_raw_text")
 
@@ -640,6 +640,12 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	if compat.has_field(EXPENSE_RECEIPT, "is_return"):
 		payload["is_return"] = is_return
 	payload.update(intelligence["columns"])
+	# v0.331.0. Which registered card paid — a device number resolves to its card.
+	card_paid = card_aliases.resolve_unique(
+		intelligence["resolution"]["signals"].get(receipts.CARD_LAST_FOUR_FIELD) or "", company
+	)
+	if card_paid and compat.has_field(EXPENSE_RECEIPT, card_aliases.RECEIPT_FIELD):
+		payload[card_aliases.RECEIPT_FIELD] = card_paid["name"]
 	payload.update(title["columns"])
 	payload.update(coop)
 	payload.update(reimbursement)
@@ -691,6 +697,7 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 			"is_return": bool(is_return),
 			"items": _items_out(doc),
 			**intelligence["reported"],
+			"card": card_aliases.describe(card_paid),
 			**(
 				{
 					"coop_name": coop["coop_name"],

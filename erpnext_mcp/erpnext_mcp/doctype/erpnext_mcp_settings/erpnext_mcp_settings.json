@@ -890,12 +890,15 @@
   "allow_list_unmatched_bank_transactions",
   "allow_list_bank_categorization_rules",
   "allow_get_cash_flow_summary",
+  "allow_list_bank_card_aliases",
   "banking_bridge_write_section",
   "allow_match_receipt_to_bank_transaction",
   "allow_create_bank_categorization_rule",
   "allow_create_bank_categorization_rules",
   "allow_apply_categorization_rules",
   "allow_seed_farm_categorization_rules",
+  "allow_add_bank_card_alias",
+  "allow_remove_bank_card_alias",
   "bank_consolidation_read_section",
   "allow_get_statement_anchor_chain",
   "allow_list_unreconciled_anchors",
@@ -7421,6 +7424,13 @@
    "label": "Get Cash Flow Summary"
   },
   {
+   "default": "1",
+   "description": "READ. Cards and Apple Pay / Google Pay device numbers registered per Bank Account, which the receipt matcher reads to treat a device number as its card.",
+   "fieldname": "allow_list_bank_card_aliases",
+   "fieldtype": "Check",
+   "label": "List Bank Card Aliases"
+  },
+  {
    "description": "The write half of Sprint 6. <b>Nothing here posts to the ledger</b> — not one tool writes a GL Entry, a Journal Entry or an allocation. Matching a receipt records EVIDENCE; categorising records what a transaction WAS. Turning either into a posting is create_journal_entry, which has its own switch.<br><br>Categorisation is allowed to write in bulk where matching is not, because a rule is deterministic and its output names the rule that produced it — an operator who disagrees reads the rule, fixes it and runs again.",
    "fieldname": "banking_bridge_write_section",
    "fieldtype": "Section Break",
@@ -7453,6 +7463,20 @@
    "fieldname": "allow_seed_farm_categorization_rules",
    "fieldtype": "Check",
    "label": "Seed Farm Categorization Rules"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Register a card, or a device number standing for one, on a Bank Account, and tag untagged receipts already carrying it.",
+   "fieldname": "allow_add_bank_card_alias",
+   "fieldtype": "Check",
+   "label": "Add Bank Card Alias"
+  },
+  {
+   "default": "0",
+   "description": "MUTATING. Deactivate a card or device number; the row and the receipts tagged with it are kept.",
+   "fieldname": "allow_remove_bank_card_alias",
+   "fieldtype": "Check",
+   "label": "Remove Bank Card Alias"
   },
   {
    "default": "0",
