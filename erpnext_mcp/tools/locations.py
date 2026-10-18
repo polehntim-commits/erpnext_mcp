@@ -223,6 +223,8 @@ DYNAMIC_REFERRERS = (
 	("Pest Control Application", "location", "location_doctype"),
 	("IPM Recommendation", "block", "block_doctype"),
 	("Pest Pressure", "block", "block_doctype"),
+	# v0.335.0. A public report names the Farm Task it was filed as; an application, its Job Applicant.
+	("Public Site Entry", "linked_document", "linked_doctype"),
 	("Signing Evidence", "document_name", "document_type"),
 	("Spray Application Block", "block", "block_doctype"),
 	("Spray REI", "block", "block_doctype"),

@@ -909,9 +909,9 @@ class ToolRegistration(unittest.TestCase):
 		# v0.207.0 adds eight reads and eleven writes: phone config, tiles, wizards, the loop, labels.
 		# v0.313.0 adds three reads and three writes: the customer portal's generic names (the packer names stay).
 		# v0.318.0 adds two reads: get_deploy_status, run_post_deploy_check.
-		self.assertEqual(len(self.registry.TOOLS), 1159)
-		self.assertEqual(len(self.registry.READ_TOOLS), 554)
-		self.assertEqual(len(self.registry.MUTATING_TOOLS), 605)
+		self.assertEqual(len(self.registry.TOOLS), 1175)
+		self.assertEqual(len(self.registry.READ_TOOLS), 560)
+		self.assertEqual(len(self.registry.MUTATING_TOOLS), 615)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
  "allow_rename": 0,
  "autoname": "hash",
  "creation": "2026-10-17 09:00:00.000000",
- "description": "Which card a receipt's last four digits stand for, per bank account. A receipt from an Apple Pay purchase prints the phone's device account number, not the card's, so the bank line (CARD 0845) and the slip (••7637) never agree on their own. One row per number a receipt can print: the card itself, and each phone or watch that carries it. auto_match_receipts reads this register to treat a device number as the card it stands for.",
+ "description": "Which card a receipt's last four digits stand for, per bank account. A receipt from an Apple Pay purchase prints the phone's device account number, not the card's, so the bank line (CARD 1234) and the slip (••4821) never agree on their own. One row per number a receipt can print: the card itself, and each phone or watch that carries it. auto_match_receipts reads this register to treat a device number as the card it stands for.",
  "doctype": "DocType",
  "editable_grid": 0,
  "engine": "InnoDB",
@@ -39,7 +39,7 @@
    "read_only": 1
   },
   {
-   "description": "The last four of the PHYSICAL card — the digits the bank prints on the statement line (CARD 0845). For the card's own row this equals Number.",
+   "description": "The last four of the PHYSICAL card — the digits the bank prints on the statement line (CARD 1234). For the card's own row this equals Number.",
    "fieldname": "card_last_four",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -53,7 +53,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "The four digits a RECEIPT prints for this card. An Apple Pay or Google Pay purchase prints the phone's device account number (••7637), not the card's; this row is how the matcher knows 7637 is card 0845.",
+   "description": "The four digits a RECEIPT prints for this card. An Apple Pay or Google Pay purchase prints the phone's device account number (••4821), not the card's; this row is how the matcher knows 4821 is card 1234.",
    "fieldname": "number",
    "fieldtype": "Data",
    "in_list_view": 1,

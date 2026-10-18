@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.335.0 — 2026-10-18 — The public website: pages, jobs, crew info, report a problem, visitor check-in, QR
+
+**Migrate.** Deploy `docs/deploy/v0.335.0_public_site.md`. Tools: **1,159 → 1,175** (6 read, 10 mutating, off).
+New doctype Public Site Entry; config kind Public Site; three Custom Fields on Job Applicant. No phone change.
+
+- **One prefix, served by this app** (`page_renderer`, default `/farm`): home / story / contact / crew pages,
+  jobs, report a problem, visitor check-in and check-out, image media. Bilingual (en / es, toggle), mobile-first.
+  Inert until **Public Site Enabled** (ERPNext MCP Settings, default off, no tool sets it) AND a site config is
+  published. The Desk and login are untouched; only `/<prefix>` and `/<prefix>/*` need to be reachable.
+- **Configurable, nothing install-specific in code:** company (any Company — every other company stays off the
+  site), brand, colours, prefix, base URL, languages, modules, contact, page content, form fields, categories,
+  visitor acknowledgement, routing, QR source tags, upload cap and rate limits. Neutral defaults.
+- **Built over MCP:** draft → preview → publish → rollback on the shared config lifecycle. Publishing over MCP is
+  its own switch, off by default.
+- **Guards:** honeypot (silently thanked and dropped), HMAC time token (min seconds, 2 h expiry), per-visitor and
+  site-wide hourly limits counted from stored entries, photos JPEG / PNG / WebP by magic bytes under the cap and
+  read only to the cap, stored private. No Guest permission on any doctype; media only for files the published
+  pages name. Responses carry no-store, nosniff, frame and CSP headers.
+- **Routing:** reports are kept as entries and, when `routing.create = farm_task` with a `reporter_employee`, filed
+  through `report_field_task`; triage can promote later. Applications with an email become HRMS Job Applicants
+  (HRMS requires an email); phone-only ones stay entries for HR to call. Visits store the acknowledgement, a
+  re-entry warning from active REIs (block names only) and a check-out code (hash kept). ToDos for notify roles /
+  users. QR scans counted per known `?src=` tag per day.
+- Public Site Entry's link to the Farm Task / Job Applicant it became is declared in `locations.DYNAMIC_REFERRERS`.
+- **No install-specific text** (Tim: configurable for other systems): the Bank Card Alias / Expense Receipt field
+  descriptions and tool descriptions now use neutral example digits (••4821 / CARD 1234) instead of this farm's
+  real card numbers. The TTM and discard releases were audited and carry none.
+- Tests: `test_public_site` (49), with negative controls on the company filter, honeypot, media allowlist, image
+  check and rate limit. Verified on a live bench from the built image: guest pages, the other company's opening
+  hidden, a photo report (stored private), a refused non-image, honeypot, forged and too-fast tokens, visitor
+  check-in / check-out by code, an application becoming a Job Applicant, QR scan counts (now committed — Frappe
+  does not commit a GET), card and sign PDFs.
+
 ## 0.334.0 — 2026-10-18 — Discard for draft Journal Entries: set aside, recoverable, purged only on purpose
 
 **Migrate.** Deploy `docs/deploy/v0.334.0_discard_drafts.md`. Tools: **1,156 → 1,159** (1 read, 2 mutating, off).

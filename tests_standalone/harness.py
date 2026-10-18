@@ -835,6 +835,33 @@ ERPNEXT_SCHEMA = {
 	# called a no-op a pass.
 	"Department": ["name", "department_name", "company", "is_group", "parent_department", "disabled"],
 	"Designation": ["name", "designation_name", "description"],
+	# v0.335.0. HRMS's recruiting pair, as the public site reads and writes them: openings of
+	# the public company only, and an applicant only when an email was given (HRMS requires one).
+	"Job Opening": [
+		"name",
+		"job_title",
+		"company",
+		"designation",
+		"status",
+		"publish",
+		"description",
+		"location",
+		"employment_type",
+		"closes_on",
+		"closed_on",
+		"planned_vacancies",
+		"route",
+	],
+	"Job Applicant": [
+		"name",
+		"applicant_name",
+		"email_id",
+		"phone_number",
+		"job_title",
+		"status",
+		"cover_letter",
+		"source",
+	],
 	"Employment Type": ["name", "employee_type_name"],
 	# v0.68.1. Frappe HR's pay band. PROMPT-NAMED on a stock site — there is no
 	# column behind the docname, which is why `tools/org._name_column` asks this
@@ -1887,6 +1914,8 @@ APP_DOCTYPES = {
 	"Merchant Alias": "merchant_alias",
 	"Bank Card Alias": "bank_card_alias",
 	"Discarded Draft Log": "discarded_draft_log",
+	# v0.335.0. What the public site receives: reports, visits, applications, scan counts.
+	"Public Site Entry": "public_site_entry",
 	# v0.80.0. Trade documentation across three tiers: the shape of a kind of
 	# paper, the rule saying which destination asks for it, one shipment, its
 	# checklist, and the documents themselves. See `tools/shipments.py` for why

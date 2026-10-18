@@ -1,0 +1,334 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:PSE-{#####}",
+ "creation": "2026-10-18 12:00:00.000000",
+ "description": "What came in through the public website: a problem report, a visitor check-in (with check-out), a job application, or a day's QR scan count. Guests never read this; they only create it through the public site's own forms.",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "entry_type",
+  "status",
+  "company",
+  "submitted_at",
+  "col_a",
+  "language",
+  "source",
+  "client_hash",
+  "job_opening",
+  "what_section",
+  "category",
+  "description",
+  "location",
+  "photo",
+  "col_b",
+  "contact_name",
+  "contact_phone",
+  "contact_email",
+  "answers_json",
+  "visit_section",
+  "visitor_company",
+  "purpose",
+  "host",
+  "vehicle",
+  "areas_visited",
+  "col_c",
+  "check_in",
+  "check_out",
+  "acknowledged",
+  "acknowledgement_text",
+  "rei_warning",
+  "checkout_code_hash",
+  "scan_section",
+  "scan_date",
+  "hits",
+  "triage_section",
+  "linked_doctype",
+  "linked_document",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "entry_type",
+   "label": "Type",
+   "fieldtype": "Select",
+   "options": "Report\nVisit\nApplication\nScan",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Select",
+   "options": "New\nTriaged\nClosed\nSpam",
+   "default": "New",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "label": "Company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "submitted_at",
+   "label": "Submitted At",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "language",
+   "label": "Language",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "label": "QR Source",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "The ?src= tag the visitor arrived through."
+  },
+  {
+   "fieldname": "client_hash",
+   "label": "Device Hash",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "A salted hash of the sender's address, for rate limits. The address itself is never stored."
+  },
+  {
+   "fieldname": "job_opening",
+   "label": "Job Opening",
+   "fieldtype": "Link",
+   "options": "Job Opening",
+   "read_only": 1
+  },
+  {
+   "fieldname": "what_section",
+   "fieldtype": "Section Break",
+   "label": "Submission"
+  },
+  {
+   "fieldname": "category",
+   "label": "Category / Purpose",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "description",
+   "label": "Description",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "location",
+   "label": "Location",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "photo",
+   "label": "Photo",
+   "fieldtype": "Attach Image",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_b",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "contact_name",
+   "label": "Name",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact_phone",
+   "label": "Phone",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact_email",
+   "label": "Email",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "answers_json",
+   "label": "All Answers",
+   "fieldtype": "Long Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "visit_section",
+   "fieldtype": "Section Break",
+   "label": "Visit",
+   "depends_on": "eval:doc.entry_type=='Visit'"
+  },
+  {
+   "fieldname": "visitor_company",
+   "label": "Visitor Company",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purpose",
+   "label": "Purpose",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "host",
+   "label": "Host",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vehicle",
+   "label": "Vehicle",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "areas_visited",
+   "label": "Areas Visited",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_c",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "check_in",
+   "label": "Check In",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "check_out",
+   "label": "Check Out",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "acknowledged",
+   "label": "Acknowledged",
+   "fieldtype": "Check",
+   "read_only": 1
+  },
+  {
+   "fieldname": "acknowledgement_text",
+   "label": "Acknowledgement Text",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "description": "The exact words the visitor accepted, kept as evidence."
+  },
+  {
+   "fieldname": "rei_warning",
+   "label": "Restricted-Entry Warning Shown",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checkout_code_hash",
+   "label": "Check-out Code Hash",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "scan_section",
+   "fieldtype": "Section Break",
+   "label": "Scans",
+   "depends_on": "eval:doc.entry_type=='Scan'"
+  },
+  {
+   "fieldname": "scan_date",
+   "label": "Scan Date",
+   "fieldtype": "Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hits",
+   "label": "Hits",
+   "fieldtype": "Int",
+   "read_only": 1
+  },
+  {
+   "fieldname": "triage_section",
+   "fieldtype": "Section Break",
+   "label": "Triage"
+  },
+  {
+   "fieldname": "linked_doctype",
+   "label": "Linked Document Type",
+   "fieldtype": "Link",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_document",
+   "label": "Linked Document",
+   "fieldtype": "Dynamic Link",
+   "options": "linked_doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "label": "Notes",
+   "fieldtype": "Small Text"
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext MCP",
+ "name": "Public Site Entry",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Farm Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "HR Manager"
+  }
+ ],
+ "search_fields": "entry_type,category,contact_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "category",
+ "track_changes": 1
+}

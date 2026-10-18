@@ -1,6 +1,6 @@
 # Tool catalogue
 
-All 1159 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
+All 1175 tools `erpnext_mcp` exposes, with arguments, return shape and a worked
 example. The authoritative definitions live in `erpnext_mcp/registry.py`; this
 document explains them.
 
@@ -72,7 +72,7 @@ ledger.
 
 # Read-only tools
 
-All 554 read tools are **on** by default and can be switched off individually. A
+All 560 read tools are **on** by default and can be switched off individually. A
 tool that is off does not appear in `tools/list` at all, and neither does one
 whose site prerequisite is missing.
 
@@ -13902,8 +13902,8 @@ Read-only. **Arguments:** `bank_account`, `company`, `include_inactive`, `limit`
 
 v0.331.0. The cards on each Bank Account and every number a receipt can print for
 each: the card's own last four and each phone or watch carrying it. An Apple Pay /
-Google Pay slip prints the device account number (••7637) where the bank line says
-CARD 0845; the receipt matcher reads this register to treat the device number as
+Google Pay slip prints the device account number (••4821) where the bank line says
+CARD 1234; the receipt matcher reads this register to treat the device number as
 its card.
 
 ### `add_bank_card_alias` — MUTATING, default off
@@ -21302,3 +21302,35 @@ The v0.276.0 names (`create_packer_share`, `issue_packer_credential`, `revoke_pa
 | `get_deploy_status` | read | Version, commit, pending patches / migrate needed, worker and scheduler, the public health probe — this site. |
 | `run_post_deploy_check` | read | The deploy file's checklist as one call — pass / warn / fail per check. |
 
+
+## The public website (v0.335.0)
+
+A public site under ONE path prefix (default `/farm`): pages, jobs, crew information, report a problem,
+visitor check-in / check-out and QR codes, in the languages configured (en / es). Every word, page, block, form
+field, category, routing rule and QR source is a `Farm Config Version` of kind **Public Site** — drafted here,
+previewed here, published by `publish_public_site` (its own switch, off) or in the Desk. Nothing is served until a
+person ticks **Public Site Enabled** in ERPNext MCP Settings; no tool changes that. Only the configured company is
+ever named or shown; its openings are the only ones listed. `get_public_site` returns the exact `funnel_paths`.
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `configure_public_site` | write (off) | The setup wizard: company, brand, prefix, base URL, languages, modules, contact, QR sources, caps; drafts neutral starter pages and forms. |
+| `set_public_site_page` | write (off) | A page and its blocks (replace, or add / update / remove / move one). A new slug is a new page. |
+| `set_crew_info_entry` | write (off) | One heading + text entry on the crew page; upsert or remove. |
+| `set_public_site_form` | write (off) | A form's wording, fields (add / update / remove / move), categories and routing. |
+| `publish_public_site` | write (off) | Drafts → live (all, or `keys`). Does not switch the site on. |
+| `rollback_public_site` | write (off) | One key back to its previous version (needs the publish switch). |
+| `unpublish_public_site_page` | write (off) | Retire a page (needs the publish switch). |
+| `create_public_job_opening` | write (off) | An HRMS Job Opening for the public company only. |
+| `close_public_job_opening` | write (off) | Closed and unpublished. |
+| `update_public_site_entry` | write (off) | Triage: status, notes, check a visitor out, promote a report to a Farm Task. |
+| `get_public_site` | read | On / off, settings, live and drafted keys, public URL, funnel paths, open jobs, warnings. |
+| `preview_public_site` | read | Any path as HTML, drafts over live. |
+| `list_public_site_pages` | read | Pages in menu order, live or drafted. |
+| `list_public_site_entries` | read | Reports, visits (`on_site`), applications, scan counts. |
+| `get_public_site_entry` | read | One entry with every answer. |
+| `generate_public_site_qr` | read | PNG, CR80 card PDF or letter sign PDF for a path and a `?src=` tag. |
+
+Guest submissions are guarded by a honeypot, an HMAC time token (too fast, forged or over 2 h old is refused),
+per-visitor and site-wide hourly limits, and photos limited to JPEG / PNG / WebP under the size cap (read only to
+the cap). A guest reads nothing but the published pages and the image files they name.

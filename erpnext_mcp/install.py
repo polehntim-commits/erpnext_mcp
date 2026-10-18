@@ -164,6 +164,7 @@ def after_install() -> None:
 	_onboard_worker()
 	_irrigation_workspace()
 	_discard_fields()
+	_public_site_fields()
 	_farm_workspaces()
 	_sidebar()
 	_settlement_invoice_link()
@@ -220,6 +221,7 @@ def after_migrate() -> None:
 	_onboard_worker()
 	_irrigation_workspace()
 	_discard_fields()
+	_public_site_fields()
 	_farm_workspaces()
 	_sidebar()
 	_settlement_invoice_link()
@@ -1244,6 +1246,16 @@ def _bank_categorization_fields() -> None:
 			f"erpnext_mcp: the Bank Transaction categorisation fields were not installed — "
 			f"{type(exc).__name__}: {exc}"
 		)
+
+
+def _public_site_fields() -> None:
+	"""v0.335.0. Three Custom Fields on HRMS's Job Applicant for public applications. Never raises."""
+	try:
+		from . import public_site
+
+		public_site.ensure_applicant_fields()
+	except Exception as exc:  # pragma: no cover - a site mid-migrate
+		print(f"erpnext_mcp: the Job Applicant public-site fields were not installed — {type(exc).__name__}: {exc}")
 
 
 def _discard_fields() -> None:

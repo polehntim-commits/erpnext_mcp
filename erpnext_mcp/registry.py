@@ -60,9 +60,9 @@ from .tools import (
 	blocklifecycle,
 	breakeven,
 	bucket_log,
-	card_aliases,
 	budget,
 	calendar,
+	card_aliases,
 	collab,
 	company,
 	compintel,
@@ -133,6 +133,7 @@ from .tools import (
 	payroll_gl,
 	pdf_check,
 	printing,
+	public_site_tools,
 	purchasing,
 	push,
 	read,
@@ -17823,6 +17824,286 @@ TOOLS = {
 		required=("kind",),
 		title="Preview config",
 	),
+	# ── v0.335.0: the public website — built, previewed and published over MCP ──
+	"get_public_site": _tool(
+		public_site_tools.get_public_site,
+		"v0.335.0. The public website: whether it is switched on (Public Site Enabled, ticked by a person "
+		"in ERPNext MCP Settings), the settings with drafts applied, which keys are live and which are "
+		"drafted, the public URL, the EXACT paths that must be reachable from the internet (funnel_paths), "
+		"the open job openings it shows, and warnings. Read-only.",
+		{"include_versions": _field(_BOOLEAN, "List every Farm Config Version row of kind Public Site.")},
+		title="Get public site",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"preview_public_site": _tool(
+		public_site_tools.preview_public_site,
+		"v0.335.0. One public-site path rendered exactly as a visitor would see it, returned as HTML — "
+		"the drafts over what is live (drafts=false shows only what is live). Works while the site is "
+		"switched off; nothing is served or written. Paths: '' (home), a page slug, 'jobs', 'jobs/<opening>', "
+		"'report', 'visit'.",
+		{
+			"path": _field(_STRING, "Path under the site's prefix, e.g. 'story' or 'jobs'. Empty = home."),
+			"lang": _field(_STRING, "en or es (the site's languages)."),
+			"src": _field(_STRING, "A QR source tag, as a scan would carry it."),
+			"drafts": _field(_BOOLEAN, "Show drafts over what is live. Default true."),
+		},
+		title="Preview public site",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"list_public_site_pages": _tool(
+		public_site_tools.list_public_site_pages,
+		"v0.335.0. The public site's pages in menu order: slug, title (en/es), module, order, menu, block "
+		"count, whether it is live and whether a draft differs. Read-only.",
+		{},
+		title="List public site pages",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"list_public_site_entries": _tool(
+		public_site_tools.list_public_site_entries,
+		"v0.335.0. What the public sent: problem reports, visitor check-ins, job applications and QR scan "
+		"counts (Public Site Entry), newest first. on_site=true lists visitors not yet checked out. Read-only.",
+		{
+			"entry_type": _field(_STRING, "Report, Visit, Application or Scan."),
+			"status": _field(_STRING, "New, Triaged, Closed or Spam."),
+			"company": _field(_STRING, "The company the entry was filed under."),
+			"source": _field(_STRING, "A QR source tag."),
+			"on_site": _field(_BOOLEAN, "Visitors checked in and not out."),
+			"limit": _LIMIT,
+		},
+		title="List public site entries",
+		available=_needs_doctype("Public Site Entry"),
+		requires="the Public Site Entry doctype (run `bench migrate`)",
+	),
+	"get_public_site_entry": _tool(
+		public_site_tools.get_public_site_entry,
+		"v0.335.0. One Public Site Entry with every answer the visitor gave and what it was filed as. Read-only.",
+		{"name": _field(_STRING, "REQUIRED. PSE-#####.")},
+		required=("name",),
+		title="Get public site entry",
+		available=_needs_doctype("Public Site Entry"),
+		requires="the Public Site Entry doctype (run `bench migrate`)",
+	),
+	"generate_public_site_qr": _tool(
+		public_site_tools.generate_public_site_qr,
+		"v0.335.0. A QR code for the public site, or one page of it, tagged with a configured source "
+		"(?src=gate, ?src=packing-shed …) so scans are counted per place. format: png (base64), card_pdf "
+		"(CR80 card) or sign_pdf (letter-size sign). Needs base_url set. Writes nothing.",
+		{
+			"path": _field(_STRING, "A page or form, e.g. 'visit' or 'report'. Empty = home."),
+			"src": _field(_STRING, "A source tag from the site's qr_sources."),
+			"format": _field(_STRING, "png (default), card_pdf or sign_pdf."),
+			"caption": _field(_STRING, "The line under the name. Default 'Scan to visit us' in lang."),
+			"lang": _field(_STRING, "en or es, for the default caption."),
+		},
+		title="Generate public site QR",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"configure_public_site": _tool(
+		public_site_tools.configure_public_site,
+		"MUTATING (default OFF). v0.335.0. The public-site setup wizard: drafts the site settings — the "
+		"public company (any Company; every other company stays off the site), brand name / logo / colours / "
+		"tagline, route prefix, base URL, languages, modules on or off, contact details, QR source tags, "
+		"upload cap and rate limits — and, with seed_defaults (the default), neutral starter pages and forms "
+		"for any not yet drafted. Everything lands as a DRAFT: preview_public_site shows it, "
+		"publish_public_site makes it live. Never switches the site on.",
+		{
+			"company": _field(_STRING, "The ONE company the public site speaks for."),
+			"brand_name": _field(_STRING, "The public name."),
+			"logo": _field(_STRING, "A public /files/... image URL."),
+			"primary_color": _field(_STRING, "#RRGGBB."),
+			"accent_color": _field(_STRING, "#RRGGBB."),
+			"tagline": _field({"type": ["object", "string"]}, "{en, es} or English text."),
+			"route_prefix": _field(_STRING, "The one path the site lives under (default 'farm')."),
+			"base_url": _field(_STRING, "The public host, e.g. https://example.org — used for QR codes."),
+			"languages": _field({"type": ["array", "string"]}, "e.g. ['en','es']."),
+			"default_language": _field(_STRING, "en or es."),
+			"modules": _field(_OBJECT, "{about, jobs, crew, report, visit}: true/false."),
+			"contact": _field(_OBJECT, "{phone, email, address: {en, es}}."),
+			"qr_sources": _field({"type": "array", "items": _OBJECT}, "[{tag, label}] — where codes are posted."),
+			"max_upload_mb": _field(_INTEGER, "Photo size cap (1–10, default 5)."),
+			"submissions_per_visitor_per_hour": _field(_INTEGER, "Per-visitor rate limit (default 5)."),
+			"submissions_per_hour": _field(_INTEGER, "Site-wide rate limit (default 120)."),
+			"min_seconds_to_submit": _field(_INTEGER, "Time trap: faster submissions are refused (default 4)."),
+			"set_home_page": _field(_BOOLEAN, "On publish, make the website's / open the public site."),
+			"seed_defaults": _field(_BOOLEAN, "Draft neutral pages and forms that do not exist yet. Default true."),
+		},
+		mutating=True,
+		title="Configure public site",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"set_public_site_page": _tool(
+		public_site_tools.set_public_site_page,
+		"MUTATING (default OFF). v0.335.0. Create or change a public page as a draft: title (en/es), menu "
+		"order, in the menu or not, and its content blocks — replace them all with `blocks`, or one "
+		"block_op (add / update / remove / move at index). Block types: heading, text, list, image (a public "
+		"/files/ URL), contact, callout; every text is {en, es}. A new slug is a new page — no code change.",
+		{
+			"slug": _field(_STRING, "REQUIRED. The page's path, e.g. 'story' (a-z, 0-9, -)."),
+			"title": _field({"type": ["object", "string"]}, "{en, es} or English text."),
+			"module": _field(_STRING, "about, crew or custom (the module switch that hides it)."),
+			"order": _field(_INTEGER, "Menu position (lower first)."),
+			"nav": _field(_BOOLEAN, "Show in the menu."),
+			"blocks": _field({"type": "array", "items": _OBJECT}, "Replace all blocks: [{type, text:{en,es}, items, image, alt}]."),
+			"block_op": _field(_STRING, "add, update, remove or move."),
+			"block": _field(_OBJECT, "The block for add / update."),
+			"index": _field(_INTEGER, "Which block (0-based); for add, where to insert."),
+			"to": _field(_INTEGER, "For move: the new position."),
+			"note": _field(_STRING, "Why, kept on the version."),
+		},
+		required=("slug",),
+		mutating=True,
+		title="Set public site page",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"set_crew_info_entry": _tool(
+		public_site_tools.set_crew_info_entry,
+		"MUTATING (default OFF). v0.335.0. One public crew-information entry (a heading and its text, "
+		"en/es) on the crew page — upsert in place or remove. Public-safe information only (what to bring, "
+		"where to park, who to call); never names, schedules or pay.",
+		{
+			"entry": _field(_STRING, "REQUIRED. A short key, e.g. 'parking'."),
+			"op": _field(_STRING, "upsert (default) or remove."),
+			"title": _field({"type": ["object", "string"]}, "{en, es} heading."),
+			"text": _field({"type": ["object", "string"]}, "{en, es} body."),
+		},
+		required=("entry",),
+		mutating=True,
+		title="Set crew info entry",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"unpublish_public_site_page": _tool(
+		public_site_tools.unpublish_public_site_page,
+		"MUTATING (default OFF). v0.335.0. Take a page off the public site (every version retired, kept; "
+		"rollback_public_site does not restore a retired page — draft it again). Needs the Publish Public "
+		"Site switch too. The home page cannot be unpublished.",
+		{
+			"slug": _field(_STRING, "REQUIRED. The page."),
+			"change_note": _field(_STRING, "Why."),
+		},
+		required=("slug",),
+		mutating=True,
+		title="Unpublish public site page",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"set_public_site_form": _tool(
+		public_site_tools.set_public_site_form,
+		"MUTATING (default OFF). v0.335.0. A public form (report, visit, apply) as a draft: title / intro / "
+		"thanks / acknowledgement wording (en/es), its fields (field_op add / update / remove / move; types "
+		"text, textarea, select, phone, email, check, image, date), the category or visit-purpose choices, "
+		"and routing (company, create: farm_task or none, task_type, reporter_employee, notify_roles, "
+		"notify_users). Image fields accept jpg/png/webp only, under the site's size cap.",
+		{
+			"form": _field(_STRING, "REQUIRED. report, visit or apply."),
+			"title": _field({"type": ["object", "string"]}, "{en, es}."),
+			"intro": _field({"type": ["object", "string"]}, "{en, es}."),
+			"thanks": _field({"type": ["object", "string"]}, "{en, es}."),
+			"acknowledgement": _field({"type": ["object", "string"]}, "Visit: the rules a visitor accepts, {en, es}."),
+			"show_rei_warning": _field(_BOOLEAN, "Visit: warn of blocks under an active re-entry interval."),
+			"field_op": _field(_STRING, "add, update, remove or move."),
+			"field": _field(_STRING, "The field's name (with field_op)."),
+			"definition": _field(_OBJECT, "{type, label:{en,es}, required, options:[{value,label}], target}."),
+			"index": _field(_INTEGER, "Add: where to insert."),
+			"to": _field(_INTEGER, "Move: the new position."),
+			"categories": _field({"type": "array", "items": _OBJECT}, "[{value, label:{en,es}}] — report categories / visit purposes."),
+			"routing": _field(_OBJECT, "Merged into the form's routing."),
+			"note": _field(_STRING, "Why, kept on the version."),
+		},
+		required=("form",),
+		mutating=True,
+		title="Set public site form",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"publish_public_site": _tool(
+		public_site_tools.publish_public_site,
+		"MUTATING (default OFF — its own switch is how an operator lets an AI publish the public site). "
+		"v0.335.0. Make the public-site drafts live: all of them, or the keys named. Each is validated for "
+		"publish; a refused key is reported and the rest go through. Does NOT switch the site on — Public "
+		"Site Enabled is ticked by a person in ERPNext MCP Settings — and changes no network exposure.",
+		{
+			"change_note": _field(_STRING, "REQUIRED. What changed (10+ characters)."),
+			"keys": _field(_STRING_ARRAY, "Only these config keys (site, page_<slug>, form_<form>)."),
+		},
+		required=("change_note",),
+		mutating=True,
+		title="Publish public site",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"rollback_public_site": _tool(
+		public_site_tools.rollback_public_site,
+		"MUTATING (default OFF). v0.335.0. Put one public-site key back to its previous published version. "
+		"Needs the Publish Public Site switch too.",
+		{
+			"key": _field(_STRING, "REQUIRED. site, page_<slug> or form_<form>."),
+			"change_note": _field(_STRING, "Why."),
+		},
+		required=("key",),
+		mutating=True,
+		title="Roll back public site",
+		available=_needs_doctype("Farm Config Version"),
+		requires="the Farm Config Version doctype (run `bench migrate`)",
+	),
+	"create_public_job_opening": _tool(
+		public_site_tools.create_public_job_opening,
+		"MUTATING (default OFF). v0.335.0. An HRMS Job Opening for the public site's company, shown on the "
+		"site's jobs page while Open and published. Openings of any other company are never shown.",
+		{
+			"job_title": _field(_STRING, "REQUIRED."),
+			"designation": _field(_STRING, "REQUIRED. An existing Designation."),
+			"description": _field({"type": ["object", "string"]}, "{en, es} or English text."),
+			"company": _field(_STRING, "Defaults to the public site's company; any other is refused."),
+			"closes_on": _field(_STRING, "YYYY-MM-DD."),
+			"location": _field(_STRING, "Where the work is."),
+			"employment_type": _field(_STRING, "An Employment Type."),
+			"planned_vacancies": _field(_INTEGER, "How many."),
+			"publish": _field(_BOOLEAN, "Show on the site. Default true."),
+		},
+		required=("job_title", "designation"),
+		mutating=True,
+		title="Create public job opening",
+		available=_needs_doctype("Job Opening"),
+		requires="HRMS (the Job Opening doctype)",
+	),
+	"close_public_job_opening": _tool(
+		public_site_tools.close_public_job_opening,
+		"MUTATING (default OFF). v0.335.0. Close a Job Opening and take it off the public site.",
+		{"name": _field(_STRING, "REQUIRED. The Job Opening.")},
+		required=("name",),
+		mutating=True,
+		idempotent=True,
+		title="Close public job opening",
+		available=_needs_doctype("Job Opening"),
+		requires="HRMS (the Job Opening doctype)",
+	),
+	"update_public_site_entry": _tool(
+		public_site_tools.update_public_site_entry,
+		"MUTATING (default OFF). v0.335.0. Triage one Public Site Entry: status (New, Triaged, Closed, Spam), "
+		"notes, check a visitor out, or promote a problem report to a Farm Task (through the same path a "
+		"crew report takes; reporter_employee / task_type override the form's routing).",
+		{
+			"name": _field(_STRING, "REQUIRED. PSE-#####."),
+			"status": _field(_STRING, "New, Triaged, Closed or Spam."),
+			"notes": _field(_STRING, "Internal notes."),
+			"check_out": _field(_BOOLEAN, "Visit: check the visitor out now."),
+			"promote": _field(_BOOLEAN, "Report: file it as a Farm Task."),
+			"reporter_employee": _field(_STRING, "Promote: the Employee the task is reported as."),
+			"task_type": _field(_STRING, "Promote: the Farm Task type."),
+		},
+		required=("name",),
+		mutating=True,
+		title="Update public site entry",
+		available=_needs_doctype("Public Site Entry"),
+		requires="the Public Site Entry doctype (run `bench migrate`)",
+	),
 	# ── v0.234.1: one config lifecycle — the generic writes ────────────────
 	"draft_config": _tool(
 		config_tools.draft_config,
@@ -28704,7 +28985,7 @@ TOOLS = {
 		"The cards registered against each Bank Account, and every number a "
 		"RECEIPT can print for each one — the card's own last four and each "
 		"phone or watch that carries it. An Apple Pay / Google Pay slip prints "
-		"the device account number (••7637), not the card's (CARD 0845 on the "
+		"the device account number (••4821), not the card's (CARD 1234 on the "
 		"bank line); auto_match_receipts and match_receipt_to_bank_transaction "
 		"read this register to treat a device number as the card it stands for. "
 		"Active rows only unless include_inactive. Read-only.",
@@ -28735,10 +29016,10 @@ TOOLS = {
 		"number is refused.",
 		{
 			"bank_account": _field(_STRING, "REQUIRED. The Bank Account the card draws on."),
-			"card_last_four": _field(_STRING, "REQUIRED. Last four of the physical card, e.g. '0845'."),
+			"card_last_four": _field(_STRING, "REQUIRED. Last four of the physical card, e.g. '1234'."),
 			"number": _field(
 				_STRING,
-				"The four digits a receipt prints, e.g. the Apple Pay device number '7637'. "
+				"The four digits a receipt prints, e.g. the Apple Pay device number '4821'. "
 				"Defaults to card_last_four (the card's own row).",
 			),
 			"kind": _field(

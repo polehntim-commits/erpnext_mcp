@@ -1462,7 +1462,25 @@
   "allow_manage_updatable_fields",
   "update_document_fields",
   "offline_punch_section",
-  "offline_punch_window_hours"
+  "offline_punch_window_hours",
+  "public_site_section",
+  "public_site_enabled",
+  "allow_get_public_site",
+  "allow_preview_public_site",
+  "allow_list_public_site_pages",
+  "allow_list_public_site_entries",
+  "allow_get_public_site_entry",
+  "allow_generate_public_site_qr",
+  "allow_configure_public_site",
+  "allow_set_public_site_page",
+  "allow_set_crew_info_entry",
+  "allow_unpublish_public_site_page",
+  "allow_set_public_site_form",
+  "allow_publish_public_site",
+  "allow_rollback_public_site",
+  "allow_create_public_job_opening",
+  "allow_close_public_job_opening",
+  "allow_update_public_site_entry"
  ],
  "fields": [
   {
@@ -11247,6 +11265,132 @@
    "fieldname": "allow_share_link",
    "fieldtype": "Check",
    "label": "Share link (every kind)"
+  },
+  {
+   "fieldname": "public_site_section",
+   "fieldtype": "Section Break",
+   "label": "Public Website",
+   "collapsible": 1,
+   "description": "v0.335.0. The public website (pages, jobs, crew info, report a problem, visitor check-in, QR codes) under ONE path prefix. Everything is built over MCP as drafts; nothing is served until <b>Public Site Enabled</b> is ticked here, by a person."
+  },
+  {
+   "default": "0",
+   "fieldname": "public_site_enabled",
+   "fieldtype": "Check",
+   "label": "Public Site Enabled",
+   "description": "Serve the PUBLISHED public site to anyone who can reach its path. Off by default. No MCP tool changes this. Exposing the path to the internet (Tailscale Funnel) is separate and also yours: get_public_site lists the exact paths."
+  },
+  {
+   "default": "1",
+   "description": "READ. Public site status, settings, drafts, Funnel paths, warnings.",
+   "fieldname": "allow_get_public_site",
+   "fieldtype": "Check",
+   "label": "Get Public Site"
+  },
+  {
+   "default": "1",
+   "description": "READ. Render any public-site path as HTML (drafts over live). Serves nothing.",
+   "fieldname": "allow_preview_public_site",
+   "fieldtype": "Check",
+   "label": "Preview Public Site"
+  },
+  {
+   "default": "1",
+   "description": "READ. The public pages, live and drafted.",
+   "fieldname": "allow_list_public_site_pages",
+   "fieldtype": "Check",
+   "label": "List Public Site Pages"
+  },
+  {
+   "default": "1",
+   "description": "READ. Problem reports, visitor logs, applications and scan counts from the public site.",
+   "fieldname": "allow_list_public_site_entries",
+   "fieldtype": "Check",
+   "label": "List Public Site Entries"
+  },
+  {
+   "default": "1",
+   "description": "READ. One public submission with every answer.",
+   "fieldname": "allow_get_public_site_entry",
+   "fieldtype": "Check",
+   "label": "Get Public Site Entry"
+  },
+  {
+   "default": "1",
+   "description": "READ. QR codes for the public site (PNG, card PDF, sign PDF).",
+   "fieldname": "allow_generate_public_site_qr",
+   "fieldtype": "Check",
+   "label": "Generate Public Site QR"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Draft the public-site settings (company, brand, languages, modules, limits) and neutral starter pages.",
+   "fieldname": "allow_configure_public_site",
+   "fieldtype": "Check",
+   "label": "Configure Public Site"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Draft a public page and its content blocks.",
+   "fieldname": "allow_set_public_site_page",
+   "fieldtype": "Check",
+   "label": "Set Public Site Page"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Draft one crew-information entry on the public crew page.",
+   "fieldname": "allow_set_crew_info_entry",
+   "fieldtype": "Check",
+   "label": "Set Crew Info Entry"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Retire a public page (needs Publish Public Site too).",
+   "fieldname": "allow_unpublish_public_site_page",
+   "fieldtype": "Check",
+   "label": "Unpublish Public Site Page"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Draft a public form's wording, fields, categories and routing.",
+   "fieldname": "allow_set_public_site_form",
+   "fieldtype": "Check",
+   "label": "Set Public Site Form"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Make public-site drafts LIVE. Off by default: until on, a person publishes in the Desk. Does not switch the site on.",
+   "fieldname": "allow_publish_public_site",
+   "fieldtype": "Check",
+   "label": "Publish Public Site"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Return a public-site key to its previous version (needs Publish Public Site too).",
+   "fieldname": "allow_rollback_public_site",
+   "fieldtype": "Check",
+   "label": "Rollback Public Site"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Create a Job Opening for the public site's company.",
+   "fieldname": "allow_create_public_job_opening",
+   "fieldtype": "Check",
+   "label": "Create Public Job Opening"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Close a Job Opening and take it off the public site.",
+   "fieldname": "allow_close_public_job_opening",
+   "fieldtype": "Check",
+   "label": "Close Public Job Opening"
+  },
+  {
+   "default": "0",
+   "description": "WRITE. Triage a public submission: status, notes, check-out, promote a report to a Farm Task.",
+   "fieldname": "allow_update_public_site_entry",
+   "fieldtype": "Check",
+   "label": "Update Public Site Entry"
   }
  ],
  "index_web_pages_for_search": 0,

@@ -709,7 +709,9 @@ auth_hooks = ["erpnext_mcp.api.fallback_auth.authenticate", "erpnext_mcp.oauth.a
 #: `/.well-known/`, which an MCP client fetches from the site root. The renderer
 #: claims those two paths only, and only while `mcp_oauth_enabled` is ticked;
 #: every other path falls through to Frappe's own renderers untouched.
-page_renderer = ["erpnext_mcp.oauth.WellKnownPage"]
+#: v0.335.0. The public website under its one configurable prefix — inert until
+#: `public_site_enabled` is ticked in the Desk and a `site` config is published.
+page_renderer = ["erpnext_mcp.oauth.WellKnownPage", "erpnext_mcp.public_site_renderer.PublicSitePage"]
 
 #: v0.216.1. A PDF-ONLY base URL for wkhtmltopdf, so print stylesheets and
 #: images are fetched from an address the container itself serves instead of

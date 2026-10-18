@@ -269,6 +269,8 @@ SECTION_DOMAIN = {
 	"printing_tools_section": "platform",
 	"upload_tools_section": "platform",
 	"collab_tools_section": "platform",
+	# v0.335.0. The public website: pages, forms, jobs, QR codes and what the public sends.
+	"public_site_section": "platform",
 	"master_data_tools_section": "platform",
 	"meta_tools_section": "platform",
 	# v0.172.0. The Desk sidebar: who sees which workspace, and which default

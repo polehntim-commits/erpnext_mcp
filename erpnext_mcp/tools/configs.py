@@ -79,6 +79,8 @@ KINDS = {
 	"supplier_connector": {"label": "Supplier Connector", "store": "Farm Config Version", "key": "e.g. wilbur_ellis_portal_csv"},
 	"input_plan": {"label": "Input Plan", "store": "Farm Config Version", "key": "<company>_<year>"},
 	"pollination_plan": {"label": "Pollination Plan", "store": "Farm Config Version", "key": "<company>_<season>"},
+	# v0.335.0. The public website: site, page_<slug>, form_report / form_visit / form_apply.
+	"public_site": {"label": "Public Site", "store": "Farm Config Version", "key": "site, page_<slug> or form_<name>"},
 }
 PAYROLL_KINDS = ("overtime_rule", "pay_policy", "wage_floor", "oregon_withholding", "garnishment_policy",
                  "garnishment_limits", "pay_item_policy", "sick_time_policy")
@@ -88,7 +90,15 @@ IPM_KINDS = ("pest_dd_models", "pest_dd_offsets", "crop_phenology")
 PHONE_KINDS = ("wizard", "tile", "label_profile", "quiz")
 #: v0.279.0. Farm Config Version kinds with no special handling: read, stage, publish and roll back through the
 #: generic phone-config path; drafted with phone_config.save_draft; previewed by their own validator.
-FCV_KINDS = ("market_commodity", "seasonal_program", "job_template", "supplier_connector", "input_plan", "pollination_plan")
+FCV_KINDS = (
+	"market_commodity",
+	"seasonal_program",
+	"job_template",
+	"supplier_connector",
+	"input_plan",
+	"pollination_plan",
+	"public_site",
+)
 RULE_KINDS = ("compliance_rule", "trigger_rule")
 MAX_PREVIEW_DAYS = 31
 

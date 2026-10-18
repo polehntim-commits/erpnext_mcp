@@ -5,10 +5,9 @@ v0.331.0. The card fingerprint (`banking_bridge.card_fingerprint`, v0.75.0)
 compares the last four printed on a slip with the last four the bank prints on
 the statement line. That works for a swiped card and fails for every phone
 payment: Apple Pay, Google Pay and Samsung Pay hand the merchant a DEVICE
-ACCOUNT NUMBER, so the slip reads ••7637 while the bank line reads CARD 0845,
-and the matcher saw two different cards. On OML two iPhones carry the Wells
-Fargo business card ending 0845, and their receipts matched on amount, date and
-merchant alone.
+ACCOUNT NUMBER, so the slip reads ••4821 while the bank line reads CARD 1234,
+and the matcher saw two different cards — so a phone's receipts matched on
+amount, date and merchant alone.
 
 ONE ROW PER NUMBER A RECEIPT CAN PRINT. The card's own row (`kind` Card,
 `number` = `card_last_four`) and one row for each phone or watch that carries
@@ -69,7 +68,7 @@ def installed() -> bool:
 
 
 def _digits(value, field: str) -> str:
-	"""Four digits from `••7637`, `xxxx-7637` or `7637`; refuses anything else."""
+	"""Four digits from `••4821`, `xxxx-4821` or `4821`; refuses anything else."""
 	text = str(value or "").strip()
 	digits = re.sub(r"\D", "", text)
 	if len(digits) > 4:

@@ -659,8 +659,8 @@ def score_match(
 	card 4417 and so does the slip" is a sentence a bookkeeper can check.
 
 	v0.331.0. `cards` is `card_aliases.load_index()`. An Apple Pay slip prints the
-	phone's device number (7637), the bank line the card's (CARD 0845); when the
-	register says 7637 is card 0845, a bank line naming any number of that card
+	phone's device number (4821), the bank line the card's (CARD 1234); when the
+	register says 4821 is card 1234, a bank line naming any number of that card
 	is a fingerprint (`card_alias_hit`). Digits registered only on OTHER bank
 	accounts than the line's cost CARD_ACCOUNT_MISMATCH_PENALTY. No `cards`, or
 	unregistered digits, scores exactly as before.

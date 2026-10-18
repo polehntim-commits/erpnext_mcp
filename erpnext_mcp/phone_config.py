@@ -55,7 +55,9 @@ KINDS = {"Wizard": "wizard", "Tile": "tile", "Label Profile": "label_profile", "
          # program, thresholds — imported from the pro forma as a draft; a person publishes.
          "Input Plan": "input_plan",
          # v0.275.0. Where the hives go and how they move (`pollination`): blocks, drops, loading area, machine.
-         "Pollination Plan": "pollination_plan"}
+         "Pollination Plan": "pollination_plan",
+         # v0.335.0. The public website (`public_site`): `site`, `page_<slug>`, `form_<report|visit|apply>`.
+         "Public Site": "public_site"}
 SLUG_KINDS = {slug: kind for kind, slug in KINDS.items()}
 DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED = "Draft", "Staged", "Published", "Superseded", "Retired"
 STATUSES = (DRAFT, STAGED, PUBLISHED, SUPERSEDED, RETIRED)
@@ -227,6 +229,10 @@ def _validator(kind: str):
 		from . import pollination
 
 		return pollination.validate
+	if kind == "Public Site":
+		from . import public_site
+
+		return public_site.validate
 	from . import label_compliance
 
 	return label_compliance.validate

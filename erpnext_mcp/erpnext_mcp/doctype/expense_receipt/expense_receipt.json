@@ -421,7 +421,7 @@
    "read_only": 1
   },
   {
-   "description": "Which registered card paid, resolved from Card Last Four through the Bank Card Alias register — an Apple Pay receipt's device number (7637) lands here as the card it stands for. Set at capture and when an alias is added; blank when the digits are unknown or belong to more than one card.",
+   "description": "Which registered card paid, resolved from Card Last Four through the Bank Card Alias register — an Apple Pay receipt's device number (4821) lands here as the card it stands for. Set at capture and when an alias is added; blank when the digits are unknown or belong to more than one card.",
    "fieldname": "card_alias",
    "fieldtype": "Link",
    "label": "Card",
