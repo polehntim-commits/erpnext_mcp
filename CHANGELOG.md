@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.333.0 — 2026-10-17 — Trailing 12 Months on the financial statements
+
+**Migrate.** Deploy `docs/deploy/v0.333.0_ttm_statements.md`. Tools: **1,156** (unchanged). No phone change.
+
+- **Desk: `Financial Statements TTM`** (new Script Report, Accounts User / Manager, Auditor): Profit and Loss,
+  Balance Sheet or Cash Flow over the twelve FULL months ending at the last month-end on or before *As of*
+  (default: the last month-end). **Monthly Columns** shows the twelve months with ERPNext's Total; **Compare Prior
+  TTM** (on by default) adds the prior TTM — on the Balance Sheet the balance a year earlier — and the change.
+  Finance book, cost center, project and currency pass through. ERPNext's own statements do the arithmetic on a
+  Date Range; nothing in ERPNext is patched and its screens are unchanged. Totals, account names, the tree and the
+  click-through to the General Ledger are ERPNext's own formatter.
+- **MCP:** `run_report` takes `period="TTM"` (+ `as_of`, `monthly_columns`, `compare_prior`) on Profit and Loss
+  Statement, Balance Sheet, Cash Flow and the new report — every run through the Desk's permission-checked runner;
+  `ttm` names the window. `get_windowed_report` and `get_sustainable_cf_per_acre` take `period="TTM"` as the
+  statements' name for window_type TTM (twelve months; a conflicting window is refused).
+- The window is `windowed_reports`' own month-end rule (`services/ttm_statements.py`).
+- **Cash Flow is always run monthly** and its TTM is ERPNext's Total: run as one Yearly period across a fiscal-year
+  boundary, ERPNext's Cash Flow counts only the months after the boundary (a live bench read 9,000 of 12,000 for
+  Oct–Sep). Profit and Loss and the Balance Sheet agreed with their monthly runs and are run as asked.
+- Tests: `test_ttm_statements` (window, filters, shapes, the Desk report and its script under node, MCP), plus a
+  live-bench run of the report against ERPNext's real statements.
+
 ## 0.332.0 — 2026-10-17 — who paid: company card, personal card, "I'm covering this"
 
 **Migrate.** Deploy `docs/deploy/v0.332.0_who_paid.md`. Tools: **1,156** (unchanged). Pairs with FarmOps 0.72.0 (68).

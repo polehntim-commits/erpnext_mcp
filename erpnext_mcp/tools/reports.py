@@ -36,7 +36,7 @@ import json
 import frappe
 
 from .. import compat
-from ..args import as_limit, as_str
+from ..args import as_bool, as_date, as_limit, as_str
 from ..errors import ToolError
 from ..result import ToolResult
 
@@ -129,8 +129,11 @@ def run_report(args: dict) -> ToolResult:
 		raise ToolError(f"no User named {user!r}")
 
 	report_type = report.get("report_type")
+	ttm = _ttm_request(args, name)
 	try:
-		if report_type in QUERY_TYPES:
+		if ttm:
+			columns, rows, extras, via, filters = _run_ttm(name, filters, user, ttm)
+		elif report_type in QUERY_TYPES:
 			columns, rows, extras, via = _run_query_report(name, filters, user)
 		elif report_type == "Report Builder":
 			columns, rows, extras, via = _run_report_builder(report, filters, limit)
@@ -169,6 +172,74 @@ def run_report(args: dict) -> ToolResult:
 		data,
 		f"ran report {name} ({report_type}) as {data['executed_as']}: {data['row_count']} of {total} row(s)",
 	)
+
+
+# ── v0.333.0: period="TTM" on a financial statement ───────────────────────────
+#: This app's own Desk report, which takes the TTM options as filters itself.
+TTM_REPORT = "Financial Statements TTM"
+
+
+def _ttm_request(args: dict, name: str) -> dict | None:
+	"""The TTM options when `period` asks for them; None when it does not."""
+	from ..services import ttm_statements
+
+	period = as_str(args, "period")
+	if not period:
+		return None
+	if period.strip().upper() != "TTM":
+		raise ToolError(
+			f"period takes 'TTM' (the twelve full months to the last month-end); got {period!r}. "
+			"For a fiscal year or a date range, pass the report's own filters instead."
+		)
+	if name != TTM_REPORT and not ttm_statements.statement_name(name):
+		raise ToolError(
+			f"period='TTM' applies to {', '.join(ttm_statements.STATEMENTS)} and {TTM_REPORT}, not "
+			f"{name!r}. A windowed KPI takes it on get_windowed_report."
+		)
+	return {
+		"as_of": as_date(args, "as_of") or None,
+		"monthly": bool(as_bool(args, "monthly_columns", False)),
+		"compare": bool(as_bool(args, "compare_prior", False)),
+	}
+
+
+def _run_ttm(name: str, filters: dict, user: str, ttm: dict):
+	"""One statement over the TTM window, every run through the Desk's own runner."""
+	from ..services import ttm_statements
+
+	if not filters.get("company"):
+		raise ToolError('period="TTM" needs filters.company — a statement is always one company\'s.')
+	if name == TTM_REPORT:
+		mine = {
+			**filters,
+			"as_of": ttm["as_of"],
+			"monthly_columns": 1 if ttm["monthly"] else 0,
+			"compare_prior": 1 if ttm["compare"] else 0,
+		}
+		columns, rows, extras, via = _run_query_report(name, mine, user)
+		return columns, rows, extras, via, mine
+
+	def runner(statement, erpnext_filters):
+		columns, rows, extras, _via = _run_query_report(statement, erpnext_filters, user)
+		return {"columns": columns, "result": rows, **extras}
+
+	try:
+		result = ttm_statements.run(
+			name, filters, as_of=ttm["as_of"], monthly=ttm["monthly"], compare=ttm["compare"], runner=runner
+		)
+	except frappe.PermissionError:
+		raise
+	extras = {
+		"ttm": result["window"],
+		"message": result["message"],
+		"ttm_warnings": result["warnings"],
+	}
+	if result.get("chart"):
+		extras["chart"] = result["chart"]
+	if result.get("report_summary"):
+		extras["report_summary"] = result["report_summary"]
+	via = "frappe.desk.query_report.run, TTM window" + (" + prior TTM" if ttm["compare"] else "")
+	return result["columns"], result["data"], extras, via, result["erpnext_filters"]
 
 
 def _filters(raw) -> dict:

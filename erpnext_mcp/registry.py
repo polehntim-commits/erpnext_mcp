@@ -2730,7 +2730,15 @@ TOOLS = {
 		"Script Reports through Frappe's own runner and Report Builder reports "
 		"through their saved configuration. Filters are the report's own filter "
 		"fieldnames. Unlike the other read tools this one enforces Frappe "
-		"permissions, because it runs through the Desk APIs. Read-only.",
+		"permissions, because it runs through the Desk APIs. Read-only.\n\n"
+		"v0.333.0. period='TTM' on Profit and Loss Statement, Balance Sheet or Cash "
+		"Flow (or Financial Statements TTM): the twelve FULL months ending at the last "
+		"month-end on or before as_of (default today, so the last month-end). One TTM "
+		"column (a balance as of that month-end on the Balance Sheet); monthly_columns "
+		"for the twelve months plus ERPNext's Total; compare_prior adds the prior TTM (the "
+		"balance a year earlier) and the change. ERPNext's own statement runs on a Date "
+		"Range; filters.company is required and the report's other filters (cost_center, "
+		"project, finance_book, presentation_currency) pass through. `ttm` names the window.",
 		{
 			"name": _field(_STRING, "Report docname, exactly as list_reports gives it."),
 			"filters": _field(
@@ -2743,6 +2751,12 @@ TOOLS = {
 				_STRING,
 				"Run as this user instead of the configured MCP user. Their permissions apply.",
 			),
+			"period": _field(_STRING, "v0.333.0. 'TTM' on a financial statement — see above."),
+			"as_of": _field(
+				_STRING, "v0.333.0, with period='TTM': YYYY-MM-DD; the window ends at the last month-end on or before it."
+			),
+			"monthly_columns": _field(_BOOLEAN, "v0.333.0, with period='TTM': the twelve months as columns."),
+			"compare_prior": _field(_BOOLEAN, "v0.333.0, with period='TTM': the prior TTM and the change beside it."),
 			"limit": _field(
 				_INTEGER,
 				"Maximum rows returned. Default 100, hard maximum 500. "
@@ -21983,6 +21997,9 @@ TOOLS = {
 				"months; the to-date windows accumulate from the start of the current period "
 				"to as_of.",
 			),
+			"period": _field(
+				_STRING, "v0.333.0. 'TTM' — the financial statements' name for window_type TTM, twelve months."
+			),
 			"window_months": _field(
 				_INTEGER, "Months in the window. 12 for TTM, which is what the T and the M mean."
 			),
@@ -22073,6 +22090,9 @@ TOOLS = {
 				"Snapshot, TTM (the default), MTD, QTD, YTD or Custom. The to-date windows run "
 				"from the start of the current period to as_of, which is what makes them "
 				"comparable with the same span of the prior year.",
+			),
+			"period": _field(
+				_STRING, "v0.333.0. 'TTM' — the financial statements' name for window_type TTM, twelve months."
 			),
 			"window_months": _field(_INTEGER, "Months in the window. Default 12."),
 			"computation_step": _field(

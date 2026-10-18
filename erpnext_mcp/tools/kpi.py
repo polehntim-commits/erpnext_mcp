@@ -841,6 +841,18 @@ def _legacy_point_in_time(actor: str, company: str, period_start: str, period_en
 # framework whose every KPI costs a tool is a framework with six KPIs in it.
 def _window_args(args: dict) -> dict:
 	"""The five window arguments, validated once for every tool that takes them."""
+	# v0.333.0. `period="TTM"` — the name the financial statements use for the same window.
+	period = as_str(args, "period")
+	if period:
+		if period.strip().upper() != windows.WINDOW_TTM:
+			raise ToolError(f"period takes 'TTM'; got {period!r}. Other windows are window_type.")
+		if as_str(args, "window_type") and as_str(args, "window_type").upper() != windows.WINDOW_TTM:
+			raise ToolError(
+				f"period='TTM' and window_type={as_str(args, 'window_type')!r} disagree. Send one."
+			)
+		if args.get("window_months") not in (None, "") and as_int(args, "window_months", 12) != 12:
+			raise ToolError("period='TTM' is twelve months; leave window_months out, or use window_type.")
+		args = {**args, "window_type": windows.WINDOW_TTM}
 	window_type = as_str(args, "window_type") or windows.WINDOW_TTM
 	matched = next((option for option in windows.WINDOW_TYPES if option.lower() == window_type.lower()), "")
 	if not matched:
