@@ -831,6 +831,7 @@ def _attach_the_procedure(args: dict, doc, tail: str) -> list:
 		doctype=POLICY,
 		name=doc.name,
 		attached_to_field="attached_document",
+		parent_authorized=True,
 	)
 	url = attachment.get("file_url")
 	if url:

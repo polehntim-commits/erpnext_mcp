@@ -765,7 +765,12 @@ def draft_receipt(intake: str, actor: str = "") -> dict:
 	if not taken:
 		raise ReceivingError(f"{intake} has nothing to receive (every line rejected).")
 	pr.flags.ignore_permissions = True
-	pr.insert()
+	# v0.336.0. ERPNext 15.123 reads each line's Item, and the supplier's payable Account, with the ACCOUNT's
+	# permission; the route has gated this act (receiving roles, scope), so these Items — and only these — are
+	# readable for this one insert, and the supplier's account currency is answered before validate asks.
+	compat.prime_party_account_currency("Supplier", pr.supplier, pr.company)
+	with compat.items_readable(row.get("item_code") for row in pr.get("items") or []):
+		pr.insert()
 	doc.purchase_receipt = pr.name
 	doc.status = "Return Drafted" if returning else "Receipt Drafted"
 	doc.drafted_by = actor or None

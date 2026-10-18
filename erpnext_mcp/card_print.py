@@ -822,7 +822,7 @@ def request(
 	from .tools import artifacts
 
 	if pdf:
-		artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
+		artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork", parent_authorized=True)
 	answer = _answer(frappe.get_doc(JOB, doc.name), user, created=True, warnings=warnings)
 	# v0.214.0. A CARD ASKED FOR WITH NO PHOTO RAISES THE BADGE PHOTO TASK. The
 	# card still queues — initials print — and the answer says a photo has been
@@ -889,7 +889,7 @@ def request_back(
 
 	from .tools import artifacts
 
-	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
+	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork", parent_authorized=True)
 	return _answer(frappe.get_doc(JOB, doc.name), user, created=True, warnings=warnings)
 
 
@@ -942,7 +942,7 @@ def download(user: str, job_type: str, reference_name: str, reprint_reason: str 
 
 	from .tools import artifacts
 
-	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork")
+	artifacts.attach_bytes(JOB, doc.name, f"{doc.name}.pdf", pdf, field="artwork", parent_authorized=True)
 	return frappe.get_doc(JOB, doc.name), pdf, warnings
 
 

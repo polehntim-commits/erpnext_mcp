@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.336.0 — 2026-10-18 — Frappe 15.123.1 / ERPNext 15.123.0 compatibility: attachments and receipt drafts
+
+**Code only, no migrate of its own.** Ships WITH the 15.123 base image (fafo-umbrel-store 92cea86) — build that
+image with `ERPNEXT_MCP_VERSION=0.336.0`. Tools: **1,175** (unchanged). No phone change.
+
+- **Attachments.** Frappe 15.12x's `File.validate` now checks WRITE on the record a file is attached to, unless
+  the File carries `ignore_permissions`. Nothing in this app set it, because nothing had to: this app's own gates
+  were the whole answer. On 15.123 every phone photo, document and signature filed by someone without Desk write
+  on the parent was refused — Foremen and Field Workers on Asset Register (the brokered attach of v0.152.0),
+  Farm Managers on W-4 / I-9, a worker fetching their own pay stub, a badge photo, an EPA label on a product the
+  phone just registered. `files.insert_attachment` and `artifacts.attach_bytes` take a keyword-only
+  `parent_authorized`; True only where the caller's own gate has already run (role / scope on the phone route,
+  `check_attachable`'s write check, or a parent the same call wrote with `ignore_permissions`). Default False
+  keeps Frappe's check: the MCP-only callers with no gate of their own (Tax Form PDFs, ACH delivery, the
+  1099 and investment-report archives, `file_governance_document`) are unchanged.
+  `test_frappe_15123_compat.AUDITED` lists every call site and its decision; a new caller fails until classified.
+  Every File re-point already set the flag (audited).
+- **Receipt drafts.** ERPNext 15.123's `_get_item_details` reads each line's Item with the ACCOUNT's permission,
+  and the parent's `ignore_permissions` does not reach it, so a Farm Manager drafting a delivery receipt on the
+  phone was refused for want of Item read. `compat.items_readable(codes)` sets the flag on exactly those Items'
+  request-cached documents for the one gated insert and clears it after. No DocPerm added (roles.py rule 1
+  forbids a Custom DocPerm on ERPNext's Item, and it would widen every Item read). Found on the live 15.123 bench
+  once that was through: `get_party_account` now also refuses unless the account may read the supplier's payable
+  Account (`validate_currency` -> `get_party_account_currency`). `compat.prime_party_account_currency` runs
+  ERPNext's own function once as Administrator (session user swapped and restored, never `set_user`) so its
+  per-request memo holds the currency when validate asks — one Account's currency, nothing else. Stock Entry and
+  Batch inserts are untouched by 15.123 on the server path (their new checks are on Desk-only whitelisted methods).
+  Not changed and worth knowing: a Desk user drafting a Purchase Receipt by hand meets the same two checks; that
+  is a role question for the site, not this app.
+- **The test double now refuses what 15.123 refuses** (File parent write, line Item read, `get_cached_doc` one
+  object per request for Item), so the whole suite runs under the new rules. Negative controls: removing each
+  fix turns its test red.
+- Verified on a live bench from the 15.123.1 image as a Farm Manager with no Item or Account read: with
+  v0.335.0 the brokered attach, a generated-PDF attach and the receipt draft were all refused ("No permission for
+  Item"); with v0.336.0 all three go through, `receiving.draft_receipt` end to end (owner kept, PO rate kept,
+  draft only), while the MCP strict attach and an un-flagged generated attach are still refused, and the account
+  still cannot read the Item or the payable Account afterwards.
+
 ## 0.335.0 — 2026-10-18 — The public website: pages, jobs, crew info, report a problem, visitor check-in, QR
 
 **Migrate.** Deploy `docs/deploy/v0.335.0_public_site.md`. Tools: **1,159 → 1,175** (6 read, 10 mutating, off).

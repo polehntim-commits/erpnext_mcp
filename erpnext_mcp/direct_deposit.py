@@ -458,7 +458,11 @@ def upload_form(
 			"the numbers read from the form do not match what you entered. Check both, or enter them again. Nothing was changed."
 		)
 	attachment = artifacts.attach_bytes(
-		ACCOUNT, account, f"direct-deposit-form-{account}{name[name.rfind('.') :]}", content
+		ACCOUNT,
+		account,
+		f"direct-deposit-form-{account}{name[name.rfind('.') :]}",
+		content,
+		parent_authorized=True,
 	)
 	sha = hashlib.sha256(content).hexdigest()
 	text = _pdf_text(content) if name.endswith(".pdf") else ""

@@ -228,7 +228,12 @@ def set_photo(employee: str, reference, by: str = "") -> dict:
 	previous = str(row.get("image") or "")
 	stamp = str(frappe.utils.now()).replace("-", "").replace(":", "").replace(" ", "-")[:15]
 	attachment = artifacts.attach_bytes(
-		EMPLOYEE, row["name"], f"badge-photo-{row['name']}-{stamp}.jpg", jpeg, field="image"
+		EMPLOYEE,
+		row["name"],
+		f"badge-photo-{row['name']}-{stamp}.jpg",
+		jpeg,
+		field="image",
+		parent_authorized=True,
 	)
 	image = str(attachment.get("file_url") or "")
 	_comment(

@@ -22,6 +22,8 @@ rather than a traceback.
 loop is cheap.
 """
 
+import contextlib
+
 import frappe
 
 from .errors import ToolError
@@ -207,3 +209,68 @@ def company_default_cost_center(company: str) -> str | None:
 	if not field:
 		return None
 	return frappe.db.get_value("Company", company, field) or None
+
+
+@contextlib.contextmanager
+def items_readable(item_codes):
+	"""v0.336.0. Let ERPNext read THESE Items for one gated write, whatever the account's Item DocPerm.
+
+	ERPNext 15.123's `_get_item_details` runs `frappe.get_cached_doc("Item", code).check_permission()` for
+	every line of a buying / selling document on every validate, so a draft this app inserts with
+	`ignore_permissions` is still refused for an account without Item read — a Farm Manager drafting a
+	delivery receipt on the phone. The parent's flag does not reach the Item; only the Item document's own
+	`ignore_permissions` does (`Document.has_permission` returns early on it), and `get_cached_doc` hands
+	every caller in the request the same object, so the flag set here is the one ERPNext sees.
+
+	NARROW ON PURPOSE. Only the codes named, only inside the `with`, only for code that has already passed
+	its own gate (the route's role and scope checks). The flag is cleared on the way out, so nothing later in
+	the request inherits it. No DocPerm is added: roles.py rule 1 forbids a Custom DocPerm on ERPNext's Item,
+	and one would have widened every Item read for every account.
+	"""
+	marked = []
+	try:
+		for code in sorted({str(c) for c in item_codes or () if c}):
+			try:
+				doc = frappe.get_cached_doc("Item", code)
+			except Exception:  # an unknown code is ERPNext's to refuse, in its own words
+				continue
+			if not doc.flags.get("ignore_permissions"):
+				doc.flags.ignore_permissions = True
+				marked.append(doc)
+		yield
+	finally:
+		for doc in marked:
+			doc.flags.ignore_permissions = False
+
+
+def prime_party_account_currency(party_type: str, party: str, company: str) -> None:
+	"""v0.336.0. Answer ERPNext's party-currency question for one gated write, before its validate asks it.
+
+	ERPNext 15.123's `get_party_account` throws unless the ACCOUNT may read the party's payable/receivable
+	Account (`account_perm_check`), and every buying / selling validate reaches it through
+	`validate_currency` -> `get_party_account_currency`. That function memoises its answer for the request in
+	`frappe.local.cache["party_account_currency"]`, keyed by (party_type, party, company); this runs ERPNext's
+	own function once, as Administrator, so the answer is there when validate asks and the check is not
+	repeated. ERPNext's own logic, not a copy of it.
+
+	WHAT IS ELEVATED IS ONE READ: the currency of one Account. The session user is swapped for the call and
+	restored in `finally` — never `frappe.set_user`, which would wipe the request's form_dict and cache — and
+	Frappe keys its permission caches by user, so nothing the Administrator was allowed lingers for the real
+	account. Only for code that has passed its own gate. Never raises: a failure here leaves ERPNext to refuse
+	in its own words.
+	"""
+	try:
+		from erpnext.accounts.party import get_party_account_currency
+	except Exception:  # no ERPNext, or a release without it: nothing to prime
+		return
+	if not (party_type and party and company):
+		return
+	session = frappe.local.session
+	user = session.user
+	try:
+		session.user = "Administrator"
+		get_party_account_currency(party_type, party, company)
+	except Exception:
+		pass
+	finally:
+		session.user = user

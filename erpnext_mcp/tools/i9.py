@@ -2232,7 +2232,9 @@ def render_i9_pdf(args: dict) -> ToolResult:
 		record, employer, reverifications, full_ssn=ssn, notes=notes, signatures=signatures
 	)
 	file_name = i9_pdf.file_name_for(record)
-	attachment = artifacts.attach_bytes(I9_FORM, name, file_name, pdf, field="generated_pdf")
+	attachment = artifacts.attach_bytes(
+		I9_FORM, name, file_name, pdf, field="generated_pdf", parent_authorized=True
+	)
 	frappe.db.set_value(I9_FORM, name, "generated_pdf_on", frappe.utils.now(), update_modified=False)
 
 	overflow = max(0, len(reverifications) - i9_pdf.SUPPLEMENT_B_ROWS)

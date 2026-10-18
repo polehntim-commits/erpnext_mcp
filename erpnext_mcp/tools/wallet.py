@@ -267,7 +267,9 @@ def _apple(card: dict, attach_to: str, inline: bool) -> dict:
 	file_name = PASS_FILE_TEMPLATE.format(badge_id=card["badge_id"])
 	replaced = _replace_existing(attach_to, file_name) if attach_to else []
 	attachment = (
-		files_tool.insert_attachment(file_name, payload, is_private=True, doctype=EMPLOYEE, name=attach_to)
+		files_tool.insert_attachment(
+			file_name, payload, is_private=True, doctype=EMPLOYEE, name=attach_to, parent_authorized=True
+		)
 		if attach_to
 		else None
 	)

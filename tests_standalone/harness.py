@@ -2940,6 +2940,11 @@ class Document(FrappeDict):
 	# -- lifecycle ------------------------------------------------------------
 	def insert(self, ignore_permissions=False, ignore_if_duplicate=False):
 		self.flags.in_insert = True
+		# v0.336.0. Frappe stores the argument on the document's flags, and Frappe 15.12x's File.validate reads
+		# `self.flags.ignore_permissions` — so the double must, or every attach looks refused or permitted
+		# for the wrong reason.
+		if ignore_permissions:
+			self.flags.ignore_permissions = True
 		# Frappe runs `autoname` before validation, and a doctype whose docname
 		# is built from its own fields (Account is the one this app writes)
 		# depends on that order. Falling straight through to a serial name would
@@ -2968,6 +2973,8 @@ class Document(FrappeDict):
 	def save(self, ignore_permissions=False):
 		if not self.get("name"):
 			return self.insert(ignore_permissions=ignore_permissions)
+		if ignore_permissions:
+			self.flags.ignore_permissions = True
 		self._doc_before_save = STORE.get_raw(self.doctype, self.name)
 		self.modified = _now()
 		self._run("before_validate")
@@ -2981,6 +2988,16 @@ class Document(FrappeDict):
 		STORE.put(self)
 		self._run("on_update")
 		return self
+
+	def has_permission(self, permtype="read", **kwargs):
+		"""Frappe's: the document's own `ignore_permissions` flag first, then `frappe.has_permission`."""
+		if self.flags.get("ignore_permissions"):
+			return True
+		return frappe.has_permission(self.doctype, permtype, self)
+
+	def check_permission(self, permtype="read", permlevel=None):
+		if not self.has_permission(permtype):
+			raise PermissionError_(f"no {permtype} permission for {self.doctype} {self.get('name')}")
 
 	def _name_children(self):
 		"""Give every child row a docname, as Frappe does on save.
@@ -3343,6 +3360,7 @@ class FileDocument(Document):
 		return STORE.file_contents[self.name]
 
 	def validate(self):
+		self._validate_attachment_references()
 		if self.get("content") is None:
 			return
 		data = _as_bytes(self["content"])
@@ -3350,6 +3368,20 @@ class FileDocument(Document):
 		self["file_size"] = len(data)
 		folder = "/private/files/" if int(self.get("is_private") or 0) else "/files/"
 		self["file_url"] = folder + self["file_name"]
+
+	def _validate_attachment_references(self):
+		"""v0.336.0. Frappe 15.12x: a File attached to a document needs WRITE on that document.
+
+		Read out of `frappe/core/doctype/file/file.py` (15.123.1): unless the File carries
+		`ignore_permissions`, `check_write_permission(attached_to_doctype, attached_to_name)` runs, and that is
+		`doc.check_permission("write")`. 15.115 had no such check, so a double without it passes every attach
+		the new base image refuses. Denials come from `STORE.denied_permissions`, as everywhere here.
+		"""
+		doctype, name = self.get("attached_to_doctype"), self.get("attached_to_name")
+		if not doctype or self.flags.get("ignore_permissions"):
+			return
+		if not frappe.has_permission(doctype, "write", name):
+			raise PermissionError_(f"Insufficient Permission for {doctype} {name} (write)")
 
 	def on_update(self):
 		if self.get("content") is None:
@@ -3815,6 +3847,19 @@ class PurchaseOrderDocument(Document):
 		return "To Receive and Bill"
 
 
+def _check_line_items_readable(doc) -> None:
+	"""v0.336.0. ERPNext 15.123 `_get_item_details`: `frappe.get_cached_doc("Item", code).check_permission()`.
+
+	The buying / selling controllers run it for every line on every validate (`set_missing_item_details`),
+	so a parent inserted with `ignore_permissions` still asks it — the flag on the PARENT does not reach the
+	ITEM. Only that Item document's own flag does, which is what `compat.items_readable` sets.
+	"""
+	for row in doc.get("items") or []:
+		code = row.get("item_code")
+		if code and STORE.get_raw("Item", code) is not None:
+			frappe.get_cached_doc("Item", code).check_permission("read")
+
+
 class PurchaseReceiptDocument(Document):
 	"""Purchase Receipt: `grand_total` from items, `status` from `per_billed`.
 
@@ -3824,6 +3869,7 @@ class PurchaseReceiptDocument(Document):
 	"""
 
 	def validate(self):
+		_check_line_items_readable(self)
 		total = 0.0
 		for row in self.get("items") or []:
 			qty = float(row.get("qty") or 0)
@@ -4272,6 +4318,9 @@ def post_stock_entry_ledger(name: str) -> list[dict]:
 	return rows
 
 
+#: v0.336.0. What `frappe.get_cached_doc` caches per request in the double — see `get_cached_doc`.
+CACHED_DOCTYPES = frozenset({"Item"})
+
 #: Doctypes whose stub behaviour differs from a plain Document.
 STUB_CONTROLLERS = {
 	"File": FileDocument,
@@ -4321,6 +4370,7 @@ class Store:
 		_now_counter = 0
 		self.file_contents: dict[str, bytes] = {}
 		self.denied_permissions: set = set()
+		self.doc_cache: dict = {}
 		self.installed_apps: list[str] = ["frappe", "erpnext"]
 		self.report_runners: dict = {}
 		self.tables: dict[str, dict[str, dict]] = {}
@@ -4479,6 +4529,7 @@ class Store:
 
 	def put(self, doc: Document):
 		self._extract_passwords(doc)
+		self.doc_cache.pop((doc.doctype, doc.get("name")), None)
 		if META.get(doc.doctype) and META[doc.doctype].issingle:
 			self.singles[doc.doctype] = _drop_grandchildren(_plain(doc), doc.doctype)
 			return
@@ -4575,9 +4626,11 @@ class Store:
 		self.committed += 1
 		self.pending.clear()
 		self.before_images.clear()
+		self.doc_cache.clear()
 
 	def rollback(self):
 		self.rolled_back += 1
+		self.doc_cache.clear()
 		for doctype, name in self.pending:
 			self.tables.get(doctype, {}).pop(name, None)
 		for (doctype, name), row in self.before_images.items():
@@ -4880,6 +4933,7 @@ class FakeDB:
 		if row is None:
 			return
 		STORE.snapshot(doctype, name)
+		STORE.doc_cache.pop((doctype, name), None)
 		if isinstance(fieldname, dict):
 			row.update(fieldname)
 		else:
@@ -5598,6 +5652,15 @@ def _build_frappe() -> types.ModuleType:
 		return doc
 
 	def get_cached_doc(*args, **kwargs):
+		"""v0.336.0. Frappe returns ONE object per (doctype, name) for the rest of the request
+		(`frappe.local.cache`), which is what lets a flag set on it reach ERPNext's own read of it. Modelled
+		for Item only — the doctype the 15.123 check reads — and dropped on commit, rollback and any write
+		to that Item, so settings singles keep their fresh reads."""
+		if len(args) == 2 and args[0] in CACHED_DOCTYPES and isinstance(args[1], str):
+			key = (args[0], args[1])
+			if key not in STORE.doc_cache:
+				STORE.doc_cache[key] = get_doc(*args, **kwargs)
+			return STORE.doc_cache[key]
 		return get_doc(*args, **kwargs)
 
 	def get_single(doctype):

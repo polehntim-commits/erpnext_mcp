@@ -1857,6 +1857,7 @@ def regenerate_governance_document_pdf(args: dict) -> ToolResult:
 		doctype=GOVERNANCE_DOCUMENT,
 		name=name,
 		attached_to_field="attached_file",
+		parent_authorized=True,  # the has_permission(write) above is this call's gate
 	)
 	frappe.db.set_value(GOVERNANCE_DOCUMENT, name, "attached_file", attachment.get("file_url"))
 

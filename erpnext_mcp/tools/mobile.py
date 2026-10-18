@@ -1549,6 +1549,7 @@ def _archive_card(user: str, png: bytes, url: str, expires_at, args: dict) -> di
 		f"mobile-enrolment-{user.replace('@', '-at-')}.png",
 		png,
 		field="attached_file",
+		parent_authorized=True,
 	)
 	return {
 		"archived": True,

@@ -327,6 +327,7 @@ def submit_app_feedback(args: dict) -> ToolResult:
 				f"{doc.name}-screenshot{extension}",
 				content,
 				field="screenshot",
+				parent_authorized=True,
 			)
 			# `attach_bytes` writes the column with `db.set_value`, which does
 			# not run the controller — so `has_screenshot` is set the same way

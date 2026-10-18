@@ -798,6 +798,7 @@ def render_garnishment_response(args: dict) -> ToolResult:
 		garnishment_response_pdf.file_name_for(described),
 		pdf,
 		field="response_letter",
+		parent_authorized=True,
 	)
 	frappe.db.set_value(
 		GARNISHMENT,

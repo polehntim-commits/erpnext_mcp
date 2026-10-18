@@ -1312,7 +1312,8 @@ def render_training_sign_in_sheet(args: dict) -> ToolResult:
 		signatures=captures,
 	)
 	attachment = artifacts.attach_bytes(
-		DOCTYPE, row["name"], training_sheet_pdf.file_name_for(described), pdf, field="generated_pdf"
+		DOCTYPE, row["name"], training_sheet_pdf.file_name_for(described), pdf, field="generated_pdf",
+		parent_authorized=True,
 	)
 	frappe.db.set_value(DOCTYPE, row["name"], "generated_pdf_on", frappe.utils.now(), update_modified=False)
 

@@ -847,7 +847,8 @@ def _attach_to_employee(employee: str, file_name: str, content: bytes) -> dict:
 			# filename, and that one is left alone.
 			frappe.delete_doc("File", existing, ignore_permissions=True, force=True)
 			report["replaced"] = existing
-		attachment = artifacts.attach_bytes(EMPLOYEE, employee, file_name, content)
+		# v0.336.0. Both callers gate first (hiring role + company scope; the Desk button asks write itself).
+		attachment = artifacts.attach_bytes(EMPLOYEE, employee, file_name, content, parent_authorized=True)
 		report["attached"] = True
 		report["file_url"] = attachment.get("file_url")
 		report["file_docname"] = attachment.get("name")

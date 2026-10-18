@@ -483,6 +483,9 @@ def _attach(args: dict, *, require_parent_write: bool) -> ToolResult:
 			+ f" to {doctype} {name}",
 		)
 
+	# v0.336.0. Both modes have run their gate by now: `check_attachable` asked Frappe for write, or the
+	# brokered caller asked its stricter questions. Frappe 15.12x would otherwise ask again and refuse the
+	# brokered path for every account without Desk write — the phone's whole reason for that path.
 	attachment = insert_attachment(
 		file_name,
 		content,
@@ -490,6 +493,7 @@ def _attach(args: dict, *, require_parent_write: bool) -> ToolResult:
 		doctype=doctype,
 		name=name,
 		file_url=file_url,
+		parent_authorized=True,
 	)
 
 	stored_size = int(attachment.get("file_size") or len(content) or 0)
@@ -660,8 +664,18 @@ def insert_attachment(
 	name: str = "",
 	file_url: str = "",
 	attached_to_field: str = "",
+	parent_authorized: bool = False,
 ):
 	"""Write one File, from bytes or from a URL, and return the document.
+
+	`parent_authorized` (v0.336.0): THE CALLER HAS ALREADY DECIDED THIS ACCOUNT MAY PUT A FILE ON THIS
+	PARENT. Frappe 15.12x's `File.validate` checks write on the parent itself (`check_write_permission`)
+	unless the File carries `ignore_permissions`; until then nothing did, so every gate in this app was the
+	whole answer. Pass True only AFTER that gate has run — `check_attachable` with its write check, the
+	brokered `attach_file_to_authorized_parent`, a phone route's role / scope gate, or a parent this same
+	call wrote with `ignore_permissions`. Keyword-only and never read off `args`, for the reason `_attach`
+	gives: a payload flag would let any caller spend it.
+	False keeps Frappe's own check, which is what a caller that asked nothing gets.
 
 	The single place in this app that inserts a File. `content` wins over
 	`file_url` when both are given, because bytes are the thing the caller
@@ -691,8 +705,11 @@ def insert_attachment(
 	# (employee, I-9, W-4, injury) are still stripped. `asset_photos.keeps_exif`.
 	from .. import asset_photos
 
+	doc = frappe.get_doc(payload)
+	if parent_authorized and doctype and name:
+		doc.flags.ignore_permissions = True
 	with asset_photos.exif_kept(asset_photos.keeps_exif(doctype, file_name)):
-		return frappe.get_doc(payload).insert()
+		return doc.insert(ignore_permissions=True) if doc.flags.ignore_permissions else doc.insert()
 
 
 def decode_base64_content(file_content: str, tail: str = "Nothing was created.") -> bytes:

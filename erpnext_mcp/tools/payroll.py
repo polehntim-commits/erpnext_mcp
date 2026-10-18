@@ -2519,7 +2519,7 @@ def render_pay_stub(args: dict) -> ToolResult:
 		_stub_company_info(doc.company, args),
 		show_employer_contributions=bool(args.get("show_employer_contributions")),
 	)
-	attachment = artifacts.attach_bytes(PAYROLL_ENTRY, doc.name, file_name, pdf)
+	attachment = artifacts.attach_bytes(PAYROLL_ENTRY, doc.name, file_name, pdf, parent_authorized=True)
 
 	data = {
 		"payroll_entry": doc.name,
@@ -2626,7 +2626,7 @@ def _render_earnings_explanation(args: dict) -> ToolResult:
 	                        f"/ Emitido {today}. Se actualiza cada 1 de enero y cuando cambie tu pago o tus descuentos."}
 	pdf = pay_stub_pdf.render_earnings_explanation(info)
 	file_name = f"Earnings-explanation-{employee}-{today}.pdf"
-	attachment = artifacts.attach_bytes(EMPLOYEE, employee, file_name, pdf)
+	attachment = artifacts.attach_bytes(EMPLOYEE, employee, file_name, pdf, parent_authorized=True)
 	return ToolResult(
 		data={"employee": employee, "employee_name": emp.get("employee_name"), "file_name": file_name,
 		      "file_url": attachment.get("file_url"), "bytes": len(pdf), "pay_frequency": frequency, "payday": payday,

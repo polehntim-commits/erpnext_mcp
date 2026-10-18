@@ -155,12 +155,24 @@ def write_output(path: str, payload: bytes, overwrite: bool) -> dict:
 	}
 
 
-def attach_bytes(doctype: str, name: str, file_name: str, content: bytes, field: str = ""):
+def attach_bytes(
+	doctype: str,
+	name: str,
+	file_name: str,
+	content: bytes,
+	field: str = "",
+	*,
+	parent_authorized: bool = False,
+):
 	"""Store `content` as a PRIVATE File attached to one document.
 
 	Private is not an argument. A quarterly report names positions and balances,
 	and a 1099 names people and what they were paid; neither belongs at a public
 	URL because somebody passed the wrong flag.
+
+	`parent_authorized` (v0.336.0) is `files.insert_attachment`'s: True only once the caller's own gate
+	has passed, because Frappe 15.12x otherwise asks for write on the parent — which a worker fetching
+	their own pay stub, or HR rendering a W-4 they may not edit in the Desk, does not hold.
 	"""
 	payload = {
 		"doctype": "File",
@@ -172,7 +184,10 @@ def attach_bytes(doctype: str, name: str, file_name: str, content: bytes, field:
 	}
 	if field:
 		payload["attached_to_field"] = field
-	attachment = frappe.get_doc(payload).insert()
+	attachment = frappe.get_doc(payload)
+	if parent_authorized:
+		attachment.flags.ignore_permissions = True
+	attachment = attachment.insert(ignore_permissions=True) if parent_authorized else attachment.insert()
 	if field:
 		frappe.db.set_value(doctype, name, field, attachment.get("file_url"))
 	return attachment

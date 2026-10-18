@@ -327,6 +327,7 @@ def commit_staged_file(args: dict) -> ToolResult:
 			is_private=is_private,
 			doctype=target["doctype"],
 			name=target["name"],
+			parent_authorized=True,
 		)
 		created = None
 		attachment_name = attachment.name

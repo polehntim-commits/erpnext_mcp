@@ -870,7 +870,7 @@ def packet(employee: str, viewer: str) -> dict:
 	else:
 		skipped = [f"{d} {n}" for d, n, _f in _appendix_files(data)]
 	file_name = f"employee-file-{employee}-{data['as_of']}.pdf"
-	attachment = artifacts.attach_bytes(EMPLOYEE, employee, file_name, pdf)
+	attachment = artifacts.attach_bytes(EMPLOYEE, employee, file_name, pdf, parent_authorized=True)
 	return {
 		"employee": employee,
 		"file": getattr(attachment, "name", None),

@@ -221,7 +221,12 @@ def generate_audit_packet(args: dict) -> ToolResult:
 		document = _file_governance_document(title, company, start, end, packet, readiness)
 
 	attachment = artifacts.attach_bytes(
-		GOVERNANCE_DOCUMENT, document.name, file_name, content, field="attached_file"
+		GOVERNANCE_DOCUMENT,
+		document.name,
+		file_name,
+		content,
+		field="attached_file",
+		parent_authorized=True,
 	)
 	if staged and staged.get("staged"):
 		# The File is the record now. Staging that outlives the file it built is

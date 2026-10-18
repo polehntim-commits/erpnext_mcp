@@ -1076,6 +1076,7 @@ def collect_form_signature(args: dict) -> ToolResult:
 			doctype=box.doctype,
 			name=name,
 			attached_to_field=box.field,
+			parent_authorized=True,
 		)
 	else:
 		# THROUGH THE DOCUMENT, NOT `db.set_value`, for the reason

@@ -936,7 +936,7 @@ def render_w4_pdf(args: dict) -> ToolResult:
 
 	pdf = w4_pdf.fill_w4_pdf(record, person, employer, signature=_signature_capture(record))
 	file_name = w4_pdf.file_name_for(record, person)
-	attachment = artifacts.attach_bytes(W4_FORM, name, file_name, pdf, field="generated_pdf")
+	attachment = artifacts.attach_bytes(W4_FORM, name, file_name, pdf, field="generated_pdf", parent_authorized=True)
 	frappe.db.set_value(W4_FORM, name, "generated_pdf_on", now(), update_modified=False)
 
 	tax_year = int(row.get("tax_year") or 0)
@@ -1060,7 +1060,7 @@ def _render_or_w4(args: dict) -> ToolResult:
 	pdf, notes = or_w4_pdf.fill_or_w4_pdf(record, person, employer, signature=ink)
 	file_name = or_w4_pdf.file_name_for(record, person)
 	field = "or_generated_pdf" if compat.has_field(W4_FORM, "or_generated_pdf") else None
-	attachment = artifacts.attach_bytes(W4_FORM, name, file_name, pdf, field=field)
+	attachment = artifacts.attach_bytes(W4_FORM, name, file_name, pdf, field=field, parent_authorized=True)
 	if compat.has_field(W4_FORM, "or_generated_pdf_on"):
 		frappe.db.set_value(W4_FORM, name, "or_generated_pdf_on", now(), update_modified=False)
 	tax_year = int(row.get("tax_year") or 0)

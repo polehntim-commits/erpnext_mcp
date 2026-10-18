@@ -102,8 +102,11 @@ def _signal_word(raw) -> str | None:
 	return word if word in ("Danger", "Warning", "Caution") else None
 
 
-def attach_label_pdf(item_code: str, record: dict) -> dict:
+def attach_label_pdf(item_code: str, record: dict, *, parent_authorized: bool = False) -> dict:
 	"""Download EPA's newest accepted label and file it on the Item. Returns the File card.
+
+	`parent_authorized` (v0.336.0) is `files.insert_attachment`'s: the phone route has gated the act and
+	written the Item with `ignore_permissions`, so a Foreman without Desk write on Item is not refused the label.
 
 	A PDF of the same name already on this Item is the answer, not a second copy —
 	registering the same product twice must not stack two identical labels.
@@ -131,7 +134,12 @@ def attach_label_pdf(item_code: str, record: dict) -> dict:
 	if fetched.extension != "pdf":
 		raise ToolError(f"EPA answered {newest['pdffile']} with a {fetched.extension}, not a PDF.")
 	handle = file_tools.insert_attachment(
-		file_name, fetched.content, is_private=True, doctype="Item", name=item_code
+		file_name,
+		fetched.content,
+		is_private=True,
+		doctype="Item",
+		name=item_code,
+		parent_authorized=parent_authorized,
 	)
 	return {
 		"name": handle.name,
@@ -141,7 +149,7 @@ def attach_label_pdf(item_code: str, record: dict) -> dict:
 	}
 
 
-def label_for_item(item_code: str, number, *, attach: bool = True) -> dict:
+def label_for_item(item_code: str, number, *, attach: bool = True, parent_authorized: bool = False) -> dict:
 	"""The `epa_label` block of `register_product_label`'s answer. Never raises."""
 	registration = base_registration(number)
 	answer = {
@@ -177,7 +185,7 @@ def label_for_item(item_code: str, number, *, attach: bool = True) -> dict:
 	if not attach:
 		return answer
 	try:
-		card = attach_label_pdf(item_code, record)
+		card = attach_label_pdf(item_code, record, parent_authorized=parent_authorized)
 	except ToolError as exc:
 		answer.update(status="failed", reason=f"The label PDF could not be attached: {exc}")
 		return answer

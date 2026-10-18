@@ -466,7 +466,9 @@ def seal_signed_document(args: dict) -> ToolResult:
 	sealed = pdf_seal.seal(content, rows, note=note)
 	digest = pdf_seal.sha256_of(sealed)
 
-	attachment = artifacts.attach_bytes(doctype, name, _seal_file_name(doctype, name, url), sealed)
+	attachment = artifacts.attach_bytes(
+		doctype, name, _seal_file_name(doctype, name, url), sealed, parent_authorized=True
+	)
 	recorded = _record_seal(rows, attachment.get("file_url"), digest)
 	filed = _file_on_employee(doctype, name, attachment)
 
@@ -596,6 +598,7 @@ def _file_on_employee(doctype: str, name: str, attachment) -> dict:
 			doctype=EMPLOYEE,
 			name=employee,
 			file_url=url,
+			parent_authorized=True,
 		)
 	except Exception as exc:
 		return {

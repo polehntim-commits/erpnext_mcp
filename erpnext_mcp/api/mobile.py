@@ -22739,7 +22739,8 @@ def register_product_label(
 	if not number and compat.has_field("Item", "epa_registration_number"):
 		number = str(frappe.db.get_value("Item", code, "epa_registration_number") or "").strip()
 	attach = fetch_epa_label in (None, "") or compat.checked(fetch_epa_label)
-	epa = epa_ppls.label_for_item(code, number, attach=attach)
+	# v0.336.0. Gated above (scope, dispatch role) and the Item written with ignore_permissions.
+	epa = epa_ppls.label_for_item(code, number, attach=attach, parent_authorized=True)
 	record = epa.pop("record", None)
 
 	# 3. The validation, filed against the Item.
@@ -23896,6 +23897,7 @@ def attach_asset_document(
 			is_private=True,
 			doctype=asset_tags.ASSET_REGISTER,
 			name=target["name"],
+			parent_authorized=True,
 		)
 		attachment = _attachment_out(handle, len(fetched.content), fetched.mime_type)
 
