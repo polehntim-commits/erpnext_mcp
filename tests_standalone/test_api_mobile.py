@@ -582,6 +582,7 @@ class TheSurfaceIsClosed(MobileAPITestCase):
 		"universal_scan",
 		"classify_receipt",
 		"create_expense_receipt",
+		"list_card_numbers",
 		"create_scale_ticket",
 		"list_scale_tickets",
 		"collect_signature",

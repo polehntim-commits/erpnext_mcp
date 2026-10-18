@@ -3,6 +3,31 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.332.0 — 2026-10-17 — who paid: company card, personal card, "I'm covering this"
+
+**Migrate.** Deploy `docs/deploy/v0.332.0_who_paid.md`. Tools: **1,156** (unchanged). Pairs with FarmOps 0.72.0 (68).
+
+- **Expense Receipt → Who Paid** (new section, editable on the Desk form): `paid_with` (Company card / Personal
+  card), `card_bank_account` (the company account the card draws on), `covered_by_submitter` ("I'm covering this").
+  Taken by `submit_expense_receipt`, `update_expense_receipt` and the phone's `create_expense_receipt`; impossible
+  combinations are refused, and a company account implies a company card.
+- **Unknown card → learned once.** A Company card answer with an account and an unknown `card_last_four` registers
+  the number as a Bank Card Alias on that account (`save_card_alias`, default on; `card_alias_card` makes it a
+  device of a known card). Only Accounts / Farm / Member Manager, Accounts User or System Manager teach it; anyone
+  else's answer is kept on the receipt and learned when a bookkeeper saves it in the Desk.
+- **Personal card** — owed to the submitter: `post_reimbursement_receipt` now also books an approved personal-card
+  purchase as a DRAFT Journal Entry, Dr the expense (`expense_account` or the category match), Cr `credit_account`
+  or the submitter's member draw account; a Payable credit carries the Employee as party. Never billed as a Purchase
+  Invoice; never proposed against a company bank line.
+- **"I'm covering this"** — `create_owner_draw` takes an approved covered receipt and defaults everything from it:
+  amount, date, a narrative, the draw account from the submitter's **Cap Table Entry** (new `employee` +
+  `draw_account`, set with create/update_cap_table_entry; must be leaf Equity), and the card's bank account as the
+  credit. DRAFT only.
+- **Matcher:** an account named on the receipt is account evidence (the 0.05 mismatch penalty).
+- **Phone:** new GET `/farmops/api/mobile/list_card_numbers` (enrolment) — the farm's card numbers, cached on the
+  phone so the prompt works offline. SERVER_CHANGES.md §75.
+- Tests: `test_who_paid`, the `list_card_numbers` mirror (test_116).
+
 ## 0.331.0 — 2026-10-17 — Apple Pay device numbers matched as their card: the Bank Card Alias register
 
 **Migrate.** Deploy `docs/deploy/v0.331.0_card_aliases.md`. Tools: **1,153 → 1,156** (1 read, 2 mutating, off).

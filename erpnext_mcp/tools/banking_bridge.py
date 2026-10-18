@@ -267,6 +267,10 @@ _RECEIPT_FIELDS = (
 	# which is falsy, which is Withdrawal — exactly what every site did before
 	# this column existed.
 	"is_return",
+	# v0.332.0. Who paid: a personal-card slip is not on any company statement,
+	# and a company account the submitter named is evidence about which one.
+	"paid_with",
+	"card_bank_account",
 )
 
 #: Rule fields, in the order the evaluator wants them.
@@ -690,6 +694,11 @@ def score_match(
 			f"amounts differ by {amount_gap} (receipt {receipt_amount}, transaction {gross}), "
 			f"outside the {tolerance} tolerance"
 		)
+	if receipt.get("paid_with") == "Personal card":
+		reasons.append(
+			"the receipt was paid on the submitter's personal card, so it is not on a company "
+			"statement — it is booked with post_reimbursement_receipt"
+		)
 	if day_gap is None:
 		reasons.append("one of the two documents has no date")
 	elif day_gap < -BACKDATE_TOLERANCE_DAYS:
@@ -727,6 +736,8 @@ def score_match(
 		base += CARD_FINGERPRINT_BONUS
 
 	owners = {entry["bank_account"] for entry in entries}
+	if not owners and receipt.get("card_bank_account"):
+		owners = {receipt["card_bank_account"]}
 	account = transaction.get("bank_account")
 	account_mismatch = bool(owners and account and account not in owners and not fingerprint)
 	if account_mismatch:

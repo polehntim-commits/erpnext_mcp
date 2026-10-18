@@ -741,7 +741,6 @@
   },
   "collect_signature": {},
   "complete_task_via_mobile": {},
-  "save_task_progress": {},
   "complete_training_session": {},
   "confirm_shipment_movement": {},
   "create_accident_report": {},
@@ -1165,6 +1164,11 @@
     "dispatch"
    ]
   },
+  "hold_task": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "index_lot_events": {
    "gates": [
     "dispatch"
@@ -1216,6 +1220,7 @@
   "list_available_housing": {},
   "list_available_tasks": {},
   "list_branches": {},
+  "list_card_numbers": {},
   "list_card_print_jobs": {},
   "list_certifications": {
    "gates": [
@@ -1294,6 +1299,7 @@
   "list_field_boundaries": {},
   "list_food_safety_plans": {},
   "list_hazard_analyses": {},
+  "list_held_tasks": {},
   "list_housing_units": {},
   "list_i9_document_types": {},
   "list_inspection_evidence": {},
@@ -1398,6 +1404,11 @@
     "dispatch"
    ]
   },
+  "move_task_pin": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "my_day_check": {},
   "normalize_merchant": {},
   "override_task_hold": {},
@@ -1434,6 +1445,11 @@
   "register_push_token": {},
   "reject_leave_request": {},
   "reject_task": {},
+  "release_task": {
+   "gates": [
+    "dispatch"
+   ]
+  },
   "remove_authorized_signer": {},
   "remove_from_crew_task": {},
   "render_pay_stub": {
@@ -1481,6 +1497,7 @@
     "ipm_edit"
    ]
   },
+  "save_task_progress": {},
   "scan_asset": {},
   "scan_valve": {},
   "seal_bin": {},
@@ -1537,22 +1554,6 @@
     "dispatch"
    ]
   },
-  "move_task_pin": {
-   "gates": [
-    "dispatch"
-   ]
-  },
-  "hold_task": {
-   "gates": [
-    "dispatch"
-   ]
-  },
-  "release_task": {
-   "gates": [
-    "dispatch"
-   ]
-  },
-  "list_held_tasks": {},
   "universal_scan": {
    "resources": [
     {

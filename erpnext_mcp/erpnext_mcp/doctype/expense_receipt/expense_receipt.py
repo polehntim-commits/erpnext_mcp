@@ -53,6 +53,42 @@ class ExpenseReceipt(Document):
 		self.validate_amount()
 		self.validate_confidence()
 		self.fill_in_line_totals()
+		self.validate_who_paid()
+
+	def validate_who_paid(self):
+		"""v0.332.0. The Desk form's who-paid choice, held to the rules the tools apply."""
+		if self.get("card_bank_account") and not self.get("paid_with"):
+			self.paid_with = "Company card"
+		if self.get("paid_with") == "Personal card" and self.get("card_bank_account"):
+			frappe.throw(_("A personal card does not draw on a company bank account. Clear one of them."))
+		if self.get("paid_with") == "Personal card" and int(self.get("covered_by_submitter") or 0):
+			frappe.throw(
+				_('"I\'m covering this" is for a purchase the company paid; untick it for a personal card.')
+			)
+
+	def on_update(self):
+		"""v0.332.0. Company card + an account + an unknown number: learn the number once.
+
+		Skipped when a tool is saving and learns for itself (`submit_expense_receipt`
+		sets the flag), so a capture does not learn twice and report the second.
+		"""
+		if self.flags.get("who_paid_handled"):
+			return
+		try:
+			from erpnext_mcp.tools import paid_with
+
+			result = paid_with.learn_from_saved_receipt(self)
+		except Exception:
+			frappe.log_error(title="erpnext_mcp: card learning on save failed")
+			return
+		if result and result.get("action") == "created":
+			frappe.msgprint(
+				_("Card {0} saved on {1}.").format(self.get("card_last_four"), self.get("card_bank_account"))
+			)
+		elif result and result.get("action") == "pending":
+			frappe.msgprint(
+				_("Card {0} kept for a bookkeeper to confirm.").format(self.get("card_last_four"))
+			)
 
 	def validate_amount(self):
 		"""A receipt total below zero is a refund, and this is not the doctype for one."""

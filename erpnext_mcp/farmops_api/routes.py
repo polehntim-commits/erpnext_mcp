@@ -415,6 +415,8 @@ ROUTES = (
 	# with no route 404s, which is the whole design of this table.
 	Route("/mobile", mobile_api.classify_receipt),
 	Route("/mobile", mobile_api.create_expense_receipt),
+	# v0.332.0. The company card numbers, cached on the phone for the who-paid prompt.
+	Route("/mobile", mobile_api.list_card_numbers),
 	Route("/mobile", mobile_api.create_scale_ticket),
 	Route("/mobile", mobile_api.list_scale_tickets),
 	# The three reads `create_expense_receipt`'s pickers and detail view need:

@@ -75,6 +75,10 @@ _CAP_TABLE_FIELDS = (
 	"retired",
 	"member_cost_center",
 	"member_dimension_doctype",
+	# v0.332.0. Who this member captures receipts as, and the draw account a
+	# purchase they cover personally is booked to.
+	"employee",
+	"draw_account",
 	"notes",
 )
 
@@ -224,6 +228,8 @@ def _describe_entry(row: dict) -> dict:
 		"ownership_percentage": float(row.get("ownership_percentage") or 0),
 		"retired": bool(int(row.get("retired") or 0)),
 		"member_cost_center": row.get("member_cost_center") or None,
+		"employee": row.get("employee") or None,
+		"draw_account": row.get("draw_account") or None,
 	}
 
 
@@ -449,7 +455,16 @@ def create_owner_draw(args: dict) -> ToolResult:
 	`record_member_event`.
 	"""
 	actor = _require_member_manager()
-	company = resolve_company(as_str(args, "company"), required=True)
+	# v0.332.0. A receipt the submitter marked "I'm covering this" carries its own
+	# amount, date, person and card, so each becomes a default rather than a demand.
+	covered = _covered_receipt(as_str(args, "receipt") or as_str(args, "expense_receipt"))
+	company = resolve_company(as_str(args, "company") or (covered or {}).get("company") or "", required=True)
+	if covered and args.get("amount") in (None, ""):
+		args = {**args, "amount": covered.get("amount")}
+	if covered and not (as_str(args, "date") or as_str(args, "effective_date")):
+		args = {**args, "date": str(covered.get("receipt_date") or "")}
+	if covered and not (as_str(args, "narrative") or as_str(args, "reason") or as_str(args, "notes")):
+		args = {**args, "narrative": _covered_narrative(covered)}
 
 	amount = as_float(args.get("amount"), "amount")
 	if args.get("amount") in (None, ""):
@@ -469,12 +484,25 @@ def create_owner_draw(args: dict) -> ToolResult:
 		)
 
 	explicit_draw_account = as_str(args, "draw_account") or as_str(args, "equity_account")
-	draw_account = (
-		resolve_account(explicit_draw_account, company)
-		if explicit_draw_account
-		else _match_equity_account(company, _DISTRIBUTION_KEYWORDS, "owner draw")
+	draw_resolved_by = "argument" if explicit_draw_account else "name match"
+	if explicit_draw_account:
+		draw_account = resolve_account(explicit_draw_account, company)
+	elif covered and covered.get("member_draw_account"):
+		draw_account = resolve_account(covered["member_draw_account"], company)
+		draw_resolved_by = f"Cap Table Entry {covered['member']} (the submitter's draw account)"
+	elif covered:
+		raise ToolError(
+			f'{covered["name"]} is marked "I\'m covering this" by {covered.get("submitted_by") or "nobody"}, '
+			"and no draw account is mapped for them: set employee and draw_account on their Cap Table "
+			"Entry (update_cap_table_entry), or pass draw_account. Nothing was created."
+		)
+	else:
+		draw_account = _match_equity_account(company, _DISTRIBUTION_KEYWORDS, "owner draw")
+	counter_account = (
+		covered["card_gl_account"]
+		if covered and covered.get("card_gl_account") and not as_str(args, "counter_account")
+		else _counter_account(args, company)
 	)
-	counter_account = _counter_account(args, company)
 
 	cost_center = as_str(args, "cost_center")
 	if cost_center:
@@ -498,7 +526,7 @@ def create_owner_draw(args: dict) -> ToolResult:
 			["category", "linked_doctype", "linked_document", "company"],
 			as_dict=True,
 		)
-		if receipt.get("category") != expenses.OWNER_DRAW_CATEGORY:
+		if receipt.get("category") != expenses.OWNER_DRAW_CATEGORY and not covered:
 			raise ToolError(
 				f"expense receipt {receipt_name} is categorised {receipt.get('category')!r}, not "
 				f"{expenses.OWNER_DRAW_CATEGORY!r}. Recategorise it with update_expense_receipt "
@@ -552,7 +580,8 @@ def create_owner_draw(args: dict) -> ToolResult:
 		"date": date_value,
 		"amount": amount,
 		"draw_account": draw_account,
-		"draw_account_resolved_by": "argument" if explicit_draw_account else "name match",
+		"draw_account_resolved_by": draw_resolved_by,
+		"covered_by_submitter": bool(covered),
 		"counter_account": counter_account,
 		"cost_center": cost_center or None,
 		"party_type": party_type or None,
@@ -571,6 +600,66 @@ def create_owner_draw(args: dict) -> ToolResult:
 		f"draft Journal Entry {doc.name}"
 		+ (f", linked to expense receipt {receipt_name}" if receipt_name else ""),
 		docstatus_delta="none → 0 (draft)",
+	)
+
+
+def _covered_receipt(name: str) -> dict | None:
+	"""v0.332.0. An Expense Receipt marked "I'm covering this", with what booking it needs."""
+	from . import paid_with
+
+	if not name or not compat.has_field(expenses.EXPENSE_RECEIPT, paid_with.COVERED_FIELD):
+		return None
+	row = frappe.db.get_value(
+		expenses.EXPENSE_RECEIPT,
+		name,
+		compat.existing_fields(
+			expenses.EXPENSE_RECEIPT,
+			(
+				"name",
+				"company",
+				"amount",
+				"receipt_date",
+				"merchant",
+				"submitted_by",
+				"status",
+				paid_with.COVERED_FIELD,
+				paid_with.ACCOUNT_FIELD,
+				"card_alias",
+			),
+		),
+		as_dict=True,
+	)
+	if not row or not int(row.get(paid_with.COVERED_FIELD) or 0):
+		return None
+	row = dict(row)
+	if row.get("status") != expenses.APPROVED:
+		raise ToolError(
+			f"{name} is {row.get('status')!r}, not Approved. A covered purchase is booked once it is "
+			"approved (approve_expense_receipt). Nothing was created."
+		)
+	member = paid_with.member_for(row.get("submitted_by") or "", row.get("company") or "")
+	row["member"] = (member or {}).get("name")
+	row["member_draw_account"] = (member or {}).get("draw_account")
+	bank_account = row.get(paid_with.ACCOUNT_FIELD) or (
+		frappe.db.get_value("Bank Card Alias", row["card_alias"], "bank_account")
+		if row.get("card_alias")
+		else None
+	)
+	row["card_gl_account"] = (
+		frappe.db.get_value("Bank Account", bank_account, "account") if bank_account else None
+	)
+	return row
+
+
+def _covered_narrative(row: dict) -> str:
+	who = (
+		frappe.db.get_value("Employee", row.get("submitted_by"), "employee_name")
+		or row.get("submitted_by")
+		or "the submitter"
+	)
+	return (
+		f"Covered personally by {who}: {row.get('merchant') or 'purchase'} on {row.get('receipt_date')} "
+		f"({row['name']}). The company paid; booked to their draw, not an expense."
 	)
 
 
@@ -643,6 +732,8 @@ def create_cap_table_entry(args: dict) -> ToolResult:
 		doc.member_dimension_doctype = dimension_doctype
 	if notes:
 		doc.notes = notes
+	for field, value in _member_mapping(args, company).items():
+		doc.set(field, value)
 	doc.insert()
 
 	total = _active_ownership_total(company)
@@ -673,6 +764,36 @@ def create_cap_table_entry(args: dict) -> ToolResult:
 		f"at {ownership_percentage}%",
 		docstatus_delta="none → 0 (created)",
 	)
+
+
+def _member_mapping(args: dict, company: str) -> dict:
+	"""v0.332.0. `employee` and `draw_account`, checked; only the keys the caller sent.
+
+	'' clears one. The draw account must be a leaf Equity account of this company —
+	the point of it is that a covered purchase never lands on the P&L.
+	"""
+	out = {}
+	if "employee" in args:
+		employee = as_str(args, "employee")
+		if employee:
+			if not compat.doctype_exists("Employee") or not frappe.db.exists("Employee", employee):
+				raise ToolError(f"no Employee called {employee!r} on this site. Nothing was changed.")
+			if not compat.has_field(CAP_TABLE, "employee"):
+				raise ToolError("this site's Cap Table Entry has no employee column yet — run bench migrate.")
+		out["employee"] = employee
+	if "draw_account" in args:
+		value = as_str(args, "draw_account")
+		account = resolve_account(value, company) if value else ""
+		if account:
+			row = frappe.db.get_value("Account", account, ["root_type", "is_group"], as_dict=True) or {}
+			if row.get("root_type") != "Equity" or int(row.get("is_group") or 0):
+				raise ToolError(
+					f"draw_account {account!r} must be a leaf Equity account (a member draw), not "
+					f"{row.get('root_type') or 'unknown'}{' group' if int(row.get('is_group') or 0) else ''}. "
+					"Nothing was changed."
+				)
+		out["draw_account"] = account
+	return out
 
 
 def _active_ownership_total(company: str) -> float:
@@ -745,10 +866,16 @@ def update_cap_table_entry(args: dict) -> ToolResult:
 			updates["member_cost_center"] = cost_center or None
 			changes["member_cost_center"] = [entry.get("member_cost_center") or "", cost_center]
 
+	for field, value in _member_mapping(args, company).items():
+		if str(value or "") != str(entry.get(field) or ""):
+			updates[field] = value or None
+			changes[field] = [entry.get(field) or "", value or ""]
+
 	if not changes:
 		raise ToolError(
 			f"nothing to change on {entry['name']}. Pass at least one of legal_entity_name, "
-			"entity_type, admission_date, ownership_percentage, member_cost_center or notes, "
+			"entity_type, admission_date, ownership_percentage, member_cost_center, employee, "
+			"draw_account or notes, "
 			"with a value that differs from the current one."
 		)
 

@@ -7702,6 +7702,13 @@ def create_expense_receipt(
 	reimburses_receipt=None,
 	check_number=None,
 	check_memo=None,
+	paid_with=None,
+	card_bank_account=None,
+	covered_by_submitter=None,
+	save_card_alias=None,
+	card_alias_card=None,
+	card_alias_kind=None,
+	card_alias_label=None,
 ) -> dict:
 	"""The fuel slip at the pump, with v0.67.0's Supplier and Item links.
 
@@ -7754,8 +7761,17 @@ def create_expense_receipt(
 	category is `Reimbursement`, and `check_number` and `check_memo` are declared
 	here — the release the phone's `acceptsReimbursementFields` waits for before
 	it stops folding them into `notes`.
+
+	v0.332.0: WHO PAID (fafo_ios SERVER_CHANGES.md §75). `paid_with` (Company card /
+	Personal card), `card_bank_account` (scoped like every docname a body names),
+	`covered_by_submitter` ("I'm covering this"), and `save_card_alias` with
+	`card_alias_card` / `card_alias_kind` / `card_alias_label` to learn an unknown
+	number — kept on the receipt for a bookkeeper unless the caller may teach the
+	register.
 	"""
 	allowed = guard.require_scope(user)
+	if str(card_bank_account or "").strip():
+		card_bank_account = guard.require_scoped_doc("Bank Account", card_bank_account, "card_bank_account", allowed)
 	if str(linked_asset or "").strip():
 		linked_asset = guard.require_scoped_doc(
 			asset_tags.ASSET_REGISTER, linked_asset, "linked_asset", allowed
@@ -7797,6 +7813,14 @@ def create_expense_receipt(
 		("reimburses_receipt", reimburses_receipt),
 		("check_number", check_number),
 		("check_memo", check_memo),
+		# v0.332.0. Who paid.
+		("paid_with", paid_with),
+		("card_bank_account", card_bank_account),
+		("covered_by_submitter", covered_by_submitter),
+		("save_card_alias", save_card_alias),
+		("card_alias_card", card_alias_card),
+		("card_alias_kind", card_alias_kind),
+		("card_alias_label", card_alias_label),
 	):
 		if value not in (None, ""):
 			inner[key] = value
@@ -7804,6 +7828,26 @@ def create_expense_receipt(
 		inner["items"] = _receipt_items(items)
 
 	return expense_tools.submit_expense_receipt(inner).data
+
+
+# ── 56b. list_card_numbers ──────────────────────────────────────────────────
+@frappe.whitelist(methods=["POST", "GET"])
+@guard.endpoint("list_card_numbers", limit=guard.READ_LIMIT)
+def list_card_numbers(user: str, company=None) -> dict:
+	"""v0.332.0. The company card numbers the phone caches, to ask "company card or yours?".
+
+	The caller's own capture, so enrolment is the gate — the same as
+	`create_expense_receipt`. Last-four digits and account labels only: nothing an
+	account can be reached by. `draw_mapped` says per company whether this person
+	has a draw account for "I'm covering this"; `may_save_card` whether their
+	answer is learned at once or kept for a bookkeeper.
+	"""
+	allowed = guard.require_scope(user)
+	wanted = guard.require_company(user, company, allowed)
+	from ..tools import paid_with as paid_with_tools
+
+	employee = fieldwork._employee_for(user) or ""
+	return paid_with_tools.company_cards([wanted] if wanted else list(allowed), employee)
 
 
 def _receipt_items(raw) -> list:

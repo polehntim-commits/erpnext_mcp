@@ -335,9 +335,16 @@ def post_reimbursement_receipt(args: dict) -> ToolResult:
 		as_dict=True,
 	)
 	if row.get("category") != REIMBURSEMENT_CATEGORY:
+		# v0.332.0. A company expense the submitter paid on their own card is the
+		# other reimbursement: money the farm owes back rather than money it got.
+		if compat.has_field(EXPENSE_RECEIPT, "paid_with") and (
+			frappe.db.get_value(EXPENSE_RECEIPT, receipt, "paid_with") == "Personal card"
+		):
+			return _post_personal_card(receipt, args, tail)
 		raise ToolError(
 			f"{receipt} is categorised {row.get('category')!r}, and this tool books only a "
-			f"{REIMBURSEMENT_CATEGORY} receipt. {tail}"
+			f"{REIMBURSEMENT_CATEGORY} receipt, or a purchase paid on a personal card "
+			f"(paid_with = Personal card). {tail}"
 		)
 	if row.get("status") != expenses.APPROVED:
 		raise ToolError(
@@ -461,5 +468,152 @@ def post_reimbursement_receipt(args: dict) -> ToolResult:
 		summary=f"draft Journal Entry {doc.name} for {receipt}: {payer} paid back {amount}"
 		+ (f" of {original_name}" if original_name else "")
 		+ f", Cr {credit}",
+		docstatus_delta="none → 0 (draft Journal Entry)",
+	)
+
+
+# ── v0.332.0: a company purchase paid on the submitter's own card ────────────
+#: The debit side of a personal-card purchase: what was bought.
+DEBIT_ROOT_TYPES = ("Expense", "Asset")
+
+
+def _post_personal_card(receipt: str, args: dict, tail: str) -> ToolResult:
+	"""Dr what was bought, Cr what the farm now owes the submitter. A DRAFT Journal Entry.
+
+	THE DEBIT is `expense_account`, or the account the receipt's category matches —
+	exactly as `create_purchase_invoice_from_receipt` would choose. THE CREDIT is
+	`credit_account`, or the submitter's member draw account (Cap Table Entry →
+	Draw Account: a member paying a farm bill reduces what they have drawn), and
+	otherwise it refuses — an employee is owed through a payable the farm names.
+	A Payable credit carries the Employee as its party, which ERPNext requires.
+	"""
+	from . import paid_with, receipts
+
+	row = frappe.db.get_value(
+		EXPENSE_RECEIPT,
+		receipt,
+		[
+			"category",
+			"status",
+			"amount",
+			"company",
+			"merchant",
+			"receipt_date",
+			"cost_center",
+			"submitted_by",
+			"linked_doctype",
+			"linked_document",
+			*compat.existing_fields(EXPENSE_RECEIPT, ("covered_by_submitter",)),
+		],
+		as_dict=True,
+	)
+	if row.get("status") != expenses.APPROVED:
+		raise ToolError(
+			f"{receipt} is {row.get('status')!r}, not Approved. Approve it with approve_expense_receipt "
+			f"first. {tail}"
+		)
+	if row.get("linked_document"):
+		raise ToolError(
+			f"{receipt} is already linked to {row['linked_doctype']} {row['linked_document']}. {tail}"
+		)
+	if int(row.get("covered_by_submitter") or 0):
+		raise ToolError(f'{receipt} is marked "I\'m covering this" as well; untick one. {tail}')
+	amount = float(row.get("amount") or 0)
+	if amount <= 0:
+		raise ToolError(f"{receipt} has amount {amount}; there is nothing to book. {tail}")
+	company = row["company"]
+	employee = row.get("submitted_by") or ""
+
+	named_debit = as_str(args, "expense_account")
+	if named_debit:
+		debit, debit_resolved_by = resolve_account(named_debit, company), "argument"
+	else:
+		try:
+			debit = receipts._match_expense_account(company, row.get("category") or "Other")
+		except ToolError:
+			raise ToolError(
+				f"{receipt}'s category {row.get('category')!r} does not match exactly one leaf Expense "
+				f"account in {company}. Name it with expense_account. {tail}"
+			) from None
+		debit_resolved_by = f"matched from category {row.get('category')!r}"
+	debit_row = _account_row(debit)
+	if debit_row.get("root_type") not in DEBIT_ROOT_TYPES or debit_row.get("is_group"):
+		raise ToolError(f"expense_account {debit!r} must be a leaf Expense or Asset account. {tail}")
+
+	named = as_str(args, "credit_account")
+	member = paid_with.member_for(employee, company)
+	if named:
+		credit, credit_resolved_by = resolve_account(named, company), "argument"
+	elif (member or {}).get("draw_account"):
+		credit = member["draw_account"]
+		credit_resolved_by = f"Cap Table Entry {member['name']} (the submitter's draw account)"
+	else:
+		raise ToolError(
+			f"{receipt} was paid on {employee or 'the submitter'}'s own card, and nothing says where "
+			"the farm records owing them: pass credit_account (an employee reimbursements payable, "
+			"say), or map a member's draw account on their Cap Table Entry. " + tail
+		)
+	credit_row = _account_row(credit)
+	# Stored Check columns: truthiness, not a coercion with a default.
+	if credit_row.get("is_group") or credit_row.get("disabled"):
+		raise ToolError(f"credit_account {credit!r} is a group or disabled. {tail}")
+	if credit_row.get("account_type") == "Receivable":
+		raise ToolError(f"credit_account {credit!r} is Receivable; the farm OWES this money. {tail}")
+	credit_line = {"account": credit, "credit": amount}
+	if credit_row.get("account_type") == "Payable":
+		if not employee:
+			raise ToolError(f"{receipt} has no submitter to carry as the payable's party. {tail}")
+		credit_line.update({"party_type": "Employee", "party": employee})
+
+	cost_center = None
+	if debit_row.get("root_type") == "Expense":
+		cost_center = (
+			as_str(args, "cost_center")
+			or row.get("cost_center")
+			or frappe.db.get_value("Company", company, "cost_center")
+		)
+		if not cost_center:
+			raise ToolError(f"{company} has no default cost center; pass cost_center. {tail}")
+	who = frappe.db.get_value("Employee", employee, "employee_name") if employee else ""
+	remark = (
+		f"Paid on a personal card — owed to {who or employee or 'the submitter'} ({receipt}): "
+		f"{row.get('merchant') or ''}"
+	)
+	debit_line = {"account": debit, "debit": amount, "user_remark": remark}
+	if cost_center:
+		debit_line["cost_center"] = cost_center
+	credit_line["user_remark"] = remark
+	raw = [debit_line, credit_line]
+	posting_date = as_date(args, "posting_date") or str(row.get("receipt_date"))
+	lines = mutate.validated_journal_lines(raw, company)
+	doc = mutate.insert_draft_journal_entry(company, posting_date, lines, remark, {})
+	frappe.db.set_value(
+		EXPENSE_RECEIPT, receipt, {"linked_doctype": "Journal Entry", "linked_document": doc.name}
+	)
+	return ToolResult(
+		data={
+			"journal_entry": doc.name,
+			"docstatus": 0,
+			"receipt": receipt,
+			"company": company,
+			"paid_with": "Personal card",
+			"owed_to": employee or None,
+			"amount": amount,
+			"posting_date": posting_date,
+			"expense_account": debit,
+			"expense_account_resolved_by": debit_resolved_by,
+			"credit_account": credit,
+			"credit_account_resolved_by": credit_resolved_by,
+			"cost_center": cost_center,
+			"lines": [
+				{
+					"account": line["account"],
+					"debit": line.get("debit") or 0,
+					"credit": line.get("credit") or 0,
+				}
+				for line in raw
+			],
+		},
+		summary=f"draft Journal Entry {doc.name} for {receipt}: {amount} owed to {who or employee}, Dr {debit}, Cr {credit}",
 		docstatus_delta="none → 0 (draft Journal Entry)",
 	)

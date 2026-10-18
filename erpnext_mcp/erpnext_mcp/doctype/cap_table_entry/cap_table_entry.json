@@ -19,6 +19,8 @@
   "linkage_section",
   "member_cost_center",
   "member_dimension_doctype",
+  "employee",
+  "draw_account",
   "notes_section",
   "notes"
  ],
@@ -110,6 +112,20 @@
    "fieldtype": "Data",
    "label": "Member Dimension DocType",
    "read_only": 1
+  },
+  {
+   "description": "The Employee record this member captures receipts as. Lets a receipt the member marks \"I'm covering this\" find their draw account.",
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee"
+  },
+  {
+   "description": "The equity draw account a purchase this member personally covers is booked to (e.g. 3610 Draws – Tim), and the default credit for a company expense they paid on a personal card. Used by create_owner_draw and post_reimbursement_receipt.",
+   "fieldname": "draw_account",
+   "fieldtype": "Link",
+   "label": "Draw Account",
+   "options": "Account"
   },
   {
    "fieldname": "notes_section",

@@ -5309,6 +5309,15 @@ TOOLS = {
 				"The accounting dimension holding member values, if it is not called 'Member'.",
 			),
 			"notes": _field(_STRING, "Why this member exists, and what paperwork evidences it."),
+			"employee": _field(
+				_STRING,
+				"v0.332.0. The Employee this member captures receipts as; '' clears it. With "
+				"draw_account, what \"I'm covering this\" books to.",
+			),
+			"draw_account": _field(
+				_STRING,
+				"v0.332.0. The member's leaf Equity draw account, e.g. '3610 Draws – Tim'; '' clears it.",
+			),
 		},
 		required=("company", "member_id", "legal_entity_name", "entity_type", "admission_date"),
 		mutating=True,
@@ -5336,6 +5345,15 @@ TOOLS = {
 			"ownership_percentage": _field(_NUMBER, "New percentage, 0-100."),
 			"member_cost_center": _field(_STRING, "Cost center to carry, or an empty string to clear it."),
 			"notes": _field(_STRING, "Replacement notes."),
+			"employee": _field(
+				_STRING,
+				"v0.332.0. The Employee this member captures receipts as; '' clears it. With "
+				"draw_account, what \"I'm covering this\" books to.",
+			),
+			"draw_account": _field(
+				_STRING,
+				"v0.332.0. The member's leaf Equity draw account, e.g. '3610 Draws – Tim'; '' clears it.",
+			),
 		},
 		required=("member",),
 		mutating=True,
@@ -5496,7 +5514,13 @@ TOOLS = {
 		"independent of whether this site has adopted the cap table / Member "
 		"Event machinery at all. ALWAYS A DRAFT — post it with "
 		"submit_journal_entry, which needs its own switch on as well as this "
-		"tool's.",
+		"tool's.\n\n"
+		"v0.332.0. \"I'M COVERING THIS\": a receipt marked covered_by_submitter "
+		"(any expense category, Approved) is accepted too, and supplies the "
+		"defaults — company, amount, date, a narrative, the draw account from "
+		"the submitter's Cap Table Entry (employee + draw_account, e.g. 3610 "
+		"Draws – Tim), and the counter account from the card's bank account. "
+		"Refused when no draw account is mapped and none is passed.",
 		{
 			"company": _COMPANY,
 			"amount": _field(_NUMBER, "Positive. The size of the draw."),
@@ -5514,10 +5538,14 @@ TOOLS = {
 				_STRING, "Optional attribution on the equity line — e.g. Family. Pass with party, or neither."
 			),
 			"party": _field(_STRING, "The party named by party_type. Pass with party_type, or neither."),
-			"receipt": _field(_STRING, "An Expense Receipt categorised Owner Draw to link this draw to."),
+			"receipt": _field(
+				_STRING,
+				"An Expense Receipt categorised Owner Draw, or (v0.332.0) marked \"I'm covering this\", "
+				"to link this draw to.",
+			),
 			"expense_receipt": _field(_STRING, "Alias for receipt."),
 		},
-		required=("company", "amount", "date", "narrative"),
+		required=(),
 		mutating=True,
 		title="Create owner draw",
 	),
@@ -16804,6 +16832,30 @@ TOOLS = {
 				_STRING, "v0.187.0. On a Reimbursement receipt only: the number in the check's corner."
 			),
 			"check_memo": _field(_STRING, "v0.187.0. On a Reimbursement receipt only: the memo line."),
+			"paid_with": _field(
+				_STRING,
+				"v0.332.0. Company card or Personal card. A personal card is a purchase the "
+				"submitter is owed for (booked later by post_reimbursement_receipt).",
+			),
+			"card_bank_account": _field(
+				_STRING, "v0.332.0. The company Bank Account the card draws on; implies Company card."
+			),
+			"covered_by_submitter": _field(
+				_BOOLEAN,
+				"v0.332.0. \"I'm covering this\": the company paid and the submitter covers it — "
+				"booked to their draw by create_owner_draw, not an expense.",
+			),
+			"save_card_alias": _field(
+				_BOOLEAN,
+				"v0.332.0. With card_bank_account: learn card_last_four as a Bank Card Alias on it "
+				"(default true). Kept on the receipt for a bookkeeper unless the caller holds "
+				"Accounts / Farm / Member Manager, Accounts User or System Manager.",
+			),
+			"card_alias_card": _field(
+				_STRING, "v0.332.0. The physical card's last four the number stands for, when known."
+			),
+			"card_alias_kind": _field(_STRING, "v0.332.0. Card, Apple Pay, Google Pay, Samsung Pay or Other Device."),
+			"card_alias_label": _field(_STRING, "v0.332.0. A label for the learned number."),
 			"coop_name": _field(
 				_STRING,
 				"v0.166.0. On a Co-op Equity or Patronage Dividend receipt only: the "
@@ -17034,6 +17086,17 @@ TOOLS = {
 				"withdrawals, and what makes the expense totals subtract it "
 				"rather than add it. Pass false to untick one set in error.",
 			),
+			"paid_with": _field(
+				_STRING,
+				"v0.332.0. Company card, Personal card, or '' — the Desk form's who-paid choice. "
+				"Refused once the receipt is booked.",
+			),
+			"card_bank_account": _field(
+				_STRING,
+				"v0.332.0. The company Bank Account the card draws on, or ''. With Company card and an "
+				"unknown card_last_four, the number is learned as a Bank Card Alias (role-gated).",
+			),
+			"covered_by_submitter": _field(_BOOLEAN, "v0.332.0. \"I'm covering this\" — see submit_expense_receipt."),
 		},
 		required=("name",),
 		mutating=True,
@@ -17208,9 +17271,18 @@ TOOLS = {
 		"reimburses_receipt and no credit_account; a Receivable or Payable "
 		"credit account (ERPNext needs a party, and the payer is neither); an "
 		"original split across several expense accounts (name one). ALWAYS A "
-		"DRAFT — submit_journal_entry posts it.",
+		"DRAFT — submit_journal_entry posts it.\n\n"
+		"v0.332.0. ALSO a purchase paid on the SUBMITTER'S OWN CARD (paid_with = "
+		"Personal card, any expense category): Dr `expense_account`, else the "
+		"account its category matches; Cr `credit_account`, else the submitter's "
+		"member draw account (Cap Table Entry employee + draw_account); a Payable "
+		"credit carries the Employee as party. Approved, unbooked and not marked "
+		"\"I'm covering this\".",
 		{
 			"receipt": _field(_STRING, "The Expense Receipt docname."),
+			"expense_account": _field(
+				_STRING, "v0.332.0, personal card: the account debited, instead of the category match."
+			),
 			"expense_receipt": _field(_STRING, "Alias for receipt."),
 			"counter_account": _field(
 				_STRING, "The bank account the check was deposited to, instead of the company default."

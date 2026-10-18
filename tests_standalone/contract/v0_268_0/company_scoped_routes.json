@@ -79,6 +79,7 @@
  "list_available_housing",
  "list_available_tasks",
  "list_branches",
+ "list_card_numbers",
  "list_certifications",
  "list_competitive_moves",
  "list_compliance_alerts",

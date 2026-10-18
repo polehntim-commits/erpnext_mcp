@@ -167,7 +167,18 @@ NON_EXPENSE_CATEGORIES = (*DOCUMENT_CATEGORIES, *COOP_CATEGORIES, REIMBURSEMENT_
 #: OCR never claimed it, so changing it corrects nothing and there is nothing to
 #: keep an original of. `amount` and `receipt_date` get their own tools, with an
 #: audit trail each: see `correct_receipt_amount`.
-UPDATABLE_FIELDS = ("cost_center", "supplier", "category", "notes", "is_return", "reimburses_receipt")
+UPDATABLE_FIELDS = (
+	"cost_center",
+	"supplier",
+	"category",
+	"notes",
+	"is_return",
+	"reimburses_receipt",
+	# v0.332.0. Who paid — the Desk form's choice, also over MCP.
+	"paid_with",
+	"card_bank_account",
+	"covered_by_submitter",
+)
 
 #: What every read tool returns for a receipt, minus the raw OCR text and the
 #: line items — both of which are large and only `get_expense_receipt` returns.
@@ -240,6 +251,9 @@ _COOP_FIELDS = ("coop_name", "is_balance_sheet_item")
 #: v0.186.0. The reimbursement column, read back when the site has it.
 _REIMBURSEMENT_FIELDS = ("reimburses_receipt", "check_number", "check_memo")
 
+#: v0.331.0 / v0.332.0. Which card paid, and who paid: read back when the site has them.
+_PAID_FIELDS = ("card_alias", "paid_with", "card_bank_account", "covered_by_submitter")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -253,6 +267,7 @@ def _read_fields() -> list[str]:
 		*compat.existing_fields(EXPENSE_RECEIPT, _TITLE_FIELDS),
 		*compat.existing_fields(EXPENSE_RECEIPT, _COOP_FIELDS),
 		*compat.existing_fields(EXPENSE_RECEIPT, _REIMBURSEMENT_FIELDS),
+		*compat.existing_fields(EXPENSE_RECEIPT, _PAID_FIELDS),
 	]
 
 
@@ -300,7 +315,7 @@ def _row_out(row: dict) -> dict:
 	"""
 	out = {}
 	for key, value in dict(row).items():
-		if key == "is_balance_sheet_item":
+		if key in ("is_balance_sheet_item", "covered_by_submitter"):
 			# v0.166.0. Always a boolean, because the phone draws the receipt
 			# differently on it and an absent Check means an expense.
 			out[key] = bool(value)
@@ -598,7 +613,7 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	# module for the Expense Receipt name and its statuses, so a module-level
 	# import here would be a cycle. Same shape and same reason as `read.py`'s
 	# local import of `mutate`.
-	from . import card_aliases, receipts
+	from . import card_aliases, paid_with, receipts
 
 	ocr_raw_text = as_str(args, "ocr_raw_text")
 
@@ -646,6 +661,9 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 	)
 	if card_paid and compat.has_field(EXPENSE_RECEIPT, card_aliases.RECEIPT_FIELD):
 		payload[card_aliases.RECEIPT_FIELD] = card_paid["name"]
+	# v0.332.0. Company card, personal card, or "I'm covering this".
+	who_paid = paid_with.capture_arguments(args, category=category, company=company, tail="Nothing was created.")
+	payload.update(who_paid["columns"])
 	payload.update(title["columns"])
 	payload.update(coop)
 	payload.update(reimbursement)
@@ -655,10 +673,16 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 		doc.append("items", row)
 
 	doc.flags.ignore_permissions = True
+	doc.flags.who_paid_handled = True
 	doc.insert()
 
 	if resolution.get("method") == "Alias" and (resolution.get("alias") or {}).get("name"):
 		receipts.record_alias_use(resolution["alias"]["name"])
+
+	card_number = str(intelligence["resolution"]["signals"].get(receipts.CARD_LAST_FOUR_FIELD) or "")
+	learned = paid_with.learn_card(doc.name, card_number, who_paid["learn"])
+	if learned and learned.get("action") == "created":
+		card_paid = card_aliases.resolve_unique(card_number, company)
 
 	# v0.165.0. After the insert, because the asset's back-link names this docname.
 	# Every refusal a link can raise was raised in `_title_arguments`, before it.
@@ -698,6 +722,17 @@ def submit_expense_receipt(args: dict) -> ToolResult:
 			"items": _items_out(doc),
 			**intelligence["reported"],
 			"card": card_aliases.describe(card_paid),
+			**(
+				paid_with.reported(
+					who_paid["columns"],
+					learned,
+					card_last_four=card_number,
+					company=company,
+					employee=submitted_by,
+				)
+				if paid_with.installed()
+				else {}
+			),
 			**(
 				{
 					"coop_name": coop["coop_name"],
@@ -1082,11 +1117,15 @@ def update_expense_receipt(args: dict) -> ToolResult:
 				receipt=name,
 				tail="Nothing was changed.",
 			)
+		elif key in ("paid_with", "card_bank_account", "covered_by_submitter"):
+			from . import paid_with
+
+			value = paid_with.update_value(key, args, doc)
 		else:  # notes
 			value = as_str(args, "notes")
 
 		current = doc.get(key)
-		if key == "is_return":
+		if key in ("is_return", "covered_by_submitter"):
 			current = 1 if current else 0
 		current = "" if current is None else current
 		if str(value) == str(current):
@@ -1095,8 +1134,9 @@ def update_expense_receipt(args: dict) -> ToolResult:
 		# says the money went out — a guard that dropped it would refuse to
 		# untick a box that had been ticked in error, and would say the field
 		# was missing while reporting the tick it was asked to remove.
-		before[key] = current if key == "is_return" else (current or None)
-		after[key] = value if key == "is_return" else (value or None)
+		flag = key in ("is_return", "covered_by_submitter")
+		before[key] = current if flag else (current or None)
+		after[key] = value if flag else (value or None)
 
 	if not before:
 		raise ToolError(
@@ -1111,8 +1151,14 @@ def update_expense_receipt(args: dict) -> ToolResult:
 	from . import reimbursements
 
 	reimbursements.follow_update(doc, before, after)
+	from . import paid_with
+
+	paid_with.follow_update(doc, after)
 
 	frappe.db.set_value(EXPENSE_RECEIPT, name, after)
+	card_learned = None
+	if any(key in after for key in ("paid_with", "card_bank_account")):
+		card_learned = paid_with.learn_from_saved_receipt(frappe.get_doc(EXPENSE_RECEIPT, name))
 
 	alias_learned = None
 	if after.get("supplier") and linked_by == "automation":
@@ -1164,6 +1210,7 @@ def update_expense_receipt(args: dict) -> ToolResult:
 			"before": before,
 			"after": after,
 			"alias_learned": alias_learned,
+			**({"card_learned": card_learned} if card_learned else {}),
 		},
 		summary=f"Expense receipt {name} ({merchant} {amount}) updated: {diff}"
 		+ (

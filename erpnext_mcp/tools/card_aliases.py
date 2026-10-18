@@ -246,7 +246,26 @@ def add_bank_card_alias(args: dict) -> ToolResult:
 	bank_account = _bank_account(args, required=True)
 	card = _digits(as_str(args, "card_last_four") or as_str(args, "card"), "card_last_four")
 	number = _digits(as_str(args, "number") or card, "number")
-	kind = as_str(args, "kind") or (KIND_CARD if number == card else "Apple Pay")
+	data, summary = register(
+		bank_account,
+		card,
+		number,
+		kind=as_str(args, "kind"),
+		label=as_str(args, "label"),
+		tag_existing=as_bool(args, "tag_existing", True),
+	)
+	return ToolResult(data, summary)
+
+
+def register(
+	bank_account: str, card: str, number: str, *, kind: str = "", label: str = "", tag_existing: bool = True
+) -> tuple:
+	"""Write (or reactivate) one row; `(data, summary)`. Raises ToolError on a conflict.
+
+	Shared by `add_bank_card_alias` and by a receipt capture that learns a number
+	(`paid_with.learn_card`), so the two cannot disagree about what a duplicate is.
+	"""
+	kind = kind or (KIND_CARD if number == card else "Apple Pay")
 	if kind not in KINDS:
 		raise ToolError(f"kind must be one of: {', '.join(KINDS)} — got {kind!r}. Nothing was written.")
 	if kind == KIND_CARD and number != card:
@@ -255,7 +274,6 @@ def add_bank_card_alias(args: dict) -> ToolResult:
 			f"({card}), not {number}. A phone's number is kind Apple Pay, Google Pay, Samsung Pay "
 			"or Other Device. Nothing was written."
 		)
-	label = as_str(args, "label")
 	company = frappe.db.get_value(BANK_ACCOUNT, bank_account, "company") or ""
 
 	existing = frappe.db.get_all(
@@ -307,7 +325,7 @@ def add_bank_card_alias(args: dict) -> ToolResult:
 		}
 	)
 	tagged = []
-	if as_bool(args, "tag_existing", True) and not elsewhere:
+	if tag_existing and not elsewhere:
 		tagged = _tag_existing(number, company, name)
 
 	row = frappe.db.get_value(DOCTYPE, name, compat.existing_fields(DOCTYPE, _FIELDS), as_dict=True)
@@ -323,10 +341,9 @@ def add_bank_card_alias(args: dict) -> ToolResult:
 			"while they do, a receipt printing them is not tagged and earns no account penalty."
 		)
 	what = "card" if kind == KIND_CARD else f"{kind} number {number} for card"
-	return ToolResult(
-		data,
+	return data, (
 		f"{'reactivated' if reactivated else 'registered'} {what} {card} on {bank_account}"
-		+ (f"; tagged {len(tagged)} receipt(s)" if tagged else ""),
+		+ (f"; tagged {len(tagged)} receipt(s)" if tagged else "")
 	)
 
 

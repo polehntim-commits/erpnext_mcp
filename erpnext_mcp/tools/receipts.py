@@ -3222,6 +3222,27 @@ def create_purchase_invoice_from_receipt(args: dict) -> ToolResult:
 			"is equity leaving the company, not a bill from a vendor. Use create_owner_draw instead. "
 			"Nothing was created."
 		)
+	# v0.332.0. Who paid decides the book, and neither of these is a vendor bill
+	# the farm still owes: a covered purchase is the member's draw, and a
+	# personal-card purchase is owed to the submitter, the vendor already paid.
+	who_paid = frappe.db.get_value(
+		expenses.EXPENSE_RECEIPT,
+		receipt_name,
+		compat.existing_fields(expenses.EXPENSE_RECEIPT, ("paid_with", "covered_by_submitter")) or ["name"],
+		as_dict=True,
+	)
+	if int((who_paid or {}).get("covered_by_submitter") or 0):
+		raise ToolError(
+			f'expense receipt {receipt_name} is marked "I\'m covering this": the company paid and the '
+			"submitter is covering it, so it is booked to their draw with create_owner_draw, not "
+			"billed. Nothing was created."
+		)
+	if (who_paid or {}).get("paid_with") == "Personal card":
+		raise ToolError(
+			f"expense receipt {receipt_name} was paid on the submitter's own card, so the vendor is "
+			"paid and the farm owes the submitter — book it with post_reimbursement_receipt. Nothing "
+			"was created."
+		)
 	if receipt.get("category") in expenses.DOCUMENT_CATEGORIES:
 		# v0.165.0. A title or a bill of sale records a vehicle's paperwork. It has
 		# no ledger side: whatever the vehicle cost is capitalised on the asset.

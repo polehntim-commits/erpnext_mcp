@@ -56,6 +56,11 @@
   "bank_match_confidence",
   "bank_matched_on",
   "card_alias",
+  "paid_section",
+  "paid_with",
+  "card_bank_account",
+  "paid_col",
+  "covered_by_submitter",
   "corrections_section",
   "original_amount",
   "amount_correction_reason",
@@ -422,6 +427,38 @@
    "label": "Card",
    "options": "Bank Card Alias",
    "read_only": 1
+  },
+  {
+   "collapsible": 0,
+   "fieldname": "paid_section",
+   "fieldtype": "Section Break",
+   "label": "Who Paid"
+  },
+  {
+   "description": "Company card: the farm's money paid, on Company Account Used. Personal card: the submitter paid and is owed it back — booked by post_reimbursement_receipt once approved. Blank: not said. The phone asks when the card on the slip is not a known company card.",
+   "fieldname": "paid_with",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Paid With",
+   "options": "\nCompany card\nPersonal card"
+  },
+  {
+   "description": "The company bank account the card draws on, as the submitter or a bookkeeper said. Saving a Company card receipt whose card number is unknown, with this set, registers the number as a Bank Card Alias on this account (Accounts / Farm / Member Manager, System Manager).",
+   "fieldname": "card_bank_account",
+   "fieldtype": "Link",
+   "label": "Company Account Used",
+   "options": "Bank Account"
+  },
+  {
+   "fieldname": "paid_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "I'm covering this: the company paid, and the submitter is personally covering the purchase. Booked by create_owner_draw to the submitter's member draw account (Cap Table Entry → Draw Account) instead of an expense. Draft only; nothing posts on its own.",
+   "fieldname": "covered_by_submitter",
+   "fieldtype": "Check",
+   "label": "I'm Covering This"
   },
   {
    "collapsible": 1,

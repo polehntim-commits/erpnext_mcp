@@ -318,6 +318,7 @@ class TheSurfaceIsClosed(FarmOpsAPITestCase):
 		# keeps that a decision rather than an omission.
 		"/mobile/classify_receipt",
 		"/mobile/create_expense_receipt",
+		"/mobile/list_card_numbers",
 		"/mobile/create_scale_ticket",
 		"/mobile/list_scale_tickets",
 		"/mobile/list_cost_centers",
@@ -3189,6 +3190,8 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 	}
 
 	OPEN_ON_ENROLMENT: ClassVar[set[str]] = {
+		# v0.332.0. The company card numbers the caller's own receipt capture checks against.
+		"list_card_numbers",
 		# v0.326.0. A worker saves pieces of their own job — the route checks it is theirs.
 		"save_task_progress",
 		# v0.324.0. What is on hold, and why — everybody who sees the farm's work may read it.
@@ -3467,7 +3470,7 @@ class TheNewRegistersAreGated(FarmOpsAPITestCase):
 
 	def test_the_three_sets_are_exactly_the_routes_these_releases_added(self):
 		named = self.DISPATCH_GATED | self.HR_GATED | self.OPEN_ON_ENROLMENT
-		self.assertEqual(len(named), 249, "a method is named in two sets at once")  # v0.326.0: + save_task_progress
+		self.assertEqual(len(named), 250, "a method is named in two sets at once")  # v0.332.0: + list_card_numbers
 		mounted = {route.path for route in ROUTES if route.path.startswith("/mobile/")}
 		missing = {f"/mobile/{m}" for m in named} - mounted
 		self.assertEqual(missing, set(), f"{sorted(missing)} is named here and not mounted")

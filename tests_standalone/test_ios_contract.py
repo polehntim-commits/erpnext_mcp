@@ -6295,3 +6295,50 @@ for _name, _fn in vars(_SeparationMirrors).items():
 		setattr(EveryMobileMethodDecodes, _name, _fn)
 
 TheContractIsComplete.COVERED.update({"record_separation": "test_115"})
+
+
+# ── v0.332.0. Who paid: the farm's card numbers (app 0.72.0) ─────────────────
+class CompanyCardNumberModel(Codable):
+	SWIFT = "WhoPaid.swift"
+	LENIENT = (("number", str, 0), ("kind", str, 0), ("label", str, 0))
+
+
+class CompanyCardModel(Codable):
+	SWIFT = "WhoPaid.swift"
+	LENIENT = (("card_last_four", str, 0), ("numbers", list, 0))
+	NESTED = (("numbers", CompanyCardNumberModel, True, 0),)
+
+
+class CompanyCardAccountModel(Codable):
+	SWIFT = "WhoPaid.swift"
+	STRICT = (("bank_account", str, 0),)
+	LENIENT = (("label", str, 0), ("company", str, 0), ("cards", list, 0))
+	NESTED = (("cards", CompanyCardModel, True, 0),)
+
+
+class CompanyCardsModel(Codable):
+	SWIFT = "WhoPaid.swift"
+	LENIENT = (("accounts", list, 0), ("known_numbers", list, 0), ("may_save_card", bool, 0),
+	           ("draw_mapped", dict, 0))
+	NESTED = (("accounts", CompanyCardAccountModel, True, 0),)
+
+
+class _WhoPaidMirrors:
+	def test_116_list_card_numbers(self):
+		from erpnext_mcp.tools import card_aliases
+
+		from .fixtures import BANK_ACCOUNT
+
+		card_aliases.register(BANK_ACCOUNT, "0845", "7637", label="Tim's iPhone")
+		STORE.commit()
+		self.be()
+		got = CompanyCardsModel.decode(self.wire("list_card_numbers"), "list_card_numbers")
+		self.assertEqual(got["known_numbers"], ["7637"])
+		self.assertEqual(got["accounts"][0]["cards"][0]["numbers"][0]["number"], "7637")
+
+
+for _name, _fn in vars(_WhoPaidMirrors).items():
+	if _name.startswith("test_"):
+		setattr(EveryMobileMethodDecodes, _name, _fn)
+
+TheContractIsComplete.COVERED.update({"list_card_numbers": "test_116"})
