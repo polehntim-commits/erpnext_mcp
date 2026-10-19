@@ -705,23 +705,20 @@ def create_housing_unit(args: dict) -> ToolResult:
 	)
 
 
-def _check_asset(asset: str, company: str, parcel: str) -> str:
+def _check_asset(asset: str, company: str, parcel: str, *, tail: str = "Nothing was created.", unit: str = "") -> str:
 	if not frappe.db.exists("Asset", asset):
-		raise ToolError(
-			f"no Asset named {asset!r} on this site. Assets are created with create_asset. "
-			"Nothing was created."
-		)
+		raise ToolError(f"no Asset named {asset!r} on this site. Assets are created with create_asset. {tail}")
 	owner = frappe.db.get_value("Asset", asset, "company")
 	if company and owner and owner != company:
 		raise ToolError(
 			f"Asset {asset!r} is on {owner!r}'s books and {parcel} is on {company!r}'s. A building "
-			"and the asset carrying it have to be on the same books. Nothing was created."
+			f"and the asset carrying it have to be on the same books. {tail}"
 		)
-	claimed = frappe.db.get_value(HOUSING_UNIT, {"related_asset": asset}, "name")
+	claimed = frappe.db.get_value(HOUSING_UNIT, {"related_asset": asset, "name": ("!=", unit or "")}, "name")
 	if claimed:
 		raise ToolError(
 			f"Asset {asset!r} already carries housing unit {claimed!r}. One asset, one building — "
-			"if it really covers both, split the cost first. Nothing was created."
+			f"if it really covers both, split the cost first. {tail}"
 		)
 	return asset
 
@@ -744,34 +741,88 @@ def _sync_occupancy(args: dict, company: str) -> ToolResult:
 	                  docstatus_delta="" if result["dry_run"] else "0 → 0 (updated)")
 
 
+#: v0.337.0. Dates that move only through their own record, so a date on the register always has a record behind it.
+RECORD_DATES = {
+	"last_habitability_inspection": "a completed Housing Inspection (create_housing_inspection)",
+	"smoke_detector_last_test": "a Detector Test (create_detector_test)",
+	"co_detector_last_test": "a Detector Test (create_detector_test)",
+}
+
+
+def _find_unit(args: dict, company: str) -> dict:
+	"""The unit to change — or a refusal that names the units that DO exist where the caller was looking."""
+	wanted = as_str(args, "unit", required=True)
+	parcel = ""
+	if as_str(args, "parcel"):
+		try:
+			parcel = str(parcel_row(as_str(args, "parcel"), company)["name"])
+		except ToolError:
+			parcel = ""
+	if parcel and not frappe.db.exists(HOUSING_UNIT, wanted):
+		match = frappe.db.get_value(HOUSING_UNIT, {"unit_name": wanted, "parcel": parcel}, "name")
+		if match:
+			return unit_row(str(match), company)
+	exists = frappe.db.exists(HOUSING_UNIT, wanted) or frappe.db.get_value(
+		HOUSING_UNIT, {"unit_name": wanted, **({"owning_entity": company} if company else {})}, "name"
+	)
+	if exists:
+		return unit_row(wanted, company)
+	filters = {"parcel": parcel} if parcel else ({"owning_entity": company} if company else {})
+	known = frappe.db.get_all(HOUSING_UNIT, filters=filters, pluck="unit_name", order_by="unit_name asc", limit=60)
+	where = f" on {parcel}" if parcel else (f" for {company}" if company else "")
+	listing = f" The units{where}: {', '.join(str(k) for k in known)}." if known else ""
+	raise ToolError(f"no Housing Unit called {wanted!r}{where}.{listing} list_housing_units has the register. "
+	                "Nothing was changed.")
+
+
+def _names(assignments: list) -> str:
+	return ", ".join(f"{a['name']} ({a.get('employee_name') or a.get('employee') or 'unnamed'})" for a in assignments)
+
+
 def update_housing_unit(args: dict) -> ToolResult:
-	"""Change a registered unit. Cannot re-key it and cannot move it to another parcel."""
+	"""Change a registered unit: only the fields passed, a rename through the rename engine, a dry run, a diff.
+
+	v0.337.0 (Tim, "update_housing_unit"): `new_unit_name` renames through `renames` — the docname, every
+	assignment, inspection, task and file that points at it, and the paired Asset Register tag move together, and
+	the old name is kept in `old_names` so it still resolves. `append_notes` adds a dated line. `dry_run` checks
+	everything and writes nothing. The answer carries `diff` {field: {before, after}} and the lawful occupancy.
+	"""
 	_require(HOUSING_UNIT)
 	company = _entity(args)
 	# v0.327.0. Occupied made consistent between units and their tags, from a chosen source of truth.
 	if as_str(args, "sync_occupancy_from"):
 		return _sync_occupancy(args, company or "")
-	row = unit_row(as_str(args, "unit", required=True), company or "")
-
+	tail = "Nothing was changed."
+	for key, how in RECORD_DATES.items():
+		if key in args:
+			raise ToolError(f"{key} is not set here: it moves only when {how} is recorded, so the register's date "
+			                f"always has a record behind it. {tail}")
 	if as_str(args, "unit_name"):
 		raise ToolError(
-			"unit_name cannot be changed here: the docname is built from it and every assignment "
-			"points at that docname. Rename it with record action=rename type=housing_unit (its tag "
-			"follows, the old name keeps resolving). Nothing was changed."
+			"unit_name is not changed directly: the docname is built from it and every assignment points at that "
+			"docname. Pass new_unit_name instead — the rename moves the docname, its assignments and its tag "
+			f"together and keeps the old name resolving. {tail}"
 		)
+	row = _find_unit(args, company or "")
 	if as_str(args, "parcel"):
-		raise ToolError(
-			"a building cannot move between parcels. If it really was moved — and manufactured "
-			"homes are — retire this record and register it where it stands, so the assignment "
-			"history stays attached to the ground it happened on. Nothing was changed."
-		)
+		parcel = str(parcel_row(as_str(args, "parcel"), row.get("owning_entity") or company or "")["name"])
+		if parcel != row.get("parcel"):
+			raise ToolError(
+				"a building cannot move between parcels. If it really was moved — and manufactured homes are — "
+				"retire this record and register it where it stands, so the assignment history stays attached to "
+				f"the ground it happened on. {tail}"
+			)
+	dry_run = bool(as_bool(args, "dry_run", False))
 
 	doc = frappe.get_doc(HOUSING_UNIT, row["name"])
 	changes = {}
-
 	for key in ("access_card_zone", "notes", "door_label", "room_labels"):
 		if key in args and compat.has_field(HOUSING_UNIT, key):
 			_stage(changes, doc, key, as_str(args, key))
+	if as_str(args, "append_notes"):
+		before = str(doc.get("notes") or "").rstrip()
+		line = f"[{frappe.utils.today()}] {as_str(args, 'append_notes').strip()}"
+		_stage(changes, doc, "notes", f"{before}\n{line}" if before else line)
 	if "square_footage" in args:
 		_stage(changes, doc, "square_footage", as_float(args.get("square_footage"), "square_footage"))
 	for key in ("capacity", "year_built", "max_occupants_per_or_law"):
@@ -781,9 +832,6 @@ def update_housing_unit(args: dict) -> ToolResult:
 		if key in args:
 			value = as_str(args, key)
 			_stage(changes, doc, key, as_choice(HOUSING_UNIT, key, value, key) if value else "")
-	for key in ("last_habitability_inspection", "smoke_detector_last_test", "co_detector_last_test"):
-		if key in args:
-			_stage(changes, doc, key, as_date(args, key) or "")
 	if "fsma_worker_facility" in args:
 		_stage(changes, doc, "fsma_worker_facility", 1 if as_bool(args, "fsma_worker_facility") else 0)
 	# v0.203.0. Occupied at takeover with no assignment behind it (Mill Creek), or
@@ -792,12 +840,8 @@ def update_housing_unit(args: dict) -> ToolResult:
 		if key in args and compat.has_field(HOUSING_UNIT, key):
 			_stage(changes, doc, key, 1 if as_bool(args, key) else 0)
 
-	# v0.32.0. THE PAIR MOVES TOGETHER OR NOT AT ALL. Accepting one on its own
-	# would let a caller correct a longitude and leave the old latitude behind,
-	# which produces a coordinate that is somewhere — just not anywhere either
-	# reading of the record meant. `check_coordinates` refuses the half-call; the
-	# two-field carry below is what makes the other half available to it when only
-	# one was passed.
+	# v0.32.0. THE PAIR MOVES TOGETHER OR NOT AT ALL. `check_coordinates` refuses the half-call; the two-field carry
+	# below is what makes the stored other half available to it when only one was passed.
 	if "gps_latitude" in args or "gps_longitude" in args:
 		latitude, longitude = check_coordinates(
 			args.get("gps_latitude", row.get("gps_latitude")),
@@ -808,56 +852,129 @@ def update_housing_unit(args: dict) -> ToolResult:
 	if "related_asset" in args:
 		asset = as_str(args, "related_asset")
 		if asset and asset != row.get("related_asset"):
-			asset = _check_asset(asset, row.get("owning_entity") or company or "", row["parcel"])
+			asset = _check_asset(asset, row.get("owning_entity") or company or "", row["parcel"], tail=tail,
+			                     unit=row["name"])
 		_stage(changes, doc, "related_asset", asset)
+
+	# v0.337.0. What the people living there make impossible.
+	current = _current_assignments([row["name"]]).get(row["name"]) or []
+	warnings = []
+	new_type = changes.get("unit_type", [None, None])[1]
+	# v0.337.0. A unit with people in it cannot become a type that holds nobody (NON_RESIDENTIAL_TYPES).
+	if new_type in NON_RESIDENTIAL_TYPES and current:
+		raise ToolError(f"{row['name']} cannot become a {new_type} while {len(current)} current assignment(s) house "
+		                f"people in it: {_names(current)}. End them with end_housing_assignment first. {tail}")
+	if changes.get("condition", [None, None])[1] == "Uninhabitable" and (current or int(row.get("occupied") or 0)):
+		who = _names(current) if current else "nobody on an assignment, but the unit is marked occupied"
+		if not as_bool(args, "force_uninhabitable", False):
+			raise ToolError(f"{row['name']} is lived in ({who}); marking it Uninhabitable would leave them housed in "
+			                "a unit the register says nobody may live in. Move them first, or pass "
+			                f"force_uninhabitable=true to record it anyway (the assignments are then listed). {tail}")
+		warnings.append(f"Marked Uninhabitable while lived in: {who}. Move them — new assignments here are refused.")
+
+	# v0.337.0. A rename goes through the rename engine (the docname, its links and its tag move together).
+	new_name = as_str(args, "new_unit_name").strip()
+	rename_plan = None
+	if new_name and new_name != row.get("unit_name"):
+		taken = frappe.db.get_value(
+			HOUSING_UNIT, {"parcel": row["parcel"], "unit_name": new_name, "name": ("!=", row["name"])}, "name"
+		)
+		if taken:
+			raise ToolError(f"{row['parcel']} already has a unit called {new_name!r} ({taken}). Two buildings on "
+			                f"one parcel cannot share a name. {tail}")
+		from .. import renames
+
+		try:
+			rename_plan = renames.plan("housing_unit", [{"name": row["name"], "new_name": new_name}])
+		except renames.RenameError as exc:
+			raise ToolError(f"{exc} {tail}") from None
 
 	# v0.328.0. A value goes to the unit's tag (the insurance schedule's record), checked before anything is written.
 	values = _values_argument(args)
-	if values and not changes:
-		from .. import housing_assets
-
-		written = housing_assets.set_values(row["name"], values)
-		return ToolResult(data={"unit": row["name"], "value": written},
-		                  summary=f"{row['name']}: value recorded on {written.get('asset')}",
-		                  docstatus_delta="0 → 0 (updated)")
-
-	if not changes:
+	if not changes and not rename_plan and not values:
 		raise ToolError(
-			"nothing to change. Pass at least one of: unit_type, square_footage, capacity, "
+			"nothing to change. Pass at least one of: new_unit_name, unit_type, square_footage, capacity, "
 			"year_built, condition, related_asset, access_card_zone, gps_latitude, gps_longitude, "
-			"fsma_worker_facility, or_housing_law_compliant, max_occupants_per_or_law, "
-			"last_habitability_inspection, smoke_detector_last_test, co_detector_last_test, "
-			"occupied, people_work_here, notes."
+			"fsma_worker_facility, or_housing_law_compliant, max_occupants_per_or_law, occupied, people_work_here, "
+			"notes, append_notes, door_label, room_labels, purchase_value, replacement_value, acquired_on."
 		)
 
-	# The controller only fills in a blank lawful occupancy, so a square footage
-	# that changes leaves a stale computed limit behind unless the caller also
-	# changed it. Clearing it hands the recomputation back to the controller and
+	# The controller only fills in a blank lawful occupancy, so a square footage that changes leaves a stale computed
+	# limit behind unless the caller also changed it. Clearing it hands the recomputation back to the controller and
 	# keeps a number somebody typed themselves.
 	if "square_footage" in changes and "max_occupants_per_or_law" not in changes:
 		previous = int(row.get("max_occupants_per_or_law") or 0)
 		if previous == lawful_occupancy(row.get("square_footage")):
 			doc.max_occupants_per_or_law = 0
-			changes["max_occupants_per_or_law"] = [previous or None, None]
+			changes["max_occupants_per_or_law"] = [previous or None, lawful_occupancy(doc.square_footage) or None]
+	# A stored limit of 0 is "not set": the controller computes it on save, so the answer computes it the same way.
+	stored_limit = int(doc.get("max_occupants_per_or_law") or 0)
+	lawful = stored_limit if stored_limit else lawful_occupancy(doc.get("square_footage"))
+	capacity = int(doc.get("capacity") or 0)
+	if capacity > BARRACKS_CAPACITY and (doc.get("unit_type") or "") != "Multi-Unit Building":
+		warnings.append(f"Capacity {capacity} in a unit typed {doc.get('unit_type') or '(unrecorded)'}. Anything over "
+		                f"{BARRACKS_CAPACITY} is barracks by another name — Multi-Unit Building is probably the type.")
+	if lawful and capacity > lawful:
+		warnings.append(f"Capacity {capacity} is above the lawful occupancy of {lawful} "
+		                f"({SQ_FT_PER_OCCUPANT} sq ft per occupant). The lawful number is the one that counts.")
 
-	doc.save(ignore_permissions=True)
-	described = _describe_unit(dict(doc.as_dict()), frappe.utils.today())
+	diff = {key: {"before": before, "after": after} for key, (before, after) in changes.items()}
+	if rename_plan:
+		step = rename_plan["steps"][0]
+		diff["name"] = {"before": row["name"], "after": step["new_name"]}
+		diff["unit_name"] = {"before": row.get("unit_name"), "after": step.get("unit_name") or new_name}
+	if values:
+		diff["value"] = {"before": _value_of(row["name"]), "after": values}
+	summary_diff = "; ".join(f"{k}: {v['before']!r} → {v['after']!r}" for k, v in diff.items())
+
+	if dry_run:
+		data = {"dry_run": True, "unit": row["name"], "diff": diff, "lawful_occupancy": lawful,
+		        "note": "Nothing was changed. Call again without dry_run to write it."}
+		if rename_plan:
+			data["rename"] = {"to": rename_plan["steps"][0]["new_name"], "links": rename_plan["steps"][0]["links"],
+			                  "needs_new_tag": bool(rename_plan["needs_new_tag"])}
+		if warnings:
+			data["warnings"] = warnings
+		return ToolResult(data=data, summary=f"dry run {row['name']}: {summary_diff}")
+
+	if changes:
+		doc.save(ignore_permissions=True)
+	name = doc.name
+	described_value = None
 	if values:
 		from .. import housing_assets
 
-		described["value"] = housing_assets.set_values(doc.name, values)
-	if "max_occupants_per_or_law" in changes:
-		changes["max_occupants_per_or_law"][1] = described["max_occupants_per_or_law"]
+		described_value = housing_assets.set_values(name, values)
+	renamed = None
+	if rename_plan:
+		from .. import renames
 
-	return ToolResult(
-		data={
-			**described,
-			"changed": {key: [before, after] for key, (before, after) in changes.items()},
-			"compliance_notes": _unit_notes(described),
-		},
-		summary=f"{doc.name}: {len(changes)} field(s) changed",
-		docstatus_delta="0 → 0 (updated)",
-	)
+		renamed = renames.apply(rename_plan, reason=as_str(args, "reason") or "update_housing_unit new_unit_name")
+		name = renamed[0]["to"] if renamed else name
+	fields = compat.existing_fields(HOUSING_UNIT, _UNIT_FIELDS)
+	described = _describe_unit(dict(frappe.db.get_value(HOUSING_UNIT, name, fields, as_dict=True) or {}),
+	                           frappe.utils.today())
+	if described_value is not None:
+		described["value"] = described_value
+	if "max_occupants_per_or_law" in diff:
+		diff["max_occupants_per_or_law"]["after"] = described["max_occupants_per_or_law"]
+	try:
+		frappe.get_doc(HOUSING_UNIT, name).add_comment("Info", f"Updated through MCP: {summary_diff}")
+	except Exception:  # noqa: BLE001 — the Action Log row carries the same diff in its summary
+		pass
+	data = {
+		**described,
+		"diff": diff,
+		# Kept for callers written before v0.337.0: {field: [before, after]}.
+		"changed": {key: [v["before"], v["after"]] for key, v in diff.items() if key not in ("value",)},
+		"lawful_occupancy": described["max_occupants_per_or_law"] or lawful_occupancy(described["square_footage"]),
+		"compliance_notes": _unit_notes(described),
+	}
+	if renamed:
+		data["renamed"] = renamed
+	if warnings:
+		data["warnings"] = warnings
+	return ToolResult(data=data, summary=f"{name}: {summary_diff}", docstatus_delta="0 → 0 (updated)")
 
 
 def _stage(changes: dict, doc, field: str, wanted) -> None:

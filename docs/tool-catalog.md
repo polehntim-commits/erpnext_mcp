@@ -5794,21 +5794,28 @@ violation.
 
 **MUTATING**, default OFF (`allow_update_housing_unit`).
 
-**Arguments:** `unit` (required), plus any of `unit_type`, `square_footage`,
-`capacity`, `year_built`, `condition`, `related_asset`, `access_card_zone`,
-`fsma_worker_facility`, `or_housing_law_compliant`, `max_occupants_per_or_law`,
-`last_habitability_inspection`, `smoke_detector_last_test`,
-`co_detector_last_test`, `notes`.
+**Arguments:** `unit` (required; narrowed by `company` / `parcel`), plus any of `new_unit_name`,
+`unit_type`, `square_footage`, `capacity`, `year_built`, `condition`, `related_asset`, `access_card_zone`,
+`gps_latitude` + `gps_longitude`, `fsma_worker_facility`, `or_housing_law_compliant`,
+`max_occupants_per_or_law`, `occupied`, `people_work_here`, `notes`, `append_notes`, `door_label`,
+`room_labels`, `purchase_value`, `replacement_value`, `acquired_on`, `force_uninhabitable`, `reason`,
+`dry_run`.
 
-**Returns** the unit, `changed` as `[before, after]`, and `compliance_notes`.
+**Returns** the unit, `diff` as `{field: {before, after}}` (v0.337.0; `changed` as `[before, after]` is kept),
+`lawful_occupancy`, `compliance_notes` and any `warnings`. `dry_run` returns the diff and writes nothing.
 
-Changing `square_footage` **recomputes the lawful occupancy only when the stored
-limit was itself the computed one**. A figure somebody typed is kept.
+Only the fields passed change. `new_unit_name` renames through the rename engine (`record action=rename`):
+the docname, every assignment / inspection / task / file pointing at it, and the paired Asset Register tag
+move together, and the old name is kept in `old_names`. Changing `square_footage` **recomputes the lawful
+occupancy only when the stored limit was itself the computed one**. A figure somebody typed is kept.
 
-Cannot rename it (assignments point at the docname), and cannot move a building
-between parcels — even a manufactured home that really was moved should be
-re-registered where it stands, so the assignment history stays attached to the
-ground it happened on.
+**Refused, each with the reason:** an unknown unit (the parcel's units are listed); a name already used on
+the parcel; a type that holds nobody (Toilet-Shower, Kitchen, Bath House, Barn, Shop) while it has a current
+assignment; Uninhabitable while lived in, unless `force_uninhabitable` (the assignments are listed); an Asset
+on another company's books or already carrying another unit; half a GPS pair with no stored other half;
+`last_habitability_inspection`, `smoke_detector_last_test`, `co_detector_last_test` — those move only through
+a Housing Inspection or a Detector Test; a different parcel (a building cannot move). **Warns:** capacity over
+20 outside a Multi-Unit Building; capacity above the lawful occupancy.
 
 ---
 
@@ -21334,3 +21341,14 @@ ever named or shown; its openings are the only ones listed. `get_public_site` re
 Guest submissions are guarded by a honeypot, an HMAC time token (too fast, forged or over 2 h old is refused),
 per-visitor and site-wide hourly limits, and photos limited to JPEG / PNG / WebP under the size cap (read only to
 the cap). A guest reads nothing but the published pages and the image files they name.
+
+## Download links (v0.337.0)
+
+`get_attachment_download_link` — MUTATING, default off. A short-lived URL to one private file, fetched as plain
+HTTP with no cookies or headers. Which file: `file`, or `doctype` + `name` (+ `file_name`), or
+`governance_document`. `ttl_seconds` (600 default, 3600 max), `single_use` (default true), `note`. Answers `url`,
+`expires_at`, `file_name`, `mime`, `size_bytes`, `sha256`, `link_id`. The URL is Farm Ops Public URL +
+`/farmops/api/download/<token>` — the prefix the Funnel already publishes — and the tool refuses when no public
+URL is configured. Read is checked as `get_attachment_content` checks it. Unknown, used, expired, revoked and
+tampered tokens are all the same plain 404. Revoke with `revoke_upload_link`; list with `list_upload_links
+direction=Download active_only=true`; rows are deleted a week after they expire.

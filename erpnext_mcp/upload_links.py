@@ -91,6 +91,11 @@ DOWNLOAD = "Download"
 HOST_DESK = "Desk"
 HOST_PUBLIC = "Public (Funnel)"
 MAX_EXPIRY_MINUTES = 24 * 60
+#: v0.337.0. Download links are minted in seconds: ten minutes by default, an hour at most (Tim's spec).
+DOWNLOAD_TTL_SECONDS = 600
+DOWNLOAD_MAX_TTL_SECONDS = 3600
+#: v0.337.0. Download rows are deleted this long after they expired (the Action Log keeps issued / used / revoked).
+DOWNLOAD_PURGE_AFTER = datetime.timedelta(days=7)
 
 #: A link left Receiving this long is a dead transfer: Failed by the sweep.
 STALE_RECEIVING = datetime.timedelta(hours=6)
@@ -612,9 +617,26 @@ def sweep() -> dict:
 					removed += 1
 	except OSError:
 		pass
-	if expired or failed or removed:
+	purged = purge_downloads(now)
+	if expired or failed or removed or purged:
 		frappe.db.commit()
-	return {"expired": expired, "failed": failed, "parts_removed": removed}
+	return {"expired": expired, "failed": failed, "parts_removed": removed, "downloads_purged": purged}
+
+
+def purge_downloads(now: datetime.datetime | None = None) -> int:
+	"""v0.337.0. Delete DOWNLOAD rows that expired more than a week ago, whatever their status. Never raises."""
+	if not compat.has_field(DOCTYPE, "direction"):
+		return 0
+	cutoff = _stamp((now or _now()) - DOWNLOAD_PURGE_AFTER)
+	purged = 0
+	try:
+		for name in frappe.db.get_all(DOCTYPE, filters={"direction": DOWNLOAD, "expires_at": ("<", cutoff)},
+		                              pluck="name", limit=5000):
+			frappe.delete_doc(DOCTYPE, name, ignore_permissions=True, force=True)
+			purged += 1
+	except Exception:  # noqa: BLE001 — a purge that fails leaves rows for the next hour
+		pass
+	return purged
 
 
 
@@ -631,8 +653,21 @@ def link_host() -> str:
 	return HOST_PUBLIC if value == HOST_PUBLIC else HOST_DESK
 
 
+def download_base_url() -> str:
+	"""v0.337.0. Where a download link points: the public host the Funnel serves `/farmops` on.
+
+	Farm Ops Public URL, else the MCP Public URL. Never the Desk's own URL: on a farm whose Desk is reachable only
+	over Tailscale (or a port the Funnel does not carry) that link is a 404 for every plain HTTP client, which is
+	the bug this replaced. Empty when neither is configured, and then nothing is issued.
+	"""
+	return str(settings.farmops_public_url() or settings.public_url() or "").strip().rstrip("/")
+
+
 def link_url(direction: str, token: str, base_url: str = "") -> str:
-	"""Where the token is presented. Desk host by default; the sidecar's public route only if chosen."""
+	"""Where the token is presented. Downloads: always the public `/farmops` route (v0.337.0). Uploads: the Desk host
+	by default; the sidecar's public route only if an operator chose File Links: Host = Public (Funnel)."""
+	if direction == DOWNLOAD:
+		return f"{str(base_url or download_base_url()).rstrip('/')}/farmops/api/download/{token}"
 	if link_host() == HOST_PUBLIC:
 		base = str(base_url or "").rstrip("/")
 		return f"{base}/farmops/api/{'download' if direction == DOWNLOAD else 'upload'}/{token}"
@@ -652,54 +687,93 @@ def _log(event: str, link: str, upload_id: str, detail: dict) -> None:
 		pass
 
 
-def issue_download(*, user: str, file: str, expires_minutes=None, note: str = "", base_url: str = "") -> dict:
-	"""One single-use link to one File. Read permission on its parent (or the File itself) is checked now."""
-	if not enabled():
-		raise ToolError("file links are switched off on this site (ERPNext MCP Settings → Upload Links Enabled). "
-		                "Nothing was issued.")
+def _ttl(ttl_seconds, expires_minutes, tail: str) -> int:
+	"""Seconds the link lives: ttl_seconds, or the older expires_minutes, 1 to DOWNLOAD_MAX_TTL_SECONDS."""
+	try:
+		if ttl_seconds not in (None, ""):
+			seconds = int(ttl_seconds)
+		elif expires_minutes not in (None, ""):
+			seconds = int(expires_minutes) * 60
+		else:
+			seconds = DOWNLOAD_TTL_SECONDS
+	except (TypeError, ValueError):
+		raise ToolError(f"ttl_seconds must be a whole number of seconds. {tail}") from None
+	if seconds <= 0 or seconds > DOWNLOAD_MAX_TTL_SECONDS:
+		raise ToolError(f"ttl_seconds is 1 to {DOWNLOAD_MAX_TTL_SECONDS} (an hour); expires_minutes 1 to "
+		                f"{DOWNLOAD_MAX_TTL_SECONDS // 60}. {tail}")
+	return seconds
+
+
+def _sha256_of(path: str) -> str:
+	digest = hashlib.sha256()
+	with open(path, "rb") as handle:
+		for piece in iter(lambda: handle.read(CHUNK), b""):
+			digest.update(piece)
+	return digest.hexdigest()
+
+
+def issue_download(*, user: str, file: str, ttl_seconds=None, expires_minutes=None, single_use: bool = True,
+                   note: str = "", base_url: str = "") -> dict:
+	"""One link to one private File, on the public host. v0.325.0; v0.337.0 to Tim's spec.
+
+	READ IS CHECKED LIKE `get_attachment_content`: `files._authorize_file` — the parent's read permission, or for an
+	unattached private file its owner or a System Manager. Refused with no public URL configured, because a link
+	nobody outside can reach is the failure this exists to end. The answer carries the bytes' sha256 so the caller
+	can prove what it fetched.
+	"""
+	from .tools import files as file_tools
+
 	tail = "Nothing was issued."
-	name = str(file or "").strip()
-	row = frappe.db.get_value("File", name, ["name", "file_name", "file_url", "file_size", "is_private",
-	                                         "attached_to_doctype", "attached_to_name", "is_folder"], as_dict=True) \
-		if name and frappe.db.exists("File", name) else None
-	if not row and name:
-		row = frappe.db.get_value("File", {"file_url": name}, ["name", "file_name", "file_url", "file_size",
-		                                                       "is_private", "attached_to_doctype",
-		                                                       "attached_to_name", "is_folder"], as_dict=True)
-	if not row or int(row.get("is_folder") or 0):
-		raise ToolError(f"no File called {name!r}. {tail}")
-	parent_dt, parent_name = row.get("attached_to_doctype"), row.get("attached_to_name")
-	if parent_dt and parent_name:
-		if not frappe.has_permission(parent_dt, "read", parent_name, user=user):
-			raise ToolError(f"{user} may not read {parent_dt} {parent_name}, which this file is attached to. {tail}")
-	elif not frappe.has_permission("File", "read", row["name"], user=user):
-		raise ToolError(f"{user} may not read File {row['name']}. {tail}")
+	if not enabled():
+		raise ToolError(f"file links are switched off on this site (ERPNext MCP Settings → Upload Links Enabled). {tail}")
+	base = str(base_url or download_base_url()).rstrip("/")
+	if not base:
+		raise ToolError("no public URL configured — the link would not be reachable. Set Farm Ops Public URL (the "
+		                f"host the Funnel serves /farmops on) in ERPNext MCP Settings. {tail}")
+	wanted = str(file or "").strip()
+	if wanted and not frappe.db.exists("File", wanted):
+		wanted = str(frappe.db.get_value("File", {"file_url": wanted}, "name") or wanted)
+	try:
+		doc = file_tools._open_attachment(wanted)
+	except ToolError as exc:
+		raise ToolError(f"{exc} {tail}") from None
+	if int(doc.get("is_folder") or 0):
+		raise ToolError(f"File {doc.name} is a folder. {tail}")
+	try:
+		file_tools._authorize_file(doc)
+	except ToolError as exc:
+		raise ToolError(f"{exc} {tail}") from None
+	row = {k: doc.get(k) for k in ("name", "file_name", "file_url", "is_private", "attached_to_doctype",
+	                                "attached_to_name")}
 	path = _path_of(row)
 	if not path or not os.path.isfile(path):
-		raise ToolError(f"File {row['name']}'s bytes are not on disk ({row.get('file_url')}). {tail}")
-	try:
-		minutes = int(expires_minutes) if expires_minutes not in (None, "") else DEFAULT_EXPIRY_MINUTES
-	except (TypeError, ValueError):
-		raise ToolError(f"expires_minutes must be a whole number. {tail}") from None
-	if minutes <= 0 or minutes > MAX_EXPIRY_MINUTES:
-		raise ToolError(f"expires_minutes is 1 to {MAX_EXPIRY_MINUTES} (24 hours). {tail}")
+		raise ToolError(f"File {doc.name}'s bytes are not on disk ({row.get('file_url')}). {tail}")
+	seconds = _ttl(ttl_seconds, expires_minutes, tail)
+	size = os.path.getsize(path)
+	sha256 = _sha256_of(path)
+	file_name = row.get("file_name") or os.path.basename(path)
+	import mimetypes
+
+	mime = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
 	token = secrets.token_urlsafe(32)
 	link_id = "DNL-" + secrets.token_hex(6).upper()
 	now = _now()
-	expires = now + datetime.timedelta(minutes=minutes)
-	doc = frappe.get_doc({
+	expires = now + datetime.timedelta(seconds=seconds)
+	parent_dt, parent_name = row.get("attached_to_doctype"), row.get("attached_to_name")
+	link = frappe.get_doc({
 		"doctype": DOCTYPE, "upload_id": link_id, "status": OPEN,
 		"target_doctype": parent_dt or "File", "target_name": parent_name or row["name"],
-		"allowed_kinds": "document", "max_bytes": int(row.get("file_size") or os.path.getsize(path) or 1),
+		"allowed_kinds": "document", "max_bytes": max(size, 1),
 		"is_private": int(row.get("is_private") or 0), "expires_at": _stamp(expires), "note": str(note or "")[:500],
 		"token_hash": hash_token(token), "issued_by": user, "issued_at": _stamp(now), "attempts": 0,
-		"file": row["name"], "file_name": row.get("file_name"), "file_size": os.path.getsize(path),
-		**_optional({"direction": DOWNLOAD}),
+		"file": row["name"], "file_name": file_name, "file_size": size, "file_sha256": sha256,
+		**_optional({"direction": DOWNLOAD, "single_use": 1 if single_use else 0}),
 	}).insert(ignore_permissions=True)
-	_log("issued", doc.name, link_id, {"direction": DOWNLOAD, "file": row["name"]})
-	return {"link_id": link_id, "upload_id": link_id, "link": doc.name, "url": link_url(DOWNLOAD, token, base_url),
-	        "expires_at": _stamp(expires), "file": row["name"], "file_name": row.get("file_name"),
-	        "file_size": os.path.getsize(path)}
+	_log("issued", link.name, link_id, {"direction": DOWNLOAD, "file": row["name"], "single_use": bool(single_use)})
+	return {"link_id": link_id, "upload_id": link_id, "link": link.name, "url": link_url(DOWNLOAD, token, base),
+	        "expires_at": _stamp(expires), "ttl_seconds": seconds, "single_use": bool(single_use),
+	        "file": row["name"], "file_name": file_name, "mime": mime, "size_bytes": size, "file_size": size,
+	        "sha256": sha256}
 
 
 def _path_of(row: dict) -> str:
@@ -727,7 +801,16 @@ def open_download(token: str, ip: str = "", user_agent: str = "") -> dict | None
 	if not path or not os.path.isfile(path):
 		fail(link["name"], "The file is no longer on disk.")
 		return None
-	frappe.db.set_value(DOCTYPE, link["name"], {"status": DONE, "received_at": _stamp(_now())}, update_modified=False)
+	reusable = compat.has_field(DOCTYPE, "single_use") and not int(
+		frappe.db.get_value(DOCTYPE, link["name"], "single_use") or 0
+	)
+	first_use = not frappe.db.get_value(DOCTYPE, link["name"], "received_at")
+	# v0.337.0. A single-use link is spent now; a reusable one stays Open until it expires. received_at is the first use.
+	values = {} if reusable else {"status": DONE}
+	if first_use:
+		values["received_at"] = _stamp(_now())
+	if values:
+		frappe.db.set_value(DOCTYPE, link["name"], values, update_modified=False)
 	note_attempt(link["name"], ip, user_agent)
 	_log("used", link["name"], link["upload_id"], {"direction": DOWNLOAD, "file": row.get("name"), "ip": ip})
 	frappe.db.commit()

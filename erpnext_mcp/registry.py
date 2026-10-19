@@ -9090,26 +9090,40 @@ TOOLS = {
 	),
 	"update_housing_unit": _tool(
 		housing.update_housing_unit,
-		"MUTATING (default OFF). Change a registered unit: type, square footage, "
-		"capacity, year built, condition, asset link, access-card zone, WHERE IT "
-		"STANDS, and every compliance flag and date. Every change is echoed as "
-		"before → after.\n\n"
+		"MUTATING (default OFF). Change a registered unit — ONLY the fields passed: type, square footage, "
+		"capacity, year built, condition, asset link, access-card zone, WHERE IT STANDS, compliance flags, notes "
+		"(or append_notes, a dated line), its value, and its NAME (new_unit_name). Answers `diff` "
+		"{field: {before, after}} and the new lawful_occupancy; dry_run checks everything and writes nothing. "
+		"v0.337.0.\n\n"
+		"RENAME with new_unit_name: the docname, every assignment, inspection, task and file pointing at it, and "
+		"the paired Asset Register tag move together (the same engine as record action=rename), and the old name "
+		"is kept in old_names so it still resolves. A name already used on the parcel is refused.\n\n"
+		"REFUSED, each with the reason: an unknown unit (the parcel's units are listed — pass parcel to narrow); "
+		"unit_type Toilet-Shower / Kitchen / Bath House / Barn / Shop while it has a current assignment; "
+		"condition Uninhabitable while lived in, unless force_uninhabitable (the assignments are then listed); "
+		"an Asset on another company's books or already carrying another unit; half a GPS pair with no stored "
+		"other half; last_habitability_inspection / smoke_detector_last_test / co_detector_last_test, which move "
+		"only through a Housing Inspection or a Detector Test. WARNS: capacity over 20 outside a Multi-Unit "
+		"Building, and capacity above the lawful occupancy.\n\n"
 		"gps_latitude AND gps_longitude MOVE TOGETHER OR NOT AT ALL (v0.32.0). "
 		"Passing one is filled in from the stored other; a genuine half-pair is "
 		"refused, because a unit carrying a corrected longitude beside a stale "
 		"latitude sits somewhere neither reading of the record meant. A camp address "
 		"is a driveway off a county road and a cabin number is paint on a door — "
 		"neither puts an ambulance at the right building.\n\n"
-		"CANNOT re-key: unit_name is refused because the docname is built from it and "
-		"every assignment points at that docname. CANNOT move a building between "
+		"unit_name itself is refused (use new_unit_name). CANNOT move a building between "
 		"parcels — even a manufactured home that really was moved should be "
 		"re-registered where it stands, so the assignment history stays attached to "
 		"the ground it happened on.\n\n"
 		"CHANGING THE SQUARE FOOTAGE RECOMPUTES THE LAWFUL OCCUPANCY, but only when "
 		"the stored limit was the computed one. A figure somebody typed themselves is "
 		"kept.",
-		{"purchase_value": _field(_NUMBER, "v0.328.0. What the building cost, in dollars — recorded on its Asset Register tag."), "replacement_value": _field(_NUMBER, "v0.328.0. What it would cost to replace (the insured value) — recorded on its tag, which the insurance schedule reads."), "acquired_on": _field(_STRING, "v0.328.0. YYYY-MM-DD it was bought or built."), "sync_occupancy_from": _field(_STRING, "v0.327.0. unit | asset | assignments: make units and their tags agree on occupied, taking this as the truth. With units (a list), or unit='*' for every unit. Dry run unless dry_run=false."), "units": _field({"type": "array", "items": {"type": "string"}}, "v0.327.0. sync_occupancy_from: these units."), "dry_run": _field(_BOOLEAN, "v0.327.0. sync_occupancy_from: default true."), "door_label": _field(_STRING, "v0.327.0. What is painted on the door ('16&16')."), "room_labels": _field(_STRING, "v0.327.0. A duplex's rooms, comma-separated ('16a, 16b')."), 
-			"unit": _field(_STRING, "The Housing Unit docname, or its unit name."),
+		{"purchase_value": _field(_NUMBER, "v0.328.0. What the building cost, in dollars — recorded on its Asset Register tag."), "replacement_value": _field(_NUMBER, "v0.328.0. What it would cost to replace (the insured value) — recorded on its tag, which the insurance schedule reads."), "acquired_on": _field(_STRING, "v0.328.0. YYYY-MM-DD it was bought or built."), "sync_occupancy_from": _field(_STRING, "v0.327.0. unit | asset | assignments: make units and their tags agree on occupied, taking this as the truth. With units (a list), or unit='*' for every unit. Dry run unless dry_run=false."), "units": _field({"type": "array", "items": {"type": "string"}}, "v0.327.0. sync_occupancy_from: these units."), "dry_run": _field(_BOOLEAN, "v0.337.0. Check everything and write nothing; answers the diff. Default false (true for sync_occupancy_from, v0.327.0)."), "door_label": _field(_STRING, "v0.327.0. What is painted on the door ('16&16')."), "room_labels": _field(_STRING, "v0.327.0. A duplex's rooms, comma-separated ('16a, 16b')."), 
+			"unit": _field(_STRING, "REQUIRED. The Housing Unit docname, or its unit name (narrowed by company / parcel)."),
+			"new_unit_name": _field(_STRING, "v0.337.0. Rename the unit (and its tag); the old name keeps resolving."),
+			"append_notes": _field(_STRING, "v0.337.0. Add a dated line to the notes instead of replacing them."),
+			"force_uninhabitable": _field(_BOOLEAN, "v0.337.0. Record Uninhabitable even though people live there."),
+			"reason": _field(_STRING, "v0.337.0. Why — kept on the rename's timeline comment."),
 			"owning_entity": _field(_STRING, "Narrow a bare unit name to one company."),
 			"company": _field(_STRING, "Alias for owning_entity."),
 			"unit_type": _field(_STRING, "New unit type. Empty string clears it."),
@@ -9137,12 +9151,12 @@ TOOLS = {
 			),
 			"or_housing_law_compliant": _field(_STRING, "Yes, No, Unknown or Not Applicable."),
 			"max_occupants_per_or_law": _field(_INTEGER, "New occupancy limit."),
-			"last_habitability_inspection": _field(_STRING, "New inspection date, YYYY-MM-DD."),
-			"smoke_detector_last_test": _field(_STRING, "New smoke detector test, YYYY-MM-DD."),
-			"co_detector_last_test": _field(_STRING, "New CO detector test, YYYY-MM-DD."),
+			"last_habitability_inspection": _field(_STRING, "Refused (v0.337.0): it moves only through its own record — see the description."),
+			"smoke_detector_last_test": _field(_STRING, "Refused (v0.337.0): it moves only through its own record — see the description."),
+			"co_detector_last_test": _field(_STRING, "Refused (v0.337.0): it moves only through its own record — see the description."),
 			"notes": _field(_STRING, "New notes."),
-			"unit_name": _field(_STRING, "Always refused — see the description."),
-			"parcel": _field(_STRING, "Always refused — see the description."),
+			"unit_name": _field(_STRING, "Refused — pass new_unit_name to rename."),
+			"parcel": _field(_STRING, "Narrows the unit lookup. A DIFFERENT parcel is refused (a building cannot move)."),
 		},
 		required=("unit",),
 		mutating=True,
@@ -19927,22 +19941,33 @@ TOOLS = {
 			"name": _field(_STRING, "Only links onto this document."),
 			"limit": _field(_INTEGER, "At most this many (default 50, max 200)."),
 			"direction": _field(_STRING, "v0.325.0. Upload or Download."),
+			"active_only": _field(_BOOLEAN, "v0.337.0. Only links still Open and not yet expired."),
 		},
 		title="List upload links",
 	),
 	"get_attachment_download_link": _tool(
 		upload_link_tools.get_attachment_download_link,
-		"MUTATING (default OFF). v0.325.0. A single-use DOWNLOAD link to one File, so a large photo or PDF leaves "
-		"as plain HTTP (curl -fOJ, or Chrome) instead of base64 through get_attachment_content. The link works "
-		"ONCE, for expires_minutes (default 10), streams the file at any size with Content-Disposition, and is "
-		"then 404 like any bad token. Your read permission on the document the file is attached to is checked "
-		"now. It points at the Desk's own host (Tailscale) unless an operator set File Links: Host to Public "
-		"(Funnel). Logged when issued, used, expired or revoked; revoke with revoke_upload_link. Needs Upload "
-		"Links Enabled.",
+		"MUTATING (default OFF). v0.325.0; v0.337.0 (make_download_link). A short-lived, self-authorizing URL to ONE "
+		"private file, so the bytes leave as plain HTTP (curl -fOJ, no cookies or headers) instead of base64 "
+		"through get_attachment_content. Which file: file (File docname or file_url), or doctype + name "
+		"(+ file_name), or governance_document. ttl_seconds default 600, at most 3600; single_use default true "
+		"(a second GET is 404). Answers url, expires_at, file_name, mime, size_bytes, sha256, link_id.\n\n"
+		"THE URL IS ON THE PUBLIC HOST: Farm Ops Public URL + /farmops/api/download/<token> — the prefix the "
+		"Funnel already carries — never the Desk's own address (v0.337.0 fixed links that pointed at a Desk port a "
+		"plain client could not reach). Refused when no public URL is configured. Read permission is checked "
+		"as get_attachment_content checks it. Every unusable token — unknown, used, expired, revoked — is the "
+		"same plain 404. Only the token's hash is stored. Close one early with revoke_upload_link (link_id); "
+		"list them with list_upload_links direction=Download active_only=true. Rows are deleted a week after "
+		"they expire. Needs Upload Links Enabled.",
 		{"file": _field(_STRING, "The File docname (or its file_url), e.g. from list_attachments."),
-		 "expires_minutes": _field(_INTEGER, "Minutes the link lives, 1–1440. Default 10."),
+		 "doctype": _field(_STRING, "v0.337.0. With name: the document the file is attached to."),
+		 "name": _field(_STRING, "v0.337.0. With doctype."),
+		 "file_name": _field(_STRING, "v0.337.0. Which of that document's files (needed when it has several)."),
+		 "governance_document": _field(_STRING, "v0.337.0. A Governance Document: its attached file."),
+		 "ttl_seconds": _field(_INTEGER, "v0.337.0. Seconds the link lives, 1–3600. Default 600."),
+		 "expires_minutes": _field(_INTEGER, "Older form of ttl_seconds, 1–60."),
+		 "single_use": _field(_BOOLEAN, "v0.337.0. Spent on first use. Default true."),
 		 "note": _field(_STRING, "Why — kept on the link.")},
-		required=("file",),
 		mutating=True,
 		title="Get attachment download link",
 	),

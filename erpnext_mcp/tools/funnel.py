@@ -582,7 +582,8 @@ def _verdict(data: dict) -> dict:
 			"summary": f"{data['host']} did not answer — {tls.get('error', 'unreachable')}",
 			"next_step": (
 				"Run get_tailscale_funnel_config to see whether this machine thinks it is "
-				"serving anything, then `tailscale funnel status` on the host. README has the "
+				"serving anything, then read the Funnel on the host — on umbrelOS Tailscale is an app "
+				"container, not a host command: `sudo docker exec $(sudo docker ps --format '{{.Names}}' | grep -m1 -i tailscale) tailscale funnel status`. README has the "
 				"setup under 'Exposing ERPNext MCP publicly via Tailscale Funnel'."
 			),
 		}
@@ -685,8 +686,10 @@ def get_tailscale_funnel_config(args: dict) -> ToolResult:
 	if not binary:
 		data["diagnosis"] = _no_binary_diagnosis(socket_path)
 		data["next_step"] = (
-			"Read the Funnel config on the HOST rather than from in here: `tailscale funnel "
-			"status` and `tailscale serve status --json`. Then put the resulting "
+			"Read the Funnel config on the HOST rather than from in here. On umbrelOS Tailscale runs "
+			"as an app container, not a host command (`sudo tailscale` is 'command not found'): "
+			"`sudo docker exec $(sudo docker ps --format '{{.Names}}' | grep -m1 -i tailscale) tailscale funnel status` (and `tailscale serve status --json` the same way); on a host with Tailscale "
+			"installed directly, `sudo tailscale funnel status`. Then put the resulting "
 			"https://<host>.<tailnet>.ts.net into `public_url` on ERPNext MCP Settings, and run "
 			"validate_public_endpoint — which needs no local Tailscale at all, because it asks "
 			"from outside."

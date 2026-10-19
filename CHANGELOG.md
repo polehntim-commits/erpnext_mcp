@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.337.0 — 2026-10-18 — update_housing_unit to spec; download links that work from outside
+
+**Migrate** (one new column, Upload Link `single_use`). Deploy `docs/deploy/v0.337.0_housing_update_download_links.md`.
+Tools: **1,175** (unchanged — both tools extended, not duplicated). No phone change. No Funnel change.
+
+- **update_housing_unit** (Tim's spec): only the fields passed change; `new_unit_name` renames through the existing
+  rename engine (docname, assignments, inspections, tasks, files and the paired Asset Register tag move together;
+  the old name kept in `old_names` and still resolving); `append_notes` adds a dated line; `dry_run` writes nothing;
+  the answer carries `diff` {field: {before, after}} and `lawful_occupancy` (`changed` kept for older callers). The
+  lawful occupancy is still recomputed only when the stored value was the computed one.
+  Refused with the reason: an unknown unit (the parcel's units are listed — `parcel` now narrows the lookup, and only
+  a DIFFERENT parcel is refused); a name already on the parcel; a type that holds nobody while it has a current
+  assignment; Uninhabitable while lived in unless `force_uninhabitable` (then listed); an Asset on another company's
+  books or carrying another unit; half a GPS pair; and — a change — `last_habitability_inspection`,
+  `smoke_detector_last_test`, `co_detector_last_test`, which now move only through a Housing Inspection or a
+  Detector Test. Warns on capacity over 20 outside a Multi-Unit Building and capacity above the lawful occupancy.
+  The diff is on the Action Log row (summary) and the unit's timeline.
+- **get_attachment_download_link** (Tim's make_download_link): **the host bug is fixed** — links were built on the
+  Desk's own URL (`host_name`, `:8443` on OML), which the public Funnel does not route, so a plain HTTP client got
+  404. A download link is now always Farm Ops Public URL + `/farmops/api/download/<token>`, the prefix the Funnel
+  already publishes (so no Funnel change), and is refused with "no public URL configured — the link would not be
+  reachable" when none is set. `File Links: Host` now governs upload links only. Adds `doctype` + `name`
+  (+ `file_name`) and `governance_document` targets, `ttl_seconds` (600 default, 3600 max; `expires_minutes` capped
+  to 60), `single_use` (default true; false keeps the link working until it expires), and `mime`, `size_bytes`,
+  `sha256` in the answer (the sha256 is stored on the row). Read is checked as `get_attachment_content` checks it.
+  Every unusable token is the same plain-text 404 on the public route too. Rows are deleted a week after they
+  expire (the hourly sweep). `list_upload_links` gains `active_only`.
+- **Kept as built, not as the spec sketched:** the existing Upload Link register (direction Download) instead of a
+  new Download Link table (one register for file links, both ways); the existing token — 32 random bytes, only its
+  SHA-256 stored — instead of an HMAC with a new `download_link_secret`: equally unforgeable, nothing to generate or
+  rotate, and a database dump still yields no working link. Revoke / list stay `revoke_upload_link` /
+  `list_upload_links direction=Download`.
+- `get_tailscale_funnel_config` / `validate_public_endpoint` no longer advise `sudo tailscale …` on the host: on
+  umbrelOS Tailscale is an app container, so they give the `docker exec` form.
+- Tests: `test_housing_update_v337` (18), `test_download_link_v337` (11); the alert / housing fixtures that set
+  inspection and detector dates through update_housing_unit now set the column; the v0.325.0 tests that asserted
+  the Desk-host URL now assert the public one. Negative controls on every new rule.
+
 ## 0.336.0 — 2026-10-18 — Frappe 15.123.1 / ERPNext 15.123.0 compatibility: attachments and receipt drafts
 
 **Code only, no migrate of its own.** Ships WITH the 15.123 base image (fafo-umbrel-store 92cea86) — build that

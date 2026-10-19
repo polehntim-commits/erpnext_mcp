@@ -18,6 +18,7 @@
   "max_bytes",
   "is_private",
   "expected_sha256",
+  "single_use",
   "expires_at",
   "note",
   "col_issue",
@@ -156,6 +157,14 @@
    "fieldname": "expected_sha256",
    "fieldtype": "Data",
    "label": "Expected SHA-256",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "description": "v0.337.0. Downloads: spent on first use (the default). Unticked, the link works until it expires.",
+   "fieldname": "single_use",
+   "fieldtype": "Check",
+   "label": "Single Use",
    "read_only": 1
   },
   {

@@ -43,9 +43,10 @@ class DownloadCase(tu.UploadLinkCase):
 
 
 class TheDownloadLink(DownloadCase):
-	def test_desk_host_by_default_single_use_with_the_files_name(self):
+	def test_the_public_host_always_single_use_with_the_files_name(self):
+		"""v0.337.0. Download links point at the public /farmops route, never the Desk's own address (the :8443 404)."""
 		issued = self.link()
-		self.assertIn("/api/method/erpnext_mcp.file_links.download?token=", issued["url"])
+		self.assertTrue(issued["url"].startswith("https://farm.example.ts.net/farmops/api/download/"), issued["url"])
 		self.assertTrue(issued["link_id"].startswith("DNL-"))
 		row = STORE.get_raw("Upload Link", issued["link"])
 		self.assertEqual(row["direction"], "Download")
@@ -85,19 +86,16 @@ class TheDownloadLink(DownloadCase):
 		with mock.patch.object(frappe, "has_permission", return_value=False):
 			with self.assertRaises(Exception) as caught:
 				self.link()
-		self.assertIn("may not read", str(caught.exception))
+		self.assertIn("not permitted to read", str(caught.exception))
 
-	def test_the_public_route_only_when_chosen(self):
-		issued = self.link()
-		path = f"/farmops/api/download/{self.token(issued)}"
-		self.assertEqual(self.client.get(path.replace("/farmops", "")).status_code, 404, "Desk host: no public door")
-		self.configure(enabled=1, upload_links_enabled=1, allow_get_attachment_download_link=1,
-		               farmops_public_url="https://farm.example.ts.net", file_link_host="Public (Funnel)")
-		public = self.link()
-		self.assertTrue(public["url"].startswith("https://farm.example.ts.net/farmops/api/download/"))
+	def test_the_public_route_serves_downloads_whatever_file_link_host_says(self):
+		"""v0.337.0. File Links: Host now decides only where UPLOAD links point; a download is always public."""
+		public = self.link()  # file_link_host is the Desk default here
 		answer = self.client.get(public["url"].split("farm.example.ts.net", 1)[1])
 		self.assertEqual(answer.status_code, 200)
 		self.assertEqual(answer.get_data(), tu.PDF)
+		self.assertEqual(answer.headers["Cache-Control"], "no-store")
+		self.assertEqual(answer.headers["Content-Type"], "application/pdf")
 
 
 class TheUploadLinkAdditions(tu.UploadLinkCase):

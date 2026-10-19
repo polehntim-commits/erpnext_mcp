@@ -86,6 +86,12 @@ class AlertTestCase(V12TestCase):
 		super().setUp()
 		self.configure(enabled=1, **ALL_ON)
 
+	def _set_unit(self, unit, **values):
+		"""v0.337.0. Inspection and detector dates move only through their records (update_housing_unit refuses
+		them); these tests are about the alert, which reads the column, so the column is set directly."""
+		frappe.db.set_value("Housing Unit", unit, values)
+		STORE.commit()
+
 	def sweep(self, **kwargs):
 		return self.tool_data("refresh_compliance_alerts", kwargs)
 
@@ -632,10 +638,8 @@ class HousingInspectionOverdue(AlertTestCase):
 	def test_recording_an_inspection_auto_dismisses_it(self):
 		unit = self.a_cabin(inspected_days_ago=400)
 		self.assertFires(self.RULE)
-		self.tool_data(
-			"update_housing_unit",
-			{"unit": unit["name"], "last_habitability_inspection": days_from_today(-2)},
-		)
+		# v0.337.0. The register's date moves through a Housing Inspection; the rule reads the column, set here.
+		self._set_unit(unit["name"], last_habitability_inspection=days_from_today(-2))
 		self.assertAutoDismissed(self.RULE)
 
 
@@ -664,13 +668,10 @@ class DetectorTestStale(AlertTestCase):
 	def test_recording_both_tests_auto_dismisses_it(self):
 		unit = self.a_cabin(inspected_days_ago=10, detector_days_ago=400)
 		self.assertFires(self.RULE)
-		self.tool_data(
-			"update_housing_unit",
-			{
-				"unit": unit["name"],
-				"smoke_detector_last_test": days_from_today(-2),
-				"co_detector_last_test": days_from_today(-2),
-			},
+		self._set_unit(
+			unit["name"],
+			smoke_detector_last_test=days_from_today(-2),
+			co_detector_last_test=days_from_today(-2),
 		)
 		self.assertAutoDismissed(self.RULE)
 
@@ -678,9 +679,7 @@ class DetectorTestStale(AlertTestCase):
 		"""A cabin with a tested smoke alarm and an untested CO alarm is still a
 		cabin with an untested CO alarm."""
 		unit = self.a_cabin(inspected_days_ago=10, detector_days_ago=400)
-		self.tool_data(
-			"update_housing_unit", {"unit": unit["name"], "smoke_detector_last_test": days_from_today(-2)}
-		)
+		self._set_unit(unit["name"], smoke_detector_last_test=days_from_today(-2))
 		self.assertIn("CO detector", self.assertFires(self.RULE)["message"])
 
 

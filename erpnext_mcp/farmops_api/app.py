@@ -1499,16 +1499,22 @@ def _download(request: Request, path: str) -> Response:
 	from .. import file_links
 
 	token = path[len(DOWNLOAD_PREFIX) :]
+
+	def plain(status: int, message: str) -> Response:
+		# v0.337.0. Plain text, as the Desk route answers: a curl or a browser, not a phone, is on the other end.
+		return Response(message, status=status, mimetype="text/plain")
+
 	ip = _peer(request)
 	if guard._count(f"download:{ip or 'unknown'}", 60) > UPLOAD_LIMIT:
-		return _failure(429, TOO_MANY)
+		return plain(429, TOO_MANY)
 	with session.request_session(request=request, body={}):
-		if request.method != "GET" or not upload_links.enabled() or upload_links.link_host() != upload_links.HOST_PUBLIC:
-			return _failure(404, NOT_FOUND)
+		# v0.337.0. Download links always point here (the public host), whatever File Links: Host says for uploads.
+		if request.method != "GET" or not upload_links.enabled():
+			return plain(404, upload_links.NOT_FOUND)
 		got = upload_links.open_download(token, ip, str(request.headers.get("User-Agent") or ""))
 		session.commit()
 		if not got:
-			return _failure(404, NOT_FOUND)
+			return plain(404, upload_links.NOT_FOUND)
 	import mimetypes
 
 	response = Response(wrap_file(request.environ, open(got["path"], "rb")),  # noqa: SIM115 — closed by the server
