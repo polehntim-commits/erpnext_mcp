@@ -5794,28 +5794,24 @@ violation.
 
 **MUTATING**, default OFF (`allow_update_housing_unit`).
 
-**Arguments:** `unit` (required; narrowed by `company` / `parcel`), plus any of `new_unit_name`,
-`unit_type`, `square_footage`, `capacity`, `year_built`, `condition`, `related_asset`, `access_card_zone`,
-`gps_latitude` + `gps_longitude`, `fsma_worker_facility`, `or_housing_law_compliant`,
-`max_occupants_per_or_law`, `occupied`, `people_work_here`, `notes`, `append_notes`, `door_label`,
-`room_labels`, `purchase_value`, `replacement_value`, `acquired_on`, `force_uninhabitable`, `reason`,
-`dry_run`.
+**Arguments:** `unit` (required), plus any of `unit_type`, `square_footage`,
+`capacity`, `year_built`, `condition`, `related_asset`, `access_card_zone`,
+`fsma_worker_facility`, `or_housing_law_compliant`, `max_occupants_per_or_law`,
+`notes`, `append_notes` (v0.337.1: a dated line added, not a replacement), `dry_run` (v0.337.1: the
+diff `{field: {before, after}}`, nothing written).
 
-**Returns** the unit, `diff` as `{field: {before, after}}` (v0.337.0; `changed` as `[before, after]` is kept),
-`lawful_occupancy`, `compliance_notes` and any `warnings`. `dry_run` returns the diff and writes nothing.
+**Returns** the unit, `changed` as `[before, after]`, and `compliance_notes`.
 
-Only the fields passed change. `new_unit_name` renames through the rename engine (`record action=rename`):
-the docname, every assignment / inspection / task / file pointing at it, and the paired Asset Register tag
-move together, and the old name is kept in `old_names`. Changing `square_footage` **recomputes the lawful
-occupancy only when the stored limit was itself the computed one**. A figure somebody typed is kept.
+Changing `square_footage` **recomputes the lawful occupancy only when the stored
+limit was itself the computed one**. A figure somebody typed is kept.
 
-**Refused, each with the reason:** an unknown unit (the parcel's units are listed); a name already used on
-the parcel; a type that holds nobody (Toilet-Shower, Kitchen, Bath House, Barn, Shop) while it has a current
-assignment; Uninhabitable while lived in, unless `force_uninhabitable` (the assignments are listed); an Asset
-on another company's books or already carrying another unit; half a GPS pair with no stored other half;
-`last_habitability_inspection`, `smoke_detector_last_test`, `co_detector_last_test` — those move only through
-a Housing Inspection or a Detector Test; a different parcel (a building cannot move). **Warns:** capacity over
-20 outside a Multi-Unit Building; capacity above the lawful occupancy.
+**Refused (v0.337.1):** `last_habitability_inspection`, `smoke_detector_last_test`, `co_detector_last_test` —
+they move only through a Housing Inspection or a Detector Test (`create_housing_unit` still takes them).
+
+Cannot rename it (assignments point at the docname — `record action=rename` does that), and cannot move a building
+between parcels — even a manufactured home that really was moved should be
+re-registered where it stands, so the assignment history stays attached to the
+ground it happened on.
 
 ---
 

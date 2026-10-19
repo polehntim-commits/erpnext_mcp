@@ -3,12 +3,33 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org).
 
+## 0.337.1 — 2026-10-18 — update_housing_unit trimmed back to three small additions (Tim)
+
+**Ships in the same build as 0.337.0** (its migrate, Upload Link `single_use`, is unchanged). Tools: **1,175**.
+The download link (0.337.0) is unchanged and remains the main item.
+
+- **Scope trim, per Tim:** the existing update_housing_unit already covers what is needed (it was used live for
+  4405 / 4407 / 4409), so 0.337.0's rewrite is taken back out — no `new_unit_name` rename (renames stay
+  `record action=rename`), no unit-lookup listing, no type / Uninhabitable / duplicate-name refusals, no warnings,
+  no timeline comment, `_check_asset` as it was. The tool is v0.336.0's plus three small additions:
+  - `append_notes` — a dated line added after the existing notes instead of replacing them;
+  - `dry_run` for ordinary edits — every check runs, the answer is the diff `{field: {before, after}}` (the
+    recomputed lawful occupancy and any tag value included), nothing is written;
+  - `last_habitability_inspection` / `smoke_detector_last_test` / `co_detector_last_test` are refused here and move
+    only through a Housing Inspection or a Detector Test. Checked first for callers that set them through this
+    tool — none: no app code (update_farm_location does not forward them), no phone (iOS only reads them), no
+    runbook, and none of the five update_housing_unit calls in OML's MCP Action Log. create_housing_unit still
+    takes them.
+- Tests: `test_housing_update_v337` rewritten for the three (neutral fixtures — no live register names), with
+  negative controls; the fixtures that set those dates through the tool still set the column directly.
+
 ## 0.337.0 — 2026-10-18 — update_housing_unit to spec; download links that work from outside
 
 **Migrate** (one new column, Upload Link `single_use`). Deploy `docs/deploy/v0.337.0_housing_update_download_links.md`.
 Tools: **1,175** (unchanged — both tools extended, not duplicated). No phone change. No Funnel change.
 
-- **update_housing_unit** (Tim's spec): only the fields passed change; `new_unit_name` renames through the existing
+- **update_housing_unit** (Tim's spec — SUPERSEDED by 0.337.1, which keeps only append_notes, dry_run and the date
+  refusal): only the fields passed change; `new_unit_name` renames through the existing
   rename engine (docname, assignments, inspections, tasks, files and the paired Asset Register tag move together;
   the old name kept in `old_names` and still resolving); `append_notes` adds a dated line; `dry_run` writes nothing;
   the answer carries `diff` {field: {before, after}} and `lawful_occupancy` (`changed` kept for older callers). The

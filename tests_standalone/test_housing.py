@@ -362,7 +362,7 @@ class UpdateHousingUnit(HousingTestCase):
 		self.assertEqual(data["changed"]["condition"], ["Fair", "Needs Repair"])
 
 	def test_inspection_and_detector_dates_move_only_through_their_own_records(self):
-		"""v0.337.0. A date on the register always has an inspection or a detector test behind it."""
+		"""v0.337.1. A date on the register always has an inspection or a detector test behind it."""
 		for key, record in (
 			("last_habitability_inspection", "create_housing_inspection"),
 			("smoke_detector_last_test", "create_detector_test"),
@@ -397,8 +397,8 @@ class UpdateHousingUnit(HousingTestCase):
 	def test_a_call_that_changes_nothing_is_refused_with_the_options(self):
 		error = self.tool_error("update_housing_unit", {"unit": "MC-Cabin-01"})
 		self.assertIn("nothing to change", error)
-		self.assertIn("new_unit_name", error)
-		self.assertNotIn("co_detector_last_test", error, "v0.337.0: refused here, so not offered")
+		self.assertIn("append_notes", error)
+		self.assertNotIn("co_detector_last_test", error, "v0.337.1: refused here, so not offered")
 
 	def test_an_unknown_unit_is_refused(self):
 		self.assertIn(
@@ -888,13 +888,13 @@ class ListHousingUnits(HousingTestCase):
 		self.assertEqual(len(data["overdue_inspections"]), 2)
 
 	def test_a_recent_inspection_takes_a_unit_off_that_list(self):
-		# v0.337.0. The date moves only through a Housing Inspection; the fixture sets the column directly.
+		# v0.337.1. The date moves only through a Housing Inspection; the fixture sets the column directly.
 		frappe.db.set_value("Housing Unit", "MC-Cabin-01 - MC", "last_habitability_inspection", "2026-06-15")
 		STORE.commit()
 		self.assertNotIn("MC-Cabin-01 - MC", self.tool_data("list_housing_units")["overdue_inspections"])
 
 	def test_an_inspection_older_than_a_year_is_overdue_again(self):
-		# v0.337.0. The date moves only through a Housing Inspection; the fixture sets the column directly.
+		# v0.337.1. The date moves only through a Housing Inspection; the fixture sets the column directly.
 		frappe.db.set_value("Housing Unit", "MC-Cabin-01 - MC", "last_habitability_inspection", "2024-01-01")
 		STORE.commit()
 		self.assertIn("MC-Cabin-01 - MC", self.tool_data("list_housing_units")["overdue_inspections"])

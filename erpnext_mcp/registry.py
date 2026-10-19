@@ -9090,40 +9090,30 @@ TOOLS = {
 	),
 	"update_housing_unit": _tool(
 		housing.update_housing_unit,
-		"MUTATING (default OFF). Change a registered unit — ONLY the fields passed: type, square footage, "
-		"capacity, year built, condition, asset link, access-card zone, WHERE IT STANDS, compliance flags, notes "
-		"(or append_notes, a dated line), its value, and its NAME (new_unit_name). Answers `diff` "
-		"{field: {before, after}} and the new lawful_occupancy; dry_run checks everything and writes nothing. "
-		"v0.337.0.\n\n"
-		"RENAME with new_unit_name: the docname, every assignment, inspection, task and file pointing at it, and "
-		"the paired Asset Register tag move together (the same engine as record action=rename), and the old name "
-		"is kept in old_names so it still resolves. A name already used on the parcel is refused.\n\n"
-		"REFUSED, each with the reason: an unknown unit (the parcel's units are listed — pass parcel to narrow); "
-		"unit_type Toilet-Shower / Kitchen / Bath House / Barn / Shop while it has a current assignment; "
-		"condition Uninhabitable while lived in, unless force_uninhabitable (the assignments are then listed); "
-		"an Asset on another company's books or already carrying another unit; half a GPS pair with no stored "
-		"other half; last_habitability_inspection / smoke_detector_last_test / co_detector_last_test, which move "
-		"only through a Housing Inspection or a Detector Test. WARNS: capacity over 20 outside a Multi-Unit "
-		"Building, and capacity above the lawful occupancy.\n\n"
+		"MUTATING (default OFF). Change a registered unit: type, square footage, "
+		"capacity, year built, condition, asset link, access-card zone, WHERE IT "
+		"STANDS, and every compliance flag and date. Every change is echoed as "
+		"before → after.\n\n"
 		"gps_latitude AND gps_longitude MOVE TOGETHER OR NOT AT ALL (v0.32.0). "
 		"Passing one is filled in from the stored other; a genuine half-pair is "
 		"refused, because a unit carrying a corrected longitude beside a stale "
 		"latitude sits somewhere neither reading of the record meant. A camp address "
 		"is a driveway off a county road and a cabin number is paint on a door — "
 		"neither puts an ambulance at the right building.\n\n"
-		"unit_name itself is refused (use new_unit_name). CANNOT move a building between "
+		"CANNOT re-key: unit_name is refused because the docname is built from it and "
+		"every assignment points at that docname. CANNOT move a building between "
 		"parcels — even a manufactured home that really was moved should be "
 		"re-registered where it stands, so the assignment history stays attached to "
 		"the ground it happened on.\n\n"
 		"CHANGING THE SQUARE FOOTAGE RECOMPUTES THE LAWFUL OCCUPANCY, but only when "
 		"the stored limit was the computed one. A figure somebody typed themselves is "
-		"kept.",
-		{"purchase_value": _field(_NUMBER, "v0.328.0. What the building cost, in dollars — recorded on its Asset Register tag."), "replacement_value": _field(_NUMBER, "v0.328.0. What it would cost to replace (the insured value) — recorded on its tag, which the insurance schedule reads."), "acquired_on": _field(_STRING, "v0.328.0. YYYY-MM-DD it was bought or built."), "sync_occupancy_from": _field(_STRING, "v0.327.0. unit | asset | assignments: make units and their tags agree on occupied, taking this as the truth. With units (a list), or unit='*' for every unit. Dry run unless dry_run=false."), "units": _field({"type": "array", "items": {"type": "string"}}, "v0.327.0. sync_occupancy_from: these units."), "dry_run": _field(_BOOLEAN, "v0.337.0. Check everything and write nothing; answers the diff. Default false (true for sync_occupancy_from, v0.327.0)."), "door_label": _field(_STRING, "v0.327.0. What is painted on the door ('16&16')."), "room_labels": _field(_STRING, "v0.327.0. A duplex's rooms, comma-separated ('16a, 16b')."), 
-			"unit": _field(_STRING, "REQUIRED. The Housing Unit docname, or its unit name (narrowed by company / parcel)."),
-			"new_unit_name": _field(_STRING, "v0.337.0. Rename the unit (and its tag); the old name keeps resolving."),
-			"append_notes": _field(_STRING, "v0.337.0. Add a dated line to the notes instead of replacing them."),
-			"force_uninhabitable": _field(_BOOLEAN, "v0.337.0. Record Uninhabitable even though people live there."),
-			"reason": _field(_STRING, "v0.337.0. Why — kept on the rename's timeline comment."),
+		"kept.\n\n"
+		"v0.337.1: append_notes adds a dated line instead of replacing the notes; dry_run checks everything and "
+		"answers the diff {field: {before, after}} without writing; last_habitability_inspection, "
+		"smoke_detector_last_test and co_detector_last_test are refused here — they move only through a Housing "
+		"Inspection or a Detector Test.",
+		{"purchase_value": _field(_NUMBER, "v0.328.0. What the building cost, in dollars — recorded on its Asset Register tag."), "replacement_value": _field(_NUMBER, "v0.328.0. What it would cost to replace (the insured value) — recorded on its tag, which the insurance schedule reads."), "acquired_on": _field(_STRING, "v0.328.0. YYYY-MM-DD it was bought or built."), "sync_occupancy_from": _field(_STRING, "v0.327.0. unit | asset | assignments: make units and their tags agree on occupied, taking this as the truth. With units (a list), or unit='*' for every unit. Dry run unless dry_run=false."), "units": _field({"type": "array", "items": {"type": "string"}}, "v0.327.0. sync_occupancy_from: these units."), "dry_run": _field(_BOOLEAN, "v0.337.1. Check everything, answer the diff, write nothing. Default false (true for sync_occupancy_from, v0.327.0)."), "door_label": _field(_STRING, "v0.327.0. What is painted on the door ('16&16')."), "room_labels": _field(_STRING, "v0.327.0. A duplex's rooms, comma-separated ('16a, 16b')."), 
+			"unit": _field(_STRING, "The Housing Unit docname, or its unit name."),
 			"owning_entity": _field(_STRING, "Narrow a bare unit name to one company."),
 			"company": _field(_STRING, "Alias for owning_entity."),
 			"unit_type": _field(_STRING, "New unit type. Empty string clears it."),
@@ -9151,12 +9141,13 @@ TOOLS = {
 			),
 			"or_housing_law_compliant": _field(_STRING, "Yes, No, Unknown or Not Applicable."),
 			"max_occupants_per_or_law": _field(_INTEGER, "New occupancy limit."),
-			"last_habitability_inspection": _field(_STRING, "Refused (v0.337.0): it moves only through its own record — see the description."),
-			"smoke_detector_last_test": _field(_STRING, "Refused (v0.337.0): it moves only through its own record — see the description."),
-			"co_detector_last_test": _field(_STRING, "Refused (v0.337.0): it moves only through its own record — see the description."),
-			"notes": _field(_STRING, "New notes."),
-			"unit_name": _field(_STRING, "Refused — pass new_unit_name to rename."),
-			"parcel": _field(_STRING, "Narrows the unit lookup. A DIFFERENT parcel is refused (a building cannot move)."),
+			"last_habitability_inspection": _field(_STRING, "Refused (v0.337.1): it moves only through a Housing Inspection or a Detector Test."),
+			"smoke_detector_last_test": _field(_STRING, "Refused (v0.337.1): it moves only through a Housing Inspection or a Detector Test."),
+			"co_detector_last_test": _field(_STRING, "Refused (v0.337.1): it moves only through a Housing Inspection or a Detector Test."),
+			"notes": _field(_STRING, "New notes (replaces them)."),
+			"append_notes": _field(_STRING, "v0.337.1. Add a dated line to the notes instead of replacing them."),
+			"unit_name": _field(_STRING, "Always refused — see the description."),
+			"parcel": _field(_STRING, "Always refused — see the description."),
 		},
 		required=("unit",),
 		mutating=True,
